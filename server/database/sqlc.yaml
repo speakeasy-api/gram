@@ -15,15 +15,6 @@ overrides:
           import: "github.com/google/uuid"
           type: "NullUUID"
         nullable: true
-      # Temporary pin while the schema ships ahead of the application layer:
-      # the column became nullable for the meta MCP endpoint backend, but no
-      # code writes meta-backed rows yet, so it is never NULL on this branch.
-      # The application PR removes this override together with the code that
-      # handles the nullable type.
-      - column: mcp_endpoints.mcp_server_id
-        go_type:
-          import: "github.com/google/uuid"
-          type: "UUID"
       - column: http_tool_definitions.response_filter
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/tools/repo/models
@@ -150,12 +141,31 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/agents/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/agents/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/assistants/queries.sql
     engine: postgresql
     gen:
       go:
         package: "repo"
         out: "../internal/assistants/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+  - schema: schema.sql
+    queries: ../internal/explore/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/explore/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -250,6 +260,56 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/identityproviderconnections/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/identityproviderconnections/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/oktaresourceconnections/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/oktaresourceconnections/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/oktaapplications/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/oktaapplications/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/managedrows/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/managedrows/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/jsonwebkeysets/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/jsonwebkeysets/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/keys/queries.sql
     engine: postgresql
     gen:
@@ -330,6 +390,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../cmd/tools/migrations/openrouterdisablecauses/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "openrouterdisablecauses"
+        out: "../cmd/tools/migrations/openrouterdisablecauses"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/openrouterkeys/queries.sql
     engine: postgresql
     gen:
@@ -390,12 +460,42 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/networkingress/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/networkingress/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/mcpendpoints/queries.sql
     engine: postgresql
     gen:
       go:
         package: "repo"
         out: "../internal/mcpendpoints/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/networkingress/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/networkingress/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/netingress/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/netingress/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -416,6 +516,16 @@ sql:
       go:
         package: "repo"
         out: "../internal/mcpservers/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/metamcp/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/metamcp/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -546,16 +656,6 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
-    queries: ../internal/collections/queries.sql
-    engine: postgresql
-    gen:
-      go:
-        package: "repo"
-        out: "../internal/collections/repo"
-        sql_package: "pgx/v5"
-        omit_unused_structs: true
-
-  - schema: schema.sql
     queries: ../internal/hooks/queries.sql
     engine: postgresql
     gen:
@@ -666,6 +766,16 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/metering/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/metering/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/spendrules/queries.sql
     engine: postgresql
     gen:
@@ -729,12 +839,12 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
-    queries: ../internal/otelforwarding/queries.sql
+    queries: ../internal/dataexports/queries.sql
     engine: postgresql
     gen:
       go:
         package: "repo"
-        out: "../internal/otelforwarding/repo"
+        out: "../internal/dataexports/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
@@ -789,11 +899,41 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
+    queries: ../internal/killswitches/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/killswitches/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
     queries: ../internal/trials/queries.sql
     engine: postgresql
     gen:
       go:
         package: "repo"
         out: "../internal/trials/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/metering/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/metering/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/workloadidentity/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/workloadidentity/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true

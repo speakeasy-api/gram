@@ -1,23 +1,32 @@
+import { useOrganization, useProject } from "@/contexts/Auth";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { CommandGroup, CommandItem } from "@/components/ui/Command";
 import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { useEnvironments } from "@/pages/environments/useEnvironments";
+import { CATALOG_STALE_TIME_MS } from "@/pages/catalog/hooks";
 import { BUILTIN_RULES_BY_CATEGORY } from "@/pages/security/detection-rules-data";
+import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { useRoutes } from "@/routes";
 import { useAssistantsListSuspense } from "@gram/client/react-query/assistantsList.js";
 import { useLatestDeploymentSuspense } from "@gram/client/react-query/latestDeployment.js";
 import { useListDeploymentsSuspense } from "@gram/client/react-query/listDeployments.js";
+import { useListMCPCatalogSuspense } from "@gram/client/react-query/listMCPCatalog.js";
 import { useListToolsetsSuspense } from "@gram/client/react-query/listToolsets.js";
 import { useMcpServersSuspense } from "@gram/client/react-query/mcpServers.js";
+import { useMembersSuspense } from "@gram/client/react-query/members.js";
 import { useRiskListCustomDetectionRulesSuspense } from "@gram/client/react-query/riskListCustomDetectionRules.js";
 import { useListMcpApprovalRequestsSuspense } from "@gram/client/react-query/listMcpApprovalRequests.js";
 import { useRiskListPoliciesSuspense } from "@gram/client/react-query/riskListPolicies.js";
 import { usePluginsSuspense } from "@gram/client/react-query/plugins";
+import { useSessionInfoSuspense } from "@gram/client/react-query/sessionInfo.js";
 import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
+import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, useMemo, type ReactNode } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { CommandErrorBoundary } from "./CommandErrorBoundary";
 
 /**
@@ -148,6 +157,74 @@ function McpServersGroup({ onNavigate }: GroupProps) {
   );
 }
 
+/**
+ * Third-party servers offered by the registry catalog.
+ *
+ * Kept in a group of its own, under its own icon, rather than folded into "MCP
+ * Servers": a catalog hit is something this project could run, not something it
+ * runs, and the two legitimately share a name once an entry has been added. The
+ * registry specifier rides along as the sublabel, so a row is never mistaken
+ * for one of the project's own slugs.
+ *
+ * The typed query filters the fetched list here rather than being sent to
+ * listCatalog, which keeps what this group can reach identical to what the
+ * catalog page can show. Both read the same capped response: listCatalog
+ * concatenates its sources in priority order and truncates the merged list, so
+ * the day a second source is enabled, entries past the cap fall out of the
+ * page, out of this group, and out of the detail page — which resolves a
+ * selected row by finding it in that same list. Searching server-side here
+ * alone would filter per source before the merge and so surface rows the
+ * detail page then fails to resolve. The cap is the thing to lift, and the
+ * handler already marks it as standing until cursor pagination lands.
+ */
+function McpCatalogGroup({ onNavigate }: GroupProps) {
+  const routes = useRoutes();
+  const gramProject = useProjectSlugForRequests();
+  // Same request the catalog page makes, down to the freshness window: staleness
+  // is per-observer, so without it this reader would refetch the registry on
+  // every palette mount despite sharing a cache entry the page still considers
+  // fresh.
+  const { data } = useListMCPCatalogSuspense({ gramProject }, undefined, {
+    staleTime: CATALOG_STALE_TIME_MS,
+  });
+  // A specifier is unique within a registry but not across them, and the detail
+  // route is addressed by specifier alone — it resolves the first entry that
+  // matches. Two registries publishing one server would otherwise render as two
+  // identical rows that lead to the same page, so only the row that page
+  // actually opens is offered.
+  const servers = useMemo(() => {
+    const bySpecifier = new Map<string, (typeof data.servers)[number]>();
+    for (const server of data.servers ?? []) {
+      if (!bySpecifier.has(server.registrySpecifier)) {
+        bySpecifier.set(server.registrySpecifier, server);
+      }
+    }
+    return Array.from(bySpecifier.values());
+  }, [data]);
+  if (!servers.length) return null;
+  return (
+    <CommandGroup heading="MCP Catalog">
+      {servers.map((server) => (
+        <ResultItem
+          key={server.registrySpecifier}
+          value={`catalog ${server.title ?? ""} ${server.registrySpecifier}`}
+          label={server.title || server.registrySpecifier}
+          // Dropped when it is standing in as the label: an untitled entry
+          // would otherwise print its specifier twice on the same row.
+          sublabel={server.title ? server.registrySpecifier : undefined}
+          icon="store"
+          onSelect={() => {
+            routes.mcp.catalog.detail.goTo(
+              encodeURIComponent(server.registrySpecifier),
+            );
+            onNavigate();
+          }}
+        />
+      ))}
+    </CommandGroup>
+  );
+}
+
 function SourcesGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
   const { data } = useLatestDeploymentSuspense();
@@ -185,7 +262,7 @@ function SourcesGroup({ onNavigate }: GroupProps) {
           sublabel={source.kind}
           icon="file-code"
           onSelect={() => {
-            routes.sources.source.goTo(source.kind, source.slug);
+            routes.mcp.goTo();
             onNavigate();
           }}
         />
@@ -269,7 +346,8 @@ function AssistantsGroup({ onNavigate }: GroupProps) {
 
 function PluginsGroup({ onNavigate }: GroupProps) {
   const routes = useRoutes();
-  const { data } = usePluginsSuspense();
+  const scope = usePluginQueryScope();
+  const { data } = usePluginsSuspense(scope);
   const plugins = data?.plugins ?? [];
   if (!plugins.length) return null;
   return (
@@ -401,20 +479,173 @@ function ApprovalRequestsGroup({ onNavigate }: GroupProps) {
   );
 }
 
+/**
+ * People, by name or address, jumping straight to their identity page.
+ *
+ * Directory members only: the identities index also lists unattributed
+ * addresses and agent ids, but reaching those needs an all-time telemetry crawl
+ * — far too heavy for a surface that has to answer on every keystroke.
+ */
+function PeopleGroup({ onNavigate }: GroupProps) {
+  // The identity page lives under a project, and the palette opens from the
+  // org shell too, where the path carries no slug. Fall back to the slug those
+  // pages already send on their requests, the same way IdentityLink does —
+  // without it the palette built `/org/projects//identities/...`, which
+  // matches no route.
+  const projectSlug = useProjectSlugForRequests();
+  const routes = useRoutes({ projectSlug });
+  const navigate = useNavigate();
+  // The palette opens over whatever page the reader had narrowed, so the
+  // person's page opens on that same window rather than the default one.
+  const { search } = useLocation();
+  const { data } = useMembersSuspense();
+  const members = data?.members ?? [];
+  if (!members.length) return null;
+  return (
+    <CommandGroup heading="People">
+      {members.map((member) => (
+        <ResultItem
+          key={member.id}
+          value={`person ${member.name} ${member.email} ${member.id}`}
+          label={member.name || member.email}
+          sublabel={member.email}
+          icon="user"
+          onSelect={() => {
+            void navigate(
+              withIdentityWindow(
+                routes.identities.detail.overview.href(
+                  encodeIdentityUrn(`user:${member.id}`),
+                ),
+                search,
+              ),
+            );
+            onNavigate();
+          }}
+        />
+      ))}
+    </CommandGroup>
+  );
+}
+
+/**
+ * Projects in the organization, jumping straight into one.
+ *
+ * Read off the session rather than projects.list: the response the app boots
+ * on already carries the caller's projects for each of their organizations, so
+ * the group costs no request of its own and offers exactly what the workspace
+ * switcher offers.
+ */
+function ProjectsGroup({ onNavigate }: GroupProps) {
+  const { orgSlug, projectSlug } = useSlugs();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data } = useSessionInfoSuspense();
+  const { organizations, activeOrganizationId } = data.result;
+  // The palette opens from either shell, and only the project shell's path
+  // carries a slug we could match on — so fall back to the session's active
+  // organization, which is the one every other surface renders.
+  const organization = useMemo(
+    () =>
+      organizations.find((org) => org.slug === orgSlug) ??
+      organizations.find((org) => org.id === activeOrganizationId),
+    [organizations, activeOrganizationId, orgSlug],
+  );
+  // Slug order, matching the switcher, so a reader scanning the idle list
+  // finds a project where the switcher taught them to look.
+  const projects = useMemo(
+    () =>
+      (organization?.projects ?? []).toSorted((a, b) =>
+        a.slug.localeCompare(b.slug),
+      ),
+    [organization],
+  );
+  if (!organization || !projects.length) return null;
+  return (
+    <CommandGroup heading="Projects">
+      {projects.map((project) => {
+        const label = project.name || project.slug;
+        return (
+          <ResultItem
+            key={project.id}
+            value={`project ${project.name} ${project.slug} ${project.id}`}
+            label={label}
+            // Case-insensitively, as in the switcher: "Default" / "default" is
+            // the same name, so the slug would only repeat the label — as it
+            // would for a project with no name, where it *is* the label.
+            sublabel={
+              label.toLowerCase() === project.slug.toLowerCase()
+                ? undefined
+                : project.slug
+            }
+            icon="folder"
+            onSelect={() => {
+              // Drop the cache on a switch, the way WorkspaceSwitcher does:
+              // project-scoped queries that don't fold the slug into their key
+              // would otherwise serve the previous project's data on the page
+              // we land on.
+              if (project.slug !== projectSlug) queryClient.clear();
+              void navigate(`/${organization.slug}/projects/${project.slug}`);
+              onNavigate();
+            }}
+          />
+        );
+      })}
+    </CommandGroup>
+  );
+}
+
+/**
+ * Projects on their own, so the palette can offer them from the org shell,
+ * where the project-scoped resource groups have no project to read. Projects
+ * are the one resource that is organization-scoped rather than project-scoped.
+ */
+export function ProjectsResults({ onNavigate }: GroupProps): JSX.Element {
+  return (
+    <LazyGroup>
+      <ProjectsGroup onNavigate={onNavigate} />
+    </LazyGroup>
+  );
+}
+
+/**
+ * The people group on its own, so the palette can offer it from the org shell
+ * too — where the project-scoped resource groups have no project to read.
+ */
+export function PeopleResults({ onNavigate }: GroupProps): JSX.Element | null {
+  const organization = useOrganization();
+  const { hasAnyScope } = useRBAC();
+  if (!hasAnyScope(["org:read", "org:admin"], organization.id)) return null;
+  return (
+    <LazyGroup>
+      <PeopleGroup onNavigate={onNavigate} />
+    </LazyGroup>
+  );
+}
+
 export function ResourceResults({
   onNavigate,
   query,
 }: GroupProps & { query: string }): JSX.Element {
+  const organization = useOrganization();
+  const project = useProject();
   const { hasAnyScope, hasScope } = useRBAC();
   // Risk resources are org:admin-gated on their own pages; mirror that here so
   // non-admins never fire the (forbidden) list calls.
-  const isAdmin = hasAnyScope(["org:admin"]);
+  const canWritePlugins = usePluginWriteAccess();
+  const canReadPlugins =
+    canWritePlugins || hasAnyScope(["org:read", "org:admin"], organization.id);
+  const isAdmin = hasAnyScope(["org:admin"], organization.id);
   // Approval requests are an org-admin surface, matching the queue page's
   // own gate.
-  const canReadApprovals = hasScope("org:admin");
-  // Detection rules are high-cardinality (dozens of built-ins), so they'd flood
-  // the default view and fetch on open. Make them search-only: render (and
-  // fetch) the group only once the user types, letting cmdk filter the results.
+  const canReadApprovals = hasScope("org:admin", organization.id);
+  // What listCatalog itself requires, rather than the looser any-of gate the
+  // catalog page renders behind: an mcp:write-only reader would pass that one
+  // and then have the request refused.
+  const canBrowseCatalog = hasScope("project:read", project.id);
+  // Detection rules and the catalog are high-cardinality (dozens of built-ins;
+  // hundreds of registry entries), so they'd flood the default view and fetch
+  // on open. Make them search-only: render (and fetch) the group only once the
+  // user types, letting cmdk filter the results.
   const hasQuery = query.length > 0;
 
   return (
@@ -422,6 +653,13 @@ export function ResourceResults({
       <LazyGroup>
         <McpServersGroup onNavigate={onNavigate} />
       </LazyGroup>
+      {/* Directly below the project's own servers: when a name matches both,
+          what you already run should read first and the catalog offer second. */}
+      {canBrowseCatalog && hasQuery && (
+        <LazyGroup>
+          <McpCatalogGroup onNavigate={onNavigate} />
+        </LazyGroup>
+      )}
       <LazyGroup>
         <SourcesGroup onNavigate={onNavigate} />
       </LazyGroup>
@@ -434,9 +672,11 @@ export function ResourceResults({
       <LazyGroup>
         <AssistantsGroup onNavigate={onNavigate} />
       </LazyGroup>
-      <LazyGroup>
-        <PluginsGroup onNavigate={onNavigate} />
-      </LazyGroup>
+      {canReadPlugins && (
+        <LazyGroup>
+          <PluginsGroup onNavigate={onNavigate} />
+        </LazyGroup>
+      )}
       {isAdmin && (
         <>
           <LazyGroup>

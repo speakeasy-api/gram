@@ -1,0 +1,123 @@
+import { render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import IdentityConnections from "./IdentityConnections";
+
+vi.mock("@/components/connections/ConnectionsListSection", () => ({
+  // Echo the props the page derives from the sessions query, so the test can
+  // tell a list that was rendered with the right sessions from an empty panel.
+  ConnectionsListSection: ({
+    sessions,
+    isPending,
+    isError,
+  }: {
+    sessions: { id: string }[];
+    isPending: boolean;
+    isError: boolean;
+  }) => (
+    <ul
+      data-testid="connections-list"
+      data-pending={String(isPending)}
+      data-error={String(isError)}
+    >
+      {sessions.map((session) => (
+        <li key={session.id}>{session.id}</li>
+      ))}
+    </ul>
+  ),
+}));
+vi.mock("@/components/observe/EmployeeShadowAISection", () => ({
+  EmployeeShadowAISection: ({ userEmail }: { userEmail: string | null }) => (
+    <div data-testid="shadow-ai">{userEmail}</div>
+  ),
+}));
+vi.mock("@/components/observe/employee-data-flow", () => ({
+  IdentityDataFlowGraphCard: () => null,
+}));
+vi.mock("@/components/observe/identity-data-flow-query", () => ({
+  fetchIdentityDataFlowGraph: vi.fn(),
+}));
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
+}));
+vi.mock("@gram/client/react-query/userSessions.js", () => ({
+  useUserSessions: () => ({
+    data: { result: { items: [{ id: "session-1" }, { id: "session-2" }] } },
+    isError: false,
+    isPending: false,
+    refetch: vi.fn(),
+  }),
+}));
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: () => ({
+    data: { edges: [], nodes: [] },
+    error: null,
+    isLoading: false,
+  }),
+}));
+vi.mock("react-router", () => ({
+  useLocation: () => ({ search: "" }),
+}));
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({}),
+  useRoutes: () => ({}),
+}));
+vi.mock("./identityHandoffs", () => ({
+  identityHandoffs: () => ({ mcpSessions: "/sessions" }),
+}));
+vi.mock("./IdentityPanel", () => ({
+  IdentityPanel: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="active-connections">{children}</div>
+  ),
+}));
+vi.mock("./identityRoute", () => ({
+  useIdentityOutlet: () => ({
+    identity: {
+      displayName: "Employee",
+      emails: ["employee@example.com"],
+      externalUserIds: [],
+      kind: "user",
+      photoUrl: null,
+      userIds: ["user_1"],
+    },
+  }),
+}));
+vi.mock("./IdentitySection", () => ({
+  IdentitySection: ({ children }: { children: React.ReactNode }) => (
+    <main>{children}</main>
+  ),
+}));
+vi.mock("./sectionMeta", () => ({
+  sectionMeta: () => "",
+}));
+vi.mock("./useIdentityQueries", () => ({
+  retryFailed: () => vi.fn(),
+  useIdentityProject: () => ({ slug: "project" }),
+  useIdentityWindow: () => ({
+    from: new Date("2026-08-01T00:00:00Z"),
+    to: new Date("2026-09-01T00:00:00Z"),
+  }),
+}));
+
+describe("IdentityConnections", () => {
+  it("renders the active MCP connections list from the sessions query", () => {
+    render(<IdentityConnections />);
+
+    const panel = screen.getByTestId("active-connections");
+    const list = within(panel).getByTestId("connections-list");
+    expect(list.getAttribute("data-pending")).toBe("false");
+    expect(list.getAttribute("data-error")).toBe("false");
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["session-1", "session-2"]);
+  });
+
+  // Which AI tools a person runs is a security question about them, not a
+  // list of things they have connected. It moved to Identity -> Security.
+  it("no longer carries the employee Shadow AI section", () => {
+    render(<IdentityConnections />);
+
+    expect(screen.queryByTestId("shadow-ai")).toBeNull();
+  });
+});

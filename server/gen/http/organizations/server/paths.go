@@ -76,3 +76,13 @@ func SendEnterpriseAdminOnboardingEmailOrganizationsPath() string {
 func GenerateWorkOSAdminPortalLinkOrganizationsPath() string {
 	return "/rpc/organizations.generateWorkOSAdminPortalLink"
 }
+
+// ListSetupTasksOrganizationsPath returns the URL path to the organizations service listSetupTasks HTTP endpoint.
+func ListSetupTasksOrganizationsPath() string {
+	return "/rpc/organizations.listSetupTasks"
+}
+
+// UpdateSetupTaskOrganizationsPath returns the URL path to the organizations service updateSetupTask HTTP endpoint.
+func UpdateSetupTaskOrganizationsPath() string {
+	return "/rpc/organizations.updateSetupTask"
+}

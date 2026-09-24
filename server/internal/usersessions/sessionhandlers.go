@@ -29,7 +29,7 @@ import (
 // Distinct pairs are collected first because a subject commonly holds several
 // sessions against the same issuer — one per MCP client — and every one of them
 // shares the same upstream tokens.
-func (s *Service) loadUpstreamsForSessions(ctx context.Context, projectID uuid.UUID, rows []repo.ListUserSessionsByProjectIDRow) (map[mv.UpstreamKey][]*types.UserSessionUpstream, error) {
+func (s *Service) loadUpstreamsForSessions(ctx context.Context, projectID uuid.UUID, organizationID string, rows []repo.ListUserSessionsByProjectIDRow) (map[mv.UpstreamKey][]*types.UserSessionUpstream, error) {
 	if len(rows) == 0 {
 		return map[mv.UpstreamKey][]*types.UserSessionUpstream{}, nil
 	}
@@ -53,16 +53,64 @@ func (s *Service) loadUpstreamsForSessions(ctx context.Context, projectID uuid.U
 	upstreamRows, err := repo.New(s.db).ListRemoteSessionUpstreamsForSubjects(ctx, repo.ListRemoteSessionUpstreamsForSubjectsParams{
 		SubjectUrns: subjectURNs,
 		IssuerIds:   issuerIDs,
-		// Scopes on the user_session_issuer's project rather than the client's,
-		// so an upstream held through an organization-level or global client
-		// still surfaces here. See the query for why.
-		ProjectID: projectID,
+		// Scopes on the user_session_issuer's tenancy, with org-level clients
+		// additionally pinned to the caller's organization so a stray
+		// cross-tenant binding row can never surface a foreign credential.
+		ProjectID:      projectID,
+		OrganizationID: organizationID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list remote session upstreams").LogError(ctx, s.logger)
 	}
 
 	return mv.BuildUserSessionUpstreamIndex(upstreamRows), nil
+}
+
+// loadWorkloadLabelsForSessions resolves the workloads behind a page of
+// sessions in one query. Workloads are keyed on (workload issuer, subject)
+// parsed through the session subject, never on the subject alone.
+func (s *Service) loadWorkloadLabelsForSessions(ctx context.Context, projectID uuid.UUID, organizationID string, rows []repo.ListUserSessionsByProjectIDRow) (map[mv.WorkloadKey]*types.UserSessionWorkload, error) {
+	seen := make(map[mv.WorkloadKey]struct{})
+	issuerIDs := make([]uuid.UUID, 0)
+	subjects := make([]string, 0)
+	for _, row := range rows {
+		key, ok := mv.WorkloadKeyForSession(row.SubjectUrn)
+		if !ok {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		issuerIDs = append(issuerIDs, key.WorkloadIssuerID)
+		subjects = append(subjects, key.ExternalSubject)
+	}
+	if len(issuerIDs) == 0 {
+		return map[mv.WorkloadKey]*types.UserSessionWorkload{}, nil
+	}
+
+	queries := repo.New(s.db)
+	labelRows, err := queries.ListWorkloadSessionLabels(ctx, repo.ListWorkloadSessionLabelsParams{
+		WorkloadIssuerIds: issuerIDs,
+		Subjects:          subjects,
+		OrganizationID:    organizationID,
+		ProjectID:         projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list workload session labels").LogError(ctx, s.logger)
+	}
+
+	admissionRows, err := queries.ListWorkloadSessionAdmissions(ctx, repo.ListWorkloadSessionAdmissionsParams{
+		WorkloadIssuerIds: issuerIDs,
+		Subjects:          subjects,
+		OrganizationID:    organizationID,
+		ProjectID:         projectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list workload session admissions").LogError(ctx, s.logger)
+	}
+
+	return mv.BuildUserSessionWorkloadIndex(labelRows, admissionRows), nil
 }
 
 // Lists issued sessions; keyset paginated by id (descending).
@@ -95,6 +143,7 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 
 	rows, err := repo.New(s.db).ListUserSessionsByProjectID(ctx, repo.ListUserSessionsByProjectIDParams{
 		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		Status:              conv.PtrToPGTextEmpty(payload.Status),
 		SubjectUrn:          conv.PtrToPGTextEmpty(payload.SubjectUrn),
 		UserSessionIssuerID: issuerFilter,
@@ -107,12 +156,17 @@ func (s *Service) ListUserSessions(ctx context.Context, payload *gen.ListUserSes
 		return nil, oops.E(oops.CodeUnexpected, err, "list user sessions").LogError(ctx, s.logger)
 	}
 
-	upstreams, err := s.loadUpstreamsForSessions(ctx, *authCtx.ProjectID, rows)
+	upstreams, err := s.loadUpstreamsForSessions(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, rows)
 	if err != nil {
 		return nil, err
 	}
 
-	items := mv.BuildUserSessionListView(rows, upstreams)
+	workloads, err := s.loadWorkloadLabelsForSessions(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	items := mv.BuildUserSessionListView(rows, upstreams, workloads)
 
 	var nextCursor *string
 	if len(rows) >= int(limit) {
@@ -137,15 +191,24 @@ func (s *Service) ListFacets(ctx context.Context, _ *gen.ListFacetsPayload) (*ge
 	}
 
 	q := repo.New(s.db)
-	clients, err := q.ListUserSessionClientFacets(ctx, *authCtx.ProjectID)
+	clients, err := q.ListUserSessionClientFacets(ctx, repo.ListUserSessionClientFacetsParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list client facets").LogError(ctx, s.logger)
 	}
-	users, err := q.ListUserSessionUserFacets(ctx, *authCtx.ProjectID)
+	users, err := q.ListUserSessionUserFacets(ctx, repo.ListUserSessionUserFacetsParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list user facets").LogError(ctx, s.logger)
 	}
-	servers, err := q.ListUserSessionServerFacets(ctx, *authCtx.ProjectID)
+	servers, err := q.ListUserSessionServerFacets(ctx, repo.ListUserSessionServerFacetsParams{
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list server facets").LogError(ctx, s.logger)
 	}
@@ -198,8 +261,9 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 	txRepo := repo.New(dbtx)
 
 	revoked, err := txRepo.RevokeUserSession(ctx, repo.RevokeUserSessionParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
+		ID:             id,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -223,7 +287,7 @@ func (s *Service) RevokeUserSession(ctx context.Context, payload *gen.RevokeUser
 
 	// Tombstone the subject's upstream grants in the same transaction; the
 	// RFC 7009 pushes wait until it commits.
-	revokedUpstream, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, revoked.SubjectUrn, *authCtx.ProjectID)
+	revokedUpstream, err := s.revoker.SoftDeleteSubjectSessions(ctx, dbtx, revoked.SubjectUrn, revoked.UserSessionIssuerID, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "revoke upstream remote sessions").LogError(ctx, logger)
 	}

@@ -405,7 +405,10 @@ func TestGetToolUsageFilterOptions_ReturnsUncappedShadowServersAndUsers(t *testi
 	})
 
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
-	require.Len(t, summary.Targets, 25)
+	// The summary's target list feeds several cards at once — servers, skills,
+	// most errors — so its limit sits far above what any one card shows and a
+	// project of this size comes back whole.
+	require.Len(t, summary.Targets, 30)
 }
 
 func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T) {
@@ -480,12 +483,17 @@ func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T)
 }
 
 type hostedToolEventParams struct {
-	projectID   string
-	timestamp   time.Time
-	toolsetSlug string
-	toolName    string
-	userEmail   string
-	statusCode  int
+	projectID      string
+	timestamp      time.Time
+	toolsetSlug    string
+	toolName       string
+	userEmail      string
+	statusCode     int
+	clientName     string
+	clientVersion  string
+	agentID        string
+	externalUserID string
+	userID         string
 }
 
 func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, p hostedToolEventParams) {
@@ -503,6 +511,21 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 		"gen_ai.conversation.id":         uuid.New().String(),
 		"gen_ai.response.finish_reasons": []string{"tool_calls"},
 	}
+	// Left off entirely when unset, so a fixture can model a caller Gram never
+	// saw an initialize handshake for.
+	if p.clientName != "" {
+		attrs["gram.mcp.client.name"] = p.clientName
+	}
+	if p.clientVersion != "" {
+		attrs["gram.mcp.client.version"] = p.clientVersion
+	}
+	if p.agentID != "" {
+		attrs["gram.event.source"] = "tool_call"
+		attrs["gram.authorization.actor.type"] = "agent"
+		attrs["gram.authorization.actor.id"] = p.agentID
+	}
+	attrs["gram.external_user.id"] = p.externalUserID
+	attrs["user.id"] = p.userID
 	attrsJSON, err := json.Marshal(attrs)
 	require.NoError(t, err)
 
@@ -512,7 +535,8 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 	// UUID hyphens to get 32 hex chars. This is what lands the event in the
 	// trace_summaries materialized view that now backs the tool-usage queries.
 	traceID := strings.ReplaceAll(uuid.New().String(), "-", "")
-	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+	// Query fixtures must be committed before reading; do not depend on the shared async queue.
+	err = ti.chClient.InsertTelemetryLogsSync(ctx, []telemetryRepo.InsertTelemetryLogParams{{
 		ID:                   uuid.New().String(),
 		TimeUnixNano:         p.timestamp.UnixNano(),
 		ObservedTimeUnixNano: p.timestamp.UnixNano(),
@@ -529,7 +553,7 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 		ServiceName:          "gram-http-gateway",
 		ServiceVersion:       nil,
 		GramChatID:           nil,
-	})
+	}})
 	require.NoError(t, err)
 }
 
@@ -622,7 +646,8 @@ func insertDirectMCPToolEvent(t *testing.T, ctx context.Context, ti *testInstanc
 
 	spanID := uuid.New().String()[:16]
 	traceID := strings.ReplaceAll(uuid.New().String(), "-", "")
-	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+	// Query fixtures must be committed before reading; do not depend on the shared async queue.
+	err = ti.chClient.InsertTelemetryLogsSync(ctx, []telemetryRepo.InsertTelemetryLogParams{{
 		ID:                   uuid.New().String(),
 		TimeUnixNano:         p.timestamp.UnixNano(),
 		ObservedTimeUnixNano: p.timestamp.UnixNano(),
@@ -639,7 +664,7 @@ func insertDirectMCPToolEvent(t *testing.T, ctx context.Context, ti *testInstanc
 		ServiceName:          "gram-remote-mcp",
 		ServiceVersion:       nil,
 		GramChatID:           nil,
-	})
+	}})
 	require.NoError(t, err)
 }
 
@@ -678,7 +703,8 @@ func insertHostedToolEventRow(t *testing.T, ctx context.Context, ti *testInstanc
 	require.NoError(t, err)
 
 	spanID := uuid.New().String()[:16]
-	err = ti.chClient.InsertTelemetryLog(ctx, telemetryRepo.InsertTelemetryLogParams{
+	// Query fixtures must be committed before reading; do not depend on the shared async queue.
+	err = ti.chClient.InsertTelemetryLogsSync(ctx, []telemetryRepo.InsertTelemetryLogParams{{
 		ID:                   uuid.New().String(),
 		TimeUnixNano:         timestamp.UnixNano(),
 		ObservedTimeUnixNano: timestamp.UnixNano(),
@@ -695,7 +721,7 @@ func insertHostedToolEventRow(t *testing.T, ctx context.Context, ti *testInstanc
 		ServiceName:          "gram-http-gateway",
 		ServiceVersion:       nil,
 		GramChatID:           nil,
-	})
+	}})
 	require.NoError(t, err)
 }
 
@@ -842,4 +868,245 @@ func TestGetToolUsageGranularEndpoints_MatchSummary(t *testing.T) {
 	breakdown, err := ti.service.GetToolUsageTargetToolBreakdown(ctx, &gen.GetToolUsageTargetToolBreakdownPayload{From: from, To: to})
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	require.Equal(t, summary.TargetToolBreakdown, breakdown.TargetToolBreakdown)
+}
+
+// Fixture writes must be visible without polling or a server-wide async flush.
+func TestToolUsageFixturesAreQueryReady(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	now := time.Now().UTC()
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{projectID: ti.projectID, timestamp: now, toolsetSlug: "fixture", toolName: "query", statusCode: 200})
+	insertDirectMCPToolEvent(t, ctx, ti, directMCPToolEventParams{projectID: ti.projectID, timestamp: now, sourceID: uuid.NewString(), mcpServerID: uuid.NewString(), toolName: "query", statusCode: 200})
+	insertHostedToolEventRow(t, ctx, ti, strings.ReplaceAll(uuid.NewString(), "-", ""), now, "fixture", "query", "")
+	var count uint64
+	require.NoError(t, ti.chConn.QueryRow(ctx, "SELECT count() FROM telemetry_logs WHERE gram_project_id = ?", ti.projectID).Scan(&count))
+	require.Equal(t, uint64(3), count, "fixture helpers must commit every row before returning")
+}
+
+func TestGetToolUsageClients_FoldsCaseAndUnattributed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	// Two spellings of one client must rank as one client: clients report
+	// whatever casing they like, and a split row would understate both.
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-20 * time.Minute),
+		toolsetSlug: "payments", toolName: "charge", userEmail: "alice@example.com",
+		statusCode: 200, clientName: "Claude Code", clientVersion: "2.4.1",
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-19 * time.Minute),
+		toolsetSlug: "payments", toolName: "refund", userEmail: "alice@example.com",
+		statusCode: 500, clientName: "claude code", clientVersion: "2.3.8",
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-18 * time.Minute),
+		toolsetSlug: "payments", toolName: "charge", userEmail: "bob@example.com",
+		statusCode: 200, clientName: "Cursor", clientVersion: "1.7.42",
+	})
+	// Reported no client at all: handshaked before Gram recorded identities,
+	// or never handshaked.
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-17 * time.Minute),
+		toolsetSlug: "payments", toolName: "charge", userEmail: "bob@example.com",
+		statusCode: 200,
+	})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	res, err := ti.service.GetToolUsageClients(ctx, &gen.GetToolUsageClientsPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Len(t, res.Clients, 3)
+
+	byKey := map[string]*gen.ToolUsageClientSummary{}
+	for _, client := range res.Clients {
+		byKey[client.ClientKey] = client
+	}
+
+	claude := byKey["claude code"]
+	require.NotNil(t, claude)
+	require.Equal(t, int64(2), claude.EventCount)
+	require.Equal(t, int64(1), claude.SuccessCount)
+	require.Equal(t, int64(1), claude.FailureCount)
+	require.Equal(t, int64(2), claude.UniqueTools)
+
+	require.NotNil(t, byKey["cursor"])
+	require.Equal(t, int64(1), byKey["cursor"].EventCount)
+
+	unattributed := byKey["unattributed"]
+	require.NotNil(t, unattributed)
+	require.Equal(t, int64(1), unattributed.EventCount)
+	require.Equal(t, "unattributed", unattributed.ClientLabel)
+
+	t.Run("client_keys narrows the shared aggregates", func(t *testing.T) {
+		t.Parallel()
+
+		totals, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{
+			From: from, To: to, ClientKeys: []string{"claude code"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(2), totals.Totals.EventCount)
+		require.Equal(t, int64(1), totals.Totals.FailureCount)
+
+		// The filter is applied in the shared params resolver, so a second
+		// endpoint proves it reaches every aggregate rather than just totals.
+		targets, err := ti.service.GetToolUsageTargets(ctx, &gen.GetToolUsageTargetsPayload{
+			From: from, To: to, ClientKeys: []string{"cursor"},
+		})
+		require.NoError(t, err)
+		require.Len(t, targets.Targets, 1)
+		require.Equal(t, int64(1), targets.Targets[0].EventCount)
+	})
+
+	t.Run("breaks down tools per client", func(t *testing.T) {
+		t.Parallel()
+
+		res, err := ti.service.GetToolUsageClientToolBreakdown(ctx, &gen.GetToolUsageClientToolBreakdownPayload{
+			From: from, To: to, ClientKeys: []string{"claude code"},
+		})
+		require.NoError(t, err)
+		require.Len(t, res.ClientToolBreakdown, 2)
+		for _, row := range res.ClientToolBreakdown {
+			require.Equal(t, "claude code", row.ClientKey)
+			require.Equal(t, int64(1), row.EventCount)
+		}
+	})
+}
+
+// The cards and the timeline must narrow by outcome the same way the rows do:
+// a page that filters to errors and then reports the whole window's totals is
+// telling two different stories at once.
+func TestGetToolUsageTotals_NarrowsByStatus(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	for _, status := range []int{200, 200, 500} {
+		insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+			projectID:   projectID,
+			timestamp:   now.Add(-10 * time.Minute),
+			toolsetSlug: "payments",
+			toolName:    "charge",
+			userEmail:   "alice@example.com",
+			statusCode:  status,
+		})
+	}
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	all, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, int64(3), all.Totals.EventCount)
+
+	errorsOnly, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{
+		From:     from,
+		To:       to,
+		Statuses: []gen.ToolUsageStatus{"error"},
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, int64(1), errorsOnly.Totals.EventCount)
+
+	successOnly, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{
+		From:     from,
+		To:       to,
+		Statuses: []gen.ToolUsageStatus{"success"},
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, int64(2), successOnly.Totals.EventCount)
+}
+
+// A free-text query has no column on the pre-aggregated view, so the summary
+// drops onto the same raw scan the trace listing uses. The two paths must
+// still agree about what they counted.
+func TestGetToolUsageTotals_NarrowsByQueryOnTheRawPath(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-10 * time.Minute),
+		toolsetSlug: "payments",
+		toolName:    "charge",
+		userEmail:   "alice@example.com",
+		statusCode:  200,
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID:   projectID,
+		timestamp:   now.Add(-9 * time.Minute),
+		toolsetSlug: "shipping",
+		toolName:    "quote",
+		userEmail:   "bob@example.com",
+		statusCode:  200,
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	query := "charge"
+
+	all, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{From: from, To: to})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, int64(2), all.Totals.EventCount)
+
+	res, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{
+		From:  from,
+		To:    to,
+		Query: &query,
+	})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, int64(1), res.Totals.EventCount)
+}
+
+func TestGetToolUsageUsers_ManagedAgentAttribution(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	now := time.Now().UTC()
+	agentIDs := []string{uuid.NewString(), uuid.NewString()}
+	for _, agentID := range agentIDs {
+		for _, email := range []string{"", "approver@example.com"} {
+			insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+				projectID: authCtx.ProjectID.String(), timestamp: now.Add(-time.Minute),
+				toolsetSlug: "payments", toolName: "charge", statusCode: 200,
+				agentID: agentID, userEmail: email, externalUserID: "approver-external", userID: "approver-id",
+			})
+		}
+	}
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: authCtx.ProjectID.String(), timestamp: now.Add(-time.Minute),
+		toolsetSlug: "payments", toolName: "charge", statusCode: 200, userEmail: "human@example.com",
+	})
+	params := telemetryRepo.GetToolUsageSummaryParams{
+		GramProjectID: authCtx.ProjectID.String(), TimeStart: now.Add(-time.Hour).UnixNano(), TimeEnd: now.UnixNano(),
+	}
+	rows, err := ti.chClient.GetToolUsageUsers(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, rows, 3)
+	for _, row := range rows {
+		if row.UserKind == "agent_id" {
+			require.Contains(t, agentIDs, row.UserKey)
+			require.Equal(t, "agent:"+row.UserKey, row.UserLabel)
+			require.EqualValues(t, 2, row.EventCount)
+		} else {
+			require.Equal(t, "email", row.UserKind)
+			require.Equal(t, "human@example.com", row.UserKey)
+		}
+	}
 }

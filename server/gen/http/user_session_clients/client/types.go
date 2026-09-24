@@ -52,6 +52,18 @@ type GetUserSessionClientResponseBody struct {
 	// extracted from its metadata document. Client-controlled and unverified; do
 	// not present it as an identity.
 	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	// What the client must present to authenticate: 'public' (nothing), 'secret'
+	// (a client secret), 'key' (an assertion signed by its published key), or
+	// 'misconfigured'. Derived by the same rule the token endpoint enforces, so it
+	// reads what the client will actually be held to rather than what it declared.
+	// 'misconfigured' means the registration contradicts itself and the client
+	// cannot authenticate at all.
+	CredentialKind *string `form:"credential_kind,omitempty" json:"credential_kind,omitempty" xml:"credential_kind,omitempty"`
+	// The raw RFC 7591 token_endpoint_auth_method the client declared, for
+	// debugging against the spec. Null for a client registered before the value
+	// was recorded, which is not the same as declaring 'none' -- credential_kind
+	// resolves both cases and is what should be displayed.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
 	// Validated on every /authorize.
 	RedirectUris     []string `form:"redirect_uris,omitempty" json:"redirect_uris,omitempty" xml:"redirect_uris,omitempty"`
 	ClientIDIssuedAt *string  `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
@@ -97,6 +109,18 @@ type RefreshUserSessionClientCIMDResponseBody struct {
 	// extracted from its metadata document. Client-controlled and unverified; do
 	// not present it as an identity.
 	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	// What the client must present to authenticate: 'public' (nothing), 'secret'
+	// (a client secret), 'key' (an assertion signed by its published key), or
+	// 'misconfigured'. Derived by the same rule the token endpoint enforces, so it
+	// reads what the client will actually be held to rather than what it declared.
+	// 'misconfigured' means the registration contradicts itself and the client
+	// cannot authenticate at all.
+	CredentialKind *string `form:"credential_kind,omitempty" json:"credential_kind,omitempty" xml:"credential_kind,omitempty"`
+	// The raw RFC 7591 token_endpoint_auth_method the client declared, for
+	// debugging against the spec. Null for a client registered before the value
+	// was recorded, which is not the same as declaring 'none' -- credential_kind
+	// resolves both cases and is what should be displayed.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
 	// Validated on every /authorize.
 	RedirectUris     []string `form:"redirect_uris,omitempty" json:"redirect_uris,omitempty" xml:"redirect_uris,omitempty"`
 	ClientIDIssuedAt *string  `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
@@ -901,6 +925,18 @@ type UserSessionClientResponseBody struct {
 	// extracted from its metadata document. Client-controlled and unverified; do
 	// not present it as an identity.
 	ClientName *string `form:"client_name,omitempty" json:"client_name,omitempty" xml:"client_name,omitempty"`
+	// What the client must present to authenticate: 'public' (nothing), 'secret'
+	// (a client secret), 'key' (an assertion signed by its published key), or
+	// 'misconfigured'. Derived by the same rule the token endpoint enforces, so it
+	// reads what the client will actually be held to rather than what it declared.
+	// 'misconfigured' means the registration contradicts itself and the client
+	// cannot authenticate at all.
+	CredentialKind *string `form:"credential_kind,omitempty" json:"credential_kind,omitempty" xml:"credential_kind,omitempty"`
+	// The raw RFC 7591 token_endpoint_auth_method the client declared, for
+	// debugging against the spec. Null for a client registered before the value
+	// was recorded, which is not the same as declaring 'none' -- credential_kind
+	// resolves both cases and is what should be displayed.
+	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
 	// Validated on every /authorize.
 	RedirectUris     []string `form:"redirect_uris,omitempty" json:"redirect_uris,omitempty" xml:"redirect_uris,omitempty"`
 	ClientIDIssuedAt *string  `form:"client_id_issued_at,omitempty" json:"client_id_issued_at,omitempty" xml:"client_id_issued_at,omitempty"`
@@ -1094,6 +1130,8 @@ func NewGetUserSessionClientUserSessionClientOK(body *GetUserSessionClientRespon
 		ClientIDMetadataCacheExpiresAt: body.ClientIDMetadataCacheExpiresAt,
 		ClientIDMetadataEtag:           body.ClientIDMetadataEtag,
 		ClientName:                     *body.ClientName,
+		CredentialKind:                 *body.CredentialKind,
+		TokenEndpointAuthMethod:        body.TokenEndpointAuthMethod,
 		ClientIDIssuedAt:               *body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:          body.ClientSecretExpiresAt,
 		CreatedAt:                      *body.CreatedAt,
@@ -1271,6 +1309,8 @@ func NewRefreshUserSessionClientCIMDUserSessionClientOK(body *RefreshUserSession
 		ClientIDMetadataCacheExpiresAt: body.ClientIDMetadataCacheExpiresAt,
 		ClientIDMetadataEtag:           body.ClientIDMetadataEtag,
 		ClientName:                     *body.ClientName,
+		CredentialKind:                 *body.CredentialKind,
+		TokenEndpointAuthMethod:        body.TokenEndpointAuthMethod,
 		ClientIDIssuedAt:               *body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:          body.ClientSecretExpiresAt,
 		CreatedAt:                      *body.CreatedAt,
@@ -1617,6 +1657,9 @@ func ValidateGetUserSessionClientResponseBody(body *GetUserSessionClientResponse
 	if body.ClientName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_name", "body"))
 	}
+	if body.CredentialKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_kind", "body"))
+	}
 	if body.RedirectUris == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("redirect_uris", "body"))
 	}
@@ -1643,6 +1686,11 @@ func ValidateGetUserSessionClientResponseBody(body *GetUserSessionClientResponse
 	}
 	if body.ClientIDMetadataCacheExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_metadata_cache_expires_at", *body.ClientIDMetadataCacheExpiresAt, goa.FormatDateTime))
+	}
+	if body.CredentialKind != nil {
+		if !(*body.CredentialKind == "public" || *body.CredentialKind == "secret" || *body.CredentialKind == "key" || *body.CredentialKind == "misconfigured") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_kind", *body.CredentialKind, []any{"public", "secret", "key", "misconfigured"}))
+		}
 	}
 	if body.ClientIDIssuedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
@@ -1674,6 +1722,9 @@ func ValidateRefreshUserSessionClientCIMDResponseBody(body *RefreshUserSessionCl
 	if body.ClientName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_name", "body"))
 	}
+	if body.CredentialKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_kind", "body"))
+	}
 	if body.RedirectUris == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("redirect_uris", "body"))
 	}
@@ -1700,6 +1751,11 @@ func ValidateRefreshUserSessionClientCIMDResponseBody(body *RefreshUserSessionCl
 	}
 	if body.ClientIDMetadataCacheExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_metadata_cache_expires_at", *body.ClientIDMetadataCacheExpiresAt, goa.FormatDateTime))
+	}
+	if body.CredentialKind != nil {
+		if !(*body.CredentialKind == "public" || *body.CredentialKind == "secret" || *body.CredentialKind == "key" || *body.CredentialKind == "misconfigured") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_kind", *body.CredentialKind, []any{"public", "secret", "key", "misconfigured"}))
+		}
 	}
 	if body.ClientIDIssuedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))
@@ -2698,6 +2754,9 @@ func ValidateUserSessionClientResponseBody(body *UserSessionClientResponseBody) 
 	if body.ClientName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("client_name", "body"))
 	}
+	if body.CredentialKind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("credential_kind", "body"))
+	}
 	if body.RedirectUris == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("redirect_uris", "body"))
 	}
@@ -2724,6 +2783,11 @@ func ValidateUserSessionClientResponseBody(body *UserSessionClientResponseBody) 
 	}
 	if body.ClientIDMetadataCacheExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_metadata_cache_expires_at", *body.ClientIDMetadataCacheExpiresAt, goa.FormatDateTime))
+	}
+	if body.CredentialKind != nil {
+		if !(*body.CredentialKind == "public" || *body.CredentialKind == "secret" || *body.CredentialKind == "key" || *body.CredentialKind == "misconfigured") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.credential_kind", *body.CredentialKind, []any{"public", "secret", "key", "misconfigured"}))
+		}
 	}
 	if body.ClientIDIssuedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.client_id_issued_at", *body.ClientIDIssuedAt, goa.FormatDateTime))

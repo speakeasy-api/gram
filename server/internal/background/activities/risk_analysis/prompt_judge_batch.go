@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -58,6 +59,14 @@ func judgeFanout(
 	onChunk func(end int),
 ) {
 	for start := 0; start < len(indices); start += judgeConcurrency {
+		if err := ctx.Err(); err != nil {
+			for pos := start; pos < len(indices); pos++ {
+				idx := indices[pos]
+				apply(pos, idx, nil, err, 0)
+			}
+			return
+		}
+
 		end := min(start+judgeConcurrency, len(indices))
 		var wg sync.WaitGroup
 		for pos := start; pos < end; pos++ {
@@ -84,11 +93,13 @@ func judgeFanout(
 	}
 }
 
-func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) [][]scanners.Finding {
-	out := make([][]scanners.Finding, len(messages))
+func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, masks CategoryScopeMasks) ([][]scanners.Finding, error) {
+	out := make([]scanners.Result, len(messages))
+	models := make([]string, len(messages))
+	providers := make([]string, len(messages))
 	cfg := promptpolicy.ParseConfig(policy.ModelConfig)
 	if !a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagPromptPolicies) {
-		return out
+		return findingsFromResults(out), nil
 	}
 
 	indices := make([]int, 0, len(messages))
@@ -99,51 +110,68 @@ func (a *AnalyzeBatch) scanPromptPolicy(ctx context.Context, args AnalyzeBatchAr
 		indices = append(indices, i)
 	}
 	if len(indices) == 0 {
-		return out
+		return findingsFromResults(out), nil
 	}
 
 	if a.judge == nil || !policy.Prompt.Valid || strings.TrimSpace(policy.Prompt.String) == "" {
 		// Fresh slice per index (not one shared slice) so setEventMatch below
 		// stamps each finding with its own message rather than aliasing.
 		for _, idx := range indices {
-			findings := promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
-			setEventMatch(findings, messages[idx])
-			out[idx] = findings
+			out[idx].Findings = promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true)
+			setEventMatch(out[idx].Findings, messages[idx])
 		}
-		return out
+		return findingsFromResults(out), nil
 	}
 
-	a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices)
+	if err := a.publishPromptPolicyScanRequests(ctx, args, policy, messages, indices); err != nil {
+		return nil, err
+	}
 
+	startedAt := time.Now().UTC()
 	judgeFanout(
 		ctx, a.judge,
 		args.OrganizationID, args.ProjectID.String(), policy.Prompt.String, cfg,
 		messages, indices,
 		func(_, idx int, verdict *promptpolicy.Verdict, err error, _ time.Duration) {
-			findings := promptpolicy.FindingsFromEvaluation(cfg, verdict, err, false)
-			setEventMatch(findings, messages[idx])
-			out[idx] = findings
+			out[idx].Findings = promptpolicy.FindingsFromEvaluation(cfg, verdict, err, false)
+			if err == nil && verdict != nil && verdict.Completed {
+				out[idx].STokens = verdict.STokens
+				out[idx].Completed = true
+				models[idx] = verdict.Model
+				providers[idx] = verdict.Provider
+			}
+			setEventMatch(out[idx].Findings, messages[idx])
 		},
 		func(end int) { activity.RecordHeartbeat(ctx, promptpolicy.Source, end) },
 	)
-	return out
+	requestID := batchScanRequestID(args, "prompt_policy").String()
+
+	for i := range out {
+		if !out[i].Completed {
+			continue
+		}
+		provenance := batchRiskProvenance(args, messages[i], inlineBatchExecutionPath, requestID)
+		provenance.Model = models[i]
+		provenance.Provider = providers[i]
+		if err := a.riskRecorder.Record(ctx, metering.RiskPromptPolicy(), provenance, out[i].STokens, startedAt); err != nil {
+			a.logger.ErrorContext(ctx, "record prompt policy usage", attr.SlogError(err))
+		}
+	}
+	return findingsFromResults(out), nil
 }
 
 func (a *AnalyzeBatch) projectFlagEnabled(ctx context.Context, orgID string, projectID uuid.UUID, flag feature.Flag) bool {
 	return policyflags.ProjectFlagEnabled(ctx, a.logger, repo.New(a.db), a.flags, orgID, projectID, flag)
 }
 
-func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, indices []int) {
-	requestID, err := uuid.NewV7()
-	if err != nil {
-		a.logger.WarnContext(ctx, "failed to generate prompt policy scan request id", attr.SlogError(err))
-		return
-	}
+func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args AnalyzeBatchArgs, policy repo.RiskPolicy, messages []batchMessage, indices []int) error {
 
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(indices))
+	requestID := batchScanRequestID(args, "prompt_policy")
 	for _, idx := range indices {
 		msg := messages[idx]
+		provenance := batchRiskProvenance(args, msg, shadowStreamExecutionPath, requestID.String())
 		chatMessageID, contentPartID := msg.anchorIDStrings()
 		jm := batchJudgeMessage(msg)
 		toolCalls := make([]*riskv1.PromptPolicyAnalysis_ToolCall, 0, len(jm.ToolCalls))
@@ -155,14 +183,22 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 		}
 
 		publishResults = append(publishResults, a.promptPolicyPub.Publish(ctx, riskv1.PromptPolicyAnalysis_builder{
-			RequestId:         new(requestID.String()),
-			ChatMessageId:     chatMessageID,
-			ContentPartId:     contentPartID,
-			ProjectId:         new(args.ProjectID.String()),
-			OrganizationId:    &args.OrganizationID,
-			RiskPolicyId:      new(args.RiskPolicyID.String()),
-			RiskPolicyVersion: &args.PolicyVersion,
-			CreatedAt:         &createdAt,
+			RequestId:               new(requestID.String()),
+			ChatMessageId:           chatMessageID,
+			ContentPartId:           contentPartID,
+			ProjectId:               new(args.ProjectID.String()),
+			OrganizationId:          &args.OrganizationID,
+			RiskPolicyId:            new(args.RiskPolicyID.String()),
+			RiskPolicyVersion:       &args.PolicyVersion,
+			CreatedAt:               &createdAt,
+			ChatId:                  nilUUIDString(msg.ChatID),
+			ParentChatMessageId:     nilUUIDString(msg.ParentChatMessageID),
+			OriginRiskPolicyId:      new(args.RiskPolicyID.String()),
+			OriginRiskPolicyVersion: &args.PolicyVersion,
+			MessageLinkReason:       &provenance.MessageLinkReason,
+			ExecutionPath:           new(shadowStreamExecutionPath),
+			ToolCallId:              &provenance.ToolCallID,
+			HookSource:              &msg.Source,
 
 			Content:     new(msg.Content),
 			UserId:      &msg.UserID,
@@ -174,5 +210,5 @@ func (a *AnalyzeBatch) publishPromptPolicyScanRequests(ctx context.Context, args
 			ToolCalls:   toolCalls,
 		}.Build()))
 	}
-	drainPublishAcks(ctx, a.logger, "failed to publish prompt policy scan request", publishResults)
+	return drainPublishAcks(ctx, "publish prompt policy scan requests", publishResults)
 }

@@ -1,26 +1,13 @@
-<Style backgroundColor="#FAFAFA" backgroundXPadding="0" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="0" bodyYPadding="0" bodyFontFamily="Inter" bodyFontCategory="ui-sans-serif" borderColor="" borderWidth="0" borderRadius="0" buttonBodyColor="#121212" buttonBodyXPadding="22" buttonBodyYPadding="14" buttonBorderColor="" buttonBorderWidth="0" buttonBorderRadius="0" buttonTextColor="#FFFFFF" buttonTextFormat="0" buttonTextFontSize="13" dividerColor="#BABABA" dividerBorderWidth="1" textBaseColor="#545454" textBaseFontSize="16" textBaseLineHeight="165" textBaseLetterSpacing="0" textLinkColor="#121212" heading1Color="#121212" heading1FontSize="44" heading1LineHeight="112" heading1LetterSpacing="-1.5" heading2Color="" heading2FontSize="24" heading2LineHeight="125" heading2LetterSpacing="0" heading3Color="" heading3FontSize="20" heading3LineHeight="125" heading3LetterSpacing="0" />
-<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzwke702cu0j3bz2gats4u.png" width="600" />
-<Columns gap="12" widths="10,45,45" stackOnMobile="false" paddingTop="26" paddingRight="40" paddingBottom="24" paddingLeft="40">
-  <ColumnItem verticalAlignment="middle">
-    <Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzv81y00z60i1dmtf9twha.png" width="28" />
-  </ColumnItem>
-  <ColumnItem verticalAlignment="middle">
-    <Paragraph fontSize="21" lineHeight="100">speakeasy</Paragraph>
-  </ColumnItem>
-  <ColumnItem verticalAlignment="middle">
-    <Paragraph fontSize="12" lineHeight="140" align="right"><Text textColor="#757575">AI CONTROL PLANE</Text></Paragraph>
-  </ColumnItem>
-</Columns>
-<Paragraph fontSize="12" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40"><Strong textColor="#757575">CUSTOM DOMAIN · ACTION REQUIRED</Strong></Paragraph>
-<H1 paddingRight="40" paddingBottom="26" paddingLeft="40">Your custom domain needs attention.</H1>
-<Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">Speakeasy detected a health issue with {data.domain}. Review the reported issue and update the domain configuration.</Paragraph>
-<Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DBDBDB" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24">
-  <Paragraph fontSize="12" lineHeight="140"><Strong textColor="#757575">REPORTED ISSUE</Strong></Paragraph>
-  <Paragraph fontSize="14" lineHeight="155" paddingTop="8">{data.issue_message}</Paragraph>
+<Style themeId="cmsnm620801ug0j2jdxiw79j4" backgroundColor="#FAFAFA" backgroundXPadding="0" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="32" bodyYPadding="32" borderColor="#DCDCDC" borderWidth="1" borderRadius="0" buttonBodyColor="#000000" buttonBodyXPadding="20" buttonBodyYPadding="12" buttonBorderColor="" buttonBorderWidth="0" buttonBorderRadius="0" buttonTextColor="#FAFAFA" buttonTextFontSize="15" dividerColor="#DCDCDC" dividerBorderWidth="1" textBaseColor="#000000" textBaseFontSize="15" textBaseLineHeight="150" textBaseLetterSpacing="0" textLinkColor="#2873D7" heading1Color="#000000" heading1FontSize="26" heading1LineHeight="115" heading1LetterSpacing="-1" heading2Color="#000000" heading2FontSize="20" heading2LineHeight="120" heading2LetterSpacing="0" heading3Color="#000000" heading3FontSize="16" heading3LineHeight="120" heading3LetterSpacing="0" />
+<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmt7eueee05e20izu0frdx1jq.png" alt="Speakeasy" width="160" align="left" paddingBottom="28" />
+<Paragraph fontSize="12" paddingBottom="4"><Text textColor="#6E6E6E">CUSTOM DOMAIN / ACTION REQUIRED</Text></Paragraph>
+<H1>Your custom domain needs attention</H1>
+<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmshilgvx01u30j6t4t0211tl.png" alt="" width="536" paddingTop="12" paddingBottom="20" />
+<Paragraph paddingBottom="16">Speakeasy detected a health issue with {data.domain}. Review the reported issue and update the domain configuration.</Paragraph>
+<Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DCDCDC" paddingTop="18" paddingRight="20" paddingBottom="16" paddingLeft="20">
+  <Paragraph fontSize="12" paddingBottom="4"><Text textColor="#6E6E6E">REPORTED ISSUE</Text></Paragraph>
+  <Paragraph fontSize="14" lineHeight="150">{data.issue_message}</Paragraph>
 </Section>
-<Button href="{data.domain_link}" paddingTop="32" paddingRight="40" paddingBottom="48" paddingLeft="40">Review domain →</Button>
-<Divider />
-<Section blockColor="#FAFAFA" paddingTop="24" paddingRight="40" paddingBottom="30" paddingLeft="40">
-  <Paragraph fontSize="12" lineHeight="160"><Strong textColor="#757575">SPEAKEASY · AI CONTROL PLANE</Strong></Paragraph>
-  <Paragraph fontSize="12" lineHeight="160" paddingTop="8">You’re receiving this operational alert at {data.email} because this address is configured for custom domain health notifications.</Paragraph>
-</Section>
+<Button href="{data.domain_link}" align="left" paddingTop="24" paddingBottom="32">Review domain</Button>
+<Divider paddingBottom="16" />
+<Paragraph fontSize="12"><Text textColor="#6E6E6E">You’re receiving this operational alert at {data.email} because this address is configured for custom domain health notifications.</Text></Paragraph>

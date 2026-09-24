@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -32,8 +31,8 @@ import (
 //     server's risk_policy:block rule; deny writes one for everyone.
 //
 // Only server_url targets are enforceable — grants key on the canonical URL,
-// and an stdio command has none. Those decisions still record; the caller is
-// responsible for surfacing that they do not enforce.
+// and an stdio command has none. Platform callers reject stdio targets; the
+// dashboard may still record those decisions without calling this function.
 //
 // One combination is rejected rather than approximated: an approval narrower
 // than everyone when only allow_all policies govern. The evaluator never
@@ -53,14 +52,9 @@ func reconcileDecisionGrants(
 	approved bool,
 	principals []urn.Principal,
 ) error {
-	// Serialized against the policy-creation backfill: two check-then-write
-	// transactions that each read what the other writes would otherwise miss
-	// each other's uncommitted rows and both commit, leaving this decision
-	// unenforced on a policy created in the same instant.
-	if err := repo.New(db).LockProjectEnforcementState(ctx, projectID.String()); err != nil {
-		return fmt.Errorf("lock project enforcement state: %w", err)
-	}
-
+	// DecideInTransaction already holds the project enforcement lock before its
+	// request row lock. Keeping lock acquisition at the command boundary gives
+	// every standing-decision writer one global order.
 	rows, err := riskrepo.New(db).ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
 	if err != nil {
 		return fmt.Errorf("list shadow mcp policies for decision: %w", err)

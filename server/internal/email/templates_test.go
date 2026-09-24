@@ -26,8 +26,6 @@ func TestParseTemplateIDs_ValidatesCompleteRegistry(t *testing.T) {
 	ids, err := ParseTemplateIDs(`{
 		"team_invite":"id-1",
 		"enterprise_admin_onboarding":"id-2",
-		"tum_usage_threshold":"id-3",
-		"tum_usage_overage":"id-4",
 		"openrouter_chat_credits_threshold":"id-5",
 		"openrouter_internal_credits_threshold":"id-6",
 		"custom_domain_unhealthy":"id-7",
@@ -35,7 +33,8 @@ func TestParseTemplateIDs_ValidatesCompleteRegistry(t *testing.T) {
 		"access_request":"id-9",
 		"trial_ending_soon":"id-10",
 		"access_paused":"id-11",
-		"payg_activated":"id-12"
+		"payg_activated":"id-12",
+		"setup_task_assignment":"id-13"
 	}`)
 	require.NoError(t, err)
 	require.NoError(t, ids.ValidateRegistered())

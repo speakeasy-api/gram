@@ -13,8 +13,8 @@ type UserSession struct {
 	ID string
 	// The issuing user_session_issuer id.
 	UserSessionIssuerID string
-	// The session's subject URN (user:<id> | apikey:<uuid> |
-	// anonymous:<mcp-session-id>).
+	// The session's subject URN (user:<id> | apikey:<uuid> | agent:<uuid> |
+	// anonymous:<mcp-session-id> | workload:<issuer-id>:<external-subject>).
 	SubjectUrn string
 	// Current access-token JTI; used by the revocation path.
 	Jti string
@@ -37,7 +37,19 @@ type UserSession struct {
 	// ID Metadata Document (CIMD) hosted at this URL, rather than registered via
 	// RFC 7591 DCR. Null for DCR clients and for sessions with no bound client.
 	ClientIDMetadataURI *string
-	// Subject kind: 'user', 'apikey', or 'anonymous'.
+	// What the client that established this session must present to authenticate:
+	// 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed
+	// by its published key), or 'misconfigured'. Derived by the same rule the
+	// token endpoint enforces. Null only when the session has no bound client,
+	// which is the case for API key and anonymous subjects; a bound client always
+	// resolves to one of the four.
+	ClientCredentialKind *string
+	// The raw RFC 7591 token_endpoint_auth_method the client declared, for
+	// debugging against the spec. Null both for a session with no bound client and
+	// for a client registered before the value was recorded;
+	// client_credential_kind separates those cases and is what should be displayed.
+	ClientTokenEndpointAuthMethod *string
+	// Subject kind: 'user', 'apikey', 'agent', 'anonymous', or 'workload'.
 	SubjectType string
 	// Resolved human-readable name of the subject, if known.
 	SubjectDisplayName *string
@@ -56,4 +68,8 @@ type UserSession struct {
 	// tools. A session can have several: an issuer may have more than one
 	// remote_session_client attached.
 	Upstreams []*UserSessionUpstream
+	// Set only when subject_type is 'workload': the external issuer that vouched
+	// for the machine, the subject it asserted, and the agent the workload
+	// inherits its authority from.
+	Workload *UserSessionWorkload
 }

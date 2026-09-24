@@ -9,12 +9,31 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+/**
+ * The latest recorded decision still standing for this server, independent of the request's lifecycle status — a reopened request's prior decision keeps enforcing until re-decided, and clients checking an edit against standing intent must read this rather than status. Absent when nothing was ever decided or the decision was superseded.
+ */
+export const StandingDecision = {
+  Approved: "approved",
+  Denied: "denied",
+} as const;
+/**
+ * The latest recorded decision still standing for this server, independent of the request's lifecycle status — a reopened request's prior decision keeps enforcing until re-decided, and clients checking an edit against standing intent must read this rather than status. Absent when nothing was ever decided or the decision was superseded.
+ */
+export type StandingDecision = ClosedEnum<typeof StandingDecision>;
+
+/**
+ * superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.
+ */
 export const Status = {
   Unreviewed: "unreviewed",
   Requested: "requested",
   Approved: "approved",
   Denied: "denied",
+  Superseded: "superseded",
 } as const;
+/**
+ * superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.
+ */
 export type Status = ClosedEnum<typeof Status>;
 
 /**
@@ -30,8 +49,20 @@ export type ShadowMCPInventoryApprovalRequest = {
    * How many distinct people have asked for this server.
    */
   requesterCount: number;
+  /**
+   * The latest recorded decision still standing for this server, independent of the request's lifecycle status — a reopened request's prior decision keeps enforcing until re-decided, and clients checking an edit against standing intent must read this rather than status. Absent when nothing was ever decided or the decision was superseded.
+   */
+  standingDecision?: StandingDecision | undefined;
+  /**
+   * superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.
+   */
   status: Status;
 };
+
+/** @internal */
+export const StandingDecision$inboundSchema: z.ZodMiniEnum<
+  typeof StandingDecision
+> = z.enum(StandingDecision);
 
 /** @internal */
 export const Status$inboundSchema: z.ZodMiniEnum<typeof Status> = z.enum(
@@ -49,12 +80,14 @@ export const ShadowMCPInventoryApprovalRequest$inboundSchema: z.ZodMiniType<
     ),
     id: z.string(),
     requester_count: z.int(),
+    standing_decision: z.optional(StandingDecision$inboundSchema),
     status: Status$inboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
       "evidence_changed_at": "evidenceChangedAt",
       "requester_count": "requesterCount",
+      "standing_decision": "standingDecision",
     });
   }),
 );

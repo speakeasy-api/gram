@@ -113,6 +113,7 @@ func (i *ResourcesReadUsageTrackingInterceptor) InterceptResourcesReadResponse(c
 		ResponseStatusCode:    statusCode,
 		ToolsetID:             nil,
 		MCPSessionID:          sessionID,
+		MetaMCPServerID:       nil,
 		FunctionCPUUsage:      nil,
 		FunctionMemUsage:      nil,
 		FunctionExecutionTime: nil,

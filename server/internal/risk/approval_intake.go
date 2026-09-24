@@ -5,6 +5,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // ShadowMCPApprovalIntake admits a blocked shadow-MCP server into the MCP
@@ -33,4 +36,17 @@ type ShadowMCPApprovalIntake interface {
 	// error (an inexpressible blast radius) aborts the policy write with its
 	// explanation intact.
 	ReconcileStandingDecisionsForPolicy(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, policyID uuid.UUID) error
+
+	// ReviewShadowMCPPolicyURLEdit names the standing decisions a URL-list
+	// edit on an already-blocking policy would contradict, plus every URL
+	// whose grants carry a standing decision (so the reconciler can leave
+	// retained ones untouched). A nil URL list means that list is not being
+	// edited.
+	ReviewShadowMCPPolicyURLEdit(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, policyID uuid.UUID, disposition string, desiredAllowedURLs []string, desiredBlockedURLs []string) (shadowmcp.StandingDecisionReview, error)
+
+	// SupersedeShadowMCPDecisions transitions each conflicted request to
+	// superseded — actor-attributed and audit-logged, decision history and
+	// rationale intact — in the same transaction as the policy edit that
+	// displaces it.
+	SupersedeShadowMCPDecisions(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID, conflicts []shadowmcp.StandingDecisionConflict, actor urn.Principal, actorDisplayName *string) error
 }

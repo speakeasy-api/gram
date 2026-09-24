@@ -1,8 +1,9 @@
 import { AssetImageUploadField } from "@/components/asset-image-upload-field";
 import { RequireScope } from "@/components/require-scope";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { Text } from "@/components/ui/Text";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
@@ -10,7 +11,7 @@ import { useRefreshOrganizationRemoteSessionIssuerMetadataMutation } from "@gram
 import { useUpdateOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionIssuer.js";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
-import { Link } from "react-router";
+import { ExistingIssuerLink } from "../../ExistingIssuerLink";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -25,13 +26,14 @@ import { DeleteIssuerDialog } from "../../RemoteIdentityProviders";
 import { issuerDisplayName } from "../../issuerDisplay";
 import { SettingsField, SettingsSection } from "../../issuerSettingsFields";
 import { buildUpdateIssuerForm } from "../../issuerSettingsForm";
+import { IssuerTunnelSelector } from "./IssuerTunnelSelector";
 
 export function SettingsTab({
   issuer,
 }: {
   issuer: RemoteSessionIssuer;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const queryClient = useQueryClient();
   const [name, setName] = useState(issuer.name ?? "");
   // Seeded from the saved issuer like name: buildUpdateIssuerForm always sends
@@ -44,7 +46,11 @@ export function SettingsTab({
   const [slug, setSlug] = useState(issuer.slug);
   const [clientSetupDocumentationUrl, setClientSetupDocumentationUrl] =
     useState(issuer.clientSetupDocumentationUrl ?? "");
+  const [tunneledMcpServerId, setTunneledMcpServerId] = useState(
+    issuer.tunneledMcpServerId ?? "",
+  );
   const [showDelete, setShowDelete] = useState(false);
+  const isPlatformAdmin = useIsPlatformAdmin();
   const { hasAnyScope } = useRBAC();
   const hasOrgAdminScope = hasAnyScope(["org:admin"]);
 
@@ -93,6 +99,16 @@ export function SettingsTab({
       serviceDocumentation: issuer.serviceDocumentation ?? "",
       opPolicyUri: issuer.opPolicyUri ?? "",
       opTosUri: issuer.opTosUri ?? "",
+      userinfoEndpoint: issuer.userinfoEndpoint ?? "",
+      introspectionEndpoint: issuer.introspectionEndpoint ?? "",
+      introspectionEndpointAuthMethodsSupported:
+        issuer.introspectionEndpointAuthMethodsSupported ?? null,
+      idTokenSigningAlgValuesSupported:
+        issuer.idTokenSigningAlgValuesSupported ?? null,
+      claimsSupported: issuer.claimsSupported ?? null,
+      backchannelLogoutSupported: issuer.backchannelLogoutSupported ?? null,
+      authorizationResponseIssParameterSupported:
+        issuer.authorizationResponseIssParameterSupported ?? null,
     },
     // Seed the saved values into the fields but not a discovery snapshot, so the
     // Discover control is available against the existing issuer URL. This tab
@@ -203,6 +219,10 @@ export function SettingsTab({
           registrationEndpoint,
           jwksUri,
           discoveredSnapshot,
+          tunneledMcpServerId:
+            isPlatformAdmin && issuer.projectId
+              ? tunneledMcpServerId
+              : undefined,
         }),
       },
     });
@@ -226,6 +246,12 @@ export function SettingsTab({
         />
       </SettingsSection>
 
+      <IssuerTunnelSelector
+        projectId={issuer.projectId}
+        value={tunneledMcpServerId}
+        onChange={setTunneledMcpServerId}
+      />
+
       <SettingsSection
         title="Issuer configuration"
         description="The upstream Authorization Server. Refresh to re-read its RFC 8414 metadata, or change the issuer URL and run discovery to point this provider somewhere else."
@@ -237,17 +263,7 @@ export function SettingsTab({
             <IssuerDuplicateWarning
               viewerScope="organization"
               matches={duplicateMatches}
-              renderLink={(match) => (
-                <Button asChild variant="secondary">
-                  <Link
-                    to={orgRoutes.remoteIdentityProviders.issuerDetail.href(
-                      match.id,
-                    )}
-                  >
-                    View existing provider
-                  </Link>
-                </Button>
-              )}
+              renderLink={(match) => <ExistingIssuerLink match={match} />}
             />
           }
           onIssuerUrlChange={(value) => {
@@ -381,7 +397,7 @@ export function SettingsTab({
           issuerId={issuer.id}
           issuerLabel={issuerDisplayName(issuer)}
           onClose={() => setShowDelete(false)}
-          onDeleted={() => orgRoutes.remoteIdentityProviders.goTo()}
+          onDeleted={() => routes.remoteIdentityProviders.goTo()}
         />
       )}
     </div>

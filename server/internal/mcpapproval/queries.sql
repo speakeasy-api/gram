@@ -56,6 +56,43 @@ WHERE r.project_id = @project_id
   AND r.target_key = @target_key
   AND r.deleted IS FALSE;
 
+-- name: GetPlatformRequesterApprovalRequest :one
+-- Returns one request only when the calling user is attached as a requester.
+-- The organization, project, request, and user pins make cross-tenant and
+-- other-requester reads indistinguishable from a missing request.
+SELECT
+  r.id
+  , r.target_kind
+  , r.target_raw
+  , r.status
+  , CASE
+      WHEN r.status = 'superseded' THEN ''
+      ELSE COALESCE((
+        SELECT d.decision
+        FROM mcp_approval_decisions d
+        WHERE d.mcp_approval_request_id = r.id
+          AND d.project_id = r.project_id
+          AND d.deleted IS FALSE
+          AND d.decision IN ('approved', 'denied')
+        ORDER BY d.decided_at DESC, d.id DESC
+        LIMIT 1
+      ), '')
+    END::text AS standing_decision
+  , req.requested_at
+  , r.created_at
+  , r.updated_at
+FROM mcp_approval_requests r
+JOIN mcp_approval_request_requesters req
+  ON req.mcp_approval_request_id = r.id
+  AND req.organization_id = r.organization_id
+  AND req.project_id = r.project_id
+  AND req.deleted IS FALSE
+WHERE r.id = @id
+  AND r.organization_id = @organization_id
+  AND r.project_id = @project_id
+  AND req.user_id = @user_id
+  AND r.deleted IS FALSE;
+
 -- name: ListApprovalRequestsByTargetKeys :many
 -- Resolves the approval request tracking each of a set of canonical server
 -- URLs, so the Shadow MCP inventory can join approval state onto its rows.
@@ -66,6 +103,17 @@ SELECT
   , r.target_key
   , r.status
   , r.evidence_changed_at
+  -- The latest decision independent of lifecycle status: a reopened
+  -- request's prior decision still stands until re-decided.
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -77,6 +125,42 @@ FROM mcp_approval_requests r
 WHERE r.project_id = @project_id
   AND r.target_kind = 'server_url'
   AND r.target_key = ANY (@target_keys::text[])
+  AND r.deleted IS FALSE;
+
+-- name: GetApprovalRequestTarget :one
+-- Exact projection for one inventory target. This carries the same latest
+-- decision and requester count as ListApprovalRequestTargets without scanning
+-- every review in the project for a get-by-reference call. The partial unique
+-- index on (project_id, target_kind, target_key) guarantees one live row.
+SELECT
+  r.id
+  , r.target_kind
+  , r.target_raw
+  , r.target_key
+  , r.status
+  , r.evidence_changed_at
+  , r.created_at
+  , r.updated_at
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = @project_id
+  AND r.target_kind = @target_kind
+  AND r.target_key = @target_key
   AND r.deleted IS FALSE;
 
 -- name: ListApprovalRequestTargets :many
@@ -92,6 +176,16 @@ SELECT
   , r.evidence_changed_at
   , r.created_at
   , r.updated_at
+  -- Same latest-decision join as ListApprovalRequestsByTargetKeys.
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -225,7 +319,7 @@ ON CONFLICT (project_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDA
 SET updated_at = clock_timestamp()
   , status = CASE
       WHEN EXCLUDED.status = 'requested'
-        AND mcp_approval_requests.status IN ('denied', 'unreviewed')
+        AND mcp_approval_requests.status IN ('denied', 'unreviewed', 'superseded')
         THEN EXCLUDED.status
       ELSE mcp_approval_requests.status
     END
@@ -374,23 +468,23 @@ WHERE id = @id
   AND deleted IS FALSE;
 
 -- name: LockProjectEnforcementState :exec
--- Serializes the two writers of a project's enforcement grants: recording a
--- decision (which writes onto every blocking policy) and creating or
--- transitioning a blocking policy (which replays every standing decision).
--- Without a shared lock the two transactions can each miss the other's
--- uncommitted row and both commit, leaving a decision unenforced on the new
--- policy — the exact contradiction the backfill exists to remove. An
--- advisory transaction lock releases on commit or rollback, so neither
--- writer can forget to unlock.
+-- Serializes every writer and admission reader of a project's Shadow MCP
+-- enforcement state. Decisions, supersession, policy mutations, and policy
+-- deletion acquire this before their domain locks so an admission check can
+-- observe one complete ordering of policy and standing-decision state.
+-- The advisory transaction lock releases on commit or rollback, so no caller
+-- can forget to unlock it.
 SELECT pg_advisory_xact_lock(hashtextextended('mcp-approval-enforcement:' || @project_id::text, 0));
 
 -- name: ListStandingServerDecisionsForProject :many
 -- The latest decision per server_url review in a project — what enforcement
--- derived its grants from. Read by the policy-creation backfill so a blocking
--- policy created after decisions were recorded honors them, instead of
--- blocking servers whose rows still read approved.
+-- derived its grants from. Read by the policy-creation backfill and by the
+-- policy URL-list conflict check (which is why the request id rides along).
+-- Superseded requests are excluded: their decisions were explicitly
+-- overridden and must never be replayed.
 SELECT
-    r.target_key
+    r.id
+  , r.target_key
   , r.target_raw
   , d.decision
   , d.granted_principal_urns
@@ -406,6 +500,34 @@ JOIN LATERAL (
 ) d ON TRUE
 WHERE r.project_id = @project_id
   AND r.target_kind = 'server_url'
+  AND r.status != 'superseded'
+  AND r.deleted IS FALSE;
+
+-- name: GetStandingServerDecisionForAdmission :one
+-- Exact standing decision used by distribution admission after the caller has
+-- acquired LockProjectEnforcementState. Organization, project, kind, and the
+-- canonical target key are all part of the predicate so a missing or
+-- cross-tenant target has the same no-row result. Unknown or superseded request
+-- states and deleted decision history never authorize distribution.
+SELECT
+    r.id
+  , d.decision
+  , d.granted_principal_urns
+FROM mcp_approval_requests r
+JOIN LATERAL (
+    SELECT decision, granted_principal_urns
+    FROM mcp_approval_decisions
+    WHERE mcp_approval_request_id = r.id
+      AND project_id = r.project_id
+      AND deleted IS FALSE
+    ORDER BY decided_at DESC, id DESC
+    LIMIT 1
+) d ON TRUE
+WHERE r.organization_id = @organization_id
+  AND r.project_id = @project_id
+  AND r.target_kind = 'server_url'
+  AND r.target_key = @target_key
+  AND r.status IN ('unreviewed', 'requested', 'approved', 'denied')
   AND r.deleted IS FALSE;
 
 -- name: LockApprovalRequestForResearch :one

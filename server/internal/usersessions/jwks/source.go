@@ -1,0 +1,186 @@
+package jwks
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+)
+
+// maxJWKSURILength caps a remote key source URL in application code. The
+// value arrives from outside and eventually feeds TEXT columns and log
+// lines; 2 KB accommodates any real key set URL with wide margin.
+const maxJWKSURILength = 2048
+
+// sourceKind discriminates the Source sum type. The zero value is invalid so
+// a zero Source cannot be resolved.
+type sourceKind string
+
+const (
+	sourceInline sourceKind = "inline"
+	sourceRemote sourceKind = "remote"
+)
+
+// Source identifies where a verification key set comes from: an inline JWK
+// Set document (no fetch at all) or a remote HTTPS URL. Construct one with
+// NewInlineSource or NewRemoteSource.
+type Source struct {
+	kind             sourceKind
+	inline           json.RawMessage
+	uri              string
+	origin           string
+	cacheKey         string
+	refreshNamespace string
+
+	// fetchScope names the party whose fetch budget an upstream consult of
+	// this source is charged to, when the KeyResolver has a fetch limiter.
+	// Empty means the shared unscoped budget.
+	fetchScope string
+
+	// doer replaces the resolver's own client for this source's fetches.
+	// Nil means the resolver's direct-egress client.
+	doer Doer
+}
+
+// Doer is the request surface a Source may carry in place of the resolver's
+// own HTTP client.
+type Doer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+// WithTransport returns a copy of the source whose upstream fetches go through
+// doer rather than the resolver's direct-egress client. It is how a key set
+// published inside a customer network is read: the caller supplies a transport
+// that reaches it, and the resolver's cache policy, screening, and telemetry
+// are unchanged.
+//
+// The transport plays no part in caching. A key set is stored under its URL
+// alone, and what a URL serves is public key material, so two issuers naming
+// the same jwks_uri share the stored document whichever transport fetched it
+// first. Nil restores the resolver's own client.
+func (s Source) WithTransport(doer Doer) Source {
+	s.doer = doer
+	return s
+}
+
+// WithFetchScope returns a copy of the source whose upstream consults are
+// charged to scope's fetch budget rather than the shared one. The scope
+// plays no part in caching; the key set is still shared across every scope
+// that names the same URL.
+func (s Source) WithFetchScope(scope string) Source {
+	s.fetchScope = scope
+	return s
+}
+
+// WithRefreshNamespace separates the unknown-kid refresh budget for two
+// assertion profiles that happen to publish the same key-set URL.
+func (s Source) WithRefreshNamespace(namespace string) Source {
+	s.refreshNamespace = namespace
+	return s
+}
+
+// WithCacheKey stores a remote source under a durable configuration-row key
+// bound to the configured URI. The URI remains the network target and part
+// of the refresh-rate-limit key.
+func (s Source) WithCacheKey(key string) Source {
+	s.cacheKey = key
+	return s
+}
+
+// NewInlineSource returns a Source backed by an inline JWK Set document, such
+// as the client_jwks column captured from a registration request. Resolving
+// it never fetches, so it has no cache key and an unknown kid is terminal.
+// The document is parsed and screened at resolve time, not here.
+func NewInlineSource(keySet json.RawMessage) (Source, error) {
+	if len(keySet) == 0 {
+		return Source{kind: "", inline: nil, uri: "", origin: "", cacheKey: "", refreshNamespace: "", fetchScope: "", doer: nil}, errors.New("inline key set is empty")
+	}
+	return Source{kind: sourceInline, inline: keySet, uri: "", origin: "", cacheKey: "", refreshNamespace: "", fetchScope: "", doer: nil}, nil
+}
+
+// NewRemoteSource returns a Source for a jwks_uri, whether it came from a
+// client's metadata or a trusted issuer's discovery document. Deliberately
+// no origin rule relates the URL to the party that published it: neither
+// RFC 7591 (client metadata) nor RFC 8414 (issuer metadata) constrains
+// jwks_uri beyond the https scheme, real deployments cross hosts (Google
+// publishes issuer accounts.google.com with a jwks_uri on
+// www.googleapis.com; platform-hosted client documents name key sets on the
+// client's own domain), and the CIMD draft's §8.1 explicitly preserves
+// unrestricted relationships between a document's URLs. The binding comes
+// from declaration instead: the authenticated document that names the
+// jwks_uri (the client metadata document at the client_id URL, or issuer
+// metadata whose issuer RFC 8414 §3.3 requires to match the well-known URL)
+// is what vouches for it, wherever it is hosted — and a signature only
+// verifies for the party actually holding the private keys.
+func NewRemoteSource(jwksURI string) (Source, error) {
+	parsed, err := parseJWKSURI(jwksURI)
+	if err != nil {
+		return Source{kind: "", inline: nil, uri: "", origin: "", cacheKey: "", refreshNamespace: "", fetchScope: "", doer: nil}, err
+	}
+	return Source{kind: sourceRemote, inline: nil, uri: jwksURI, origin: parsed.Host, cacheKey: "", refreshNamespace: "", fetchScope: "", doer: nil}, nil
+}
+
+// ErrURINotHTTPS reports a jwks_uri that is not https. Named so a caller can
+// tell a plain-http key set location, a configuration an operator has to fix,
+// from other malformed values.
+var ErrURINotHTTPS = errors.New("jwks_uri must use the https scheme")
+
+// ValidateURI reports whether a jwks_uri satisfies the syntax every remote
+// key source must satisfy, without building a Source from it.
+//
+// The rules are NewRemoteSource's, and stay the same on purpose: no
+// specification narrows jwks_uri beyond the https scheme, so registration
+// applies no extra policy of its own.
+func ValidateURI(jwksURI string) error {
+	_, err := parseJWKSURI(jwksURI)
+	return err
+}
+
+// CacheKey is the storage key for this source's resolved key set. It is the
+// jwks_uri by default, so clients sharing a URI share one cache entry. A
+// trusted issuer can override it with its durable row id and URI. Empty for inline
+// sources, which never fetch and are never cached.
+func (s Source) CacheKey() string {
+	if s.cacheKey != "" {
+		return s.cacheKey
+	}
+	return s.uri
+}
+
+// parseJWKSURI enforces the syntax every remote key source must satisfy
+// before its URL is allowed anywhere near an outbound fetch: absolute https,
+// a host, and none of the components (userinfo, fragment) that have no
+// business in a published key set URL. The guardian dialer separately blocks
+// internal targets at fetch time; this check is about rejecting junk early
+// with an actionable error.
+func parseJWKSURI(raw string) (*url.URL, error) {
+	if raw == "" {
+		return nil, errors.New("jwks_uri is empty")
+	}
+	if len(raw) > maxJWKSURILength {
+		return nil, fmt.Errorf("jwks_uri exceeds the %d byte limit", maxJWKSURILength)
+	}
+	// Detect fragments on the raw string so an empty "#" is caught too.
+	if strings.Contains(raw, "#") {
+		return nil, errors.New("jwks_uri must not contain a fragment")
+	}
+
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return nil, errors.New("jwks_uri is not a valid URL")
+	}
+	if parsed.Scheme != "https" {
+		return nil, ErrURINotHTTPS
+	}
+	if parsed.User != nil {
+		return nil, errors.New("jwks_uri must not contain a userinfo component")
+	}
+	// Hostname rather than Host: a port-only authority like https://:443
+	// leaves Host non-empty while naming no host at all.
+	if parsed.Hostname() == "" {
+		return nil, errors.New("jwks_uri must include a host")
+	}
+	return parsed, nil
+}

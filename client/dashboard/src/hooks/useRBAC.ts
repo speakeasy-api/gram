@@ -1,4 +1,4 @@
-import { useIsPlatformAdmin } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useSession } from "@/contexts/Auth";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGrants } from "@gram/client/react-query/grants.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -8,13 +8,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * Mirrors the server-side ResourceKindForScope in authz/selector.go.
  */
 export function resourceKindForScope(scope: string): string {
-  if (scope.startsWith("project:")) return "project";
+  if (scope.startsWith("project:") || scope.startsWith("plugin:"))
+    return "project";
   if (scope.startsWith("remote-mcp:") || scope.startsWith("mcp:")) return "mcp";
   if (scope.startsWith("org:")) return "org";
   if (scope.startsWith("environment:")) return "environment";
   if (scope.startsWith("skill:")) return "skill";
   if (scope.startsWith("risk_policy:")) return "risk_policy";
   if (scope.startsWith("chat:")) return "chat";
+  if (scope.startsWith("agent:")) return "agent";
   return "*";
 }
 
@@ -58,14 +60,19 @@ const exclusionScopesByScope: Partial<Record<Scope, readonly string[]>> = {
   "org:admin": ["org:blocked_admin", "org:blocked_read"],
   "project:read": ["project:blocked_read"],
   "project:write": ["project:blocked_write", "project:blocked_read"],
-  "mcp:read": ["mcp:blocked_read", "mcp:blocked_connect"],
-  "mcp:write": ["mcp:blocked_write", "mcp:blocked_read", "mcp:blocked_connect"],
+  // The mcp:blocked_* scopes are independent of one another, unlike the
+  // other families: connecting to a server and administering it are
+  // different jobs, so a block on one takes nothing from the others. Mirrors
+  // scopeExpansions in server/internal/authz/scopes.go.
+  "mcp:read": ["mcp:blocked_read"],
+  "mcp:write": ["mcp:blocked_write"],
   "mcp:connect": ["mcp:blocked_connect"],
   "environment:read": ["environment:blocked_read"],
   "environment:write": [
     "environment:blocked_write",
     "environment:blocked_read",
   ],
+  "plugin:write": ["plugin:blocked_write"],
   "skill:read": ["skill:blocked_read"],
   "skill:write": ["skill:blocked_write", "skill:blocked_read"],
   "risk_policy:evaluate": ["risk_policy:bypass"],
@@ -92,21 +99,33 @@ function grantSelectorsMatch(
   return grant.selectors.some((selector) => matches(selector, check));
 }
 
-/** Pure equivalent of hasScope for loaded effective grants. */
+/**
+ * Pure equivalent of hasScope for loaded effective grants. Multiple resource IDs
+ * accept any allow, but an exclusion on ANY alternative wins (RequireAnyUnblocked).
+ */
 export function hasScopeInGrants(
   grants: EffectiveGrant[],
   scope: Scope,
-  resourceId?: string,
+  resourceId?: string | readonly string[],
+  projectId?: string,
 ): boolean {
-  const allowCheck: Record<string, string> = {
-    resourceKind: resourceKindForScope(scope),
-  };
-  if (resourceId) allowCheck.resourceId = resourceId;
+  const resourceIds =
+    typeof resourceId === "string" || resourceId === undefined
+      ? [resourceId]
+      : resourceId;
+  const allowChecks = resourceIds.map((id) => {
+    const allowCheck: Record<string, string> = {
+      resourceKind: resourceKindForScope(scope),
+    };
+    if (id) allowCheck.resourceId = id;
+    if (projectId) allowCheck.projectId = projectId;
+    return allowCheck;
+  });
   // Unscoped allows are existential, but strict exclusions must distinguish
   // unrestricted wildcards from exclusions for one concrete resource.
-  const exclusionCheck = resourceId
-    ? allowCheck
-    : { ...allowCheck, resourceId: "*" };
+  const exclusionChecks = allowChecks.map((check) =>
+    check.resourceId ? check : { ...check, resourceId: "*" },
+  );
 
   const exclusionScopes = exclusionScopesForScope(scope);
   let hasAllow = false;
@@ -121,7 +140,7 @@ export function hasScopeInGrants(
       exclusionScopes.includes(grant.scope);
     if (
       (isLegacyDeny || isExclusion) &&
-      grantSelectorsMatch(grant, exclusionCheck, true)
+      exclusionChecks.some((check) => grantSelectorsMatch(grant, check, true))
     ) {
       return false;
     }
@@ -131,7 +150,7 @@ export function hasScopeInGrants(
     if (
       effect === "allow" &&
       scopeMatches &&
-      grantSelectorsMatch(grant, allowCheck, false)
+      allowChecks.some((check) => grantSelectorsMatch(grant, check, false))
     ) {
       hasAllow = true;
     }
@@ -140,12 +159,37 @@ export function hasScopeInGrants(
   return hasAllow;
 }
 
+/** Any allow is sufficient, but an exclusion on any alternative wins. */
+export function hasAnyUnblockedScopeInGrants(
+  grants: EffectiveGrant[],
+  checks: readonly { scope: Scope; resourceId: string; projectId?: string }[],
+): boolean {
+  return (
+    checks.every(({ scope, resourceId, projectId }) =>
+      // A synthetic allow probes only exclusions; real allows are checked below.
+      hasScopeInGrants([...grants, { scope }], scope, resourceId, projectId),
+    ) &&
+    checks.some(({ scope, resourceId, projectId }) =>
+      hasScopeInGrants(grants, scope, resourceId, projectId),
+    )
+  );
+}
+
+export function hasScopeInProject(
+  grants: EffectiveGrant[],
+  scope: Scope,
+  projectId: string,
+): boolean {
+  return hasScopeInGrants(grants, scope, "*", projectId);
+}
+
 /**
  * Core RBAC hook. Fetches the current user's effective grants and provides
  * helpers to check whether the user holds a particular scope.
  */
 function useRBACImpl() {
   const isAdmin = useIsPlatformAdmin();
+  const session = useSession();
 
   // Re-render when the toolbar changes scopes in localStorage.
   const [, setOverrideVersion] = useState(0);
@@ -159,10 +203,14 @@ function useRBACImpl() {
   // Always fetch grants so we can detect a broken org membership (404/403) and
   // show a recovery prompt via MembershipSyncGuard. throwOnError is disabled
   // so the error doesn't crash the app; it's surfaced via `error` instead.
-  const { data, isLoading, error } = useGrants(undefined, undefined, {
-    staleTime: 30_000,
-    throwOnError: false,
-  });
+  const { data, isLoading, error } = useGrants(
+    { gramSession: session.session },
+    undefined,
+    {
+      staleTime: 30_000,
+      throwOnError: false,
+    },
+  );
 
   // The toolbar event re-renders this hook; query invalidation refreshes the grants.
   const grants = useMemo(() => {
@@ -208,17 +256,35 @@ function useRBACImpl() {
     [hasScope],
   );
 
+  const hasAnyScopeInProject = useCallback(
+    (scopes: Scope[], projectId: string): boolean => {
+      return scopes.some((scope) =>
+        hasScopeInProject(grants ?? [], scope, projectId),
+      );
+    },
+    [grants],
+  );
+
   return useMemo(
     () => ({
       hasScope,
       hasAllScopes,
       hasAnyScope,
+      hasAnyScopeInProject,
       isLoading,
       grants: grants ?? [],
       /** Non-null when the grants query failed (e.g. missing org membership). */
       error: error ?? null,
     }),
-    [hasScope, hasAllScopes, hasAnyScope, isLoading, grants, error],
+    [
+      hasScope,
+      hasAllScopes,
+      hasAnyScope,
+      hasAnyScopeInProject,
+      isLoading,
+      grants,
+      error,
+    ],
   );
 }
 

@@ -1,31 +1,28 @@
 import * as React from "react";
 
 import { AppRoute, useOrgRoutes, useRoutes } from "@/routes";
-import { MinusIcon, TestTube2Icon } from "lucide-react";
+import { ArrowLeft, MinusIcon, TestTube2Icon } from "lucide-react";
 import { NavButton, NavGroupProvider } from "@/components/nav-menu";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
-  SidebarTrigger,
 } from "@/components/ui/Sidebar";
 import { useMemo, useState } from "react";
 
-import { BuiltInMcpSidebarNav } from "./built-in-mcp-sidebar-nav";
 import { Button } from "./ui/Button";
-import { HatchRule } from "./hatch-rule";
 import { FeatureRequestModal } from "./FeatureRequestModal";
-import { GramLogo } from "./gram-logo";
+import { SidebarBrandHeader } from "./sidebar-brand-header";
+import { DevSidebarSlot } from "@/dev/sidebar-slot";
 import { Icon } from "@/components/ui/Icon";
 import { InsightsDockResumeButton } from "./insights-dock-resume-button";
 import { Link } from "react-router";
 import { McpDetailSidebarNav } from "./mcp-detail-sidebar-nav";
+import { GatewaySidebarNav } from "./gateway-sidebar-nav";
 import { McpServerXSidebarNav } from "./mcp-server-x-sidebar-nav";
-import { OnboardingResumeButton } from "./onboarding-resume-button";
-import { PlatformMcpSidebarCta } from "./platform-mcp-sidebar-cta";
+import { ProjectGuideSidebarCta } from "./project-guide-sidebar-cta";
 import { PluginDetailSidebarNav } from "./plugin-detail-sidebar-nav";
 import type { ProjectNavRoute } from "@/hooks/useProjectNavRoutes";
 import { RequireScope } from "./require-scope";
@@ -46,13 +43,14 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { useSidebar } from "@/components/ui/Sidebar/sidebar-context";
 import { useSlugs } from "@/contexts/Sdk";
 
+/** A top-level navigation item gated by its required scopes. */
 function ScopeGatedTopLevelItem({
   item,
-  scope,
+  scope = ["project:read"],
   resourceId,
 }: {
   item: AppRoute;
-  scope: Scope | Scope[];
+  scope?: Scope | Scope[];
   resourceId?: string;
 }) {
   return (
@@ -91,8 +89,10 @@ export function AppSidebar({
   }, [allNavRoutes]);
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
   const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
-  const isDeploymentsPageEnabled = navAccess.has(routes.deployments.url);
+  const isExploreEnabled = navAccess.has(routes.explore.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
+  const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
+  const isAgentManagementEnabled = navAccess.has(routes.agents.url);
 
   // Shared with the page-title eyebrow (Page.Eyebrow) so the sidebar group
   // highlight and the page header always agree on the area. "Organization"
@@ -105,23 +105,19 @@ export function AppSidebar({
   const activeRoute = allNavRoutes.find((entry) => entry.route.active)?.route;
   const accessFor = (
     route: AppRoute,
-  ): Pick<ProjectNavRoute, "scope" | "resourceId"> => {
+  ): { scope?: Scope[]; resourceId?: string } => {
     const entry = navAccess.get(route.url);
     return entry
-      ? { scope: entry.scope, resourceId: entry.resourceId }
+      ? {
+          scope: entry.scope.length > 0 ? entry.scope : undefined,
+          resourceId: entry.resourceId,
+        }
       : { scope: ["project:read"] };
   };
   // In collapsed mode, sub-items are hidden — fall back to group highlight.
   // Top-level items (Home, Settings) have no activeGroup, so keep activeItem for those.
   const activeItem =
     state === "collapsed" && activeGroup ? undefined : activeRoute?.title;
-
-  const isWideSidebarDetailRoute =
-    routes.mcp.details.active ||
-    routes.mcp.x.active ||
-    routes.mcp.builtIn.active ||
-    routes.skills.detail.active ||
-    routes.plugins.detail.active;
 
   let sidebarContent: React.ReactNode;
   if (rbacLoading) {
@@ -135,12 +131,38 @@ export function AppSidebar({
         className="gap-0.5 px-2 group-data-[collapsible=icon]:px-0"
       />
     );
+  } else if (routes.mcp.add.active) {
+    // Adding a server is a focused flow: no nav competing with the choice,
+    // just the way back — in the same spot the detail sidebars put theirs.
+    // Standard width, so arriving from the MCP index doesn't shift the page.
+    sidebarContent = (
+      <SidebarMenu className="gap-1 group-data-[collapsible=icon]:px-0">
+        <SidebarMenuItem>
+          {/* Rule matches the breadcrumb bar's on the other side of the pane
+              boundary: same vertical padding and text size, so the two read as
+              one line across the sidebar edge. */}
+          <Link
+            to={routes.mcp.href()}
+            // -mt-2 cancels SidebarContent's 8px top padding so the row starts
+            // flush against the sidebar header rule; py-3.5 then centres the
+            // label in the band, landing its bottom border level with the
+            // breadcrumb bar's across the pane boundary.
+            className="text-foreground hover:bg-accent trans border-foreground/10 -mt-2 flex items-center gap-2 border-b px-4 py-3.5 text-sm hover:no-underline group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+          >
+            <ArrowLeft className="size-4 shrink-0" strokeWidth={1.75} />
+            <span className="truncate group-data-[collapsible=icon]:hidden">
+              Back to all MCPs
+            </span>
+          </Link>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    );
   } else if (routes.mcp.details.active) {
     sidebarContent = <McpDetailSidebarNav />;
   } else if (routes.mcp.x.active) {
     sidebarContent = <McpServerXSidebarNav />;
-  } else if (routes.mcp.builtIn.active) {
-    sidebarContent = <BuiltInMcpSidebarNav />;
+  } else if (routes.mcp.gateway.active) {
+    sidebarContent = <GatewaySidebarNav />;
   } else if (routes.skills.detail.active) {
     sidebarContent = <SkillDetailSidebarNav />;
   } else if (routes.plugins.detail.active) {
@@ -184,75 +206,33 @@ export function AppSidebar({
             <div className="border-border border-t" />
           </li>
 
-          {/* Observe group */}
+          {/* Identity group */}
           <ScopeGatedNavGroup
-            label="Observe"
-            Icon={(p) => <Icon {...p} name="eye" />}
+            label="Identity"
+            Icon={(p) => <Icon {...p} name="fingerprint" />}
             items={[
-              { item: routes.costs, ...accessFor(routes.costs) },
-              { item: routes.insights, ...accessFor(routes.insights) },
-              {
-                item: routes.agentSessions,
-                ...accessFor(routes.agentSessions),
-              },
-              ...(isOrgMemoryEnabled
-                ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
+              { item: routes.identities, ...accessFor(routes.identities) },
+              ...(isAgentManagementEnabled
+                ? [{ item: routes.agents, ...accessFor(routes.agents) }]
                 : []),
-              { item: routes.logs, ...accessFor(routes.logs) },
-              { item: routes.employees, ...accessFor(routes.employees) },
-            ]}
-          />
-
-          {/* Secure group */}
-          <ScopeGatedNavGroup
-            label="Secure"
-            Icon={(p) => <Icon {...p} name="shield" />}
-            items={[
-              // Watchdog supersedes Risk Overview and Risk Events: exactly one
-              // of the two sets shows, mirroring useProjectNavRoutes.
-              ...(isRiskWatchdogEnabled
-                ? [{ item: routes.watchdog, ...accessFor(routes.watchdog) }]
-                : [
-                    {
-                      item: routes.riskOverview,
-                      ...accessFor(routes.riskOverview),
-                    },
-                  ]),
-              { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
-              ...(isRiskWatchdogEnabled
-                ? []
-                : [
-                    {
-                      item: routes.riskEvents,
-                      ...accessFor(routes.riskEvents),
-                    },
-                  ]),
-              { item: routes.shadowMCP, ...accessFor(routes.shadowMCP) },
-            ]}
-          />
-
-          {/* Connect group */}
-          <ScopeGatedNavGroup
-            label="Connect"
-            Icon={(p) => <Icon {...p} name="plug" />}
-            items={[
-              { item: routes.sources, ...accessFor(routes.sources) },
-              { item: routes.catalog, ...accessFor(routes.catalog) },
-              { item: routes.playground, ...accessFor(routes.playground) },
-              ...(isDeploymentsPageEnabled
+              ...(isUserSessionsEnabled
                 ? [
                     {
-                      item: routes.deployments,
-                      ...accessFor(routes.deployments),
+                      item: routes.mcpSessions,
+                      ...accessFor(routes.mcpSessions),
                     },
                   ]
                 : []),
+              {
+                item: routes.remoteIdentityProviders,
+                ...accessFor(routes.remoteIdentityProviders),
+              },
             ]}
           />
 
-          {/* Distribute group */}
+          {/* MCP Gateway group */}
           <ScopeGatedNavGroup
-            label="Distribute"
+            label="MCP Gateway"
             Icon={(p) => <Icon {...p} name="hammer" />}
             items={[
               { item: routes.mcp, ...accessFor(routes.mcp) },
@@ -262,6 +242,50 @@ export function AppSidebar({
               { item: routes.skills, ...accessFor(routes.skills) },
               { item: routes.plugins, ...accessFor(routes.plugins) },
               { item: routes.environments, ...accessFor(routes.environments) },
+              { item: routes.playground, ...accessFor(routes.playground) },
+            ]}
+          />
+
+          {/* Security and Policy group */}
+          <ScopeGatedNavGroup
+            label="Security and Policy"
+            Icon={(p) => <Icon {...p} name="shield" />}
+            items={[
+              // Watchdog supersedes Risk Overview: exactly one of the two
+              // shows, mirroring useProjectNavRoutes. Risk Events sits below
+              // the landing surface in both modes.
+              ...(isRiskWatchdogEnabled
+                ? [{ item: routes.watchdog, ...accessFor(routes.watchdog) }]
+                : [
+                    {
+                      item: routes.riskOverview,
+                      ...accessFor(routes.riskOverview),
+                    },
+                  ]),
+              { item: routes.riskEvents, ...accessFor(routes.riskEvents) },
+              { item: routes.policyCenter, ...accessFor(routes.policyCenter) },
+              { item: routes.shadowAI, ...accessFor(routes.shadowAI) },
+            ]}
+          />
+
+          {/* Observability group */}
+          <ScopeGatedNavGroup
+            label="Observability"
+            Icon={(p) => <Icon {...p} name="eye" />}
+            items={[
+              { item: routes.costs, ...accessFor(routes.costs) },
+              ...(isExploreEnabled
+                ? [{ item: routes.explore, ...accessFor(routes.explore) }]
+                : []),
+              { item: routes.insights, ...accessFor(routes.insights) },
+              {
+                item: routes.agentSessions,
+                ...accessFor(routes.agentSessions),
+              },
+              ...(isOrgMemoryEnabled
+                ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
+                : []),
+              { item: routes.logs, ...accessFor(routes.logs) },
             ]}
           />
 
@@ -276,42 +300,23 @@ export function AppSidebar({
   }
 
   return (
-    <Sidebar
-      collapsible="icon"
-      style={
-        isWideSidebarDetailRoute
-          ? ({ "--sidebar-width": "22rem" } as React.CSSProperties)
-          : undefined
-      }
-      {...props}
-    >
-      {/* Logo row only — the project switcher now lives in the page header.
-          The row is exactly --header-height and closes with the same crosshatch
-          rule the page header uses, so the divider reads as one line running
-          across both panes. */}
-      <SidebarHeader className="gap-0 p-0">
-        <div className="flex h-(--header-height) items-center justify-between gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <Link
-            to={`/${orgSlug}`}
-            className="flex h-full items-center px-1 hover:no-underline group-data-[collapsible=icon]:hidden"
-          >
-            <GramLogo className="w-28" />
-          </Link>
-          {/* Collapse control sits beside the logo (WorkOS placement); search
-              moved out to the page header. */}
-          <SidebarTrigger />
-        </div>
-        <HatchRule />
-      </SidebarHeader>
+    <Sidebar collapsible="icon" {...props}>
+      {/* Brand row only — the project switcher now lives in the page header. */}
+      <SidebarBrandHeader homeHref={`/${orgSlug}`} />
       <SidebarContent className="pt-2">{sidebarContent}</SidebarContent>
       <SidebarFooter className="border-t">
         <FreeTierExceededNotification />
-        <div className="mb-2 flex flex-col gap-1.5">
+        {/* Every card here is conditional — the trial banner, the guide CTA,
+            and the dock's resume button (absent while the dock is open). When
+            they all stand down the wrapper renders empty, and its margin was
+            left behind as a band of blank space above the user menu, so it
+            hides itself instead. */}
+        <div className="mb-2 flex flex-col gap-1.5 empty:hidden">
           <TrialStatusCard />
-          <OnboardingResumeButton />
-          <PlatformMcpSidebarCta />
+          <ProjectGuideSidebarCta />
           <InsightsDockResumeButton />
         </div>
+        {DevSidebarSlot && <DevSidebarSlot />}
         <SidebarUserMenu />
       </SidebarFooter>
       <FeatureRequestModal

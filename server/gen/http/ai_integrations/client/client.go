@@ -17,6 +17,18 @@ import (
 
 // Client lists the aiIntegrations service endpoint HTTP clients.
 type Client struct {
+	// GetAnthropicInferenceConfig Doer is the HTTP client used to make requests to
+	// the getAnthropicInferenceConfig endpoint.
+	GetAnthropicInferenceConfigDoer goahttp.Doer
+
+	// UpsertAnthropicInferenceConfig Doer is the HTTP client used to make requests
+	// to the upsertAnthropicInferenceConfig endpoint.
+	UpsertAnthropicInferenceConfigDoer goahttp.Doer
+
+	// DeleteAnthropicInferenceConfig Doer is the HTTP client used to make requests
+	// to the deleteAnthropicInferenceConfig endpoint.
+	DeleteAnthropicInferenceConfigDoer goahttp.Doer
+
 	// GetConfig Doer is the HTTP client used to make requests to the getConfig
 	// endpoint.
 	GetConfigDoer goahttp.Doer
@@ -62,17 +74,92 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetConfigDoer:          doer,
-		UpsertConfigDoer:       doer,
-		DeleteConfigDoer:       doer,
-		ListSchedulesDoer:      doer,
-		SetScheduleEnabledDoer: doer,
-		RetryScheduleDoer:      doer,
-		RestoreResponseBody:    restoreBody,
-		scheme:                 scheme,
-		host:                   host,
-		decoder:                dec,
-		encoder:                enc,
+		GetAnthropicInferenceConfigDoer:    doer,
+		UpsertAnthropicInferenceConfigDoer: doer,
+		DeleteAnthropicInferenceConfigDoer: doer,
+		GetConfigDoer:                      doer,
+		UpsertConfigDoer:                   doer,
+		DeleteConfigDoer:                   doer,
+		ListSchedulesDoer:                  doer,
+		SetScheduleEnabledDoer:             doer,
+		RetryScheduleDoer:                  doer,
+		RestoreResponseBody:                restoreBody,
+		scheme:                             scheme,
+		host:                               host,
+		decoder:                            dec,
+		encoder:                            enc,
+	}
+}
+
+// GetAnthropicInferenceConfig returns an endpoint that makes HTTP requests to
+// the aiIntegrations service getAnthropicInferenceConfig server.
+func (c *Client) GetAnthropicInferenceConfig() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetAnthropicInferenceConfigRequest(c.encoder)
+		decodeResponse = DecodeGetAnthropicInferenceConfigResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetAnthropicInferenceConfigRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetAnthropicInferenceConfigDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("aiIntegrations", "getAnthropicInferenceConfig", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpsertAnthropicInferenceConfig returns an endpoint that makes HTTP requests
+// to the aiIntegrations service upsertAnthropicInferenceConfig server.
+func (c *Client) UpsertAnthropicInferenceConfig() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpsertAnthropicInferenceConfigRequest(c.encoder)
+		decodeResponse = DecodeUpsertAnthropicInferenceConfigResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpsertAnthropicInferenceConfigRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpsertAnthropicInferenceConfigDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DeleteAnthropicInferenceConfig returns an endpoint that makes HTTP requests
+// to the aiIntegrations service deleteAnthropicInferenceConfig server.
+func (c *Client) DeleteAnthropicInferenceConfig() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDeleteAnthropicInferenceConfigRequest(c.encoder)
+		decodeResponse = DecodeDeleteAnthropicInferenceConfigResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDeleteAnthropicInferenceConfigRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DeleteAnthropicInferenceConfigDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

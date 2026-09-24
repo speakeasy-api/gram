@@ -85,6 +85,7 @@ func (m *McpInputs) toInternal() *mcpInputs {
 
 	return &mcpInputs{
 		projectID:        m.ProjectID,
+		organizationID:   "",
 		toolset:          m.Toolset,
 		environment:      m.Environment,
 		mcpEnvVariables:  m.McpEnvVariables,
@@ -102,8 +103,18 @@ func (m *McpInputs) toInternal() *mcpInputs {
 		// version, so they resolve to the unversioned default.
 		toolVariationsGroupID: nil,
 		mcpServerID:           nil,
-		tags:                  nil,
-		protocolVersion:       mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
-		toolSelection:         nil,
+		wrapperRBACResourceID: "",
+		wrapperIsPublic:       nil,
+		metaMcpServerID:       "",
+		// An internal caller never handshaked as an MCP client. Scoping it
+		// somewhere no handshake can be stored keeps it from resolving the
+		// record some real client wrote for the same toolset and session,
+		// which would attribute an agent-workflow call to that client.
+		clientInfoScope:          internalClientInfoScope,
+		skipProxyTools:           false,
+		tags:                     nil,
+		protocolVersion:          mcpversions.Resolve("", mcpversions.SupportedHostedToolset()),
+		identityCoverageRecorded: false,
+		toolSelection:            nil,
 	}
 }

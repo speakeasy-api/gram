@@ -153,7 +153,12 @@ func TestCoordinatorWorkflow_StartSignalDoesNotSelfLoop(t *testing.T) {
 	require.NoError(t, env.GetWorkflowError(), "start signal must be drained at top; should complete, not ContinueAsNew")
 }
 
-func TestCoordinatorWorkflow_AnalyzeFailureStillMarksAnalyzed(t *testing.T) {
+// TestCoordinatorWorkflow_FailedBatchExcludedFromMark pins the at-least-once
+// contract on the analyzed mark: a batch whose activity exhausted its retries
+// must leave its units unmarked, while units from batches that succeeded are
+// still marked — and the run must retry the withheld units via ContinueAsNew
+// after the backoff rather than waiting for an organic signal.
+func TestCoordinatorWorkflow_FailedBatchExcludedFromMark(t *testing.T) {
 	t.Parallel()
 
 	var suite testsuite.WorkflowTestSuite
@@ -175,9 +180,13 @@ func TestCoordinatorWorkflow_AnalyzeFailureStillMarksAnalyzed(t *testing.T) {
 		activity.RegisterOptions{Name: "FetchUnanalyzedMessages"},
 	)
 
+	// The message batch fails; the content-part batch succeeds.
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ risk_analysis.AnalyzeBatchArgs) (*risk_analysis.AnalyzeBatchResult, error) {
-			return nil, temporal.NewApplicationError("scan failed", "", nil)
+		func(_ context.Context, args risk_analysis.AnalyzeBatchArgs) (*risk_analysis.AnalyzeBatchResult, error) {
+			if len(args.MessageIDs) > 0 {
+				return nil, temporal.NewApplicationError("scan failed", "", nil)
+			}
+			return &risk_analysis.AnalyzeBatchResult{Processed: len(args.ContentPartIDs), Findings: 0}, nil
 		},
 		activity.RegisterOptions{Name: "AnalyzeBatch"},
 	)
@@ -186,10 +195,7 @@ func TestCoordinatorWorkflow_AnalyzeFailureStillMarksAnalyzed(t *testing.T) {
 		func(_ context.Context, args risk_analysis.MarkMessagesAnalyzedArgs) error {
 			markCallCount++
 			require.Equal(t, projectID, args.ProjectID)
-			// Content parts follow the chat message path exactly: marking is
-			// best effort, so a failed batch is still marked rather than being
-			// retried forever by the next sweep.
-			require.Equal(t, []uuid.UUID{messageID}, args.MessageIDs)
+			require.Empty(t, args.MessageIDs, "the failed batch's message must stay unmarked for the next sweep")
 			require.Equal(t, []uuid.UUID{contentPartID}, args.ContentPartIDs)
 			return nil
 		},
@@ -201,8 +207,118 @@ func TestCoordinatorWorkflow_AnalyzeFailureStillMarksAnalyzed(t *testing.T) {
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
-	require.NoError(t, env.GetWorkflowError(), "best-effort: workflow must return nil even when batch activity fails")
-	require.Equal(t, 1, markCallCount, "mark activity still runs after a failed batch")
+	err := env.GetWorkflowError()
+	require.Error(t, err, "a run with a failed batch must ContinueAsNew to retry it")
+	var continueAsNewErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, err, &continueAsNewErr)
+	require.Equal(t, 1, markCallCount, "mark activity still runs for the surviving units")
+}
+
+// TestCoordinatorWorkflow_UnitFailedForOnePolicyNotMarked pins the cross-policy
+// intersection: the same batch is dispatched once per policy, and a unit is
+// only durably analyzed when every policy's activity covering it succeeded.
+// When nothing succeeded for every policy, the mark activity is skipped
+// entirely and the run retries via ContinueAsNew.
+func TestCoordinatorWorkflow_UnitFailedForOnePolicyNotMarked(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	projectID := uuid.New()
+	messageID := uuid.New()
+	failingPolicyID := uuid.New()
+	markCallCount := 0
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ risk_analysis.FetchUnanalyzedArgs) (*risk_analysis.FetchUnanalyzedResult, error) {
+			return &risk_analysis.FetchUnanalyzedResult{
+				MessageIDs: []uuid.UUID{messageID},
+				Policies: []risk_analysis.PolicyForAnalysis{
+					{ID: uuid.New(), OrganizationID: "org1", Version: 1},
+					{ID: failingPolicyID, OrganizationID: "org1", Version: 1},
+				},
+			}, nil
+		},
+		activity.RegisterOptions{Name: "FetchUnanalyzedMessages"},
+	)
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, args risk_analysis.AnalyzeBatchArgs) (*risk_analysis.AnalyzeBatchResult, error) {
+			if args.RiskPolicyID == failingPolicyID {
+				return nil, temporal.NewApplicationError("scan failed", "", nil)
+			}
+			return &risk_analysis.AnalyzeBatchResult{Processed: len(args.MessageIDs), Findings: 0}, nil
+		},
+		activity.RegisterOptions{Name: "AnalyzeBatch"},
+	)
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ risk_analysis.MarkMessagesAnalyzedArgs) error {
+			markCallCount++
+			return nil
+		},
+		activity.RegisterOptions{Name: "MarkMessagesAnalyzed"},
+	)
+
+	env.ExecuteWorkflow(RiskAnalysisCoordinatorWorkflow, RiskAnalysisCoordinatorParams{
+		ProjectID: projectID,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err, "a run with a failed batch must ContinueAsNew to retry it")
+	var continueAsNewErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, err, &continueAsNewErr)
+	require.Equal(t, 0, markCallCount, "a unit that failed under any policy must not be marked analyzed")
+}
+
+// TestCoordinatorWorkflow_MarkFailureRetriesViaContinueAsNew pins that a
+// failed MarkMessagesAnalyzed joins the self-retry decision: its units remain
+// unmarked exactly like a failed batch's, so the run must ContinueAsNew after
+// the backoff instead of completing and waiting for an organic signal.
+func TestCoordinatorWorkflow_MarkFailureRetriesViaContinueAsNew(t *testing.T) {
+	t.Parallel()
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	projectID := uuid.New()
+	messageID := uuid.New()
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ risk_analysis.FetchUnanalyzedArgs) (*risk_analysis.FetchUnanalyzedResult, error) {
+			return &risk_analysis.FetchUnanalyzedResult{
+				MessageIDs: []uuid.UUID{messageID},
+				Policies:   []risk_analysis.PolicyForAnalysis{{ID: uuid.New(), OrganizationID: "org1", Version: 1}},
+			}, nil
+		},
+		activity.RegisterOptions{Name: "FetchUnanalyzedMessages"},
+	)
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, args risk_analysis.AnalyzeBatchArgs) (*risk_analysis.AnalyzeBatchResult, error) {
+			return &risk_analysis.AnalyzeBatchResult{Processed: len(args.MessageIDs), Findings: 0}, nil
+		},
+		activity.RegisterOptions{Name: "AnalyzeBatch"},
+	)
+
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ risk_analysis.MarkMessagesAnalyzedArgs) error {
+			return temporal.NewApplicationError("mark failed", "", nil)
+		},
+		activity.RegisterOptions{Name: "MarkMessagesAnalyzed"},
+	)
+
+	env.ExecuteWorkflow(RiskAnalysisCoordinatorWorkflow, RiskAnalysisCoordinatorParams{
+		ProjectID: projectID,
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	require.Error(t, err, "a run whose mark failed must ContinueAsNew to retry it")
+	var continueAsNewErr *workflow.ContinueAsNewError
+	require.ErrorAs(t, err, &continueAsNewErr)
 }
 
 func TestChunkUUIDs(t *testing.T) {

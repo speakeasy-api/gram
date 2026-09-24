@@ -9,6 +9,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_endpoints"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -28,7 +29,7 @@ func TestGetMcpEndpoint_ByID(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(slugVal),
 	})
 	require.NoError(t, err)
@@ -63,7 +64,7 @@ func TestGetMcpEndpoint_BySlugOnPlatformDomain(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(slugVal),
 	})
 	require.NoError(t, err)

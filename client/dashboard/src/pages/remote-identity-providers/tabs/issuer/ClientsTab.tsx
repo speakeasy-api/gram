@@ -5,7 +5,7 @@ import { DotTable } from "@/components/ui/DotTable";
 import type { Action } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import type { OrganizationRemoteSessionClient } from "@gram/client/models/components/organizationremotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
@@ -28,7 +28,7 @@ export function ClientsTab({
 }: {
   issuer: RemoteSessionIssuer;
 }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const { hasAnyScope } = useRBAC();
   const canManage = hasAnyScope(["org:admin"]);
   const { data, isLoading, isError } = useOrganizationRemoteSessionClients({
@@ -80,7 +80,7 @@ export function ClientsTab({
                 icon={
                   <Icon name="key" className="text-muted-foreground h-5 w-5" />
                 }
-                href={orgRoutes.remoteIdentityProviders.clientDetail.href(
+                href={routes.remoteIdentityProviders.clientDetail.href(
                   issuer.id,
                   item.client.id,
                 )}

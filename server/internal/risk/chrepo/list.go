@@ -35,6 +35,8 @@ type ListRiskFindingsParams struct {
 	OrganizationID string
 	ProjectID      string
 	PolicyIDs      []string
+	MCPServerID    string
+	ChatID         string
 	From           *time.Time
 	To             *time.Time
 	Category       string
@@ -73,29 +75,51 @@ var riskFindingListColumns = []string{
 	"start_pos",
 	"end_pos",
 	"match_redacted",
+	"execution_id",
+	"mcp_server_id",
+	"meta_mcp_server_id",
+	"toolset_id",
+	"tool_name",
+	"phase",
+	"mediation_surface",
+	"mcp_method",
+	"principal_kind",
+	"identity_stamped",
+	"enforcement_outcome",
 }
 
 // RiskFindingListRow is one listing row served from ClickHouse. The match is
 // only ever the precomputed redacted display string — the raw value never
 // reaches this store.
 type RiskFindingListRow struct {
-	ID                uuid.UUID
-	MessageCreatedAt  time.Time
-	ChatMessageID     string
-	ContentPartID     string
-	ChatID            string
-	ExternalUserID    string
-	AssistantID       string
-	RiskPolicyID      string
-	RiskPolicyVersion int64
-	RuleID            string
-	Description       string
-	Source            string
-	Confidence        float64
-	Tags              []string
-	StartPos          int32
-	EndPos            int32
-	MatchRedacted     string
+	ID                 uuid.UUID
+	MessageCreatedAt   time.Time
+	ChatMessageID      string
+	ContentPartID      string
+	ChatID             string
+	ExternalUserID     string
+	AssistantID        string
+	RiskPolicyID       string
+	RiskPolicyVersion  int64
+	RuleID             string
+	Description        string
+	Source             string
+	Confidence         float64
+	Tags               []string
+	StartPos           int32
+	EndPos             int32
+	MatchRedacted      string
+	ExecutionID        string
+	MCPServerID        string
+	MetaMCPServerID    string
+	ToolsetID          string
+	ToolName           string
+	Phase              string
+	MediationSurface   string
+	MCPMethod          string
+	PrincipalKind      string
+	IdentityStamped    bool
+	EnforcementOutcome string
 }
 
 // scanTargets returns the row's fields in riskFindingListColumns order. It is
@@ -120,12 +144,23 @@ func (r *RiskFindingListRow) scanTargets() []any {
 		&r.StartPos,
 		&r.EndPos,
 		&r.MatchRedacted,
+		&r.ExecutionID,
+		&r.MCPServerID,
+		&r.MetaMCPServerID,
+		&r.ToolsetID,
+		&r.ToolName,
+		&r.Phase,
+		&r.MediationSurface,
+		&r.MCPMethod,
+		&r.PrincipalKind,
+		&r.IdentityStamped,
+		&r.EnforcementOutcome,
 	}
 }
 
 // listRiskFindingsBase applies the filters shared by the list and count reads
-// that are immutable across an id's copies: tenancy, dead-letter sentinels and
-// the enabled-policy pushdown. The exclusion / false-positive state is
+// that are immutable across an id's copies: tenancy, dead-letter sentinels,
+// the shadow marker and the enabled-policy pushdown. The exclusion / false-positive state is
 // deliberately NOT here: those flags change by appending a newer copy of the
 // row (the retroactive reconcile, the false-positive mirror), so filtering
 // them before the latest-copy-per-id dedup would drop the flagged copy and
@@ -140,8 +175,38 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
 		Where("dead_letter_reason = ''").
+		Where(notShadowCond).
 		Where(squirrel.Eq{"risk_policy_id": p.PolicyIDs})
+	if p.ChatID != "" {
+		sb = sb.Where("chat_id = ?", p.ChatID)
+	}
 	return sb, nil
+}
+
+// notShadowCond hides engine-comparison rows. Findings the LLM analyzer
+// produced under the shadow risk engine mode are stored with shadow = 1 so
+// the two engines' verdicts can be compared per message, but they were never
+// enforced and must never surface to users: every read path serving the Risk
+// Events listing, the Dismissed listing, the overview, signals, the Watchdog,
+// reveal and the retroactive exclusion reconcile applies this condition.
+//
+// Unlike the suppression state the marker is immutable across an id's copies:
+// the scanner stamps it, the retroactive reconcile's INSERT ... SELECT passes
+// it through verbatim, and the manual-dismissal mirror republishes Postgres
+// risk_results rows only, which never hold shadow findings. It is therefore
+// safe to apply BEFORE the per-id dedup, next to the tenancy filters, where it
+// also prunes the scan.
+const notShadowCond = "shadow = 0"
+
+// withMCPServerCond narrows to one concrete server AFTER the latest-copy
+// dedup. A suppression copy mirrored from Postgres carries no execution
+// metadata, so filtering before dedup would drop it and let the live scanner
+// copy win, resurfacing a dismissed finding under the filter.
+func withMCPServerCond(sb squirrel.SelectBuilder, p ListRiskFindingsParams) squirrel.SelectBuilder {
+	if p.MCPServerID == "" {
+		return sb
+	}
+	return sb.Where("mcp_server_id = ?", p.MCPServerID)
 }
 
 // liveStateCond gates the latest copy of a finding to live rows only — not
@@ -165,8 +230,9 @@ const liveStateCond = "excluded_at IS NULL AND false_positive_at IS NULL"
 //
 // Dedup, always on: the table is a plain append-only MergeTree fed by
 // at-least-once Pub/Sub delivery, so redelivered rows sharing an id are
-// expected; inserted_at DESC in the sort order plus LIMIT 1 BY id keeps the
-// latest-inserted copy. With UniqueMatch the LIMIT BY key widens to
+// expected; latestCopyOrderSQL in the sort order plus LIMIT 1 BY id keeps the
+// winning copy (state-change copies outrank finding copies, latest inserted
+// within a rank). With UniqueMatch the LIMIT BY key widens to
 // (risk_policy_id, rule_id, tenant-fingerprint) keeping the newest occurrence,
 // which subsumes the id dedup (duplicates share the whole key).
 func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams) ([]RiskFindingListRow, error) {
@@ -207,7 +273,7 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 	} else if p.NonAssistant {
 		sb = sb.Where("assistant_id = ''")
 	}
-	sb = sb.OrderBy("message_created_at DESC", "id DESC", "inserted_at DESC")
+	sb = sb.OrderBy("message_created_at DESC", "id DESC", latestCopyOrderSQL)
 
 	// cursorCond resumes strictly after a prior page's last row; both branches
 	// below share it so the cursor shape cannot drift between them.
@@ -225,9 +291,9 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 		sb = sb.Column("excluded_at").Column("false_positive_at").
 			Column("fingerprint_tenant_hs256").
 			Suffix("LIMIT 1 BY id")
-		grouped := sq.Select(riskFindingListColumns...).
+		grouped := withMCPServerCond(sq.Select(riskFindingListColumns...).
 			FromSelect(sb, "latest").
-			Where(liveStateCond).
+			Where(liveStateCond), p).
 			OrderBy("message_created_at DESC", "id DESC").
 			Suffix("LIMIT 1 BY (risk_policy_id, rule_id, " + uniqueMatchKey + ")")
 		outer := sq.Select(riskFindingListColumns...).FromSelect(grouped, "deduped")
@@ -250,9 +316,9 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 		// support, so it renders through the suffix.
 		sb = sb.Column("excluded_at").Column("false_positive_at").
 			Suffix("LIMIT 1 BY id")
-		sb = sq.Select(riskFindingListColumns...).
+		sb = withMCPServerCond(sq.Select(riskFindingListColumns...).
 			FromSelect(sb, "latest").
-			Where(liveStateCond).
+			Where(liveStateCond), p).
 			OrderBy("message_created_at DESC", "id DESC").
 			Limit(p.Limit)
 	}
@@ -290,14 +356,14 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 // table) and only then is the live-state gate applied, so a finding whose
 // newest copy carries an exclusion or false-positive flag is not counted.
 func (q *Queries) CountRiskFindings(ctx context.Context, p ListRiskFindingsParams) (uint64, error) {
-	inner, err := listRiskFindingsBase(p, "id", "excluded_at", "false_positive_at")
+	inner, err := listRiskFindingsBase(p, "id", "excluded_at", "false_positive_at", "mcp_server_id")
 	if err != nil {
 		return 0, err
 	}
-	inner = inner.OrderBy("inserted_at DESC").Suffix("LIMIT 1 BY id")
-	sb := sq.Select("count() AS findings").
+	inner = inner.OrderBy(latestCopyOrderSQL).Suffix("LIMIT 1 BY id")
+	sb := withMCPServerCond(sq.Select("count() AS findings").
 		FromSelect(inner, "latest").
-		Where(liveStateCond)
+		Where(liveStateCond), p)
 
 	query, args, err := sb.ToSql()
 	if err != nil {

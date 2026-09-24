@@ -40,6 +40,7 @@ vi.mock("@/components/ui/ContextMenu", () => ({
 vi.mock("@/components/auditlogs/feed", () => ({
   ActionIconTile: () => null,
 }));
+
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
     id: "org-1",
@@ -47,9 +48,12 @@ vi.mock("@/contexts/Auth", () => ({
     slug: "acme",
     projects: [{ id: "project-1", name: "Project One", slug: "project-one" }],
   }),
+  useUser: () => ({ id: "user-1" }),
   useSession: () => ({
+    user: { id: "user-1", email: "viewer@example.test", isAdmin: false },
     rawGramAccountType: "enterprise",
     hasActiveSubscription: true,
+    trial: null,
   }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
@@ -57,7 +61,7 @@ vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme" }),
 }));
 vi.mock("@/contexts/Telemetry", () => ({
-  useTelemetry: () => ({ isFeatureEnabled: () => false }),
+  useTelemetry: () => ({ isFeatureEnabled: () => false, capture: vi.fn() }),
 }));
 vi.mock("@/hooks/useLocalStorageState", () => ({
   useLocalStorageState: () => ["list", vi.fn()],
@@ -69,20 +73,21 @@ vi.mock("@/hooks/useProjectFavorites", () => ({
     toggleFavorite: vi.fn(),
   }),
 }));
+vi.mock("@/hooks/useOrganizationPlatformMCPOnboarding", () => ({
+  useOrganizationPlatformMCPOnboarding: () => ({
+    data: { enabled: false },
+    isError: false,
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
-vi.mock("@/hooks/usePlatformMcpCta", () => ({
-  usePlatformMcpCta: () => ({
-    dismiss: vi.fn(),
-    href: "/acme/platform-mcp",
-    label: "Set up Platform MCP",
-    recordImpression: vi.fn(),
-    recordSelected: vi.fn(),
-    visible: false,
+vi.mock(
+  "@gram/client/react-query/recordPlatformMCPDashboardCtaEvent.js",
+  () => ({
+    useRecordPlatformMCPDashboardCtaEventMutation: () => ({ mutate: vi.fn() }),
   }),
-  usePlatformMcpCtaImpression: () => vi.fn(),
-}));
+);
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     access: {
@@ -98,6 +103,8 @@ vi.mock("@/routes", () => ({
     // Used by the welcome banner's route cards.
     home: { href: () => "/acme" },
     setup: { href: () => "/acme/setup" },
+    setupWizard: { href: () => "/acme/setup/wizard" },
+    headless: { href: () => "/acme/headless" },
   }),
   useRoutes: ({ projectSlug }: { projectSlug?: string }) => ({
     exploreDemo: { href: () => "/explore-demo" },
@@ -123,6 +130,7 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => ({ prefetchQuery: vi.fn() }),
+  useQuery: () => ({ data: undefined, isPending: false }),
 }));
 vi.mock("react-router", () => ({
   Link: ({ children, ...props }: React.ComponentProps<"a">) => (

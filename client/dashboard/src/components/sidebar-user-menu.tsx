@@ -1,6 +1,14 @@
-import { useSession, useUser } from "@/contexts/Auth";
+import {
+  useIsPlatformAdmin,
+  useOrganization,
+  useSession,
+  useUser,
+} from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { getAdminServerUrl } from "@/lib/admin-server-url";
+import { DEMO_ORG_SLUG } from "@/lib/demo";
+import { logoutToLogin } from "@/lib/logout-to-login";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import {
   DropdownMenu,
@@ -16,42 +24,55 @@ import {
   ActivityIcon,
   BookOpenIcon,
   BuildingIcon,
+  CompassIcon,
   CreditCardIcon,
+  CrownIcon,
   LogOutIcon,
   MailIcon,
   MapIcon,
   MessageCircleIcon,
-  MoreHorizontal,
   PencilIcon,
   SettingsIcon,
 } from "lucide-react";
-import { useCallback, useState } from "react";
-import { useNavigate } from "react-router";
+import { useState, useSyncExternalStore } from "react";
+import { Link, useNavigate } from "react-router";
+import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import {
+  isPylonChatOpen,
+  subscribePylonChatOpen,
+  togglePylonChat,
+} from "@/lib/pylon";
 
 export function SidebarUserMenu(): JSX.Element {
   const user = useUser();
+  const isPlatformAdmin = useIsPlatformAdmin();
+  const adminServerUrl = getAdminServerUrl(
+    document
+      .querySelector<HTMLMetaElement>('meta[name="gram-admin-server-url"]')
+      ?.getAttribute("content"),
+    import.meta.env.DEV,
+  );
   const session = useSession();
+  const organization = useOrganization();
   const navigate = useNavigate();
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
   const client = useSdkClient();
   const { projectSlug } = useSlugs();
   const { hasAnyScope } = useRBAC();
+  const identityHref = useIdentityHrefBuilder()({ userId: user.id });
 
   const canAccessOrgRoutes = hasAnyScope(["org:read", "org:admin"]);
   const isMultiOrg = session.organizations.length > 1;
+  const isDemoOrg = organization.slug === DEMO_ORG_SLUG;
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [pylonOpen, setPylonOpen] = useState(false);
-  const togglePylon = useCallback(() => {
-    if (pylonOpen) {
-      window.Pylon?.("hide");
-    } else {
-      window.Pylon?.("show");
-    }
-    setPylonOpen((prev) => !prev);
-  }, [pylonOpen]);
+  const pylonOpen = useSyncExternalStore(
+    subscribePylonChatOpen,
+    isPylonChatOpen,
+    () => false,
+  );
 
   const userInitials =
     user.displayName
@@ -65,40 +86,30 @@ export function SidebarUserMenu(): JSX.Element {
 
   // Only the first name in the compact footer preview so it never truncates.
   const firstName = user.displayName?.trim().split(/\s+/)[0] || "User";
+  const accountDetails = (
+    <div className="flex min-w-0 flex-col space-y-1">
+      <p className="truncate text-sm leading-none font-medium">
+        {user.displayName || "User"}
+      </p>
+      <p className="text-muted-foreground truncate text-xs leading-none">
+        {user.email}
+      </p>
+    </div>
+  );
 
   return (
     <div className="flex items-center gap-2 px-1 py-1">
-      {/* Compact identity preview — clicking it opens the same menu. Expanded only. */}
-      <button
-        type="button"
-        aria-label="Open account menu"
-        onClick={() => setMenuOpen(true)}
-        className="hover:bg-accent flex min-w-0 flex-1 items-center gap-2 p-1 text-left group-data-[collapsible=icon]:hidden"
-      >
-        <Avatar className="size-7 shrink-0">
-          <AvatarImage
-            src={user.photoUrl}
-            alt={user.displayName || user.email}
-          />
-          <AvatarFallback className="text-xs">{userInitials}</AvatarFallback>
-        </Avatar>
-        <span className="truncate text-sm font-medium">{firstName}</span>
-      </button>
-
-      {/* Smaller inline theme switcher — expanded only */}
-      <ThemeSwitcher className="group-data-[collapsible=icon]:hidden" />
-
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        {/* The identity preview is the menu trigger — collapsed it is the avatar
+            alone, so the menu stays reachable without a second control. */}
         <DropdownMenuTrigger asChild>
           <button
             data-testid="user-menu-trigger"
             type="button"
             aria-label="Account menu"
-            className="border-border text-muted-foreground hover:bg-accent hover:text-foreground flex size-9 shrink-0 items-center justify-center border group-data-[collapsible=icon]:mx-auto"
+            className="hover:bg-accent flex min-w-0 flex-1 items-center gap-2 p-1 text-left group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center"
           >
-            <MoreHorizontal className="h-4 w-4 group-data-[collapsible=icon]:hidden" />
-            {/* Collapsed: the round trigger shows the avatar so the menu stays reachable */}
-            <Avatar className="hidden size-7 group-data-[collapsible=icon]:block">
+            <Avatar className="size-7 shrink-0">
               <AvatarImage
                 src={user.photoUrl}
                 alt={user.displayName || user.email}
@@ -107,31 +118,38 @@ export function SidebarUserMenu(): JSX.Element {
                 {userInitials}
               </AvatarFallback>
             </Avatar>
+            <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
+              {firstName}
+            </span>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="end" className="w-56">
-          <DropdownMenuLabel className="font-normal">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm leading-none font-medium">
-                  {user.displayName || "User"}
-                </p>
-                <p className="text-muted-foreground text-xs leading-none">
-                  {user.email}
-                </p>
-              </div>
-              {projectSlug && (
-                <button
-                  type="button"
-                  aria-label="Project Settings"
-                  onClick={() => routes.settings.goTo()}
-                  className="text-muted-foreground hover:text-foreground"
+          <DropdownMenuGroup className="relative">
+            {identityHref ? (
+              <DropdownMenuItem asChild className="pr-8 font-normal">
+                <Link to={identityHref}>{accountDetails}</Link>
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuLabel className="pr-8 font-normal">
+                {accountDetails}
+              </DropdownMenuLabel>
+            )}
+            {isPlatformAdmin && adminServerUrl && (
+              <DropdownMenuItem
+                asChild
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring absolute top-1.5 right-2 size-4 cursor-pointer p-0 focus:bg-transparent focus:text-foreground focus-visible:rounded focus-visible:ring-2 focus-visible:ring-offset-1"
+              >
+                <a
+                  href={adminServerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Platform admin"
                 >
-                  <SettingsIcon className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </DropdownMenuLabel>
+                  <CrownIcon className="h-4 w-4" />
+                </a>
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             {projectSlug && (
@@ -154,6 +172,12 @@ export function SidebarUserMenu(): JSX.Element {
               >
                 <BuildingIcon className="mr-2 h-4 w-4" />
                 Switch Organization
+              </DropdownMenuItem>
+            )}
+            {!isDemoOrg && (
+              <DropdownMenuItem onClick={() => routes.exploreDemo.goTo()}>
+                <CompassIcon className="mr-2 h-4 w-4" />
+                Explore demo org
               </DropdownMenuItem>
             )}
           </DropdownMenuGroup>
@@ -180,7 +204,7 @@ export function SidebarUserMenu(): JSX.Element {
               </a>
             </DropdownMenuItem>
             {"Pylon" in window && (
-              <DropdownMenuItem onClick={togglePylon}>
+              <DropdownMenuItem onClick={togglePylonChat}>
                 <MessageCircleIcon className="mr-2 h-4 w-4" />
                 {pylonOpen ? "Close Support" : "Get Support"}
               </DropdownMenuItem>
@@ -215,10 +239,7 @@ export function SidebarUserMenu(): JSX.Element {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {
-              void (async () => {
-                await client.auth.logout();
-                window.location.href = "/login";
-              })();
+              void logoutToLogin(client);
             }}
           >
             <LogOutIcon className="mr-2 h-4 w-4" />
@@ -226,6 +247,9 @@ export function SidebarUserMenu(): JSX.Element {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Smaller inline theme switcher — expanded only */}
+      <ThemeSwitcher className="group-data-[collapsible=icon]:hidden" />
     </div>
   );
 }

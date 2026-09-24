@@ -125,14 +125,21 @@ func RejectWritesTo(t *testing.T, ctx context.Context, conn *pgxpool.Pool, table
 
 // BeginTx starts a transaction that's rolled back on test cleanup, so tests
 // that need a real pgx.Tx (e.g. for savepoint-using functions) don't leak
-// open transactions. Callers that need a write visible to a later call in
-// the same test (simulating separate requests) must Commit explicitly.
+// open transactions. Cleanup uses its own timeout because testing cancels the
+// test context before running cleanup functions. Callers that need a write
+// visible to a later call in the same test (simulating separate requests) must
+// Commit explicitly.
 func BeginTx(t *testing.T, ctx context.Context, conn *pgxpool.Pool) pgx.Tx {
 	t.Helper()
 
 	tx, err := conn.Begin(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(ctx) })
+	t.Cleanup(func() {
+		rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+		defer cancel()
+
+		_ = tx.Rollback(rollbackCtx)
+	})
 
 	return tx
 }

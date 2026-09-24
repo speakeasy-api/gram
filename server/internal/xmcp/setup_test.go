@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -148,21 +149,22 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	telemLogger := telemetry.NewLogger(ctx, logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), chConn, logsEnabled, toolIOLogsEnabled, telemetry.NewUserInfoResolver(logger, conn, cacheAdapter), telemetry.NewNoopLogPublisher(testenv.NewLogger(t)))
 	telemService := telemetry.NewService(logger, tracerProvider, conn, chConn, sessionManager, chatSessionsManager, logsEnabled, sessionCaptureEnabled, posthogClient, authzEngine, nil)
 
-	temporalEnv, _ := infra.NewTemporalEnv(t)
-
 	assistantTokens := assistanttokens.New("test-jwt-secret", conn, authzEngine)
 	shadowMCPClient := shadowmcp.NewClient(logger, conn, cacheAdapter, nil)
 	auditLogger := audit.NewLogger()
 	userSessionSigner := usersessions.NewSigner("test-jwt-secret")
-	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, cacheAdapter, serverURL)
-	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, guardianPolicy, authzEngine, posthogClient, telemLogger, billingClient, billingClient, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()))
-	mcpService := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, &feature.InMemory{}, serverURL, serverURL, enc, cacheAdapter, guardianPolicy, funcs, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, temporalEnv, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, remoteProxyManager, route.NewRouteTable(), "", nil, nil, mcp.TunnelPublicConfig{
+	remoteChallengeMgr := remotesessions.NewChallengeManager(logger, tracerProvider, meterProvider, conn, enc, guardianPolicy, nil, cacheAdapter, serverURL)
+	mcpToolExecutionCheckpoint, err := mcptoolexecution.NewCheckpoint(conn, mcptoolexecution.DefaultEvaluationTimeout, meterProvider, logger)
+	require.NoError(t, err)
+	remoteProxyManager := remotemcp.NewProxyManager(logger, tracerProvider, meterProvider, conn, guardianPolicy, authzEngine, posthogClient, telemLogger, billingClient, billingClient, mcpservers.NewToolDispositionCache(logger, conn, cacheAdapter), toolcallobserver.NoopSuccessRecorder{}, toolfilter.NewSessionToolWitnessStore(testenv.NewLogger(t), testenv.NewMemoryCache()), mcpToolExecutionCheckpoint)
+	mcpService, err := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, chatSessionsManager, env, posthogClient, &feature.InMemory{}, serverURL, serverURL, enc, cacheAdapter, guardianPolicy, funcs, billingClient, billingClient, telemLogger, telemService, vectorToolStore, nil, authzEngine, assistantTokens, shadowMCPClient, auditLogger, nil, nil, nil, nil, userSessionSigner, remoteChallengeMgr, remoteProxyManager, route.NewRouteTable(), "", nil, redisClient, mcp.TunnelPublicConfig{
 		SessionTTL:         0,
 		LiveSessionCap:     0,
 		InitializeRate:     ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		RequestRate:        ratelimit.Rate{Tokens: 0, Interval: 0, Burst: 0},
 		MaxRequestLifetime: 0,
-	})
+	}, mcp.MetaRuntimeConfig{MemberCallTimeout: 0})
+	require.NoError(t, err)
 
 	svc := xmcp.NewService(logger, conn, enc, mcpService)
 
@@ -279,7 +281,7 @@ func seedRemoteMCPEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: uuid.NullUUID{},
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           slug,
 	})
 	require.NoError(t, err)
@@ -323,7 +325,7 @@ func seedToolsetMCPEndpointOnDomain(t *testing.T, ctx context.Context, ti *testI
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: customDomainID,
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           slug,
 	})
 	require.NoError(t, err)
@@ -468,7 +470,7 @@ func seedIssuerGatedToolsetMCPEndpoint(
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           slug,
 	})
 	require.NoError(t, err)
@@ -527,7 +529,7 @@ func seedIssuerGatedRemoteMCPEndpointOnDomain(
 	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: customDomainID,
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           slug,
 	})
 	require.NoError(t, err)

@@ -22,15 +22,17 @@ type RiskSignalWindowParams struct {
 }
 
 // signalFindings is the doubled-window analog of overviewFindings: the same
-// per-id dedup (latest inserted_at wins) and live-finding filters, but scanning
-// [WideFrom, To) so callers can split current vs previous with *If aggregates.
+// per-id dedup (latestCopyOrderSQL), shadow exclusion and live-finding
+// filters, but scanning [WideFrom, To) so callers can split current vs
+// previous with *If aggregates.
 func signalFindings(p RiskSignalWindowParams, columns ...squirrel.Sqlizer) squirrel.SelectBuilder {
-	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY inserted_at DESC) AS rn").
+	latest := sq.Select("*", "ROW_NUMBER() OVER (PARTITION BY id ORDER BY "+latestCopyOrderSQL+") AS rn").
 		From("risk_findings").
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
-		Where("created_at >= ?", p.WideFrom).
-		Where("created_at < ?", p.To)
+		Where(notShadowCond).
+		Where("created_at >= toDateTime64(?, 9, 'UTC')", p.WideFrom.UTC().Format(watchdogTimeLayout)).
+		Where("created_at < toDateTime64(?, 9, 'UTC')", p.To.UTC().Format(watchdogTimeLayout))
 
 	sb := sq.Select()
 	for _, column := range columns {

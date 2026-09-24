@@ -312,8 +312,9 @@ func TestLogs_EnrichesAttributionWhenIdentityArrivesAcrossBatches(t *testing.T) 
 	userID, workEmail := "split-employee", "split@example.com"
 	seedHookUser(t, ctx, ti.conn, orgID, userID, workEmail)
 
+	// Session metadata outlives the cloned database in shared Redis.
+	sessionID := "split-session-" + uuid.NewString()
 	const (
-		sessionID   = "split-session"
 		accountUUID = "acct-split"
 		extOrgID    = "split-ent-org"
 		deviceID    = "device-split"

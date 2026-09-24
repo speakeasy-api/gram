@@ -63,6 +63,7 @@ func TestFPMirrorMessage(t *testing.T) {
 	require.Equal(t, "2026-08-01T12:30:00.123456789Z", marked.GetExcludedAt(), "excluded_at mirrors the mark timestamp")
 	require.Equal(t, chrepo.ExcludedReasonManual, marked.GetExcludedReason())
 	require.Equal(t, "test data", marked.GetExcludedDetail())
+	require.Equal(t, chrepo.EventKindSuppression, marked.GetEventKind())
 
 	row.FalsePositiveAt = pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: 0}
 	row.FalsePositiveReason = pgtype.Text{String: "", Valid: false}
@@ -71,4 +72,5 @@ func TestFPMirrorMessage(t *testing.T) {
 	require.Empty(t, unmarked.GetExcludedAt(), "an unmark republish carries no excluded state")
 	require.Empty(t, unmarked.GetExcludedReason())
 	require.Empty(t, unmarked.GetExcludedDetail())
+	require.Equal(t, chrepo.EventKindUnsuppression, unmarked.GetEventKind(), "an unmark republish is still a state-change row, so a redelivered scanner copy cannot outrank it")
 }

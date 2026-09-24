@@ -3,6 +3,7 @@ package background
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -56,9 +57,12 @@ func TestDeviceIntegrationSyncCoordinatorRunsEachCandidateOnce(t *testing.T) {
 	// signature is the contract that credentials never enter Temporal
 	// payloads.
 	var ran []string
+	var ranMu sync.Mutex
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input string) error {
+			ranMu.Lock()
 			ran = append(ran, input)
+			ranMu.Unlock()
 			return nil
 		},
 		activity.RegisterOptions{Name: "RunDeviceIntegrationSync"},
@@ -69,6 +73,8 @@ func TestDeviceIntegrationSyncCoordinatorRunsEachCandidateOnce(t *testing.T) {
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, 2, listCalls)
+	ranMu.Lock()
+	defer ranMu.Unlock()
 	require.ElementsMatch(t, []string{
 		"11111111-1111-1111-1111-111111111111",
 		"22222222-2222-2222-2222-222222222222",
@@ -100,9 +106,12 @@ func TestDeviceIntegrationSyncCoordinatorContinuesAfterChildFailure(t *testing.T
 	)
 
 	var ran []string
+	var ranMu sync.Mutex
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input string) error {
+			ranMu.Lock()
 			ran = append(ran, input)
+			ranMu.Unlock()
 			if input == "11111111-1111-1111-1111-111111111111" {
 				return errors.New("infra exploded")
 			}
@@ -116,6 +125,8 @@ func TestDeviceIntegrationSyncCoordinatorContinuesAfterChildFailure(t *testing.T
 	// One child failing must not abort the coordinator or the sibling sync.
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
+	ranMu.Lock()
+	defer ranMu.Unlock()
 	require.Contains(t, ran, "22222222-2222-2222-2222-222222222222")
 }
 

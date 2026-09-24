@@ -1,6 +1,6 @@
 import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 
-export type PolicyAction = "flag" | "block" | "warn";
+export type PolicyAction = "flag" | "block" | "warn" | "quarantine";
 
 export type PolicyMessageType =
   | "user_message"
@@ -44,10 +44,33 @@ export type DetectionRule = {
   hidden?: boolean;
 };
 
-export const RULE_CATEGORY_META: Record<
-  RuleCategory,
-  { label: string; description: string; icon: string }
-> = {
+/** Which engine backs the personal-data categories in the policy editor.
+ *
+ *  - `presidio`: the legacy per-entity scanner. Personal data is split into
+ *    four categories (financial, pii, government_ids, healthcare), each with a
+ *    rule list the user can narrow, plus a confidence threshold.
+ *  - `llm`: the fine-tuned risk analyzer replaces the legacy engine for the
+ *    organization. The model decides which personal-data category applies per
+ *    finding, so the editor collapses the four categories into a single
+ *    category-level `pii` detector with no rule list, no sensitivity and no
+ *    entity-type exclusions.
+ *
+ *  The mode follows the multivariate PostHog flag `gram-risk-llm-analyzer`
+ *  (see `useDetectorMode`): `off` and `shadow` render `presidio` (under
+ *  `shadow` the analyzer also scans server-side for comparison but never
+ *  enforces, so the editor keeps the legacy controls); only `llm` renders
+ *  `llm`. Until the flag is converted to multivariate in PostHog it has no
+ *  variant, and its boolean-enabled read also renders `llm` (the transition
+ *  rule in `useDetectorMode`). */
+export type DetectorMode = "presidio" | "llm";
+
+export type RuleCategoryMeta = {
+  label: string;
+  description: string;
+  icon: string;
+};
+
+export const RULE_CATEGORY_META: Record<RuleCategory, RuleCategoryMeta> = {
   secrets: {
     label: "Secrets",
     description: "API keys, tokens, private keys, credentials",
@@ -121,6 +144,40 @@ export const RULE_CATEGORY_META: Record<
     icon: "regex",
   },
 };
+
+/** Copy that changes with the detector mode. Under the LLM analyzer the
+ *  `pii` card stands for every kind of personal data, so its Presidio-specific
+ *  entity list no longer describes it. */
+const LLM_RULE_CATEGORY_META: Partial<Record<RuleCategory, RuleCategoryMeta>> =
+  {
+    pii: {
+      label: "PII",
+      description:
+        "Personal data about an identifiable person; the category is decided per finding.",
+      icon: "user",
+    },
+  };
+
+/** Label, description and icon for a category under `mode`. Prefer this over
+ *  indexing `RULE_CATEGORY_META` directly anywhere the policy editor renders a
+ *  category, so the LLM-analyzer copy applies without mutating the constant. */
+export function ruleCategoryMeta(
+  category: RuleCategory,
+  mode: DetectorMode = "presidio",
+): RuleCategoryMeta {
+  if (mode === "llm") {
+    return LLM_RULE_CATEGORY_META[category] ?? RULE_CATEGORY_META[category];
+  }
+  return RULE_CATEGORY_META[category];
+}
+
+// Display order for the message kinds a policy can scope to.
+export const ALL_POLICY_MESSAGE_TYPES: PolicyMessageType[] = [
+  "user_message",
+  "tool_request",
+  "tool_response",
+  "assistant_message",
+];
 
 export const POLICY_MESSAGE_TYPE_META: Record<
   PolicyMessageType,

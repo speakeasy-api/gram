@@ -38,11 +38,21 @@ const (
 	ScopeSkillBlockedRead        Scope = "skill:blocked_read"
 	ScopeSkillWrite              Scope = "skill:write"
 	ScopeSkillBlockedWrite       Scope = "skill:blocked_write"
+	ScopePluginWrite             Scope = "plugin:write"
+	ScopePluginBlockedWrite      Scope = "plugin:blocked_write"
 	ScopeRiskPolicyEvaluate      Scope = "risk_policy:evaluate"
 	ScopeRiskPolicyBypass        Scope = "risk_policy:bypass" //nolint:gosec // scope name, not a credential
 	ScopeRiskPolicyBlock         Scope = "risk_policy:block"
 	ScopeChatRead                Scope = "chat:read"
 	ScopeChatWrite               Scope = "chat:write"
+	ScopeAgentRead               Scope = "agent:read"
+	ScopeAgentWrite              Scope = "agent:write"
+	ScopeAgentAuthorize          Scope = "agent:authorize"
+	ScopeAgentTransfer           Scope = "agent:transfer"
+	// Device-agent sync and hook ingestion for agent-principal keys. Human
+	// callers reach these routes through transport scopes, not these grants.
+	ScopeOrgDeviceAgentSync Scope = "org:device_agent_sync"
+	ScopeOrgHooksIngest     Scope = "org:hooks_ingest"
 )
 
 type scopeVisibility int
@@ -69,6 +79,11 @@ var adminScopes = []Scope{
 	ScopeEnvironmentWrite,
 	ScopeSkillRead,
 	ScopeSkillWrite,
+	ScopePluginWrite,
+	ScopeAgentRead,
+	ScopeAgentWrite,
+	ScopeAgentAuthorize,
+	ScopeAgentTransfer,
 	// chat:read and chat:write are intentionally NOT defaults for any system
 	// role: reading other members' session transcripts is sensitive, and
 	// mutating them (rename, feedback, delete) is destructive, so both must be
@@ -107,11 +122,19 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeSkillBlockedRead:        scopeVisibilityInternal,
 	ScopeSkillWrite:              scopeVisibilityUserVisible,
 	ScopeSkillBlockedWrite:       scopeVisibilityInternal,
+	ScopePluginWrite:             scopeVisibilityUserVisible,
+	ScopePluginBlockedWrite:      scopeVisibilityInternal,
 	ScopeRiskPolicyEvaluate:      scopeVisibilityUserVisible,
 	ScopeRiskPolicyBypass:        scopeVisibilityUserVisible,
 	ScopeRiskPolicyBlock:         scopeVisibilityUserVisible,
 	ScopeChatRead:                scopeVisibilityUserVisible,
 	ScopeChatWrite:               scopeVisibilityUserVisible,
+	ScopeAgentRead:               scopeVisibilityUserVisible,
+	ScopeAgentWrite:              scopeVisibilityUserVisible,
+	ScopeAgentAuthorize:          scopeVisibilityUserVisible,
+	ScopeAgentTransfer:           scopeVisibilityUserVisible,
+	ScopeOrgDeviceAgentSync:      scopeVisibilityUserVisible,
+	ScopeOrgHooksIngest:          scopeVisibilityUserVisible,
 }
 
 var memberScopes = []Scope{
@@ -124,9 +147,9 @@ var memberScopes = []Scope{
 	// values include secrets, so viewing them must be granted explicitly via a
 	// custom role. Admins retain environment:read/write via adminScopes.
 	//
-	// The Observe/observability dashboard surface is separately gated on org:admin
-	// at the page level, so basic members (e.g. synced via directory/SCIM) don't
-	// see telemetry by default.
+	// Most Observe pages are separately gated on org:admin. The Identities
+	// roster and required-employee-scoped Shadow AI read are project:read
+	// surfaces; identity detail resolution separately requires org:read.
 }
 
 func (s Scope) Parts() ScopeParts {
@@ -136,6 +159,16 @@ func (s Scope) Parts() ScopeParts {
 	}
 
 	return ScopeParts{Resource: resource, Action: action}
+}
+
+// RegisteredScopes returns the scopes known to authorization in stable order.
+func RegisteredScopes() []Scope {
+	scopes := make([]Scope, 0, len(scopeVisibilityByScope))
+	for scope := range scopeVisibilityByScope {
+		scopes = append(scopes, scope)
+	}
+	slices.Sort(scopes)
+	return scopes
 }
 
 func ScopeVisibilityFor(scope Scope) (string, bool) {
@@ -170,6 +203,13 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 // Preserves qstearns' non-escalation rule: project:read does not grant environment access
 // (a generic project-viewer must not gain access to environment values, which include
 // secrets).
+//
+// The mcp:blocked_* scopes are deliberately independent of each other, unlike
+// the other blocklist families. Connecting to a server and administering it
+// are different jobs — an operator who never calls a server's tools may still
+// have to manage it — so "cannot connect" has to be expressible without also
+// meaning "cannot see or manage". Anything that takes a principal off a
+// server entirely writes all three.
 var scopeExpansions = map[Scope][]Scope{
 	ScopeRoot:                    nil,
 	ScopeOrgRead:                 {ScopeOrgAdmin},
@@ -181,9 +221,9 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeProjectWrite:            nil,
 	ScopeProjectBlockedWrite:     {ScopeProjectBlockedRead},
 	ScopeMCPRead:                 {ScopeMCPWrite},
-	ScopeMCPBlockedRead:          {ScopeMCPBlockedConnect},
+	ScopeMCPBlockedRead:          nil,
 	ScopeMCPWrite:                nil,
-	ScopeMCPBlockedWrite:         {ScopeMCPBlockedRead, ScopeMCPBlockedConnect},
+	ScopeMCPBlockedWrite:         nil,
 	ScopeMCPConnect:              {ScopeMCPRead, ScopeMCPWrite},
 	ScopeMCPBlockedConnect:       nil,
 	ScopeEnvironmentRead:         {ScopeEnvironmentWrite},
@@ -194,11 +234,19 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeSkillBlockedRead:        nil,
 	ScopeSkillWrite:              nil,
 	ScopeSkillBlockedWrite:       {ScopeSkillBlockedRead},
+	ScopePluginWrite:             nil,
+	ScopePluginBlockedWrite:      nil,
 	ScopeRiskPolicyEvaluate:      nil,
 	ScopeRiskPolicyBypass:        nil,
 	ScopeRiskPolicyBlock:         nil,
 	ScopeChatRead:                {ScopeChatWrite},
 	ScopeChatWrite:               nil,
+	ScopeAgentRead:               nil,
+	ScopeAgentWrite:              nil,
+	ScopeAgentAuthorize:          nil,
+	ScopeAgentTransfer:           nil,
+	ScopeOrgDeviceAgentSync:      {ScopeOrgAdmin},
+	ScopeOrgHooksIngest:          {ScopeOrgAdmin},
 }
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
@@ -228,11 +276,19 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeSkillBlockedRead:        "",
 	ScopeSkillWrite:              ScopeSkillBlockedWrite,
 	ScopeSkillBlockedWrite:       "",
+	ScopePluginWrite:             ScopePluginBlockedWrite,
+	ScopePluginBlockedWrite:      "",
 	ScopeRiskPolicyEvaluate:      ScopeRiskPolicyBypass,
 	ScopeRiskPolicyBypass:        "",
 	ScopeRiskPolicyBlock:         "",
 	ScopeChatRead:                "",
 	ScopeChatWrite:               "",
+	ScopeAgentRead:               "",
+	ScopeAgentWrite:              "",
+	ScopeAgentAuthorize:          "",
+	ScopeAgentTransfer:           "",
+	ScopeOrgDeviceAgentSync:      "",
+	ScopeOrgHooksIngest:          "",
 }
 
 // ExclusionScopeFor returns the scope that stores exception grants for the
@@ -275,4 +331,33 @@ func CalculateSubScopes(scope Scope) []string {
 		out[i] = string(s)
 	}
 	return out
+}
+
+// ScopeImplicationClosure returns the complete set of checks that a grant for
+// scope can satisfy, including scope itself.
+func ScopeImplicationClosure(scope Scope) []Scope {
+	seen := make(map[Scope]struct{}, 1)
+	seen[scope] = struct{}{}
+	queue := []Scope{scope}
+	for len(queue) > 0 {
+		granted := queue[0]
+		queue = queue[1:]
+		for checked, satisfying := range scopeExpansions {
+			if !slices.Contains(satisfying, granted) {
+				continue
+			}
+			if _, ok := seen[checked]; ok {
+				continue
+			}
+			seen[checked] = struct{}{}
+			queue = append(queue, checked)
+		}
+	}
+
+	closure := make([]Scope, 0, len(seen))
+	for implied := range seen {
+		closure = append(closure, implied)
+	}
+	slices.Sort(closure)
+	return closure
 }

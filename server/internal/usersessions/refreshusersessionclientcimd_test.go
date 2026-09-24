@@ -176,12 +176,13 @@ func newRefreshTestSetup(t *testing.T, issuerSlug string) (context.Context, *tes
 	require.NoError(t, err)
 
 	row, err := repo.New(ti.conn).UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
-		UserSessionIssuerID:  uuid.MustParse(issuer.ID),
-		ClientID:             ds.clientID,
-		ClientName:           "Stale Cached Name",
-		RedirectUris:         []string{"http://127.0.0.1:33418/callback"},
-		CacheTtlSeconds:      3600,
-		ClientIDMetadataEtag: pgtype.Text{String: `"v1"`, Valid: true},
+		UserSessionIssuerID:     uuid.MustParse(issuer.ID),
+		ClientID:                ds.clientID,
+		ClientName:              "Stale Cached Name",
+		RedirectUris:            []string{"http://127.0.0.1:33418/callback"},
+		CacheTtlSeconds:         3600,
+		ClientIDMetadataEtag:    pgtype.Text{String: `"v1"`, Valid: true},
+		TokenEndpointAuthMethod: "none",
 	})
 	require.NoError(t, err)
 	require.True(t, row.ClientIDMetadataEtag.Valid)
@@ -224,6 +225,7 @@ func TestRefreshUserSessionClientCIMD(t *testing.T) {
 
 	ctx, ti, ds, seeded := newRefreshTestSetup(t, "refresh-client-issuer")
 	backdateFetchedAt(t, ctx, ti, seeded.ID)
+	requireOrganizationID(t, ctx, seeded.OrganizationID)
 
 	ds.set(t, func(ds *cimdDocServer) {
 		ds.etag = `"v1"`
@@ -257,6 +259,65 @@ func TestRefreshUserSessionClientCIMD(t *testing.T) {
 // upstream fetches: the second call inside the cooldown is rejected before
 // any request leaves Gram, and a client whose last read has aged past the
 // window is allowed again.
+// The operator refresh applies the same downgrade rule as the authorize-time
+// refresh: a document that drops private_key_jwt is refused with an error
+// naming the reset (revoke the client), and the stored method and keys stand.
+func TestRefreshUserSessionClientCIMD_AuthMethodDowngradeRefused(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, ds, seeded := newRefreshTestSetup(t, "cimd-refresh-downgrade")
+
+	const publishedKeys = `{"keys":[{"kty":"EC","crv":"P-256","kid":"k1","x":"AA","y":"AA","use":"sig"}]}`
+	committed, err := repo.New(ti.conn).UpsertUserSessionClientFromCIMD(ctx, repo.UpsertUserSessionClientFromCIMDParams{
+		UserSessionIssuerID:     seeded.UserSessionIssuerID,
+		ClientID:                ds.clientID,
+		ClientName:              "Committed Asymmetric",
+		RedirectUris:            seeded.RedirectUris,
+		CacheTtlSeconds:         3600,
+		ClientIDMetadataEtag:    pgtype.Text{String: "", Valid: false},
+		TokenEndpointAuthMethod: "private_key_jwt",
+		ClientJwks:              []byte(publishedKeys),
+		ClientJwksUri:           pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	backdateFetchedAt(t, ctx, ti, committed.ID)
+
+	// The served document still says "none": that is now a downgrade.
+	_, err = ti.service.RefreshUserSessionClientCIMD(ctx, refreshPayload(committed.ID.String()))
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorContains(t, err, "Revoke the client")
+
+	after, err := repo.New(ti.conn).GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{ID: committed.ID, ProjectID: committed.ProjectID.UUID})
+	require.NoError(t, err)
+	require.Equal(t, "private_key_jwt", after.TokenEndpointAuthMethod.String)
+	require.JSONEq(t, publishedKeys, string(after.ClientJwks))
+	require.Equal(t, "Committed Asymmetric", after.ClientName, "a refused refresh must not persist the new document's display fields either")
+}
+
+// The operator refresh must write a row that predates the method column. Its
+// downgrade guard sees a NULL method and has to read that as "not committed
+// to private_key_jwt", or every pre-existing CIMD client becomes unrepairable
+// the moment an operator presses refresh.
+func TestRefreshUserSessionClientCIMD_LegacyNullMethodRowRefreshes(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, ds, seeded := newRefreshTestSetup(t, "cimd-refresh-legacy-null")
+
+	legacy, err := repo.New(ti.conn).ClearUserSessionClientAuthMethod(ctx, seeded.ID)
+	require.NoError(t, err)
+	require.False(t, legacy.TokenEndpointAuthMethod.Valid)
+	backdateFetchedAt(t, ctx, ti, legacy.ID)
+
+	ds.set(t, func(ds *cimdDocServer) { ds.doc["client_name"] = "Refreshed Legacy Client" })
+	got, err := ti.service.RefreshUserSessionClientCIMD(ctx, refreshPayload(legacy.ID.String()))
+	require.NoError(t, err)
+	require.Equal(t, "Refreshed Legacy Client", got.ClientName)
+
+	after, err := repo.New(ti.conn).GetUserSessionClientByID(ctx, repo.GetUserSessionClientByIDParams{ID: legacy.ID, ProjectID: legacy.ProjectID.UUID})
+	require.NoError(t, err)
+	require.Equal(t, "none", after.TokenEndpointAuthMethod.String)
+}
+
 func TestRefreshUserSessionClientCIMD_CooldownWindow(t *testing.T) {
 	t.Parallel()
 

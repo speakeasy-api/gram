@@ -1,3 +1,5 @@
+import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
+import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { CodeBlock } from "@/components/code";
 import { FormPage } from "@/components/page-templates";
 import { Input } from "@/components/ui/Input";
@@ -15,8 +17,15 @@ import { AlertCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Navigate } from "react-router";
 import { toast } from "sonner";
+import { RESOURCE_IDENTIFIER_EXPLAINER } from "./copy";
 import { useCreateTunneledMcpSource } from "./hooks";
 import { TunneledMcpSetupTabs } from "./TunneledMcpSetupTabs";
+import { UserSessionIssuerSelect } from "@/components/user-session-issuer-select";
+import {
+  PROJECT_SPECIFIC_ISSUER_VALUE,
+  defaultCreationUserSessionIssuerValue,
+} from "@/components/user-session-issuer-select.utils";
+import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
 
 function validateDisplayName(value: string): string | null {
   if (!value.trim()) return "Display name is required";
@@ -41,30 +50,53 @@ export default function CreateTunneledMcp(): JSX.Element | null {
   }
 
   if (!isTunneledMcpEnabled) {
-    return <Navigate to={routes.sources.href()} replace />;
+    return <Navigate to={routes.mcp.add.href()} replace />;
   }
 
   return <CreateTunneledMcpForm />;
 }
 
 function CreateTunneledMcpForm() {
+  const flow = useGatewayCreation();
+  const creationLocked = flow.createdServerId !== null || flow.isAttaching;
   const routes = useRoutes();
   const createSource = useCreateTunneledMcpSource();
+  const issuerQuery = useEffectiveUserSessionIssuers();
   const [name, setName] = useState("");
+  const [resourceIdentifier, setResourceIdentifier] = useState("");
   const [touched, setTouched] = useState(false);
   const [created, setCreated] = useState<CreatedState | null>(null);
+  const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
+
+  const defaultIssuerSelection = defaultCreationUserSessionIssuerValue(
+    issuerQuery.organizationIssuers,
+  );
+  const selectedIssuer = issuerSelection ?? defaultIssuerSelection;
 
   const validationError = touched ? validateDisplayName(name) : null;
   const submitDisabled =
-    createSource.isPending || validateDisplayName(name) !== null;
+    creationLocked ||
+    createSource.isPending ||
+    validateDisplayName(name) !== null ||
+    issuerQuery.isLoading ||
+    issuerQuery.isError ||
+    selectedIssuer === "";
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (creationLocked) return;
     setTouched(true);
     if (validateDisplayName(name) !== null) return;
 
     try {
-      const result = await createSource.mutateAsync({ name: name.trim() });
+      const result = await createSource.mutateAsync({
+        name: name.trim(),
+        resourceIdentifier: resourceIdentifier.trim() || undefined,
+        userSessionIssuerId:
+          selectedIssuer === PROJECT_SPECIFIC_ISSUER_VALUE
+            ? undefined
+            : selectedIssuer,
+      });
       setCreated(result);
       toast.success("Tunneled MCP server added");
     } catch (error) {
@@ -85,6 +117,7 @@ function CreateTunneledMcpForm() {
         description="Use this tunnel key to connect an MCP server running in your own network."
       >
         <Stack gap={6}>
+          <GatewayAttachmentStatus flow={flow} />
           <div className="border p-5">
             <Text variant="subheading" className="mb-3">
               Tunnel key
@@ -104,27 +137,52 @@ function CreateTunneledMcpForm() {
           />
 
           <Stack direction="horizontal" gap={2}>
-            <Button
-              variant="primary"
-              onClick={() =>
-                routes.mcp.x.overview.goTo(
-                  mcpServerRouteParam(created.mcpServer),
-                )
-              }
-            >
-              <Button.Text>Open MCP server</Button.Text>
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() =>
-                routes.sources.source.goTo(
-                  "tunneledmcp",
-                  tunneledMcpRouteParam(created.tunneledMcpServer),
-                )
-              }
-            >
-              <Button.Text>View source</Button.Text>
-            </Button>
+            {flow.gatewayId ? (
+              <>
+                <Button
+                  variant="primary"
+                  disabled={flow.isAttaching}
+                  onClick={() => {
+                    // The one-time key must be copied before leaving this screen.
+                    void flow.complete(created.mcpServer.id).catch(() => {});
+                  }}
+                >
+                  <Button.Text>Add to gateway</Button.Text>
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={flow.isAttaching}
+                  onClick={() => {
+                    flow.cancel();
+                  }}
+                >
+                  <Button.Text>Cancel</Button.Text>
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="primary"
+                  onClick={() =>
+                    routes.mcp.x.overview.goTo(
+                      mcpServerRouteParam(created.mcpServer),
+                    )
+                  }
+                >
+                  <Button.Text>Open MCP server</Button.Text>
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() =>
+                    routes.mcp.x.overview.goTo(
+                      tunneledMcpRouteParam(created.tunneledMcpServer),
+                    )
+                  }
+                >
+                  <Button.Text>View source</Button.Text>
+                </Button>
+              </>
+            )}
           </Stack>
         </Stack>
       </FormPage>
@@ -144,49 +202,94 @@ function CreateTunneledMcpForm() {
         noValidate
       >
         <Stack gap={4}>
-          <Stack gap={1}>
-            <label
-              htmlFor="tunneled-mcp-name"
-              className="text-sm leading-none font-medium"
-            >
-              Display name
-            </label>
-            <Input
-              id="tunneled-mcp-name"
-              autoFocus
-              placeholder="Internal MCP server"
-              value={name}
-              onChange={(value) => {
-                setName(value);
-                if (!touched) setTouched(true);
-              }}
-              onBlur={() => setTouched(true)}
-              aria-invalid={validationError ? true : undefined}
-              aria-describedby={
-                validationError ? "tunneled-mcp-name-error" : undefined
-              }
-            />
-            {validationError && (
-              <div
-                id="tunneled-mcp-name-error"
-                role="alert"
-                className="text-destructive mt-2 flex items-center gap-1.5 text-xs"
+          <fieldset disabled={creationLocked} className="contents">
+            <Stack gap={1}>
+              <label
+                htmlFor="tunneled-mcp-name"
+                className="text-sm leading-none font-medium"
               >
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                <span>{validationError}</span>
-              </div>
-            )}
-          </Stack>
+                Display name
+              </label>
+              <Input
+                id="tunneled-mcp-name"
+                autoFocus
+                placeholder="Internal MCP server"
+                value={name}
+                onChange={(value) => {
+                  setName(value);
+                  if (!touched) setTouched(true);
+                }}
+                onBlur={() => setTouched(true)}
+                aria-invalid={validationError ? true : undefined}
+                aria-describedby={
+                  validationError ? "tunneled-mcp-name-error" : undefined
+                }
+              />
+              {validationError && (
+                <div
+                  id="tunneled-mcp-name-error"
+                  role="alert"
+                  className="text-destructive mt-2 flex items-center gap-1.5 text-xs"
+                >
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span>{validationError}</span>
+                </div>
+              )}
+            </Stack>
 
-          <Stack gap={1}>
-            <label className="text-sm leading-none font-medium">
-              Transport
-            </label>
-            <Text muted small>
-              Outbound tunnel to a normal MCP server
-            </Text>
-          </Stack>
+            <Stack gap={1}>
+              <label
+                htmlFor="tunneled-mcp-resource-identifier"
+                className="text-sm leading-none font-medium"
+              >
+                Resource identifier{" "}
+                <span className="text-muted-foreground font-normal">
+                  (optional)
+                </span>
+              </label>
+              <Input
+                id="tunneled-mcp-resource-identifier"
+                placeholder="https://mcp.internal.example.com/mcp"
+                value={resourceIdentifier}
+                onChange={(value) => setResourceIdentifier(value)}
+              />
+              <Text muted small>
+                {`${RESOURCE_IDENTIFIER_EXPLAINER} Leave blank if unknown — it can be recorded later in the source settings.`}
+              </Text>
+            </Stack>
 
+            <Stack gap={1}>
+              <label className="text-sm leading-none font-medium">
+                Transport
+              </label>
+              <Text muted small>
+                Outbound tunnel to a normal MCP server
+              </Text>
+            </Stack>
+
+            <Stack gap={1}>
+              <label className="text-sm leading-none font-medium">
+                User session issuer
+              </label>
+              <UserSessionIssuerSelect
+                issuers={issuerQuery.organizationIssuers}
+                value={selectedIssuer}
+                onValueChange={setIssuerSelection}
+                includeProjectSpecific
+                disabled={issuerQuery.isLoading || issuerQuery.isError}
+              />
+              <Text muted small>
+                Organization issuers are shared across projects. Creating a
+                project-specific issuer is available for exceptional setups.
+              </Text>
+              {issuerQuery.isError ? (
+                <Alert variant="error" dismissible={false}>
+                  Failed to load organization user session issuers.
+                </Alert>
+              ) : null}
+            </Stack>
+          </fieldset>
+          <GatewayAttachmentStatus flow={flow} />
           {createSource.isError && (
             <Alert variant="error" dismissible={false}>
               {createSource.error.message}
@@ -207,8 +310,10 @@ function CreateTunneledMcpForm() {
             <Button
               type="button"
               variant="secondary"
-              disabled={createSource.isPending}
-              onClick={() => routes.sources.goTo()}
+              disabled={createSource.isPending || flow.isAttaching}
+              onClick={() => {
+                if (!flow.cancel()) routes.mcp.add.goTo();
+              }}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>

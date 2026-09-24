@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,17 +17,24 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
+	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
@@ -43,13 +51,22 @@ import (
 )
 
 type Service struct {
-	tracer             trace.Tracer
-	metrics            *metrics
-	logger             *slog.Logger
-	db                 *pgxpool.Pool
-	telemetryLogger    *telemetry.Logger
+	tracer          trace.Tracer
+	metrics         *metrics
+	logger          *slog.Logger
+	db              *pgxpool.Pool
+	telemetryLogger *telemetry.Logger
+	// otelLogPublisher tees OTLP logs received on the hooks endpoint into the
+	// OTel event feed pipeline (the gram.otel.v1.InboundLogRecord topic).
+	// Optional: when nil, hooks OTLP ingestion behaves exactly as before and
+	// nothing is republished.
+	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord]
+	// otelTeeDrains tracks in-flight tee ack-drain goroutines so tests can
+	// await them deterministically.
+	otelTeeDrains      sync.WaitGroup
 	auth               authorizer
 	authz              *authz.Engine
+	audit              *audit.Logger
 	cache              cache.Cache
 	temporalEnv        *tenv.Environment
 	repo               *repo.Queries
@@ -59,6 +76,7 @@ type Service struct {
 	// piScanner flags captured skill manifests that read as prompt injections.
 	// Optional: when nil, skill capture stores content and scans nothing.
 	piScanner       *promptinjection.Scanner
+	riskRecorder    *metering.RiskRecorder
 	policyBypass    *risk.PolicyBypassEvaluator
 	spendGate       *spendrules.Gate
 	shadowMCPClient *shadowmcp.Client
@@ -211,6 +229,9 @@ func (s *Service) signalIdentityMapRefresh(ctx context.Context) {
 // client disconnect must not drop it. Failures are logged and swallowed —
 // no hook decision, response or tool flow depends on a wake landing.
 func (s *Service) signalSkillEfficacy(ctx context.Context, projectID uuid.UUID) {
+	ctx, span := s.tracer.Start(ctx, "hooks.signalSkillEfficacy")
+	defer span.End()
+
 	if s.efficacySignaler == nil || projectID == uuid.Nil {
 		return
 	}
@@ -233,11 +254,13 @@ func NewService(
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	telemetryLogger *telemetry.Logger,
+	otelLogPublisher gcp.Publisher[*otelv1.InboundLogRecord],
 	sessionsMgr *sessions.Manager,
 	cacheAdapter cache.Cache,
 	completionsClient openrouter.CompletionClient,
 	temporalEnv *tenv.Environment,
 	authz *authz.Engine,
+	auditLogger *audit.Logger,
 	pfClient ProductFeaturesClient,
 	chatTitleGenerator ChatTitleGenerator,
 	riskScanner risk.RiskScanner,
@@ -252,6 +275,7 @@ func NewService(
 	serverURL *url.URL,
 	siteURL *url.URL,
 	jwtSecret string,
+	riskRecorder *metering.RiskRecorder,
 ) *Service {
 	return &Service{
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hooks"),
@@ -259,8 +283,11 @@ func NewService(
 		logger:             logger.With(attr.SlogComponent("hooks")),
 		db:                 db,
 		telemetryLogger:    telemetryLogger,
+		otelLogPublisher:   otelLogPublisher,
+		otelTeeDrains:      sync.WaitGroup{},
 		auth:               auth.New(logger, db, sessionsMgr, authz),
 		authz:              authz,
+		audit:              auditLogger,
 		cache:              cacheAdapter,
 		temporalEnv:        temporalEnv,
 		repo:               repo.New(db),
@@ -268,6 +295,7 @@ func NewService(
 		chatTitleGenerator: chatTitleGenerator,
 		riskScanner:        riskScanner,
 		piScanner:          piScanner,
+		riskRecorder:       riskRecorder,
 		policyBypass:       policyBypass,
 		spendGate:          spendGate,
 		shadowMCPClient:    shadowMCPClient,
@@ -286,6 +314,19 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	ctx, err := s.auth.Authorize(ctx, key, schema)
 	if err != nil {
 		return ctx, fmt.Errorf("authorize hooks api key: %w", err)
+	}
+	if schema.Name != constants.KeySecurityScheme || !isAgentActor(ctx) {
+		return ctx, nil
+	}
+
+	// Agent-principal keys may only reach the ingestion methods.
+	switch method, _ := ctx.Value(goa.MethodKey).(string); method {
+	case "cursor", "codex", "logs", "metrics":
+	default:
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+	if err := s.requireAgentHooksIngest(ctx); err != nil {
+		return ctx, err
 	}
 	return ctx, nil
 }

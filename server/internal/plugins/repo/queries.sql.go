@@ -58,7 +58,7 @@ VALUES (
   $5,
   $6
 )
-RETURNING id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+RETURNING id, plugin_id, project_id, toolset_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 `
 
 type AddPluginServerParams struct {
@@ -86,8 +86,10 @@ func (q *Queries) AddPluginServer(ctx context.Context, arg AddPluginServerParams
 	err := row.Scan(
 		&i.ID,
 		&i.PluginID,
+		&i.ProjectID,
 		&i.ToolsetID,
 		&i.McpServerID,
+		&i.MetaMcpServerID,
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,
@@ -369,7 +371,7 @@ func (q *Queries) GetGitHubConnectionOwner(ctx context.Context, arg GetGitHubCon
 }
 
 const getMarketplaceSettings = `-- name: GetMarketplaceSettings :one
-SELECT project_id, marketplace_name, created_at, updated_at
+SELECT project_id, marketplace_name, observability_enabled, created_at, updated_at
 FROM project_marketplace_settings
 WHERE project_id = $1
 `
@@ -380,6 +382,7 @@ func (q *Queries) GetMarketplaceSettings(ctx context.Context, projectID uuid.UUI
 	err := row.Scan(
 		&i.ProjectID,
 		&i.MarketplaceName,
+		&i.ObservabilityEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -484,7 +487,7 @@ func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, e
 }
 
 const getPluginServerByBackend = `-- name: GetPluginServerByBackend :one
-SELECT id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted FROM plugin_servers
+SELECT id, plugin_id, project_id, toolset_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted FROM plugin_servers
 WHERE plugin_id = $1
   AND toolset_id IS NOT DISTINCT FROM $2::uuid
   AND mcp_server_id IS NOT DISTINCT FROM $3::uuid
@@ -508,8 +511,10 @@ func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginSer
 	err := row.Scan(
 		&i.ID,
 		&i.PluginID,
+		&i.ProjectID,
 		&i.ToolsetID,
 		&i.McpServerID,
+		&i.MetaMcpServerID,
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,
@@ -517,6 +522,83 @@ func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginSer
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getPluginWithCounts = `-- name: GetPluginWithCounts :one
+SELECT
+  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.created_at, p.updated_at, p.deleted_at, p.deleted,
+  (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
+  (
+    SELECT count(*)
+    FROM skill_distributions sd
+    JOIN skills s
+      ON s.id = sd.skill_id
+      AND s.project_id = sd.project_id
+      AND s.archived_at IS NULL
+    WHERE sd.plugin_id = p.id
+      AND sd.project_id = p.project_id
+      AND sd.channel = 'plugin'
+      AND sd.assistant_id IS NULL
+      AND sd.revoked_at IS NULL
+      AND EXISTS (
+        SELECT 1
+        FROM skill_versions sv
+        WHERE sv.skill_id = sd.skill_id
+          AND sv.spec_valid IS TRUE
+          AND (sd.pinned_version_id IS NULL OR sv.id = sd.pinned_version_id)
+      )
+  ) AS skill_count,
+  (SELECT count(*) FROM plugin_assignments pa WHERE pa.plugin_id = p.id) AS assignment_count
+FROM plugins p
+WHERE p.id = $1
+  AND p.organization_id = $2
+  AND p.project_id = $3
+  AND p.deleted IS FALSE
+`
+
+type GetPluginWithCountsParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type GetPluginWithCountsRow struct {
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	Name            string
+	Slug            string
+	Description     pgtype.Text
+	IsDefault       pgtype.Bool
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+	ServerCount     int64
+	SkillCount      int64
+	AssignmentCount int64
+}
+
+func (q *Queries) GetPluginWithCounts(ctx context.Context, arg GetPluginWithCountsParams) (GetPluginWithCountsRow, error) {
+	row := q.db.QueryRow(ctx, getPluginWithCounts, arg.ID, arg.OrganizationID, arg.ProjectID)
+	var i GetPluginWithCountsRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+		&i.ServerCount,
+		&i.SkillCount,
+		&i.AssignmentCount,
 	)
 	return i, err
 }
@@ -551,6 +633,86 @@ func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectI
 	var i GetProjectMarketplaceNameContextRow
 	err := row.Scan(&i.ProjectSlug, &i.IsDefaultProject)
 	return i, err
+}
+
+const getProspectiveDefaultPlugin = `-- name: GetProspectiveDefaultPlugin :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE organization_id = $1
+  AND project_id = $2
+  AND (is_default IS TRUE OR slug = 'default')
+  AND deleted IS FALSE
+ORDER BY (is_default IS TRUE) DESC
+LIMIT 1
+`
+
+type GetProspectiveDefaultPluginParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetProspectiveDefaultPlugin(ctx context.Context, arg GetProspectiveDefaultPluginParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, getProspectiveDefaultPlugin, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const hasPluginGithubConnectionForProject = `-- name: HasPluginGithubConnectionForProject :one
+SELECT EXISTS (
+  SELECT 1 FROM plugin_github_connections WHERE project_id = $1
+)::bool
+`
+
+func (q *Queries) HasPluginGithubConnectionForProject(ctx context.Context, projectID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPluginGithubConnectionForProject, projectID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const hasPluginMembershipForMCPServer = `-- name: HasPluginMembershipForMCPServer :one
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers ps
+  JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = $1 AND p.deleted IS FALSE
+  JOIN mcp_servers s ON s.id = $2 AND s.project_id = p.project_id AND s.deleted IS FALSE
+  WHERE ps.deleted IS FALSE
+    AND (
+      ps.mcp_server_id = s.id
+      OR (
+        ps.toolset_id = s.toolset_id
+        AND s.visibility <> 'disabled'
+        AND (SELECT count(*) FROM mcp_servers wrapper
+             WHERE wrapper.toolset_id = s.toolset_id AND wrapper.project_id = p.project_id
+               AND wrapper.deleted IS FALSE AND wrapper.visibility <> 'disabled') = 1
+      )
+    )
+)::bool
+`
+
+type HasPluginMembershipForMCPServerParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+}
+
+// Include legacy toolset-backed plugins only when this server is their sole active wrapper.
+func (q *Queries) HasPluginMembershipForMCPServer(ctx context.Context, arg HasPluginMembershipForMCPServerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPluginMembershipForMCPServer, arg.ProjectID, arg.McpServerID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const isDefaultProject = `-- name: IsDefaultProject :one
@@ -666,6 +828,13 @@ WITH intended AS (
       WHEN ps.toolset_id IS NOT NULL AND t.project_id <> p.project_id THEN 'toolset_wrong_project'
       WHEN ps.toolset_id IS NOT NULL AND t.deleted IS TRUE THEN 'toolset_deleted'
       WHEN ps.toolset_id IS NOT NULL AND (t.mcp_enabled IS FALSE OR t.mcp_slug IS NULL) THEN 'toolset_disabled_or_unresolved'
+      WHEN ps.toolset_id IS NOT NULL AND (SELECT count(*) FROM mcp_servers ms WHERE ms.toolset_id = t.id AND ms.project_id = p.project_id AND ms.deleted IS FALSE AND ms.visibility <> 'disabled') > 1 THEN 'toolset_wrapper_ambiguous'
+      WHEN ps.toolset_id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM mcp_servers ms
+        WHERE ms.toolset_id = t.id AND ms.project_id = p.project_id AND ms.deleted IS FALSE
+          AND ms.visibility <> 'disabled' AND ms.network_access_mode IS NOT NULL
+          AND ms.network_access_mode NOT IN ('', 'public_only', 'dual', 'private_only')
+      ) THEN 'toolset_wrapper_network_mode_invalid'
 	  WHEN ps.toolset_id IS NOT NULL AND EXISTS (
 		SELECT 1
 		FROM mcp_metadata md
@@ -676,6 +845,7 @@ WITH intended AS (
       WHEN ps.mcp_server_id IS NOT NULL AND s.project_id <> p.project_id THEN 'mcp_server_wrong_project'
       WHEN ps.mcp_server_id IS NOT NULL AND s.deleted IS TRUE THEN 'mcp_server_deleted'
       WHEN ps.mcp_server_id IS NOT NULL AND s.visibility = 'disabled' THEN 'mcp_server_disabled'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.network_access_mode IS NOT NULL AND s.network_access_mode NOT IN ('', 'public_only', 'dual', 'private_only') THEN 'mcp_server_network_mode_invalid'
       WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND (rms.id IS NULL OR rms.project_id <> p.project_id OR rms.deleted IS TRUE) THEN 'remote_backing_unresolved'
 	  WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND rms.transport_type NOT IN ('streamable-http', 'sse') THEN 'remote_transport_unsupported'
 	  WHEN ps.mcp_server_id IS NOT NULL AND s.remote_mcp_server_id IS NOT NULL AND EXISTS (
@@ -702,6 +872,7 @@ WITH intended AS (
 		JOIN mcp_environment_configs ec ON ec.mcp_metadata_id = md.id AND ec.project_id = p.project_id
 		WHERE md.toolset_id = mts.id AND md.project_id = p.project_id AND ec.provided_by = 'user'
 	  ) THEN 'toolset_backing_requires_user_header'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.unproxied_mcp_server_id IS NOT NULL AND s.network_access_mode IN ('dual', 'private_only') THEN 'unproxied_private_network_unsupported'
       WHEN ps.mcp_server_id IS NOT NULL AND s.unproxied_mcp_server_id IS NOT NULL AND NOT EXISTS (
         SELECT 1
         FROM unproxied_mcp_servers ump
@@ -709,7 +880,15 @@ WITH intended AS (
           AND ump.project_id = p.project_id
           AND ump.deleted IS FALSE
       ) THEN 'unproxied_backing_unresolved'
-      WHEN ps.mcp_server_id IS NOT NULL AND s.unproxied_mcp_server_id IS NULL AND NOT EXISTS (
+      WHEN ps.mcp_server_id IS NOT NULL AND s.network_access_mode = 'private_only' AND NOT EXISTS (
+        SELECT 1 FROM network_ingresses ni
+        JOIN mcp_endpoints e ON e.project_id = p.project_id AND e.mcp_server_id = s.id AND e.deleted IS FALSE
+          AND ((ni.endpoint_namespace_kind = 'platform' AND ni.custom_domain_id IS NULL AND e.custom_domain_id IS NULL)
+            OR (ni.endpoint_namespace_kind = 'custom_domain' AND ni.custom_domain_id IS NOT NULL AND e.custom_domain_id = ni.custom_domain_id))
+        WHERE ni.organization_id = p.organization_id AND ni.enabled IS TRUE AND ni.deleted IS FALSE
+          AND ni.dns_name IS NOT NULL AND ni.dns_name <> ''
+      ) THEN 'mcp_server_private_endpoint_unresolved'
+      WHEN ps.mcp_server_id IS NOT NULL AND s.unproxied_mcp_server_id IS NULL AND s.network_access_mode IS DISTINCT FROM 'private_only' AND NOT EXISTS (
         SELECT 1
         FROM mcp_endpoints e
         LEFT JOIN custom_domains cd
@@ -799,64 +978,26 @@ func (q *Queries) ListAgentPluginCompatibilityIssuesForProject(ctx context.Conte
 	return items, nil
 }
 
-const listOrgPluginPublishTargets = `-- name: ListOrgPluginPublishTargets :many
-SELECT
-  c.project_id,
-  k.created_by_user_id
-FROM plugin_github_connections c
-JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
-JOIN LATERAL (
-  SELECT created_by_user_id
-  FROM api_keys
-  WHERE project_id = c.project_id
-    AND deleted IS FALSE
-    AND name LIKE 'plugins-mcp-%'
-  ORDER BY created_at DESC
-  LIMIT 1
-) k ON TRUE
-WHERE p.organization_id = $1
-ORDER BY c.project_id ASC
-`
-
-type ListOrgPluginPublishTargetsRow struct {
-	ProjectID       uuid.UUID
-	CreatedByUserID string
-}
-
-// Lists every project in one organization that has a GitHub plugin connection,
-// with the actor user for each (the creator of the project's most recent
-// plugins-mcp API key), so an org-level setting change (e.g. browser login)
-// can be republished to all of the org's marketplaces. Like
-// ListPluginPublishCandidates this is a deliberate cross-project sweep, but it is
-// constrained to a single organization rather than scanning globally.
-func (q *Queries) ListOrgPluginPublishTargets(ctx context.Context, organizationID string) ([]ListOrgPluginPublishTargetsRow, error) {
-	rows, err := q.db.Query(ctx, listOrgPluginPublishTargets, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListOrgPluginPublishTargetsRow
-	for rows.Next() {
-		var i ListOrgPluginPublishTargetsRow
-		if err := rows.Scan(&i.ProjectID, &i.CreatedByUserID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listPluginAssignments = `-- name: ListPluginAssignments :many
-SELECT id, plugin_id, organization_id, principal_urn, created_at, updated_at
-FROM plugin_assignments
-WHERE plugin_id = $1
+SELECT pa.id, pa.plugin_id, pa.organization_id, pa.principal_urn, pa.created_at, pa.updated_at
+FROM plugin_assignments pa
+JOIN plugins p
+  ON p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND p.deleted IS FALSE
+WHERE pa.plugin_id = $1
+  AND pa.organization_id = $2
+  AND p.project_id = $3
 `
 
-func (q *Queries) ListPluginAssignments(ctx context.Context, pluginID uuid.UUID) ([]PluginAssignment, error) {
-	rows, err := q.db.Query(ctx, listPluginAssignments, pluginID)
+type ListPluginAssignmentsParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ListPluginAssignments(ctx context.Context, arg ListPluginAssignmentsParams) ([]PluginAssignment, error) {
+	rows, err := q.db.Query(ctx, listPluginAssignments, arg.PluginID, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -934,26 +1075,50 @@ func (q *Queries) ListPluginEnvironmentConfigsForProject(ctx context.Context, ar
 }
 
 const listPluginPublishCandidates = `-- name: ListPluginPublishCandidates :many
-SELECT
-  cp.project_id,
-  COALESCE(k.created_by_user_id, 'system') AS created_by_user_id
-FROM (
-  SELECT c.project_id FROM plugin_github_connections c WHERE c.project_id > $1
-  UNION
-  SELECT dp.project_id FROM plugins dp WHERE dp.is_default IS TRUE AND dp.deleted IS FALSE AND dp.project_id > $1
-) cp
-JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
-LEFT JOIN LATERAL (
-  SELECT created_by_user_id
-  FROM api_keys
-  WHERE project_id = cp.project_id
-    AND deleted IS FALSE
-    AND name LIKE 'plugins-mcp-%'
-  ORDER BY created_at DESC
-  LIMIT 1
-) k ON TRUE
+WITH candidate_projects AS MATERIALIZED (
+  SELECT cp.project_id, p.organization_id
+  FROM (
+    SELECT c.project_id FROM plugin_github_connections c WHERE c.project_id > $1
+    UNION
+    SELECT dp.project_id FROM plugins dp WHERE dp.is_default IS TRUE AND dp.deleted IS FALSE AND dp.project_id > $1
+  ) cp
+  JOIN projects p ON p.id = cp.project_id AND p.deleted IS FALSE
+  ORDER BY cp.project_id ASC
+  LIMIT $2
+)
+SELECT cp.project_id, cp.organization_id,
+  COALESCE(
+  (
+    SELECT ak.created_by_user_id
+    FROM api_keys ak
+    JOIN users u ON u.id = ak.created_by_user_id
+    JOIN organization_user_relationships our
+      ON our.user_id = ak.created_by_user_id
+     AND our.organization_id = cp.organization_id
+     AND our.deleted IS FALSE
+    WHERE ak.organization_id = cp.organization_id
+      AND ak.project_id = cp.project_id
+      AND ak.deleted IS FALSE
+      AND ak.name LIKE 'plugins-mcp-%'
+      AND u.deleted_at IS NULL
+    ORDER BY ak.created_at DESC
+    LIMIT 1
+  ),
+  (
+    SELECT our.user_id
+    FROM organization_user_relationships our
+    JOIN users u ON u.id = our.user_id
+    WHERE our.organization_id = cp.organization_id
+      AND our.deleted IS FALSE
+      AND our.user_id IS NOT NULL
+      AND u.deleted_at IS NULL
+    ORDER BY our.created_at ASC, our.user_id ASC
+    LIMIT 1
+  ),
+  ''
+)::text AS created_by_user_id
+FROM candidate_projects cp
 ORDER BY cp.project_id ASC
-LIMIT $2
 `
 
 type ListPluginPublishCandidatesParams struct {
@@ -963,6 +1128,7 @@ type ListPluginPublishCandidatesParams struct {
 
 type ListPluginPublishCandidatesRow struct {
 	ProjectID       uuid.UUID
+	OrganizationID  string
 	CreatedByUserID string
 }
 
@@ -978,15 +1144,12 @@ type ListPluginPublishCandidatesRow struct {
 // crash between commit and enqueue), this sweep picks it up within one tick
 // instead of leaving it stuck until a human notices. Republishing an
 // unchanged project is cheap -- SkipIfUnchanged short-circuits on the
-// fingerprint check before any GitHub/key work. Each row carries the user
-// that created the project's most recent plugins-mcp API key as the
-// publish actor, falling back to 'system' for a project that has never
-// published (no such key exists yet). This is a deliberate cross-project
-// sweep, so unlike the tenant-scoped queries it is not constrained to a
-// single project_id. The after_project_id filter is applied inside each
-// UNION branch rather than the outer query -- sqlc's analyzer can't resolve
-// an outer WHERE referencing the derived table's alias once a LATERAL join
-// follows it ("table alias does not exist").
+// fingerprint check before any GitHub/key work. The publish actor for each
+// row is resolved in this query, using the same fallback order as
+// ResolvePluginPublishActor. Page before resolving actors; key lookups use
+// the existing (organization_id, project_id, id) index prefix.
+// This is a deliberate cross-project sweep, so unlike the tenant-scoped
+// queries it is not constrained to a single project_id.
 func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPluginPublishCandidatesParams) ([]ListPluginPublishCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listPluginPublishCandidates, arg.AfterProjectID, arg.ResultLimit)
 	if err != nil {
@@ -996,7 +1159,7 @@ func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPlugi
 	var items []ListPluginPublishCandidatesRow
 	for rows.Next() {
 		var i ListPluginPublishCandidatesRow
-		if err := rows.Scan(&i.ProjectID, &i.CreatedByUserID); err != nil {
+		if err := rows.Scan(&i.ProjectID, &i.OrganizationID, &i.CreatedByUserID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1008,7 +1171,7 @@ func (q *Queries) ListPluginPublishCandidates(ctx context.Context, arg ListPlugi
 }
 
 const listPluginServers = `-- name: ListPluginServers :many
-SELECT id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+SELECT id, plugin_id, project_id, toolset_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 FROM plugin_servers
 WHERE plugin_id = $1
   AND deleted IS FALSE
@@ -1027,8 +1190,10 @@ func (q *Queries) ListPluginServers(ctx context.Context, pluginID uuid.UUID) ([]
 		if err := rows.Scan(
 			&i.ID,
 			&i.PluginID,
+			&i.ProjectID,
 			&i.ToolsetID,
 			&i.McpServerID,
+			&i.MetaMcpServerID,
 			&i.DisplayName,
 			&i.Policy,
 			&i.SortOrder,
@@ -1048,7 +1213,7 @@ func (q *Queries) ListPluginServers(ctx context.Context, pluginID uuid.UUID) ([]
 }
 
 const listPluginServersByPluginIDs = `-- name: ListPluginServersByPluginIDs :many
-SELECT plugin_servers.id, plugin_servers.plugin_id, plugin_servers.toolset_id, plugin_servers.mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted
+SELECT plugin_servers.id, plugin_servers.plugin_id, plugin_servers.project_id, plugin_servers.toolset_id, plugin_servers.mcp_server_id, plugin_servers.meta_mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted
 FROM plugin_servers
 JOIN plugins ON plugins.id = plugin_servers.plugin_id
 WHERE plugin_servers.plugin_id = ANY($1::uuid[])
@@ -1078,8 +1243,10 @@ func (q *Queries) ListPluginServersByPluginIDs(ctx context.Context, arg ListPlug
 		if err := rows.Scan(
 			&i.ID,
 			&i.PluginID,
+			&i.ProjectID,
 			&i.ToolsetID,
 			&i.McpServerID,
+			&i.MetaMcpServerID,
 			&i.DisplayName,
 			&i.Policy,
 			&i.SortOrder,
@@ -1285,10 +1452,23 @@ SELECT
 	(s.user_session_issuer_id IS NOT NULL)::bool AS mcp_server_is_oauth,
   COALESCE(ep.slug, '') AS endpoint_slug,
   ep.custom_domain AS endpoint_custom_domain,
-  ump.url AS unproxied_url
+  ump.url AS unproxied_url,
+  s.network_access_mode,
+  COALESCE(private_ep.slug, '') AS private_endpoint_slug,
+  ingress.dns_name AS private_dns_name
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN mcp_servers s ON s.id = ps.mcp_server_id AND s.deleted IS FALSE AND s.project_id = p.project_id AND s.visibility <> 'disabled'
+LEFT JOIN network_ingresses ingress ON ingress.organization_id = p.organization_id AND ingress.enabled IS TRUE AND ingress.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT e.slug
+  FROM mcp_endpoints e
+  WHERE e.mcp_server_id = s.id AND e.project_id = p.project_id AND e.deleted IS FALSE
+    AND ((ingress.endpoint_namespace_kind = 'platform' AND ingress.custom_domain_id IS NULL AND e.custom_domain_id IS NULL)
+      OR (ingress.endpoint_namespace_kind = 'custom_domain' AND ingress.custom_domain_id IS NOT NULL AND e.custom_domain_id = ingress.custom_domain_id))
+  ORDER BY e.created_at, e.id
+  LIMIT 1
+) private_ep ON TRUE
 LEFT JOIN LATERAL (
   SELECT e.slug, cd.domain AS custom_domain, e.created_at
   FROM mcp_endpoints e
@@ -1302,7 +1482,7 @@ LEFT JOIN LATERAL (
 	AND e.project_id = p.project_id
     AND e.deleted IS FALSE
     AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
-  ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC
+  ORDER BY (e.custom_domain_id IS NULL) ASC, e.created_at ASC, e.id ASC
   LIMIT 1
 ) ep ON TRUE
 LEFT JOIN unproxied_mcp_servers ump ON ump.id = s.unproxied_mcp_server_id AND ump.project_id = p.project_id AND ump.deleted IS FALSE
@@ -1311,7 +1491,7 @@ LEFT JOIN tunneled_mcp_servers tms ON tms.id = s.tunneled_mcp_server_id AND tms.
 LEFT JOIN toolsets mts ON mts.id = s.toolset_id AND mts.project_id = p.project_id AND mts.deleted IS FALSE AND mts.mcp_enabled IS TRUE
 WHERE p.project_id = $1
   AND p.deleted IS FALSE
-  AND (ep.slug IS NOT NULL OR ump.url IS NOT NULL)
+  AND (ep.slug IS NOT NULL OR private_ep.slug IS NOT NULL OR ump.url IS NOT NULL OR s.network_access_mode IS NOT NULL)
   AND (COALESCE(cardinality($2::uuid[]), 0) = 0 OR p.id = ANY($2::uuid[]))
   AND (
     (s.remote_mcp_server_id IS NOT NULL AND rms.id IS NOT NULL)
@@ -1342,6 +1522,9 @@ type ListPluginsWithMcpServersForProjectRow struct {
 	EndpointSlug         string
 	EndpointCustomDomain pgtype.Text
 	UnproxiedUrl         pgtype.Text
+	NetworkAccessMode    pgtype.Text
+	PrivateEndpointSlug  string
+	PrivateDnsName       pgtype.Text
 }
 
 // Plugin-generation companion to ListPluginsWithServersForProject covering
@@ -1354,7 +1537,9 @@ type ListPluginsWithMcpServersForProjectRow struct {
 // a (wrong) platform URL. A server backed by an unproxied MCP server never has
 // an mcp_endpoints row (Gram never proxies it), so it's resolved instead via
 // unproxied_mcp_servers, exposing the vendor's own URL. Servers with neither a
-// usable endpoint nor an unproxied backing are dropped.
+// usable endpoint nor an unproxied backing are dropped unless their stored
+// network mode needs fail-closed validation. Private-only endpoints are picked
+// only from the ingress-pinned namespace; absence blocks publication in Go.
 // Scoped to project_id; the mcp_server must live in the same project as the
 // plugin, and disabled servers are excluded.
 func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, arg ListPluginsWithMcpServersForProjectParams) ([]ListPluginsWithMcpServersForProjectRow, error) {
@@ -1381,6 +1566,9 @@ func (q *Queries) ListPluginsWithMcpServersForProject(ctx context.Context, arg L
 			&i.EndpointSlug,
 			&i.EndpointCustomDomain,
 			&i.UnproxiedUrl,
+			&i.NetworkAccessMode,
+			&i.PrivateEndpointSlug,
+			&i.PrivateDnsName,
 		); err != nil {
 			return nil, err
 		}
@@ -1406,7 +1594,17 @@ SELECT
   t.mcp_slug AS toolset_mcp_slug,
   t.mcp_is_public AS toolset_is_public,
   (t.user_session_issuer_id IS NOT NULL)::bool AS toolset_is_oauth,
-  cd.domain AS toolset_custom_domain
+  cd.domain AS toolset_custom_domain,
+  (SELECT count(*) FROM mcp_servers ms WHERE ms.toolset_id = t.id AND ms.project_id = p.project_id AND ms.deleted IS FALSE AND ms.visibility <> 'disabled')::bigint AS wrapper_count,
+  (SELECT ms.network_access_mode FROM mcp_servers ms WHERE ms.toolset_id = t.id AND ms.project_id = p.project_id AND ms.deleted IS FALSE AND ms.visibility <> 'disabled' ORDER BY ms.id LIMIT 1) AS wrapper_network_access_mode,
+  COALESCE((SELECT e.slug::text FROM mcp_servers ms
+   JOIN network_ingresses ni ON ni.organization_id = p.organization_id AND ni.enabled IS TRUE AND ni.deleted IS FALSE
+   JOIN mcp_endpoints e ON e.mcp_server_id = ms.id AND e.project_id = p.project_id AND e.deleted IS FALSE
+     AND ((ni.endpoint_namespace_kind = 'platform' AND ni.custom_domain_id IS NULL AND e.custom_domain_id IS NULL)
+       OR (ni.endpoint_namespace_kind = 'custom_domain' AND ni.custom_domain_id IS NOT NULL AND e.custom_domain_id = ni.custom_domain_id))
+   WHERE ms.toolset_id = t.id AND ms.project_id = p.project_id AND ms.deleted IS FALSE AND ms.visibility <> 'disabled'
+   ORDER BY e.created_at, e.id LIMIT 1), ''::text)::text AS private_endpoint_slug,
+  (SELECT ni.dns_name FROM network_ingresses ni WHERE ni.organization_id = p.organization_id AND ni.enabled IS TRUE AND ni.deleted IS FALSE LIMIT 1) AS private_dns_name
 FROM plugins p
 JOIN plugin_servers ps ON ps.plugin_id = p.id AND ps.deleted IS FALSE
 JOIN toolsets t ON t.id = ps.toolset_id AND t.project_id = p.project_id AND t.deleted IS FALSE AND t.mcp_enabled IS TRUE
@@ -1423,19 +1621,23 @@ type ListPluginsWithServersForProjectParams struct {
 }
 
 type ListPluginsWithServersForProjectRow struct {
-	PluginID            uuid.UUID
-	PluginName          string
-	PluginSlug          string
-	PluginDescription   pgtype.Text
-	ServerID            uuid.UUID
-	ServerDisplayName   string
-	ServerPolicy        string
-	ServerSortOrder     int32
-	ToolsetID           uuid.NullUUID
-	ToolsetMcpSlug      pgtype.Text
-	ToolsetIsPublic     bool
-	ToolsetIsOauth      bool
-	ToolsetCustomDomain pgtype.Text
+	PluginID                 uuid.UUID
+	PluginName               string
+	PluginSlug               string
+	PluginDescription        pgtype.Text
+	ServerID                 uuid.UUID
+	ServerDisplayName        string
+	ServerPolicy             string
+	ServerSortOrder          int32
+	ToolsetID                uuid.NullUUID
+	ToolsetMcpSlug           pgtype.Text
+	ToolsetIsPublic          bool
+	ToolsetIsOauth           bool
+	ToolsetCustomDomain      pgtype.Text
+	WrapperCount             int64
+	WrapperNetworkAccessMode pgtype.Text
+	PrivateEndpointSlug      string
+	PrivateDnsName           pgtype.Text
 }
 
 // Used during plugin generation: returns all active plugin servers joined with
@@ -1463,6 +1665,10 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, arg List
 			&i.ToolsetIsPublic,
 			&i.ToolsetIsOauth,
 			&i.ToolsetCustomDomain,
+			&i.WrapperCount,
+			&i.WrapperNetworkAccessMode,
+			&i.PrivateEndpointSlug,
+			&i.PrivateDnsName,
 		); err != nil {
 			return nil, err
 		}
@@ -1472,6 +1678,33 @@ func (q *Queries) ListPluginsWithServersForProject(ctx context.Context, arg List
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockMarketplaceSettings = `-- name: LockMarketplaceSettings :one
+INSERT INTO project_marketplace_settings (project_id)
+VALUES ($1)
+ON CONFLICT (project_id) DO UPDATE
+  SET project_id = EXCLUDED.project_id
+RETURNING project_id, marketplace_name, observability_enabled, created_at, updated_at
+`
+
+// Ensures a project's marketplace settings row exists and locks it for the rest
+// of the transaction, returning the values currently stored. Callers snapshot
+// the state their update is about to replace; the lock is what keeps that
+// snapshot from describing a row a concurrent update already replaced. A row of
+// all-NULL columns is the same as no row: every column falls back to its
+// server-side default.
+func (q *Queries) LockMarketplaceSettings(ctx context.Context, projectID uuid.UUID) (ProjectMarketplaceSetting, error) {
+	row := q.db.QueryRow(ctx, lockMarketplaceSettings, projectID)
+	var i ProjectMarketplaceSetting
+	err := row.Scan(
+		&i.ProjectID,
+		&i.MarketplaceName,
+		&i.ObservabilityEnabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const pluginServerDisplayNameExists = `-- name: PluginServerDisplayNameExists :one
@@ -1544,12 +1777,23 @@ func (q *Queries) PromoteToDefaultPlugin(ctx context.Context, arg PromoteToDefau
 }
 
 const removeAllPluginAssignments = `-- name: RemoveAllPluginAssignments :execrows
-DELETE FROM plugin_assignments
-WHERE plugin_id = $1
+DELETE FROM plugin_assignments pa
+USING plugins p
+WHERE p.id = pa.plugin_id
+  AND p.organization_id = pa.organization_id
+  AND pa.plugin_id = $1
+  AND pa.organization_id = $2
+  AND p.project_id = $3
 `
 
-func (q *Queries) RemoveAllPluginAssignments(ctx context.Context, pluginID uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, removeAllPluginAssignments, pluginID)
+type RemoveAllPluginAssignmentsParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) RemoveAllPluginAssignments(ctx context.Context, arg RemoveAllPluginAssignmentsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, removeAllPluginAssignments, arg.PluginID, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return 0, err
 	}
@@ -1563,7 +1807,7 @@ SET deleted_at = clock_timestamp(),
 WHERE id = $1
   AND plugin_id = $2
   AND deleted IS FALSE
-RETURNING id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+RETURNING id, plugin_id, project_id, toolset_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 `
 
 type RemovePluginServerParams struct {
@@ -1579,8 +1823,10 @@ func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServer
 	err := row.Scan(
 		&i.ID,
 		&i.PluginID,
+		&i.ProjectID,
 		&i.ToolsetID,
 		&i.McpServerID,
+		&i.MetaMcpServerID,
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,
@@ -1590,6 +1836,72 @@ func (q *Queries) RemovePluginServer(ctx context.Context, arg RemovePluginServer
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const resolvePluginPublishActor = `-- name: ResolvePluginPublishActor :one
+SELECT COALESCE(
+  (
+    SELECT our.user_id
+    FROM organization_user_relationships our
+    JOIN users u ON u.id = our.user_id
+    WHERE our.organization_id = $1
+      AND our.user_id = $2::text
+      AND our.deleted IS FALSE
+      AND u.deleted_at IS NULL
+    LIMIT 1
+  ),
+  (
+    SELECT ak.created_by_user_id
+    FROM api_keys ak
+    JOIN users u ON u.id = ak.created_by_user_id
+    JOIN organization_user_relationships our
+      ON our.user_id = ak.created_by_user_id
+     AND our.organization_id = $1
+     AND our.deleted IS FALSE
+    WHERE ak.organization_id = $1
+      AND ak.project_id = $3::uuid
+      AND ak.deleted IS FALSE
+      AND ak.name LIKE 'plugins-mcp-%'
+      AND u.deleted_at IS NULL
+    ORDER BY ak.created_at DESC
+    LIMIT 1
+  ),
+  (
+    SELECT our.user_id
+    FROM organization_user_relationships our
+    JOIN users u ON u.id = our.user_id
+    WHERE our.organization_id = $1
+      AND our.deleted IS FALSE
+      AND our.user_id IS NOT NULL
+      AND u.deleted_at IS NULL
+    ORDER BY our.created_at ASC, our.user_id ASC
+    LIMIT 1
+  ),
+  ''
+)::text AS user_id
+`
+
+type ResolvePluginPublishActorParams struct {
+	OrganizationID  string
+	PreferredUserID string
+	ProjectID       uuid.UUID
+}
+
+// Picks the users.id that the plugin API keys minted by a publish are
+// attributed to. GetAPIKeyByKeyHash JOINs users on created_by_user_id, so the
+// id must belong to a current connected member of the organization (a
+// non-deleted users row plus a non-deleted organization_user_relationships
+// row) or the minted keys never authenticate. In order of preference: the
+// preferred actor (the user who made the change) when they are such a member;
+// the creator of the project's newest plugins-mcp API key when they still
+// are, so successive publishes keep one attribution; otherwise the
+// organization's oldest connected member. Returns ” when the organization has
+// no member at all.
+func (q *Queries) ResolvePluginPublishActor(ctx context.Context, arg ResolvePluginPublishActorParams) (string, error) {
+	row := q.db.QueryRow(ctx, resolvePluginPublishActor, arg.OrganizationID, arg.PreferredUserID, arg.ProjectID)
+	var user_id string
+	err := row.Scan(&user_id)
+	return user_id, err
 }
 
 const revokeSkillDistributionsByPlugin = `-- name: RevokeSkillDistributionsByPlugin :many
@@ -1705,7 +2017,7 @@ WHERE plugins.id = plugin_servers.plugin_id
   AND plugins.project_id = $1
   AND plugin_servers.mcp_server_id = $2
   AND plugin_servers.deleted IS FALSE
-RETURNING plugin_servers.id, plugin_servers.plugin_id, plugin_servers.toolset_id, plugin_servers.mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted, plugins.name AS plugin_name, plugins.slug AS plugin_slug
+RETURNING plugin_servers.id, plugin_servers.plugin_id, plugin_servers.project_id, plugin_servers.toolset_id, plugin_servers.mcp_server_id, plugin_servers.meta_mcp_server_id, plugin_servers.display_name, plugin_servers.policy, plugin_servers.sort_order, plugin_servers.created_at, plugin_servers.updated_at, plugin_servers.deleted_at, plugin_servers.deleted, plugins.name AS plugin_name, plugins.slug AS plugin_slug
 `
 
 type SoftDeletePluginServersByMCPServerIDParams struct {
@@ -1714,19 +2026,21 @@ type SoftDeletePluginServersByMCPServerIDParams struct {
 }
 
 type SoftDeletePluginServersByMCPServerIDRow struct {
-	ID          uuid.UUID
-	PluginID    uuid.UUID
-	ToolsetID   uuid.NullUUID
-	McpServerID uuid.NullUUID
-	DisplayName string
-	Policy      string
-	SortOrder   int32
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	DeletedAt   pgtype.Timestamptz
-	Deleted     bool
-	PluginName  string
-	PluginSlug  string
+	ID              uuid.UUID
+	PluginID        uuid.UUID
+	ProjectID       uuid.NullUUID
+	ToolsetID       uuid.NullUUID
+	McpServerID     uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+	DisplayName     string
+	Policy          string
+	SortOrder       int32
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
+	PluginName      string
+	PluginSlug      string
 }
 
 // Soft-deletes every live plugin server backed by the mcp_server, joining
@@ -1747,8 +2061,10 @@ func (q *Queries) SoftDeletePluginServersByMCPServerID(ctx context.Context, arg 
 		if err := rows.Scan(
 			&i.ID,
 			&i.PluginID,
+			&i.ProjectID,
 			&i.ToolsetID,
 			&i.McpServerID,
+			&i.MetaMcpServerID,
 			&i.DisplayName,
 			&i.Policy,
 			&i.SortOrder,
@@ -1869,7 +2185,7 @@ SET display_name = $1,
 WHERE id = $4
   AND plugin_id = $5
   AND deleted IS FALSE
-RETURNING id, plugin_id, toolset_id, mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
+RETURNING id, plugin_id, project_id, toolset_id, mcp_server_id, meta_mcp_server_id, display_name, policy, sort_order, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdatePluginServerParams struct {
@@ -1892,8 +2208,10 @@ func (q *Queries) UpdatePluginServer(ctx context.Context, arg UpdatePluginServer
 	err := row.Scan(
 		&i.ID,
 		&i.PluginID,
+		&i.ProjectID,
 		&i.ToolsetID,
 		&i.McpServerID,
+		&i.MetaMcpServerID,
 		&i.DisplayName,
 		&i.Policy,
 		&i.SortOrder,
@@ -1972,27 +2290,51 @@ func (q *Queries) UpsertGitHubConnection(ctx context.Context, arg UpsertGitHubCo
 }
 
 const upsertMarketplaceSettings = `-- name: UpsertMarketplaceSettings :one
-INSERT INTO project_marketplace_settings (project_id, marketplace_name)
-VALUES ($1, $2)
+INSERT INTO project_marketplace_settings (project_id, marketplace_name, observability_enabled)
+VALUES (
+  $1,
+  CASE WHEN $2::boolean THEN $3::text END,
+  CASE WHEN $4::boolean THEN $5::boolean END
+)
 ON CONFLICT (project_id) DO UPDATE
-  SET marketplace_name = EXCLUDED.marketplace_name,
+  SET marketplace_name = CASE
+        WHEN $2::boolean THEN EXCLUDED.marketplace_name
+        ELSE project_marketplace_settings.marketplace_name
+      END,
+      observability_enabled = CASE
+        WHEN $4::boolean THEN EXCLUDED.observability_enabled
+        ELSE project_marketplace_settings.observability_enabled
+      END,
       updated_at = clock_timestamp()
-RETURNING project_id, marketplace_name, created_at, updated_at
+RETURNING project_id, marketplace_name, observability_enabled, created_at, updated_at
 `
 
 type UpsertMarketplaceSettingsParams struct {
-	ProjectID       uuid.UUID
-	MarketplaceName pgtype.Text
+	ProjectID               uuid.UUID
+	SetMarketplaceName      bool
+	MarketplaceName         pgtype.Text
+	SetObservabilityEnabled bool
+	ObservabilityEnabled    pgtype.Bool
 }
 
-// Sets the marketplace name override for a project. Pass NULL to clear the
-// override and fall back to the server-side default.
+// Writes only the settings the caller supplied: each column is applied when its
+// set_* flag is true and otherwise keeps the stored value, so a name-only and an
+// observability-only update running concurrently can't clobber each other. A
+// NULL marketplace_name clears the override and falls back to the server-side
+// default; a NULL observability_enabled keeps the historical default (enabled).
 func (q *Queries) UpsertMarketplaceSettings(ctx context.Context, arg UpsertMarketplaceSettingsParams) (ProjectMarketplaceSetting, error) {
-	row := q.db.QueryRow(ctx, upsertMarketplaceSettings, arg.ProjectID, arg.MarketplaceName)
+	row := q.db.QueryRow(ctx, upsertMarketplaceSettings,
+		arg.ProjectID,
+		arg.SetMarketplaceName,
+		arg.MarketplaceName,
+		arg.SetObservabilityEnabled,
+		arg.ObservabilityEnabled,
+	)
 	var i ProjectMarketplaceSetting
 	err := row.Scan(
 		&i.ProjectID,
 		&i.MarketplaceName,
+		&i.ObservabilityEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

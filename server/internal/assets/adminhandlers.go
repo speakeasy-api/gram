@@ -4,16 +4,19 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
 
 	admingen "github.com/speakeasy-api/gram/server/gen/admin_assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
-	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -26,16 +29,16 @@ import (
 // (audit_log.organization_id is NOT NULL).
 
 func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.UploadPlatformImageForm, reader io.ReadCloser) (*admingen.UploadImageResult, error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close platform image upload reader", func() error {
 		return reader.Close()
 	})
 
-	authCtx, logger, err := auth.RequirePlatformAdmin(ctx, s.logger)
+	operatorEmail, logger, err := auth.RequireGlobalAdmin(ctx, s.logger)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authorize global operation: %w", err)
 	}
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadAuthorizedAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -43,7 +46,7 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up platform image upload", func() error {
 		return result.cleanup()
 	})
 
@@ -116,7 +119,7 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 		attr.SlogAuditSubject("asset"),
 		attr.SlogAuditSubjectID(urn.NewAsset(urn.AssetKindImage, asset.ID).String()),
 		attr.SlogAssetID(asset.ID.String()),
-		attr.SlogAuthUserEmail(conv.PtrValOrEmpty(authCtx.Email, "")),
+		attr.SlogAuthUserEmail(operatorEmail),
 	)
 
 	return &admingen.UploadImageResult{
@@ -130,4 +133,23 @@ func (s *Service) UploadPlatformImage(ctx context.Context, payload *admingen.Upl
 			UpdatedAt:     asset.UpdatedAt.Time.Format(time.RFC3339),
 		},
 	}, nil
+}
+
+// NewPlatformService supplies only dependencies needed by public image serving and global uploads.
+func NewPlatformService(logger *slog.Logger, tp trace.TracerProvider, policy *guardian.Policy, db *pgxpool.Pool, storage BlobStore) *Service {
+	logger = logger.With(attr.SlogComponent("assets"))
+	return &Service{
+		auth:           nil,
+		authz:          nil,
+		jwtSecret:      "",
+		chatSessions:   nil,
+		projects:       nil,
+		audit:          nil,
+		logger:         logger,
+		tracer:         tp.Tracer("github.com/speakeasy-api/gram/server/internal/assets"),
+		guardianPolicy: policy,
+		db:             db,
+		storage:        storage,
+		repo:           repo.New(db),
+	}
 }

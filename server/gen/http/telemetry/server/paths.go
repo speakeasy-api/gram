@@ -52,6 +52,11 @@ func GetObservabilityOverviewTelemetryPath() string {
 	return "/rpc/telemetry.getObservabilityOverview"
 }
 
+// GetMetaMcpServerUsageTelemetryPath returns the URL path to the telemetry service getMetaMcpServerUsage HTTP endpoint.
+func GetMetaMcpServerUsageTelemetryPath() string {
+	return "/rpc/telemetry.getMetaMcpServerUsage"
+}
+
 // GetProjectOverviewTelemetryPath returns the URL path to the telemetry service getProjectOverview HTTP endpoint.
 func GetProjectOverviewTelemetryPath() string {
 	return "/rpc/telemetry.getProjectOverview"
@@ -125,6 +130,16 @@ func GetToolUsageTargetsTelemetryPath() string {
 // GetToolUsageUsersTelemetryPath returns the URL path to the telemetry service getToolUsageUsers HTTP endpoint.
 func GetToolUsageUsersTelemetryPath() string {
 	return "/rpc/telemetry.getToolUsageUsers"
+}
+
+// GetToolUsageClientsTelemetryPath returns the URL path to the telemetry service getToolUsageClients HTTP endpoint.
+func GetToolUsageClientsTelemetryPath() string {
+	return "/rpc/telemetry.getToolUsageClients"
+}
+
+// GetToolUsageClientToolBreakdownTelemetryPath returns the URL path to the telemetry service getToolUsageClientToolBreakdown HTTP endpoint.
+func GetToolUsageClientToolBreakdownTelemetryPath() string {
+	return "/rpc/telemetry.getToolUsageClientToolBreakdown"
 }
 
 // GetToolUsageTargetTimeSeriesTelemetryPath returns the URL path to the telemetry service getToolUsageTargetTimeSeries HTTP endpoint.

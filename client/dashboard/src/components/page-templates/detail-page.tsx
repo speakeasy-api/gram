@@ -173,7 +173,7 @@ export function DetailPage({
             />
           </div>
         ))}
-      <DetailBody spacing="loose" fill>
+      <DetailBody spacing="loose" fill className="pt-0">
         {sections.map((section) => (
           <section key={section.id} id={section.id}>
             {section.content}

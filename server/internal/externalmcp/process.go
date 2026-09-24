@@ -1,4 +1,3 @@
-//nolint:exhaustruct // Server details intentionally rely on documented optional zero values.
 package externalmcp
 
 import (
@@ -48,13 +47,12 @@ func NewToolExtractor(
 }
 
 type ToolExtractorTaskMCPServer struct {
-	AttachmentID                        uuid.UUID
-	RegistryID                          uuid.NullUUID
-	OrganizationMcpCollectionRegistryID uuid.NullUUID
-	Name                                string
-	Slug                                string
-	RegistryServerSpecifier             string
-	SelectedRemotes                     []string
+	AttachmentID            uuid.UUID
+	RegistryID              uuid.NullUUID
+	Name                    string
+	Slug                    string
+	RegistryServerSpecifier string
+	SelectedRemotes         []string
 }
 
 type ToolExtractorTask struct {
@@ -99,36 +97,24 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 
 	logger.InfoContext(ctx, fmt.Sprintf("[%s] processing external mcp server", task.MCP.Name))
 
-	var serverDetails *ServerDetails
-	if task.MCP.OrganizationMcpCollectionRegistryID.Valid {
-		// Internal Gram-hosted server — build ServerDetails directly from selected_remotes
-		if len(task.MCP.SelectedRemotes) == 0 {
-			return oops.E(oops.CodeBadRequest, nil, "[%s] internal mcp server has no selected remotes", task.MCP.Name).LogError(ctx, logger)
-		}
-		serverDetails = &ServerDetails{
-			Name:          task.MCP.Name,
-			Description:   "",
-			Version:       "",
-			RemoteURL:     task.MCP.SelectedRemotes[0],
-			TransportType: types.TransportTypeStreamableHTTP,
-			Tools:         nil,
-			Headers:       nil,
-		}
-		logger.InfoContext(ctx, fmt.Sprintf("[%s] using internal gram server at %s", task.MCP.Name, serverDetails.RemoteURL))
-	} else {
-		// External registry server — look up registry and fetch details via HTTP
-		registry, err := te.repo.GetMCPRegistryByID(ctx, task.MCP.RegistryID.UUID)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "[%s] error getting registry for mcp server", task.MCP.Name).LogError(ctx, logger)
-		}
+	// Attachments published from a collection carried no registry id and were
+	// served straight off their selected remotes. Collections are gone, so
+	// those rows can no longer be processed.
+	if !task.MCP.RegistryID.Valid {
+		return oops.E(oops.CodeBadRequest, nil, "[%s] external mcp server has no registry", task.MCP.Name).LogError(ctx, logger)
+	}
 
-		serverDetails, err = te.registryClient.GetServerDetails(ctx, Registry{
-			ID:  registry.ID,
-			URL: registry.Url,
-		}, task.MCP.RegistryServerSpecifier, task.MCP.SelectedRemotes)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).LogError(ctx, logger)
-		}
+	registry, err := te.repo.GetMCPRegistryByID(ctx, task.MCP.RegistryID.UUID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "[%s] error getting registry for mcp server", task.MCP.Name).LogError(ctx, logger)
+	}
+
+	serverDetails, err := te.registryClient.GetServerDetails(ctx, Registry{
+		ID:  registry.ID,
+		URL: registry.Url,
+	}, task.MCP.RegistryServerSpecifier, task.MCP.SelectedRemotes)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "[%s] error fetching server details from registry", task.MCP.Name).LogError(ctx, logger)
 	}
 
 	var requiresOAuth bool
@@ -186,7 +172,7 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 	} else if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "[%s] external mcp server unavailable", task.MCP.Name).LogError(ctx, logger)
 	} else {
-		defer o11y.LogDefer(ctx, logger, mcpClient.Close)
+		defer o11y.LogDefer(ctx, logger, "failed to close external mcp client", mcpClient.Close)
 	}
 
 	// Build OAuth metadata params

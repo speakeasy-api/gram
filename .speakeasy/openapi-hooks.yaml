@@ -720,11 +720,6 @@ components:
         - raw_sha256
         - content
   securitySchemes:
-    admin_auth_header_Authorization:
-      type: apiKey
-      description: Admin session auth for admin endpoints. Cookie-only credential; session is validated against Google on every request.
-      name: Authorization
-      in: header
     apikey_header_Authorization:
       type: apiKey
       description: key based auth.
@@ -754,14 +749,18 @@ components:
       name: Gram-Session
       in: header
 tags:
+  - name: killswitches
+    description: Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.
   - name: access
     description: Manage roles, team member access control, and authorization challenge events.
-  - name: admin
-    description: Operations supporting admin tasks, protected by Google workspace auth.
   - name: agent
     description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
+  - name: agents
+    description: Human-only management of first-class agent principals.
   - name: aiIntegrations
     description: Manage organization-level AI provider integrations.
+  - name: analytics
+    description: Query agent session data by dataset and field, never by table or SQL. The catalog describe serves is the contract.
   - name: assets
     description: Manages assets used by Gram projects.
   - name: organizationAssets
@@ -782,6 +781,8 @@ tags:
     description: Manages chat session tokens for client-side authentication
   - name: cliAuth
     description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+  - name: dataExports
+    description: Manage project-scoped data export destinations and routes.
   - name: deployments
     description: Manages deployments of tools from upstream sources.
   - name: deviceIntegrations
@@ -790,24 +791,30 @@ tags:
     description: Manage custom domains for gram.
   - name: environments
     description: Managing toolset environments.
+  - name: explore
+    description: 'Queries: the saved questions Explore keeps. Explore''s only server-side surface; everything it shows comes from the analytics service.'
   - name: externalCredentials
     description: Manage organization-level external credentials — how Gram authenticates into a customer's AWS or GCP account.
   - name: externalKeys
     description: Manage organization-level external keys — externally-managed AWS or GCP KMS keys Gram signs with.
   - name: mcpRegistries
     description: External MCP registry operations
-  - name: collections
-    description: MCP collection operations
   - name: functions
     description: Endpoints for working with functions.
   - name: hooksServerNames
     description: Manages display name overrides for hooks servers.
   - name: hooks
     description: Receives hook events from coding assistants for tool usage observability.
+  - name: identity
+    description: Resolves the identifiers Gram records activity under into a single identity.
+  - name: identityProviderConnections
+    description: 'Manage the organization''s Okta connection: provision the private_key_jwt credential, submit the Okta client ID, verify granted scopes, and revoke.'
   - name: instances
     description: Consumer APIs for interacting with all relevant data for an instance of a toolset and environment.
   - name: integrations
     description: Explore third-party tools in Gram.
+  - name: jsonWebKeySets
+    description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
   - name: keys
     description: Managing system api keys.
   - name: litellm
@@ -815,19 +822,23 @@ tags:
   - name: mcpApproval
     description: Dashboard API for reviewing and deciding MCP server approval requests.
   - name: mcpEndpoints
-    description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers.
+    description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
   - name: mcpMetadata
     description: Manages metadata for the MCP install page shown to users.
   - name: mcpServers
     description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
+  - name: metaMcp
+    description: 'Managing meta MCP servers: aggregate servers that front an explicitly managed set of MCP servers through a single endpoint.'
   - name: modelKeys
     description: Manage customer-supplied model provider API keys, scoped per project and responsibility slot.
+  - name: networkIngress
+    description: Manage an organization's private network ingress desired state.
+  - name: oktaResourceConnections
+    description: 'Okta resource connections per MCP server: what the organization administrator still has to do in the identity provider console, what they confirmed, and what the exchange path observed. Advisory only; the exchange path never consults it.'
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: otel
     description: Receives OpenTelemetry signals from LLM providers and harnesses.
-  - name: otelForwarding
-    description: Manage per-organization forwarding of inbound OTEL hook payloads to a customer-owned endpoint.
   - name: packages
     description: Manages packages in Gram.
   - name: adminAssets
@@ -836,6 +847,8 @@ tags:
     description: Platform-admin management of an organization's chat session analysis settings. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: adminExternalCredentials
     description: Platform-admin management of platform external_credentials — how Gram authenticates into a cloud provider to reach a platform KMS key. Shared across every organization (organization_id NULL, project_id NULL). Speakeasy-staff only; every method requires the platform-admin flag.
+  - name: platformKillswitches
+    description: Platform break-glass access to generic killswitch lifecycle operations on the main server. Requires a current users.admin entitlement on an ordinary Gram session.
   - name: adminOpenRouterKeys
     description: Platform-admin management of per-organization platform OpenRouter keys. Speakeasy-staff only; every method requires the platform-admin flag.
   - name: platformMcp
@@ -894,10 +907,12 @@ tags:
     description: Operator visibility into MCP clients registered against a user-session issuer (user_session_clients). Read + revoke. Registrations are written by /mcp/{slug}/register (RFC 7591 DCR) or resolved from a Client ID Metadata Document on /mcp/{slug}/authorize (CIMD); client_id_metadata_uri distinguishes the two.
   - name: userSessionConsents
     description: Operator visibility into user_session_consents — persistent consent records per (subject, user_session_client). List + revoke.
-  - name: userSessionIssuers
-    description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
   - name: userSessionIssuersCimdClients
     description: 'Manage the CIMD (OAuth Client ID Metadata Document) clients a user_session_issuer admits: the read-only preset catalog Gram curates, plus per-issuer custom document URLs.'
+  - name: userSessionIssuers
+    description: Manage user_session_issuer records — Gram-side authorization-server configuration that issues user sessions for an MCP server.
+  - name: organizationUserSessionIssuers
+    description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
   - name: variations

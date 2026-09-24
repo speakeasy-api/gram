@@ -54,6 +54,38 @@ func TestScopeVisibilityCoversKnownScopes(t *testing.T) {
 	}
 }
 
+func TestAgentManagementScopesAreIndependent(t *testing.T) {
+	t.Parallel()
+
+	managementScopes := []Scope{ScopeAgentRead, ScopeAgentWrite, ScopeAgentAuthorize, ScopeAgentTransfer}
+	for _, granted := range managementScopes {
+		grants := []Grant{NewGrant(granted, "agent_123")}
+		for _, checked := range managementScopes {
+			require.Equal(t, granted == checked, GrantsSatisfy(grants, Check{Scope: checked, ResourceID: "agent_123"}),
+				"grant %q checking %q", granted, checked)
+		}
+	}
+
+	for _, checked := range managementScopes {
+		require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgAdmin, "agent_123")}, Check{Scope: checked, ResourceID: "agent_123"}))
+	}
+}
+
+// Org admins can delegate device-agent grants without a backfill, but the
+// grants themselves confer nothing beyond their own check.
+func TestDeviceAgentScopesAreSatisfiedByOrgAdminOnly(t *testing.T) {
+	t.Parallel()
+
+	for _, scope := range []Scope{ScopeOrgDeviceAgentSync, ScopeOrgHooksIngest} {
+		check := Check{Scope: scope, ResourceID: "org_123"}
+		require.True(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgAdmin, "org_123")}, check), scope)
+		require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgRead, "org_123")}, check), scope)
+		require.Equal(t, []Scope{scope}, ScopeImplicationClosure(scope))
+		require.False(t, GrantsSatisfy([]Grant{NewGrant(scope, "org_123")}, Check{Scope: ScopeOrgRead, ResourceID: "org_123"}))
+	}
+	require.False(t, GrantsSatisfy([]Grant{NewGrant(ScopeOrgDeviceAgentSync, "org_123")}, Check{Scope: ScopeOrgHooksIngest, ResourceID: "org_123"}))
+}
+
 func TestScopeExclusionsCoversKnownScopes(t *testing.T) {
 	t.Parallel()
 
@@ -90,8 +122,12 @@ func TestBlocklistScopeExpansions(t *testing.T) {
 
 	require.Equal(t, []Scope{ScopeOrgBlockedRead}, scopeExpansions[ScopeOrgBlockedAdmin])
 	require.Equal(t, []Scope{ScopeProjectBlockedRead}, scopeExpansions[ScopeProjectBlockedWrite])
-	require.Equal(t, []Scope{ScopeMCPBlockedConnect}, scopeExpansions[ScopeMCPBlockedRead])
-	require.Equal(t, []Scope{ScopeMCPBlockedRead, ScopeMCPBlockedConnect}, scopeExpansions[ScopeMCPBlockedWrite])
+	// The mcp:blocked_* scopes are the exception: they are independent of
+	// one another, so a block on connect leaves view and manage standing.
+	// Connecting to a server and administering it are different jobs.
+	require.Nil(t, scopeExpansions[ScopeMCPBlockedConnect])
+	require.Nil(t, scopeExpansions[ScopeMCPBlockedRead])
+	require.Nil(t, scopeExpansions[ScopeMCPBlockedWrite])
 	require.Equal(t, []Scope{ScopeEnvironmentBlockedRead}, scopeExpansions[ScopeEnvironmentBlockedWrite])
 	require.Equal(t, []Scope{ScopeSkillBlockedRead}, scopeExpansions[ScopeSkillBlockedWrite])
 }
@@ -438,7 +474,7 @@ func TestCalculateSubScopes(t *testing.T) {
 		scope string
 		want  []string
 	}{
-		{scope: string(ScopeOrgAdmin), want: []string{string(ScopeOrgRead)}},
+		{scope: string(ScopeOrgAdmin), want: []string{string(ScopeOrgDeviceAgentSync), string(ScopeOrgHooksIngest), string(ScopeOrgRead)}},
 		{scope: string(ScopeProjectWrite), want: []string{string(ScopeProjectRead)}},
 		{scope: string(ScopeMCPWrite), want: []string{string(ScopeMCPConnect), string(ScopeMCPRead)}},
 		{scope: string(ScopeMCPRead), want: []string{string(ScopeMCPConnect)}},

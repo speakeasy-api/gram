@@ -18,10 +18,11 @@ vi.mock("@/hooks/useRBAC", () => ({
 // The route helper resolves :orgSlug from the URL; stubbing it keeps the
 // expected href readable without standing up the org route tree.
 vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
+  useRoutes: () => ({
     remoteIdentityProviders: {
       issuerDetail: {
-        href: (id: string) => `/org-slug/remote-identity-providers/${id}`,
+        href: (id: string) =>
+          `/org-slug/projects/project-slug/remote-identity-providers/${id}`,
       },
     },
   }),
@@ -46,13 +47,19 @@ function issuer(overrides: Partial<RemoteSessionIssuer> = {}) {
 
 function renderField(
   issuers: RemoteSessionIssuer[],
-  handlers: { onEdit?: () => void; onDelete?: () => void } = {},
+  handlers: {
+    onEdit?: () => void;
+    onDelete?: () => void;
+    allowAdditionalProviders?: boolean;
+  } = {},
 ) {
   return render(
     <MemoryRouter>
       <RemoteIdentityProvidersField
         associatedIssuers={issuers}
         isLoading={false}
+        allowAdditionalProviders={handlers.allowAdditionalProviders ?? true}
+        projectId="project-1"
         onAdd={vi.fn<() => void>()}
         onEdit={handlers.onEdit ?? vi.fn<() => void>()}
         onDelete={handlers.onDelete ?? vi.fn<() => void>()}
@@ -71,12 +78,30 @@ describe("RemoteIdentityProvidersField", () => {
     vi.clearAllMocks();
   });
 
+  // The gateway (meta MCP) case attaches one provider per member vendor, so
+  // the add action must survive past the first attachment.
+  it("keeps Attach Provider available once providers exist", () => {
+    renderField([issuer()]);
+
+    expect(screen.getByRole("button", { name: /add provider/i })).toBeTruthy();
+  });
+
+  // Remote/tunneled servers have exactly one upstream: once it is attached,
+  // no further attach may be offered.
+  it("hides Attach Provider for single-upstream targets once a provider exists", () => {
+    renderField([issuer()], { allowAdditionalProviders: false });
+
+    expect(screen.queryByRole("button", { name: /add provider/i })).toBeNull();
+  });
+
   it("links the provider name to its detail page", () => {
     renderField([issuer()]);
 
     expect(
       screen.getByRole("link", { name: "Acme Identity" }).getAttribute("href"),
-    ).toBe("/org-slug/remote-identity-providers/issuer-1");
+    ).toBe(
+      "/org-slug/projects/project-slug/remote-identity-providers/issuer-1",
+    );
   });
 
   // Inherited organization and platform providers resolve through the same
@@ -89,7 +114,9 @@ describe("RemoteIdentityProvidersField", () => {
 
     expect(
       screen.getByRole("link", { name: "Acme Identity" }).getAttribute("href"),
-    ).toBe("/org-slug/remote-identity-providers/issuer-1");
+    ).toBe(
+      "/org-slug/projects/project-slug/remote-identity-providers/issuer-1",
+    );
   });
 
   // The detail page requires org:read/org:admin, so without them the name has
@@ -111,7 +138,7 @@ describe("RemoteIdentityProvidersField", () => {
     renderField([issuer()], { onEdit, onDelete });
 
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
-    fireEvent.click(screen.getByRole("button", { name: /delete/i }));
+    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
 
     expect(onEdit).toHaveBeenCalledTimes(1);
     expect(onDelete).toHaveBeenCalledTimes(1);

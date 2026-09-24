@@ -1,0 +1,172 @@
+package agentmanagement
+
+import (
+	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/agents"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+)
+
+func TestServiceLifecycleMutationsAreAuditedAtomically(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := validatedHumanContext(t, "org-a", "owner")
+
+	created, err := service.Create(ctx, &gen.CreatePayload{Name: "  Build agent  "})
+	require.NoError(t, err)
+	require.Equal(t, "Build agent", created.Name)
+	require.Equal(t, gen.AgentLifecycle("active"), created.Lifecycle)
+	require.True(t, created.Permissions.Read)
+	require.True(t, created.Permissions.Write)
+	require.True(t, created.Permissions.Authorize)
+	require.True(t, created.Permissions.Transfer)
+
+	read, err := service.Get(ctx, &gen.GetPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, created.ID, read.ID)
+
+	renamed, err := service.Rename(ctx, &gen.RenamePayload{ID: created.ID, Name: "Renamed agent"})
+	require.NoError(t, err)
+	require.Equal(t, "Renamed agent", renamed.Name)
+
+	suspended, err := service.Suspend(ctx, &gen.SuspendPayload{AgentID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, gen.AgentLifecycle("suspended"), suspended.Lifecycle)
+
+	resumed, err := service.Resume(ctx, &gen.ResumePayload{AgentID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, gen.AgentLifecycle("active"), resumed.Lifecycle)
+
+	revoked, err := service.Revoke(ctx, &gen.RevokePayload{AgentID: created.ID})
+	require.NoError(t, err)
+	require.Equal(t, gen.AgentLifecycle("revoked"), revoked.Lifecycle)
+
+	_, err = service.Resume(ctx, &gen.ResumePayload{AgentID: created.ID})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	err = service.Delete(ctx, &gen.DeletePayload{AgentID: created.ID})
+	require.NoError(t, err)
+	_, err = service.Get(ctx, &gen.GetPayload{ID: created.ID})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	rows, err := conn.Query(t.Context(), `SELECT action FROM audit_logs WHERE organization_id = $1 AND subject_id = $2 ORDER BY seq`, "org-a", created.ID) //nolint:glint // notestingrawsql: directly verifies ordered transactional audit side effects
+	require.NoError(t, err)
+	defer rows.Close()
+	var actions []string
+	for rows.Next() {
+		var action string
+		require.NoError(t, rows.Scan(&action))
+		actions = append(actions, action)
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, []string{
+		"agent:create",
+		"agent:rename",
+		"agent:suspend",
+		"agent:resume",
+		"agent:revoke",
+		"agent:delete",
+	}, actions)
+	require.Equal(t, actions, agentWebhookOutboxActions(t, conn, "org-a"))
+}
+
+func TestAuditFailureRollsBackLifecycleMutation(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := validatedHumanContext(t, "org-a", "owner")
+
+	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Rollback agent"})
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).RejectPublishOutboxWritesFixture(t.Context()))
+
+	_, err = service.Suspend(ctx, &gen.SuspendPayload{AgentID: created.ID})
+	require.Error(t, err)
+	agentID, err := parseAgentID(created.ID)
+	require.NoError(t, err)
+	stored, err := agentsrepo.New(conn).GetAgentByID(t.Context(), agentsrepo.GetAgentByIDParams{
+		OrganizationID: "org-a",
+		ID:             agentID,
+	})
+	require.NoError(t, err)
+	require.False(t, stored.SuspendedAt.Valid, "the mutation must roll back when its audit outbox write fails")
+}
+
+func TestFailedLifecycleMutationDoesNotEmitAudit(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := validatedHumanContext(t, "org-a", "owner")
+	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Lifecycle agent"})
+	require.NoError(t, err)
+
+	_, err = service.Resume(ctx, &gen.ResumePayload{AgentID: created.ID})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	var count int
+	err = conn.QueryRow(t.Context(), `SELECT count(*) FROM audit_logs WHERE organization_id = $1 AND subject_id = $2`, "org-a", created.ID).Scan(&count) //nolint:glint // notestingrawsql: directly verifies rollback of the audit side effect
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+}
+
+func TestNameConflictIsScopedToActiveOrganizationAgents(t *testing.T) {
+	t.Parallel()
+
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx := validatedHumanContext(t, "org-a", "owner")
+
+	first, err := service.Create(ctx, &gen.CreatePayload{Name: "Case Name"})
+	require.NoError(t, err)
+	_, err = service.Create(ctx, &gen.CreatePayload{Name: "case name"})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.NoError(t, service.Delete(ctx, &gen.DeletePayload{AgentID: first.ID}))
+	_, err = service.Create(ctx, &gen.CreatePayload{Name: "case name"})
+	require.NoError(t, err)
+}
+
+func TestAgentViewsUseTransactionConnection(t *testing.T) {
+	t.Parallel()
+	conn := newTestDB(t)
+	seedOrganization(t, conn, "org-a")
+	seedOrganizationUser(t, conn, "org-a", "owner")
+	seedOrganizationUser(t, conn, "org-a", "next-owner")
+	config := conn.Config()
+	config.MaxConns = 1
+	pool, err := pgxpool.NewWithConfig(t.Context(), config)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	service := newTestService(pool, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	ctx, cancel := context.WithTimeout(validatedHumanContext(t, "org-a", "owner"), 5*time.Second)
+	defer cancel()
+	created, err := service.Create(ctx, &gen.CreatePayload{Name: "Single connection"})
+	require.NoError(t, err)
+	require.Equal(t, "owner", created.OwnerProfile.DisplayName)
+	suspended, err := service.Suspend(ctx, &gen.SuspendPayload{AgentID: created.ID})
+	require.NoError(t, err)
+	require.NotNil(t, suspended.OwnerProfile)
+	_, err = service.Resume(ctx, &gen.ResumePayload{AgentID: created.ID})
+	require.NoError(t, err)
+	transferred, err := service.Transfer(ctx, &gen.TransferPayload{AgentID: created.ID, OwnerUserID: "next-owner"})
+	require.NoError(t, err)
+	require.Equal(t, "next-owner", transferred.OwnerProfile.DisplayName)
+}

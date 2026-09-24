@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 )
@@ -27,6 +28,7 @@ func marketplaceRow(orgSlug, orgName, projectSlug string, isDefault bool, token 
 		OrganizationName:     orgName,
 		MarketplaceToken:     pgtype.Text{String: token, Valid: true},
 		MarketplaceUpdatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		ObservabilityEnabled: true,
 		IsDefaultProject:     isDefault,
 		PluginID:             uuid.NullUUID{},
 		PluginSlug:           pgtype.Text{},
@@ -169,6 +171,28 @@ func TestBuildAgentPluginsView_SameNameRowsCollapseToDefault(t *testing.T) {
 	require.Equal(t, "https://app.getgram.ai/marketplace/tokA.git", result.Marketplaces[0].URL, "first row's token wins")
 }
 
+func TestBuildAgentPluginsView_OmitsObservabilityWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	row := marketplaceRow("acme", "Acme Corp", "default", true, "tokA", now)
+	row.ObservabilityEnabled = false
+	rows := []repo.GetAgentPluginSetRow{
+		withPlugin(row, "engineering-tools", now),
+	}
+
+	result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
+
+	require.Len(t, result.Marketplaces, 1)
+	slugs := make([]string, 0, len(result.Plugins))
+	for _, p := range result.Plugins {
+		slugs = append(slugs, p.Slug)
+	}
+	require.Equal(t, []string{"engineering-tools"}, slugs,
+		"a disabled observability plugin must not be synthesized for the device agent")
+	require.NotContains(t, slugs, "acme-corp-observability")
+}
+
 func TestBuildAgentPluginsView_EmptyRows(t *testing.T) {
 	t.Parallel()
 
@@ -190,6 +214,27 @@ func TestBuildAgentPluginsView_SkipsRowsWithMissingMarketplaceToken(t *testing.T
 
 	require.Empty(t, result.Marketplaces)
 	require.Empty(t, result.Plugins)
+}
+
+func TestAttachAgentPrincipal_ETagTracksPrincipal(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+	rows := []repo.GetAgentPluginSetRow{marketplaceRow("acme", "Acme Corp", "default", true, "tokA", now)}
+	human := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
+	humanEtag := human.Etag
+
+	attach := func(name string) string {
+		result := mv.BuildAgentPluginsView(rows, testMarketplaceURL)
+		mv.AttachAgentPrincipal(result, &gen.AgentPollingPrincipal{Urn: "agent:11111111-1111-1111-1111-111111111111", DisplayName: name})
+		return result.Etag
+	}
+	original := attach("CI agent")
+
+	require.Equal(t, humanEtag, mv.BuildAgentPluginsView(rows, testMarketplaceURL).Etag, "human ETag is unaffected")
+	require.NotEqual(t, humanEtag, original, "agent ETag covers the principal")
+	require.Equal(t, original, attach("CI agent"), "stable for the same principal")
+	require.NotEqual(t, original, attach("Renamed agent"), "a rename changes the ETag")
 }
 
 func TestBuildAgentPluginsView_ETagIgnoresRowsThatDoNotRender(t *testing.T) {

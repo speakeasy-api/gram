@@ -67,7 +67,6 @@ import {
 } from "@/elements/components/assistant-ui/reasoning";
 import { ThinkingIndicator } from "@/elements/components/assistant-ui/thinking-indicator";
 import { ToolFallback } from "@/elements/components/assistant-ui/tool-fallback";
-import { DEFAULT_TOOL_COMPONENTS } from "@/elements/components/assistant-ui/default-tool-components";
 import { UserMessageText } from "@/elements/components/assistant-ui/user-message-text";
 import { ToolMentionAutocomplete } from "@/elements/components/assistant-ui/tool-mention-autocomplete";
 import { TooltipIconButton } from "@/elements/components/assistant-ui/tooltip-icon-button";
@@ -93,6 +92,14 @@ import { useThemeProps } from "@/elements/hooks/useThemeProps";
 import { useToolMentions } from "@/elements/hooks/useToolMentions";
 import { getApiUrl } from "@/elements/lib/api";
 import { dictationAdapter } from "@/elements/lib/dictation";
+import {
+  composerContextToolsEmptyMessage,
+  composerMcpServersPresence,
+  mcpToolsAvailability,
+  mcpToolsListPending,
+  mcpToolsSendBlocked,
+  mcpToolsSendTooltip,
+} from "@/elements/lib/mcpToolsAvailability";
 import { EASE_OUT_QUINT } from "@/elements/lib/easing";
 import { groupAssistantMessageParts } from "@/elements/lib/messagePartGrouping";
 import {
@@ -394,11 +401,22 @@ const ThreadWelcome: FC = () => {
 };
 
 const ThreadSuggestions: FC = () => {
-  const { config } = useElements();
+  const { config, mcpTools, mcpToolsLoading, mcpToolsError } = useElements();
   const r = useRadius();
   const d = useDensity();
   const suggestions = config.welcome?.suggestions ?? [];
   const isStandalone = config.variant === "standalone";
+
+  if (
+    mcpToolsSendBlocked(
+      config.composer?.requireMcpTools,
+      mcpToolsLoading,
+      mcpTools,
+      mcpToolsError,
+    )
+  ) {
+    return null;
+  }
 
   if (suggestions.length === 0) return null;
 
@@ -621,7 +639,7 @@ export const Composer: FC<ComposerProps> = ({
   showThreadAffordances = true,
   autoFocus = true,
 }) => {
-  const { config, mcpTools } = useElements();
+  const { config, mcpTools, mcpToolsLoading, mcpToolsError } = useElements();
   const { isResolved, setUnresolved } = useChatResolution();
   const r = useRadius();
   const d = useDensity();
@@ -723,7 +741,23 @@ export const Composer: FC<ComposerProps> = ({
   const composerTextRef = useRef(composerText);
   composerTextRef.current = composerText;
 
+  const toolsAvailability = mcpToolsAvailability(
+    mcpToolsLoading,
+    mcpTools,
+    mcpToolsError,
+  );
+  const sendBlocked = mcpToolsSendBlocked(
+    composerConfig.requireMcpTools,
+    mcpToolsLoading,
+    mcpTools,
+    mcpToolsError,
+  );
+  const sendTooltip = sendBlocked
+    ? mcpToolsSendTooltip(toolsAvailability)
+    : "Send message";
+
   const runSlashCommand = (command: ComposerSlashCommand) => {
+    if (sendBlocked) return;
     const composer = aui.composer();
     composer.setText(command.prompt);
     composer.send();
@@ -812,7 +846,11 @@ export const Composer: FC<ComposerProps> = ({
           ref={composerRootRef}
           // Capture: the menu owns Up/Down/Enter while it is open, before the
           // textarea inserts a newline or the composer sends the raw query.
-          onSubmit={() => {
+          onSubmit={(event) => {
+            if (sendBlocked) {
+              event.preventDefault();
+              return;
+            }
             promptHistory.record(composerTextRef.current);
           }}
           onKeyDownCapture={(event) => {
@@ -920,7 +958,11 @@ export const Composer: FC<ComposerProps> = ({
               isDictating && "invisible",
             )}
           />
-          <ComposerAction showRunState={showThreadAffordances} />
+          <ComposerAction
+            showRunState={showThreadAffordances}
+            sendBlocked={sendBlocked}
+            sendTooltip={sendTooltip}
+          />
         </ComposerPrimitive.Root>
       )}
     </div>
@@ -1274,7 +1316,7 @@ const CONTEXT_ALL_TOOLS_SECTION = "__all_tools__";
  * `@mention` into the draft — but the user makes one trip to one list.
  */
 const ComposerContextPicker: FC = () => {
-  const { config, mcpTools, mcpToolsLoading } = useElements();
+  const { config, mcpTools, mcpToolsLoading, mcpToolsError } = useElements();
   const aui = useAui();
   const triggerRef = useRef<HTMLButtonElement>(null);
   // Read the composer text from the same reactive source the tool-mention
@@ -1297,6 +1339,15 @@ const ComposerContextPicker: FC = () => {
       composerConfig.toolMentions.enabled !== false);
 
   const tools = useMemo(() => toolSetToMentionableTools(mcpTools), [mcpTools]);
+  const serversPresence = composerMcpServersPresence(config.mcp, config.mcps);
+  const toolsListPending =
+    serversPresence === "unknown" ||
+    mcpToolsListPending(
+      mcpToolsLoading,
+      mcpTools,
+      mcpToolsError,
+      serversPresence === "some",
+    );
 
   const categories = useMemo<ToolCategory[]>(() => {
     const grouped = new Map<string, MentionableTool[]>();
@@ -1316,11 +1367,11 @@ const ComposerContextPicker: FC = () => {
 
   // Both halves stay visible while their source is still loading, so the
   // button appears immediately rather than popping in once the async list
-  // resolves — but a half that loaded empty is dropped, and a button with
-  // nothing behind it at all is not rendered.
+  // resolves. An empty tools/list stays visible too — hiding it would read
+  // as "this assistant has no tools" with no explanation.
   const hasSkills =
     !!skillContext && (skillContext.skills.length > 0 || skillContext.loading);
-  const hasTools = toolMentionsEnabled && (tools.length > 0 || mcpToolsLoading);
+  const hasTools = toolMentionsEnabled;
   if (!hasSkills && !hasTools) {
     return null;
   }
@@ -1555,7 +1606,7 @@ const ComposerContextPicker: FC = () => {
                 {/* A search that outruns the fetch has nothing to match yet;
                     saying "nothing found" there reports absence when the
                     answer is simply not back. */}
-                {skillContext?.loading || mcpToolsLoading
+                {skillContext?.loading || toolsListPending
                   ? "Loading…"
                   : "Nothing found"}
               </div>
@@ -1591,7 +1642,12 @@ const ComposerContextPicker: FC = () => {
                   />
                   <ContextToolResults
                     tools={matchingTools}
-                    loading={mcpToolsLoading}
+                    emptyMessage={composerContextToolsEmptyMessage(
+                      mcpToolsLoading,
+                      mcpTools,
+                      mcpToolsError,
+                      serversPresence,
+                    )}
                     onSelect={insertMention}
                   />
                 </>
@@ -1605,17 +1661,17 @@ const ComposerContextPicker: FC = () => {
 
 function ContextToolResults({
   tools,
-  loading,
+  emptyMessage,
   onSelect,
 }: {
   tools: MentionableTool[];
-  loading: boolean;
+  emptyMessage: string;
   onSelect: (toolName: string) => void;
 }): React.ReactElement {
   if (tools.length === 0) {
     return (
       <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-        {loading ? "Loading tools…" : "No tools found"}
+        {emptyMessage}
       </div>
     );
   }
@@ -1780,8 +1836,14 @@ const ComposerDictate: FC = () => {
   );
 };
 
-const ComposerAction: FC<{ showRunState?: boolean }> = ({
+const ComposerAction: FC<{
+  showRunState?: boolean;
+  sendBlocked?: boolean;
+  sendTooltip?: string;
+}> = ({
   showRunState = true,
+  sendBlocked = false,
+  sendTooltip = "Send message",
 }) => {
   const { config } = useElements();
   const r = useRadius();
@@ -1821,13 +1883,14 @@ const ComposerAction: FC<{ showRunState?: boolean }> = ({
         {!showRunState && (
           <ComposerPrimitive.Send asChild>
             <TooltipIconButton
-              tooltip="Send message"
+              tooltip={sendTooltip}
               side="bottom"
               type="submit"
               variant="default"
               size="icon"
+              disabled={sendBlocked}
               className={cn("aui-composer-send size-[34px] p-1", r("full"))}
-              aria-label="Send message"
+              aria-label={sendTooltip}
             >
               <ArrowUpIcon className="aui-composer-send-icon size-5" />
             </TooltipIconButton>
@@ -1838,13 +1901,14 @@ const ComposerAction: FC<{ showRunState?: boolean }> = ({
           <ThreadPrimitive.If running={false}>
             <ComposerPrimitive.Send asChild>
               <TooltipIconButton
-                tooltip="Send message"
+                tooltip={sendTooltip}
                 side="bottom"
                 type="submit"
                 variant="default"
                 size="icon"
+                disabled={sendBlocked}
                 className={cn("aui-composer-send size-[34px] p-1", r("full"))}
-                aria-label="Send message"
+                aria-label={sendTooltip}
               >
                 <ArrowUpIcon className="aui-composer-send-icon size-5" />
               </TooltipIconButton>
@@ -1978,9 +2042,7 @@ const AssistantMessage: FC = () => {
       Text: withToolCallAnnotationSuppression(components?.Text ?? MarkdownText),
       Image: components?.Image ?? Image,
       tools: {
-        // Built-in renderers come first so a host override of the same tool
-        // name still wins.
-        by_name: { ...DEFAULT_TOOL_COMPONENTS, ...toolsComponents },
+        by_name: toolsComponents,
         Fallback: components?.ToolFallback ?? ToolFallback,
       },
       Reasoning: components?.Reasoning ?? Reasoning,

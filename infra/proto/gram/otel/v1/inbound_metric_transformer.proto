@@ -1,0 +1,23 @@
+edition = "2024";
+
+package gram.otel.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1;otelv1";
+
+// InboundMetricTransformer consumes received OTLP metrics and publishes their
+// normalized form after applying configured resource enrichers.
+message InboundMetricTransformer {
+  option (gcp.pubsub.v1.subscription) = {
+    topic: "gram.otel.v1.InboundMetric"
+    ack_deadline: {seconds: 60}
+    retention: {seconds: 604800} /* 7 days */
+    retain_acked_messages: false
+    retry_policy: {
+      minimum_backoff: {seconds: 10}
+      maximum_backoff: {seconds: 60}
+    }
+    dead_letter: {max_delivery_attempts: 10}
+  };
+}

@@ -168,7 +168,7 @@ func classifyAgentPlugin(p PluginInfo) agentPluginCompatibility {
 
 func validateAgentPluginRemoteURL(raw string) error {
 	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" {
+	if err != nil || u.Host == "" || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
 		return errors.New("url must be absolute and must not contain user information or a fragment")
 	}
 	if u.Scheme == "https" {
@@ -229,26 +229,9 @@ func compileAgentPlugin(p PluginInfo, cfg GenerateConfig, mode agentPluginCreden
 	}
 	files["plugin.json"] = manifestJSON
 
-	mcpServers := make(map[string]agentMCPServer, len(p.Servers)+1)
+	mcpServers := make(map[string]agentMCPServer, len(p.Servers))
 	for _, server := range p.Servers {
 		mcpServers[server.DisplayName] = agentMCPServer{Type: "streamable-http", Command: "", Args: nil, Env: nil, CWD: "", URL: server.MCPURL, Headers: nil}
-	}
-	if bundleSkillFeedbackMCP(p) {
-		mcpServers[skillFeedbackMCPServerName] = agentMCPServer{
-			Type:    "stdio",
-			Command: "bash",
-			Args: []string{
-				"-c",
-				`exec "${PLUGIN_ROOT:-${CURSOR_PLUGIN_ROOT}}/hooks/bootstrap.sh" skill-feedback "--config=${PLUGIN_ROOT:-${CURSOR_PLUGIN_ROOT}}/speakeasy.json"`,
-			},
-			Env:     nil,
-			CWD:     "",
-			URL:     "",
-			Headers: nil,
-		}
-		if err := writeHooksRuntimeFiles(files, "", cfg); err != nil {
-			return nil, err
-		}
 	}
 	mcpConfig := agentMCPConfig{Schema: agentMCPSchemaID, MCPServers: mcpServers}
 	mcpJSON, err := marshalJSON(mcpConfig)

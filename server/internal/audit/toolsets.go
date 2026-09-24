@@ -14,14 +14,15 @@ import (
 )
 
 const (
-	ActionToolsetCreate              Action = "toolset:create"
-	ActionToolsetUpdate              Action = "toolset:update"
-	ActionToolsetDelete              Action = "toolset:delete"
-	ActionToolsetAttachExternalOAuth Action = "toolset:attach_external_oauth"
-	ActionToolsetDetachExternalOAuth Action = "toolset:detach_external_oauth"
-	ActionToolsetAttachOAuthProxy    Action = "toolset:attach_oauth_proxy"
-	ActionToolsetUpdateOAuthProxy    Action = "toolset:update_oauth_proxy"
-	ActionToolsetDetachOAuthProxy    Action = "toolset:detach_oauth_proxy"
+	ActionToolsetCreate                    Action = "toolset:create"
+	ActionToolsetUpdate                    Action = "toolset:update"
+	ActionToolsetDelete                    Action = "toolset:delete"
+	ActionToolsetAttachExternalOAuth       Action = "toolset:attach_external_oauth"
+	ActionToolsetUpdateExternalOAuthIssuer Action = "toolset:update_external_oauth_issuer"
+	ActionToolsetDetachExternalOAuth       Action = "toolset:detach_external_oauth"
+	ActionToolsetAttachOAuthProxy          Action = "toolset:attach_oauth_proxy"
+	ActionToolsetUpdateOAuthProxy          Action = "toolset:update_oauth_proxy"
+	ActionToolsetDetachOAuthProxy          Action = "toolset:detach_oauth_proxy"
 )
 
 type LogToolsetCreateEvent struct {
@@ -188,17 +189,19 @@ type LogToolsetAttachExternalOAuthEvent struct {
 	ToolsetSlug         string
 	ToolsetVersionAfter int64
 
-	ExternalOAuthServerID   string //nolint:glint // TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
-	ExternalOAuthServerSlug string
+	ExternalOAuthServerID        string //nolint:glint // TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
+	ExternalOAuthServerSlug      string
+	AuthorizationServerIssuerSet bool
 }
 
 func (l *Logger) LogToolsetAttachExternalOAuth(ctx context.Context, dbtx repo.DBTX, event LogToolsetAttachExternalOAuthEvent) error {
 	action := ActionToolsetAttachExternalOAuth
 
 	metadata, err := marshalAuditPayload(map[string]any{
-		"toolset_version_after":      event.ToolsetVersionAfter,
-		"external_oauth_server_id":   event.ExternalOAuthServerID,
-		"external_oauth_server_slug": event.ExternalOAuthServerSlug,
+		"toolset_version_after":           event.ToolsetVersionAfter,
+		"external_oauth_server_id":        event.ExternalOAuthServerID,
+		"external_oauth_server_slug":      event.ExternalOAuthServerSlug,
+		"authorization_server_issuer_set": event.AuthorizationServerIssuerSet,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
@@ -223,6 +226,56 @@ func (l *Logger) LogToolsetAttachExternalOAuth(ctx context.Context, dbtx repo.DB
 		Metadata:       metadata,
 		BeforeSnapshot: nil,
 		AfterSnapshot:  nil,
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
+}
+
+type LogToolsetUpdateExternalOAuthIssuerEvent struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+
+	Actor            urn.Principal
+	ActorDisplayName *string
+	ActorSlug        *string
+
+	ToolsetURN          urn.Toolset
+	ToolsetName         string
+	ToolsetSlug         string
+	ToolsetVersionAfter int64
+
+	ExternalOAuthServerID        string //nolint:glint // TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
+	ExternalOAuthServerSlug      string
+	AuthorizationServerIssuerSet bool
+}
+
+func (l *Logger) LogToolsetUpdateExternalOAuthIssuer(ctx context.Context, dbtx repo.DBTX, event LogToolsetUpdateExternalOAuthIssuerEvent) error {
+	action := ActionToolsetUpdateExternalOAuthIssuer
+	metadata, err := marshalAuditPayload(map[string]any{
+		"toolset_version_after":           event.ToolsetVersionAfter,
+		"external_oauth_server_id":        event.ExternalOAuthServerID,
+		"external_oauth_server_slug":      event.ExternalOAuthServerSlug,
+		"authorization_server_issuer_set": event.AuthorizationServerIssuerSet,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID:     event.OrganizationID,
+		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+		ActorID:            event.Actor.ID,
+		ActorType:          string(event.Actor.Type),
+		ActorDisplayName:   conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:          conv.PtrToPGTextEmpty(event.ActorSlug),
+		Action:             string(action),
+		SubjectID:          event.ToolsetURN.ID.String(),
+		SubjectType:        string(subjectTypeToolset),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.ToolsetName),
+		SubjectSlug:        conv.ToPGTextEmpty(event.ToolsetSlug),
+		Metadata:           metadata,
+		BeforeSnapshot:     nil,
+		AfterSnapshot:      nil,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.ToolsetV1})
@@ -282,5 +335,5 @@ func (l *Logger) LogToolsetDetachExternalOAuth(ctx context.Context, dbtx repo.DB
 }
 
 // NOTE: The Attach/Update/Detach OAuth-proxy emit functions were removed with
-// the legacy OAuth proxy. The ActionToolset*OAuthProxy action-string constants
+// the OAuth proxy. The ActionToolset*OAuthProxy action-string constants
 // are retained because historical audit-log entries still reference them.

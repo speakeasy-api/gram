@@ -23,6 +23,11 @@ type CreateServerRequestBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server (e.g. streamable-http)
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+	// For createServerAndMcpServer, the ID of an existing project- or
+	// organization-owned user session issuer to attach to the linked MCP server.
+	// Omit to mint a project issuer. The source-only createServer method rejects
+	// this field.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 }
 
 // CreateServerAndMcpServerRequestBody is the type of the "remoteMcp" service
@@ -35,6 +40,11 @@ type CreateServerAndMcpServerRequestBody struct {
 	URL string `form:"url" json:"url" xml:"url"`
 	// The transport type for the remote MCP server (e.g. streamable-http)
 	TransportType string `form:"transport_type" json:"transport_type" xml:"transport_type"`
+	// For createServerAndMcpServer, the ID of an existing project- or
+	// organization-owned user session issuer to attach to the linked MCP server.
+	// Omit to mint a project issuer. The source-only createServer method rejects
+	// this field.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 }
 
 // UpdateServerRequestBody is the type of the "remoteMcp" service
@@ -56,6 +66,13 @@ type UpdateServerRequestBody struct {
 type DiscoverProtectedResourceMetadataRequestBody struct {
 	// The ID of the remote MCP server to probe.
 	RemoteMcpServerID string `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+}
+
+// ProbeURLRequestBody is the type of the "remoteMcp" service "probeURL"
+// endpoint HTTP request body.
+type ProbeURLRequestBody struct {
+	// The URL of the remote MCP server to probe
+	URL string `form:"url" json:"url" xml:"url"`
 }
 
 // VerifyURLRequestBody is the type of the "remoteMcp" service "verifyURL"
@@ -200,6 +217,24 @@ type DiscoverProtectedResourceMetadataResponseBody struct {
 	// missing resource field, mismatched resource value). Empty when available is
 	// false.
 	DiscoveryWarnings []string `form:"discovery_warnings,omitempty" json:"discovery_warnings,omitempty" xml:"discovery_warnings,omitempty"`
+}
+
+// ProbeURLResponseBody is the type of the "remoteMcp" service "probeURL"
+// endpoint HTTP response body.
+type ProbeURLResponseBody struct {
+	// Probe outcome.
+	Outcome *string `form:"outcome,omitempty" json:"outcome,omitempty" xml:"outcome,omitempty"`
+	// Absolute HTTP(S) protected resource metadata URL advertised by a
+	// WWW-Authenticate challenge. Present only when authentication is required and
+	// the advertised URL is valid.
+	ProtectedResourceMetadataURL *string `form:"protected_resource_metadata_url,omitempty" json:"protected_resource_metadata_url,omitempty" xml:"protected_resource_metadata_url,omitempty"`
+	// HTTP status returned by the remote server. Required for invalid_mcp_response
+	// and present for HTTP-based unreachable outcomes.
+	HTTPStatus *int `form:"http_status,omitempty" json:"http_status,omitempty" xml:"http_status,omitempty"`
+	// Stable machine-readable reason code. Present only when outcome is
+	// unreachable; currently timeout, rate_limited, server_error, dns_error,
+	// tls_error, guardian_rejected, or transport_error.
+	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 }
 
 // VerifyURLResponseBody is the type of the "remoteMcp" service "verifyURL"
@@ -1380,6 +1415,187 @@ type DiscoverProtectedResourceMetadataUnexpectedResponseBody struct {
 // "remoteMcp" service "discoverProtectedResourceMetadata" endpoint HTTP
 // response body for the "gateway_error" error.
 type DiscoverProtectedResourceMetadataGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ProbeURLUnauthorizedResponseBody is the type of the "remoteMcp" service
+// "probeURL" endpoint HTTP response body for the "unauthorized" error.
+type ProbeURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ProbeURLForbiddenResponseBody is the type of the "remoteMcp" service
+// "probeURL" endpoint HTTP response body for the "forbidden" error.
+type ProbeURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ProbeURLBadRequestResponseBody is the type of the "remoteMcp" service
+// "probeURL" endpoint HTTP response body for the "bad_request" error.
+type ProbeURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ProbeURLNotFoundResponseBody is the type of the "remoteMcp" service
+// "probeURL" endpoint HTTP response body for the "not_found" error.
+type ProbeURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ProbeURLConflictResponseBody is the type of the "remoteMcp" service
+// "probeURL" endpoint HTTP response body for the "conflict" error.
+type ProbeURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ProbeURLUnsupportedMediaResponseBody is the type of the "remoteMcp" service
+// "probeURL" endpoint HTTP response body for the "unsupported_media" error.
+type ProbeURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ProbeURLInvalidResponseBody is the type of the "remoteMcp" service
+// "probeURL" endpoint HTTP response body for the "invalid" error.
+type ProbeURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ProbeURLInvariantViolationResponseBody is the type of the "remoteMcp"
+// service "probeURL" endpoint HTTP response body for the "invariant_violation"
+// error.
+type ProbeURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ProbeURLUnexpectedResponseBody is the type of the "remoteMcp" service
+// "probeURL" endpoint HTTP response body for the "unexpected" error.
+type ProbeURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ProbeURLGatewayErrorResponseBody is the type of the "remoteMcp" service
+// "probeURL" endpoint HTTP response body for the "gateway_error" error.
+type ProbeURLGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2745,6 +2961,8 @@ type McpServerResponseBody struct {
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
+	// The effective allowed network surfaces. Existing NULL rows are public_only.
+	NetworkAccessMode *string `form:"network_access_mode,omitempty" json:"network_access_mode,omitempty" xml:"network_access_mode,omitempty"`
 	// When the MCP server was created
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the MCP server was last updated
@@ -2764,6 +2982,12 @@ type ProtectedResourceMetadataResponseBody struct {
 	BearerMethodsSupported []string `form:"bearer_methods_supported,omitempty" json:"bearer_methods_supported,omitempty" xml:"bearer_methods_supported,omitempty"`
 	// URL of human-readable documentation for the resource server.
 	ResourceDocumentation *string `form:"resource_documentation,omitempty" json:"resource_documentation,omitempty" xml:"resource_documentation,omitempty"`
+	// Human-readable display name of the resource server.
+	ResourceName *string `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
+	// URL of the resource server's data-usage policy.
+	ResourcePolicyURI *string `form:"resource_policy_uri,omitempty" json:"resource_policy_uri,omitempty" xml:"resource_policy_uri,omitempty"`
+	// URL of the resource server's terms of service.
+	ResourceTosURI *string `form:"resource_tos_uri,omitempty" json:"resource_tos_uri,omitempty" xml:"resource_tos_uri,omitempty"`
 }
 
 // ProtectedResourceMetadataUnavailableResponseBody is used to define fields on
@@ -2805,9 +3029,10 @@ type RemoteMcpServerHeaderResponseBody struct {
 // the "createServer" endpoint of the "remoteMcp" service.
 func NewCreateServerRequestBody(p *remotemcp.CreateServerPayload) *CreateServerRequestBody {
 	body := &CreateServerRequestBody{
-		Name:          p.Name,
-		URL:           p.URL,
-		TransportType: p.TransportType,
+		Name:                p.Name,
+		URL:                 p.URL,
+		TransportType:       p.TransportType,
+		UserSessionIssuerID: p.UserSessionIssuerID,
 	}
 	return body
 }
@@ -2817,9 +3042,10 @@ func NewCreateServerRequestBody(p *remotemcp.CreateServerPayload) *CreateServerR
 // service.
 func NewCreateServerAndMcpServerRequestBody(p *remotemcp.CreateServerAndMcpServerPayload) *CreateServerAndMcpServerRequestBody {
 	body := &CreateServerAndMcpServerRequestBody{
-		Name:          p.Name,
-		URL:           p.URL,
-		TransportType: p.TransportType,
+		Name:                p.Name,
+		URL:                 p.URL,
+		TransportType:       p.TransportType,
+		UserSessionIssuerID: p.UserSessionIssuerID,
 	}
 	return body
 }
@@ -2842,6 +3068,15 @@ func NewUpdateServerRequestBody(p *remotemcp.UpdateServerPayload) *UpdateServerR
 func NewDiscoverProtectedResourceMetadataRequestBody(p *remotemcp.DiscoverProtectedResourceMetadataPayload) *DiscoverProtectedResourceMetadataRequestBody {
 	body := &DiscoverProtectedResourceMetadataRequestBody{
 		RemoteMcpServerID: p.RemoteMcpServerID,
+	}
+	return body
+}
+
+// NewProbeURLRequestBody builds the HTTP request body from the payload of the
+// "probeURL" endpoint of the "remoteMcp" service.
+func NewProbeURLRequestBody(p *remotemcp.ProbeURLPayload) *ProbeURLRequestBody {
+	body := &ProbeURLRequestBody{
+		URL: p.URL,
 	}
 	return body
 }
@@ -3872,6 +4107,169 @@ func NewDiscoverProtectedResourceMetadataUnexpected(body *DiscoverProtectedResou
 // NewDiscoverProtectedResourceMetadataGatewayError builds a remoteMcp service
 // discoverProtectedResourceMetadata endpoint gateway_error error.
 func NewDiscoverProtectedResourceMetadataGatewayError(body *DiscoverProtectedResourceMetadataGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewProbeURLResultOK builds a "remoteMcp" service "probeURL" endpoint result
+// from a HTTP "OK" response.
+func NewProbeURLResultOK(body *ProbeURLResponseBody) *remotemcp.ProbeURLResult {
+	v := &remotemcp.ProbeURLResult{
+		Outcome:                      *body.Outcome,
+		ProtectedResourceMetadataURL: body.ProtectedResourceMetadataURL,
+		HTTPStatus:                   body.HTTPStatus,
+		Reason:                       body.Reason,
+	}
+
+	return v
+}
+
+// NewProbeURLUnauthorized builds a remoteMcp service probeURL endpoint
+// unauthorized error.
+func NewProbeURLUnauthorized(body *ProbeURLUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewProbeURLForbidden builds a remoteMcp service probeURL endpoint forbidden
+// error.
+func NewProbeURLForbidden(body *ProbeURLForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewProbeURLBadRequest builds a remoteMcp service probeURL endpoint
+// bad_request error.
+func NewProbeURLBadRequest(body *ProbeURLBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewProbeURLNotFound builds a remoteMcp service probeURL endpoint not_found
+// error.
+func NewProbeURLNotFound(body *ProbeURLNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewProbeURLConflict builds a remoteMcp service probeURL endpoint conflict
+// error.
+func NewProbeURLConflict(body *ProbeURLConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewProbeURLUnsupportedMedia builds a remoteMcp service probeURL endpoint
+// unsupported_media error.
+func NewProbeURLUnsupportedMedia(body *ProbeURLUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewProbeURLInvalid builds a remoteMcp service probeURL endpoint invalid
+// error.
+func NewProbeURLInvalid(body *ProbeURLInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewProbeURLInvariantViolation builds a remoteMcp service probeURL endpoint
+// invariant_violation error.
+func NewProbeURLInvariantViolation(body *ProbeURLInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewProbeURLUnexpected builds a remoteMcp service probeURL endpoint
+// unexpected error.
+func NewProbeURLUnexpected(body *ProbeURLUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewProbeURLGatewayError builds a remoteMcp service probeURL endpoint
+// gateway_error error.
+func NewProbeURLGatewayError(body *ProbeURLGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5184,6 +5582,23 @@ func ValidateDiscoverProtectedResourceMetadataResponseBody(body *DiscoverProtect
 		if err2 := ValidateProtectedResourceMetadataUnavailableResponseBody(body.Unavailable); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateProbeURLResponseBody runs the validations defined on
+// ProbeURLResponseBody
+func ValidateProbeURLResponseBody(body *ProbeURLResponseBody) (err error) {
+	if body.Outcome == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("outcome", "body"))
+	}
+	if body.Outcome != nil {
+		if !(*body.Outcome == "mcp_available" || *body.Outcome == "authentication_required" || *body.Outcome == "invalid_mcp_response" || *body.Outcome == "unreachable") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.outcome", *body.Outcome, []any{"mcp_available", "authentication_required", "invalid_mcp_response", "unreachable"}))
+		}
+	}
+	if body.ProtectedResourceMetadataURL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.protected_resource_metadata_url", *body.ProtectedResourceMetadataURL, goa.FormatURI))
 	}
 	return
 }
@@ -6746,6 +7161,246 @@ func ValidateDiscoverProtectedResourceMetadataUnexpectedResponseBody(body *Disco
 // validations defined on
 // discoverProtectedResourceMetadata_gateway_error_response_body
 func ValidateDiscoverProtectedResourceMetadataGatewayErrorResponseBody(body *DiscoverProtectedResourceMetadataGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateProbeURLUnauthorizedResponseBody runs the validations defined on
+// probeURL_unauthorized_response_body
+func ValidateProbeURLUnauthorizedResponseBody(body *ProbeURLUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateProbeURLForbiddenResponseBody runs the validations defined on
+// probeURL_forbidden_response_body
+func ValidateProbeURLForbiddenResponseBody(body *ProbeURLForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateProbeURLBadRequestResponseBody runs the validations defined on
+// probeURL_bad_request_response_body
+func ValidateProbeURLBadRequestResponseBody(body *ProbeURLBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateProbeURLNotFoundResponseBody runs the validations defined on
+// probeURL_not_found_response_body
+func ValidateProbeURLNotFoundResponseBody(body *ProbeURLNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateProbeURLConflictResponseBody runs the validations defined on
+// probeURL_conflict_response_body
+func ValidateProbeURLConflictResponseBody(body *ProbeURLConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateProbeURLUnsupportedMediaResponseBody runs the validations defined on
+// probeURL_unsupported_media_response_body
+func ValidateProbeURLUnsupportedMediaResponseBody(body *ProbeURLUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateProbeURLInvalidResponseBody runs the validations defined on
+// probeURL_invalid_response_body
+func ValidateProbeURLInvalidResponseBody(body *ProbeURLInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateProbeURLInvariantViolationResponseBody runs the validations defined
+// on probeURL_invariant_violation_response_body
+func ValidateProbeURLInvariantViolationResponseBody(body *ProbeURLInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateProbeURLUnexpectedResponseBody runs the validations defined on
+// probeURL_unexpected_response_body
+func ValidateProbeURLUnexpectedResponseBody(body *ProbeURLUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateProbeURLGatewayErrorResponseBody runs the validations defined on
+// probeURL_gateway_error_response_body
+func ValidateProbeURLGatewayErrorResponseBody(body *ProbeURLGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -8498,6 +9153,9 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	if body.Visibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("visibility", "body"))
 	}
+	if body.NetworkAccessMode == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("network_access_mode", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -8534,6 +9192,11 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.visibility", *body.Visibility, []any{"disabled", "private", "public"}))
+		}
+	}
+	if body.NetworkAccessMode != nil {
+		if !(*body.NetworkAccessMode == "public_only" || *body.NetworkAccessMode == "dual" || *body.NetworkAccessMode == "private_only") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.network_access_mode", *body.NetworkAccessMode, []any{"public_only", "dual", "private_only"}))
 		}
 	}
 	if body.CreatedAt != nil {

@@ -15,6 +15,79 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// BuildListDistributionPluginsPayload builds the payload for the plugins
+// listDistributionPlugins endpoint from CLI flags.
+func BuildListDistributionPluginsPayload(pluginsListDistributionPluginsSkillID string, pluginsListDistributionPluginsSessionToken string, pluginsListDistributionPluginsProjectSlugInput string) (*plugins.ListDistributionPluginsPayload, error) {
+	var err error
+	var skillID string
+	{
+		skillID = pluginsListDistributionPluginsSkillID
+		err = goa.MergeErrors(err, goa.ValidateFormat("skill_id", skillID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if pluginsListDistributionPluginsSessionToken != "" {
+			sessionToken = &pluginsListDistributionPluginsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsListDistributionPluginsProjectSlugInput != "" {
+			projectSlugInput = &pluginsListDistributionPluginsProjectSlugInput
+		}
+	}
+	v := &plugins.ListDistributionPluginsPayload{}
+	v.SkillID = skillID
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetDistributionPluginPayload builds the payload for the plugins
+// getDistributionPlugin endpoint from CLI flags.
+func BuildGetDistributionPluginPayload(pluginsGetDistributionPluginSkillID string, pluginsGetDistributionPluginID string, pluginsGetDistributionPluginSessionToken string, pluginsGetDistributionPluginProjectSlugInput string) (*plugins.GetDistributionPluginPayload, error) {
+	var err error
+	var skillID string
+	{
+		skillID = pluginsGetDistributionPluginSkillID
+		err = goa.MergeErrors(err, goa.ValidateFormat("skill_id", skillID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var id string
+	{
+		id = pluginsGetDistributionPluginID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if pluginsGetDistributionPluginSessionToken != "" {
+			sessionToken = &pluginsGetDistributionPluginSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if pluginsGetDistributionPluginProjectSlugInput != "" {
+			projectSlugInput = &pluginsGetDistributionPluginProjectSlugInput
+		}
+	}
+	v := &plugins.GetDistributionPluginPayload{}
+	v.SkillID = skillID
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildListPluginsPayload builds the payload for the plugins listPlugins
 // endpoint from CLI flags.
 func BuildListPluginsPayload(pluginsListPluginsSessionToken string, pluginsListPluginsProjectSlugInput string) (*plugins.ListPluginsPayload, error) {
@@ -445,40 +518,6 @@ func BuildDownloadPluginPackagePayload(pluginsDownloadPluginPackagePluginID stri
 	return v, nil
 }
 
-// BuildDownloadPlatformMCPPluginPayload builds the payload for the plugins
-// downloadPlatformMCPPlugin endpoint from CLI flags.
-func BuildDownloadPlatformMCPPluginPayload(pluginsDownloadPlatformMCPPluginPlatform string, pluginsDownloadPlatformMCPPluginSessionToken string, pluginsDownloadPlatformMCPPluginProjectSlugInput string) (*plugins.DownloadPlatformMCPPluginPayload, error) {
-	var err error
-	var platform string
-	{
-		platform = pluginsDownloadPlatformMCPPluginPlatform
-		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "opencode" || platform == "agent-plugin") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "opencode", "agent-plugin"}))
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var sessionToken *string
-	{
-		if pluginsDownloadPlatformMCPPluginSessionToken != "" {
-			sessionToken = &pluginsDownloadPlatformMCPPluginSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if pluginsDownloadPlatformMCPPluginProjectSlugInput != "" {
-			projectSlugInput = &pluginsDownloadPlatformMCPPluginProjectSlugInput
-		}
-	}
-	v := &plugins.DownloadPlatformMCPPluginPayload{}
-	v.Platform = platform
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
 // BuildDownloadObservabilityPluginPayload builds the payload for the plugins
 // downloadObservabilityPlugin endpoint from CLI flags.
 func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginPlatform string, pluginsDownloadObservabilityPluginSessionToken string, pluginsDownloadObservabilityPluginProjectSlugInput string) (*plugins.DownloadObservabilityPluginPayload, error) {
@@ -486,8 +525,8 @@ func BuildDownloadObservabilityPluginPayload(pluginsDownloadObservabilityPluginP
 	var platform string
 	{
 		platform = pluginsDownloadObservabilityPluginPlatform
-		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "opencode") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "opencode"}))
+		if !(platform == "claude" || platform == "cursor" || platform == "codex" || platform == "opencode" || platform == "copilot" || platform == "openclaw" || platform == "pi") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("platform", platform, []any{"claude", "cursor", "codex", "opencode", "copilot", "openclaw", "pi"}))
 		}
 		if err != nil {
 			return nil, err
@@ -529,43 +568,6 @@ func BuildDownloadCodexInstallScriptPayload(pluginsDownloadCodexInstallScriptSes
 		}
 	}
 	v := &plugins.DownloadCodexInstallScriptPayload{}
-	v.SessionToken = sessionToken
-	v.ProjectSlugInput = projectSlugInput
-
-	return v, nil
-}
-
-// BuildGetPlatformMCPPackageStatusPayload builds the payload for the plugins
-// getPlatformMCPPackageStatus endpoint from CLI flags.
-func BuildGetPlatformMCPPackageStatusPayload(pluginsGetPlatformMCPPackageStatusSessionToken string) (*plugins.GetPlatformMCPPackageStatusPayload, error) {
-	var sessionToken *string
-	{
-		if pluginsGetPlatformMCPPackageStatusSessionToken != "" {
-			sessionToken = &pluginsGetPlatformMCPPackageStatusSessionToken
-		}
-	}
-	v := &plugins.GetPlatformMCPPackageStatusPayload{}
-	v.SessionToken = sessionToken
-
-	return v, nil
-}
-
-// BuildRepairPlatformMCPPackagePayload builds the payload for the plugins
-// repairPlatformMCPPackage endpoint from CLI flags.
-func BuildRepairPlatformMCPPackagePayload(pluginsRepairPlatformMCPPackageSessionToken string, pluginsRepairPlatformMCPPackageProjectSlugInput string) (*plugins.RepairPlatformMCPPackagePayload, error) {
-	var sessionToken *string
-	{
-		if pluginsRepairPlatformMCPPackageSessionToken != "" {
-			sessionToken = &pluginsRepairPlatformMCPPackageSessionToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if pluginsRepairPlatformMCPPackageProjectSlugInput != "" {
-			projectSlugInput = &pluginsRepairPlatformMCPPackageProjectSlugInput
-		}
-	}
-	v := &plugins.RepairPlatformMCPPackagePayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -660,7 +662,7 @@ func BuildUpdateMarketplaceSettingsPayload(pluginsUpdateMarketplaceSettingsBody 
 	{
 		err = json.Unmarshal([]byte(pluginsUpdateMarketplaceSettingsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"marketplace_name\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"marketplace_name\": \"abc123\",\n      \"observability_enabled\": false\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -676,7 +678,8 @@ func BuildUpdateMarketplaceSettingsPayload(pluginsUpdateMarketplaceSettingsBody 
 		}
 	}
 	v := &plugins.UpdateMarketplaceSettingsPayload{
-		MarketplaceName: body.MarketplaceName,
+		MarketplaceName:      body.MarketplaceName,
+		ObservabilityEnabled: body.ObservabilityEnabled,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

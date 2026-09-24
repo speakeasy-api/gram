@@ -2,10 +2,12 @@ package usersessions_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -16,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -178,11 +181,12 @@ func TestListUserSessionsReturnsUpstreamsForOrgLevelClient(t *testing.T) {
 
 // seedUpstream builds one outbound leg: the remote issuer, a client registered
 // against it, the attachment binding that client to the user-session issuer,
-// and the session Gram holds for the subject.
+// and the session Gram holds for the subject. Returns the client id so a test
+// can bind the same client to additional user-session issuers.
 // clientProject is a NullUUID because the client and issuer it registers can be
 // project-scoped, organization-level, or global; the invalid case is what the
 // org-level coverage below leans on.
-func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientProject uuid.NullUUID, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, slug string) {
+func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientProject uuid.NullUUID, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, slug string) uuid.UUID {
 	t.Helper()
 
 	q := remotesessions_repo.New(conn)
@@ -249,4 +253,436 @@ func seedUpstream(t *testing.T, ctx context.Context, conn *pgxpool.Pool, clientP
 		AutoRefresh:            false,
 	})
 	require.NoError(t, err)
+
+	return client.ID
+}
+
+// A remote_session is one shared upstream grant per (subject, client); its
+// user_session_issuer_id records only which surface minted it. A session under
+// a sibling issuer bound to the same client must therefore report the same
+// upstream, keyed by the sibling (requesting) issuer.
+func TestListUserSessionsReturnsUpstreamsMintedThroughSiblingIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	provenance, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "shared-upstream-provenance",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+	sibling, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "shared-upstream-sibling",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	provenanceID := uuid.MustParse(provenance.ID)
+	siblingID := uuid.MustParse(sibling.ID)
+	subject := urn.NewUserSubject("shared-upstream-subject")
+
+	// The page shows only the sibling's session; the credential was minted
+	// through the provenance issuer.
+	_, err = seedUserSession(t, ctx, ti.conn, siblingID, subject)
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), provenanceID, subject, "mcp.shared.example")
+	require.NoError(t, remotesessions_repo.New(ti.conn).AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   siblingID,
+	}))
+
+	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Status:              nil,
+		ClientID:            nil,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Items, 1)
+	require.Len(t, res.Items[0].Upstreams, 1,
+		"a credential minted through a sibling issuer on the same client belongs to this session's upstreams")
+	require.Equal(t, "mcp.shared.example", res.Items[0].Upstreams[0].IssuerSlug)
+}
+
+// A client detached from the issuer that minted the grant keeps live upstream
+// tokens, and revoking the Gram session still destroys them. The page has to
+// keep listing them or an admin reads an empty page as "nothing to revoke".
+func TestListUserSessionsReturnsUpstreamsOnDetachedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+		SessionToken:         nil,
+		ApikeyToken:          nil,
+		ProjectSlugInput:     nil,
+		Slug:                 "detached-upstream-issuer",
+		AuthnChallengeMode:   "chain",
+		SessionDurationHours: 24,
+	})
+	require.NoError(t, err)
+
+	issuerID := uuid.MustParse(issuer.ID)
+	subject := urn.NewUserSubject("detached-upstream-subject")
+	_, err = seedUserSession(t, ctx, ti.conn, issuerID, subject)
+	require.NoError(t, err)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), issuerID, subject, "mcp.detached.example")
+	detached, err := remotesessions_repo.New(ti.conn).DetachRemoteSessionClientFromUserSessionIssuer(ctx, remotesessions_repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+		RemoteSessionClientID: clientID,
+		UserSessionIssuerID:   issuerID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), detached)
+
+	res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{
+		SessionToken:        nil,
+		ApikeyToken:         nil,
+		ProjectSlugInput:    nil,
+		SubjectUrn:          nil,
+		UserSessionIssuerID: nil,
+		Status:              nil,
+		ClientID:            nil,
+		Cursor:              nil,
+		Limit:               nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, res.Items, 1)
+	require.Len(t, res.Items[0].Upstreams, 1,
+		"a grant minted through this issuer stays listed after its client is detached")
+	require.Equal(t, "mcp.detached.example", res.Items[0].Upstreams[0].IssuerSlug)
+}
+
+// An agent's upstream is the exact, still-authorized owner attachment, not
+// an independently owned token or an implicit inheritance from its owner.
+func TestListUserSessionsAgentAttachmentUpstreams(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name           string
+		mutation       func(context.Context, *testrepo.Queries, attachmentFixtureArgs) (int64, error)
+		wantAttached   bool
+		wantConstraint string
+		hideSessions   bool
+		humanRemains   bool
+	}{
+		{name: "existing owner remote source", wantAttached: true, humanRemains: true},
+		{name: "expired access remains refreshable", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentExpiredAccessRemainsRefreshableFixture(ctx, args.Source)
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, wantAttached: true, humanRemains: true},
+		{name: "detached binding", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentDetachedBindingFixture(ctx, testrepo.MutateAttachmentDetachedBindingFixtureParams{Project: args.Project, Agent: args.Agent})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, humanRemains: true},
+		{name: "revoked binding", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentRevokedBindingFixture(ctx, testrepo.MutateAttachmentRevokedBindingFixtureParams{Project: args.Project, Agent: args.Agent})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, humanRemains: true},
+		{name: "superseded grant generation", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentSupersededGrantGenerationFixture(ctx, args.Source)
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, humanRemains: true},
+		{name: "deleted source", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentDeletedSourceFixture(ctx, args.Source)
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}},
+		{name: "suspended agent", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentSuspendedAgentFixture(ctx, testrepo.MutateAttachmentSuspendedAgentFixtureParams{Agent: args.Agent, Organization: args.Organization})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, humanRemains: true},
+		{name: "revoked agent", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentRevokedAgentFixture(ctx, testrepo.MutateAttachmentRevokedAgentFixtureParams{Agent: args.Agent, Organization: args.Organization})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, humanRemains: true},
+		{name: "deleted agent", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentDeletedAgentFixture(ctx, testrepo.MutateAttachmentDeletedAgentFixtureParams{Agent: args.Agent, Organization: args.Organization})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, humanRemains: true},
+		{name: "owner reassignment required", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentOwnerReassignmentRequiredFixture(ctx, testrepo.MutateAttachmentOwnerReassignmentRequiredFixtureParams{Agent: args.Agent, Organization: args.Organization})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, humanRemains: true},
+		{name: "deleted owner", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentDeletedOwnerFixture(ctx, args.Owner)
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, humanRemains: true},
+		{name: "inactive owner membership", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentInactiveOwnerMembershipFixture(ctx, testrepo.MutateAttachmentInactiveOwnerMembershipFixtureParams{Owner: pgtype.Text{String: args.Owner, Valid: true}, Organization: args.Organization})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, humanRemains: true},
+		{name: "client detached from requesting issuer", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentClientDetachedFromRequestingIssuerFixture(ctx, testrepo.MutateAttachmentClientDetachedFromRequestingIssuerFixtureParams{Client: args.Client, Requesting: args.Requesting})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}},
+		{name: "deleted client", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentDeletedClientFixture(ctx, testrepo.MutateAttachmentDeletedClientFixtureParams{Client: args.Client, Project: uuid.NullUUID{UUID: args.Project, Valid: true}})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}},
+		{name: "deleted remote issuer", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentDeletedRemoteIssuerFixture(ctx, testrepo.MutateAttachmentDeletedRemoteIssuerFixtureParams{Client: args.Client, Project: uuid.NullUUID{UUID: args.Project, Valid: true}})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}},
+		{name: "deleted provenance issuer", hideSessions: true, mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentDeletedProvenanceIssuerFixture(ctx, testrepo.MutateAttachmentDeletedProvenanceIssuerFixtureParams{Provenance: args.Provenance, Project: uuid.NullUUID{UUID: args.Project, Valid: true}})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}},
+		{name: "foreign project binding", wantConstraint: "principal_remote_session_bindings_client_scope_check", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentForeignProjectBindingFixture(ctx, testrepo.MutateAttachmentForeignProjectBindingFixtureParams{ForeignProject: args.ForeignProject, Project: args.Project, Agent: args.Agent})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, humanRemains: true},
+		{name: "foreign project client", wantConstraint: "principal_remote_session_bindings_client_scope_fkey", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentForeignProjectClientFixture(ctx, testrepo.MutateAttachmentForeignProjectClientFixtureParams{ForeignProject: uuid.NullUUID{UUID: args.ForeignProject, Valid: true}, Client: args.Client, Project: uuid.NullUUID{UUID: args.Project, Valid: true}})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}},
+		{name: "foreign project remote issuer", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentForeignProjectRemoteIssuerFixture(ctx, testrepo.MutateAttachmentForeignProjectRemoteIssuerFixtureParams{ForeignProject: uuid.NullUUID{UUID: args.ForeignProject, Valid: true}, Client: args.Client, Project: uuid.NullUUID{UUID: args.Project, Valid: true}})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}},
+		// Issuer scope changes cascade into the binding, so the tenant check
+		// rejects a provenance issuer that moved to a foreign project or organization.
+		{name: "foreign project provenance", wantConstraint: "principal_remote_session_bindings_issuer_scope_check", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentForeignProjectProvenanceFixture(ctx, testrepo.MutateAttachmentForeignProjectProvenanceFixtureParams{ForeignProject: uuid.NullUUID{UUID: args.ForeignProject, Valid: true}, Provenance: args.Provenance, Project: uuid.NullUUID{UUID: args.Project, Valid: true}})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}},
+		{name: "foreign organization client", wantConstraint: "principal_remote_session_bindings_client_scope_fkey", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentForeignOrganizationClientFixture(ctx, testrepo.MutateAttachmentForeignOrganizationClientFixtureParams{Client: args.Client, Project: uuid.NullUUID{UUID: args.Project, Valid: true}})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}},
+		{name: "foreign organization provenance", wantConstraint: "principal_remote_session_bindings_issuer_scope_check", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentForeignOrganizationProvenanceFixture(ctx, testrepo.MutateAttachmentForeignOrganizationProvenanceFixtureParams{Provenance: args.Provenance, Project: uuid.NullUUID{UUID: args.Project, Valid: true}})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}},
+		{name: "different source subject", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentDifferentSourceSubjectFixture(ctx, args.Source)
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}},
+		{name: "direct agent source does not bypass attachment", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentDirectAgentSourceDoesNotBypassAttachmentFixture(ctx, testrepo.MutateAttachmentDirectAgentSourceDoesNotBypassAttachmentFixtureParams{AgentSubject: urn.NewAgentSubject(args.Agent), Source: args.Source})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}},
+		{name: "different attaching subject", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentDifferentAttachingSubjectFixture(ctx, testrepo.MutateAttachmentDifferentAttachingSubjectFixtureParams{Project: args.Project, Agent: args.Agent})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, humanRemains: true},
+		{name: "different source client", wantConstraint: "principal_remote_session_bindings_session_fkey", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentDifferentSourceClientFixture(ctx, testrepo.MutateAttachmentDifferentSourceClientFixtureParams{OtherClient: args.OtherClient, Project: args.Project, Agent: args.Agent})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, humanRemains: true},
+		{name: "different requesting issuer", wantConstraint: "principal_remote_session_bindings_session_fkey", mutation: func(ctx context.Context, q *testrepo.Queries, args attachmentFixtureArgs) (int64, error) {
+			rows, err := q.MutateAttachmentDifferentRequestingIssuerFixture(ctx, testrepo.MutateAttachmentDifferentRequestingIssuerFixtureParams{Provenance: args.OtherIssuer, Project: args.Project, Agent: args.Agent})
+			if err != nil {
+				return rows, fmt.Errorf("mutate attachment fixture: %w", err)
+			}
+			return rows, nil
+		}, humanRemains: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			auth, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			require.NotNil(t, auth.ProjectID)
+			projectID := *auth.ProjectID
+			createIssuer := func(slug string) uuid.UUID {
+				issuer, err := ti.service.CreateUserSessionIssuer(ctx, &issuersgen.CreateUserSessionIssuerPayload{
+					Slug: slug, AuthnChallengeMode: "chain", SessionDurationHours: 24,
+				})
+				require.NoError(t, err)
+				return uuid.MustParse(issuer.ID)
+			}
+			requesting := createIssuer("attachment-requesting")
+			provenance := requesting
+			otherIssuer := createIssuer("attachment-other")
+			owner := urn.NewUserSubject(auth.UserID)
+			agentID := uuid.New()
+			agent := urn.NewAgentSubject(agentID)
+			unattached := urn.NewAgentSubject(uuid.New())
+			_, err := testrepo.New(ti.conn).CreateAttachmentUpstreamAgentFixture(ctx, testrepo.CreateAttachmentUpstreamAgentFixtureParams{ID: agentID, OrganizationID: auth.ActiveOrganizationID, OwnerUserID: auth.UserID})
+			require.NoError(t, err)
+			for _, subject := range []urn.SessionSubject{owner, agent, unattached} {
+				_, err := seedUserSession(t, ctx, ti.conn, requesting, subject)
+				require.NoError(t, err)
+			}
+			clientID := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(projectID), provenance, owner, "attachment.example.com")
+			q := remotesessions_repo.New(ti.conn)
+			require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+				RemoteSessionClientID: clientID, UserSessionIssuerID: otherIssuer,
+			}))
+			var sourceID uuid.UUID
+			sourceID, err = testrepo.New(ti.conn).GetAttachmentSourceIDFixture(ctx, testrepo.GetAttachmentSourceIDFixtureParams{RemoteSessionClientID: clientID, SubjectUrn: owner})
+			require.NoError(t, err)
+			// Bind both clients so mismatches exercise the exact source-client guard.
+			otherClient := seedUpstream(t, ctx, ti.conn, conv.ToNullUUID(projectID), provenance, urn.NewUserSubject("other-source"), "other-attachment.example.com")
+			require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessions_repo.AttachRemoteSessionClientToUserSessionIssuerParams{
+				RemoteSessionClientID: otherClient, UserSessionIssuerID: otherIssuer,
+			}))
+			foreignProject := uuid.New()
+			_, err = testrepo.New(ti.conn).CreateAttachmentForeignProjectFixture(ctx, testrepo.CreateAttachmentForeignProjectFixtureParams{ID: foreignProject, OrganizationID: auth.ActiveOrganizationID})
+			require.NoError(t, err)
+			_, err = testrepo.New(ti.conn).CreateAttachmentForeignOrganizationFixture(ctx)
+			require.NoError(t, err)
+			args := attachmentFixtureArgs{
+				Project: projectID, Organization: auth.ActiveOrganizationID,
+				Agent: agentID, AgentSubject: agent.String(), Owner: auth.UserID,
+				Requesting: requesting, Provenance: provenance, Client: clientID, OtherIssuer: otherIssuer,
+				Source: sourceID, OtherClient: otherClient, ForeignProject: foreignProject,
+			}
+			list := func() map[string][]*types.UserSessionUpstream {
+				res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{})
+				require.NoError(t, err)
+				require.Len(t, res.Items, 3)
+				bySubject := make(map[string][]*types.UserSessionUpstream, len(res.Items))
+				for _, item := range res.Items {
+					bySubject[item.SubjectUrn] = item.Upstreams
+				}
+				require.Contains(t, bySubject, agent.String(), "attachment projection must retain the agent subject")
+				require.Empty(t, bySubject[unattached.String()], "a sibling agent never inherits another agent's attachment")
+				return bySubject
+			}
+			before := list()
+			require.Len(t, before[owner.String()], 1)
+			require.Empty(t, before[agent.String()], "owner credentials alone do not attach an upstream")
+			_, err = testrepo.New(ti.conn).InsertAttachmentFromSourceFixture(ctx, testrepo.InsertAttachmentFromSourceFixtureParams{Project: args.Project, Organization: args.Organization, Agent: args.Agent, Requesting: args.Requesting, Client: args.Client, Source: args.Source})
+			require.NoError(t, err)
+			attached := list()
+			require.Len(t, attached[owner.String()], 1)
+			require.Len(t, attached[agent.String()], 1)
+			require.Equal(t, attached[owner.String()], attached[agent.String()], "human and agent reference the same existing upstream")
+			if tc.mutation != nil {
+				_, err = tc.mutation(ctx, testrepo.New(ti.conn), args)
+				if tc.wantConstraint != "" {
+					// Tenant and exact-session constraints reject invalid state;
+					// the existing attachment must remain intact after rejection.
+					var pgErr *pgconn.PgError
+					require.ErrorAs(t, err, &pgErr)
+					require.Equal(t, tc.wantConstraint, pgErr.ConstraintName)
+					require.Equal(t, attached, list())
+					return
+				}
+				require.NoError(t, err)
+			}
+			if tc.hideSessions {
+				// The exact source issuer is also the requesting issuer. Deleting
+				// it hides its user sessions, not just their attached upstreams.
+				res, err := ti.service.ListUserSessions(ctx, &gen.ListUserSessionsPayload{})
+				require.NoError(t, err)
+				require.Empty(t, res.Items)
+				return
+			}
+			after := list()
+			if tc.wantAttached {
+				require.Len(t, after[agent.String()], 1)
+				require.Equal(t, "attachment.example.com", after[agent.String()][0].IssuerSlug)
+				require.True(t, after[agent.String()][0].HasRefreshToken)
+			} else {
+				require.Empty(t, after[agent.String()], "unavailable attachments must not fall back to the owner's grant")
+			}
+			if tc.humanRemains {
+				require.Len(t, after[owner.String()], 1, "attachment lifecycle must not revoke the owner's upstream")
+			}
+		})
+	}
+}
+
+// attachmentFixtureArgs identifies the isolated rows owned by each projection case.
+type attachmentFixtureArgs struct {
+	Project, Agent, Requesting, Provenance, Client, Source, OtherClient, ForeignProject, OtherIssuer uuid.UUID
+	Organization, AgentSubject, Owner                                                                string
 }

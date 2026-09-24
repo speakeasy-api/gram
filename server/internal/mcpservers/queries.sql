@@ -11,7 +11,8 @@ INSERT INTO mcp_servers (
     toolset_id,
     unproxied_mcp_server_id,
     tool_variations_group_id,
-    visibility
+    visibility,
+    network_access_mode
 )
 VALUES (
     @id,
@@ -25,7 +26,8 @@ VALUES (
     @toolset_id,
     @unproxied_mcp_server_id,
     @tool_variations_group_id,
-    @visibility
+    @visibility,
+    sqlc.narg('network_access_mode')
 )
 RETURNING *;
 
@@ -33,6 +35,14 @@ RETURNING *;
 SELECT *
 FROM mcp_servers
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: GetMCPServerByToolsetID :one
+-- Deterministic pick until a partial unique index enforces one wrapper per toolset.
+SELECT *
+FROM mcp_servers
+WHERE toolset_id = @toolset_id::uuid AND project_id = @project_id AND deleted IS FALSE
+ORDER BY created_at, id
+LIMIT 1;
 
 -- name: LockMCPServerByIDAndProjectID :one
 SELECT *
@@ -59,6 +69,42 @@ JOIN projects AS p ON p.id = m.project_id
 WHERE m.id = @id
   AND p.organization_id = @organization_id
   AND m.deleted IS FALSE;
+
+-- name: LockLiveMCPServersInOrganization :many
+SELECT m.id
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE m.id = ANY(@ids::uuid[])
+  AND p.organization_id = @organization_id
+  AND m.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY m.id
+FOR SHARE OF m, p;
+
+-- name: ListLiveMCPServerIDsInOrganization :many
+SELECT m.id
+FROM mcp_servers AS m
+JOIN projects AS p ON p.id = m.project_id
+WHERE m.id = ANY(@ids::uuid[])
+  AND p.organization_id = @organization_id
+  AND m.deleted IS FALSE
+  AND p.deleted IS FALSE
+ORDER BY m.id;
+
+-- name: HasLiveMCPServerInOrganization :one
+-- Reports whether an MCP server is live and owned by the organization:
+-- the server is not deleted and its project is not deleted. Used by
+-- kill-switch resource validation, where a server under a soft-deleted
+-- project must stop counting as a current organization resource.
+SELECT EXISTS(
+  SELECT 1
+  FROM mcp_servers AS m
+  JOIN projects AS p ON p.id = m.project_id
+  WHERE m.id = @id
+    AND p.organization_id = @organization_id
+    AND m.deleted IS FALSE
+    AND p.deleted IS FALSE
+) AS exists;
 
 -- name: GetMCPServerBySlug :one
 SELECT *
@@ -89,7 +135,7 @@ WHERE p.organization_id = @organization_id
 ORDER BY m.created_at DESC;
 
 -- name: ListMCPServersByProjectIDLimited :many
-SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, tool_variations_group_id, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 FROM mcp_servers
 WHERE project_id = @project_id
   AND deleted IS FALSE
@@ -145,6 +191,10 @@ SET
     unproxied_mcp_server_id = @unproxied_mcp_server_id,
     tool_variations_group_id = @tool_variations_group_id,
     visibility = @visibility,
+    network_access_mode = CASE
+        WHEN @network_access_mode_set::boolean THEN sqlc.narg('network_access_mode')
+        ELSE network_access_mode
+    END,
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
@@ -316,3 +366,112 @@ WHERE mcp_server_id = @mcp_server_id
   AND tool_name = @tool_name
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: ResyncMCPServerRemoteSessionIssuers :execrows
+-- Recomputes mcp_servers.remote_session_issuer_id from the live client
+-- bindings on each named user session issuer. Exactly one distinct remote
+-- issuer stamps it; none or several leave it NULL and readers fail closed.
+--
+-- Best effort: runs post-commit outside the mutating transaction, so it takes
+-- no advisory lock and a raced run merely leaves a stale value, which the
+-- consent-time lookup degrades on and the next run heals.
+--
+-- Clients and issuers are only ever soft-deleted, so `deleted IS FALSE` is the
+-- removal signal; the column's ON DELETE SET NULL never fires. The filters
+-- mirror the serve-time credential resolver: the column must never name an
+-- issuer that resolver would refuse.
+--
+-- Tenancy: the ids arrive from an untenanted join table, so the derivation is
+-- pinned to the caller's own project — a foreign id derives no row and writes
+-- nothing — and only that project's servers are written. Organization-level
+-- clients of the caller's organization count toward the derivation, matching
+-- what the attach surface permits.
+WITH resolved AS (
+    SELECT input.user_session_issuer_id,
+           CASE WHEN count(DISTINCT i.id) = 1
+                THEN (array_agg(DISTINCT i.id))[1]
+           END AS remote_session_issuer_id
+    FROM unnest(@user_session_issuer_ids::uuid[]) AS input(user_session_issuer_id)
+    JOIN user_session_issuers AS usi
+      ON usi.id = input.user_session_issuer_id
+     AND (usi.project_id = @project_id::uuid
+          OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+    LEFT JOIN remote_session_client_user_session_issuers AS link
+           ON link.user_session_issuer_id = input.user_session_issuer_id
+    LEFT JOIN remote_session_clients AS c
+           ON c.id = link.remote_session_client_id
+          AND c.deleted IS FALSE
+          AND (c.project_id = @project_id::uuid
+               OR (c.project_id IS NULL AND c.organization_id = @organization_id::text))
+    LEFT JOIN remote_session_issuers AS i
+           ON i.id = c.remote_session_issuer_id
+          AND i.deleted IS FALSE
+    GROUP BY input.user_session_issuer_id
+)
+UPDATE mcp_servers AS s
+SET remote_session_issuer_id = resolved.remote_session_issuer_id,
+    updated_at = clock_timestamp()
+FROM resolved
+WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
+  AND s.project_id = @project_id::uuid
+  -- Belt and suspenders on the caller's org/project pair agreeing.
+  AND EXISTS (SELECT 1
+              FROM projects AS p
+              WHERE p.id = s.project_id
+                AND p.organization_id = @organization_id::text)
+  AND s.deleted IS FALSE
+  AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id;
+
+-- name: DeleteAssistantMCPServersByMCPServer :exec
+DELETE FROM assistant_mcp_servers
+WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
+
+-- name: ListServableMCPServersByOrganizationID :many
+-- Candidate members for a gateway whose membership is derived rather than
+-- stored: an agent gateway has no meta_mcp_server_members rows, so it
+-- enumerates here and lets the caller's own grants do the narrowing.
+--
+-- Organization-wide on purpose. Agent grants are organization-scoped and a
+-- selector's project is optional, so an agent may legitimately reach servers
+-- in several projects; scoping this to one project would serve less than the
+-- agent was granted. The caller's mcp:connect check is what narrows the
+-- result, so enumerating widely here exposes nothing extra.
+--
+-- Filtered exactly as ListServableMetaMCPMembers — disabled servers and
+-- slugless legacy rows are excluded — so a server invisible to the stored
+-- serving path is invisible to a derived one too. Carries the same backend
+-- and dispatch columns that path needs, plus each member's project, since
+-- members no longer share one, and each member's network access mode, which
+-- the caller matches against the request's ingress surface so a private_only
+-- server stays invisible on the public one. Ordered by project then slug: a derived
+-- gateway has no operator-authored order, and slugs are unique only within a
+-- project, so the pair is what makes the listing stable.
+SELECT
+    s.id AS mcp_server_id,
+    s.project_id AS mcp_server_project_id,
+    p.slug AS mcp_server_project_slug,
+    s.name AS mcp_server_name,
+    s.slug AS mcp_server_slug,
+    s.visibility AS mcp_server_visibility,
+    s.network_access_mode AS mcp_server_network_access_mode,
+    s.toolset_id AS mcp_server_toolset_id,
+    s.remote_mcp_server_id AS mcp_server_remote_mcp_server_id,
+    s.tunneled_mcp_server_id AS mcp_server_tunneled_mcp_server_id,
+    s.unproxied_mcp_server_id AS mcp_server_unproxied_mcp_server_id,
+    s.environment_id AS mcp_server_environment_id,
+    s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
+    s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
+FROM mcp_servers s
+JOIN projects p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = s.project_id
+ AND t.deleted IS FALSE
+WHERE p.organization_id = @organization_id
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND s.slug IS NOT NULL
+ORDER BY s.project_id, s.slug;

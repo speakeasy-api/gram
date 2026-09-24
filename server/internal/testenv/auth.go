@@ -50,7 +50,8 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 	fakePylon, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
 
-	fakePosthog := posthog.New(context.Background(), logger, "test-posthog-key", "test-posthog-host", "")
+	// Auth fixtures do not send analytics; avoid starting unused SDK workers.
+	fakePosthog := posthog.New(t.Context(), logger, "", "", "")
 
 	resolver := identity.NewResolver(
 		logger,
@@ -64,6 +65,7 @@ func NewTestManager(t *testing.T, logger *slog.Logger, tracerProvider trace.Trac
 		userRepo.New(db),
 		fakePylon,
 		fakePosthog,
+		nil,
 		suffix,
 	)
 
@@ -100,11 +102,12 @@ func InitAuthContext(t *testing.T, ctx context.Context, conn *pgxpool.Pool, sess
 	// Upsert organization metadata in the database
 	orgQueries := orgRepo.New(conn)
 	_, err = orgQueries.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
-		ID:          mockidp.MockOrgID,
-		Name:        mockidp.MockOrgName,
-		Slug:        mockidp.MockOrgSlug,
-		WorkosID:    pgtype.Text{String: mockidp.MockOrgID, Valid: true},
-		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+		ID:             mockidp.MockOrgID,
+		Name:           mockidp.MockOrgName,
+		Slug:           mockidp.MockOrgSlug,
+		WorkosID:       pgtype.Text{String: mockidp.MockOrgID, Valid: true},
+		Whitelisted:    pgtype.Bool{Bool: false, Valid: false},
+		CreationSource: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
 

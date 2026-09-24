@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -24,7 +25,7 @@ func TestService_redirectSignupError(t *testing.T) {
 		},
 	}
 
-	result, err := svc.redirectSignupError(t.Context(), errors.New("provisioning failed"))
+	result, err := svc.redirectSignupError(t.Context(), nil, errors.New("provisioning failed"))
 	require.NoError(t, err, "signup failures are reported by redirect, not by error")
 	require.Equal(t, "http://localhost:3000/dashboard/sign-up?signin_error=init_error", result.Location)
 	require.Empty(t, result.SessionToken)
@@ -44,7 +45,51 @@ func TestService_redirectSignupError_TrimsTrailingSlash(t *testing.T) {
 		},
 	}
 
-	result, err := svc.redirectSignupError(t.Context(), errors.New("provisioning failed"))
+	result, err := svc.redirectSignupError(t.Context(), nil, errors.New("provisioning failed"))
 	require.NoError(t, err)
 	require.Equal(t, "http://localhost:3000/dashboard/sign-up?signin_error=init_error", result.Location)
+}
+
+// TestService_redirectSignupError_PreservesDestination confirms the retry page
+// keeps the post-login destination that the failed attempt carried through the
+// IDP round trip: /sign-up threads ?redirect= into the next login attempt, so
+// dropping it here would strand a deep-linked signup on the dashboard root.
+func TestService_redirectSignupError_PreservesDestination(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{
+		logger: testenv.NewLogger(t),
+		cfg: AuthConfigurations{
+			SignInRedirectURL: "http://localhost:3000",
+		},
+	}
+
+	state := encodeStateParam("/~/toolsets?tab=all", "nonce")
+	payload := &gen.CallbackPayload{Code: "code", State: &state}
+
+	result, err := svc.redirectSignupError(t.Context(), payload, errors.New("provisioning failed"))
+	require.NoError(t, err)
+	require.Equal(t, "http://localhost:3000/sign-up?signin_error=init_error&redirect=%2F~%2Ftoolsets%3Ftab%3Dall", result.Location)
+}
+
+// TestService_redirectSignupError_DropsForeignDestination confirms an
+// off-origin destination smuggled into the unsigned state param is discarded
+// rather than echoed back into the retry URL.
+func TestService_redirectSignupError_DropsForeignDestination(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{
+		logger: testenv.NewLogger(t),
+		cfg: AuthConfigurations{
+			SignInRedirectURL: "http://localhost:3000",
+		},
+		siteOrigin: parseSiteOrigin("http://localhost:3000"),
+	}
+
+	state := encodeStateParam("https://evil.example/phish", "nonce")
+	payload := &gen.CallbackPayload{Code: "code", State: &state}
+
+	result, err := svc.redirectSignupError(t.Context(), payload, errors.New("provisioning failed"))
+	require.NoError(t, err)
+	require.Equal(t, "http://localhost:3000/sign-up?signin_error=init_error", result.Location)
 }

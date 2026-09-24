@@ -16,12 +16,15 @@ import (
 
 // Endpoints wraps the "aiIntegrations" service endpoints.
 type Endpoints struct {
-	GetConfig          goa.Endpoint
-	UpsertConfig       goa.Endpoint
-	DeleteConfig       goa.Endpoint
-	ListSchedules      goa.Endpoint
-	SetScheduleEnabled goa.Endpoint
-	RetrySchedule      goa.Endpoint
+	GetAnthropicInferenceConfig    goa.Endpoint
+	UpsertAnthropicInferenceConfig goa.Endpoint
+	DeleteAnthropicInferenceConfig goa.Endpoint
+	GetConfig                      goa.Endpoint
+	UpsertConfig                   goa.Endpoint
+	DeleteConfig                   goa.Endpoint
+	ListSchedules                  goa.Endpoint
+	SetScheduleEnabled             goa.Endpoint
+	RetrySchedule                  goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "aiIntegrations" service with
@@ -30,24 +33,137 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetConfig:          NewGetConfigEndpoint(s, a.APIKeyAuth),
-		UpsertConfig:       NewUpsertConfigEndpoint(s, a.APIKeyAuth),
-		DeleteConfig:       NewDeleteConfigEndpoint(s, a.APIKeyAuth),
-		ListSchedules:      NewListSchedulesEndpoint(s, a.APIKeyAuth),
-		SetScheduleEnabled: NewSetScheduleEnabledEndpoint(s, a.APIKeyAuth),
-		RetrySchedule:      NewRetryScheduleEndpoint(s, a.APIKeyAuth),
+		GetAnthropicInferenceConfig:    NewGetAnthropicInferenceConfigEndpoint(s, a.APIKeyAuth),
+		UpsertAnthropicInferenceConfig: NewUpsertAnthropicInferenceConfigEndpoint(s, a.APIKeyAuth),
+		DeleteAnthropicInferenceConfig: NewDeleteAnthropicInferenceConfigEndpoint(s, a.APIKeyAuth),
+		GetConfig:                      NewGetConfigEndpoint(s, a.APIKeyAuth),
+		UpsertConfig:                   NewUpsertConfigEndpoint(s, a.APIKeyAuth),
+		DeleteConfig:                   NewDeleteConfigEndpoint(s, a.APIKeyAuth),
+		ListSchedules:                  NewListSchedulesEndpoint(s, a.APIKeyAuth),
+		SetScheduleEnabled:             NewSetScheduleEnabledEndpoint(s, a.APIKeyAuth),
+		RetrySchedule:                  NewRetryScheduleEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "aiIntegrations" service
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.GetAnthropicInferenceConfig = m(e.GetAnthropicInferenceConfig)
+	e.UpsertAnthropicInferenceConfig = m(e.UpsertAnthropicInferenceConfig)
+	e.DeleteAnthropicInferenceConfig = m(e.DeleteAnthropicInferenceConfig)
 	e.GetConfig = m(e.GetConfig)
 	e.UpsertConfig = m(e.UpsertConfig)
 	e.DeleteConfig = m(e.DeleteConfig)
 	e.ListSchedules = m(e.ListSchedules)
 	e.SetScheduleEnabled = m(e.SetScheduleEnabled)
 	e.RetrySchedule = m(e.RetrySchedule)
+}
+
+// NewGetAnthropicInferenceConfigEndpoint returns an endpoint function that
+// calls the method "getAnthropicInferenceConfig" of service "aiIntegrations".
+func NewGetAnthropicInferenceConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetAnthropicInferenceConfigPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"consumer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetAnthropicInferenceConfig(ctx, p)
+	}
+}
+
+// NewUpsertAnthropicInferenceConfigEndpoint returns an endpoint function that
+// calls the method "upsertAnthropicInferenceConfig" of service
+// "aiIntegrations".
+func NewUpsertAnthropicInferenceConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpsertAnthropicInferenceConfigPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UpsertAnthropicInferenceConfig(ctx, p)
+	}
+}
+
+// NewDeleteAnthropicInferenceConfigEndpoint returns an endpoint function that
+// calls the method "deleteAnthropicInferenceConfig" of service
+// "aiIntegrations".
+func NewDeleteAnthropicInferenceConfigEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteAnthropicInferenceConfigPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DeleteAnthropicInferenceConfig(ctx, p)
+	}
 }
 
 // NewGetConfigEndpoint returns an endpoint function that calls the method

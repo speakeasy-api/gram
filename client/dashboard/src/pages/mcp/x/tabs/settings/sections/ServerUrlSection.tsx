@@ -1,4 +1,11 @@
-import { RequireScope } from "@/components/require-scope";
+import {
+  ExternalLink,
+  Loader2,
+  Plus,
+  SaveIcon,
+  Trash2,
+  XIcon,
+} from "lucide-react";
 import {
   Field,
   FieldDescription,
@@ -11,38 +18,52 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/InputGroup";
-import { Text } from "@/components/ui/Text";
-import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import { useRBAC } from "@/hooks/useRBAC";
 import {
   invalidateRootMcpEndpointQueries,
+  patchMcpEndpointInCache,
   useRootMcpEndpointMutation,
 } from "@/hooks/useRootMcpEndpoint";
-import { useCustomDomains } from "@/hooks/useToolsetUrl";
-import { getServerURL } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
-import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
-import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
-import type { McpServer } from "@gram/client/models/components/mcpserver.js";
-import { useDeleteMcpEndpointMutation } from "@gram/client/react-query/deleteMcpEndpoint.js";
-import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
+import { useEffect, useMemo, useState } from "react";
+import { useSdkClient, useSlugs } from "@/contexts/Sdk";
+
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
+import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
 import { Dialog } from "@/components/ui/Dialog";
-import { Stack } from "@/components/ui/Stack";
-import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, SaveIcon, Trash2, XIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
-import { useMcpEndpointSlugValidation } from "../../../useMcpEndpointSlugValidation";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import {
+  McpServerNetworkAccessMode,
+  type McpServer,
+} from "@gram/client/models/components/mcpserver.js";
+import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
+import { RequireScope } from "@/components/require-scope";
 import { SettingsInlineEmptyState } from "../SettingsInlineEmptyState";
 import { SettingsSection } from "@/components/detail/settings-section";
+import { Stack } from "@/components/ui/Stack";
+import { Text } from "@/components/ui/Text";
+import { getServerURL } from "@/lib/utils";
+import { toast } from "sonner";
+import { useCustomDomains } from "@/hooks/useToolsetUrl";
+import { useDeleteMcpEndpointMutation } from "@gram/client/react-query/deleteMcpEndpoint.js";
+import { useMcpEndpointSlugValidation } from "../../../useMcpEndpointSlugValidation";
+import { useOrgRoutes } from "@/routes";
+import { usePrivateMcpServerUrls } from "@/hooks/usePrivateMcpServerUrls";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useUpdateMcpEndpointMutation } from "@gram/client/react-query/updateMcpEndpoint.js";
 
 const ADDRESS_INPUT_GROUP_CLASSNAME = "";
 const ADDRESS_SLUG_INPUT_CLASSNAME = "font-mono pl-0! font-bold";
 const ADDRESS_RANDOM_SUFFIX_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const ADDRESS_RANDOM_SUFFIX_LENGTH = 5;
 export const MCP_SERVER_URL_SECTION_ID = "server-url";
+
+// The endpoint create/update forms take exactly one backend id; spreading one
+// of these supplies it.
+export type EndpointBackendRef =
+  | { mcpServerId: string }
+  | { metaMcpServerId: string };
 
 function generateAddressSuffix() {
   let suffix = "";
@@ -56,18 +77,32 @@ function generateAddressSuffix() {
 }
 
 export function ServerUrlSection({
-  mcpServer,
+  backend,
   endpoints,
   isLoadingEndpoints,
+  /** What the addresses point at, for copy that reads naturally. */
+  subject = "server",
+  mcpServer,
 }: {
-  mcpServer: McpServer;
+  backend: EndpointBackendRef;
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
+  subject?: "server" | "gateway";
+  mcpServer?: McpServer | MetaMcpServer;
 }): JSX.Element {
   const { domains } = useCustomDomains();
   const orgRoutes = useOrgRoutes();
   const { hasScope } = useRBAC();
   const canManageDomains = hasScope("org:admin");
+  const privateMode =
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
+  const {
+    privateMcpUrls,
+    privateInstallPageUrls,
+    isLoading: isLoadingPrivateUrls,
+    isError: privateUrlsError,
+  } = usePrivateMcpServerUrls(mcpServer, endpoints);
 
   const platformEndpoint = useMemo(
     () => endpoints.find((e) => !e.customDomainId),
@@ -125,9 +160,11 @@ export function ServerUrlSection({
   return (
     <SettingsSection id={MCP_SERVER_URL_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Server URL</SettingsSection.Title>
+        <SettingsSection.Title>
+          {subject === "gateway" ? "Gateway URL" : "Server URL"}
+        </SettingsSection.Title>
         <SettingsSection.Description>
-          The web address MCP clients use to connect to this server.
+          {`The web address MCP clients use to connect to this ${subject}.`}
         </SettingsSection.Description>
       </SettingsSection.Header>
       <SettingsSection.Panel>
@@ -143,28 +180,28 @@ export function ServerUrlSection({
                 <FieldLabel>Hosted Address</FieldLabel>
                 {platformEndpoint ? (
                   <AddressRow
-                    mcpServer={mcpServer}
+                    backend={backend}
                     endpoint={platformEndpoint}
                     isLastEndpoint={endpoints.length === 1}
                   />
                 ) : addingPlatform ? (
                   <NewPlatformAddressRow
-                    mcpServer={mcpServer}
+                    backend={backend}
                     onClose={() => setAddingPlatform(false)}
                   />
                 ) : (
                   <RequireScope scope="mcp:write" level="component">
                     <SettingsInlineEmptyState
                       title="No hosted address"
-                      description="Create the default Speakeasy-hosted URL for this server."
+                      description={`Create the default Speakeasy-hosted URL for this ${subject}.`}
                       actionLabel="Add"
                       onAction={() => setAddingPlatform(true)}
                     />
                   </RequireScope>
                 )}
                 <FieldDescription>
-                  Hosted under a Speakeasy domain. Always available unless you
-                  remove it.
+                  Hosted under a Speakeasy domain. Configured here even when
+                  private-only access stops it from serving clients.
                 </FieldDescription>
               </Field>
 
@@ -176,7 +213,7 @@ export function ServerUrlSection({
                 {customDomainEndpoints.map((endpoint) => (
                   <AddressRow
                     key={endpoint.id}
-                    mcpServer={mcpServer}
+                    backend={backend}
                     endpoint={endpoint}
                     domains={availableDomains}
                     isLastEndpoint={endpoints.length === 1}
@@ -185,7 +222,7 @@ export function ServerUrlSection({
                 ))}
                 {addingCustom && (
                   <NewCustomAddressRow
-                    mcpServer={mcpServer}
+                    backend={backend}
                     domains={availableDomains}
                     onClose={() => setAddingCustom(false)}
                   />
@@ -209,6 +246,61 @@ export function ServerUrlSection({
                     </RequireScope>
                   )}
               </Field>
+
+              {mcpServer &&
+                canManageDomains &&
+                privateMode &&
+                (isLoadingPrivateUrls ||
+                  privateUrlsError ||
+                  privateMcpUrls.length > 0) && (
+                  <Field>
+                    <FieldLabel>Private Address</FieldLabel>
+                    {isLoadingPrivateUrls ? (
+                      <Text muted small>
+                        Loading…
+                      </Text>
+                    ) : privateUrlsError ? (
+                      <Text muted small>
+                        Private address could not be loaded.
+                      </Text>
+                    ) : (
+                      <div className="space-y-2">
+                        {privateMcpUrls.map((url, index) => (
+                          <div
+                            key={url}
+                            className="border-border flex items-center gap-2 border px-3 py-2"
+                          >
+                            <Text className="min-w-0 flex-1 break-all font-mono text-sm">
+                              {url}
+                            </Text>
+                            <CopyButton
+                              text={url}
+                              size="xs"
+                              tooltip="Copy private address"
+                            />
+                            <Button asChild variant="tertiary" size="xs">
+                              <a
+                                href={privateInstallPageUrls[index]}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <ExternalLink aria-hidden="true" />
+                                <span className="sr-only">
+                                  Open private install page
+                                </span>
+                              </a>
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <FieldDescription>
+                      Available from devices connected to the
+                      organization&apos;s tailnet. Open the private install page
+                      to get connection instructions that use this address.
+                    </FieldDescription>
+                  </Field>
+                )}
             </FieldGroup>
           )}
         </SettingsSection.Body>
@@ -227,13 +319,13 @@ export function ServerUrlSection({
 // for the server's last address, which asks for confirmation first since it
 // leaves the server unreachable and unpublishable.
 function AddressRow({
-  mcpServer,
+  backend,
   endpoint,
   domains,
   isLastEndpoint,
   canManageDomainRoot = false,
 }: {
-  mcpServer: McpServer;
+  backend: EndpointBackendRef;
   endpoint: McpEndpoint;
   domains?: CustomDomain[];
   isLastEndpoint: boolean;
@@ -262,7 +354,8 @@ function AddressRow({
 
   const queryClient = useQueryClient();
   const update = useUpdateMcpEndpointMutation({
-    onSuccess: async () => {
+    onSuccess: async (updated) => {
+      patchMcpEndpointInCache(queryClient, updated);
       await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address updated");
     },
@@ -307,7 +400,7 @@ function AddressRow({
       request: {
         updateMcpEndpointForm: {
           id: endpoint.id,
-          mcpServerId: mcpServer.id,
+          ...backend,
           slug: fullSlug,
           customDomainId: endpoint.customDomainId ?? undefined,
         },
@@ -464,8 +557,8 @@ function ConfirmDomainRootDialog({
 }
 
 // Confirmation for removing a server's only address. Without an address the
-// server can't serve traffic and stops being publishable — it can't be added
-// to plugins or collections until a new address is created.
+// server can't serve traffic — it can't be added to plugins until a new
+// address is created.
 function RemoveLastAddressDialog({
   isOpen,
   isLoading,
@@ -485,7 +578,7 @@ function RemoveLastAddressDialog({
           <Dialog.Description>
             This is the last address for this MCP server. Removing it means
             clients can no longer connect, and the server can't be added to
-            plugins or published to collections until you create a new address.
+            plugins until you create a new address.
           </Dialog.Description>
         </Dialog.Header>
         <Dialog.Footer>
@@ -513,10 +606,10 @@ function RemoveLastAddressDialog({
 }
 
 function NewPlatformAddressRow({
-  mcpServer,
+  backend,
   onClose,
 }: {
-  mcpServer: McpServer;
+  backend: EndpointBackendRef;
   onClose: () => void;
 }) {
   const [suffix, setSuffix] = useState(generateAddressSuffix);
@@ -537,7 +630,7 @@ function NewPlatformAddressRow({
     try {
       await client.mcpEndpoints.create({
         createMcpEndpointForm: {
-          mcpServerId: mcpServer.id,
+          ...backend,
           slug: fullSlug,
         },
       });
@@ -608,11 +701,11 @@ function NewPlatformAddressRow({
 }
 
 function NewCustomAddressRow({
-  mcpServer,
+  backend,
   domains,
   onClose,
 }: {
-  mcpServer: McpServer;
+  backend: EndpointBackendRef;
   domains: CustomDomain[];
   onClose: () => void;
 }) {
@@ -634,7 +727,7 @@ function NewCustomAddressRow({
     try {
       await client.mcpEndpoints.create({
         createMcpEndpointForm: {
-          mcpServerId: mcpServer.id,
+          ...backend,
           slug: trimmed,
           customDomainId: domainId,
         },

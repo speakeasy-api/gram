@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -18,6 +19,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	srv "github.com/speakeasy-api/gram/server/gen/http/access/server"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -133,12 +135,31 @@ func (s *Service) ListRoles(ctx context.Context, _ *gen.ListRolesPayload) (*gen.
 		return s.roleMgr.ListRoles(ctx, ac.ActiveOrganizationID)
 	}
 
-	ac, _, err := s.roleOrgContext(ctx)
+	ac, err := s.authContext(ctx)
 	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	checks := []authz.Check{{
+		Scope:        authz.ScopeOrgRead,
+		ResourceKind: "",
+		ResourceID:   ac.ActiveOrganizationID,
+		Dimensions:   nil,
+	}}
+	if ac.ProjectID != nil {
+		checks = append(checks, authz.Check{
+			Scope:        authz.ScopeProjectRead,
+			ResourceKind: "",
+			ResourceID:   ac.ProjectID.String(),
+			Dimensions:   nil,
+		})
+	}
+	if err := s.authz.RequireAny(ctx, checks...); err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	if ac.ProjectID != nil {
+		if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, *ac.ProjectID); err != nil {
+			return nil, err
+		}
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -213,7 +234,7 @@ func (s *Service) UpdateRole(ctx context.Context, payload *gen.UpdateRolePayload
 	if err != nil {
 		return nil, err
 	}
-	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(updated.Role.Slug))
+	trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleSlug(updated.Slug))
 
 	return updated.After, nil
 }
@@ -283,11 +304,19 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeSkillBlockedRead, description: "Store exceptions for skill read access.", resourceType: "skill"},
 		{scope: authz.ScopeSkillWrite, description: "Create and modify skills within the project.", resourceType: "skill"},
 		{scope: authz.ScopeSkillBlockedWrite, description: "Store exceptions for skill write access.", resourceType: "skill"},
+		{scope: authz.ScopePluginWrite, description: "Manage plugin contents and publish plugins within the project, without editing referenced skills or MCP servers.", resourceType: "project"},
+		{scope: authz.ScopePluginBlockedWrite, description: "Store exceptions for plugin write access.", resourceType: "project"},
 		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeChatRead, description: "Read every member's agent session transcripts, pin them, and reveal the secret values flagged in Risk Events. Members can always read and pin their own sessions, no one else's; this grant adds access to everyone else's sessions and to unmasking flagged secrets.", resourceType: "chat"},
-		{scope: authz.ScopeChatWrite, description: "Rename, delete, and submit feedback on every member's agent sessions. Members can always do this to their own sessions; this grant adds it for everyone else's. Separate from chat:read so a session reviewer can read and pin transcripts without being able to delete them.", resourceType: "chat"},
+		{scope: authz.ScopeChatRead, description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.", resourceType: "chat"},
+		{scope: authz.ScopeChatWrite, description: "Rename, delete, and give feedback on other members' agent sessions. Everyone keeps their own.", resourceType: "chat"},
+		{scope: authz.ScopeAgentRead, description: "View agents.", resourceType: "agent"},
+		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
+		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
+		{scope: authz.ScopeAgentTransfer, description: "Transfer agent ownership.", resourceType: "agent"},
+		{scope: authz.ScopeOrgDeviceAgentSync, description: "Let an agent's device agent sync the plugins assigned to it.", resourceType: "org"},
+		{scope: authz.ScopeOrgHooksIngest, description: "Let an agent send AI-tool hook events and telemetry.", resourceType: "org"},
 	}
 	result := make([]*gen.ScopeDefinition, 0, len(scopes))
 	for _, scope := range scopes {
@@ -314,17 +343,25 @@ func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 		visibility = authz.ScopeVisibilityInternal
 	}
 
+	// A role may hold scopes its agent members cannot. Agent policy is filtered
+	// against the runtime registry every time it is loaded, so those scopes are
+	// dropped rather than granted; reporting eligibility here lets the role
+	// editor say so instead of leaving the difference invisible.
+	agentEligible := runtimepolicy.IsRuntimeScopeSafe(runtimepolicy.CurrentRuntimeScopeRegistryVersion, input.scope)
+
 	return &gen.ScopeDefinition{
 		Slug:           string(input.scope),
 		Description:    input.description,
 		ResourceType:   input.resourceType,
 		Visibility:     visibility,
+		AgentEligible:  agentEligible,
 		ExclusionScope: exclusionScope,
 	}
 }
 
-// ListMembers follows the original access API contract by returning WorkOS user
-// identifiers while decorating them with the role information the UI needs.
+// ListMembers returns the active organization's members. Organization readers
+// use it for access management; project readers use the same roster for the
+// Employee Enrollment surface.
 func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*gen.ListMembersResult, error) {
 	// Impersonated orgs without a WorkOS link (e.g. the demo org) can't pass
 	// roleOrgContext, but the listing itself is pure Postgres — serve it.
@@ -340,12 +377,31 @@ func (s *Service) ListMembers(ctx context.Context, _ *gen.ListMembersPayload) (*
 		return s.roleMgr.ListMembers(ctx, ac.ActiveOrganizationID)
 	}
 
-	ac, _, err := s.roleOrgContext(ctx)
+	ac, err := s.authContext(ctx)
 	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	checks := []authz.Check{{
+		Scope:        authz.ScopeOrgRead,
+		ResourceKind: "",
+		ResourceID:   ac.ActiveOrganizationID,
+		Dimensions:   nil,
+	}}
+	if ac.ProjectID != nil {
+		checks = append(checks, authz.Check{
+			Scope:        authz.ScopeProjectRead,
+			ResourceKind: "",
+			ResourceID:   ac.ProjectID.String(),
+			Dimensions:   nil,
+		})
+	}
+	if err := s.authz.RequireAny(ctx, checks...); err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
-		return nil, err
+	if ac.ProjectID != nil {
+		if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, *ac.ProjectID); err != nil {
+			return nil, err
+		}
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
 		attr.OrganizationID(ac.ActiveOrganizationID),
@@ -628,11 +684,18 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeSkillRead), Selectors: nil},
 		{Scope: string(authz.ScopeSkillWrite), Selectors: nil},
+		{Scope: string(authz.ScopePluginWrite), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
 		{Scope: string(authz.ScopeChatRead), Selectors: nil},
 		{Scope: string(authz.ScopeChatWrite), Selectors: nil},
+		{Scope: string(authz.ScopeAgentRead), Selectors: nil},
+		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
+		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
+		{Scope: string(authz.ScopeAgentTransfer), Selectors: nil},
+		{Scope: string(authz.ScopeOrgDeviceAgentSync), Selectors: nil},
+		{Scope: string(authz.ScopeOrgHooksIngest), Selectors: nil},
 	}
 }
 
@@ -774,6 +837,14 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 		return nil, err
 	}
 
+	// The window is a filter, not a required frame: a caller that sends neither
+	// bound still gets the whole history, which is what every existing caller
+	// of this endpoint expects.
+	from, to, err := conv.ParseOptionalTimeWindow(payload.From, payload.To)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, s.logger)
+	}
+
 	filters := chrepo.ChallengeListFilters{
 		ChallengeFilters: chrepo.ChallengeFilters{
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -783,6 +854,8 @@ func (s *Service) ListChallenges(ctx context.Context, payload *gen.ListChallenge
 			Scope:          payload.Scope,
 			MemberUserIDs:  memberIDs,
 		},
+		From:           from,
+		To:             to,
 		Limit:          uint64(payload.Limit),  //nolint:gosec // Goa validates 1..200
 		Offset:         uint64(payload.Offset), //nolint:gosec // Goa validates >= 0
 		SkipPagination: skipPagination,
@@ -893,6 +966,7 @@ func (s *Service) buildChallengeResult(ctx context.Context, authCtx *contextvalu
 			pProjectID      *string
 			pResourceKind   *string
 			pResourceID     *string
+			selector        map[string]string
 			pUserEmail      *string
 			pPhotoURL       *string
 			pResolvedAt     *string
@@ -909,6 +983,12 @@ func (s *Service) buildChallengeResult(ctx context.Context, authCtx *contextvalu
 		}
 		if c.ResourceID != "" {
 			pResourceID = &c.ResourceID
+		}
+		if c.Selector != "" {
+			parsed, err := authz.SelectorFromRow([]byte(c.Selector))
+			if err == nil {
+				selector = map[string]string(parsed)
+			}
 		}
 
 		// Enrich with user data.
@@ -949,6 +1029,7 @@ func (s *Service) buildChallengeResult(ctx context.Context, authCtx *contextvalu
 			Scope:               c.Scope,
 			ResourceKind:        pResourceKind,
 			ResourceID:          pResourceID,
+			Selector:            selector,
 			RoleSlugs:           roleSlugs,
 			EvaluatedGrantCount: int(c.EvaluatedGrantCount),
 			MatchedGrantCount:   int(c.MatchedGrantCount), //nolint:gosec // small number
@@ -1158,19 +1239,19 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 		attr.UserID(authCtx.UserID),
 	)
 
-	if len(payload.ChallengeIds) == 0 {
-		return nil, oops.E(oops.CodeBadRequest, nil, "challenge_ids must not be empty").LogError(ctx, s.logger)
+	challengeIDs, err := uniqueChallengeIDs(payload.ChallengeIds)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "challenge_ids must contain distinct, non-empty IDs").LogError(ctx, s.logger)
 	}
-
-	// Validate: role_assigned requires role_slug.
 	if payload.ResolutionType == "role_assigned" && (payload.RoleSlug == nil || *payload.RoleSlug == "") {
 		return nil, oops.E(oops.CodeBadRequest, nil, "role_slug is required when resolution_type is role_assigned").LogError(ctx, s.logger)
+	}
+	if payload.ResolutionType == "role_assigned" && (payload.RoleAssignmentConfirmed == nil || !*payload.RoleAssignmentConfirmed) {
+		return nil, oops.E(oops.CodeBadRequest, nil, "role_assignment_confirmed must be true because assigning a role grants all of its permissions").LogError(ctx, s.logger)
 	}
 	if payload.ResolutionType == "dismissed" && payload.RoleSlug != nil && *payload.RoleSlug != "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "role_slug must be empty when resolution_type is dismissed").LogError(ctx, s.logger)
 	}
-
-	resolvedBy := fmt.Sprintf("user:%s", authCtx.UserID)
 
 	resourceKind := ""
 	if payload.ResourceKind != nil {
@@ -1186,20 +1267,68 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	queries := repo.New(dbtx)
+	if err := queries.LockChallengeResolutions(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock challenge resolutions").LogError(ctx, s.logger)
+	}
 
-	rows, err := repo.New(dbtx).InsertChallengeResolutions(ctx, repo.InsertChallengeResolutionsParams{
+	existing, err := queries.ListChallengeResolutions(ctx, repo.ListChallengeResolutionsParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
-		ChallengeIds:   payload.ChallengeIds,
+		ChallengeIds:   challengeIDs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list challenge resolutions").LogError(ctx, s.logger)
+	}
+	resolved := make(map[string]struct{}, len(existing))
+	for _, row := range existing {
+		resolved[row.ChallengeID] = struct{}{}
+	}
+	unresolved := make([]string, 0, len(challengeIDs)-len(resolved))
+	for _, challengeID := range challengeIDs {
+		if _, ok := resolved[challengeID]; !ok {
+			unresolved = append(unresolved, challengeID)
+		}
+	}
+	if len(unresolved) == 0 {
+		if err := dbtx.Commit(ctx); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "commit challenge resolution replay").LogError(ctx, s.logger)
+		}
+		return &gen.ResolveChallengesResult{Resolutions: nil}, nil
+	}
+	if len(unresolved) != len(challengeIDs) {
+		return nil, oops.E(oops.CodeConflict, nil, "some challenges were already resolved; refresh and try again").LogError(ctx, s.logger)
+	}
+
+	var (
+		roleSlug       *string
+		reconciliation MemberRoleReconciliation
+	)
+	if payload.ResolutionType == "role_assigned" {
+		assignedSlug, pending, err := s.assignChallengeRole(ctx, dbtx, authCtx, payload, unresolved, resourceKind, resourceID)
+		if err != nil {
+			return nil, err
+		}
+		roleSlug = &assignedSlug
+		reconciliation = pending
+	}
+
+	resolvedBy := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID).String()
+	rows, err := queries.InsertChallengeResolutions(ctx, repo.InsertChallengeResolutionsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ChallengeIds:   unresolved,
 		PrincipalUrn:   payload.PrincipalUrn,
 		Scope:          payload.Scope,
 		ResourceKind:   resourceKind,
 		ResourceID:     resourceID,
 		ResolutionType: payload.ResolutionType,
-		RoleSlug:       conv.PtrToPGText(payload.RoleSlug),
+		RoleSlug:       conv.PtrToPGText(roleSlug),
 		ResolvedBy:     resolvedBy,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "insert challenge resolutions").LogError(ctx, s.logger)
+	}
+	if len(rows) != len(unresolved) {
+		return nil, oops.E(oops.CodeConflict, nil, "one or more challenges were resolved concurrently").LogError(ctx, s.logger)
 	}
 
 	resolutions := make([]*gen.ChallengeResolution, 0, len(rows))
@@ -1226,7 +1355,7 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 			PrincipalURN:     row.PrincipalUrn,
 			Scope:            row.Scope,
 			ResolutionType:   row.ResolutionType,
-			RoleSlug:         payload.RoleSlug,
+			RoleSlug:         roleSlug,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "log access challenge resolve").LogError(ctx, s.logger)
 		}
@@ -1235,8 +1364,153 @@ func (s *Service) ResolveChallenge(ctx context.Context, payload *gen.ResolveChal
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, s.logger)
 	}
+	if payload.ResolutionType == "role_assigned" {
+		s.roleMgr.ReconcileMemberRoles(ctx, reconciliation)
+	}
 
 	return &gen.ResolveChallengesResult{Resolutions: resolutions}, nil
+}
+
+func uniqueChallengeIDs(input []string) ([]string, error) {
+	if len(input) == 0 {
+		return nil, errors.New("empty challenge IDs")
+	}
+	result := make([]string, 0, len(input))
+	seen := make(map[string]struct{}, len(input))
+	for _, challengeID := range input {
+		challengeID = strings.TrimSpace(challengeID)
+		if challengeID == "" {
+			return nil, errors.New("empty challenge ID")
+		}
+		if _, ok := seen[challengeID]; ok {
+			return nil, errors.New("duplicate challenge ID")
+		}
+		seen[challengeID] = struct{}{}
+		result = append(result, challengeID)
+	}
+	return result, nil
+}
+
+func (s *Service) assignChallengeRole(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, payload *gen.ResolveChallengePayload, challengeIDs []string, resourceKind, resourceID string) (string, MemberRoleReconciliation, error) {
+	principal, err := urn.ParsePrincipal(payload.PrincipalUrn)
+	if err != nil || principal.Type != urn.PrincipalTypeUser || principal.ID == urn.AllUsersPrincipalID {
+		return "", MemberRoleReconciliation{}, oops.E(oops.CodeBadRequest, err, "role assignment requires one organization user").LogError(ctx, s.logger)
+	}
+	// ClickHouse is the durable source of the captured denial facts. The
+	// organization-qualified read below validates caller-supplied IDs and the
+	// complete selector before any PostgreSQL role mutation is attempted. A row
+	// that has not reached ClickHouse yet remains unresolved and can be retried.
+	challenges, err := chrepo.New(s.chConn).ListChallengesByIDs(ctx, authCtx.ActiveOrganizationID, challengeIDs)
+	if err != nil {
+		return "", MemberRoleReconciliation{}, oops.E(oops.CodeUnavailable, err, "denied challenges could not be verified yet").LogError(ctx, s.logger)
+	}
+	if err := validateChallengeAssignmentInput(challenges, challengeIDs, payload, resourceKind, resourceID); err != nil {
+		return "", MemberRoleReconciliation{}, oops.E(oops.CodeConflict, err, "challenge details changed; refresh and try again").LogError(ctx, s.logger)
+	}
+
+	role, err := s.roleMgr.getLocalRoleBySlugTx(ctx, tx, authCtx.ActiveOrganizationID, *payload.RoleSlug)
+	if err != nil {
+		return "", MemberRoleReconciliation{}, err
+	}
+
+	_, reconciliation, err := s.roleMgr.AddMemberRoleTx(ctx, tx, authCtx.ActiveOrganizationID, principal.ID, role.ID, RoleAuditActor{
+		Principal:   urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		DisplayName: authCtx.Email,
+	}, func(state MemberRoleState) error {
+		if state.RoleSlug != *payload.RoleSlug {
+			return oops.E(oops.CodeConflict, nil, "selected role changed; refresh and try again").LogError(ctx, s.logger)
+		}
+		rolePrincipal, parseErr := urn.ParsePrincipal(state.RolePrincipalURN)
+		if parseErr != nil {
+			return oops.E(oops.CodeUnexpected, parseErr, "parse challenge role principal").LogError(ctx, s.logger)
+		}
+		roleGrants, loadErr := authz.LoadGrants(ctx, tx, authCtx.ActiveOrganizationID, []urn.Principal{rolePrincipal})
+		if loadErr != nil {
+			return oops.E(oops.CodeUnexpected, loadErr, "load selected role grants").LogError(ctx, s.logger)
+		}
+		principals, resolveErr := authz.ResolveUserPrincipals(ctx, tx, authCtx.ActiveOrganizationID, principal.ID)
+		if resolveErr != nil {
+			return oops.E(oops.CodeUnexpected, resolveErr, "resolve challenged user principals").LogError(ctx, s.logger)
+		}
+		principals = append(principals, rolePrincipal)
+		resultingGrants, loadErr := authz.LoadGrants(ctx, tx, authCtx.ActiveOrganizationID, principals)
+		if loadErr != nil {
+			return oops.E(oops.CodeUnexpected, loadErr, "load resulting member grants").LogError(ctx, s.logger)
+		}
+		for _, challenge := range challenges {
+			if challenge.Selector == "" {
+				return oops.E(oops.CodeConflict, nil, "this older challenge cannot grant access; dismiss it and retry the denied action").LogError(ctx, s.logger)
+			}
+			selector, selectorErr := challengeSelector(challenge)
+			if selectorErr != nil {
+				return oops.E(oops.CodeConflict, selectorErr, "challenge selector is no longer valid").LogError(ctx, s.logger)
+			}
+			dimensions := make(map[string]string, len(selector)-2)
+			for key, value := range selector {
+				if key != authz.SelectorKeyResourceKind && key != authz.SelectorKeyResourceID {
+					dimensions[key] = value
+				}
+			}
+			check := authz.Check{
+				Scope:        authz.Scope(challenge.Scope),
+				ResourceKind: challenge.ResourceKind,
+				ResourceID:   challenge.ResourceID,
+				Dimensions:   dimensions,
+			}
+			roleAllows, authorizeErr := authz.GrantsAuthorize(roleGrants, check.WithStrictSelectorMatch())
+			if authorizeErr != nil {
+				return oops.E(oops.CodeBadRequest, authorizeErr, "challenge cannot be granted through this role").LogError(ctx, s.logger)
+			}
+			if !roleAllows {
+				return oops.E(oops.CodeBadRequest, nil, "selected role does not grant the challenged access").LogError(ctx, s.logger)
+			}
+			resultAllows, authorizeErr := authz.GrantsAuthorize(resultingGrants, check.WithStrictSelectorMatch())
+			if authorizeErr != nil {
+				return oops.E(oops.CodeBadRequest, authorizeErr, "resulting access cannot be evaluated").LogError(ctx, s.logger)
+			}
+			if !resultAllows {
+				return oops.E(oops.CodeBadRequest, nil, "an existing exclusion still blocks this access").LogError(ctx, s.logger)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return "", MemberRoleReconciliation{}, err
+	}
+	return role.Slug, reconciliation, nil
+}
+
+func challengeSelector(challenge chrepo.ChallengeSummary) (authz.Selector, error) {
+	selector, err := authz.SelectorFromRow([]byte(challenge.Selector))
+	if err != nil {
+		return nil, fmt.Errorf("parse challenge selector: %w", err)
+	}
+	selectorKind, hasKind := selector[authz.SelectorKeyResourceKind]
+	selectorID, hasID := selector[authz.SelectorKeyResourceID]
+	if len(selector) < 2 || !hasKind || !hasID || selectorKind == "" || selectorID == "" {
+		return nil, errors.New("selector is incomplete")
+	}
+	if selectorKind != challenge.ResourceKind || selectorID != challenge.ResourceID {
+		return nil, errors.New("selector resource does not match challenge")
+	}
+	return selector, nil
+}
+
+func validateChallengeAssignmentInput(challenges []chrepo.ChallengeSummary, challengeIDs []string, payload *gen.ResolveChallengePayload, resourceKind, resourceID string) error {
+	if len(challenges) != len(challengeIDs) {
+		return errors.New("one or more challenges are no longer available")
+	}
+	seen := make(map[string]struct{}, len(challenges))
+	for _, challenge := range challenges {
+		if _, ok := seen[challenge.ID]; ok {
+			return errors.New("duplicate challenge data")
+		}
+		seen[challenge.ID] = struct{}{}
+		if challenge.Outcome != string(chrepo.OutcomeDeny) || challenge.PrincipalURN != payload.PrincipalUrn || challenge.Scope != payload.Scope || challenge.ResourceKind != resourceKind || challenge.ResourceID != resourceID {
+			return errors.New("challenge does not match the requested resolution")
+		}
+	}
+	return nil
 }
 
 // RequestAccess sends email notifications to organization administrators when a user
@@ -1280,7 +1554,9 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	}
 
 	// Build the manage access link. The query params let the dashboard open a
-	// pre-filled grant dialog for the requester and scope.
+	// pre-filled grant dialog for the requester and scope. Resolve an MCP's
+	// project from the tenant-qualified resource rather than trusting browser
+	// state or a client-supplied project id.
 	manageAccessLink := ""
 	if s.siteURL != nil {
 		accessURL := s.siteURL.JoinPath(org.Slug, "access", "roles")
@@ -1289,6 +1565,16 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		q.Set("scope", payload.Scope)
 		if payload.ResourceID != nil && *payload.ResourceID != "" {
 			q.Set("resource_id", *payload.ResourceID)
+			if strings.HasPrefix(payload.Scope, "mcp:") {
+				projectID, resolveErr := s.resourceProjectID(ctx, ac.ActiveOrganizationID, *payload.ResourceID)
+				if resolveErr != nil {
+					logger.WarnContext(ctx, "could not resolve MCP project for access request link",
+						attr.SlogError(resolveErr),
+					)
+				} else {
+					q.Set("project_id", projectID)
+				}
+			}
 		}
 		accessURL.RawQuery = q.Encode()
 		manageAccessLink = accessURL.String()
@@ -1318,7 +1604,11 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	}
 
 	if sentCount == 0 {
-		return nil, oops.E(oops.CodeUnexpected, nil, "failed to notify any organization administrator").LogError(ctx, logger)
+		logger.WarnContext(ctx, "no organization administrator could be notified for access request",
+			attr.SlogAccessRequestAdminCount(len(admins)),
+			attr.SlogAccessRequestScope(payload.Scope),
+		)
+		return &gen.RequestAccessResult{SentToCount: 0}, nil
 	}
 
 	logger.InfoContext(ctx, "access request emails sent",
@@ -1328,4 +1618,106 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 	)
 
 	return &gen.RequestAccessResult{SentToCount: sentCount}, nil
+}
+
+// ListIdentityAccess returns the MCP servers and skills accessible to a user
+// through RBAC grants and plugin assignments.
+func (s *Service) ListIdentityAccess(ctx context.Context, payload *gen.ListIdentityAccessPayload) (*gen.ListIdentityAccessResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	logger := s.logger.With(
+		attr.SlogOrganizationID(ac.ActiveOrganizationID),
+		attr.SlogUserID(ac.UserID),
+		attr.SlogAccessMemberID(payload.UserID),
+	)
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+		attr.AccessMemberID(payload.UserID),
+	)
+
+	// Membership is checked before resolving, not left to the resolver:
+	// ResolveUserPrincipals answers for a non-member with the everyone
+	// principal alone rather than an error, which here would return whatever
+	// user:all can reach under a stranger's name — the one answer this
+	// endpoint must never give.
+	isMember, err := orgrepo.New(s.db).HasActiveOrganizationUser(ctx, orgrepo.HasActiveOrganizationUserParams{
+		UserID:         payload.UserID,
+		OrganizationID: ac.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "check organization membership").LogError(ctx, logger)
+	}
+	if !isMember {
+		return nil, oops.E(oops.CodeNotFound, nil, "user not found in this organization").LogError(ctx, logger)
+	}
+
+	principals, err := authz.ResolveUserPrincipals(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
+	switch {
+	case errors.Is(err, authz.ErrPrincipalInvalid):
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid user id").LogError(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "resolve user principals").LogError(ctx, logger)
+	}
+
+	principalURNs := make([]string, 0, len(principals))
+	for _, p := range principals {
+		principalURNs = append(principalURNs, p.String())
+	}
+
+	q := repo.New(s.db)
+
+	serverRows, err := q.ListAccessibleMCPServersForUser(ctx, repo.ListAccessibleMCPServersForUserParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		PrincipalUrns:  principalURNs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list accessible MCP servers").LogError(ctx, logger)
+	}
+
+	skillRows, err := q.ListAccessibleSkillsForUser(ctx, repo.ListAccessibleSkillsForUserParams{
+		OrganizationID: ac.ActiveOrganizationID,
+		PrincipalUrns:  principalURNs,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list accessible skills").LogError(ctx, logger)
+	}
+
+	servers := make([]*gen.AccessibleMCPServer, 0, len(serverRows))
+	for _, row := range serverRows {
+		servers = append(servers, &gen.AccessibleMCPServer{
+			ID:          row.ID.String(),
+			Name:        row.Name.String,
+			Slug:        row.Slug.String,
+			ProjectID:   row.ProjectID.String(),
+			ProjectSlug: row.ProjectSlug,
+		})
+	}
+
+	skills := make([]*gen.AccessibleSkill, 0, len(skillRows))
+	for _, row := range skillRows {
+		var displayName *string
+		if row.DisplayName != "" {
+			displayName = &row.DisplayName
+		}
+		skills = append(skills, &gen.AccessibleSkill{
+			ID:          row.ID.String(),
+			Name:        row.Name,
+			DisplayName: displayName,
+			ProjectID:   row.ProjectID.String(),
+			ProjectSlug: row.ProjectSlug,
+		})
+	}
+
+	return &gen.ListIdentityAccessResult{
+		Servers: servers,
+		Skills:  skills,
+	}, nil
 }

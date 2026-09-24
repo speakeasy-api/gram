@@ -178,12 +178,15 @@ WHERE chat_id = @chat_id
   );
 
 -- name: CreateChatMessage :copyfrom
+-- id is caller-supplied because ChatMessageWriter must know the durable message
+-- identity before COPY FROM so transactional side effects use the same id.
 -- created_at is caller-supplied so hook-captured messages carry the event's
 -- original occurred_at: spool replays arrive after newer live rows, and
 -- insert-time stamps would sort them out of conversation order. Transcript
 -- readers order by (created_at, seq).
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -210,7 +213,8 @@ INSERT INTO chat_messages (
   , created_at
 )
 VALUES (
-    @chat_id
+    @id
+  , @chat_id
   , @role
   , @project_id::uuid
   , @content
@@ -237,9 +241,12 @@ VALUES (
   , @created_at
 );
 
--- name: UpsertCorrelatedChatMessage :execrows
+-- name: UpsertCorrelatedChatMessage :one
+-- Returns persisted metering fields and distinguishes initial inserts from
+-- native-hook promotions, which must not emit another storage reading.
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -267,7 +274,8 @@ INSERT INTO chat_messages (
   , created_at
 )
 VALUES (
-    @chat_id
+    @id
+  , @chat_id
   , @role
   , @project_id::uuid
   , @content
@@ -304,8 +312,9 @@ DO UPDATE SET
   , created_at = EXCLUDED.created_at
   , risk_analyzed_at = NULL
 WHERE chat_messages.project_id = EXCLUDED.project_id
-  AND EXCLUDED.source IN ('codex', 'opencode')
-  AND chat_messages.source = 'litellm';
+  AND EXCLUDED.source IN ('codex', 'opencode', 'openclaw')
+  AND chat_messages.source = 'litellm'
+RETURNING id, content, tool_calls, model, user_id, external_user_id, source, (xmax = 0) AS inserted;
 
 -- name: AcquireChatPromptCorrelationLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
@@ -407,9 +416,12 @@ WHERE ccp.chat_id = @chat_id
   )
 ORDER BY created_at ASC, id ASC;
 
--- name: CreateExternalChatMessage :execrows
+-- name: CreateExternalChatMessage :one
+-- The writer supplies the candidate id before insertion so a newly inserted
+-- message and its atomic meter reading share one durable identity.
 INSERT INTO chat_messages (
-    chat_id
+    id
+  , chat_id
   , role
   , project_id
   , content
@@ -436,7 +448,8 @@ INSERT INTO chat_messages (
   , created_at
 )
 VALUES (
-    @chat_id
+    @id
+  , @chat_id
   , @role
   , @project_id::uuid
   , @content
@@ -463,7 +476,21 @@ VALUES (
   , @created_at
 )
 ON CONFLICT (chat_id, external_message_id) WHERE external_message_id IS NOT NULL
-DO NOTHING;
+DO NOTHING
+RETURNING id;
+
+-- name: GetProjectOrganizationID :one
+SELECT organization_id
+FROM projects
+WHERE id = @project_id;
+
+-- name: ChatBelongsToProject :one
+SELECT EXISTS (
+  SELECT 1
+  FROM chats
+  WHERE id = @chat_id::uuid
+    AND project_id = @project_id::uuid
+);
 
 -- name: CountChats :one
 -- Fallback for chats.list pagination: ListChats returns the total alongside
@@ -1826,3 +1853,62 @@ WHERE l.project_id = @project_id
     OR cc.id IS NOT NULL
   )
 ORDER BY l.created_at DESC;
+
+-- Refresh display metadata on previously captured inference messages without
+-- changing their identity or replacing a known product source.
+-- name: UpdateInferenceMessageAttribution :exec
+UPDATE chat_messages
+SET external_user_id = COALESCE(sqlc.narg('actor_email')::text, external_user_id),
+    user_id = COALESCE(sqlc.narg('user_id')::text, user_id),
+    source = CASE WHEN source = 'anthropic-inference' THEN @source::text ELSE source END
+WHERE chat_id = @chat_id AND project_id = @project_id
+  AND origin = 'anthropic-inference'
+  AND (
+    (sqlc.narg('actor_email')::text IS NOT NULL AND external_user_id IS DISTINCT FROM sqlc.narg('actor_email')::text)
+    OR (sqlc.narg('user_id')::text IS NOT NULL AND user_id IS DISTINCT FROM sqlc.narg('user_id')::text)
+    OR (source = 'anthropic-inference' AND @source::text <> 'anthropic-inference')
+  );
+
+-- name: ListInferenceMessageIdentities :many
+-- The newest message-level rows of an inference conversation, used to align
+-- an incoming transcript against what is already stored. Block rows share
+-- their parent's identity and carry no hash, so they are excluded.
+SELECT external_message_id, content_hash
+FROM chat_messages
+WHERE chat_id = @chat_id AND project_id = @project_id
+  AND origin = 'anthropic-inference' AND external_message_id IS NOT NULL
+  AND external_message_id NOT LIKE '%/block:%'
+ORDER BY created_at DESC, seq DESC
+LIMIT @row_limit;
+
+-- name: CountInferenceMessages :one
+SELECT count(*) FROM chat_messages
+WHERE chat_id = @chat_id AND project_id = @project_id
+  AND origin = 'anthropic-inference' AND external_message_id IS NOT NULL
+  AND external_message_id NOT LIKE '%/block:%';
+
+-- name: GetInferenceAcceptedCheckpoint :one
+SELECT inference_accepted_checkpoint FROM chats
+WHERE project_id = @project_id AND external_chat_id = @external_chat_id;
+
+-- name: SetInferenceAcceptedCheckpoint :execrows
+UPDATE chats SET inference_accepted_checkpoint = @checkpoint
+WHERE project_id = @project_id AND external_chat_id = @external_chat_id
+  AND inference_accepted_checkpoint IS NOT DISTINCT FROM sqlc.narg('expected_checkpoint')::bytea;
+
+-- name: InferencePolicyRevision :one
+-- Include mutable exclusions and custom rules, which do not bump policy
+-- versions. Strict inference scans cannot accept in-scope prompt-policy
+-- content while its feature flag is disabled or its evaluation is incomplete.
+WITH policies AS (
+  SELECT * FROM risk_policies
+  WHERE project_id = @project_id AND enabled IS TRUE AND deleted IS FALSE
+    AND action IN ('block', 'warn', 'quarantine')
+)
+SELECT jsonb_build_object(
+    'policies', (SELECT coalesce(jsonb_agg(to_jsonb(p) ORDER BY p.id), '[]'::jsonb) FROM policies p),
+    'exclusions', (SELECT coalesce(jsonb_agg(to_jsonb(e) ORDER BY e.id), '[]'::jsonb)
+      FROM risk_exclusions e WHERE e.project_id = @project_id AND e.enabled IS TRUE AND e.deleted IS FALSE),
+    'custom_rules', (SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY r.id), '[]'::jsonb)
+      FROM risk_custom_detection_rules r WHERE r.project_id = @project_id AND r.deleted IS FALSE)
+  )::text AS revision;

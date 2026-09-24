@@ -35,10 +35,11 @@ type ReadGramDocToolOutput struct {
 func registerReadDocTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "read_gram_doc",
-		Title:       "Read Gram Doc",
-		Description: "Read one reviewed Speakeasy AICP guide in full by its gram:// resource URI, as returned by search_gram_docs. Returns guide_unavailable when no reviewed guide stands behind that URI: say so and hand the user the canonical links rather than inventing steps.",
+		Title:       "Read a Setup Guide",
+		Description: "Read one reviewed Speakeasy setup guide in full, by the gram:// URI search_gram_docs returned. Constraints: returns guide_unavailable when no reviewed guide stands behind that URI — say so and hand the user the canonical links rather than inventing steps.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
+		Authorization: ExternalAuthorizationOrgAdmin,
 		// Assistant-only. External clients read the same content through
 		// resources/read, and offering both would be two names for one thing.
 		Audiences: []Audience{AudienceAssistant}, ProjectScope: ProjectScopeNone,
@@ -56,9 +57,8 @@ func registerReadDocTool(reg *Registrar) {
 		if errors.Is(err, ErrSetupGuideUnavailable) {
 			// The withheld guide carries its own trusted links, so the model is
 			// handed the sources it is told to pass on rather than recalling them.
-			var withheld *SetupGuideUnavailableError
 			links := []string{docsIndexURL}
-			if errors.As(err, &withheld) {
+			if withheld, ok := errors.AsType[*SetupGuideUnavailableError](err); ok {
 				links = withheld.TrustedLinks()
 			}
 			return nil, docUnavailable(input.URI, "This guide is too far past its revalidation date to stand behind and has been withheld. Tell the user the reviewed guide is stale and point them at the trusted links returned with this result.", links), nil

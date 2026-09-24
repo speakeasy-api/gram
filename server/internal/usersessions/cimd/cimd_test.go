@@ -26,6 +26,26 @@ func TestIsClientIDURL(t *testing.T) {
 	require.False(t, IsClientIDURL("https://"))
 }
 
+// TestDocument_DeclaredAuthMethod pins the absent-member rule that decides
+// what gets persisted: a document that names no method has declared "none",
+// which is a different claim from the NULL stored on rows that predate the
+// column, so the two must never be conflated by a caller writing the row.
+func TestDocument_DeclaredAuthMethod(t *testing.T) {
+	t.Parallel()
+
+	absent := &Document{}
+	require.Equal(t, "none", absent.DeclaredAuthMethod(), "an absent member declares a public client")
+
+	explicit := &Document{TokenEndpointAuthMethod: "none"}
+	require.Equal(t, "none", explicit.DeclaredAuthMethod())
+
+	// Carried verbatim rather than filtered: whether a method is acceptable
+	// is validateDocument's decision, and this method reports only what the
+	// document said.
+	other := &Document{TokenEndpointAuthMethod: "private_key_jwt"}
+	require.Equal(t, "private_key_jwt", other.DeclaredAuthMethod())
+}
+
 // newDocServer starts a TLS server whose /client.json responds via handler
 // and returns the server plus a resolver whose fetch client trusts its
 // certificate — the same injection pattern production uses with a

@@ -47,3 +47,57 @@ func TestTruncateDetail_NegativeBoundDoesNotPanic(t *testing.T) {
 		require.Contains(t, got, "truncated")
 	})
 }
+
+func TestStripNUL(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "plain text", conv.StripNUL("plain text"))
+	require.Equal(t, "ab", conv.StripNUL("a\x00b\x00"))
+	require.Empty(t, conv.StripNUL("\x00"))
+}
+
+func TestPtrStripNUL(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, conv.PtrStripNUL(nil))
+	for _, tc := range []struct {
+		name, input, want string
+	}{
+		{name: "empty"},
+		{name: "unchanged", input: "plain text", want: "plain text"},
+		{name: "all NUL", input: "\x00\x00"},
+		{name: "embedded and boundary NUL", input: "\x00a\x00b\x00", want: "ab"},
+		{name: "preserve whitespace and unicode", input: " \t\x00日本語\x00 \n", want: " \t日本語 \n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			input := tc.input
+			got := conv.PtrStripNUL(&input)
+			require.NotNil(t, got)
+			require.Equal(t, tc.want, *got)
+			require.Equal(t, tc.input, input)
+			*got = "changed"
+			require.Equal(t, tc.input, input)
+		})
+	}
+}
+
+func TestPtrStripNULToPGTextTrimmed(t *testing.T) {
+	t.Parallel()
+
+	empty, blank := "", " \x00\t\x00\n"
+	for _, input := range []*string{nil, &empty, &blank} {
+		got := conv.PtrToPGTextTrimmed(conv.PtrStripNUL(input))
+		require.False(t, got.Valid)
+		require.Empty(t, got.String)
+	}
+
+	input := "\x00 \t日本\x00語 \n\x00"
+	got := conv.PtrToPGTextTrimmed(conv.PtrStripNUL(&input))
+	require.True(t, got.Valid)
+	require.Equal(t, "日本語", got.String)
+	require.Equal(t, "\x00 \t日本\x00語 \n\x00", input)
+
+	// Trimming alone must continue to preserve NUL bytes for other callers.
+	require.Equal(t, "a\x00b", conv.PtrToPGTextTrimmed(conv.PtrEmpty(" a\x00b ")).String)
+}

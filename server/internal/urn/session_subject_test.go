@@ -47,8 +47,24 @@ func TestNewSessionSubject(t *testing.T) {
 			wantErr: urn.ErrInvalid,
 		},
 		{
-			name:    "id too long",
-			build:   func() urn.SessionSubject { return urn.NewUserSubject(strings.Repeat("a", 129)) },
+			name: "id at byte limit",
+			build: func() urn.SessionSubject {
+				return urn.NewUserSubject(strings.Repeat("é", urn.MaxSessionSubjectIDLength/2))
+			},
+			wantErr: nil,
+		},
+		{
+			name: "ASCII id over byte limit",
+			build: func() urn.SessionSubject {
+				return urn.NewUserSubject(strings.Repeat("a", urn.MaxSessionSubjectIDLength+1))
+			},
+			wantErr: urn.ErrInvalid,
+		},
+		{
+			name: "multibyte id over byte limit",
+			build: func() urn.SessionSubject {
+				return urn.NewUserSubject(strings.Repeat("é", urn.MaxSessionSubjectIDLength/2+1))
+			},
 			wantErr: urn.ErrInvalid,
 		},
 	}
@@ -115,6 +131,7 @@ func TestParseSessionSubject(t *testing.T) {
 	t.Parallel()
 
 	apikeyID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	agentID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 	tests := []struct {
 		name    string
@@ -135,6 +152,12 @@ func TestParseSessionSubject(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "valid agent",
+			input:   "agent:22222222-2222-2222-2222-222222222222",
+			want:    urn.NewAgentSubject(agentID),
+			wantErr: false,
+		},
+		{
 			name:    "valid anonymous",
 			input:   "anonymous:mcp-session-id",
 			want:    urn.NewAnonymousSubject("mcp-session-id"),
@@ -148,6 +171,16 @@ func TestParseSessionSubject(t *testing.T) {
 		{
 			name:    "apikey non-uuid rejected",
 			input:   "apikey:not-a-uuid",
+			wantErr: true,
+		},
+		{
+			name:    "agent non-uuid rejected",
+			input:   "agent:not-a-uuid",
+			wantErr: true,
+		},
+		{
+			name:    "agent non-canonical uuid rejected",
+			input:   "agent:22222222222222222222222222222222",
 			wantErr: true,
 		},
 		{
@@ -421,4 +454,141 @@ func TestSessionSubject_RoundTrip(t *testing.T) {
 	err = fromDB.Scan(value)
 	require.NoError(t, err)
 	require.Equal(t, original.String(), fromDB.String())
+}
+
+// Platform subjects are colon-heavy, and the id splits on the first colon only.
+func TestWorkloadSubject_RoundTripsRealPlatformSubjects(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.MustParse("0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0f")
+
+	for name, externalSubject := range map[string]string{
+		"github actions branch":       "repo:acme/payments-api:ref:refs/heads/main",
+		"github actions environment":  "repo:acme/payments-api:environment:production",
+		"github actions pull request": "repo:acme/payments-api:pull_request",
+		"kubernetes service account":  "system:serviceaccount:payments:checkout-worker",
+		"spiffe id":                   "spiffe://acme.example/ns/payments/sa/checkout",
+		"opaque numeric":              "1029384756",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			subject := urn.NewWorkloadSubject(issuerID, externalSubject)
+
+			parsed, err := urn.ParseSessionSubject(subject.String())
+			require.NoError(t, err)
+			require.Equal(t, subject, parsed, "a workload subject must survive format and parse unchanged")
+
+			gotIssuer, gotSubject, err := parsed.Workload()
+			require.NoError(t, err)
+			require.Equal(t, issuerID, gotIssuer)
+			require.Equal(t, externalSubject, gotSubject,
+				"the external subject must come back byte-identical, colons included")
+		})
+	}
+}
+
+// The kind round-trips through every transport a session subject uses.
+func TestWorkloadSubject_RoundTripsThroughJSONAndTheValuer(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.MustParse("0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0f")
+	subject := urn.NewWorkloadSubject(issuerID, "repo:acme/payments-api:ref:refs/heads/main")
+
+	encoded, err := json.Marshal(subject)
+	require.NoError(t, err)
+
+	var viaJSON urn.SessionSubject
+	require.NoError(t, json.Unmarshal(encoded, &viaJSON))
+	require.Equal(t, subject, viaJSON)
+
+	value, err := subject.Value()
+	require.NoError(t, err)
+	require.Equal(t, driver.Value(subject.String()), value)
+
+	var viaScan urn.SessionSubject
+	require.NoError(t, viaScan.Scan(subject.String()))
+	require.Equal(t, subject, viaScan)
+}
+
+// Two workloads sharing a sub across different issuers must produce different
+// session subjects.
+func TestWorkloadSubject_OneSubjectFromTwoIssuersDiffers(t *testing.T) {
+	t.Parallel()
+
+	const shared = "repo:acme/payments-api:ref:refs/heads/main"
+	first := urn.NewWorkloadSubject(uuid.MustParse("0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0f"), shared)
+	second := urn.NewWorkloadSubject(uuid.MustParse("0192f4c8-1a2b-7c3d-8e4f-aaaaaaaaaaaa"), shared)
+
+	require.NotEqual(t, first.String(), second.String(),
+		"an identical sub vouched for by another issuer is another workload")
+}
+
+// A malformed workload id is rejected, not accepted as an opaque string.
+func TestParseSessionSubject_RejectsMalformedWorkloadIDs(t *testing.T) {
+	t.Parallel()
+
+	for name, input := range map[string]string{
+		"no issuer reference":    "workload:repo-acme-payments-api",
+		"issuer is not a uuid":   "workload:not-a-uuid:repo:acme/payments-api",
+		"uppercase issuer":       "workload:0192F4C8-1A2B-7C3D-8E4F-5A6B7C8D9E0F:repo:acme/payments-api",
+		"braced issuer":          "workload:{0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0f}:repo:acme/payments-api",
+		"empty external subject": "workload:0192f4c8-1a2b-7c3d-8e4f-5a6b7c8d9e0f:",
+		// No workload_issuers row has the nil uuid, so it is rejected even
+		// though it parses.
+		"nil uuid issuer": "workload:00000000-0000-0000-0000-000000000000:repo:acme/api",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := urn.ParseSessionSubject(input)
+			require.Error(t, err, "%q must not parse as a workload subject", input)
+		})
+	}
+}
+
+// Workload() refuses a subject of another kind.
+func TestSessionSubject_WorkloadRefusesOtherKinds(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := urn.NewUserSubject("user_01abc").Workload()
+	require.Error(t, err)
+
+	_, _, err = urn.NewAPIKeySubject(uuid.New()).Workload()
+	require.Error(t, err)
+}
+
+// Over-long workload ids are rejected, not truncated.
+func TestWorkloadSubject_ExternalSubjectBudgetIsEnforced(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.New()
+
+	atLimit := urn.NewWorkloadSubject(issuerID, strings.Repeat("x", urn.MaxWorkloadExternalSubjectLength))
+	_, err := urn.ParseSessionSubject(atLimit.String())
+	require.NoError(t, err, "a subject exactly at the budget must be accepted")
+
+	overLimit := urn.NewWorkloadSubject(issuerID, strings.Repeat("x", urn.MaxWorkloadExternalSubjectLength+1))
+	_, err = urn.ParseSessionSubject(overLimit.String())
+	require.Error(t, err, "a subject one byte over the budget must be rejected, not truncated")
+}
+
+// AWS IAM ARNs can exceed the 128-byte cap other kinds keep, so only the
+// workload kind gets the larger one.
+func TestWorkloadSubject_AcceptsSubjectsLongerThanOtherKinds(t *testing.T) {
+	t.Parallel()
+
+	arn := "arn:aws-us-gov:iam::123456789012:role/" + strings.Repeat("platform/", 20) + strings.Repeat("R", 64)
+	require.Greater(t, len(arn), urn.MaxSessionSubjectIDLength, "the fixture must exceed the cap other kinds keep")
+
+	subject := urn.NewWorkloadSubject(uuid.New(), arn)
+	parsed, err := urn.ParseSessionSubject(subject.String())
+	require.NoError(t, err)
+
+	_, externalSubject, err := parsed.Workload()
+	require.NoError(t, err)
+	require.Equal(t, arn, externalSubject, "a long platform subject must come back byte-identical")
+
+	_, err = urn.ParseSessionSubject("user:" + strings.Repeat("u", urn.MaxSessionSubjectIDLength+1))
+	require.Error(t, err, "every other kind keeps MaxSessionSubjectIDLength")
 }

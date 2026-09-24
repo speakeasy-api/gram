@@ -43,6 +43,43 @@ type Client struct {
 	RedirectURIs    []string
 	SecretExpiresAt *time.Time
 	RevokedAt       *time.Time
+
+	// MetadataURI is set when the row came from a Client ID Metadata
+	// Document rather than RFC 7591 dynamic registration. The draft
+	// requires the client_id to equal the document URL, so this doubles as
+	// the CIMD discriminator: a non-empty value means the client is public
+	// by construction and its metadata is a cache of a remote document.
+	MetadataURI string
+	// CacheExpiresAt and ETag carry the stored document's cache state back
+	// to the resolver so it can decide between serving the row, sending a
+	// conditional refresh, and refetching unconditionally.
+	CacheExpiresAt *time.Time
+	ETag           string
+}
+
+// IsCIMD reports whether this client was resolved from a Client ID Metadata
+// Document. CIMD clients are public: the draft forbids symmetric secrets, and
+// the client_id_metadata_uri CHECK constraints enforce that in the database.
+func (c Client) IsCIMD() bool { return c.MetadataURI != "" }
+
+// UpsertCIMDClientInput carries a freshly fetched metadata document into the
+// client registry. ClientID is the document URL, which is also what is stored
+// as the metadata URI.
+type UpsertCIMDClientInput struct {
+	ClientID     string
+	Name         string
+	RedirectURIs []string
+	CacheTTL     time.Duration
+	ETag         string
+}
+
+// TouchCIMDCacheInput refreshes cache bookkeeping after a 304 Not Modified.
+// The stored name and redirect URIs are current by definition of the 304, so
+// they are not part of the input.
+type TouchCIMDCacheInput struct {
+	ClientID string
+	CacheTTL time.Duration
+	ETag     string
 }
 
 type Connection struct {
@@ -121,6 +158,15 @@ type Store interface {
 	RegisterClient(ctx context.Context, client Client) error
 	GetClient(ctx context.Context, clientID string) (Client, error)
 	RevokeClient(ctx context.Context, clientID string, now time.Time) error
+	// UpsertClientFromCIMD writes a client resolved from a metadata
+	// document, replacing the mutable metadata and the cache columns. It
+	// returns ErrNotFound when the client_id is already held by a
+	// secret-bearing registration or a revoked row, neither of which a
+	// document may rewrite.
+	UpsertClientFromCIMD(ctx context.Context, input UpsertCIMDClientInput) (Client, error)
+	// TouchClientCIMDCache moves the cache stamp, expiry, and validator on
+	// an existing CIMD row after a 304, with the same guards.
+	TouchClientCIMDCache(ctx context.Context, input TouchCIMDCacheInput) (Client, error)
 	RegisterConnection(ctx context.Context, connection Connection) error
 	GetConnection(ctx context.Context, organizationID, subject, clientID string) (Connection, error)
 	AuthorizeConnection(ctx context.Context, input AuthorizeConnectionInput) (Connection, error)
@@ -183,6 +229,46 @@ func (s *InMemoryStore) GetClient(_ context.Context, clientID string) (Client, e
 	if client.RevokedAt != nil {
 		return Client{}, ErrRevoked
 	}
+	return client, nil
+}
+
+func (s *InMemoryStore) UpsertClientFromCIMD(_ context.Context, input UpsertCIMDClientInput) (Client, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if existing, ok := s.clients[input.ClientID]; ok && (existing.SecretHash != "" || existing.RevokedAt != nil) {
+		// Mirrors the guarded DO UPDATE in Postgres: a document may never
+		// rewrite a secret-bearing registration or resurrect a revoked row.
+		return Client{}, ErrNotFound
+	}
+	expiresAt := time.Now().Add(input.CacheTTL)
+	client := Client{
+		ID:              input.ClientID,
+		SecretHash:      "",
+		Name:            input.Name,
+		RedirectURIs:    input.RedirectURIs,
+		SecretExpiresAt: nil,
+		RevokedAt:       nil,
+		MetadataURI:     input.ClientID,
+		CacheExpiresAt:  &expiresAt,
+		ETag:            input.ETag,
+	}
+	s.clients[input.ClientID] = client
+	return client, nil
+}
+
+func (s *InMemoryStore) TouchClientCIMDCache(_ context.Context, input TouchCIMDCacheInput) (Client, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	client, ok := s.clients[input.ClientID]
+	if !ok || !client.IsCIMD() || client.SecretHash != "" || client.RevokedAt != nil {
+		return Client{}, ErrNotFound
+	}
+	expiresAt := time.Now().Add(input.CacheTTL)
+	client.CacheExpiresAt = &expiresAt
+	client.ETag = input.ETag
+	s.clients[input.ClientID] = client
 	return client, nil
 }
 

@@ -1,11 +1,14 @@
-import { useEffect, useRef, type JSX, type ReactNode } from "react";
+import { useRef, type JSX, type ReactNode } from "react";
+import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   inferenceKeysQuery,
+  inferenceSpendHistoryQuery,
   invalidateOrganizationBilling,
   organizationQuery,
   paygBillingSummaryQuery,
@@ -16,7 +19,10 @@ import {
   errorMessage,
   GramAdminError,
   resumeStripeSubscription,
+  setInferenceKeyMonthlyLimit,
   type AdminInferenceKey,
+  type AdminInferenceKeyType,
+  type AdminInferenceSpendMonth,
   type AdminOrganization,
   type AdminPaygBillingSummary,
   type AdminStripeSubscription,
@@ -30,6 +36,8 @@ import {
   formatRecordedThrough,
   formatTokenCount,
 } from "./billingState";
+import { MeterUsage } from "./MeterUsage";
+import { SpendBreakdown } from "./SpendBreakdown";
 
 function Group({
   title,
@@ -82,6 +90,27 @@ function inferenceKeyPurpose(keyType: AdminInferenceKey["key_type"]): string {
   }
 }
 
+function inferenceKeyDisableCauseLabel(cause: string): string {
+  switch (cause) {
+    case "admin_lock":
+      return "Admin lock";
+    case "trial_demotion":
+      return "Trial demotion";
+    case "billing_inactive":
+      return "Billing inactive";
+    default:
+      return cause;
+  }
+}
+
+function inferenceKeyDisableCauses(key: AdminInferenceKey): string {
+  if (!key.disable_causes_classified) return "Unclassified (legacy)";
+  if (key.disable_causes === null || key.disable_causes.length === 0)
+    return "No disable causes";
+
+  return key.disable_causes.map(inferenceKeyDisableCauseLabel).join(", ");
+}
+
 function formatCredits(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -91,7 +120,169 @@ function formatCredits(value: number): string {
   }).format(value);
 }
 
-function InferenceKeys({ keys }: { keys: AdminInferenceKey[] }): JSX.Element {
+const MIN_MONTHLY_LIMIT = 1;
+const MAX_MONTHLY_LIMIT = 10_000;
+
+function isWritableInferenceKey(
+  key: AdminInferenceKey,
+): key is AdminInferenceKey & { key_type: AdminInferenceKeyType } {
+  return key.key_type === "chat" || key.key_type === "internal";
+}
+
+function InferenceKeyLimitEditor({
+  organizationID,
+  inferenceKey,
+}: {
+  organizationID: string;
+  inferenceKey: AdminInferenceKey & { key_type: AdminInferenceKeyType };
+}): JSX.Element {
+  const qc = useQueryClient();
+  const { announce, showFailure } = useWriteReport();
+  const mutation = useMutation({
+    mutationFn: (monthlyCredits: number) =>
+      setInferenceKeyMonthlyLimit({
+        organizationID,
+        keyType: inferenceKey.key_type,
+        monthlyCredits,
+      }),
+    onSuccess: async () => {
+      showFailure(null);
+      announce(`${inferenceKey.key_type} monthly limit updated.`);
+      await qc.invalidateQueries({
+        queryKey: inferenceKeysQuery(organizationID).queryKey,
+      });
+    },
+    onError: (error) => {
+      const message = `Could not update ${inferenceKey.key_type} monthly limit: ${errorMessage(error)}`;
+      announce(message);
+      showFailure(message);
+    },
+  });
+
+  const inputID = `inference-key-limit-${inferenceKey.key_type}`;
+  const errorID = `${inputID}-error`;
+
+  const form = useForm({
+    defaultValues: { monthlyCredits: String(inferenceKey.monthly_credits) },
+    onSubmit: async ({ value }) => {
+      if (inferenceKey.disabled) return;
+      showFailure(null);
+      try {
+        const updated = await mutation.mutateAsync(
+          Number(value.monthlyCredits),
+        );
+        form.reset({ monthlyCredits: String(updated.monthly_credits) });
+      } catch {
+        // The mutation reports the failure through the page's shared live region.
+      }
+    },
+  });
+
+  return (
+    <Row label="Monthly limit">
+      <form
+        className="flex max-w-sm items-start gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.handleSubmit();
+        }}
+      >
+        <form.Field
+          name="monthlyCredits"
+          validators={{
+            onChange: ({ value }) => {
+              const parsed = Number(value);
+              return value.trim() === "" ||
+                !Number.isInteger(parsed) ||
+                parsed < MIN_MONTHLY_LIMIT ||
+                parsed > MAX_MONTHLY_LIMIT
+                ? "Enter a whole-dollar limit from $1 to $10,000."
+                : undefined;
+            },
+          }}
+        >
+          {(field) => {
+            const invalid = !field.state.meta.isValid;
+            const showValidation =
+              !inferenceKey.disabled && field.state.meta.isDirty && invalid;
+            return (
+              <div className="flex-1">
+                <label className="sr-only" htmlFor={inputID}>
+                  {inferenceKey.key_type} monthly limit in USD
+                </label>
+                <Input
+                  id={inputID}
+                  type="number"
+                  min={MIN_MONTHLY_LIMIT}
+                  max={MAX_MONTHLY_LIMIT}
+                  step={1}
+                  name={field.name}
+                  value={field.state.value}
+                  disabled={inferenceKey.disabled || mutation.isPending}
+                  aria-invalid={showValidation}
+                  aria-describedby={showValidation ? errorID : undefined}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => {
+                    mutation.reset();
+                    field.handleChange(event.target.value);
+                  }}
+                />
+                {showValidation && (
+                  <p id={errorID} className="text-destructive mt-1 text-xs">
+                    {field.state.meta.errors[0]}
+                  </p>
+                )}
+                {mutation.isError && (
+                  <p role="alert" className="text-destructive mt-1 text-xs">
+                    {errorMessage(mutation.error)}
+                  </p>
+                )}
+                {inferenceKey.disabled && (
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    Enable this key before changing its limit.
+                  </p>
+                )}
+              </div>
+            );
+          }}
+        </form.Field>
+        <form.Subscribe
+          selector={(state) =>
+            [
+              state.values.monthlyCredits,
+              state.canSubmit,
+              state.isSubmitting,
+            ] as const
+          }
+        >
+          {([value, canSubmit, isSubmitting]) => (
+            <Button
+              type="submit"
+              size="sm"
+              disabled={
+                inferenceKey.disabled ||
+                !canSubmit ||
+                mutation.isPending ||
+                isSubmitting ||
+                Number(value) === inferenceKey.monthly_credits
+              }
+            >
+              {mutation.isPending || isSubmitting ? "Saving…" : "Save limit"}
+            </Button>
+          )}
+        </form.Subscribe>
+      </form>
+    </Row>
+  );
+}
+
+function InferenceKeys({
+  organizationID,
+  keys,
+}: {
+  organizationID: string;
+  keys: AdminInferenceKey[];
+}): JSX.Element {
   return (
     <Group title="Platform-managed OpenRouter keys">
       {keys.length === 0 && (
@@ -118,8 +309,90 @@ function InferenceKeys({ keys }: { keys: AdminInferenceKey[] }): JSX.Element {
               : formatCredits(key.monthly_credits)}
           </Row>
           <Row label="State">{key.disabled ? "Disabled" : "Enabled"}</Row>
+          <Row label="Disable causes">{inferenceKeyDisableCauses(key)}</Row>
+          {isWritableInferenceKey(key) && (
+            <InferenceKeyLimitEditor
+              organizationID={organizationID}
+              inferenceKey={key}
+            />
+          )}
         </div>
       ))}
+    </Group>
+  );
+}
+
+function hasSufficientHistory(months: AdminInferenceSpendMonth[]): boolean {
+  const previous = months.at(-2);
+  const latest = months.at(-1);
+  return previous !== undefined && previous.period_end === latest?.period_start;
+}
+
+function InferenceSpendHistory({
+  months,
+}: {
+  months: AdminInferenceSpendMonth[];
+}): JSX.Element {
+  const showGraph = hasSufficientHistory(months);
+  const amounts = months.map((month) => Number.parseFloat(month.spend_usd));
+  const maximum = Math.max(0, ...amounts);
+
+  return (
+    <Group title="Monthly inference spend">
+      {months.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          No complete monthly inference spend has been recorded yet.
+        </p>
+      ) : showGraph ? (
+        <figure
+          aria-label="Monthly inference spend graph"
+          className="space-y-2"
+        >
+          <figcaption className="sr-only">
+            Monthly inference spend by completed UTC calendar month
+          </figcaption>
+          {months.map((month, index) => {
+            const amount = amounts[index] ?? 0;
+            const width = maximum === 0 ? 0 : (amount / maximum) * 100;
+            return (
+              <div
+                key={month.period_start}
+                className="grid grid-cols-[5rem_minmax(8rem,1fr)_7rem] items-center gap-3"
+              >
+                <span className="text-muted-foreground text-xs">
+                  {formatBillingDate(month.period_start) ?? month.period_start}
+                </span>
+                <div
+                  aria-hidden="true"
+                  className="bg-muted h-3 overflow-hidden rounded-sm"
+                >
+                  <div
+                    className="bg-primary h-full rounded-sm"
+                    style={{ width: `${width}%` }}
+                  />
+                </div>
+                <span className="text-right text-sm tabular-nums">
+                  {formatExactUsd(month.spend_usd) ?? "—"}
+                </span>
+              </div>
+            );
+          })}
+        </figure>
+      ) : (
+        months.map((month) => (
+          <Row
+            key={month.period_start}
+            label={formatBillingDate(month.period_start) ?? month.period_start}
+          >
+            {formatExactUsd(month.spend_usd) ?? "—"}
+          </Row>
+        ))
+      )}
+      {months.length > 0 ? (
+        <p className="text-muted-foreground mt-2 text-xs">
+          Complete UTC calendar months only.
+        </p>
+      ) : null}
     </Group>
   );
 }
@@ -223,7 +496,13 @@ export function BillingRoute(): JSX.Element | null {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
   const { data } = useQuery(organizationQuery(idOrSlug));
   if (!data) return null;
-  return <Billing key={data.id} org={data} />;
+  return (
+    <div className="flex min-w-0 flex-col gap-6">
+      <SpendBreakdown key={`spend-${data.id}`} organizationID={data.id} />
+      <MeterUsage key={`usage-${data.id}`} organizationID={data.id} />
+      <Billing key={data.id} org={data} />
+    </div>
+  );
 }
 
 export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
@@ -231,9 +510,11 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
   const [confirm, confirmDialog] = useConfirmDialog();
   const { announce, showFailure } = useWriteReport();
   const control = useRef<HTMLButtonElement>(null);
-  const restoreFocus = useRef(false);
 
   const inferenceKeysResult = useQuery(inferenceKeysQuery(org.id));
+  const inferenceSpendHistoryResult = useQuery(
+    inferenceSpendHistoryQuery(org.id),
+  );
   const subscriptionQuery = useQuery(stripeSubscriptionQuery(org.id));
   const subscription = subscriptionQuery.data;
   const state = subscription ? billingState(subscription) : null;
@@ -255,12 +536,6 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
     },
   });
 
-  useEffect(() => {
-    if (mutation.isPending || !restoreFocus.current) return;
-    restoreFocus.current = false;
-    control.current?.focus();
-  }, [mutation.isPending, mutation.status, mutation.variables]);
-
   const changeCancellation = async (cancel: boolean): Promise<void> => {
     const confirmed = await confirm({
       title: `${cancel ? "Cancel" : "Resume"} pay as you go for ${org.name}?`,
@@ -276,7 +551,6 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
     }
 
     showFailure(null);
-    restoreFocus.current = true;
     mutation.mutate(cancel, {
       onSuccess: () =>
         announce(
@@ -286,6 +560,17 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
         const text = `Could not update billing for ${org.name}: ${errorMessage(error)}`;
         announce(text);
         showFailure(text);
+      },
+      onSettled: () => {
+        setTimeout(function restoreControlFocus() {
+          const target = control.current;
+          if (!target?.isConnected) return;
+          if (target.disabled) {
+            setTimeout(restoreControlFocus);
+            return;
+          }
+          target.focus();
+        });
       },
     });
   };
@@ -312,7 +597,10 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
       {subscription && <SubscriptionDetails subscription={subscription} />}
 
       {inferenceKeysResult.data && (
-        <InferenceKeys keys={inferenceKeysResult.data} />
+        <InferenceKeys
+          organizationID={org.id}
+          keys={inferenceKeysResult.data}
+        />
       )}
       {inferenceKeysResult.isPending && (
         <p className="text-muted-foreground mt-5 text-sm">
@@ -342,6 +630,21 @@ export function Billing({ org }: { org: AdminOrganization }): JSX.Element {
           {errorMessage(summaryQuery.error)}
         </p>
       )}
+
+      {inferenceSpendHistoryResult.data ? (
+        <InferenceSpendHistory months={inferenceSpendHistoryResult.data} />
+      ) : null}
+      {inferenceSpendHistoryResult.isPending ? (
+        <p className="text-muted-foreground mt-5 text-sm">
+          Loading inference spend history…
+        </p>
+      ) : null}
+      {inferenceSpendHistoryResult.isError ? (
+        <p role="alert" className="text-destructive mt-5 text-sm">
+          Could not load inference spend history:{" "}
+          {errorMessage(inferenceSpendHistoryResult.error)}
+        </p>
+      ) : null}
 
       {state &&
         (state.kind === "active" ||

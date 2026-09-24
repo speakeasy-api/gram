@@ -113,7 +113,10 @@ type EnsureServerReviewResponseBody struct {
 	ArtifactRef *string `form:"artifact_ref,omitempty" json:"artifact_ref,omitempty" xml:"artifact_ref,omitempty"`
 	// Whether the reference names an exact version.
 	VersionPinned bool `form:"version_pinned" json:"version_pinned" xml:"version_pinned"`
-	// The request's current status.
+	// The request's current status: unreviewed, requested, approved, denied, or
+	// superseded (the latest decision was explicitly displaced by a policy
+	// URL-list edit; history preserved, no enforcement derives from it until
+	// re-decided).
 	Status string `form:"status" json:"status" xml:"status"`
 	// How many people have asked for this server.
 	RequesterCount int `form:"requester_count" json:"requester_count" xml:"requester_count"`
@@ -149,7 +152,10 @@ type CreateRequestResponseBody struct {
 	ArtifactRef *string `form:"artifact_ref,omitempty" json:"artifact_ref,omitempty" xml:"artifact_ref,omitempty"`
 	// Whether the reference names an exact version.
 	VersionPinned bool `form:"version_pinned" json:"version_pinned" xml:"version_pinned"`
-	// The request's current status.
+	// The request's current status: unreviewed, requested, approved, denied, or
+	// superseded (the latest decision was explicitly displaced by a policy
+	// URL-list edit; history preserved, no enforcement derives from it until
+	// re-decided).
 	Status string `form:"status" json:"status" xml:"status"`
 	// How many people have asked for this server.
 	RequesterCount int `form:"requester_count" json:"requester_count" xml:"requester_count"`
@@ -185,7 +191,10 @@ type PromoteResponseBody struct {
 	ArtifactRef *string `form:"artifact_ref,omitempty" json:"artifact_ref,omitempty" xml:"artifact_ref,omitempty"`
 	// Whether the reference names an exact version.
 	VersionPinned bool `form:"version_pinned" json:"version_pinned" xml:"version_pinned"`
-	// The request's current status.
+	// The request's current status: unreviewed, requested, approved, denied, or
+	// superseded (the latest decision was explicitly displaced by a policy
+	// URL-list edit; history preserved, no enforcement derives from it until
+	// re-decided).
 	Status string `form:"status" json:"status" xml:"status"`
 	// How many people have asked for this server.
 	RequesterCount int `form:"requester_count" json:"requester_count" xml:"requester_count"`
@@ -1785,7 +1794,10 @@ type ApprovalRequestSummaryResponseBody struct {
 	ArtifactRef *string `form:"artifact_ref,omitempty" json:"artifact_ref,omitempty" xml:"artifact_ref,omitempty"`
 	// Whether the reference names an exact version.
 	VersionPinned bool `form:"version_pinned" json:"version_pinned" xml:"version_pinned"`
-	// The request's current status.
+	// The request's current status: unreviewed, requested, approved, denied, or
+	// superseded (the latest decision was explicitly displaced by a policy
+	// URL-list edit; history preserved, no enforcement derives from it until
+	// re-decided).
 	Status string `form:"status" json:"status" xml:"status"`
 	// How many people have asked for this server.
 	RequesterCount int `form:"requester_count" json:"requester_count" xml:"requester_count"`

@@ -82,6 +82,41 @@ func ResolveShadowMCPInventoryRequestAccessPath() string {
 	return "/rpc/access.resolveShadowMCPInventoryRequest"
 }
 
+// ListAIDetectionsAccessPath returns the URL path to the access service listAIDetections HTTP endpoint.
+func ListAIDetectionsAccessPath() string {
+	return "/rpc/access.listAIDetections"
+}
+
+// ListEmployeeAIDetectionsAccessPath returns the URL path to the access service listEmployeeAIDetections HTTP endpoint.
+func ListEmployeeAIDetectionsAccessPath() string {
+	return "/rpc/access.listEmployeeAIDetections"
+}
+
+// ListAIDetectionUsersAccessPath returns the URL path to the access service listAIDetectionUsers HTTP endpoint.
+func ListAIDetectionUsersAccessPath() string {
+	return "/rpc/access.listAIDetectionUsers"
+}
+
+// SetAIToolDecisionAccessPath returns the URL path to the access service setAIToolDecision HTTP endpoint.
+func SetAIToolDecisionAccessPath() string {
+	return "/rpc/access.setAIToolDecision"
+}
+
+// ListResourceAudienceAccessPath returns the URL path to the access service listResourceAudience HTTP endpoint.
+func ListResourceAudienceAccessPath() string {
+	return "/rpc/access.listResourceAudience"
+}
+
+// SetResourceAudienceAccessPath returns the URL path to the access service setResourceAudience HTTP endpoint.
+func SetResourceAudienceAccessPath() string {
+	return "/rpc/access.setResourceAudience"
+}
+
+// ListAudienceOptionsAccessPath returns the URL path to the access service listAudienceOptions HTTP endpoint.
+func ListAudienceOptionsAccessPath() string {
+	return "/rpc/access.listAudienceOptions"
+}
+
 // RequestAccessAccessPath returns the URL path to the access service requestAccess HTTP endpoint.
 func RequestAccessAccessPath() string {
 	return "/rpc/access.requestAccess"
@@ -100,4 +135,9 @@ func ListChallengeBucketsAccessPath() string {
 // ResolveChallengeAccessPath returns the URL path to the access service resolveChallenge HTTP endpoint.
 func ResolveChallengeAccessPath() string {
 	return "/rpc/access.resolveChallenge"
+}
+
+// ListIdentityAccessAccessPath returns the URL path to the access service listIdentityAccess HTTP endpoint.
+func ListIdentityAccessAccessPath() string {
+	return "/rpc/access.listIdentityAccess"
 }

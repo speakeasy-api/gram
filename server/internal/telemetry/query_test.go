@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	telemetryserver "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -477,11 +478,12 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	var deptResult *gen.QueryResult
 	require.Eventually(t, func() bool {
 		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:    from,
-			To:      to,
-			GroupBy: conv.PtrEmpty("department_name"),
-			TopN:    10,
-			SortBy:  "total_cost",
+			From:                   from,
+			To:                     to,
+			GroupBy:                conv.PtrEmpty("department_name"),
+			TopN:                   10,
+			SortBy:                 "total_cost",
+			IncludeDimensionValues: true,
 		})
 		if err != nil || res == nil {
 			return false
@@ -536,6 +538,23 @@ func TestQuery_GroupByDimensionsAndDrilldown(t *testing.T) {
 	sales := rowByGroup(t, deptResult.Table, "Sales")
 	require.ElementsMatch(t, []string{"c@x.com"}, sales.DimensionValues["email"])
 	require.ElementsMatch(t, []string{""}, sales.DimensionValues["role"])
+
+	withoutDimensions, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:                   from,
+		To:                     to,
+		GroupBy:                conv.PtrEmpty("department_name"),
+		IncludeDimensionValues: false,
+		TopN:                   10,
+		SortBy:                 "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, withoutDimensions.Table, 2)
+	require.Equal(t, deptCost, tableCostByGroup(withoutDimensions.Table))
+	for _, row := range withoutDimensions.Table {
+		require.NotNil(t, row.DimensionValues)
+		require.Empty(t, row.DimensionValues)
+	}
+	require.Len(t, withoutDimensions.Timeseries, len(deptResult.Timeseries))
 
 	// Group by role: dev gets both Engineering rows ($0.35), admin one ($0.25),
 	// and Sales' role-less spend surfaces under the empty-string group ($0.50).
@@ -661,6 +680,23 @@ func TestQuery_SkillVersionAttributesFullSessionsWithoutDuplicateMappings(t *tes
 	require.Equal(t, int64(2), versionOneRow.Measures.TotalChats, "tool-call-only sessions must not count as chats")
 	require.Equal(t, int64(2), versionTwoRow.Measures.TotalChats)
 	require.Equal(t, int64(1), versionOneRow.Measures.TotalToolCalls)
+
+	withoutDimensions, err := ti.service.Query(ctx, &gen.QueryPayload{
+		From:                   from,
+		To:                     to,
+		GroupBy:                conv.PtrEmpty("skill_version"),
+		IncludeDimensionValues: false,
+		TopN:                   10,
+		SortBy:                 "total_cost",
+	})
+	require.NoError(t, err)
+	require.Len(t, withoutDimensions.Table, 2)
+	require.Equal(t, costs, tableCostByGroup(withoutDimensions.Table))
+	for _, row := range withoutDimensions.Table {
+		require.NotNil(t, row.DimensionValues)
+		require.Empty(t, row.DimensionValues)
+	}
+	require.Len(t, withoutDimensions.Timeseries, len(grouped.Timeseries))
 
 	var versionTwoSeries *gen.QuerySeries
 	for _, series := range grouped.Timeseries {
@@ -892,6 +928,53 @@ func TestQuery_DefaultSortByAndTopN(t *testing.T) {
 	require.Equal(t, "D10", res.Table[9].GroupValue)
 	require.Equal(t, "Other", res.Table[10].GroupValue, "default top_n should keep 10 groups and roll up the rest")
 	require.InDelta(t, 3.0, res.Table[10].Measures.TotalCost, 1e-9)
+}
+
+// sort_by=llm_tokens ranks by input + output, not the stored TUM total_tokens
+// (which adds cache writes) — a cache-heavy group must not displace a
+// higher-LLM group inside top_n on the surfaces that display LLM tokens.
+func TestQuery_SortByLLMTokens(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgRead,
+		Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID),
+	})
+
+	now := time.Date(2026, time.July, 14, 1, 0, 0, 0, time.UTC)
+	ts := now.Add(-10 * time.Minute)
+	// Cache-heavy: TUM total dwarfs its LLM tokens.
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1, 10, 5, 0, 100000, "m", "cachey@x.com", "A", nil, "main", "", "", "", "")
+	// LLM-heavy: no cache writes, more input+output.
+	insertAttributeClaudeAPIRequestLog(t, ctx, projectID, ts, uuid.NewString(), 1, 1000, 500, 0, 0, "m", "llm@x.com", "B", nil, "main", "", "", "", "")
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	var res *gen.QueryResult
+	require.Eventually(t, func() bool {
+		r, err := ti.service.Query(ctx, &gen.QueryPayload{
+			From:    from,
+			To:      to,
+			GroupBy: conv.PtrEmpty("email"),
+			SortBy:  "llm_tokens",
+			TopN:    1,
+		})
+		if err != nil || r == nil {
+			return false
+		}
+		res = r
+		return len(r.Table) == 2
+	}, 10*time.Second, 200*time.Millisecond)
+
+	require.Equal(t, "llm@x.com", res.Table[0].GroupValue)
+	require.Equal(t, "Other", res.Table[1].GroupValue)
 }
 
 // TestQuery_CountsToolCalls covers the provenance-first tool counting: Claude
@@ -1153,11 +1236,12 @@ func TestQuery_AttributesClaudeAPIRequestByMCPAndSkill(t *testing.T) {
 	var byServer *gen.QueryResult
 	require.Eventually(t, func() bool {
 		res, err := ti.service.Query(ctx, &gen.QueryPayload{
-			From:    from,
-			To:      to,
-			GroupBy: conv.PtrEmpty("mcp_server_name"),
-			TopN:    10,
-			SortBy:  "cache_creation_input_tokens",
+			From:                   from,
+			To:                     to,
+			GroupBy:                conv.PtrEmpty("mcp_server_name"),
+			TopN:                   10,
+			SortBy:                 "cache_creation_input_tokens",
+			IncludeDimensionValues: true,
 		})
 		if err != nil || res == nil || len(res.Table) != 1 {
 			return false
@@ -1442,4 +1526,29 @@ func TestQueryTumDetails_IncludesDeletedProjects(t *testing.T) {
 		assert.Equal(c, int64(1250), res.Totals.TotalTokens,
 			"the deleted project's usage must still count toward the billing breakdowns")
 	}, 10*time.Second, 200*time.Millisecond)
+}
+
+// The include_dimension_values default is applied when the HTTP body is
+// decoded, so in-process callers of Service.Query must set it explicitly.
+func TestNewQueryPayload_IncludeDimensionValuesDefaultsToTrue(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		body string
+		want bool
+	}{
+		"omitted":        {body: `{"from":"2026-07-14T00:00:00Z","to":"2026-07-14T02:00:00Z"}`, want: true},
+		"explicit true":  {body: `{"from":"2026-07-14T00:00:00Z","to":"2026-07-14T02:00:00Z","include_dimension_values":true}`, want: true},
+		"explicit false": {body: `{"from":"2026-07-14T00:00:00Z","to":"2026-07-14T02:00:00Z","include_dimension_values":false}`, want: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var body telemetryserver.QueryRequestBody
+			require.NoError(t, json.Unmarshal([]byte(tc.body), &body))
+
+			payload := telemetryserver.NewQueryPayload(&body, nil)
+			require.Equal(t, tc.want, payload.IncludeDimensionValues)
+		})
+	}
 }

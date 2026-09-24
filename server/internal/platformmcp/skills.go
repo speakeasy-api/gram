@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // maxSkillContentBytes mirrors the skills service's own manifest ceiling. It is
@@ -63,6 +64,9 @@ type SkillsManagement interface {
 	Get(context.Context, *genskills.GetPayload) (*genskills.GetSkillResult, error)
 	ListDistributions(context.Context, *genskills.ListDistributionsPayload) (*genskills.ListSkillDistributionsResult, error)
 	ListVersions(context.Context, *genskills.ListVersionsPayload) (*genskills.ListSkillVersionsResult, error)
+	ListFeedback(context.Context, *genskills.ListFeedbackPayload) (*genskills.ListSkillFeedbackResult, error)
+	ListSuggestions(context.Context, *genskills.ListSuggestionsPayload) (*genskills.ListSkillSuggestionsResult, error)
+	ListSuggestionFeedback(context.Context, *genskills.ListSuggestionFeedbackPayload) (*genskills.ListSkillSuggestionFeedbackResult, error)
 	Distribute(context.Context, *genskills.DistributePayload) (*types.SkillDistribution, error)
 }
 
@@ -221,7 +225,7 @@ func (s *SkillsService) begin(ctx context.Context, principal Principal, projectS
 	if existing, ok := contextvalues.GetAuthContext(ctx); ok && existing != nil {
 		sessionID = existing.SessionID
 	}
-	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
+	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{
 		ActiveOrganizationID:  principal.OrganizationID,
 		UserID:                principal.UserID,
 		ExternalUserID:        "",
@@ -238,10 +242,10 @@ func (s *SkillsService) begin(ctx context.Context, principal Principal, projectS
 		ProjectSlug:           &project.Slug,
 		APIKeyScopes:          nil,
 		IsAdmin:               false,
-	})
+	}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	// Grants are loaded for the acting user, so a connection reaches exactly the
-	// projects that user's own role reaches — the OAuth org-admin check at the
-	// endpoint says who may connect, not what they may write.
+	// projects that user's own role reaches. OAuth rechecks live membership;
+	// each operation's RBAC policy separately decides what the user may do.
 	ctx, err = s.grants.PrepareContext(ctx)
 	if err != nil {
 		return ctx, ResolvedProject{}, err
@@ -555,6 +559,159 @@ type DistributeSkillOutput struct {
 	Message           string      `json:"message"`
 }
 
+type SkillFeedbackSummary struct {
+	ID             string `json:"id"`
+	Source         string `json:"source"`
+	Outcome        string `json:"outcome"`
+	Note           string `json:"note,omitempty"`
+	SkillVersionID string `json:"skill_version_id,omitempty"`
+	ReviewedAt     string `json:"reviewed_at,omitempty"`
+	CreatedAt      string `json:"created_at"`
+}
+
+type SkillFeedbackCounts struct {
+	Total           int64 `json:"total"`
+	Helped          int64 `json:"helped"`
+	PartiallyHelped int64 `json:"partially_helped"`
+	DidNotHelp      int64 `json:"did_not_help"`
+	Misleading      int64 `json:"misleading"`
+	Harmful         int64 `json:"harmful"`
+}
+
+type SkillFeedbackMetrics struct {
+	WindowStart                 string `json:"window_start"`
+	WindowEnd                   string `json:"window_end"`
+	FeedbackInWindow            int64  `json:"feedback_in_window"`
+	ActivationsInWindow         int64  `json:"activations_in_window"`
+	FeedbackActivationsInWindow int64  `json:"feedback_activations_in_window"`
+	Unreviewed                  int64  `json:"unreviewed"`
+	Converted                   int64  `json:"converted"`
+}
+
+type SkillFeedbackTimelinePoint struct {
+	BucketStart   string `json:"bucket_start"`
+	FeedbackCount int64  `json:"feedback_count"`
+}
+
+type ListSkillFeedbackInput struct {
+	ProjectSlug string
+	SkillID     string
+	Cursor      string
+	Limit       int
+}
+
+type ListSkillFeedbackOutput struct {
+	ProjectSlug string                       `json:"project_slug"`
+	SkillID     string                       `json:"skill_id"`
+	Counts      SkillFeedbackCounts          `json:"counts"`
+	Metrics     SkillFeedbackMetrics         `json:"metrics"`
+	Timeline    []SkillFeedbackTimelinePoint `json:"timeline"`
+	Feedback    []SkillFeedbackSummary       `json:"feedback"`
+	NextCursor  string                       `json:"next_cursor,omitempty"`
+}
+
+type SkillSuggestionChange struct {
+	ID                   string `json:"id"`
+	ProposedDiff         string `json:"proposed_diff"`
+	Rationale            string `json:"rationale"`
+	AppliesCleanly       bool   `json:"applies_cleanly"`
+	FeedbackCount        int64  `json:"feedback_count"`
+	FeedbackSessionCount int64  `json:"feedback_session_count"`
+	CreatedAt            string `json:"created_at"`
+}
+
+type SkillSuggestionSummary struct {
+	ID                   string                  `json:"id"`
+	SkillID              string                  `json:"skill_id"`
+	SkillName            string                  `json:"skill_name"`
+	SkillDisplayName     string                  `json:"skill_display_name"`
+	BaseVersionID        string                  `json:"base_version_id"`
+	Changes              []SkillSuggestionChange `json:"changes"`
+	ProposedContent      string                  `json:"proposed_content,omitempty"`
+	AppliesCleanly       bool                    `json:"applies_cleanly"`
+	Rationale            string                  `json:"rationale"`
+	Status               string                  `json:"status"`
+	FeedbackCount        int64                   `json:"feedback_count"`
+	FeedbackSessionCount int64                   `json:"feedback_session_count"`
+	ScoredSessionCount   int64                   `json:"scored_session_count"`
+	CreatedAt            string                  `json:"created_at"`
+	UpdatedAt            string                  `json:"updated_at"`
+}
+
+type ListSkillSuggestionsInput struct {
+	ProjectSlug            string
+	SkillID                string
+	IncludeProposedContent bool
+	Cursor                 string
+	Limit                  int
+}
+
+type ListSkillSuggestionsOutput struct {
+	ProjectSlug    string                   `json:"project_slug"`
+	Suggestions    []SkillSuggestionSummary `json:"suggestions"`
+	TotalOpenCount int64                    `json:"total_open_count"`
+	NextCursor     string                   `json:"next_cursor,omitempty"`
+}
+
+type ListSkillSuggestionFeedbackInput struct {
+	ProjectSlug string
+	ChangeID    string
+	Limit       int
+}
+
+type ListSkillSuggestionFeedbackOutput struct {
+	ProjectSlug string                 `json:"project_slug"`
+	ChangeID    string                 `json:"change_id"`
+	Feedback    []SkillFeedbackSummary `json:"feedback"`
+}
+
+func (s *SkillsService) ListSkillFeedback(ctx context.Context, principal Principal, input ListSkillFeedbackInput) (ListSkillFeedbackOutput, error) {
+	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
+	if err != nil {
+		return ListSkillFeedbackOutput{}, err
+	}
+	if _, err := uuid.Parse(input.SkillID); err != nil {
+		return ListSkillFeedbackOutput{}, ErrRegistrationInvalid
+	}
+	result, err := s.skills.ListFeedback(ctx, &genskills.ListFeedbackPayload{ID: input.SkillID, Cursor: optionalString(strings.TrimSpace(input.Cursor)), Limit: boundedSkillInsightLimit(input.Limit), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	if err != nil {
+		return ListSkillFeedbackOutput{}, err
+	}
+	return ListSkillFeedbackOutput{ProjectSlug: project.Slug, SkillID: input.SkillID, Counts: buildSkillFeedbackCounts(result.Counts), Metrics: buildSkillFeedbackMetrics(result.Metrics), Timeline: buildSkillFeedbackTimeline(result.Timeline), Feedback: buildSkillFeedback(result.Feedback), NextCursor: stringOrEmpty(result.NextCursor)}, nil
+}
+
+func (s *SkillsService) ListSkillSuggestions(ctx context.Context, principal Principal, input ListSkillSuggestionsInput) (ListSkillSuggestionsOutput, error) {
+	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
+	if err != nil {
+		return ListSkillSuggestionsOutput{}, err
+	}
+	if input.SkillID != "" {
+		if _, err := uuid.Parse(input.SkillID); err != nil {
+			return ListSkillSuggestionsOutput{}, ErrRegistrationInvalid
+		}
+	}
+	result, err := s.skills.ListSuggestions(ctx, &genskills.ListSuggestionsPayload{SkillID: optionalString(strings.TrimSpace(input.SkillID)), Cursor: optionalString(strings.TrimSpace(input.Cursor)), Limit: boundedSkillInsightLimit(input.Limit), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	if err != nil {
+		return ListSkillSuggestionsOutput{}, err
+	}
+	return ListSkillSuggestionsOutput{ProjectSlug: project.Slug, Suggestions: buildSkillSuggestions(result.Suggestions, input.IncludeProposedContent), TotalOpenCount: result.TotalOpenCount, NextCursor: stringOrEmpty(result.NextCursor)}, nil
+}
+
+func (s *SkillsService) ListSkillSuggestionFeedback(ctx context.Context, principal Principal, input ListSkillSuggestionFeedbackInput) (ListSkillSuggestionFeedbackOutput, error) {
+	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
+	if err != nil {
+		return ListSkillSuggestionFeedbackOutput{}, err
+	}
+	if _, err := uuid.Parse(input.ChangeID); err != nil {
+		return ListSkillSuggestionFeedbackOutput{}, ErrRegistrationInvalid
+	}
+	result, err := s.skills.ListSuggestionFeedback(ctx, &genskills.ListSuggestionFeedbackPayload{ID: input.ChangeID, Limit: boundedSkillInsightLimit(input.Limit), SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	if err != nil {
+		return ListSkillSuggestionFeedbackOutput{}, err
+	}
+	return ListSkillSuggestionFeedbackOutput{ProjectSlug: project.Slug, ChangeID: input.ChangeID, Feedback: buildSkillFeedback(result.Feedback)}, nil
+}
+
 func (s *SkillsService) DistributeSkill(ctx context.Context, principal Principal, input DistributeSkillInput) (DistributeSkillOutput, error) {
 	ctx, project, err := s.begin(ctx, principal, input.ProjectSlug)
 	if err != nil {
@@ -598,7 +755,7 @@ func (s *SkillsService) DistributeSkill(ctx context.Context, principal Principal
 		Target:            target,
 		DistributionID:    distribution.ID,
 		ResolvedVersionID: distribution.ResolvedVersionID,
-		Message:           fmt.Sprintf("The skill is now carried by the %s %q and takes effect for agents using it.", target.Kind, target.Name),
+		Message:           fmt.Sprintf("This skill is now part of the %s %q, so agents using it will load it.", target.Kind, target.Name),
 	}, nil
 }
 
@@ -623,7 +780,7 @@ func (s *SkillsService) resolveTarget(ctx context.Context, principal Principal, 
 
 	matches := make([]SkillTarget, 0, 2)
 	for _, candidate := range candidates {
-		if candidate.Kind == kind && matchesSkillTarget(candidate, wanted) {
+		if candidate.Kind == kind && matchesTargetName(candidate.ID, candidate.Slug, candidate.Name, wanted) {
 			matches = append(matches, candidate)
 		}
 	}
@@ -635,17 +792,6 @@ func (s *SkillsService) resolveTarget(ctx context.Context, principal Principal, 
 	default:
 		return SkillTarget{}, ErrSkillTargetAmbiguous
 	}
-}
-
-// matchesSkillTarget accepts the id, the slug, or the exact name. Names are
-// compared case-insensitively because a caller reading a name off a dashboard
-// should not have to reproduce its capitalization, but never by prefix or
-// substring: a partial match is what turns "the marketing plugin" into someone
-// else's plugin.
-func matchesSkillTarget(candidate SkillTarget, wanted string) bool {
-	return candidate.ID == wanted ||
-		(candidate.Slug != "" && strings.EqualFold(candidate.Slug, wanted)) ||
-		strings.EqualFold(candidate.Name, wanted)
 }
 
 // authoringResult states what an authoring write did and, deliberately, what it
@@ -665,7 +811,7 @@ func (s *SkillsService) authoringResult(ctx context.Context, principal Principal
 		CreatedSkill:        result.CreatedSkill,
 		CreatedVersion:      result.CreatedVersion,
 		Distributed:         false,
-		InertMessage:        "This skill is saved but inert: nothing loads it until it is distributed to a plugin or an assistant with distribute_skill.",
+		InertMessage:        "This skill is saved, but no agent loads it yet. Give it to a plugin or an assistant with distribute_skill for it to take effect.",
 		NextAction:          "distribute_skill",
 		DistributionTargets: targets,
 	}
@@ -734,6 +880,69 @@ func checkSkillContent(content string) error {
 	return nil
 }
 
+func boundedSkillInsightLimit(limit int) int {
+	if limit <= 0 {
+		return 20
+	}
+	return min(limit, 50)
+}
+
+func buildSkillFeedback(rows []*genskills.SkillFeedback) []SkillFeedbackSummary {
+	feedback := make([]SkillFeedbackSummary, 0, len(rows))
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		feedback = append(feedback, SkillFeedbackSummary{ID: row.ID, Source: string(row.Source), Outcome: string(row.Outcome), Note: stringOrEmpty(row.Note), SkillVersionID: stringOrEmpty(row.SkillVersionID), ReviewedAt: stringOrEmpty(row.ReviewedAt), CreatedAt: row.CreatedAt})
+	}
+	return feedback
+}
+
+func buildSkillFeedbackCounts(counts *genskills.SkillFeedbackCounts) SkillFeedbackCounts {
+	if counts == nil {
+		return SkillFeedbackCounts{}
+	}
+	return SkillFeedbackCounts{Total: counts.Total, Helped: counts.Helped, PartiallyHelped: counts.PartiallyHelped, DidNotHelp: counts.DidNotHelp, Misleading: counts.Misleading, Harmful: counts.Harmful}
+}
+
+func buildSkillFeedbackMetrics(metrics *genskills.SkillFeedbackMetrics) SkillFeedbackMetrics {
+	if metrics == nil {
+		return SkillFeedbackMetrics{}
+	}
+	return SkillFeedbackMetrics{WindowStart: metrics.WindowStart, WindowEnd: metrics.WindowEnd, FeedbackInWindow: metrics.FeedbackInWindow, ActivationsInWindow: metrics.ActivationsInWindow, FeedbackActivationsInWindow: metrics.FeedbackActivationsInWindow, Unreviewed: metrics.Unreviewed, Converted: metrics.Converted}
+}
+
+func buildSkillFeedbackTimeline(rows []*genskills.SkillFeedbackTimelinePoint) []SkillFeedbackTimelinePoint {
+	timeline := make([]SkillFeedbackTimelinePoint, 0, len(rows))
+	for _, row := range rows {
+		if row != nil {
+			timeline = append(timeline, SkillFeedbackTimelinePoint{BucketStart: row.BucketStart, FeedbackCount: row.FeedbackCount})
+		}
+	}
+	return timeline
+}
+
+func buildSkillSuggestions(rows []*types.SkillEditSuggestion, includeProposedContent bool) []SkillSuggestionSummary {
+	suggestions := make([]SkillSuggestionSummary, 0, len(rows))
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		changes := make([]SkillSuggestionChange, 0, len(row.Changes))
+		for _, change := range row.Changes {
+			if change != nil {
+				changes = append(changes, SkillSuggestionChange{ID: change.ID, ProposedDiff: change.ProposedDiff, Rationale: change.Rationale, AppliesCleanly: change.AppliesCleanly, FeedbackCount: change.FeedbackCount, FeedbackSessionCount: change.FeedbackSessionCount, CreatedAt: change.CreatedAt})
+			}
+		}
+		proposedContent := ""
+		if includeProposedContent {
+			proposedContent = row.ProposedContent
+		}
+		suggestions = append(suggestions, SkillSuggestionSummary{ID: row.ID, SkillID: row.SkillID, SkillName: row.SkillName, SkillDisplayName: row.SkillDisplayName, BaseVersionID: row.BaseVersionID, Changes: changes, ProposedContent: proposedContent, AppliesCleanly: row.AppliesCleanly, Rationale: row.Rationale, Status: row.Status, FeedbackCount: row.FeedbackCount, FeedbackSessionCount: row.FeedbackSessionCount, ScoredSessionCount: row.ScoredSessionCount, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt})
+	}
+	return suggestions
+}
+
 func stringOrEmpty(value *string) string {
 	if value == nil {
 		return ""
@@ -758,13 +967,13 @@ func skillsRefusalCode(err error) (string, string, bool) {
 	case oops.CodeConflict:
 		return "conflict", shareable.Error(), true
 	case oops.CodeUnauthorized, oops.CodeForbidden:
-		return "forbidden", "This connection is not authorized to author or distribute skills in this project.", true
+		return "forbidden", "You do not have the required skill permission in this project.", true
 	case oops.CodeRateLimitExceeded:
 		return "rate_limited", shareable.Error(), true
 	case oops.CodeFailedPrecondition, oops.CodeInvariantViolation:
 		return "conflict", shareable.Error(), true
 	case oops.CodeUnavailable, oops.CodeGatewayError, oops.CodeNotImplemented:
-		return unavailableCode, "The skills service is temporarily unavailable. Retry after a short delay.", true
+		return unavailableCode, "Skills are temporarily unavailable. Try again shortly.", true
 	case oops.CodeUnexpected, oops.CodeMethodNotAllowed, oops.CodeInsufficientCredits, oops.CodeInferenceDisabled, oops.CodeCanceled:
 		return "", "", false
 	default:
@@ -794,7 +1003,7 @@ func (s *PostgresSkillTargets) SkillTargets(ctx context.Context, organizationID 
 	limit := limitPerKind
 	// Clamped to the lookup ceiling before the narrowing conversion, so a caller
 	// cannot ask for a page size that does not fit the query parameter.
-	bounded := int32(min(max(limit, 1), maxSkillTargetLookup)) //nolint:gosec // bounded above by maxSkillTargetLookup
+	bounded := int32(min(max(limit, 1), maxSkillTargetLookup))
 	queries := platformrepo.New(s.db)
 	plugins, err := queries.ListPlatformMCPProjectPlugins(ctx, platformrepo.ListPlatformMCPProjectPluginsParams{
 		ProjectID:      projectID,
@@ -864,4 +1073,15 @@ func adviceTargets(targets []SkillTarget, limit int) []SkillTarget {
 		}
 	}
 	return kept
+}
+
+// matchesTargetName accepts the id, the slug, or the exact name. Names are
+// compared case-insensitively because a caller reading a name off a dashboard
+// should not have to reproduce its capitalization, but never by prefix or
+// substring: a partial match is what turns "the marketing plugin" into someone
+// else's plugin.
+func matchesTargetName(id, slug, name, wanted string) bool {
+	return id == wanted ||
+		(slug != "" && strings.EqualFold(slug, wanted)) ||
+		strings.EqualFold(name, wanted)
 }

@@ -216,7 +216,7 @@ func TestUpdateSkillReplayRecordsNoSecondUpdateEvent(t *testing.T) {
 	ctx, ti := newTestService(t)
 	created := createSkill(t, ctx, ti, "quiet-replay", "First summary.")
 	summary := "First summary."
-	applied, err := ti.service.Update(ctx, &gen.UpdatePayload{
+	_, err := ti.service.Update(ctx, &gen.UpdatePayload{
 		ID: created.Skill.ID, Name: "quiet-replay", DisplayName: "Quiet Replay", Summary: &summary, Tags: nil,
 		ExpectedLatestVersionID: &created.Version.ID,
 		SessionToken:            nil, ApikeyToken: nil, ProjectSlugInput: nil,
@@ -226,6 +226,12 @@ func TestUpdateSkillReplayRecordsNoSecondUpdateEvent(t *testing.T) {
 		ID: created.Skill.ID, Content: skillManifest("quiet-replay", "First summary.", "second"),
 		DerivedFromVersionID: nil, ExpectedLatestVersionID: nil,
 		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	// The intervening version may advance updated_at; only the replay is a no-op.
+	current, err := ti.service.Get(ctx, &gen.GetPayload{
+		ID: created.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
 	})
 	require.NoError(t, err)
 
@@ -242,7 +248,7 @@ func TestUpdateSkillReplayRecordsNoSecondUpdateEvent(t *testing.T) {
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionSkillUpdate)
 	require.NoError(t, err)
 	require.Equal(t, before, after, "a replay records no second update event")
-	require.Equal(t, applied.UpdatedAt, replayed.UpdatedAt, "a replay does not advance updated_at")
+	require.Equal(t, current.Skill.UpdatedAt, replayed.UpdatedAt, "a replay does not advance updated_at")
 }
 
 // A malformed token is a bad request on the metadata path too. Replay recovery

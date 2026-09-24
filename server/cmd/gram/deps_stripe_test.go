@@ -8,6 +8,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 )
@@ -19,8 +20,6 @@ func TestNewStripeClientLocalWithoutAPIKeyUsesStubBeforeCatalogValidation(t *tes
 		"environment":                    "local",
 		"stripe-api-key":                 "unset",
 		"stripe-price-id-tum":            "partial-price",
-		"stripe-meter-id-tum":            "",
-		"stripe-meter-event-name":        "",
 		"stripe-portal-configuration-id": "",
 	})
 
@@ -42,8 +41,6 @@ func TestNewAdminStripeClientDegradesInvalidCatalog(t *testing.T) {
 		"environment":                    "prod",
 		"stripe-api-key":                 "sk_test_placeholder",
 		"stripe-price-id-tum":            "partial-price",
-		"stripe-meter-id-tum":            "",
-		"stripe-meter-event-name":        "",
 		"stripe-portal-configuration-id": "",
 	})
 
@@ -54,28 +51,6 @@ func TestNewAdminStripeClientDegradesInvalidCatalog(t *testing.T) {
 		ctx,
 	)
 	require.Nil(t, client)
-}
-
-func TestNewStripeClientRealClientValidatesCatalog(t *testing.T) {
-	t.Parallel()
-
-	ctx := newStripeCLIContext(t, map[string]string{
-		"environment":                    "local",
-		"stripe-api-key":                 "sk_test_placeholder",
-		"stripe-price-id-tum":            "partial-price",
-		"stripe-meter-id-tum":            "mtr_placeholder",
-		"stripe-meter-event-name":        "",
-		"stripe-portal-configuration-id": "bpc_placeholder",
-	})
-
-	client, err := newStripeClient(
-		t.Context(),
-		testenv.NewLogger(t),
-		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
-		ctx,
-	)
-	require.Nil(t, client)
-	require.ErrorContains(t, err, "invalid Stripe catalog configuration: missing meter event name")
 }
 
 func TestNewStripeClientNonLocalWithoutAPIKeyIsOptional(t *testing.T) {
@@ -104,8 +79,8 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 		"stripe-api-key":                 "sk_test_placeholder",
 		"stripe-webhook-secret":          "whsec_placeholder",
 		"stripe-price-id-tum":            "price_placeholder",
-		"stripe-meter-id-tum":            "mtr_placeholder",
-		"stripe-meter-event-name":        "tum",
+		"stripe-price-id-mcp-egress":     "price_mcp_egress",
+		"stripe-price-id-risk-scans":     "price_risk_scans",
 		"stripe-portal-configuration-id": "bpc_placeholder",
 	})
 
@@ -119,10 +94,274 @@ func TestNewStripeClientRealClientUsesCatalog(t *testing.T) {
 	require.NotNil(t, client)
 	require.Equal(t, stripeclient.Catalog{
 		PriceIDTUM:            "price_placeholder",
-		MeterIDTUM:            "mtr_placeholder",
-		MeterEventName:        "tum",
+		PriceIDMCPEgress:      "price_mcp_egress",
+		PriceIDRiskScans:      "price_risk_scans",
 		PortalConfigurationID: "bpc_placeholder",
 	}, client.Catalog())
+}
+
+func TestNewStripeMeterEventClientLocalWithoutAPIKeyUsesNoop(t *testing.T) {
+	t.Parallel()
+
+	client, err := newStripeMeterEventClient(
+		testenv.NewLogger(t),
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		newStripeCLIContext(t, map[string]string{
+			"environment":                  "local",
+			"stripe-api-key":               "unset",
+			stripeMeterEventExportFlagName: "true",
+		}),
+	)
+	require.NoError(t, err)
+	require.NoError(t, client.CreateMeterEvent(t.Context(), stripeclient.V2MeterEventInput{}))
+}
+
+func TestNewStripeMeterEventClientLocalWithAPIKeyUsesRealClient(t *testing.T) {
+	t.Parallel()
+
+	client, err := newStripeMeterEventClient(
+		testenv.NewLogger(t),
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		newStripeCLIContext(t, map[string]string{
+			"environment":                  "local",
+			"stripe-api-key":               "sk_test_placeholder",
+			stripeMeterEventExportFlagName: "true",
+		}),
+	)
+	require.NoError(t, err)
+	require.ErrorContains(t, client.CreateMeterEvent(t.Context(), stripeclient.V2MeterEventInput{}), "identifier is required")
+}
+
+func TestNewStripeMeterEventClientStreamingDisabledUsesNoop(t *testing.T) {
+	t.Parallel()
+
+	client, err := newStripeMeterEventClient(
+		testenv.NewLogger(t),
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		newStripeCLIContext(t, map[string]string{
+			"environment":    "prod",
+			"stripe-api-key": "unset",
+		}),
+	)
+	require.NoError(t, err)
+	require.NoError(t, client.CreateMeterEvent(t.Context(), stripeclient.V2MeterEventInput{}))
+}
+
+func TestNewStripeMeterEventClientNonLocalWithoutAPIKeyFails(t *testing.T) {
+	t.Parallel()
+
+	client, err := newStripeMeterEventClient(
+		testenv.NewLogger(t),
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		newStripeCLIContext(t, map[string]string{
+			"environment":                  "prod",
+			"stripe-api-key":               "unset",
+			stripeMeterEventExportFlagName: "true",
+		}),
+	)
+	require.Nil(t, client)
+	require.ErrorContains(t, err, "stripe API key is required")
+}
+
+func TestNewStripeCatalogMapsTUMMeter(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		"stripe-meter-event-name":      "tum",
+		stripeMeterEventExportFlagName: "true",
+	}))
+
+	eventName, err := catalog.MeterEventName(metering.AgentSessionStorage())
+	require.NoError(t, err)
+	require.Equal(t, "tum", eventName)
+}
+
+func TestNewStripeCatalogDropsTUMMeterWhenStreamingDisabled(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		"stripe-meter-event-name": "tum",
+	}))
+
+	eventName, err := catalog.MeterEventName(metering.AgentSessionStorage())
+	require.NoError(t, err)
+	require.Empty(t, eventName)
+}
+
+func TestNewStripeCatalogRejectsUnmappedMeter(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		"stripe-meter-event-name": "tum",
+	}))
+
+	eventName, err := catalog.MeterEventName(metering.Definition{})
+	require.Empty(t, eventName)
+	require.ErrorContains(t, err, "meter definition is not mapped to Stripe")
+}
+
+func TestNewStripeCatalogRejectsMissingTUMEventName(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		"stripe-meter-event-name":      "unset",
+		stripeMeterEventExportFlagName: "true",
+	}))
+
+	eventName, err := catalog.MeterEventName(metering.AgentSessionStorage())
+	require.Empty(t, eventName)
+	require.ErrorContains(t, err, "stripe TUM meter event name is not configured")
+}
+
+func TestNewStripeCatalogMapsMCPBandwidthMeters(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		"stripe-meter-event-name-mcp-bandwidth-ingress": "mcp_bandwidth_ingress",
+		"stripe-meter-event-name-mcp-bandwidth-egress":  "mcp_bandwidth_egress",
+		stripeMeterEventExportFlagName:                  "true",
+	}))
+
+	ingressName, err := catalog.MeterEventName(metering.MCPBandwidthIngress())
+	require.NoError(t, err)
+	require.Equal(t, "mcp_bandwidth_ingress", ingressName)
+
+	egressName, err := catalog.MeterEventName(metering.MCPBandwidthEgress())
+	require.NoError(t, err)
+	require.Equal(t, "mcp_bandwidth_egress", egressName)
+}
+
+func TestNewStripeCatalogLeavesBandwidthMetersUnmappedWithoutNames(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		stripeMeterEventExportFlagName: "true",
+	}))
+
+	ingressName, err := catalog.MeterEventName(metering.MCPBandwidthIngress())
+	require.NoError(t, err)
+	require.Empty(t, ingressName)
+
+	egressName, err := catalog.MeterEventName(metering.MCPBandwidthEgress())
+	require.NoError(t, err)
+	require.Empty(t, egressName)
+}
+
+func TestNewStripeCatalogDropsMCPBandwidthMetersWhenExportDisabled(t *testing.T) {
+	t.Parallel()
+
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		"stripe-meter-event-name-mcp-bandwidth-ingress": "mcp_bandwidth_ingress",
+		"stripe-meter-event-name-mcp-bandwidth-egress":  "mcp_bandwidth_egress",
+	}))
+
+	ingressName, err := catalog.MeterEventName(metering.MCPBandwidthIngress())
+	require.NoError(t, err)
+	require.Empty(t, ingressName)
+
+	egressName, err := catalog.MeterEventName(metering.MCPBandwidthEgress())
+	require.NoError(t, err)
+	require.Empty(t, egressName)
+}
+
+func TestNewStripeCatalogLeavesRiskMetersUnmappedWithoutNames(t *testing.T) {
+	t.Parallel()
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		stripeMeterEventExportFlagName: "true",
+		"stripe-meter-event-name":      "tum",
+	}))
+	for _, definition := range []metering.Definition{
+		metering.RiskGitleaks(), metering.RiskPresidio(),
+		metering.RiskPromptInjection(), metering.RiskPromptPolicy(),
+		metering.RiskCustomRules(), metering.RiskCLIDestructive(),
+		metering.RiskLLMAnalyzer(),
+	} {
+		eventName, err := catalog.MeterEventName(definition)
+		require.NoError(t, err)
+		require.Empty(t, eventName)
+	}
+}
+
+func TestNewStripeCatalogLeavesPlaceholderRiskMetersUnmapped(t *testing.T) {
+	t.Parallel()
+	catalog := newStripeCatalog(newStripeCLIContext(t, map[string]string{
+		stripeMeterEventExportFlagName:                  "true",
+		"stripe-meter-event-name-risk-gitleaks":         "unset",
+		"stripe-meter-event-name-risk-presidio":         "unset",
+		"stripe-meter-event-name-risk-prompt-injection": "unset",
+		"stripe-meter-event-name-risk-prompt-policy":    "unset",
+		"stripe-meter-event-name-risk-custom-rules":     "unset",
+		"stripe-meter-event-name-risk-cli-destructive":  "unset",
+		"stripe-meter-event-name-risk-llm-analyzer":     "unset",
+	}))
+	for _, definition := range []metering.Definition{
+		metering.RiskGitleaks(), metering.RiskPresidio(),
+		metering.RiskPromptInjection(), metering.RiskPromptPolicy(),
+		metering.RiskCustomRules(), metering.RiskCLIDestructive(),
+		metering.RiskLLMAnalyzer(),
+	} {
+		eventName, err := catalog.MeterEventName(definition)
+		require.NoError(t, err)
+		require.Empty(t, eventName)
+	}
+}
+
+func TestNewStripeCatalogRiskMetersRequireExportOptIn(t *testing.T) {
+	t.Parallel()
+
+	expected := map[metering.Definition]string{
+		metering.RiskGitleaks():        "billing_gitleaks",
+		metering.RiskPresidio():        "billing_presidio",
+		metering.RiskPromptInjection(): "billing_prompt_injection",
+		metering.RiskPromptPolicy():    "billing_prompt_policy",
+		metering.RiskCustomRules():     "billing_custom_rules",
+		metering.RiskCLIDestructive():  "billing_cli_destructive",
+		metering.RiskLLMAnalyzer():     "billing_llm_analyzer",
+	}
+	args := []string{
+		"gram",
+		"--stripe-meter-event-name-risk-gitleaks=billing_gitleaks",
+		"--stripe-meter-event-name-risk-presidio=billing_presidio",
+		"--stripe-meter-event-name-risk-prompt-injection=billing_prompt_injection",
+		"--stripe-meter-event-name-risk-prompt-policy=billing_prompt_policy",
+		"--stripe-meter-event-name-risk-custom-rules=billing_custom_rules",
+		"--stripe-meter-event-name-risk-cli-destructive=billing_cli_destructive",
+		"--stripe-meter-event-name-risk-llm-analyzer=billing_llm_analyzer",
+	}
+	for _, enabled := range []string{"false", "true"} {
+		app := cli.NewApp()
+		app.Flags = stripeFlags()
+		app.Action = func(c *cli.Context) error {
+			catalog := newStripeCatalog(c)
+			for definition, want := range expected {
+				eventName, err := catalog.MeterEventName(definition)
+				require.NoError(t, err)
+				if enabled == "true" {
+					require.Equal(t, want, eventName)
+				} else {
+					require.Empty(t, eventName)
+				}
+			}
+			return nil
+		}
+		require.NoError(t, app.RunContext(t.Context(), append(args, "--"+stripeMeterEventExportFlagName+"="+enabled)))
+	}
+}
+
+func TestNewStripeMeterEventClientAllowsMissingBandwidthNamesWhenExportEnabled(t *testing.T) {
+	t.Parallel()
+
+	client, err := newStripeMeterEventClient(
+		testenv.NewLogger(t),
+		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
+		newStripeCLIContext(t, map[string]string{
+			"environment":                  "prod",
+			"stripe-api-key":               "sk_test_placeholder",
+			stripeMeterEventExportFlagName: "true",
+		}),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, client)
 }
 
 func TestNewBillingProviderAcceptsStripeWithoutPolar(t *testing.T) {
@@ -176,9 +415,20 @@ func newStripeCLIContext(t *testing.T, values map[string]string) *cli.Context {
 	set.String("stripe-api-key", "", "")
 	set.String("stripe-webhook-secret", "", "")
 	set.String("stripe-price-id-tum", "", "")
-	set.String("stripe-meter-id-tum", "", "")
+	set.String("stripe-price-id-mcp-egress", "", "")
+	set.String("stripe-price-id-risk-scans", "", "")
 	set.String("stripe-meter-event-name", "", "")
+	set.String("stripe-meter-event-name-mcp-bandwidth-ingress", "", "")
+	set.String("stripe-meter-event-name-mcp-bandwidth-egress", "", "")
+	set.String("stripe-meter-event-name-risk-gitleaks", "", "")
+	set.String("stripe-meter-event-name-risk-presidio", "", "")
+	set.String("stripe-meter-event-name-risk-prompt-injection", "", "")
+	set.String("stripe-meter-event-name-risk-prompt-policy", "", "")
+	set.String("stripe-meter-event-name-risk-custom-rules", "", "")
+	set.String("stripe-meter-event-name-risk-cli-destructive", "", "")
+	set.String("stripe-meter-event-name-risk-llm-analyzer", "", "")
 	set.String("stripe-portal-configuration-id", "", "")
+	set.Bool(stripeMeterEventExportFlagName, false, "")
 	set.String("polar-api-key", "", "")
 	for key, value := range values {
 		require.NoError(t, set.Set(key, value))

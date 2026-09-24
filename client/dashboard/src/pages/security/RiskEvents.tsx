@@ -1,3 +1,6 @@
+import { EnableLoggingOverlay } from "@/components/EnableLoggingOverlay";
+import { IdentityLink } from "@/components/identity-link";
+import { identityRefForUserKey } from "@/lib/identity-urn";
 import { LogWorkbench } from "@/components/log-workbench";
 import {
   defineFilters,
@@ -8,7 +11,8 @@ import { Page } from "@/components/page-layout";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { MoreActions, type Action } from "@/components/ui/MoreActions";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useOrganization } from "@/contexts/Auth";
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { useMeasuredHeight } from "@/hooks/useMeasuredHeight";
 import { cn } from "@/lib/utils";
@@ -17,6 +21,8 @@ import { getPresetRange } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRiskOverview } from "@gram/client/react-query/riskOverview.js";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -37,7 +43,7 @@ import {
   RuleLabel,
 } from "./risk-ui";
 import {
-  isJudgeSource,
+  isRationaleSource,
   isShadowMcpSource,
   scoreToRating,
   SEVERITY_RATING_LABEL,
@@ -52,8 +58,8 @@ import {
 // single rule whose name only restates the category, so they render the badge
 // alone rather than an empty Rule cell.
 //
-// Evidence gets the widest track: for judge findings it holds a sentence or two
-// of rationale, where every other column holds a label.
+// Evidence gets the widest track: for judge and LLM analyzer findings it holds
+// a sentence or two of rationale, where every other column holds a label.
 const RISK_EVENTS_GRID =
   "grid grid-cols-[28px_88px_172px_minmax(0,1.3fr)_minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,2.4fr)_minmax(0,0.9fr)_110px] gap-3";
 
@@ -124,6 +130,7 @@ function SignalScore({ score }: { score: number | undefined }): JSX.Element {
 const RISK_FILTERS = defineFilters([
   { id: "policy_id", label: "Policy", kind: "select", pinned: true },
   { id: "date", label: "Date range", kind: "daterange", pinned: true },
+  { id: "mcp_server_id", label: "MCP server", kind: "select" },
   {
     id: "rule_id",
     label: "Rule ID",
@@ -136,7 +143,12 @@ const RISK_FILTERS = defineFilters([
     kind: "text",
     placeholder: "User contains...",
   },
-  { id: "unique", label: "Unique matches only", kind: "boolean" },
+  {
+    id: "unique",
+    label: "Unique matches only",
+    kind: "boolean",
+    description: "Keep the latest row per policy, rule and matched value.",
+  },
   { id: "assistant", label: "Assistant", kind: "select" },
 ]);
 
@@ -147,6 +159,15 @@ const NO_ASSISTANT = "none";
 
 export default function RiskEvents(): JSX.Element {
   const client = useSdkClient();
+  const gramProject = useProjectSlugForRequests();
+  const organization = useOrganization();
+  const featuresQuery = useProductFeatures({
+    organizationId: organization.id,
+  });
+  const isLoggingDisabled =
+    !featuresQuery.isPending &&
+    !featuresQuery.isError &&
+    featuresQuery.data?.logsEnabled === false;
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedChatId = searchParams.get("chat_id");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -155,6 +176,7 @@ export default function RiskEvents(): JSX.Element {
   const { values, setValue, clearValue, clearAll } =
     useFilterState(RISK_FILTERS);
   const policyFilter = values.policy_id ?? "";
+  const mcpServerFilter = values.mcp_server_id ?? "";
   const ruleFilter = values.rule_id;
   const userFilter = values.user_id;
   const uniqueOnly = values.unique;
@@ -201,6 +223,13 @@ export default function RiskEvents(): JSX.Element {
     [policiesData?.policies],
   );
 
+  const { data: mcpServersData } = useMcpServers({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+  const mcpServers = useMemo(
+    () => mcpServersData?.mcpServers ?? [],
+    [mcpServersData?.mcpServers],
+  );
   // Powers the rule_id filter autocomplete: surface only rules that actually
   // have findings in this project's recent window.
   const { data: overviewData } = useRiskOverview({}, undefined, {
@@ -262,13 +291,17 @@ export default function RiskEvents(): JSX.Element {
         label: p.enabled === false ? `${p.name} (inactive)` : p.name,
         value: p.id,
       })),
+      mcp_server_id: mcpServers.map((server) => ({
+        label: server.name?.trim() || server.slug || server.id.slice(0, 8),
+        value: server.id,
+      })),
       rule_id: ruleSuggestions.map((r) => ({ label: r, value: r })),
       assistant: [
         { label: "No assistant", value: NO_ASSISTANT },
         ...assistants.map((a) => ({ label: a.name, value: a.id })),
       ],
     }),
-    [policies, ruleSuggestions, assistants],
+    [policies, mcpServers, ruleSuggestions, assistants],
   );
 
   const fromIso = from?.toISOString();
@@ -280,6 +313,7 @@ export default function RiskEvents(): JSX.Element {
     containerRef.current?.scrollTo({ top: 0 });
   }, [
     policyFilter,
+    mcpServerFilter,
     ruleFilter,
     userFilter,
     uniqueOnly,
@@ -294,6 +328,7 @@ export default function RiskEvents(): JSX.Element {
       "results",
       "list",
       policyFilter,
+      mcpServerFilter,
       ruleFilter,
       userFilter,
       uniqueOnly,
@@ -306,6 +341,7 @@ export default function RiskEvents(): JSX.Element {
         cursor: pageParam,
         limit: 50,
         policyId: policyFilter || undefined,
+        mcpServerId: mcpServerFilter || undefined,
         ruleId: ruleFilter || undefined,
         userId: userFilter || undefined,
         uniqueMatch: uniqueOnly || undefined,
@@ -364,12 +400,33 @@ export default function RiskEvents(): JSX.Element {
     [resultsQuery],
   );
 
-  return (
-    <RevealAllProvider>
+  if (isLoggingDisabled) {
+    return (
       <LogWorkbench
         eyebrow="Secure"
         title="Risk Events"
-        stage="beta"
+        description="Review policy findings across recent analyzed chats."
+      >
+        <div>
+          <EnableLoggingOverlay
+            onEnabled={() => {
+              void featuresQuery.refetch();
+              void resultsQuery.refetch();
+            }}
+            screenshotSrc="/empty-states/risk_events_empty.png"
+            screenshotAlt="Risk Events dashboard with policy findings"
+            className="border-0"
+          />
+        </div>
+      </LogWorkbench>
+    );
+  }
+
+  return (
+    <RevealAllProvider>
+      <LogWorkbench
+        eyebrow="Security and Policy"
+        title="Risk Events"
         description="Review policy findings across recent analyzed chats."
         actions={
           <RevealAllToggle
@@ -414,11 +471,11 @@ export default function RiskEvents(): JSX.Element {
               selectedCount={selection.selectedCount}
               actions={[
                 {
-                  label: "Mark as false positive",
+                  label: "Suppress Once",
                   onClick: handleDismissSelected,
                 },
                 {
-                  label: "Set up exclusion rule",
+                  label: "Create Rule",
                   onClick: handleSetupExclusionSelected,
                 },
               ]}
@@ -643,7 +700,7 @@ function RiskEventsRows({
   );
 }
 
-function RiskEventsRow({
+export function RiskEventsRow({
   result,
   policyName,
   policyScore,
@@ -659,9 +716,10 @@ function RiskEventsRow({
   selection: RowSelection<RiskResult>;
   onDismiss: (result: RiskResult) => void;
   onSetupExclusion: (result: RiskResult) => void;
-}) {
+}): JSX.Element {
   const isShadowMCP = isShadowMcpSource(result.source);
-  const isEventSource = isJudgeSource(result.source);
+  // Judge and LLM analyzer findings carry their evidence as a rationale.
+  const isEventSource = isRationaleSource(result.source);
   // The 2px left edge carries the severity band color; rows whose policy
   // hasn't loaded a score keep a transparent edge so the grid stays aligned.
   const edgeRating =
@@ -690,8 +748,8 @@ function RiskEventsRow({
     ...(result.chatId
       ? [{ label: "Copy link", onClick: () => void handleShare() }]
       : []),
-    { label: "Mark as false positive", onClick: () => onDismiss(result) },
-    { label: "Set up exclusion rule", onClick: () => onSetupExclusion(result) },
+    { label: "Suppress Once", onClick: () => onDismiss(result) },
+    { label: "Create Rule", onClick: () => onSetupExclusion(result) },
   ];
 
   return (
@@ -759,7 +817,9 @@ function RiskEventsRow({
         {result.chatTitle ?? "Untitled"}
       </div>
       <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">
-        {result.userId ?? "-"}
+        <IdentityLink identifier={identityRefForUserKey(result.userId)}>
+          {result.userId ?? "-"}
+        </IdentityLink>
       </div>
       {/* Judge rationale wraps to two lines, so this cell can't clip to one. */}
       <div className={cn("min-w-0", !isEventSource && "truncate")}>

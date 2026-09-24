@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	otlpcommon "go.opentelemetry.io/proto/otlp/common/v1"
 	otlplogs "go.opentelemetry.io/proto/otlp/logs/v1"
+	otlpmetrics "go.opentelemetry.io/proto/otlp/metrics/v1"
 	otlpresource "go.opentelemetry.io/proto/otlp/resource/v1"
 	otlptrace "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/protobuf/proto"
@@ -67,6 +68,30 @@ func messagePairs() []messagePair {
 			messagePair{name: fmt.Sprintf("common.v1.ArrayValue (%s)", copy.name), upstream: &otlpcommon.ArrayValue{}, ours: copy.arrayValue},
 			messagePair{name: fmt.Sprintf("common.v1.KeyValueList (%s)", copy.name), upstream: &otlpcommon.KeyValueList{}, ours: copy.keyValueList},
 			messagePair{name: fmt.Sprintf("common.v1.KeyValue (%s)", copy.name), upstream: &otlpcommon.KeyValue{}, ours: copy.keyValue, skip: keyStrIndexSkip},
+		)
+	}
+
+	for _, copy := range metricCopies() {
+		pairs = append(pairs,
+			messagePair{name: fmt.Sprintf("metrics.v1.Metric (%s)", copy.name), upstream: new(otlpmetrics.Metric), ours: copy.newMetric()},
+			messagePair{name: fmt.Sprintf("metrics.v1.Gauge (%s)", copy.name), upstream: new(otlpmetrics.Gauge), ours: copy.gauge},
+			messagePair{name: fmt.Sprintf("metrics.v1.Sum (%s)", copy.name), upstream: new(otlpmetrics.Sum), ours: copy.sum},
+			messagePair{name: fmt.Sprintf("metrics.v1.Histogram (%s)", copy.name), upstream: new(otlpmetrics.Histogram), ours: copy.histogram},
+			messagePair{name: fmt.Sprintf("metrics.v1.ExponentialHistogram (%s)", copy.name), upstream: new(otlpmetrics.ExponentialHistogram), ours: copy.exponentialHistogram},
+			messagePair{name: fmt.Sprintf("metrics.v1.Summary (%s)", copy.name), upstream: new(otlpmetrics.Summary), ours: copy.summary},
+			messagePair{name: fmt.Sprintf("metrics.v1.NumberDataPoint (%s)", copy.name), upstream: new(otlpmetrics.NumberDataPoint), ours: copy.numberDataPoint},
+			messagePair{name: fmt.Sprintf("metrics.v1.HistogramDataPoint (%s)", copy.name), upstream: new(otlpmetrics.HistogramDataPoint), ours: copy.histogramDataPoint},
+			messagePair{name: fmt.Sprintf("metrics.v1.ExponentialHistogramDataPoint (%s)", copy.name), upstream: new(otlpmetrics.ExponentialHistogramDataPoint), ours: copy.exponentialHistogramPoint},
+			messagePair{name: fmt.Sprintf("metrics.v1.ExponentialHistogramDataPoint.Buckets (%s)", copy.name), upstream: new(otlpmetrics.ExponentialHistogramDataPoint_Buckets), ours: copy.exponentialHistogramBuckets},
+			messagePair{name: fmt.Sprintf("metrics.v1.SummaryDataPoint (%s)", copy.name), upstream: new(otlpmetrics.SummaryDataPoint), ours: copy.summaryDataPoint},
+			messagePair{name: fmt.Sprintf("metrics.v1.SummaryDataPoint.ValueAtQuantile (%s)", copy.name), upstream: new(otlpmetrics.SummaryDataPoint_ValueAtQuantile), ours: copy.valueAtQuantile},
+			messagePair{name: fmt.Sprintf("metrics.v1.Exemplar (%s)", copy.name), upstream: new(otlpmetrics.Exemplar), ours: copy.exemplar},
+			messagePair{name: fmt.Sprintf("resource.v1.Resource (%s)", copy.name), upstream: new(otlpresource.Resource), ours: copy.resource, skip: entityRefsSkip},
+			messagePair{name: fmt.Sprintf("common.v1.InstrumentationScope (%s)", copy.name), upstream: new(otlpcommon.InstrumentationScope), ours: copy.instrumentationScope},
+			messagePair{name: fmt.Sprintf("common.v1.AnyValue (%s)", copy.name), upstream: new(otlpcommon.AnyValue), ours: copy.anyValue, skip: strIndexSkip},
+			messagePair{name: fmt.Sprintf("common.v1.ArrayValue (%s)", copy.name), upstream: new(otlpcommon.ArrayValue), ours: copy.arrayValue},
+			messagePair{name: fmt.Sprintf("common.v1.KeyValueList (%s)", copy.name), upstream: new(otlpcommon.KeyValueList), ours: copy.keyValueList},
+			messagePair{name: fmt.Sprintf("common.v1.KeyValue (%s)", copy.name), upstream: new(otlpcommon.KeyValue), ours: copy.keyValue, skip: keyStrIndexSkip},
 		)
 	}
 
@@ -201,6 +226,21 @@ func TestUpstreamEnumsMatch(t *testing.T) {
 			upstream: otlplogs.SeverityNumber(0).Descriptor(),
 			ours:     copy.severityNumber,
 		})
+	}
+
+	for _, copy := range metricCopies() {
+		enumPairs = append(enumPairs,
+			enumPair{
+				name:     fmt.Sprintf("metrics.v1.AggregationTemporality (%s)", copy.name),
+				upstream: otlpmetrics.AggregationTemporality_AGGREGATION_TEMPORALITY_UNSPECIFIED.Descriptor(),
+				ours:     copy.aggregationTemporality,
+			},
+			enumPair{
+				name:     fmt.Sprintf("metrics.v1.DataPointFlags (%s)", copy.name),
+				upstream: otlpmetrics.DataPointFlags_DATA_POINT_FLAGS_DO_NOT_USE.Descriptor(),
+				ours:     copy.dataPointFlags,
+			},
+		)
 	}
 
 	for _, copy := range spanCopies() {

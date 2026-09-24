@@ -43,13 +43,25 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
+	// APIKeyAuth already put the actor on ctx: scope the session ids first.
+	conversationID, conversationChanged := scopedSessionPtr(ctx, payload.ConversationID)
+	sessionID, sessionChanged := scopedSessionPtr(ctx, payload.SessionID)
+	if conversationChanged || sessionChanged {
+		scoped := *payload
+		scoped.ConversationID = conversationID
+		scoped.SessionID = sessionID
+		payload = &scoped
+	}
+
 	logger := s.logger.With(
 		attr.SlogHookSource("cursor"),
 		attr.SlogHookEvent(logHookEventName),
 		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
 		attr.SlogGenAIConversationID(conv.PtrValOr(payload.ConversationID, "")),
-		attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")),
 	)
+	if !isAgentActor(ctx) {
+		logger = logger.With(attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")))
+	}
 
 	authCtx, authOK := contextvalues.GetAuthContext(ctx)
 	if !authOK || authCtx == nil || authCtx.ProjectID == nil {
@@ -69,10 +81,15 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 	orgSlug = authCtx.OrganizationSlug
 	projectID := authCtx.ProjectID.String()
 	userEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
-	if userEmail == "" {
+	actorUserID := ""
+	switch {
+	case isAgentActor(ctx):
+		userEmail = ""
+	case userEmail == "":
 		return nil, oops.E(oops.CodeInvalid, nil, "cursor hook payload missing user_email")
+	default:
+		actorUserID = s.resolveUserByEmail(ctx, userEmail, orgID)
 	}
-	actorUserID := s.resolveUserByEmail(ctx, userEmail, orgID)
 	logger = logger.With(
 		attr.SlogOrganizationID(orgID),
 		attr.SlogProjectID(projectID),
@@ -140,9 +157,9 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		// Acknowledged warn is excluded from the enforcement block so it falls
 		// through to the shadow-MCP guard below: an ack clears the risk
 		// challenge but must never bypass unapproved-toolset validation.
-		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil && (scanResult.Action != "warn" ||
+		if scanResult := s.scanMCPRequestForEnforcement(ctx, ev); scanResult != nil && (!scanResult.IsWarnChallenge() ||
 			!s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName)) {
-			if scanResult.Action == "warn" {
+			if scanResult.IsWarnChallenge() {
 				if agentReason, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 					blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 					result.Permission = new("deny")
@@ -153,7 +170,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				}
 			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			userReason := renderUserBlockReason(scanResult, auditReason)
 			blockReason = auditReason
 			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
 				Provider:       "cursor",
@@ -249,11 +266,11 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 			break
 		}
 		if scanResult := s.scanToolRequestForEnforcement(ctx, ev); scanResult != nil {
-			if scanResult.Action == "warn" && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName) {
+			if scanResult.IsWarnChallenge() && s.warnAcknowledged(ctx, ev.Event, scanResult, ev.ToolName) {
 				result.Permission = new("allow")
 				break
 			}
-			if scanResult.Action == "warn" {
+			if scanResult.IsWarnChallenge() {
 				if agentReason, userReason, ok := s.warnDenyReason(ctx, ev.Event, scanResult, ev.ToolName); ok {
 					blockReason = fmt.Sprintf("Speakeasy challenged this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
 					result.Permission = new("deny")
@@ -264,7 +281,7 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 				}
 			}
 			auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			userReason := renderUserBlockReason(scanResult, auditReason)
 			blockReason = auditReason
 			if bURL := s.recordToolCallBlockAsync(ctx, toolCallBlockParams{
 				Provider:       "cursor",
@@ -301,9 +318,9 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		// confirmation primitive here, and denying would diverge from the
 		// Claude/Codex prompt paths. Let it through — the follow-on tool call
 		// carrying the match is where a warn is challenged.
-		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && scanResult.Action != "warn" {
+		if scanResult := s.scanUserPromptForEnforcement(ctx, ev); scanResult != nil && !scanResult.IsWarnChallenge() {
 			auditReason := fmt.Sprintf("Speakeasy blocked this prompt: matched policy %q (%s)", scanResult.PolicyName, scanResult.Description)
-			userReason := renderUserBlockReason(scanResult.UserMessage, auditReason)
+			userReason := renderUserBlockReason(scanResult, auditReason)
 			blockReason = auditReason
 			result.Permission = new("deny")
 			result.UserMessage = &userReason
@@ -338,6 +355,9 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 	ctx = context.WithoutCancel(ctx)
 
 	userEmail := conv.PtrValOr(payload.UserEmail, "")
+	if isAgentActor(ctx) {
+		userEmail = ""
+	}
 
 	metadata := &SessionMetadata{
 		SessionID:           *payload.ConversationID,
@@ -454,7 +474,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 			Timestamp:  s.now(),
 			ToolInfo:   toolInfo,
 			UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
-			Attributes: attrs,
+			Attributes: withAgentActor(ctx, attrs),
 		})
 
 		s.logger.DebugContext(ctx, "Wrote Cursor hook to ClickHouse",
@@ -537,7 +557,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 		Timestamp:  s.now(),
 		ToolInfo:   toolInfo,
 		UserInfo:   telemetry.UserInfoByID(userID),
-		Attributes: attrs,
+		Attributes: withAgentActor(ctx, attrs),
 	})
 
 	s.logger.DebugContext(ctx, "Wrote Cursor metrics to ClickHouse",
@@ -758,6 +778,7 @@ func (s *Service) writeCursorToolCallRequestToPG(ctx context.Context, payload *g
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -828,6 +849,7 @@ func (s *Service) writeCursorToolCallResultToPG(ctx context.Context, payload *ge
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -877,6 +899,7 @@ func (s *Service) persistCursorAgentResponse(ctx context.Context, payload *gen.C
 	chatID := sessionIDToUUID(*payload.ConversationID)
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -942,6 +965,7 @@ func (s *Service) persistCursorUserPrompt(ctx context.Context, payload *gen.Curs
 	}
 
 	msgParams := chatRepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,

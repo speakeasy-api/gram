@@ -47,6 +47,120 @@ function session(overrides: Partial<UserSession> = {}) {
 }
 
 describe("groupConnections", () => {
+  it("files workload sessions under their workload, apart from people", () => {
+    const workload = {
+      workloadIssuerId: "11111111-1111-4111-8111-111111111111",
+      externalSubject: "repo:acme/payments-api:ref:refs/heads/main",
+      workloadIssuerName: "GitHub Actions",
+      agentId: "agent-1",
+      agentName: "Deploy bot",
+      agentStatus: "active" as const,
+      admissions: [],
+    };
+    const subjectUrn = `workload:${workload.workloadIssuerId}:${workload.externalSubject}`;
+    const groups = groupConnections(
+      [
+        session({
+          id: "w-1",
+          subjectUrn,
+          subjectType: "workload",
+          // No display name, so the assertion below exercises the workload
+          // label branch rather than passing through subjectDisplayName.
+          subjectDisplayName: undefined,
+          workload,
+        }),
+        session({
+          id: "w-2",
+          subjectUrn,
+          subjectType: "workload",
+          // No display name, so the assertion below exercises the workload
+          // label branch rather than passing through subjectDisplayName.
+          subjectDisplayName: undefined,
+          workload,
+        }),
+        session({ id: "u-1" }),
+      ],
+      "subject",
+      { now: NOW },
+    );
+
+    const workloadGroup = groups.find((group) => group.key === subjectUrn);
+    expect(workloadGroup?.label).toBe(workload.externalSubject);
+    expect(workloadGroup?.workload).toEqual(workload);
+    expect(workloadGroup?.identity).toBeUndefined();
+    expect(workloadGroup?.revocableIds).toEqual(["w-1", "w-2"]);
+
+    const personGroup = groups.find((group) => group.key === "user:someone");
+    expect(personGroup?.workload).toBeUndefined();
+  });
+
+  // The credential kind reaches an agent row from whichever source the caller
+  // has: the MCP server tab hands over registration records, while the
+  // organization and employee pages pass sessions alone.
+  it("reads the credential kind off sessions when no registrations are passed", () => {
+    const groups = groupConnections(
+      [
+        session({
+          userSessionClientId: "client-1",
+          clientCredentialKind: "key",
+          clientTokenEndpointAuthMethod: "private_key_jwt",
+        }),
+      ],
+      "client",
+      { now: NOW },
+    );
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.credentialKind).toBe("key");
+    expect(groups[0]!.clientId).toBe("client-1");
+  });
+
+  it("reads the credential kind off a registration that holds no sessions", () => {
+    const groups = groupConnections([], "client", {
+      now: NOW,
+      clients: [
+        {
+          id: "client-9",
+          clientName: "Dormant Agent",
+          credentialKind: "misconfigured",
+        } as never,
+      ],
+    });
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.credentialKind).toBe("misconfigured");
+    expect(groups[0]!.clientId).toBe("client-9");
+  });
+
+  // A session with no bound client is grouped under its client name, and there
+  // is no registration behind it to describe or open.
+  it("leaves the credential fields unset for a session with no client id", () => {
+    const groups = groupConnections(
+      [session({ userSessionClientId: undefined })],
+      "client",
+      { now: NOW },
+    );
+
+    expect(groups[0]!.clientId).toBeUndefined();
+    expect(groups[0]!.credentialKind).toBeUndefined();
+  });
+
+  // Only agent rows name a registration. A person or provider row must not
+  // inherit one from whichever session happened to create the group.
+  it("leaves the credential fields unset under person and provider grouping", () => {
+    const withClient = session({
+      userSessionClientId: "client-1",
+      clientCredentialKind: "key",
+      upstreams: [upstream()],
+    });
+
+    for (const grouping of ["subject", "provider"] as const) {
+      const groups = groupConnections([withClient], grouping, { now: NOW });
+      expect(groups[0]!.clientId).toBeUndefined();
+      expect(groups[0]!.credentialKind).toBeUndefined();
+    }
+  });
+
   it("files a session once per provider even with two upstreams at one issuer", () => {
     // An issuer can have several remote_session_clients attached, so a subject
     // can hold two upstreams that resolve to the same provider. Keyed on the

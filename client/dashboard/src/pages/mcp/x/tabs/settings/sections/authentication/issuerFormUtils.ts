@@ -38,6 +38,15 @@ export type DiscoveredEndpoints = {
   serviceDocumentation: string;
   opPolicyUri: string;
   opTosUri: string;
+  // OIDC userinfo / RFC 7662 introspection endpoints; "" = not advertised.
+  userinfoEndpoint: string;
+  introspectionEndpoint: string;
+  // Tri-state like codeChallengeMethodsSupported: null = never captured.
+  introspectionEndpointAuthMethodsSupported: string[] | null;
+  idTokenSigningAlgValuesSupported: string[] | null;
+  claimsSupported: string[] | null;
+  backchannelLogoutSupported: boolean | null;
+  authorizationResponseIssParameterSupported: boolean | null;
 };
 
 // Matches the OAuth Proxy wizard's parseScopes helper: split on commas, trim,
@@ -50,19 +59,46 @@ export function parseScopes(raw: string): string[] {
     .filter((scope) => scope.length > 0);
 }
 
+// DCR callers leave private_key_jwt disabled because a newly registered client
+// cannot already have Gram's JWKS attached. Existing-client settings opt in
+// after the key set has been attached through its dedicated endpoint.
 export function narrowTokenEndpointAuthMethod(
   value: string | null | undefined,
+  allowPrivateKeyJwt = false,
 ): CreateRemoteSessionClientFormTokenEndpointAuthMethod | undefined {
   if (
     value ===
       CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretBasic ||
     value ===
       CreateRemoteSessionClientFormTokenEndpointAuthMethod.ClientSecretPost ||
-    value === CreateRemoteSessionClientFormTokenEndpointAuthMethod.None
+    value === CreateRemoteSessionClientFormTokenEndpointAuthMethod.None ||
+    (allowPrivateKeyJwt &&
+      value ===
+        CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt)
   ) {
     return value;
   }
   return undefined;
+}
+
+export function isPrivateKeyJwtAuthMethod(
+  method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+): boolean {
+  return (
+    method ===
+    CreateRemoteSessionClientFormTokenEndpointAuthMethod.PrivateKeyJwt
+  );
+}
+
+// The server retains an existing secret when this update omits clientSecret.
+// Never rotate a dormant secret while private_key_jwt is selected, even if a
+// value was typed before switching authentication methods in the form.
+export function clientSecretUpdateValue(
+  method: CreateRemoteSessionClientFormTokenEndpointAuthMethod | "",
+  secret: string,
+): string | undefined {
+  if (isPrivateKeyJwtAuthMethod(method)) return undefined;
+  return secret.trim() || undefined;
 }
 
 // Picks the preferred auth method from the issuer's advertised list.
@@ -124,6 +160,27 @@ export function deriveNameFromUrl(url: string): string | null {
 // credential-less client whose client_id is a Gram-hosted document URL.
 export type ClientType = "dcr" | "manual" | "cimd";
 
+export const TUNNELED_DCR_PERMISSION_MESSAGE =
+  "Dynamic client registration through this provider's tunnel requires platform admin access. Use Manual, or CIMD when supported.";
+
+export function dynamicClientRegistrationAvailability({
+  registrationEndpoint,
+  tunneled,
+  isPlatformAdmin,
+}: {
+  registrationEndpoint: string | null | undefined;
+  tunneled: boolean;
+  isPlatformAdmin: boolean;
+}): { available: boolean; permissionRestricted: boolean } {
+  const hasRegistrationEndpoint = !!registrationEndpoint?.trim();
+  const permissionRestricted =
+    hasRegistrationEndpoint && tunneled && !isPlatformAdmin;
+  return {
+    available: hasRegistrationEndpoint && !permissionRestricted,
+    permissionRestricted,
+  };
+}
+
 export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   dcr: "Dynamic Client Registration (DCR)",
   cimd: "Client ID Metadata Document (CIMD)",
@@ -156,7 +213,7 @@ export function clientTypeHelp(
 ): string {
   switch (clientType) {
     case "dcr":
-      return "The issuer advertises a registration endpoint (RFC 7591), so the platform can automatically register a client on save. You can also choose to manually define an existing client.";
+      return "A registration endpoint (RFC 7591) is configured, so the platform can automatically register a client on save. You can also choose to manually define an existing client.";
     case "cimd":
       return "The issuer supports Client ID Metadata Documents, so the platform hosts a public document and uses its URL as the client_id. No credentials are stored; the issuer authenticates the client by dereferencing that URL.";
     case "manual": {

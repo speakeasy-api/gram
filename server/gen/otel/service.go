@@ -19,8 +19,21 @@ import (
 type Service interface {
 	// Endpoint to receive OTEL logs data from LLM providers and harnesses.
 	Logs(context.Context, *LogsPayload, io.ReadCloser) (err error)
+	// Endpoint to receive OTEL metrics data from LLM providers and harnesses.
+	Metrics(context.Context, *MetricsPayload, io.ReadCloser) (err error)
 	// Endpoint to receive OTEL traces data from LLM providers and harnesses.
 	Traces(context.Context, *TracesPayload, io.ReadCloser) (err error)
+	// Org-scoped event feed over ingested OpenTelemetry signals: log records and
+	// spans merged into one reverse-chronological list with keyset pagination and
+	// a capped total count.
+	ListEventLog(context.Context, *ListEventLogPayload) (res *ListEventLogResult, err error)
+	// Org-scoped event volume timeseries for the event feed: bucketed counts of
+	// ingested OpenTelemetry log records vs spans over a time range, honoring the
+	// same filters as listEventLog.
+	GetEventVolume(context.Context, *GetEventVolumePayload) (res *GetEventVolumeResult, err error)
+	// Org-scoped filter facets for the event feed: the distinct sources and
+	// event/span names observed in a time range.
+	GetEventFacets(context.Context, *GetEventFacetsPayload) (res *GetEventFacetsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -43,10 +56,136 @@ const ServiceName = "otel"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"logs", "traces"}
+var MethodNames = [6]string{"logs", "metrics", "traces", "listEventLog", "getEventVolume", "getEventFacets"}
+
+// A single ingested OpenTelemetry signal (log record or span) in the event feed
+type EventLogEntry struct {
+	// Event time in Unix nanoseconds (string for JS int64 precision)
+	TimeUnixNano string
+	// Signal kind
+	Kind string
+	// Canonicalized source derived from the resource service name
+	Source string
+	// Event name for logs, span name for spans
+	Name string
+	// Log body truncated to 200 characters; empty for spans
+	BodyPreview string
+	// W3C trace ID
+	TraceID string
+	// W3C span ID
+	SpanID string
+	// Project the event was recorded under
+	ProjectID string
+	// Signal attributes as a JSON object
+	Attributes any
+	// Resource attributes as a JSON object
+	ResourceAttributes any
+}
+
+// One event volume bucket
+type EventVolumeBucket struct {
+	// Bucket start in Unix nanoseconds (string for JS int64 precision)
+	BucketTimeUnixNano string
+	// Log records in this bucket
+	LogCount int64
+	// Spans in this bucket
+	SpanCount int64
+}
+
+// GetEventFacetsPayload is the payload type of the otel service getEventFacets
+// method.
+type GetEventFacetsPayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Optional signal kind filter. Empty means facets from both logs and spans.
+	Kinds []string
+}
+
+// GetEventFacetsResult is the result type of the otel service getEventFacets
+// method.
+type GetEventFacetsResult struct {
+	// Distinct sources in ascending order
+	Sources []string
+	// Distinct event/span names in ascending order
+	Names []string
+}
+
+// GetEventVolumePayload is the payload type of the otel service getEventVolume
+// method.
+type GetEventVolumePayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Optional signal kind filter. Empty means both logs and spans.
+	Kinds []string
+	// Optional source filter (canonicalized service names). Values are ORed.
+	Sources []string
+	// Optional event/span name filter. Values are ORed.
+	Names []string
+	// Optional case-insensitive substring match over event body and name
+	Search *string
+}
+
+// GetEventVolumeResult is the result type of the otel service getEventVolume
+// method.
+type GetEventVolumeResult struct {
+	// Bucket width in seconds
+	IntervalSeconds int64
+	// Zero-filled buckets in ascending time order
+	Buckets []*EventVolumeBucket
+}
+
+// ListEventLogPayload is the payload type of the otel service listEventLog
+// method.
+type ListEventLogPayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+	// Optional signal kind filter. Empty means both logs and spans.
+	Kinds []string
+	// Optional source filter (canonicalized service names). Values are ORed.
+	Sources []string
+	// Optional event/span name filter. Values are ORed.
+	Names []string
+	// Optional case-insensitive substring match over event body and name
+	Search *string
+	// Number of events to return (1-200)
+	Limit int
+	// Opaque cursor for pagination
+	Cursor *string
+}
+
+// ListEventLogResult is the result type of the otel service listEventLog
+// method.
+type ListEventLogResult struct {
+	// Events ordered newest first
+	Events []*EventLogEntry
+	// Cursor for next page
+	NextCursor *string
+	// Number of events matching the filters, capped at 10000
+	TotalCount int64
+	// True when total_count hit the cap and the true count is higher
+	TotalCountCapped bool
+}
 
 // LogsPayload is the payload type of the otel service logs method.
 type LogsPayload struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	// Encoding applied to the OTLP request body. Supported values are gzip and
+	// identity.
+	ContentEncoding *string
+}
+
+// MetricsPayload is the payload type of the otel service metrics method.
+type MetricsPayload struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	// Encoding applied to the OTLP request body. Supported values are gzip and

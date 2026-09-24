@@ -28,14 +28,20 @@ func TestIsAbsoluteHTTP(t *testing.T) {
 		{raw: "mailto:legal@idp.example.com", want: false},
 		{raw: "ftp://idp.example.com", want: false},
 		{raw: "https://", want: false},
+		{raw: "https://:443/docs", want: false},
 		{raw: "data:text/html,<script>alert(1)</script>", want: false},
 		{raw: "https://idp.example.com\n", want: false},
 		{raw: "ht tp://idp.example.com", want: false},
+		// Userinfo would become a Basic Authorization header when dialled.
+		{raw: "https://user:secret@idp.example.com/docs", want: false},
+		{raw: "https://idp.example.com@evil.example/docs", want: false},
 	}
 
 	for _, tc := range cases {
 		require.Equal(t, tc.want, urls.IsAbsoluteHTTP(tc.raw), "IsAbsoluteHTTP(%q)", tc.raw)
 	}
+	require.False(t, urls.IsAbsoluteHTTPS("https://idp.example.com@evil.example/introspect"))
+	require.False(t, urls.IsAbsoluteHTTPSOrLoopback("http://user:secret@127.0.0.1/introspect"))
 }
 
 // The loopback carve-out is a security boundary: it decides which URLs Gram

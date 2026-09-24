@@ -1,4 +1,5 @@
 import { CancelPaygDialog } from "@/components/billing/cancel-payg-dialog";
+import { usePaygCheckoutAccess } from "@/components/billing/payg-checkout-access";
 import {
   canCancelPaygPlan,
   canResumePaygPlan,
@@ -9,6 +10,7 @@ import {
 } from "@/components/billing/payg-plan-state";
 import { PaygPortalButton } from "@/components/billing/payg-portal-button";
 import { ResumePaygButton } from "@/components/billing/resume-payg-button";
+import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -16,49 +18,54 @@ import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
-import { useSession } from "@/contexts/Auth";
 import { useProductTier } from "@/hooks/useProductTier";
-import { useTrialNow } from "@/hooks/useTrialNow";
 import { isNotFoundError } from "@/lib/route-errors";
-import { getTrialLifecycleFromDates } from "@/lib/trial-status";
+import type { ReactNode } from "react";
 
 /**
- * The organization's self-serve plan: what Stripe is doing right now, the way
- * into the customer portal, and the in-product cancel and resume controls.
- *
- * The rules live here rather than at the call site so the billing page can
- * place the section without re-deriving when a pay-as-you-go subscription
- * exists. Organizations that haven't taken one out get `StartPaygCheckoutCTA`
- * instead, which is what puts them here.
- *
- * An active product trial is one of those organizations even when the account
- * type already reads as PAYG: checkout hasn't run, so there is no Stripe
- * subscription to report on, and asking for one would answer 404 — which this
- * section would otherwise render as "billing isn't managed through Stripe"
- * directly beside the checkout button that is about to set it up. The trial
- * lifecycle is read from the same session clock the checkout CTA and inference
- * cap controls use, so the three can't disagree about when the trial is over.
+ * Offers checkout during an active trial or when PAYG has no Stripe subscription.
+ * Starting checkout leaves the trial unchanged until Stripe confirms completion.
+ * Unsubscribed PAYG organizations retain a way to finish billing setup.
+ * Attached subscriptions expose their live state and management controls.
  */
 export function PaygPlanSection(): JSX.Element | null {
   const productTier = useProductTier();
-  const { trial } = useSession();
-  // A trial that ends while the page is open has to bring the plan with it, so
-  // this reads a clock that re-renders on the trial's own boundaries.
-  const now = useTrialNow(trial);
+  const { eligible, trialLifecycle } = usePaygCheckoutAccess("active-trial");
+
+  if (trialLifecycle === "active") {
+    // The eligibility gate (flag, admin scope) decides whether there is
+    // anything to offer; a section whose only content is an action the viewer
+    // cannot take would just be announcing a dead end.
+    if (!eligible) return null;
+    return (
+      <PaymentSection description="Add a payment method to start pay as you go when your trial ends.">
+        <StartPaygCheckoutCTA label="Add payment method" />
+      </PaymentSection>
+    );
+  }
 
   if (productTier !== "payg") return null;
-  if (getTrialLifecycleFromDates(trial, now) === "active") return null;
 
   return (
+    <PaymentSection description="Your pay-as-you-go subscription, payment method, and invoices.">
+      <PaygPlanBody />
+    </PaymentSection>
+  );
+}
+
+function PaymentSection({
+  description,
+  children,
+}: {
+  description: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
     <Page.Section>
-      {/* Secondary section below Usage: suppress the area eyebrow. */}
-      <Page.Section.Title area="">Plan</Page.Section.Title>
-      <Page.Section.Description>
-        Your pay-as-you-go subscription, payment method, and invoices.
-      </Page.Section.Description>
-      <Page.Section.Body>
-        <PaygPlanBody />
-      </Page.Section.Body>
+      {/* Secondary section: suppress the area eyebrow. */}
+      <Page.Section.Title area="">Payment</Page.Section.Title>
+      <Page.Section.Description>{description}</Page.Section.Description>
+      <Page.Section.Body>{children}</Page.Section.Body>
     </Page.Section>
   );
 }
@@ -67,19 +74,35 @@ export function PaygPlanSection(): JSX.Element | null {
 // that has no self-serve subscription to report on.
 function PaygPlanBody(): JSX.Element {
   const { data, error, isError, isFetching, refetch } = useStripeSubscription();
+  const { eligible: canStartCheckout } =
+    usePaygCheckoutAccess("unsubscribed-payg");
 
-  // A 404 is an answer, not an outage: the pay-as-you-go tier predates Stripe,
-  // so an organization can be on it without a Stripe subscription behind it.
-  // That answer is stable, so it outranks a cached subscription and gets no
-  // retry — there is nothing here that trying again would find.
+  // A confirmed absence outranks cached subscription state. It can mean checkout
+  // was abandoned after the local trial converted, so eligible admins can offer
+  // billing setup again. Everyone else gets the confirmed state without an
+  // impossible setup instruction.
   if (isNotFoundError(error)) {
+    if (!canStartCheckout) {
+      return (
+        <Stack gap={3}>
+          <Text className="font-medium">No active billing subscription</Text>
+          <Text muted small>
+            No self-serve subscription details are available to display.
+          </Text>
+        </Stack>
+      );
+    }
+
     return (
-      <Stack gap={1}>
-        <Text className="font-medium">No Stripe subscription</Text>
+      <Stack gap={3}>
+        <Text className="font-medium">Finish setting up billing</Text>
         <Text muted small>
-          This organization's billing isn't managed through Stripe, so there's
-          no payment method or invoice history to manage here.
+          Complete checkout to activate your pay-as-you-go subscription.
         </Text>
+        <StartPaygCheckoutCTA
+          label="Add payment method"
+          eligibility="unsubscribed-payg"
+        />
       </Stack>
     );
   }

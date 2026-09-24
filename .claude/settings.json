@@ -17,10 +17,10 @@
       "Bash(mise lint:*)",
       "Bash(mise build:*)",
       "Bash(mise gen:*)",
-      "Read(*)",
-      "Update(infra:*)",
-      "Update(client:*)",
-      "Update(server:*)",
+      "Read",
+      "Edit(infra/**)",
+      "Edit(client/**)",
+      "Edit(server/**)",
       "WebFetch"
     ],
     "deny": ["Read(mise.local.toml)"]

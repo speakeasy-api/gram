@@ -30,6 +30,22 @@ func (q *Queries) AcquireOpenRouterBillingLock(ctx context.Context, arg AcquireO
 	return err
 }
 
+const acquireOpenRouterBillingSessionLock = `-- name: AcquireOpenRouterBillingSessionLock :exec
+SELECT pg_advisory_lock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+)
+`
+
+type AcquireOpenRouterBillingSessionLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+func (q *Queries) AcquireOpenRouterBillingSessionLock(ctx context.Context, arg AcquireOpenRouterBillingSessionLockParams) error {
+	_, err := q.db.Exec(ctx, acquireOpenRouterBillingSessionLock, arg.KeyType, arg.OrganizationID)
+	return err
+}
+
 const acquireStripeSubscriptionActivationLock = `-- name: AcquireStripeSubscriptionActivationLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended($1, 0))
 `
@@ -108,114 +124,6 @@ func (q *Queries) ActivatePaygOrganization(ctx context.Context, organizationID s
 	return err
 }
 
-const beginTUMMeterReportAttempt = `-- name: BeginTUMMeterReportAttempt :one
-UPDATE stripe_meter_reports
-SET first_attempted_at = COALESCE(first_attempted_at, $1),
-    last_attempted_at = $1,
-    updated_at = clock_timestamp()
-WHERE organization_id = $2
-  AND id = $3
-  AND delivery_state IN ('pending', 'ambiguous')
-  AND (first_attempted_at IS NULL OR first_attempted_at > $4)
-RETURNING id, organization_id, billing_cycle_usage_id, cycle_start, cycle_end, seq, stripe_customer_id, stripe_meter_event_name, stripe_identifier, delta_tokens, event_timestamp, delivery_state, first_attempted_at, last_attempted_at, confirmed_at, ambiguous_at, reconciled_at, created_at, updated_at
-`
-
-type BeginTUMMeterReportAttemptParams struct {
-	AttemptedAt    pgtype.Timestamptz
-	OrganizationID pgtype.Text
-	ID             uuid.UUID
-	RetryAfter     pgtype.Timestamptz
-}
-
-func (q *Queries) BeginTUMMeterReportAttempt(ctx context.Context, arg BeginTUMMeterReportAttemptParams) (StripeMeterReport, error) {
-	row := q.db.QueryRow(ctx, beginTUMMeterReportAttempt,
-		arg.AttemptedAt,
-		arg.OrganizationID,
-		arg.ID,
-		arg.RetryAfter,
-	)
-	var i StripeMeterReport
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.BillingCycleUsageID,
-		&i.CycleStart,
-		&i.CycleEnd,
-		&i.Seq,
-		&i.StripeCustomerID,
-		&i.StripeMeterEventName,
-		&i.StripeIdentifier,
-		&i.DeltaTokens,
-		&i.EventTimestamp,
-		&i.DeliveryState,
-		&i.FirstAttemptedAt,
-		&i.LastAttemptedAt,
-		&i.ConfirmedAt,
-		&i.AmbiguousAt,
-		&i.ReconciledAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const confirmReconciledTUMMeterReports = `-- name: ConfirmReconciledTUMMeterReports :execrows
-UPDATE stripe_meter_reports
-SET delivery_state = 'confirmed',
-    confirmed_at = COALESCE(confirmed_at, $1),
-    reconciled_at = $1,
-    updated_at = clock_timestamp()
-WHERE organization_id = $2
-  AND billing_cycle_usage_id = $3
-  AND delivery_state IN ('pending', 'ambiguous')
-  AND first_attempted_at IS NOT NULL
-  AND first_attempted_at <= $4
-`
-
-type ConfirmReconciledTUMMeterReportsParams struct {
-	ReconciledAt        pgtype.Timestamptz
-	OrganizationID      pgtype.Text
-	BillingCycleUsageID uuid.NullUUID
-	RetryAfter          pgtype.Timestamptz
-}
-
-func (q *Queries) ConfirmReconciledTUMMeterReports(ctx context.Context, arg ConfirmReconciledTUMMeterReportsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, confirmReconciledTUMMeterReports,
-		arg.ReconciledAt,
-		arg.OrganizationID,
-		arg.BillingCycleUsageID,
-		arg.RetryAfter,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const confirmTUMMeterReport = `-- name: ConfirmTUMMeterReport :execrows
-UPDATE stripe_meter_reports
-SET delivery_state = 'confirmed',
-    confirmed_at = $1,
-    updated_at = clock_timestamp()
-WHERE organization_id = $2
-  AND id = $3
-  AND delivery_state IN ('pending', 'ambiguous')
-`
-
-type ConfirmTUMMeterReportParams struct {
-	ConfirmedAt    pgtype.Timestamptz
-	OrganizationID pgtype.Text
-	ID             uuid.UUID
-}
-
-func (q *Queries) ConfirmTUMMeterReport(ctx context.Context, arg ConfirmTUMMeterReportParams) (int64, error) {
-	result, err := q.db.Exec(ctx, confirmTUMMeterReport, arg.ConfirmedAt, arg.OrganizationID, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const countStripeWebhookReceiptsFixture = `-- name: CountStripeWebhookReceiptsFixture :one
 SELECT count(*)
 FROM stripe_webhook_receipts
@@ -228,62 +136,6 @@ func (q *Queries) CountStripeWebhookReceiptsFixture(ctx context.Context, organiz
 	var count int64
 	err := row.Scan(&count)
 	return count, err
-}
-
-const createLegacyTUMMeterReportFixture = `-- name: CreateLegacyTUMMeterReportFixture :one
-INSERT INTO stripe_meter_reports (
-    organization_id
-  , cycle_start
-  , seq
-  , delta_tokens
-  , delivery_state
-) VALUES (
-    $1
-  , $2
-  , $3
-  , $4
-  , 'confirmed'
-)
-RETURNING id, organization_id, billing_cycle_usage_id, cycle_start, cycle_end, seq, stripe_customer_id, stripe_meter_event_name, stripe_identifier, delta_tokens, event_timestamp, delivery_state, first_attempted_at, last_attempted_at, confirmed_at, ambiguous_at, reconciled_at, created_at, updated_at
-`
-
-type CreateLegacyTUMMeterReportFixtureParams struct {
-	OrganizationID pgtype.Text
-	CycleStart     pgtype.Timestamptz
-	Seq            int32
-	DeltaTokens    int64
-}
-
-func (q *Queries) CreateLegacyTUMMeterReportFixture(ctx context.Context, arg CreateLegacyTUMMeterReportFixtureParams) (StripeMeterReport, error) {
-	row := q.db.QueryRow(ctx, createLegacyTUMMeterReportFixture,
-		arg.OrganizationID,
-		arg.CycleStart,
-		arg.Seq,
-		arg.DeltaTokens,
-	)
-	var i StripeMeterReport
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.BillingCycleUsageID,
-		&i.CycleStart,
-		&i.CycleEnd,
-		&i.Seq,
-		&i.StripeCustomerID,
-		&i.StripeMeterEventName,
-		&i.StripeIdentifier,
-		&i.DeltaTokens,
-		&i.EventTimestamp,
-		&i.DeliveryState,
-		&i.FirstAttemptedAt,
-		&i.LastAttemptedAt,
-		&i.ConfirmedAt,
-		&i.AmbiguousAt,
-		&i.ReconciledAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const createStripeBillingMetadataFixture = `-- name: CreateStripeBillingMetadataFixture :exec
@@ -317,156 +169,6 @@ type CreateStripeSubscriptionBillingMetadataFixtureParams struct {
 func (q *Queries) CreateStripeSubscriptionBillingMetadataFixture(ctx context.Context, arg CreateStripeSubscriptionBillingMetadataFixtureParams) error {
 	_, err := q.db.Exec(ctx, createStripeSubscriptionBillingMetadataFixture, arg.OrganizationID, arg.StripeCustomerID, arg.StripeSubscriptionID)
 	return err
-}
-
-const createTUMCarryAllocation = `-- name: CreateTUMCarryAllocation :execrows
-INSERT INTO stripe_invoice_allocations (
-    organization_id
-  , source_kind
-  , source_key
-  , seq
-  , source_period_start
-  , source_period_end
-  , source_snapshot_usd
-  , delta_tokens
-  , original_tum_unit_price_usd
-  , amount_usd
-  , idempotency_key
-  , delivery_state
-)
-SELECT
-    billing_cycle_usage.organization_id
-  , 'tum_cycle'
-  , extract(epoch FROM billing_cycle_usage.cycle_start)::bigint::text || ':' || extract(epoch FROM billing_cycle_usage.cycle_end)::bigint::text
-  , 1
-  , billing_cycle_usage.cycle_start
-  , billing_cycle_usage.cycle_end
-  , round(billing_cycle_usage.tum_tokens::numeric * $1::text::numeric, 6)
-  , billing_cycle_usage.tum_tokens - billing_cycle_usage.billed_tum_tokens
-  , $1::text::numeric
-  , round(billing_cycle_usage.tum_tokens::numeric * $1::text::numeric, 2)
-    - round(billing_cycle_usage.billed_tum_tokens::numeric * $1::text::numeric, 2)
-  , 'tum-carry:' || billing_cycle_usage.organization_id || ':' || extract(epoch FROM billing_cycle_usage.cycle_start)::bigint::text
-  , 'pending'
-FROM billing_cycle_usage
-WHERE billing_cycle_usage.organization_id = $2
-  AND billing_cycle_usage.id = $3
-  AND billing_cycle_usage.billed_tum_tokens IS NOT NULL
-  AND billing_cycle_usage.finalized_at IS NOT NULL
-  AND billing_cycle_usage.tum_tokens <> billing_cycle_usage.billed_tum_tokens
-ON CONFLICT (organization_id, source_kind, source_key, seq) DO NOTHING
-`
-
-type CreateTUMCarryAllocationParams struct {
-	TumUnitPriceUsd     string
-	OrganizationID      pgtype.Text
-	BillingCycleUsageID uuid.UUID
-}
-
-func (q *Queries) CreateTUMCarryAllocation(ctx context.Context, arg CreateTUMCarryAllocationParams) (int64, error) {
-	result, err := q.db.Exec(ctx, createTUMCarryAllocation, arg.TumUnitPriceUsd, arg.OrganizationID, arg.BillingCycleUsageID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const createTUMMeterReportIntent = `-- name: CreateTUMMeterReportIntent :one
-WITH locked_cycle AS (
-  SELECT id, organization_id, cycle_start, cycle_end
-  FROM billing_cycle_usage
-  WHERE billing_cycle_usage.organization_id = $4
-    AND billing_cycle_usage.id = $5
-  FOR UPDATE
-), report_totals AS (
-  SELECT
-      COALESCE(MAX(stripe_meter_reports.seq), 0)::int AS max_seq
-    , COALESCE(SUM(stripe_meter_reports.delta_tokens) FILTER (
-        WHERE stripe_meter_reports.delivery_state IN ('pending', 'ambiguous', 'confirmed')
-      ), 0)::bigint AS intended_tokens
-  FROM locked_cycle
-  LEFT JOIN stripe_meter_reports
-    ON stripe_meter_reports.organization_id = locked_cycle.organization_id
-   AND stripe_meter_reports.cycle_start = locked_cycle.cycle_start
-), intended AS (
-  SELECT
-      locked_cycle.id, locked_cycle.organization_id, locked_cycle.cycle_start, locked_cycle.cycle_end
-    , report_totals.max_seq + 1 AS next_seq
-    , $6::bigint - report_totals.intended_tokens AS delta_tokens
-  FROM locked_cycle
-  CROSS JOIN report_totals
-)
-INSERT INTO stripe_meter_reports (
-    organization_id
-  , billing_cycle_usage_id
-  , cycle_start
-  , cycle_end
-  , seq
-  , stripe_customer_id
-  , stripe_meter_event_name
-  , stripe_identifier
-  , delta_tokens
-  , event_timestamp
-  , delivery_state
-)
-SELECT
-    intended.organization_id
-  , intended.id
-  , intended.cycle_start
-  , intended.cycle_end
-  , intended.next_seq
-  , $1
-  , $2
-  , 'tum:' || intended.organization_id || ':' || to_char(intended.cycle_start AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') || ':' || intended.next_seq::text
-  , intended.delta_tokens
-  , $3
-  , 'pending'
-FROM intended
-WHERE intended.delta_tokens <> 0
-RETURNING id, organization_id, billing_cycle_usage_id, cycle_start, cycle_end, seq, stripe_customer_id, stripe_meter_event_name, stripe_identifier, delta_tokens, event_timestamp, delivery_state, first_attempted_at, last_attempted_at, confirmed_at, ambiguous_at, reconciled_at, created_at, updated_at
-`
-
-type CreateTUMMeterReportIntentParams struct {
-	StripeCustomerID     pgtype.Text
-	StripeMeterEventName pgtype.Text
-	EventTimestamp       pgtype.Timestamptz
-	OrganizationID       pgtype.Text
-	BillingCycleUsageID  uuid.UUID
-	TargetTumTokens      int64
-}
-
-func (q *Queries) CreateTUMMeterReportIntent(ctx context.Context, arg CreateTUMMeterReportIntentParams) (StripeMeterReport, error) {
-	row := q.db.QueryRow(ctx, createTUMMeterReportIntent,
-		arg.StripeCustomerID,
-		arg.StripeMeterEventName,
-		arg.EventTimestamp,
-		arg.OrganizationID,
-		arg.BillingCycleUsageID,
-		arg.TargetTumTokens,
-	)
-	var i StripeMeterReport
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.BillingCycleUsageID,
-		&i.CycleStart,
-		&i.CycleEnd,
-		&i.Seq,
-		&i.StripeCustomerID,
-		&i.StripeMeterEventName,
-		&i.StripeIdentifier,
-		&i.DeltaTokens,
-		&i.EventTimestamp,
-		&i.DeliveryState,
-		&i.FirstAttemptedAt,
-		&i.LastAttemptedAt,
-		&i.ConfirmedAt,
-		&i.AmbiguousAt,
-		&i.ReconciledAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const deactivatePaygBillingMetadata = `-- name: DeactivatePaygBillingMetadata :execrows
@@ -513,6 +215,21 @@ func (q *Queries) DeactivatePaygOrganization(ctx context.Context, organizationID
 const disablePaygOpenRouterChatKey = `-- name: DisablePaygOpenRouterChatKey :exec
 UPDATE openrouter_api_keys
 SET disabled = TRUE,
+    disable_causes = CASE
+      WHEN disable_causes IS NULL THEN NULL
+      WHEN 'billing_inactive' = ANY(disable_causes) THEN disable_causes
+      ELSE ARRAY(
+        SELECT cause
+        FROM unnest(array_append(disable_causes, 'billing_inactive')) AS causes(cause)
+        GROUP BY cause
+        ORDER BY CASE cause
+          WHEN 'admin_lock' THEN 1
+          WHEN 'trial_demotion' THEN 2
+          WHEN 'billing_inactive' THEN 3
+          ELSE 4
+        END
+      )
+    END,
     updated_at = clock_timestamp()
 WHERE organization_id = $1
   AND key_type = 'chat'
@@ -594,82 +311,6 @@ func (q *Queries) FinalizeStripeCheckoutIntent(ctx context.Context, arg Finalize
 	return i, err
 }
 
-const freezeMissedTUMBillingCycleBaseline = `-- name: FreezeMissedTUMBillingCycleBaseline :one
-UPDATE billing_cycle_usage
-SET billed_tum_tokens = 0,
-    billed_frozen_at = $1,
-    updated_at = clock_timestamp()
-WHERE organization_id = $2
-  AND id = $3
-  AND billed_tum_tokens IS NULL
-  AND billed_frozen_at IS NULL
-  AND finalized_at IS NOT NULL
-RETURNING id, organization_id, cycle_start, cycle_end, tum_tokens, billed_tum_tokens, billed_frozen_at, finalized_at, created_at, updated_at
-`
-
-type FreezeMissedTUMBillingCycleBaselineParams struct {
-	FrozenAt            pgtype.Timestamptz
-	OrganizationID      pgtype.Text
-	BillingCycleUsageID uuid.UUID
-}
-
-// If reporting was unavailable for the entire +48h..+72h window, the closed
-// invoice received no immutable baseline. Record zero as billed so the full
-// finalized usage becomes one carry-forward allocation instead of disappearing.
-func (q *Queries) FreezeMissedTUMBillingCycleBaseline(ctx context.Context, arg FreezeMissedTUMBillingCycleBaselineParams) (BillingCycleUsage, error) {
-	row := q.db.QueryRow(ctx, freezeMissedTUMBillingCycleBaseline, arg.FrozenAt, arg.OrganizationID, arg.BillingCycleUsageID)
-	var i BillingCycleUsage
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.CycleStart,
-		&i.CycleEnd,
-		&i.TumTokens,
-		&i.BilledTumTokens,
-		&i.BilledFrozenAt,
-		&i.FinalizedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const freezeTUMBillingCycleBaseline = `-- name: FreezeTUMBillingCycleBaseline :one
-UPDATE billing_cycle_usage
-SET billed_tum_tokens = tum_tokens,
-    billed_frozen_at = $1,
-    updated_at = clock_timestamp()
-WHERE organization_id = $2
-  AND id = $3
-  AND billed_tum_tokens IS NULL
-  AND billed_frozen_at IS NULL
-RETURNING id, organization_id, cycle_start, cycle_end, tum_tokens, billed_tum_tokens, billed_frozen_at, finalized_at, created_at, updated_at
-`
-
-type FreezeTUMBillingCycleBaselineParams struct {
-	FrozenAt            pgtype.Timestamptz
-	OrganizationID      pgtype.Text
-	BillingCycleUsageID uuid.UUID
-}
-
-func (q *Queries) FreezeTUMBillingCycleBaseline(ctx context.Context, arg FreezeTUMBillingCycleBaselineParams) (BillingCycleUsage, error) {
-	row := q.db.QueryRow(ctx, freezeTUMBillingCycleBaseline, arg.FrozenAt, arg.OrganizationID, arg.BillingCycleUsageID)
-	var i BillingCycleUsage
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.CycleStart,
-		&i.CycleEnd,
-		&i.TumTokens,
-		&i.BilledTumTokens,
-		&i.BilledFrozenAt,
-		&i.FinalizedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getBillingMetadata = `-- name: GetBillingMetadata :one
 SELECT id, organization_id, stripe_customer_id, stripe_subscription_id, stripe_billing_cycle_anchor, stripe_checkout_idempotency_key, stripe_checkout_billing_cycle_anchor, stripe_checkout_trial_end, stripe_checkout_expires_at, stripe_checkout_session_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 FROM billing_metadata
@@ -742,7 +383,7 @@ func (q *Queries) GetEnabledServerCount(ctx context.Context, organizationID stri
 }
 
 const getMaterializedOpenRouterInferenceKey = `-- name: GetMaterializedOpenRouterInferenceKey :one
-SELECT key_type, disabled
+SELECT key_type, (CASE WHEN disable_causes IS NULL THEN disabled ELSE cardinality(disable_causes) > 0 END)::boolean AS disabled
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND key_type = $2
@@ -949,96 +590,74 @@ func (q *Queries) GetPaygInvoiceIdentity(ctx context.Context, organizationID str
 	return i, err
 }
 
-const getTUMMeterReportTotals = `-- name: GetTUMMeterReportTotals :one
+const getPaygOpenRouterChatLifecycleProjection = `-- name: GetPaygOpenRouterChatLifecycleProjection :one
 SELECT
-    COALESCE(SUM(delta_tokens) FILTER (WHERE delivery_state = 'confirmed'), 0)::bigint AS confirmed_tokens
-  , COALESCE(SUM(delta_tokens) FILTER (WHERE delivery_state IN ('pending', 'ambiguous', 'confirmed')), 0)::bigint AS intended_tokens
-FROM stripe_meter_reports
-JOIN billing_cycle_usage
-  ON billing_cycle_usage.organization_id = stripe_meter_reports.organization_id
- AND billing_cycle_usage.cycle_start = stripe_meter_reports.cycle_start
-WHERE billing_cycle_usage.organization_id = $1
-  AND billing_cycle_usage.id = $2
+    organization_metadata.gram_account_type
+  , billing_metadata.stripe_subscription_id
+FROM organization_metadata
+LEFT JOIN billing_metadata
+  ON billing_metadata.organization_id = organization_metadata.id
+WHERE organization_metadata.id = $1
 `
 
-type GetTUMMeterReportTotalsParams struct {
-	OrganizationID      pgtype.Text
-	BillingCycleUsageID uuid.UUID
+type GetPaygOpenRouterChatLifecycleProjectionRow struct {
+	GramAccountType      string
+	StripeSubscriptionID pgtype.Text
 }
 
-type GetTUMMeterReportTotalsRow struct {
-	ConfirmedTokens int64
-	IntendedTokens  int64
-}
-
-func (q *Queries) GetTUMMeterReportTotals(ctx context.Context, arg GetTUMMeterReportTotalsParams) (GetTUMMeterReportTotalsRow, error) {
-	row := q.db.QueryRow(ctx, getTUMMeterReportTotals, arg.OrganizationID, arg.BillingCycleUsageID)
-	var i GetTUMMeterReportTotalsRow
-	err := row.Scan(&i.ConfirmedTokens, &i.IntendedTokens)
+func (q *Queries) GetPaygOpenRouterChatLifecycleProjection(ctx context.Context, organizationID string) (GetPaygOpenRouterChatLifecycleProjectionRow, error) {
+	row := q.db.QueryRow(ctx, getPaygOpenRouterChatLifecycleProjection, organizationID)
+	var i GetPaygOpenRouterChatLifecycleProjectionRow
+	err := row.Scan(&i.GramAccountType, &i.StripeSubscriptionID)
 	return i, err
 }
 
-const getTUMMeteringOrganization = `-- name: GetTUMMeteringOrganization :one
-SELECT
-    billing_metadata.organization_id
-  , billing_metadata.stripe_customer_id
-  , billing_metadata.stripe_subscription_id
-  , billing_metadata.stripe_billing_cycle_anchor
-  , organization_metadata.gram_account_type
-FROM billing_metadata
-JOIN organization_metadata
-  ON organization_metadata.id = billing_metadata.organization_id
-WHERE billing_metadata.organization_id = $1
+const getStripeWebhookReceipt = `-- name: GetStripeWebhookReceipt :one
+SELECT organization_id, event_type
+FROM stripe_webhook_receipts
+WHERE stripe_event_id = $1
 `
 
-type GetTUMMeteringOrganizationRow struct {
-	OrganizationID           string
-	StripeCustomerID         pgtype.Text
-	StripeSubscriptionID     pgtype.Text
-	StripeBillingCycleAnchor pgtype.Timestamptz
-	GramAccountType          string
+type GetStripeWebhookReceiptRow struct {
+	OrganizationID string
+	EventType      string
 }
 
-func (q *Queries) GetTUMMeteringOrganization(ctx context.Context, organizationID string) (GetTUMMeteringOrganizationRow, error) {
-	row := q.db.QueryRow(ctx, getTUMMeteringOrganization, organizationID)
-	var i GetTUMMeteringOrganizationRow
-	err := row.Scan(
-		&i.OrganizationID,
-		&i.StripeCustomerID,
-		&i.StripeSubscriptionID,
-		&i.StripeBillingCycleAnchor,
-		&i.GramAccountType,
-	)
+func (q *Queries) GetStripeWebhookReceipt(ctx context.Context, stripeEventID string) (GetStripeWebhookReceiptRow, error) {
+	row := q.db.QueryRow(ctx, getStripeWebhookReceipt, stripeEventID)
+	var i GetStripeWebhookReceiptRow
+	err := row.Scan(&i.OrganizationID, &i.EventType)
 	return i, err
 }
 
 const listBillingCycleUsage = `-- name: ListBillingCycleUsage :many
-SELECT id, organization_id, cycle_start, cycle_end, tum_tokens, billed_tum_tokens, billed_frozen_at, finalized_at, created_at, updated_at
+SELECT cycle_start, cycle_end, tum_tokens, finalized_at
 FROM billing_cycle_usage
 WHERE organization_id = $1::text
 ORDER BY cycle_start
 `
 
-func (q *Queries) ListBillingCycleUsage(ctx context.Context, organizationID string) ([]BillingCycleUsage, error) {
+type ListBillingCycleUsageRow struct {
+	CycleStart  pgtype.Timestamptz
+	CycleEnd    pgtype.Timestamptz
+	TumTokens   int64
+	FinalizedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListBillingCycleUsage(ctx context.Context, organizationID string) ([]ListBillingCycleUsageRow, error) {
 	rows, err := q.db.Query(ctx, listBillingCycleUsage, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []BillingCycleUsage
+	var items []ListBillingCycleUsageRow
 	for rows.Next() {
-		var i BillingCycleUsage
+		var i ListBillingCycleUsageRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
 			&i.CycleStart,
 			&i.CycleEnd,
 			&i.TumTokens,
-			&i.BilledTumTokens,
-			&i.BilledFrozenAt,
 			&i.FinalizedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1079,35 +698,12 @@ func (q *Queries) ListBillingProjectIDsByOrganization(ctx context.Context, organ
 	return items, nil
 }
 
-const listFinalizedBillingCycleStarts = `-- name: ListFinalizedBillingCycleStarts :many
-SELECT cycle_start
-FROM billing_cycle_usage
-WHERE organization_id = $1::text
-  AND finalized_at IS NOT NULL
-`
-
-func (q *Queries) ListFinalizedBillingCycleStarts(ctx context.Context, organizationID string) ([]pgtype.Timestamptz, error) {
-	rows, err := q.db.Query(ctx, listFinalizedBillingCycleStarts, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []pgtype.Timestamptz
-	for rows.Next() {
-		var cycle_start pgtype.Timestamptz
-		if err := rows.Scan(&cycle_start); err != nil {
-			return nil, err
-		}
-		items = append(items, cycle_start)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listMaterializedOpenRouterInferenceKeys = `-- name: ListMaterializedOpenRouterInferenceKeys :many
-SELECT key_type, monthly_credits, disabled
+SELECT key_type
+  , monthly_credits
+  , (CASE WHEN disable_causes IS NULL THEN disabled ELSE cardinality(disable_causes) > 0 END)::boolean AS disabled
+  , disable_causes
+  , (disable_causes IS NOT NULL)::boolean AS disable_causes_classified
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND key_type = ANY($2::text[])
@@ -1121,9 +717,11 @@ type ListMaterializedOpenRouterInferenceKeysParams struct {
 }
 
 type ListMaterializedOpenRouterInferenceKeysRow struct {
-	KeyType        string
-	MonthlyCredits int64
-	Disabled       bool
+	KeyType                 string
+	MonthlyCredits          int64
+	Disabled                bool
+	DisableCauses           []string
+	DisableCausesClassified bool
 }
 
 func (q *Queries) ListMaterializedOpenRouterInferenceKeys(ctx context.Context, arg ListMaterializedOpenRouterInferenceKeysParams) ([]ListMaterializedOpenRouterInferenceKeysRow, error) {
@@ -1135,7 +733,13 @@ func (q *Queries) ListMaterializedOpenRouterInferenceKeys(ctx context.Context, a
 	var items []ListMaterializedOpenRouterInferenceKeysRow
 	for rows.Next() {
 		var i ListMaterializedOpenRouterInferenceKeysRow
-		if err := rows.Scan(&i.KeyType, &i.MonthlyCredits, &i.Disabled); err != nil {
+		if err := rows.Scan(
+			&i.KeyType,
+			&i.MonthlyCredits,
+			&i.Disabled,
+			&i.DisableCauses,
+			&i.DisableCausesClassified,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1146,61 +750,82 @@ func (q *Queries) ListMaterializedOpenRouterInferenceKeys(ctx context.Context, a
 	return items, nil
 }
 
-const listStaleTUMMeterReportCycles = `-- name: ListStaleTUMMeterReportCycles :many
-SELECT
-    stripe_meter_reports.billing_cycle_usage_id
-  , stripe_meter_reports.cycle_start
-  , stripe_meter_reports.cycle_end
-  , stripe_meter_reports.stripe_customer_id
-  , MIN(stripe_meter_reports.reconciled_at)::timestamptz AS absence_observed_at
-FROM stripe_meter_reports
-WHERE organization_id = $1
-  AND delivery_state IN ('pending', 'ambiguous')
-  AND billing_cycle_usage_id IS NOT NULL
-  AND cycle_end IS NOT NULL
-  AND stripe_customer_id IS NOT NULL
-GROUP BY
-    stripe_meter_reports.billing_cycle_usage_id
-  , stripe_meter_reports.cycle_start
-  , stripe_meter_reports.cycle_end
-  , stripe_meter_reports.stripe_customer_id
-HAVING bool_and(
-  stripe_meter_reports.first_attempted_at IS NOT NULL
-  AND stripe_meter_reports.first_attempted_at <= $2
+const listOpenRouterInferenceSpendByMonth = `-- name: ListOpenRouterInferenceSpendByMonth :many
+WITH candidate_months AS (
+  SELECT
+      DATE_TRUNC('month', day)::date AS period_start
+    , (DATE_TRUNC('month', day) + INTERVAL '1 month')::date AS period_end
+    , SUM(spend_usd)::numeric(30, 6) AS spend_usd
+  FROM openrouter_spend_daily
+  WHERE organization_id = $1::text
+    AND key_type = ANY($2::text[])
+    AND day < DATE_TRUNC('month', $3::timestamptz AT TIME ZONE 'UTC')::date
+  GROUP BY DATE_TRUNC('month', day)
+), complete_months AS (
+  SELECT candidate_months.period_start, candidate_months.period_end, candidate_months.spend_usd
+  FROM candidate_months
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM openrouter_api_keys AS inference_key
+    CROSS JOIN LATERAL GENERATE_SERIES(
+      GREATEST(candidate_months.period_start, (inference_key.created_at AT TIME ZONE 'UTC')::date),
+      LEAST(
+        candidate_months.period_end,
+        COALESCE((inference_key.deleted_at AT TIME ZONE 'UTC')::date, candidate_months.period_end)
+      ) - 1,
+      INTERVAL '1 day'
+    ) AS expected_day(day)
+    WHERE inference_key.organization_id = $1::text
+      AND inference_key.key_type = ANY($2::text[])
+      AND (inference_key.created_at AT TIME ZONE 'UTC')::date < candidate_months.period_end
+      AND (
+        inference_key.deleted_at IS NULL
+        OR (inference_key.deleted_at AT TIME ZONE 'UTC')::date > candidate_months.period_start
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM openrouter_spend_daily AS daily_spend
+        WHERE daily_spend.organization_id = inference_key.organization_id
+          AND daily_spend.key_type = inference_key.key_type
+          AND daily_spend.day = expected_day.day::date
+      )
+  )
+), latest_months AS (
+  SELECT period_start, period_end, spend_usd
+  FROM complete_months
+  ORDER BY period_start DESC
+  LIMIT 12
 )
-ORDER BY cycle_start
-LIMIT 1
+SELECT
+    period_start::text AS period_start
+  , period_end::text AS period_end
+  , spend_usd::text AS spend_usd
+FROM latest_months
+ORDER BY period_start
 `
 
-type ListStaleTUMMeterReportCyclesParams struct {
-	OrganizationID pgtype.Text
-	RetryAfter     pgtype.Timestamptz
+type ListOpenRouterInferenceSpendByMonthParams struct {
+	OrganizationID   string
+	BillableKeyTypes []string
+	CompletedBefore  pgtype.Timestamptz
 }
 
-type ListStaleTUMMeterReportCyclesRow struct {
-	BillingCycleUsageID uuid.NullUUID
-	CycleStart          pgtype.Timestamptz
-	CycleEnd            pgtype.Timestamptz
-	StripeCustomerID    pgtype.Text
-	AbsenceObservedAt   pgtype.Timestamptz
+type ListOpenRouterInferenceSpendByMonthRow struct {
+	PeriodStart string
+	PeriodEnd   string
+	SpendUsd    string
 }
 
-func (q *Queries) ListStaleTUMMeterReportCycles(ctx context.Context, arg ListStaleTUMMeterReportCyclesParams) ([]ListStaleTUMMeterReportCyclesRow, error) {
-	rows, err := q.db.Query(ctx, listStaleTUMMeterReportCycles, arg.OrganizationID, arg.RetryAfter)
+func (q *Queries) ListOpenRouterInferenceSpendByMonth(ctx context.Context, arg ListOpenRouterInferenceSpendByMonthParams) ([]ListOpenRouterInferenceSpendByMonthRow, error) {
+	rows, err := q.db.Query(ctx, listOpenRouterInferenceSpendByMonth, arg.OrganizationID, arg.BillableKeyTypes, arg.CompletedBefore)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListStaleTUMMeterReportCyclesRow
+	var items []ListOpenRouterInferenceSpendByMonthRow
 	for rows.Next() {
-		var i ListStaleTUMMeterReportCyclesRow
-		if err := rows.Scan(
-			&i.BillingCycleUsageID,
-			&i.CycleStart,
-			&i.CycleEnd,
-			&i.StripeCustomerID,
-			&i.AbsenceObservedAt,
-		); err != nil {
+		var i ListOpenRouterInferenceSpendByMonthRow
+		if err := rows.Scan(&i.PeriodStart, &i.PeriodEnd, &i.SpendUsd); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1276,212 +901,6 @@ func (q *Queries) ListStripeSubscriptionOwners(ctx context.Context, stripeSubscr
 	return items, nil
 }
 
-const listTUMBillingCyclesForReporting = `-- name: ListTUMBillingCyclesForReporting :many
-SELECT id, organization_id, cycle_start, cycle_end, tum_tokens, billed_tum_tokens, billed_frozen_at, finalized_at, created_at, updated_at
-FROM billing_cycle_usage
-WHERE organization_id = $1
-  AND cycle_start >= $2
-ORDER BY cycle_start
-`
-
-type ListTUMBillingCyclesForReportingParams struct {
-	OrganizationID      pgtype.Text
-	FirstPaidCycleStart pgtype.Timestamptz
-}
-
-func (q *Queries) ListTUMBillingCyclesForReporting(ctx context.Context, arg ListTUMBillingCyclesForReportingParams) ([]BillingCycleUsage, error) {
-	rows, err := q.db.Query(ctx, listTUMBillingCyclesForReporting, arg.OrganizationID, arg.FirstPaidCycleStart)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []BillingCycleUsage
-	for rows.Next() {
-		var i BillingCycleUsage
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.CycleStart,
-			&i.CycleEnd,
-			&i.TumTokens,
-			&i.BilledTumTokens,
-			&i.BilledFrozenAt,
-			&i.FinalizedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listTUMCarryAllocationsFixture = `-- name: ListTUMCarryAllocationsFixture :many
-SELECT id, organization_id, source_kind, source_key, seq, source_day, source_period_start, source_period_end, source_snapshot_usd, delta_tokens, original_tum_unit_price_usd, amount_usd, original_invoice_id, destination_invoice_id, stripe_invoice_item_id, stripe_credit_note_id, idempotency_key, delivery_state, first_attempted_at, last_attempted_at, confirmed_at, ambiguous_at, reconciled_at, created_at, updated_at
-FROM stripe_invoice_allocations
-WHERE organization_id = $1
-  AND source_kind = 'tum_cycle'
-ORDER BY source_period_start, seq
-`
-
-func (q *Queries) ListTUMCarryAllocationsFixture(ctx context.Context, organizationID pgtype.Text) ([]StripeInvoiceAllocation, error) {
-	rows, err := q.db.Query(ctx, listTUMCarryAllocationsFixture, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []StripeInvoiceAllocation
-	for rows.Next() {
-		var i StripeInvoiceAllocation
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.SourceKind,
-			&i.SourceKey,
-			&i.Seq,
-			&i.SourceDay,
-			&i.SourcePeriodStart,
-			&i.SourcePeriodEnd,
-			&i.SourceSnapshotUsd,
-			&i.DeltaTokens,
-			&i.OriginalTumUnitPriceUsd,
-			&i.AmountUsd,
-			&i.OriginalInvoiceID,
-			&i.DestinationInvoiceID,
-			&i.StripeInvoiceItemID,
-			&i.StripeCreditNoteID,
-			&i.IdempotencyKey,
-			&i.DeliveryState,
-			&i.FirstAttemptedAt,
-			&i.LastAttemptedAt,
-			&i.ConfirmedAt,
-			&i.AmbiguousAt,
-			&i.ReconciledAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listTUMMeterReportsFixture = `-- name: ListTUMMeterReportsFixture :many
-SELECT id, organization_id, billing_cycle_usage_id, cycle_start, cycle_end, seq, stripe_customer_id, stripe_meter_event_name, stripe_identifier, delta_tokens, event_timestamp, delivery_state, first_attempted_at, last_attempted_at, confirmed_at, ambiguous_at, reconciled_at, created_at, updated_at
-FROM stripe_meter_reports
-WHERE organization_id = $1
-ORDER BY cycle_start, seq
-`
-
-func (q *Queries) ListTUMMeterReportsFixture(ctx context.Context, organizationID pgtype.Text) ([]StripeMeterReport, error) {
-	rows, err := q.db.Query(ctx, listTUMMeterReportsFixture, organizationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []StripeMeterReport
-	for rows.Next() {
-		var i StripeMeterReport
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.BillingCycleUsageID,
-			&i.CycleStart,
-			&i.CycleEnd,
-			&i.Seq,
-			&i.StripeCustomerID,
-			&i.StripeMeterEventName,
-			&i.StripeIdentifier,
-			&i.DeltaTokens,
-			&i.EventTimestamp,
-			&i.DeliveryState,
-			&i.FirstAttemptedAt,
-			&i.LastAttemptedAt,
-			&i.ConfirmedAt,
-			&i.AmbiguousAt,
-			&i.ReconciledAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listTUMMeterReportsForDelivery = `-- name: ListTUMMeterReportsForDelivery :many
-SELECT id, organization_id, billing_cycle_usage_id, cycle_start, cycle_end, seq, stripe_customer_id, stripe_meter_event_name, stripe_identifier, delta_tokens, event_timestamp, delivery_state, first_attempted_at, last_attempted_at, confirmed_at, ambiguous_at, reconciled_at, created_at, updated_at
-FROM stripe_meter_reports
-WHERE organization_id = $1
-  AND delivery_state IN ('pending', 'ambiguous')
-  AND billing_cycle_usage_id IS NOT NULL
-  AND cycle_end IS NOT NULL
-  AND stripe_customer_id IS NOT NULL
-  AND stripe_meter_event_name IS NOT NULL
-  AND stripe_identifier IS NOT NULL
-  AND event_timestamp IS NOT NULL
-  AND (first_attempted_at IS NULL OR first_attempted_at > $2)
-ORDER BY cycle_start, seq
-LIMIT 1
-`
-
-type ListTUMMeterReportsForDeliveryParams struct {
-	OrganizationID pgtype.Text
-	RetryAfter     pgtype.Timestamptz
-}
-
-func (q *Queries) ListTUMMeterReportsForDelivery(ctx context.Context, arg ListTUMMeterReportsForDeliveryParams) ([]StripeMeterReport, error) {
-	rows, err := q.db.Query(ctx, listTUMMeterReportsForDelivery, arg.OrganizationID, arg.RetryAfter)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []StripeMeterReport
-	for rows.Next() {
-		var i StripeMeterReport
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.BillingCycleUsageID,
-			&i.CycleStart,
-			&i.CycleEnd,
-			&i.Seq,
-			&i.StripeCustomerID,
-			&i.StripeMeterEventName,
-			&i.StripeIdentifier,
-			&i.DeltaTokens,
-			&i.EventTimestamp,
-			&i.DeliveryState,
-			&i.FirstAttemptedAt,
-			&i.LastAttemptedAt,
-			&i.ConfirmedAt,
-			&i.AmbiguousAt,
-			&i.ReconciledAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const lockBillingMetadata = `-- name: LockBillingMetadata :one
 SELECT id, organization_id, stripe_customer_id, stripe_subscription_id, stripe_billing_cycle_anchor, stripe_checkout_idempotency_key, stripe_checkout_billing_cycle_anchor, stripe_checkout_trial_end, stripe_checkout_expires_at, stripe_checkout_session_id, tum_monthly_token_limit, alert_email, billing_cycle_anchor_day, tunneled_mcp_server_limit, created_at, updated_at
 FROM billing_metadata
@@ -1523,93 +942,6 @@ func (q *Queries) LockBillingMetadataOrganization(ctx context.Context, organizat
 	return err
 }
 
-const markReconciledTUMMeterReportsMissing = `-- name: MarkReconciledTUMMeterReportsMissing :execrows
-UPDATE stripe_meter_reports
-SET delivery_state = 'reconciled_missing',
-    reconciled_at = $1,
-    updated_at = clock_timestamp()
-WHERE organization_id = $2
-  AND billing_cycle_usage_id = $3
-  AND delivery_state IN ('pending', 'ambiguous')
-  AND first_attempted_at IS NOT NULL
-  AND first_attempted_at <= $4
-`
-
-type MarkReconciledTUMMeterReportsMissingParams struct {
-	ReconciledAt        pgtype.Timestamptz
-	OrganizationID      pgtype.Text
-	BillingCycleUsageID uuid.NullUUID
-	RetryAfter          pgtype.Timestamptz
-}
-
-func (q *Queries) MarkReconciledTUMMeterReportsMissing(ctx context.Context, arg MarkReconciledTUMMeterReportsMissingParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markReconciledTUMMeterReportsMissing,
-		arg.ReconciledAt,
-		arg.OrganizationID,
-		arg.BillingCycleUsageID,
-		arg.RetryAfter,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const markTUMMeterReportAmbiguous = `-- name: MarkTUMMeterReportAmbiguous :execrows
-UPDATE stripe_meter_reports
-SET delivery_state = 'ambiguous',
-    ambiguous_at = COALESCE(ambiguous_at, $1),
-    updated_at = clock_timestamp()
-WHERE organization_id = $2
-  AND id = $3
-  AND delivery_state IN ('pending', 'ambiguous')
-`
-
-type MarkTUMMeterReportAmbiguousParams struct {
-	AmbiguousAt    pgtype.Timestamptz
-	OrganizationID pgtype.Text
-	ID             uuid.UUID
-}
-
-func (q *Queries) MarkTUMMeterReportAmbiguous(ctx context.Context, arg MarkTUMMeterReportAmbiguousParams) (int64, error) {
-	result, err := q.db.Exec(ctx, markTUMMeterReportAmbiguous, arg.AmbiguousAt, arg.OrganizationID, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const noteTUMMeterReportReconciliation = `-- name: NoteTUMMeterReportReconciliation :execrows
-UPDATE stripe_meter_reports
-SET reconciled_at = $1,
-    updated_at = clock_timestamp()
-WHERE organization_id = $2
-  AND billing_cycle_usage_id = $3
-  AND delivery_state IN ('pending', 'ambiguous')
-  AND first_attempted_at IS NOT NULL
-  AND first_attempted_at <= $4
-`
-
-type NoteTUMMeterReportReconciliationParams struct {
-	ReconciledAt        pgtype.Timestamptz
-	OrganizationID      pgtype.Text
-	BillingCycleUsageID uuid.NullUUID
-	RetryAfter          pgtype.Timestamptz
-}
-
-func (q *Queries) NoteTUMMeterReportReconciliation(ctx context.Context, arg NoteTUMMeterReportReconciliationParams) (int64, error) {
-	result, err := q.db.Exec(ctx, noteTUMMeterReportReconciliation,
-		arg.ReconciledAt,
-		arg.OrganizationID,
-		arg.BillingCycleUsageID,
-		arg.RetryAfter,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const prepareStripeCheckoutIntent = `-- name: PrepareStripeCheckoutIntent :one
 WITH locked AS (
   SELECT
@@ -1623,29 +955,30 @@ WITH locked AS (
         stripe_checkout_idempotency_key IS NOT NULL
         AND stripe_checkout_billing_cycle_anchor IS NOT NULL
         AND stripe_checkout_expires_at > $1::timestamptz
+        AND right(stripe_checkout_idempotency_key, length($2::text) + 1) = ':' || $2::text
       ) AS reuse_existing_intent
   FROM billing_metadata
-  WHERE organization_id = $2::text
-    AND stripe_customer_id = $3::text
+  WHERE organization_id = $3::text
+    AND stripe_customer_id = $4::text
   FOR UPDATE
 ), prepared AS (
   UPDATE billing_metadata AS metadata
   SET
       stripe_checkout_idempotency_key = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_idempotency_key
-        ELSE $4::text
+        ELSE $5::text
       END
     , stripe_checkout_billing_cycle_anchor = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_billing_cycle_anchor
-        ELSE $5::timestamptz
+        ELSE $6::timestamptz
       END
     , stripe_checkout_trial_end = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_trial_end
-        ELSE $6::timestamptz
+        ELSE $7::timestamptz
       END
     , stripe_checkout_expires_at = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_expires_at
-        ELSE $7::timestamptz
+        ELSE $8::timestamptz
       END
     , stripe_checkout_session_id = CASE
         WHEN locked.reuse_existing_intent THEN locked.stripe_checkout_session_id
@@ -1658,13 +991,20 @@ WITH locked AS (
   FROM locked
   WHERE metadata.id = locked.id
     AND metadata.stripe_subscription_id IS NULL
-    -- An expired intent with a known remote session rotates only after the
-    -- caller has checked that exact session and explicitly authorizes replacing
-    -- it. A sessionless intent has no remote completion race to guard.
+    -- A known expired session rotates only after the caller verifies it. A
+    -- lifecycle-stale intent rotates only after the caller expires its remote
+    -- session and authorizes this exact old intent key.
     AND (
       locked.reuse_existing_intent
-      OR locked.stripe_checkout_session_id IS NULL
-      OR locked.stripe_checkout_session_id = $8::text
+      OR locked.stripe_checkout_session_id = $9::text
+      OR locked.stripe_checkout_idempotency_key = $10::text
+      OR (
+        locked.stripe_checkout_session_id IS NULL
+        AND (
+          locked.stripe_checkout_idempotency_key IS NULL
+          OR locked.stripe_checkout_expires_at <= $1::timestamptz
+        )
+      )
     )
   RETURNING
       metadata.id AS billing_metadata_id
@@ -1690,6 +1030,7 @@ FROM prepared
 
 type PrepareStripeCheckoutIntentParams struct {
 	PreparedAt                       pgtype.Timestamptz
+	TrialFingerprint                 string
 	OrganizationID                   string
 	StripeCustomerID                 string
 	StripeCheckoutIdempotencyKey     string
@@ -1697,6 +1038,7 @@ type PrepareStripeCheckoutIntentParams struct {
 	StripeCheckoutTrialEnd           pgtype.Timestamptz
 	StripeCheckoutExpiresAt          pgtype.Timestamptz
 	ReplaceExpiredSessionID          pgtype.Text
+	ReplaceLifecycleIntentKey        pgtype.Text
 }
 
 type PrepareStripeCheckoutIntentRow struct {
@@ -1711,11 +1053,13 @@ type PrepareStripeCheckoutIntentRow struct {
 }
 
 // Call inside the Checkout transaction after the Stripe customer is stored.
-// The row lock makes concurrent callers reuse one live intent. Once it expires,
-// a caller may replace it only while no subscription has been activated.
+// The row lock makes concurrent callers reuse one live intent only when its
+// lifecycle fingerprint still matches. An expired or remotely expired stale
+// intent may be replaced only while no subscription has been activated.
 func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareStripeCheckoutIntentParams) (PrepareStripeCheckoutIntentRow, error) {
 	row := q.db.QueryRow(ctx, prepareStripeCheckoutIntent,
 		arg.PreparedAt,
+		arg.TrialFingerprint,
 		arg.OrganizationID,
 		arg.StripeCustomerID,
 		arg.StripeCheckoutIdempotencyKey,
@@ -1723,6 +1067,7 @@ func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareSt
 		arg.StripeCheckoutTrialEnd,
 		arg.StripeCheckoutExpiresAt,
 		arg.ReplaceExpiredSessionID,
+		arg.ReplaceLifecycleIntentKey,
 	)
 	var i PrepareStripeCheckoutIntentRow
 	err := row.Scan(
@@ -1736,6 +1081,65 @@ func (q *Queries) PrepareStripeCheckoutIntent(ctx context.Context, arg PrepareSt
 		&i.ReuseExistingIntent,
 	)
 	return i, err
+}
+
+const recoverPaygOpenRouterChatKey = `-- name: RecoverPaygOpenRouterChatKey :execrows
+UPDATE openrouter_api_keys
+SET disable_causes = ARRAY(
+      SELECT cause
+      FROM unnest(array_remove(disable_causes, 'billing_inactive')) AS causes(cause)
+      GROUP BY cause
+      ORDER BY CASE cause
+        WHEN 'admin_lock' THEN 1
+        WHEN 'trial_demotion' THEN 2
+        WHEN 'billing_inactive' THEN 3
+        ELSE 4
+      END, cause
+    ),
+    disabled = cardinality(array_remove(disable_causes, 'billing_inactive')) > 0,
+    monthly_credits = $1,
+    updated_at = CASE
+      WHEN 'billing_inactive' = ANY(disable_causes) OR monthly_credits != $1
+        THEN GREATEST(clock_timestamp(), updated_at + INTERVAL '1 microsecond')
+      ELSE updated_at
+    END
+WHERE organization_id = $2
+  AND key_type = 'chat'
+  AND key_hash = $3
+  AND disable_causes IS NOT NULL
+  AND deleted IS FALSE
+`
+
+type RecoverPaygOpenRouterChatKeyParams struct {
+	MonthlyCredits int64
+	OrganizationID string
+	KeyHash        string
+}
+
+func (q *Queries) RecoverPaygOpenRouterChatKey(ctx context.Context, arg RecoverPaygOpenRouterChatKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recoverPaygOpenRouterChatKey, arg.MonthlyCredits, arg.OrganizationID, arg.KeyHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const releaseOpenRouterBillingSessionLock = `-- name: ReleaseOpenRouterBillingSessionLock :one
+SELECT pg_advisory_unlock(
+    hashtextextended('openrouter-' || $1::text || '-billing:' || $2::text, 0)
+) AS unlocked
+`
+
+type ReleaseOpenRouterBillingSessionLockParams struct {
+	KeyType        string
+	OrganizationID string
+}
+
+func (q *Queries) ReleaseOpenRouterBillingSessionLock(ctx context.Context, arg ReleaseOpenRouterBillingSessionLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseOpenRouterBillingSessionLock, arg.KeyType, arg.OrganizationID)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
 }
 
 const setOpenRouterAPIKeyCreatedAtFixture = `-- name: SetOpenRouterAPIKeyCreatedAtFixture :exec
@@ -1849,21 +1253,6 @@ func (q *Queries) StoreStripeCustomer(ctx context.Context, arg StoreStripeCustom
 	return i, err
 }
 
-const stripeWebhookReceiptExists = `-- name: StripeWebhookReceiptExists :one
-SELECT EXISTS (
-    SELECT 1
-    FROM stripe_webhook_receipts
-    WHERE stripe_event_id = $1
-) AS received
-`
-
-func (q *Queries) StripeWebhookReceiptExists(ctx context.Context, stripeEventID string) (bool, error) {
-	row := q.db.QueryRow(ctx, stripeWebhookReceiptExists, stripeEventID)
-	var received bool
-	err := row.Scan(&received)
-	return received, err
-}
-
 const tryInsertStripeWebhookReceipt = `-- name: TryInsertStripeWebhookReceipt :one
 WITH inserted AS (
   INSERT INTO stripe_webhook_receipts (
@@ -1892,49 +1281,6 @@ func (q *Queries) TryInsertStripeWebhookReceipt(ctx context.Context, arg TryInse
 	var inserted bool
 	err := row.Scan(&inserted)
 	return inserted, err
-}
-
-const upsertBillingCycleUsage = `-- name: UpsertBillingCycleUsage :exec
-INSERT INTO billing_cycle_usage (
-    organization_id
-  , cycle_start
-  , cycle_end
-  , tum_tokens
-  , finalized_at
-) VALUES (
-    $1::text
-  , $2
-  , $3
-  , $4
-  , $5
-)
-ON CONFLICT (organization_id, cycle_start) DO UPDATE SET
-    cycle_end = EXCLUDED.cycle_end
-  , tum_tokens = EXCLUDED.tum_tokens
-  , finalized_at = EXCLUDED.finalized_at
-  , updated_at = clock_timestamp()
-WHERE billing_cycle_usage.finalized_at IS NULL
-`
-
-type UpsertBillingCycleUsageParams struct {
-	OrganizationID string
-	CycleStart     pgtype.Timestamptz
-	CycleEnd       pgtype.Timestamptz
-	TumTokens      int64
-	FinalizedAt    pgtype.Timestamptz
-}
-
-// Finalized rows are the permanent billing record and must never be
-// overwritten by later refreshes.
-func (q *Queries) UpsertBillingCycleUsage(ctx context.Context, arg UpsertBillingCycleUsageParams) error {
-	_, err := q.db.Exec(ctx, upsertBillingCycleUsage,
-		arg.OrganizationID,
-		arg.CycleStart,
-		arg.CycleEnd,
-		arg.TumTokens,
-		arg.FinalizedAt,
-	)
-	return err
 }
 
 const upsertBillingEmail = `-- name: UpsertBillingEmail :one

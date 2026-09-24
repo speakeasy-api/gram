@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/Tabs";
 import { Text } from "@/components/ui/Text";
 import { remoteSessionScopeTier } from "@/lib/sources";
-import { useOrgRoutes } from "@/routes";
+import { useRoutes } from "@/routes";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { ScopeBadge } from "./ScopeBadge";
@@ -24,7 +24,7 @@ import { ISSUER_TABS, type IssuerTab } from "./tabs";
 
 export default function RemoteIdentityProviderDetail(): JSX.Element {
   const { issuerId = "" } = useParams<{ issuerId: string }>();
-  const orgRoutes = useOrgRoutes();
+  const routes = useRoutes();
   const location = useLocation();
   const {
     data: issuer,
@@ -36,7 +36,7 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
 
   const activeTab = activeDetailTab(location.pathname, ISSUER_TABS);
   const tabHref = (tab: IssuerTab) =>
-    orgRoutes.remoteIdentityProviders.issuerDetail[tab].href(issuerId);
+    routes.remoteIdentityProviders.issuerDetail[tab].href(issuerId);
 
   const label = issuer ? issuerDisplayName(issuer) : "Remote Identity Provider";
 
@@ -47,7 +47,7 @@ export default function RemoteIdentityProviderDetail(): JSX.Element {
 
   // The issuer doesn't exist (or failed to load); return to the listing.
   if (isError || (!isLoading && !issuer)) {
-    return <Navigate to={orgRoutes.remoteIdentityProviders.href()} replace />;
+    return <Navigate to={routes.remoteIdentityProviders.href()} replace />;
   }
 
   // The bare /:issuerId URL has no tab; canonicalize to the Overview tab.

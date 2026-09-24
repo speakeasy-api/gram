@@ -19,6 +19,7 @@ import {
   scoreToRating,
   type SeverityRating,
 } from "./risk-utils";
+import { isLlmAnalyzerRuleId } from "./rule-ids";
 import { Badge } from "@/components/ui/Badge";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
@@ -82,9 +83,15 @@ export function RuleLabel({
   ruleId?: string;
 }): JSX.Element | null {
   if (!ruleId || isJudgeSource(source)) return null;
+  const title = getRuleTitleFallback(ruleId);
+  // The LLM analyzer's ids name the engine (`secret.llm`), which is the one
+  // thing this line must not surface — the tooltip repeats the label instead.
   return (
-    <span className="truncate font-mono text-xs" title={ruleId}>
-      {getRuleTitleFallback(ruleId)}
+    <span
+      className="truncate font-mono text-xs"
+      title={isLlmAnalyzerRuleId(ruleId) ? title : ruleId}
+    >
+      {title}
     </span>
   );
 }
@@ -225,21 +232,16 @@ export function MaskedMatch({
 
   if (!resultId || !matchRedacted) return <span>-</span>;
 
-  // Without chat:read the value can never be revealed — render a static,
-  // non-interactive placeholder so reveal-all can't flip it open either.
+  // Without chat:read the plaintext can never be revealed — keep the
+  // fingerprint on screen so a reviewer can still correlate and inspect the
+  // finding before suppressing it. Reveal-all must not flip this open.
   if (!canReveal) {
     return (
-      <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
-        <span
-          className={cn(
-            "inline-flex items-center gap-1 text-xs",
-            contrast ? "text-background/70" : "text-muted-foreground",
-          )}
-        >
-          <Lock className="h-3 w-3" />
-          <span>Hidden</span>
-        </span>
-      </SimpleTooltip>
+      <LockedRedactedMatch
+        matchRedacted={matchRedacted}
+        contrast={contrast}
+        wrap={wrap}
+      />
     );
   }
 
@@ -317,6 +319,47 @@ function prettyJSON(s: string): string {
   }
 }
 
+// Static fingerprint for callers who lack chat:read. The lock explains why
+// the plaintext stays withheld; the fingerprint itself is the reviewable
+// token the list endpoints already ship as match_redacted.
+function LockedRedactedMatch({
+  matchRedacted,
+  contrast = false,
+  wrap = false,
+}: {
+  matchRedacted: string;
+  contrast?: boolean;
+  wrap?: boolean;
+}): JSX.Element {
+  return (
+    <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+      <span
+        className={cn(
+          "inline-flex max-w-full min-w-0 gap-1 text-xs",
+          wrap ? "items-start" : "items-center",
+          contrast ? "text-background/70" : "text-muted-foreground",
+        )}
+      >
+        <Lock
+          role="img"
+          aria-label={REVEAL_DENIED_REASON}
+          className="h-3 w-3 shrink-0"
+        />
+        <span
+          className={cn(
+            "min-w-0 font-mono",
+            wrap
+              ? "break-all whitespace-pre-wrap"
+              : "overflow-x-auto whitespace-nowrap",
+          )}
+        >
+          {matchRedacted}
+        </span>
+      </span>
+    </SimpleTooltip>
+  );
+}
+
 // A judge rationale rendered for a cell that has no reveal affordance. Clamped
 // to two lines rather than one: a rationale is a sentence or two, and a
 // single-line clip leaves only the first few words.
@@ -333,6 +376,11 @@ function RationaleText({ text }: { text: string }): JSX.Element {
 // tool calls), not a one-line substring. The cell shows the judge's rationale
 // (`risk_results.description`) inline, and opens the payload in a scrollable
 // Dialog behind the same audited, chat:read-gated reveal as MaskedMatch.
+//
+// LLM analyzer findings take the same path: their `description` is the
+// model's reasoning and their match is empty, so the server fingerprints it
+// to the no-match sentinel and the cell reduces to the rationale alone, with
+// no reveal affordance to open an event that was never stored.
 //
 // The rationale itself is not gated: it's model-authored prose about the
 // finding, and the chat transcript's RiskBadge already renders it
@@ -353,32 +401,29 @@ export function EventMatchDialog({
 
   const summary = rationale?.trim() ? rationale.trim() : null;
 
-  if (!resultId || !hasRevealableEvent(matchRedacted)) {
+  if (!resultId || !matchRedacted || !hasRevealableEvent(matchRedacted)) {
     return summary ? <RationaleText text={summary} /> : <span>-</span>;
   }
 
   // Without chat:read the event payload can never be revealed, so there's no
-  // trigger to render. The rationale still stands on its own.
+  // trigger to render. The rationale still stands on its own; with none, the
+  // redacted fingerprint is the reviewable token (same as MaskedMatch).
   if (!canReveal) {
-    return (
-      <span className="flex min-w-0 items-center gap-1.5">
-        <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
-          <Lock
-            role="img"
-            aria-label={REVEAL_DENIED_REASON}
-            className="text-muted-foreground h-3 w-3 shrink-0"
-          />
-        </SimpleTooltip>
-        {/* The rationale reads as ordinary text, so without a label the lock is
-         * the only signal that the event itself is withheld. With no rationale
-         * to show, fall back to the same "Hidden" text MaskedMatch uses. */}
-        {summary ? (
+    if (summary) {
+      return (
+        <span className="flex min-w-0 items-center gap-1.5">
+          <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+            <Lock
+              role="img"
+              aria-label={REVEAL_DENIED_REASON}
+              className="text-muted-foreground h-3 w-3 shrink-0"
+            />
+          </SimpleTooltip>
           <RationaleText text={summary} />
-        ) : (
-          <span className="text-muted-foreground text-xs">Hidden</span>
-        )}
-      </span>
-    );
+        </span>
+      );
+    }
+    return <LockedRedactedMatch matchRedacted={matchRedacted} />;
   }
 
   return (

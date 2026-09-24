@@ -56,7 +56,7 @@ field to `Spec`.** Miss it and the local and test tenants write that value into
 the demo org's scope. `TestLocalSpecRewritesEveryDefaultIdentifier` fails with
 `still contains the demo identifier %q` — no database needed.
 
-Local-only rows (your user, the API key, the tunnel, the MCP App) live in
+Local-only rows (your user, the API key, the MCP App) live in
 `local.go` / `mcpapp.go` as `RunLocalFixtures`, NOT in the SQL — the shared demo
 org must never have them.
 

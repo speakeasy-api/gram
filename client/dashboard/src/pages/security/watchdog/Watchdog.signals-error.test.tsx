@@ -42,8 +42,9 @@ vi.mock("./SuppressedFindings", () => ({
   SuppressedFindings: () => <div>Suppressed section</div>,
 }));
 
-// Both reach the SDK provider, which this test has no use for.
+// All three reach the SDK provider, which this test has no use for.
 vi.mock("./SignalDrawer", () => ({ SignalDrawer: () => null }));
+vi.mock("./AnalysisStatusBadge", () => ({ AnalysisStatusBadge: () => null }));
 
 vi.mock("../useDismissFinding", () => ({
   useDismissFinding: () => ({
@@ -65,6 +66,14 @@ vi.mock("@gram/client/react-query/riskSignals.js", () => ({
 
 vi.mock("@gram/client/react-query/riskCreateExclusion.js", () => ({
   useRiskCreateExclusionMutation: () => ({ mutateAsync: vi.fn() }),
+}));
+
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: () => ({
+    isPending: false,
+    isError: false,
+    data: { logsEnabled: true },
+  }),
 }));
 
 // Only the client accessor needs standing in for — the rest of the module

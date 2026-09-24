@@ -12,6 +12,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/directorysync"
 	"github.com/workos/workos-go/v6/pkg/events"
 
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
@@ -334,6 +335,7 @@ func deactivateDirectoryUser(ctx context.Context, logger *slog.Logger, dbtx data
 		workosMembershipID: rel.WorkosMembershipID.String,
 		eventID:            event.ID,
 		eventUpdatedAt:     eventUpdatedAt,
+		ownerLossReason:    agentownership.OwnerReassignmentReasonOwnerInactive,
 	})
 	if err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "deprovision organization access for directory user")

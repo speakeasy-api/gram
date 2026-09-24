@@ -2,8 +2,11 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+
+	redisCache "github.com/go-redis/cache/v9"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
@@ -219,10 +222,32 @@ func resolvedMCPMatch(matched *MCPServerEntry, serverPrefix string) string {
 // at SessionStart. Returns an error when the cache has no entry for the
 // session — callers decide whether that means "fall back to allow",
 // "buffer", or in the shadow-MCP guard's case, "deny with retry message".
+// Only the caller's own project's snapshot is visible.
 func (s *Service) getCachedMCPList(ctx context.Context, sessionID string) ([]MCPServerEntry, error) {
+	projectID := s.mcpListProjectID(ctx, sessionID)
+	if projectID == "" {
+		return nil, fmt.Errorf("get cached mcp list: no project scope: %w", redisCache.ErrCacheMiss)
+	}
 	var entries []MCPServerEntry
-	if err := s.cache.Get(ctx, sessionMCPListCacheKey(sessionID), &entries); err != nil {
+	if err := s.cache.Get(ctx, sessionMCPListCacheKey(projectID, sessionID), &entries); err != nil {
 		return nil, fmt.Errorf("get cached mcp list: %w", err)
+	}
+	reader := mcpListOwnerFromContext(ctx)
+	var owner mcpListOwner
+	switch err := s.cache.Get(ctx, mcpListOwnerCacheKey(projectID, sessionID), &owner); {
+	case err == nil:
+		// Another scope's snapshot is no snapshot.
+		if !owner.shares(reader) {
+			return nil, fmt.Errorf("get cached mcp list: %w", redisCache.ErrCacheMiss)
+		}
+	case errors.Is(err, redisCache.ErrCacheMiss):
+		// An unowned snapshot is no snapshot for an agent reader.
+		if reader.isAgent() {
+			return nil, fmt.Errorf("get cached mcp list: %w", redisCache.ErrCacheMiss)
+		}
+	default:
+		// Infrastructure failures surface so enforcement fails closed.
+		return nil, fmt.Errorf("get cached mcp list owner: %w", err)
 	}
 	return entries, nil
 }

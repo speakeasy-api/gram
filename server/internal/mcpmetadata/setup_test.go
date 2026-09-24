@@ -26,6 +26,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -68,6 +70,11 @@ type testInstance struct {
 
 func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
+	return newTestMCPMetadataServiceWithAdmission(t, nil)
+}
+
+func newTestMCPMetadataServiceWithAdmission(t *testing.T, admission func(context.Context, string) error) (context.Context, *testInstance) {
+	t.Helper()
 
 	ctx := t.Context()
 
@@ -96,7 +103,7 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpmetadata.NewService(logger, tracerProvider, conn, sessionManager, serverURL, siteURL, cacheAdapter, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger)
+	svc := mcpmetadata.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, serverURL, siteURL, cacheAdapter, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, admission)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -109,16 +116,18 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 
 // mcpServerFixtureOptions tunes the fixture pair created by
 // createMcpServerWithEndpoint. ToolsetID is non-Nil for toolset-backed
-// mcp_servers (the dual-source bridge path); RemoteMcpServerID is non-Nil for
-// Remote-MCP-backed installs.
+// mcp_servers (the dual-source bridge path); RemoteMcpServerID and
+// TunneledMcpServerID select their respective remote backends.
 type mcpServerFixtureOptions struct {
 	name                string
 	visibility          string
 	endpointSlug        string
 	toolsetID           uuid.NullUUID
 	remoteMcpServerID   uuid.NullUUID
+	tunneledMcpServerID uuid.NullUUID
 	customDomainID      uuid.NullUUID
 	userSessionIssuerID uuid.NullUUID
+	networkAccessMode   networkaccess.Mode
 }
 
 func createMcpServerWithEndpoint(
@@ -143,10 +152,7 @@ func createMcpServerWithEndpoint(
 		opts.endpointSlug = "test-endpoint-" + uuid.NewString()[:8]
 	}
 
-	// mcp_servers carries an XOR check on (toolset_id, remote_mcp_server_id);
-	// when neither is supplied by the caller, default to a fresh toolset so
-	// fixtures focused on the metadata flow don't need to spell out a backend.
-	if !opts.toolsetID.Valid && !opts.remoteMcpServerID.Valid {
+	if !opts.toolsetID.Valid && !opts.remoteMcpServerID.Valid && !opts.tunneledMcpServerID.Valid {
 		toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 			OrganizationID:         authCtx.ActiveOrganizationID,
 			ProjectID:              *authCtx.ProjectID,
@@ -172,15 +178,17 @@ func createMcpServerWithEndpoint(
 		EnvironmentID:       uuid.NullUUID{},
 		UserSessionIssuerID: opts.userSessionIssuerID,
 		RemoteMcpServerID:   opts.remoteMcpServerID,
+		TunneledMcpServerID: opts.tunneledMcpServerID,
 		ToolsetID:           opts.toolsetID,
 		Visibility:          opts.visibility,
+		NetworkAccessMode:   networkaccess.Storage(opts.networkAccessMode),
 	})
 	require.NoError(t, err)
 
 	endpoint, err := mcpendpoints_repo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: opts.customDomainID,
-		McpServerID:    server.ID,
+		McpServerID:    uuid.NullUUID{UUID: server.ID, Valid: true},
 		Slug:           opts.endpointSlug,
 	})
 	require.NoError(t, err)
@@ -194,9 +202,12 @@ func createMcpServerWithEndpoint(
 // needed here.
 func createUserSessionIssuer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID) usersessions_repo.UserSessionIssuer {
 	t.Helper()
+	project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, projectID)
+	require.NoError(t, err)
 
 	usi, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
 		ProjectID:          projectID,
+		OrganizationID:     conv.ToPGText(project.OrganizationID),
 		Slug:               "usi-" + uuid.NewString()[:8],
 		AuthnChallengeMode: "interactive",
 		SessionDuration: pgtype.Interval{

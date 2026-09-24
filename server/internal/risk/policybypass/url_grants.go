@@ -20,6 +20,11 @@ type ReconcilePolicyURLsInput struct {
 	// DesiredURLs nil preserves the existing URL set while refreshing its audience.
 	DesiredURLs []string
 	Principals  []urn.Principal
+	// PreserveURLs are canonical URLs whose retained grants are left as they
+	// stand — no audience refresh. They carry a standing MCP approval
+	// decision's recorded blast radius, which a re-sent list has no
+	// authority to rewrite. URLs being added or removed are unaffected.
+	PreserveURLs map[string]struct{}
 }
 
 func URLSelector(scope authz.Scope, policyID, canonicalURL string) authz.Selector {
@@ -51,12 +56,18 @@ func ReconcilePolicyURLs(ctx context.Context, db riskrepo.DBTX, input ReconcileP
 		return fmt.Errorf("list policy url grants: %w", err)
 	}
 
+	// Keys are canonical URLs so legacy pre-canonical selector spellings
+	// group with their canonical form when compared against DesiredURLs and
+	// PreserveURLs.
 	existing := make(map[string]struct{}, len(grants))
 	existingGrants := make(map[string][]authz.Grant, len(grants))
 	for _, grant := range grants {
 		serverURL := grant.Selector[authz.SelectorKeyServerURL]
 		if serverURL == "" {
 			continue
+		}
+		if inventoryURL, ok := shadowmcp.CanonicalizeInventoryURL(serverURL); ok {
+			serverURL = inventoryURL.CanonicalURL
 		}
 		existing[serverURL] = struct{}{}
 		existingGrants[serverURL] = append(existingGrants[serverURL], grant)
@@ -97,6 +108,9 @@ func ReconcilePolicyURLs(ctx context.Context, db riskrepo.DBTX, input ReconcileP
 	}
 
 	for _, serverURL := range sortedURLSet(retained) {
+		if _, preserve := input.PreserveURLs[serverURL]; preserve {
+			continue
+		}
 		if err := revokePolicyURLGrants(ctx, db, input.OrganizationID, input.Scope, input.PolicyID, existingGrants[serverURL]); err != nil {
 			return fmt.Errorf("revoke retained policy url %q variants: %w", serverURL, err)
 		}

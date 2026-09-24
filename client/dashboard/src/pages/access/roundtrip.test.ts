@@ -15,6 +15,7 @@ const scopeDefinitions = [
     description: "Create and modify projects and project-related resources.",
     resourceType: "project",
     visibility: "user_visible",
+    agentEligible: true,
     exclusionScope: "project:blocked_write",
   },
   {
@@ -22,6 +23,7 @@ const scopeDefinitions = [
     description: "Create and modify MCP servers and configuration.",
     resourceType: "mcp",
     visibility: "user_visible",
+    agentEligible: true,
     exclusionScope: "mcp:blocked_write",
   },
   {
@@ -29,6 +31,7 @@ const scopeDefinitions = [
     description: "Connect to and use MCP servers.",
     resourceType: "mcp",
     visibility: "user_visible",
+    agentEligible: true,
     exclusionScope: "mcp:blocked_connect",
   },
   {
@@ -36,6 +39,7 @@ const scopeDefinitions = [
     description: "Create and modify skills within the project.",
     resourceType: "skill",
     visibility: "user_visible",
+    agentEligible: true,
     exclusionScope: "skill:blocked_write",
   },
 ] satisfies ScopeDefinition[];

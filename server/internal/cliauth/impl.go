@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -78,6 +79,7 @@ type Service struct {
 	db          *pgxpool.Pool
 	auth        *auth.Auth
 	authz       *authz.Engine
+	sessions    *sessions.Manager
 	pkce        *oauth.PKCEService
 	redis       *redis.Client
 	projectRepo *projectsrepo.Queries
@@ -110,6 +112,7 @@ func NewService(
 		db:          db,
 		auth:        auth.New(logger, db, sessionManager, authzEngine),
 		authz:       authzEngine,
+		sessions:    sessionManager,
 		pkce:        oauth.NewPKCEService(logger),
 		redis:       redisClient,
 		projectRepo: projectsrepo.New(db),
@@ -144,6 +147,47 @@ func (s *Service) Authorize(ctx context.Context, payload *gen.AuthorizePayload) 
 	}
 	if authCtx.Email == nil || *authCtx.Email == "" {
 		return nil, oops.E(oops.CodeUnauthorized, nil, "session has no resolved email").LogError(ctx, s.logger)
+	}
+
+	// Enrollment is refused under any form of impersonation: it would bind a
+	// device to the impersonated org's policies and transcript reporting.
+	// RBAC cannot gate this — impersonating admins hold every scope.
+
+	// Platform-admin support session (the same predicate chat uses to protect
+	// transcripts). It is already scoped to the active org, so a support
+	// session opened against a different org does not block an admin from
+	// enrolling into their own.
+	if contextvalues.IsSupportSession(ctx) {
+		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment is not available while impersonating an organization").LogError(ctx, s.logger)
+	}
+
+	// WorkOS user impersonation, recorded on the session. Authorize only runs
+	// under the Session scheme, so a missing session id is a broken context.
+	if authCtx.SessionID == nil || *authCtx.SessionID == "" {
+		return nil, oops.E(oops.CodeUnauthorized, nil, "session has no id").LogError(ctx, s.logger)
+	}
+	session, err := s.sessions.GetSession(ctx, *authCtx.SessionID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load session").LogError(ctx, s.logger)
+	}
+	if session.ImpersonatorEmail != "" {
+		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment is not available while impersonating a user").LogError(ctx, s.logger)
+	}
+
+	// Backstop: the user must be a real member of the active org. Session
+	// authentication already refuses a foreign org without a live support
+	// session, but the shared demo org is exempt there (no membership rows by
+	// design) — enrolling a real device into it would report the operator's
+	// transcripts into a shared workspace. Resolved via GetUserInfo so lookup
+	// failures surface as unexpected errors, not a misleading 403.
+	userInfo, _, err := s.sessions.GetUserInfo(ctx, authCtx.UserID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load user info").LogError(ctx, s.logger)
+	}
+	if !slices.ContainsFunc(userInfo.Organizations, func(org sessions.Organization) bool {
+		return org.ID == authCtx.ActiveOrganizationID
+	}) {
+		return nil, oops.E(oops.CodeForbidden, nil, "device enrollment requires membership in the active organization").LogError(ctx, s.logger)
 	}
 
 	// Member-available gate: any org member (org:read) may enroll their own

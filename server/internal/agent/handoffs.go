@@ -23,17 +23,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// handoffRoutePrefix is the public serving path. Links are always minted
-// against serverURL, so this is served on the primary app domain only — it is
-// deliberately absent from the custom-domain ingress allowlist in
-// k8s/ingress_provisioner.go, which exists so customer domains can serve skill
-// share pages. It must stay in lockstep with the route attached in Attach and
-// with the token-redaction prefixes in middleware.logSafeURL.
+// handoffRoutePrefix is the public serving path. Links are minted against
+// serverURL (the primary app domain). That host splits traffic: the
+// dashboard SPA is the default backend, so this prefix must appear on the
+// gram-infra helm ingress path list and on the dashboard vite dev proxy.
+// It is deliberately absent from the custom-domain ingress allowlist in
+// k8s/ingress_provisioner.go — customer domains serve skill share pages,
+// not handoff documents. Must stay in lockstep with the route attached in
+// Attach and with the token-redaction prefixes in middleware.logSafeURL.
 const handoffRoutePrefix = "/shared/handoffs/"
 
 const (
@@ -177,7 +180,7 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 		ContentBytes:     len(payload.Content),
 		TTLSeconds:       int(ttl / time.Second),
 		ExpiresAt:        expiresAt,
-		DeviceSerial:     normalizeSerial(payload.SerialNumber),
+		DeviceSerial:     deviceidentity.NormalizeSerial(payload.SerialNumber),
 		DeviceHostname:   strings.TrimSpace(conv.PtrValOr(payload.Hostname, "")),
 	}
 	if err := s.audit.LogChatSessionHandoffExport(ctx, dbtx, event); err != nil {
@@ -255,7 +258,7 @@ func (s *Service) ServeSessionHandoff(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "read handoff document").LogError(r.Context(), s.logger)
 	}
-	defer o11y.LogDefer(r.Context(), s.logger, func() error { return rdr.Close() })
+	defer o11y.LogDefer(r.Context(), s.logger, "failed to close handoff document reader", func() error { return rdr.Close() })
 
 	// no-store on a single-use document: any cache replaying it would defeat
 	// burn-after-read; noindex belt-and-braces against crawler ingestion.

@@ -1,0 +1,68 @@
+edition = "2024";
+
+package gram.risk.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1";
+
+// LLMAnalysis is one async (flag-lane) evaluation request for the fine-tuned
+// risk model. A single request evaluates every risk the model covers; the
+// consumer fans findings out to the policy sources listed in `sources`.
+message LLMAnalysis {
+  string request_id = 1;
+  string chat_message_id = 2;
+  string project_id = 3;
+  string organization_id = 4;
+  string risk_policy_id = 5;
+  int64 risk_policy_version = 6;
+  string created_at = 7; // Must be UTC timestamp in RFC3339 format, e.g. 2023-01-01T00:00:00Z
+
+  string content = 8;
+  string user_id = 9;
+  string message_type = 10;
+  string body = 11;
+  string tool_name = 12;
+  repeated ToolCall tool_calls = 13;
+  string content_part_id = 14;
+  string chat_id = 15;
+  string parent_chat_message_id = 16;
+  string origin_risk_policy_id = 17;
+  int64 origin_risk_policy_version = 18;
+  string message_link_reason = 19;
+  string execution_path = 20;
+  string tool_call_id = 21;
+  string hook_source = 22;
+  // Reason no policy initiated this scan; excludes origin_risk_policy_id.
+  string policy_link_reason = 23;
+  // Raw external conversation ID; independent of the persisted Gram chat_id.
+  string external_conversation_id = 24;
+  // Organization slug, carried for telemetry dimensions only.
+  string organization_slug = 25;
+  // Policy sources the originating policy configured (gitleaks, presidio,
+  // prompt_injection, destructive_tool, cli_destructive). Informational: it
+  // records which legacy engines this request stands in for.
+  repeated string sources = 26;
+  // True when body or tool_calls were cut to the analyzer's input caps.
+  bool content_truncated = 27;
+  // True when the organization is in the `shadow` engine mode: the legacy
+  // engines enforce this message and the analyzer's verdict is recorded for
+  // engine comparison only. Shadow findings are never enforced and are hidden
+  // from the default findings views.
+  bool shadow = 28;
+
+  message ToolCall {
+    // Harness-assigned tool call id, or a synthetic one when the harness
+    // supplied none.
+    string id = 1;
+    string name = 2;
+    string arguments = 3;
+  }
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: {
+      seconds: 604800
+      /* 7 days */
+    }
+  };
+}

@@ -1,5 +1,19 @@
 # @gram-ai/functions
 
+## 0.18.3
+
+### Patch Changes
+
+- eb3a5f0: Report a failed Gram Function tool call tersely. A JavaScript stack trace is no longer serialized into the failure response — it names minified frames inside the deployed bundle, which the tool's caller cannot act on — and is written to stderr instead, where it reaches the function's own logs. A failure caused by input validation now names each offending input on one line rather than repeating Zod's issue list as a pretty-printed JSON dump.
+
+## 0.18.2
+
+### Patch Changes
+
+- 03f3311: Unify how MCP servers are added: every way in starts from the MCP page, with the catalog, remote and tunneled servers, and an Advanced group covering OpenAPI documents, functions, and building a server from a source the project already has. Remote servers must verify connectivity before they can be saved.
+  
+  Sources move under MCP rather than going away: a shelf at `/mcp/sources` and a page per source showing its file, the tools it produced, the deployments it is versioned by, and a download. Deploying a function now offers the flow that builds a server from it, scoped to the right project, instead of the dashboard root.
+
 ## 0.18.1
 
 ## 0.18.0

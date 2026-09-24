@@ -84,9 +84,21 @@ beforeEach(() => {
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
   mocks.listOrganizationMembers.mockReset();
   mocks.listOrganizationMembers.mockResolvedValue({ members: [] });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ logs: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+  );
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 function bar(): HTMLElement {
   return screen.getByRole("navigation", { name: "breadcrumb" });
@@ -151,6 +163,15 @@ describe("SiteHeader", () => {
     });
 
     expect(crumbs()).toEqual(["Organizations", ORG.name, "Overview"]);
+  });
+
+  it("reads Organizations / Test Org / Activity on the activity view", async () => {
+    await renderRouteTree(routeTree, {
+      initialPath: `/organizations/${ORG.slug}/activity`,
+      queryClient: seeded(),
+    });
+
+    expect(crumbs()).toEqual(["Organizations", ORG.name, "Activity"]);
   });
 
   it("reads Organizations / Test Org / Members on the members view", async () => {
@@ -220,6 +241,7 @@ describe("SiteHeader", () => {
   it.each([
     ["the organizations list", "/organizations", "Organizations"],
     ["a record's own index", `/organizations/${ORG.slug}`, "Overview"],
+    ["the activity view", `/organizations/${ORG.slug}/activity`, "Activity"],
     ["the members view", `/organizations/${ORG.slug}/members`, "Members"],
     ["the projects list", `/organizations/${ORG.slug}/projects`, "Projects"],
     [

@@ -34,9 +34,6 @@ procs:
   tunnel-gateway:
     cmd: ["mise", "run", "start:tunnel-gateway"]
     stop: SIGTERM
-  tunnel-postgres-mcp:
-    cmd: ["mise", "run", "start:tunnel-postgres-mcp"]
-    stop: SIGTERM
   pystreams-multi:
     cmd: ["mise", "run", "start:pystreams-multi"]
     stop: SIGTERM

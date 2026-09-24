@@ -7,12 +7,15 @@ import (
 	"log/slog"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -148,11 +151,120 @@ func validateMigrationScope(source, target repo.RemoteSessionIssuer) error {
 	return nil
 }
 
-// endpointMismatches names the authorization-server metadata fields that differ
-// between source and target. Any difference blocks the migration: the migrated
-// clients' live sessions were established against the source's endpoints, and
-// silently re-pointing them at a different authorization server would break
-// token refresh without the user ever being asked to re-authenticate.
+// issuerFieldMismatch is one issuer field whose value differs between the source
+// and the target of a consolidation, carrying both sides' values so an
+// administrator can see what they are accepting rather than only which field
+// disagrees.
+//
+// Scalar and list values are carried in separate pairs rather than collapsed
+// into one, because a scalar's absence is load-bearing: pgTextEqual treats a set
+// value and an unset one as a mismatch, so "the target declares no token
+// endpoint" has to stay distinguishable from "the target declares an empty one".
+// A single string-slice pair could not express that difference.
+type issuerFieldMismatch struct {
+	// field names the differing issuer field in its wire spelling: issuer,
+	// token_endpoint, authorization_endpoint, oidc, passthrough,
+	// scopes_supported, or tunneled_mcp_server_id.
+	field string
+
+	// sourceValue is the source issuer's value for a scalar field. Nil when the
+	// source leaves the field unset, and nil for a list-valued field.
+	sourceValue *string
+
+	// targetValue is the target issuer's value for a scalar field. Nil when the
+	// target leaves the field unset, and nil for a list-valued field.
+	targetValue *string
+
+	// sourceValues holds the source issuer's entries for a list-valued field.
+	// Nil for a scalar field.
+	sourceValues []string
+
+	// targetValues holds the target issuer's entries for a list-valued field.
+	// Nil for a scalar field.
+	targetValues []string
+}
+
+// mismatchFieldNames reduces a mismatch set to its field names, for the error
+// messages that say what disagrees without room to show the values.
+func mismatchFieldNames(mismatches []issuerFieldMismatch) []string {
+	names := make([]string, 0, len(mismatches))
+	for _, mismatch := range mismatches {
+		names = append(names, mismatch.field)
+	}
+
+	return names
+}
+
+// textFieldMismatch describes a nullable text column's divergence, keeping the
+// NULL-versus-empty distinction that pgTextEqual compares on.
+func textFieldMismatch(field string, source, target pgtype.Text) issuerFieldMismatch {
+	return issuerFieldMismatch{
+		field:        field,
+		sourceValue:  conv.FromPGText[string](source),
+		targetValue:  conv.FromPGText[string](target),
+		sourceValues: nil,
+		targetValues: nil,
+	}
+}
+
+// boolFieldMismatch describes a boolean column's divergence. Both sides are
+// always set, so neither value is ever nil.
+func boolFieldMismatch(field string, source, target bool) issuerFieldMismatch {
+	sourceValue, targetValue := strconv.FormatBool(source), strconv.FormatBool(target)
+
+	return issuerFieldMismatch{
+		field:        field,
+		sourceValue:  &sourceValue,
+		targetValue:  &targetValue,
+		sourceValues: nil,
+		targetValues: nil,
+	}
+}
+
+// uuidFieldMismatch describes a nullable UUID reference's divergence. An unset
+// reference stays nil so it remains distinguishable from any set value.
+func uuidFieldMismatch(field string, source, target uuid.NullUUID) issuerFieldMismatch {
+	var sourceValue, targetValue *string
+	if source.Valid {
+		v := source.UUID.String()
+		sourceValue = &v
+	}
+	if target.Valid {
+		v := target.UUID.String()
+		targetValue = &v
+	}
+
+	return issuerFieldMismatch{
+		field:        field,
+		sourceValue:  sourceValue,
+		targetValue:  targetValue,
+		sourceValues: nil,
+		targetValues: nil,
+	}
+}
+
+// issuerFieldMismatchViews renders a mismatch set for the wire.
+func issuerFieldMismatchViews(mismatches []issuerFieldMismatch) []*types.IssuerFieldMismatch {
+	views := make([]*types.IssuerFieldMismatch, 0, len(mismatches))
+	for _, mismatch := range mismatches {
+		views = append(views, &types.IssuerFieldMismatch{
+			Field:        mismatch.field,
+			SourceValue:  mismatch.sourceValue,
+			TargetValue:  mismatch.targetValue,
+			SourceValues: mismatch.sourceValues,
+			TargetValues: mismatch.targetValues,
+		})
+	}
+
+	return views
+}
+
+// endpointMismatches reports the authorization-server metadata fields that
+// differ between source and target, with both sides' values. Any difference
+// blocks the migration: the migrated clients' live sessions were established
+// against the source's endpoints, and silently re-pointing them at a different
+// authorization server would break token refresh without the user ever being
+// asked to re-authenticate.
 //
 // A field is equal when both sides are unset or both are set to the same value.
 // One side set and the other unset is a mismatch, not a match, so a target that
@@ -168,17 +280,26 @@ func validateMigrationScope(source, target repo.RemoteSessionIssuer) error {
 // refuse. The endpoints are request targets rather than identities, so they stay
 // literal: an equivalent-but-differently-spelled endpoint changes nothing about
 // where tokens are exchanged, and leaving it strict keeps the guard narrow.
-func endpointMismatches(source, target repo.RemoteSessionIssuer) []string {
-	var mismatches []string
+func endpointMismatches(source, target repo.RemoteSessionIssuer) []issuerFieldMismatch {
+	var mismatches []issuerFieldMismatch
 
 	if !issuerURLsCanonicallyEqual(source.Issuer, target.Issuer) {
-		mismatches = append(mismatches, "issuer")
+		mismatches = append(mismatches, issuerFieldMismatch{
+			field:        "issuer",
+			sourceValue:  &source.Issuer,
+			targetValue:  &target.Issuer,
+			sourceValues: nil,
+			targetValues: nil,
+		})
 	}
 	if !pgTextEqual(source.TokenEndpoint, target.TokenEndpoint) {
-		mismatches = append(mismatches, "token_endpoint")
+		mismatches = append(mismatches, textFieldMismatch("token_endpoint", source.TokenEndpoint, target.TokenEndpoint))
 	}
 	if !pgTextEqual(source.AuthorizationEndpoint, target.AuthorizationEndpoint) {
-		mismatches = append(mismatches, "authorization_endpoint")
+		mismatches = append(mismatches, textFieldMismatch("authorization_endpoint", source.AuthorizationEndpoint, target.AuthorizationEndpoint))
+	}
+	if source.TunneledMcpServerID != target.TunneledMcpServerID {
+		mismatches = append(mismatches, uuidFieldMismatch("tunneled_mcp_server_id", source.TunneledMcpServerID, target.TunneledMcpServerID))
 	}
 
 	return mismatches
@@ -193,7 +314,7 @@ func pgTextEqual(a, b pgtype.Text) bool {
 
 // issuerURLsCanonicallyEqual reports whether two issuer identifiers name the
 // same upstream authorization server, collapsing the trailing-slash and
-// default-port spellings that parseCanonicalIssuerURL treats as equivalent.
+// default-port spellings that issuerurl.Parse treats as equivalent.
 //
 // A value that does not parse as an issuer identifier is only ever equal to an
 // identical string. Migration must not widen an identity comparison on input it
@@ -203,12 +324,12 @@ func issuerURLsCanonicallyEqual(a, b string) bool {
 		return true
 	}
 
-	canonicalA, err := parseCanonicalIssuerURL(a)
+	canonicalA, err := issuerurl.Parse(a)
 	if err != nil {
 		return false
 	}
 
-	canonicalB, err := parseCanonicalIssuerURL(b)
+	canonicalB, err := issuerurl.Parse(b)
 	if err != nil {
 		return false
 	}
@@ -216,44 +337,80 @@ func issuerURLsCanonicallyEqual(a, b string) bool {
 	return canonicalA.String() == canonicalB.String()
 }
 
-// migrationWarnings names issuer fields that diverge without blocking the
-// migration. The target's values become authoritative for every migrated
-// client, so these are surfaced in the preflight for the admin to accept.
+// migrationWarnings reports issuer fields that diverge without blocking the
+// migration, with both sides' values. The target's values become authoritative
+// for every migrated client, so these are surfaced in the preflight for the
+// admin to accept.
 //
 // These are advisory rather than blocking by design, but they are not inert:
 // the runtime resolution query reads oidc, passthrough, and scopes_supported off
 // the issuer, so a divergent target does change how already-authenticated
 // sessions refresh and exchange tokens. The preflight is the only place an admin
 // sees that before it happens.
-func migrationWarnings(source, target repo.RemoteSessionIssuer) []string {
-	var warnings []string
+func migrationWarnings(source, target repo.RemoteSessionIssuer) []issuerFieldMismatch {
+	var warnings []issuerFieldMismatch
 
 	if source.Oidc != target.Oidc {
-		warnings = append(warnings, fmt.Sprintf("oidc changes from %t to %t for migrated clients", source.Oidc, target.Oidc))
+		warnings = append(warnings, boolFieldMismatch("oidc", source.Oidc, target.Oidc))
 	}
 	if source.Passthrough != target.Passthrough {
-		warnings = append(warnings, fmt.Sprintf("passthrough changes from %t to %t for migrated clients", source.Passthrough, target.Passthrough))
+		warnings = append(warnings, boolFieldMismatch("passthrough", source.Passthrough, target.Passthrough))
 	}
-	if !slices.Equal(source.ScopesSupported, target.ScopesSupported) {
-		warnings = append(warnings, "scopes_supported differs; the target issuer's scopes become authoritative")
+	if !stringSetsEqual(source.ScopesSupported, target.ScopesSupported) {
+		warnings = append(warnings, issuerFieldMismatch{
+			field:        "scopes_supported",
+			sourceValue:  nil,
+			targetValue:  nil,
+			sourceValues: source.ScopesSupported,
+			targetValues: target.ScopesSupported,
+		})
 	}
 
 	return warnings
+}
+
+// stringSetsEqual reports whether two lists offer the same entries, ignoring
+// both their order and how many times each one appears.
+//
+// scopes_supported is a set in RFC 8414, and neither position nor repetition
+// changes what it offers: an issuer that lists the same scopes in a different
+// order, or lists one of them twice, grants the migrated clients exactly what
+// they had. Warning on either would name a difference the admin cannot act on,
+// and one the preflight could not draw as a delta, because no scope has been
+// gained or lost.
+func stringSetsEqual(a, b []string) bool {
+	return slices.Equal(sortedUnique(a), sortedUnique(b))
+}
+
+// sortedUnique returns the distinct entries of a list in order, leaving the
+// caller's slice untouched.
+func sortedUnique(values []string) []string {
+	unique := slices.Clone(values)
+	slices.Sort(unique)
+
+	return slices.Compact(unique)
 }
 
 // migratePreflight is the impact summary shared by getIssuerMigratePreflight and
 // by migrateIssuer's own guards, so the dialog an admin confirms and the
 // mutation that runs cannot disagree about what blocks a migration.
 type migratePreflight struct {
-	clientCount               int64
-	mcpServerNames            []string
-	endpointMismatches        []string
-	conflictingMcpServerNames []string
-	warnings                  []string
+	clientCount                   int64
+	mcpServerNames                []string
+	endpointMismatches            []issuerFieldMismatch
+	conflictingMcpServerNames     []string
+	warnings                      []issuerFieldMismatch
+	trustedUserSessionIssuerCount int64
+	trustedUserSessionIssuers     []trustedUserSessionIssuerReference
 }
 
 func (p migratePreflight) canMigrate() bool {
-	return len(p.endpointMismatches) == 0 && len(p.conflictingMcpServerNames) == 0
+	return len(p.endpointMismatches) == 0 && len(p.conflictingMcpServerNames) == 0 && p.trustedUserSessionIssuerCount == 0
+}
+
+type trustedUserSessionIssuerReference struct {
+	id   uuid.UUID
+	slug string
 }
 
 // buildMigratePreflight computes every blocker and impact figure for migrating
@@ -297,12 +454,31 @@ func buildMigratePreflight(ctx context.Context, r *repo.Queries, source, target 
 	sort.Strings(conflicts)
 	conflicts = slices.Compact(conflicts)
 
+	trustedCount, err := r.CountTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, source.ID)
+	if err != nil {
+		return migratePreflight{}, fmt.Errorf("count user session issuers that trust source issuer: %w", err)
+	}
+
+	trustedRows, err := r.ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerID(ctx, repo.ListOrganizationTrustedUserSessionIssuersByRemoteSessionIssuerIDParams{
+		RemoteSessionIssuerID: source.ID,
+		OrganizationID:        conv.FromPGTextOrEmpty[string](source.OrganizationID),
+	})
+	if err != nil {
+		return migratePreflight{}, fmt.Errorf("list user session issuers that trust source issuer: %w", err)
+	}
+	trusted := make([]trustedUserSessionIssuerReference, 0, len(trustedRows))
+	for _, row := range trustedRows {
+		trusted = append(trusted, trustedUserSessionIssuerReference{id: row.ID, slug: row.Slug})
+	}
+
 	return migratePreflight{
-		clientCount:               clientCount,
-		mcpServerNames:            names,
-		endpointMismatches:        endpointMismatches(source, target),
-		conflictingMcpServerNames: conflicts,
-		warnings:                  migrationWarnings(source, target),
+		clientCount:                   clientCount,
+		mcpServerNames:                names,
+		endpointMismatches:            endpointMismatches(source, target),
+		conflictingMcpServerNames:     conflicts,
+		warnings:                      migrationWarnings(source, target),
+		trustedUserSessionIssuerCount: trustedCount,
+		trustedUserSessionIssuers:     trusted,
 	}, nil
 }
 
@@ -328,13 +504,14 @@ func lockIssuersForMigration(ctx context.Context, r *repo.Queries, issuerIDs ...
 // is the whole of the operation apart from soft-deleting the source, which each
 // surface does with its own scoped delete query.
 //
-// The two guards are the reason this is shared rather than duplicated. Endpoint
+// The three guards are the reason this is shared rather than duplicated. Endpoint
 // parity is what keeps an already-authenticated session refreshing against the
 // authorization server it was established with, and the binding-conflict check
 // is the only thing enforcing the at-most-one-client-per-(user_session_issuer,
-// remote_session_issuer) invariant, which no database constraint expresses. A
-// surface that drifted on either would not merely behave differently, it would
-// be less safe.
+// remote_session_issuer) invariant, which no database constraint expresses.
+// Trusted user-session-issuer references must be explicitly unlinked or
+// re-linked rather than silently following a migration. A surface that drifted
+// on any guard would not merely behave differently, it would be less safe.
 //
 // Callers must already hold the advisory locks from lockIssuersForMigration and
 // have re-read both issuers under a row lock, so that the rows validated here
@@ -345,12 +522,20 @@ func runIssuerMigration(ctx context.Context, r *repo.Queries, logger *slog.Logge
 		return 0, oops.E(oops.CodeUnexpected, err, "build remote session issuer migrate preflight").LogError(ctx, logger)
 	}
 
+	// Names the fields without their values, unlike the preflight the admin
+	// confirmed. This message reaches someone who lost the race between reading
+	// that preflight and running the mutation, and the fix is to reopen the
+	// dialog and read the values there rather than to parse them out of a toast.
 	if len(preflight.endpointMismatches) > 0 {
-		return 0, oops.E(oops.CodeConflict, nil, "source and target issuers describe different authorization servers (%s differ); migration would break existing sessions", strings.Join(preflight.endpointMismatches, ", ")).LogError(ctx, logger)
+		return 0, oops.E(oops.CodeConflict, nil, "source and target issuers describe different authorization servers (%s differ); migration would break existing sessions", strings.Join(mismatchFieldNames(preflight.endpointMismatches), ", ")).LogError(ctx, logger)
 	}
 
 	if len(preflight.conflictingMcpServerNames) > 0 {
 		return 0, oops.E(oops.CodeConflict, nil, "both issuers already have a client bound to the same MCP server (%s); detach one client per server and retry", strings.Join(preflight.conflictingMcpServerNames, ", ")).LogError(ctx, logger)
+	}
+
+	if preflight.trustedUserSessionIssuerCount > 0 {
+		return 0, oops.E(oops.CodeConflict, nil, "source remote session issuer is trusted by active user session issuers; unlink or re-link them before migrating").LogError(ctx, logger)
 	}
 
 	clientsMigrated, err := r.UpdateRemoteSessionClientsToRemoteSessionIssuer(ctx, repo.UpdateRemoteSessionClientsToRemoteSessionIssuerParams{

@@ -102,9 +102,10 @@ func TestIdentity_ImpersonationTargetProblemAccepts(t *testing.T) {
 
 	identity := gcpauth.NewIdentity(newCountingResolver())
 
-	reason, err := identity.ImpersonationTargetProblem(t.Context(), testenv.NewLogger(t), "signer@customer-project.iam.gserviceaccount.com")
+	kind, reason, err := identity.ImpersonationTargetProblem(t.Context(), testenv.NewLogger(t), "signer@customer-project.iam.gserviceaccount.com")
 	require.NoError(t, err)
-	require.Empty(t, reason, "a user-managed service account in someone else's project is acceptable")
+	require.Equal(t, gcpauth.TargetOK, kind, "a user-managed service account in someone else's project is acceptable")
+	require.Empty(t, reason)
 }
 
 // The screening exists because Gram publishes its own service account, so a
@@ -114,8 +115,9 @@ func TestIdentity_ImpersonationTargetProblemRefusesGramProject(t *testing.T) {
 
 	identity := gcpauth.NewIdentity(newCountingResolver())
 
-	reason, err := identity.ImpersonationTargetProblem(t.Context(), testenv.NewLogger(t), "internal@gram-stub.iam.gserviceaccount.com")
+	kind, reason, err := identity.ImpersonationTargetProblem(t.Context(), testenv.NewLogger(t), "internal@gram-stub.iam.gserviceaccount.com")
 	require.NoError(t, err)
+	require.Equal(t, gcpauth.TargetOwnProject, kind)
 	require.Contains(t, reason, "your own GCP project")
 }
 
@@ -141,14 +143,16 @@ func TestIdentity_ImpersonationTargetProblemRefusesUnplaceable(t *testing.T) {
 		"service-123456789012@compute-system.iam.gserviceaccount.com",
 		"123456789012@cloudservices.iam.gserviceaccount.com",
 	} {
-		reason, err := identity.ImpersonationTargetProblem(t.Context(), testenv.NewLogger(t), target)
+		kind, reason, err := identity.ImpersonationTargetProblem(t.Context(), testenv.NewLogger(t), target)
 		require.NoError(t, err, "%q", target)
+		require.Equal(t, gcpauth.TargetMalformed, kind, "%q must be refused", target)
 		require.Contains(t, reason, "user-managed service account", "%q must be refused", target)
 	}
 }
 
-// A screening the server cannot evaluate is an error, never an acceptance.
-// Callers must not be able to read "" (acceptable) out of a failed evaluation.
+// A screening the server cannot evaluate is an error, never an acceptance. The
+// kind returned alongside it carries no meaning, so nothing here asserts one:
+// the error is the whole of what a caller may act on.
 func TestIdentity_ImpersonationTargetProblemErrorsWhenUnevaluatable(t *testing.T) {
 	t.Parallel()
 
@@ -158,7 +162,7 @@ func TestIdentity_ImpersonationTargetProblemErrorsWhenUnevaluatable(t *testing.T
 	})
 	identity := gcpauth.NewIdentity(resolver)
 
-	reason, err := identity.ImpersonationTargetProblem(t.Context(), testenv.NewLogger(t), "signer@customer-project.iam.gserviceaccount.com")
+	_, reason, err := identity.ImpersonationTargetProblem(t.Context(), testenv.NewLogger(t), "signer@customer-project.iam.gserviceaccount.com")
 	require.Error(t, err)
 	require.Empty(t, reason)
 }
@@ -174,7 +178,7 @@ func TestIdentity_ImpersonationTargetProblemErrorsWhenGramIsUnplaceable(t *testi
 	})
 	identity := gcpauth.NewIdentity(resolver)
 
-	reason, err := identity.ImpersonationTargetProblem(t.Context(), testenv.NewLogger(t), "signer@customer-project.iam.gserviceaccount.com")
+	_, reason, err := identity.ImpersonationTargetProblem(t.Context(), testenv.NewLogger(t), "signer@customer-project.iam.gserviceaccount.com")
 	require.Error(t, err)
 	require.Empty(t, reason)
 }

@@ -75,9 +75,21 @@ beforeEach(() => {
   mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
   mocks.listOrganizationMembers.mockReset();
   mocks.listOrganizationMembers.mockResolvedValue({ members: [] });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ logs: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ),
+  );
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 // The breadcrumb names the same views the nav does, so every link query here
 // has to say which of the two it means.
@@ -122,6 +134,7 @@ function isActive(name: string): boolean {
 const RECORD_NAV = [
   "All organizations",
   "Overview",
+  "Activity",
   "Projects",
   "Features",
   "Members",
@@ -166,6 +179,34 @@ function navState(): Record<string, { active: boolean; current: boolean }> {
 describe("AppSidebar", () => {
   it("renders the global nav outside a record", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
+
+    const groups = sidebar().querySelectorAll("[data-slot='sidebar-group']");
+    expect(
+      Array.from(groups, (group) => ({
+        label: group.querySelector("[data-slot='sidebar-group-label']")
+          ?.textContent,
+        links: Array.from(group.querySelectorAll("a"), (link) => ({
+          label: link.textContent,
+          href: link.getAttribute("href"),
+        })),
+      })),
+    ).toEqual([
+      {
+        label: "Account Management",
+        links: [
+          { label: "Organizations", href: "/organizations" },
+          { label: "Projects", href: "/projects" },
+          { label: "S-token Calculator", href: "/stoken-calculator" },
+        ],
+      },
+      {
+        label: "Platform Management",
+        links: [
+          { label: "Support matrix", href: "/integration-coverage" },
+          { label: "Remote Session Issuers", href: "/remote-session-issuers" },
+        ],
+      },
+    ]);
 
     expect(hrefs()).toContain("/projects");
     expect(
@@ -380,11 +421,31 @@ describe("AppSidebar", () => {
     expect(navState()).toEqual({
       "All organizations": { active: false, current: false },
       Overview: { active: true, current: true },
+      Activity: { active: false, current: false },
       Projects: { active: false, current: false },
       Features: { active: false, current: false },
       Members: { active: false, current: false },
     });
   });
+
+  it.each([ORG.slug, ORG.id])(
+    "names Activity as the sole current page on the activity view addressed by %s",
+    async (idOrSlug) => {
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${idOrSlug}/activity`,
+      });
+      await screen.findByRole("link", { name: "All organizations" });
+
+      expect(navState()).toEqual({
+        "All organizations": { active: false, current: false },
+        Overview: { active: false, current: false },
+        Activity: { active: true, current: true },
+        Projects: { active: false, current: false },
+        Features: { active: false, current: false },
+        Members: { active: false, current: false },
+      });
+    },
+  );
 
   it("names one current page on the members view", async () => {
     await renderRouteTree(routeTree, {
@@ -397,6 +458,7 @@ describe("AppSidebar", () => {
     expect(navState()).toEqual({
       "All organizations": { active: false, current: false },
       Overview: { active: false, current: false },
+      Activity: { active: false, current: false },
       Projects: { active: false, current: false },
       Features: { active: false, current: false },
       Members: { active: true, current: true },
@@ -416,6 +478,7 @@ describe("AppSidebar", () => {
     expect(navState()).toEqual({
       "All organizations": { active: false, current: false },
       Overview: { active: false, current: false },
+      Activity: { active: false, current: false },
       Projects: { active: true, current: true },
       Features: { active: false, current: false },
       Members: { active: false, current: false },
@@ -443,6 +506,7 @@ describe("AppSidebar", () => {
     expect(navState()).toEqual({
       "All organizations": { active: false, current: false },
       Overview: { active: false, current: false },
+      Activity: { active: false, current: false },
       Projects: { active: true, current: true },
       Features: { active: false, current: false },
       Members: { active: false, current: false },
@@ -464,6 +528,7 @@ describe("AppSidebar", () => {
     expect(navState()).toEqual({
       "All organizations": { active: false, current: false },
       Overview: { active: false, current: false },
+      Activity: { active: false, current: false },
       Projects: { active: true, current: true },
       Features: { active: false, current: false },
       Members: { active: false, current: false },
@@ -537,4 +602,12 @@ describe("AppSidebar", () => {
       `/organizations/${ORG.id}/features`,
     );
   });
+});
+
+it("links the top-level remote session issuer catalog", async () => {
+  await renderRouteTree(routeTree, { initialPath: "/organizations" });
+  const link = await within(sidebar()).findByRole("link", {
+    name: "Remote Session Issuers",
+  });
+  expect(link.getAttribute("href")).toBe("/remote-session-issuers");
 });

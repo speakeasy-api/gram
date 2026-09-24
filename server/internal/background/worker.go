@@ -5,19 +5,23 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"net/url"
+	"sync"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	svix "github.com/svix/svix-webhooks/go"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
@@ -42,10 +46,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
@@ -64,7 +71,12 @@ import (
 )
 
 type WorkerOptions struct {
-	GuardianPolicy      *guardian.Policy
+	GuardianPolicy *guardian.Policy
+
+	// TunnelHTTPClient carries back-channel OAuth calls for remote session
+	// clients bound to an MCP tunnel. Nil means tunnel-bound refreshes fail
+	// closed with a configuration error.
+	TunnelHTTPClient    *tunnelrouting.HTTPClient
 	DB                  *pgxpool.Pool
 	EncryptionClient    *encryption.Client
 	FeatureProvider     feature.Provider
@@ -76,6 +88,9 @@ type WorkerOptions struct {
 	OpenRouterSpend     openrouter.SpendClient
 	K8sClient           *k8s.KubernetesClients
 	ExpectedTargetCNAME string
+	// ExpectedARecords are the static ingress IPs apex custom domains point A
+	// records at; used alongside ExpectedTargetCNAME for verification/health.
+	ExpectedARecords []netip.Addr
 
 	// GitHubEvidenceToken authenticates the recheck sweep's repository
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
@@ -94,21 +109,29 @@ type WorkerOptions struct {
 	MCPRegistryClient   *externalmcp.RegistryClient
 	TelemetryLogger     *telemetry.Logger
 	ClickhouseConn      clickhouse.Conn
-	TelemetryRepo       *telemetryrepo.Queries
-	TriggersApp         *bgtriggers.App
-	AssistantsCore      *assistants.ServiceCore
-	TemporalEnv         *tenv.Environment
-	PIIScanner          risk_analysis.PIIScanner
-	PIScanner           *promptinjection.Scanner
-	CustomRuleScanner   *customruleanalyzer.Scanner
-	BuiltinPresets      *presetlib.Library
-	ShadowMCPClient     *shadowmcp.Client
-	AuditLogger         *audit.Logger
-	WorkOSClient        activities.WorkOSClient
-	SvixClient          *svix.Svix
-	ProductFeatures     *productfeatures.Client
-	PluginPublisher     *plugins.Service
-	Publishers          *Publishers
+	// MeterReadConn uses the least-privilege ClickHouse reader for billing summaries.
+	MeterReadConn     clickhouse.Conn
+	TelemetryRepo     *telemetryrepo.Queries
+	TriggersApp       *bgtriggers.App
+	AssistantsCore    *assistants.ServiceCore
+	TemporalEnv       *tenv.Environment
+	PIIScanner        risk_analysis.PIIScanner
+	PIScanner         *promptinjection.Scanner
+	CustomRuleScanner *customruleanalyzer.Scanner
+	BuiltinPresets    *presetlib.Library
+	ShadowMCPClient   *shadowmcp.Client
+	AuditLogger       *audit.Logger
+	WorkOSClient      activities.WorkOSClient
+	ProductFeatures   *productfeatures.Client
+	PluginPublisher   *plugins.Service
+	Publishers        *Publishers
+
+	// IssuerMetadataRefresher is optional. Share it with every in-process producer;
+	// the constructing caller owns it and must call Wait after those producers stop.
+	IssuerMetadataRefresher *remotesessions.IssuerMetadataRefresher
+	// RemoteSessionAssertionSigner enables scheduled refreshes for clients that
+	// authenticate with private_key_jwt.
+	RemoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner
 
 	// TrialEmailsService synchronizes trial lifecycle changes with Loops.
 	TrialEmailsService *trialemails.Service
@@ -123,6 +146,12 @@ type WorkerOptions struct {
 	// retroactive exclusion changes into ClickHouse: the reconcile activity
 	// gets no ClickHouse repo and degrades to its Postgres phases.
 	DisableRiskRetroReconcile bool
+
+	// LLMAnalyzerEnabled reports whether the streams process has a fine-tuned
+	// risk model configured (GRAM_RISK_LLM_URL). When false, batch scans for
+	// organizations on the LLM analyzer flag fall back to the legacy engines
+	// instead of publishing requests nobody evaluates.
+	LLMAnalyzerEnabled bool
 }
 
 // defaultFingerprinter merges WorkerOptions fingerprinters: the override wins
@@ -146,64 +175,89 @@ func ForDeploymentProcessing(
 	auditLogger *audit.Logger,
 ) *WorkerOptions {
 	return &WorkerOptions{
-		DB:                  db,
-		GuardianPolicy:      guardianPolicy,
-		EncryptionClient:    enc,
-		FeatureProvider:     f,
-		AssetStorage:        assetStorage,
-		FunctionsDeployer:   deployer,
-		FunctionsVersion:    "local", // Test deployers don't use baked versions
-		MCPRegistryClient:   mcpRegistryClient,
-		AuditLogger:         auditLogger,
-		SlackClient:         nil,
-		ChatMessageWriter:   nil,
-		ChatClient:          nil,
-		OpenRouter:          nil,
-		OpenRouterSpend:     nil,
-		K8sClient:           nil,
-		ExpectedTargetCNAME: "",
-		GitHubEvidenceToken: "",
-		SiteURL:             nil,
-		BillingTracker:      nil,
-		BillingRepository:   nil,
-		StripeClient:        nil,
-		RagService:          nil,
-		RedisClient:         nil,
-		PosthogClient:       nil,
-		TelemetryLogger:     nil,
-		TelemetryRepo:       nil,
-		TriggersApp:         nil,
-		CacheAdapter:        nil,
-		EmailService:        nil,
-		AssistantsCore:      nil,
-		TemporalEnv:         nil,
-		PIIScanner:          nil,
-		PIScanner:           nil,
-		CustomRuleScanner:   nil,
-		BuiltinPresets:      nil,
-		ShadowMCPClient:     nil,
-		WorkOSClient:        workos.NewStubClient(),
-		SvixClient:          nil,
-		ProductFeatures:     nil,
-		ClickhouseConn:      nil,
-		PluginPublisher:     nil,
+		DB:                           db,
+		GuardianPolicy:               guardianPolicy,
+		TunnelHTTPClient:             nil,
+		EncryptionClient:             enc,
+		FeatureProvider:              f,
+		AssetStorage:                 assetStorage,
+		FunctionsDeployer:            deployer,
+		FunctionsVersion:             "local", // Test deployers don't use baked versions
+		MCPRegistryClient:            mcpRegistryClient,
+		AuditLogger:                  auditLogger,
+		RemoteSessionAssertionSigner: nil,
+		SlackClient:                  nil,
+		ChatMessageWriter:            nil,
+		ChatClient:                   nil,
+		OpenRouter:                   nil,
+		OpenRouterSpend:              nil,
+		K8sClient:                    nil,
+		ExpectedTargetCNAME:          "",
+		ExpectedARecords:             nil,
+		GitHubEvidenceToken:          "",
+		SiteURL:                      nil,
+		BillingTracker:               nil,
+		BillingRepository:            nil,
+		StripeClient:                 nil,
+		RagService:                   nil,
+		RedisClient:                  nil,
+		PosthogClient:                nil,
+		TelemetryLogger:              nil,
+		MeterReadConn:                nil,
+		TelemetryRepo:                nil,
+		TriggersApp:                  nil,
+		CacheAdapter:                 nil,
+		IssuerMetadataRefresher:      nil,
+		EmailService:                 nil,
+		AssistantsCore:               nil,
+		TemporalEnv:                  nil,
+		PIIScanner:                   nil,
+		PIScanner:                    nil,
+		CustomRuleScanner:            nil,
+		BuiltinPresets:               nil,
+		ShadowMCPClient:              nil,
+		WorkOSClient:                 workos.NewStubClient(),
+		ProductFeatures:              nil,
+		ClickhouseConn:               nil,
+		PluginPublisher:              nil,
 		Publishers: &Publishers{
 			PresidioAnalysis:        gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
 			GitleaksAnalysis:        gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
 			PromptInjectionAnalysis: gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),
 			PromptPolicyAnalysis:    gcp.NewNoopPublisher[*riskv1.PromptPolicyAnalysis](),
 			CustomRulesAnalysis:     gcp.NewNoopPublisher[*riskv1.CustomRulesAnalysis](),
+			LLMAnalysis:             gcp.NewNoopPublisher[*riskv1.LLMAnalysis](),
 			RiskFindings:            gcp.NewNoopPublisher[*riskv1.Finding](),
+			MeterReadings:           gcp.NewNoopPublisher[*meteringv1.MeterReading](),
 			TelemetryLogs:           gcp.NewNoopPublisher[*telemetryv1.LogRecord](),
 			OTELLogs:                gcp.NewNoopPublisher[*otelv1.InboundLogRecord](),
+			OTELMetrics:             gcp.NewNoopPublisher[*otelv1.InboundMetric](),
 			OTELSpans:               gcp.NewNoopPublisher[*otelv1.InboundSpan](),
 			Outbox:                  topics.NewNoopPublisher(),
 		},
 		TrialEmailsService:        nil,
 		RiskFingerprinter:         risk.Fingerprinter{},
 		DisableRiskRetroReconcile: false,
+		LLMAnalyzerEnabled:        false,
 	}
 }
+
+func newWorkerInterceptors() []interceptor.WorkerInterceptor {
+	return []interceptor.WorkerInterceptor{
+		&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+		&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
+	}
+}
+
+// workerStopTimeout is how long a stopping worker lets in-flight activities
+// finish before cancelling them. A deploy stops every worker pod, and an
+// activity cancelled mid-flight is reported as a failed attempt that the
+// next pod repeats; letting short activities complete keeps a rollout from
+// looking like a failure burst. It must fit inside the pod's termination
+// drain window (60s after the preStop sleep) with room for the Temporal
+// client to respond.
+const workerStopTimeout = 45 * time.Second
 
 func NewTemporalWorker(
 	env *tenv.Environment,
@@ -213,125 +267,135 @@ func NewTemporalWorker(
 	options ...*WorkerOptions,
 ) *Workers {
 	opts := &WorkerOptions{
-		GuardianPolicy:            nil,
-		DB:                        nil,
-		EncryptionClient:          nil,
-		FeatureProvider:           nil,
-		AssetStorage:              nil,
-		SlackClient:               nil,
-		ChatMessageWriter:         nil,
-		ChatClient:                nil,
-		OpenRouter:                nil,
-		OpenRouterSpend:           nil,
-		K8sClient:                 nil,
-		ExpectedTargetCNAME:       "",
-		GitHubEvidenceToken:       "",
-		SiteURL:                   nil,
-		BillingTracker:            nil,
-		BillingRepository:         nil,
-		StripeClient:              nil,
-		RedisClient:               nil,
-		PosthogClient:             nil,
-		FunctionsDeployer:         nil,
-		FunctionsVersion:          "",
-		RagService:                nil,
-		MCPRegistryClient:         nil,
-		TelemetryLogger:           nil,
-		TelemetryRepo:             nil,
-		TriggersApp:               nil,
-		CacheAdapter:              nil,
-		EmailService:              nil,
-		AssistantsCore:            nil,
-		TemporalEnv:               env,
-		PIIScanner:                nil,
-		PIScanner:                 nil,
-		CustomRuleScanner:         nil,
-		BuiltinPresets:            nil,
-		ShadowMCPClient:           nil,
-		AuditLogger:               nil,
-		WorkOSClient:              workos.NewStubClient(),
-		SvixClient:                nil,
-		ProductFeatures:           nil,
-		ClickhouseConn:            nil,
-		PluginPublisher:           nil,
-		Publishers:                nil,
-		TrialEmailsService:        nil,
-		RiskFingerprinter:         risk.Fingerprinter{},
-		DisableRiskRetroReconcile: false,
+		GuardianPolicy:               nil,
+		TunnelHTTPClient:             nil,
+		DB:                           nil,
+		EncryptionClient:             nil,
+		FeatureProvider:              nil,
+		AssetStorage:                 nil,
+		SlackClient:                  nil,
+		ChatMessageWriter:            nil,
+		ChatClient:                   nil,
+		OpenRouter:                   nil,
+		OpenRouterSpend:              nil,
+		K8sClient:                    nil,
+		ExpectedTargetCNAME:          "",
+		ExpectedARecords:             nil,
+		GitHubEvidenceToken:          "",
+		SiteURL:                      nil,
+		BillingTracker:               nil,
+		BillingRepository:            nil,
+		StripeClient:                 nil,
+		RedisClient:                  nil,
+		PosthogClient:                nil,
+		FunctionsDeployer:            nil,
+		FunctionsVersion:             "",
+		RagService:                   nil,
+		MCPRegistryClient:            nil,
+		TelemetryLogger:              nil,
+		MeterReadConn:                nil,
+		TelemetryRepo:                nil,
+		TriggersApp:                  nil,
+		CacheAdapter:                 nil,
+		IssuerMetadataRefresher:      nil,
+		RemoteSessionAssertionSigner: nil,
+		EmailService:                 nil,
+		AssistantsCore:               nil,
+		TemporalEnv:                  env,
+		PIIScanner:                   nil,
+		PIScanner:                    nil,
+		CustomRuleScanner:            nil,
+		BuiltinPresets:               nil,
+		ShadowMCPClient:              nil,
+		AuditLogger:                  nil,
+		WorkOSClient:                 workos.NewStubClient(),
+		ProductFeatures:              nil,
+		ClickhouseConn:               nil,
+		PluginPublisher:              nil,
+		Publishers:                   nil,
+		TrialEmailsService:           nil,
+		RiskFingerprinter:            risk.Fingerprinter{},
+		DisableRiskRetroReconcile:    false,
+		LLMAnalyzerEnabled:           false,
 	}
 
 	for _, o := range options {
 		opts = &WorkerOptions{
-			GuardianPolicy:            conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
-			DB:                        conv.Default(o.DB, opts.DB),
-			EncryptionClient:          conv.Default(o.EncryptionClient, opts.EncryptionClient),
-			FeatureProvider:           conv.Default(o.FeatureProvider, opts.FeatureProvider),
-			AssetStorage:              conv.Default(o.AssetStorage, opts.AssetStorage),
-			SlackClient:               conv.Default(o.SlackClient, opts.SlackClient),
-			ChatMessageWriter:         conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
-			OpenRouter:                conv.Default(o.OpenRouter, opts.OpenRouter),
-			OpenRouterSpend:           conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
-			ChatClient:                conv.Default(o.ChatClient, opts.ChatClient),
-			K8sClient:                 conv.Default(o.K8sClient, opts.K8sClient),
-			ExpectedTargetCNAME:       conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
-			GitHubEvidenceToken:       conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
-			SiteURL:                   conv.Default(o.SiteURL, opts.SiteURL),
-			BillingTracker:            conv.Default(o.BillingTracker, opts.BillingTracker),
-			BillingRepository:         conv.Default(o.BillingRepository, opts.BillingRepository),
-			StripeClient:              conv.Default(o.StripeClient, opts.StripeClient),
-			RedisClient:               conv.Default(o.RedisClient, opts.RedisClient),
-			PosthogClient:             conv.Default(o.PosthogClient, opts.PosthogClient),
-			FunctionsDeployer:         conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
-			FunctionsVersion:          conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
-			RagService:                conv.Default(o.RagService, opts.RagService),
-			MCPRegistryClient:         conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
-			TelemetryLogger:           conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
-			TelemetryRepo:             conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
-			TriggersApp:               conv.Default(o.TriggersApp, opts.TriggersApp),
-			CacheAdapter:              conv.Default(o.CacheAdapter, opts.CacheAdapter),
-			EmailService:              conv.Default(o.EmailService, opts.EmailService),
-			AssistantsCore:            conv.Default(o.AssistantsCore, opts.AssistantsCore),
-			TemporalEnv:               conv.Default(o.TemporalEnv, opts.TemporalEnv),
-			PIIScanner:                conv.Default(o.PIIScanner, opts.PIIScanner),
-			PIScanner:                 conv.Default(o.PIScanner, opts.PIScanner),
-			CustomRuleScanner:         conv.Default(o.CustomRuleScanner, opts.CustomRuleScanner),
-			BuiltinPresets:            conv.Default(o.BuiltinPresets, opts.BuiltinPresets),
-			ShadowMCPClient:           conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
-			AuditLogger:               conv.Default(o.AuditLogger, opts.AuditLogger),
-			WorkOSClient:              conv.Default(o.WorkOSClient, opts.WorkOSClient),
-			SvixClient:                conv.Default(o.SvixClient, opts.SvixClient),
-			ProductFeatures:           conv.Default(o.ProductFeatures, opts.ProductFeatures),
-			ClickhouseConn:            conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
-			PluginPublisher:           conv.Default(o.PluginPublisher, opts.PluginPublisher),
-			Publishers:                conv.Default(o.Publishers, opts.Publishers),
-			TrialEmailsService:        conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
-			RiskFingerprinter:         defaultFingerprinter(o.RiskFingerprinter, opts.RiskFingerprinter),
-			DisableRiskRetroReconcile: conv.Default(o.DisableRiskRetroReconcile, opts.DisableRiskRetroReconcile),
+			GuardianPolicy:               conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
+			TunnelHTTPClient:             conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
+			DB:                           conv.Default(o.DB, opts.DB),
+			EncryptionClient:             conv.Default(o.EncryptionClient, opts.EncryptionClient),
+			FeatureProvider:              conv.Default(o.FeatureProvider, opts.FeatureProvider),
+			AssetStorage:                 conv.Default(o.AssetStorage, opts.AssetStorage),
+			SlackClient:                  conv.Default(o.SlackClient, opts.SlackClient),
+			ChatMessageWriter:            conv.Default(o.ChatMessageWriter, opts.ChatMessageWriter),
+			OpenRouter:                   conv.Default(o.OpenRouter, opts.OpenRouter),
+			OpenRouterSpend:              conv.Default(o.OpenRouterSpend, opts.OpenRouterSpend),
+			ChatClient:                   conv.Default(o.ChatClient, opts.ChatClient),
+			K8sClient:                    conv.Default(o.K8sClient, opts.K8sClient),
+			ExpectedTargetCNAME:          conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
+			ExpectedARecords:             conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
+			GitHubEvidenceToken:          conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
+			SiteURL:                      conv.Default(o.SiteURL, opts.SiteURL),
+			BillingTracker:               conv.Default(o.BillingTracker, opts.BillingTracker),
+			BillingRepository:            conv.Default(o.BillingRepository, opts.BillingRepository),
+			StripeClient:                 conv.Default(o.StripeClient, opts.StripeClient),
+			RedisClient:                  conv.Default(o.RedisClient, opts.RedisClient),
+			PosthogClient:                conv.Default(o.PosthogClient, opts.PosthogClient),
+			FunctionsDeployer:            conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
+			FunctionsVersion:             conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
+			RagService:                   conv.Default(o.RagService, opts.RagService),
+			MCPRegistryClient:            conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
+			TelemetryLogger:              conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
+			MeterReadConn:                conv.Default(o.MeterReadConn, opts.MeterReadConn),
+			TelemetryRepo:                conv.Default(o.TelemetryRepo, opts.TelemetryRepo),
+			TriggersApp:                  conv.Default(o.TriggersApp, opts.TriggersApp),
+			CacheAdapter:                 conv.Default(o.CacheAdapter, opts.CacheAdapter),
+			IssuerMetadataRefresher:      conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
+			RemoteSessionAssertionSigner: conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
+			EmailService:                 conv.Default(o.EmailService, opts.EmailService),
+			AssistantsCore:               conv.Default(o.AssistantsCore, opts.AssistantsCore),
+			TemporalEnv:                  conv.Default(o.TemporalEnv, opts.TemporalEnv),
+			PIIScanner:                   conv.Default(o.PIIScanner, opts.PIIScanner),
+			PIScanner:                    conv.Default(o.PIScanner, opts.PIScanner),
+			CustomRuleScanner:            conv.Default(o.CustomRuleScanner, opts.CustomRuleScanner),
+			BuiltinPresets:               conv.Default(o.BuiltinPresets, opts.BuiltinPresets),
+			ShadowMCPClient:              conv.Default(o.ShadowMCPClient, opts.ShadowMCPClient),
+			AuditLogger:                  conv.Default(o.AuditLogger, opts.AuditLogger),
+			WorkOSClient:                 conv.Default(o.WorkOSClient, opts.WorkOSClient),
+			ProductFeatures:              conv.Default(o.ProductFeatures, opts.ProductFeatures),
+			ClickhouseConn:               conv.Default(o.ClickhouseConn, opts.ClickhouseConn),
+			PluginPublisher:              conv.Default(o.PluginPublisher, opts.PluginPublisher),
+			Publishers:                   conv.Default(o.Publishers, opts.Publishers),
+			TrialEmailsService:           conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
+			RiskFingerprinter:            defaultFingerprinter(o.RiskFingerprinter, opts.RiskFingerprinter),
+			DisableRiskRetroReconcile:    conv.Default(o.DisableRiskRetroReconcile, opts.DisableRiskRetroReconcile),
+			LLMAnalyzerEnabled:           conv.Default(o.LLMAnalyzerEnabled, opts.LLMAnalyzerEnabled),
 		}
 	}
 
-	workerInterceptors := []interceptor.WorkerInterceptor{
-		&interceptors.Recovery{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-		&interceptors.InjectExecutionInfo{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-		&interceptors.Logging{WorkerInterceptorBase: interceptor.WorkerInterceptorBase{}},
-	}
+	workerInterceptors := newWorkerInterceptors()
 
 	temporalWorker := worker.New(env.Client(), string(env.Queue()), worker.Options{
-		Interceptors: workerInterceptors,
+		Interceptors:      workerInterceptors,
+		WorkerStopTimeout: workerStopTimeout,
 	})
 
 	riskWorker := worker.New(env.Client(), RiskAnalysisTaskQueue(env.Queue()), worker.Options{
 		Interceptors:                       workerInterceptors,
+		WorkerStopTimeout:                  workerStopTimeout,
 		MaxConcurrentActivityExecutionSize: perPodAnalyzeBatchConcurrency,
 	})
 
 	aiUsageWorker := worker.New(env.Client(), AIUsagePollerTaskQueue(env.Queue()), worker.Options{
 		Interceptors:                       workerInterceptors,
+		WorkerStopTimeout:                  workerStopTimeout,
 		MaxConcurrentActivityExecutionSize: perPodAIUsagePollerConcurrency,
 	})
 
 	skillEfficacyWorker := worker.New(env.Client(), SkillEfficacyTaskQueue(env.Queue()), worker.Options{
 		Interceptors:                       workerInterceptors,
+		WorkerStopTimeout:                  workerStopTimeout,
 		MaxConcurrentActivityExecutionSize: perPodSkillEfficacyPublishConcurrency,
 	})
 
@@ -346,11 +410,25 @@ func NewTemporalWorker(
 
 	judgeRateLimiter := openrouter.NewJudgeRateLimiter(ratelimit.NewRedisStore(opts.RedisClient))
 
+	// Identity capture is best effort: without a policy the sweep stores no identity.
+	idTokenVerifier := remotesessions.NoIDTokenVerifier()
+	var remoteSessionEnricher *remotesessions.SessionEnricher
+	if opts.GuardianPolicy != nil {
+		if idTokenKeys, err := remotesessions.NewIDTokenKeyResolver(logger, opts.GuardianPolicy, meterProvider, ratelimit.NewRedisStore(opts.RedisClient)); err != nil {
+			logger.ErrorContext(context.Background(), "build id token key resolver for the refresh sweep", attr.SlogError(err))
+		} else {
+			idTokenVerifier = remotesessions.NewIDTokenVerifier(idTokenKeys)
+			remoteSessionEnricher = remotesessions.NewSessionEnricher(logger, opts.EncryptionClient, opts.GuardianPolicy, idTokenKeys,
+				ratelimit.New(ratelimit.NewRedisStore(opts.RedisClient), "remote_session_enrichment", remotesessions.EnrichmentRate, ratelimit.WithMetrics(meterProvider)), opts.TunnelHTTPClient, opts.IssuerMetadataRefresher)
+		}
+	}
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
 		meterProvider,
 		opts.GuardianPolicy,
+		opts.TunnelHTTPClient,
 		opts.DB,
 		opts.EncryptionClient,
 		opts.FeatureProvider,
@@ -361,6 +439,7 @@ func NewTemporalWorker(
 		opts.ChatClient,
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
+		opts.ExpectedARecords,
 		opts.SiteURL,
 		opts.BillingTracker,
 		opts.BillingRepository,
@@ -373,6 +452,7 @@ func NewTemporalWorker(
 		opts.TemporalEnv,
 		opts.TelemetryLogger,
 		opts.ClickhouseConn,
+		opts.MeterReadConn,
 		opts.TelemetryRepo,
 		opts.TriggersApp,
 		opts.CacheAdapter,
@@ -384,7 +464,6 @@ func NewTemporalWorker(
 		opts.ShadowMCPClient,
 		opts.AuditLogger,
 		opts.WorkOSClient,
-		opts.SvixClient,
 		opts.ProductFeatures,
 		opts.PluginPublisher,
 		opts.ChatMessageWriter,
@@ -396,6 +475,11 @@ func NewTemporalWorker(
 		opts.GitHubEvidenceToken,
 		opts.RiskFingerprinter,
 		opts.DisableRiskRetroReconcile,
+		opts.LLMAnalyzerEnabled,
+		idTokenVerifier,
+		opts.IssuerMetadataRefresher,
+		remoteSessionEnricher,
+		opts.RemoteSessionAssertionSigner,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -406,7 +490,13 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
 	temporalWorker.RegisterActivity(activities.SetOpenRouterSpendCap)
 	temporalWorker.RegisterActivity(activities.ReconcilePaygOpenRouterChatKey)
+	temporalWorker.RegisterActivity(activities.ReconcileEnterpriseTrialConversionKeys)
+	adminReconciler := openrouterkeys.NewAdminReconciliationExecutor(logger, opts.DB, opts.OpenRouter)
+	adminReconciliationActivities := NewOpenRouterAdminReconciliationActivities(logger, adminReconciler)
+	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.CaptureCursor, activity.RegisterOptions{Name: OpenRouterAdminCaptureCursorActivityName})
+	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.Reconcile, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
+	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
 	temporalWorker.RegisterActivity(activities.ReconcileCustomDomain)
 	temporalWorker.RegisterActivity(activities.SignalCustomDomainReconcile)
@@ -424,17 +514,18 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.GetAIIntegrationsCandidates)
 	temporalWorker.RegisterActivity(activities.GetDeviceIntegrationSyncCandidates)
 	temporalWorker.RegisterActivity(activities.RunDeviceIntegrationSync)
-	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
-	temporalWorker.RegisterActivity(activities.SnapshotBillingCycleUsage)
-	temporalWorker.RegisterActivity(activities.ReportTUMUsageToStripe)
+	temporalWorker.RegisterActivity(activities.GetOktaApplicationSyncCandidates)
+	temporalWorker.RegisterActivity(activities.RunOktaApplicationSync)
+	temporalWorker.RegisterActivity(activities.FinalizeOktaApplicationSync)
 	temporalWorker.RegisterActivity(activities.ListWeeklyUsageSummaryTargets)
 	temporalWorker.RegisterActivity(activities.SendWeeklyUsageSummary)
-	temporalWorker.RegisterActivity(activities.ForwardTokenUsageToPostHog)
-	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 	temporalWorker.RegisterActivity(activities.GenerateToolsetEmbeddings)
+	temporalWorker.RegisterActivity(activities.ListProjectsForToolsetIndexing)
+	temporalWorker.RegisterActivity(activities.ListToolsetsForIndexing)
 	temporalWorker.RegisterActivity(activities.GenerateChatTitle)
 	temporalWorker.RegisterActivity(activities.SyncIdentityMap)
+	temporalWorker.RegisterActivity(activities.SyncTenantDimensions)
 	temporalWorker.RegisterActivity(activities.PromoteStagedTelemetry)
 	temporalWorker.RegisterActivity(activities.ListStagedTelemetryProjects)
 	temporalWorker.RegisterActivity(activities.SegmentChat)
@@ -470,18 +561,19 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSOrganizationEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSGlobalRoleEvents)
 	temporalWorker.RegisterActivity(activities.ProcessWorkOSUserEvents)
-	// Outbox relay activities
-	temporalWorker.RegisterActivity(activities.FetchPendingOutboxEvents)
-	temporalWorker.RegisterActivity(activities.FilterNoopOutboxEvents)
-	temporalWorker.RegisterActivity(activities.RelayOutboxEvents)
-	temporalWorker.RegisterActivity(activities.GCOutboxProcessedRows)
+	// Killswitch maintenance activities
+	temporalWorker.RegisterActivity(activities.RecordDueKillswitchExpiries)
+	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
+	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
 	// Publish outbox relay activities
 	temporalWorker.RegisterActivity(activities.DrainPublishOutbox)
 	temporalWorker.RegisterActivity(activities.GCPublishOutboxDeadLetters)
 	// Plugin publishing activities
 	temporalWorker.RegisterActivity(activities.ListPluginPublishCandidates)
+	temporalWorker.RegisterActivity(activities.RepairOrphanedAPIKeyCreators)
 	temporalWorker.RegisterActivity(activities.PublishPluginProject)
 	// Spend rule evaluation activities
+	temporalWorker.RegisterActivity(activities.ReassertSessionQuarantines)
 	temporalWorker.RegisterActivity(activities.ListSpendRuleOrgs)
 	temporalWorker.RegisterActivity(activities.EvaluateOrgSpendRules)
 	temporalWorker.RegisterActivity(activities.RefreshSpendRuleActor)
@@ -539,7 +631,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(FunctionsReaperWorkflow)
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(OpenRouterSpendCapWorkflow)
+	temporalWorker.RegisterWorkflow(AdminOpenRouterSpendCapWorkflow)
 	temporalWorker.RegisterWorkflow(PaygOpenRouterChatKeyReconcileWorkflow)
+	temporalWorker.RegisterWorkflow(EnterpriseTrialConversionKeyReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainDeletionWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainUpdateWorkflow)
@@ -553,12 +647,15 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(AIUsagePollerCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
+	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
+	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
-	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
+	temporalWorker.RegisterWorkflow(IndexToolsetSweepWorkflow)
 	temporalWorker.RegisterWorkflow(GenerateChatTitleWorkflow)
 	temporalWorker.RegisterWorkflow(SyncIdentityMapWorkflow)
+	temporalWorker.RegisterWorkflow(SyncTenantDimensionsWorkflow)
 	temporalWorker.RegisterWorkflow(PromoteStagedTelemetryWorkflow)
 	temporalWorker.RegisterWorkflow(StagedTelemetrySweepWorkflow)
 	temporalWorker.RegisterWorkflow(AnalyzeChatResolutionsWorkflow)
@@ -569,6 +666,11 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TriggerWakeWorkflow)
 	// Risk analysis coordinator workflow
 	temporalWorker.RegisterWorkflow(RiskAnalysisCoordinatorWorkflow)
+	// Retire per-policy executions created before the coordinator migration.
+	temporalWorker.RegisterWorkflowWithOptions(legacyDrainRiskAnalysisWorkflow, workflow.RegisterOptions{
+		Name:                          legacyDrainRiskAnalysisWorkflowName,
+		DisableAlreadyRegisteredCheck: false,
+	})
 	temporalWorker.RegisterWorkflow(RiskExclusionReconcileWorkflow)
 	temporalWorker.RegisterWorkflow(ReconcileSkillObservationsWorkflow)
 	temporalWorker.RegisterWorkflow(SkillObservationReconciliationSweepWorkflow)
@@ -588,15 +690,21 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(ProcessWorkOSUserEventsWorkflowDebounced)
 	// Assistants signup followups
 	temporalWorker.RegisterWorkflow(CancelAssistantsSubscriptionWorkflow)
-	// Outbox -> Relay workflow and GC
-	temporalWorker.RegisterWorkflow(ProcessOutboxWorkflow)
-	temporalWorker.RegisterWorkflow(OutboxGCWorkflow)
+	// Killswitch expiry history and receipt retention
+	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
+	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
 	temporalWorker.RegisterWorkflow(PublishOutboxWorkflow)
 	temporalWorker.RegisterWorkflow(PublishOutboxGCWorkflow)
 	temporalWorker.RegisterWorkflow(PluginGeneratorRolloutWorkflow)
+	temporalWorker.RegisterWorkflow(PluginPublishWorkflow)
+	temporalWorker.RegisterWorkflow(PluginPublishWorkflowDebounced)
+	// Deprecated: superseded by PluginPublishWorkflowDebounced. Kept registered
+	// for one release so executions in flight across the deploy can finish;
+	// nothing starts it any more. Safe to delete once none are running.
 	temporalWorker.RegisterWorkflow(PluginInitialPublishWorkflow)
 	// Spend rule evaluation workflows
+	temporalWorker.RegisterWorkflow(SessionQuarantineReassertWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleEvaluationWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflow)
 	temporalWorker.RegisterWorkflow(SpendRuleOrgEvaluationWorkflowDebounced)
@@ -616,60 +724,83 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(TrialLifecycleEmailWorkflow)
 	temporalWorker.RegisterWorkflow(AccessPausedEmailWorkflow)
 	temporalWorker.RegisterWorkflow(PaygActivatedEmailWorkflow)
-	if err := AddPlatformUsageMetricsSchedule(context.Background(), env); err != nil {
-		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
+	temporalWorker.RegisterWorkflow(OpenRouterAdminReconciliationWorkflow)
+
+	return &Workers{
+		main:                temporalWorker,
+		riskAnalysis:        riskWorker,
+		aiUsage:             aiUsageWorker,
+		skillEfficacy:       skillEfficacyWorker,
+		env:                 env,
+		logger:              logger,
+		opts:                opts,
+		hasSkillSuggester:   activities.skillSuggestionAnalyzer != nil,
+		networkIngressQueue: "",
+	}
+}
+
+// registerSchedules installs the fleet's recurring Temporal schedules and the
+// one-shot startup kicks that belong with them. Every schedule is best-effort:
+// a failure is logged and the worker still comes up, because a missing sweep
+// degrades a background pipeline rather than the request path.
+func (w *Workers) registerSchedules(ctx context.Context) {
+	env, logger, opts := w.env, w.logger, w.opts
+	if w.networkIngressQueue != "" {
+		if err := addNetworkIngressSweep(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "register network ingress sweep", attr.SlogError(err))
 		}
 	}
 
-	if err := AddOpenRouterCreditsMetricsSchedule(context.Background(), env); err != nil {
+	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add openrouter credits metrics schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add platform usage metrics schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddOpenRouterDailySpendSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add openrouter daily spend schedule", attr.SlogError(err))
-	}
-
-	if err := AddDeviceIntegrationSyncCoordinatorSchedule(context.Background(), env); err != nil {
+	if err := AddOpenRouterCreditsMetricsSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add device integration sync schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add openrouter credits metrics schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddAIUsagePollerCoordinatorSchedule(context.Background(), env); err != nil {
+	if err := AddOpenRouterDailySpendSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add openrouter daily spend schedule", attr.SlogError(err))
+	}
+
+	if err := AddDeviceIntegrationSyncCoordinatorSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add ai integration usage polling schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add device integration sync schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddWeeklyUsageSummarySchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add weekly usage summary schedule", attr.SlogError(err))
-	}
-
-	if err := AddRefreshBillingUsageSchedule(context.Background(), env); err != nil {
+	if err := AddOktaApplicationSyncCoordinatorSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add okta application sync schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddProcessOutboxSchedule(context.Background(), env); err != nil {
+	if err := AddAIUsagePollerCoordinatorSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add relay outbox to svix schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add ai integration usage polling schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddAssistantReaperSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add assistant reaper schedule", attr.SlogError(err))
+	if err := AddWeeklyUsageSummarySchedule(ctx, env); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(ctx, "failed to add weekly usage summary schedule", attr.SlogError(err))
+		}
 	}
 
-	if err := AddAssistantRuntimeJanitorSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+	if err := AddAssistantReaperSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add assistant reaper schedule", attr.SlogError(err))
 	}
 
-	if err := AddAssistantMemoriesReaperSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add assistant memories reaper schedule", attr.SlogError(err))
+	if err := AddAssistantRuntimeJanitorSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add assistant runtime janitor schedule", attr.SlogError(err))
+	}
+
+	if err := AddAssistantMemoriesReaperSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add assistant memories reaper schedule", attr.SlogError(err))
 	}
 
 	// One image recycle sweep per deployed runtime image: a new worker build
@@ -678,81 +809,95 @@ func NewTemporalWorker(
 	// per-admission recycle.
 	if opts.AssistantsCore != nil {
 		if imageRef := opts.AssistantsCore.RuntimeImageRef(); imageRef != "" {
-			if err := KickAssistantRuntimeImageRecycle(context.Background(), env, imageRef); err != nil {
-				logger.ErrorContext(context.Background(), "failed to kick assistant runtime image recycle", attr.SlogError(err))
+			if err := KickAssistantRuntimeImageRecycle(ctx, env, imageRef); err != nil {
+				logger.ErrorContext(ctx, "failed to kick assistant runtime image recycle", attr.SlogError(err))
 			}
 		}
 	}
 
-	if err := AddOutboxGCSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add outbox gc schedule", attr.SlogError(err))
+	if err := AddTrustedDelegationCleanupSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add trusted delegation cleanup schedule", attr.SlogError(err))
 	}
 
-	if err := AddPublishOutboxSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add publish outbox schedule", attr.SlogError(err))
+	if err := AddKillswitchMaintenanceSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add killswitch maintenance schedule", attr.SlogError(err))
 	}
 
-	if err := AddPublishOutboxGCSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add publish outbox gc schedule", attr.SlogError(err))
+	if err := AddPublishOutboxSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add publish outbox schedule", attr.SlogError(err))
 	}
 
-	if err := AddStagedTelemetrySweepSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add staged telemetry sweep schedule", attr.SlogError(err))
+	if err := AddPublishOutboxGCSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add publish outbox gc schedule", attr.SlogError(err))
 	}
 
-	if err := AddIdentityMapSyncSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add identity map sync schedule", attr.SlogError(err))
+	if err := AddStagedTelemetrySweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add staged telemetry sweep schedule", attr.SlogError(err))
 	}
 
-	if err := AddSpendRuleEvaluationSchedule(context.Background(), env); err != nil {
+	if err := AddIdentityMapSyncSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add identity map sync schedule", attr.SlogError(err))
+	}
+
+	if err := AddTenantDimensionsSyncSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add tenant dimension sync schedule", attr.SlogError(err))
+	}
+
+	if err := AddIndexToolsetSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add index toolset sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddSpendRuleEvaluationSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add spend rule evaluation schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add spend rule evaluation schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddSkillObservationReconciliationSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add skill observation reconciliation schedule", attr.SlogError(err))
+	if err := AddSessionQuarantineReassertSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add session quarantine reassert schedule", attr.SlogError(err))
 	}
 
-	if err := AddSkillEfficacySweepSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add skill efficacy sweep schedule", attr.SlogError(err))
+	if err := AddSkillObservationReconciliationSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add skill observation reconciliation schedule", attr.SlogError(err))
 	}
 
-	if err := AddChatAnalysisSweepSchedule(context.Background(), env); err != nil {
-		logger.ErrorContext(context.Background(), "failed to add chat analysis sweep schedule", attr.SlogError(err))
+	if err := AddSkillEfficacySweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add skill efficacy sweep schedule", attr.SlogError(err))
 	}
 
-	if err := AddRemoteSessionRefreshSchedule(context.Background(), env); err != nil {
+	if err := AddChatAnalysisSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add chat analysis sweep schedule", attr.SlogError(err))
+	}
+
+	if err := AddRemoteSessionRefreshSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add remote session refresh schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add remote session refresh schedule", attr.SlogError(err))
 		}
 	}
 
-	if err := AddTrialDemotionSchedule(context.Background(), env); err != nil {
+	if err := AddTrialDemotionSchedule(ctx, env); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add trial demotion schedule", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to add trial demotion schedule", attr.SlogError(err))
 		}
 	}
 
-	if activities.skillSuggestionAnalyzer != nil {
-		if err := AddSkillSuggestionSweepSchedule(context.Background(), env); err != nil {
-			logger.ErrorContext(context.Background(), "failed to add skill suggestion sweep schedule", attr.SlogError(err))
+	if w.hasSkillSuggester {
+		if err := AddSkillSuggestionSweepSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add skill suggestion sweep schedule", attr.SlogError(err))
 		}
 	}
 
-	if opts.DB != nil && opts.K8sClient != nil && opts.ExpectedTargetCNAME != "" {
-		if err := AddCustomDomainHealthSchedule(context.Background(), env); err != nil {
-			logger.ErrorContext(context.Background(), "failed to add custom domain health schedule", attr.SlogError(err))
+	if opts.DB != nil && opts.K8sClient != nil && (opts.ExpectedTargetCNAME != "" || len(opts.ExpectedARecords) > 0) {
+		if err := AddCustomDomainHealthSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add custom domain health schedule", attr.SlogError(err))
 		}
 	}
 
 	if opts.PluginPublisher != nil {
-		if err := AddPluginGeneratorRolloutSchedule(context.Background(), env); err != nil {
-			logger.ErrorContext(context.Background(), "failed to add plugin generator rollout schedule", attr.SlogError(err))
+		if err := AddPluginGeneratorRolloutSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add plugin generator rollout schedule", attr.SlogError(err))
 		}
 	}
-
-	return &Workers{main: temporalWorker, riskAnalysis: riskWorker, aiUsage: aiUsageWorker, skillEfficacy: skillEfficacyWorker}
 }
 
 // Fleet-wide cap on in-flight AnalyzeBatch per worker pod — the only knob
@@ -784,33 +929,36 @@ type Workers struct {
 	riskAnalysis  worker.Worker
 	aiUsage       worker.Worker
 	skillEfficacy worker.Worker
+
+	// Retained so Run can install the recurring schedules; see
+	// registerSchedules.
+	env                 *tenv.Environment
+	logger              *slog.Logger
+	opts                *WorkerOptions
+	hasSkillSuggester   bool
+	networkIngressQueue string
 }
 
-// Run starts dedicated workers, then blocks running the main worker until
-// interruptCh receives.
+// Run registers the recurring schedules, starts every worker, then blocks
+// until interruptCh receives and the workers have stopped.
 func (w *Workers) Run(interruptCh <-chan any) error {
-	if err := w.riskAnalysis.Start(); err != nil {
-		return fmt.Errorf("start risk analysis worker: %w", err)
-	}
-	defer w.riskAnalysis.Stop()
+	w.registerSchedules(context.Background())
 
-	if err := w.aiUsage.Start(); err != nil {
-		return fmt.Errorf("start ai integration usage worker: %w", err)
+	if err := w.Start(); err != nil {
+		return err
 	}
-	defer w.aiUsage.Stop()
-
-	if err := w.skillEfficacy.Start(); err != nil {
-		return fmt.Errorf("start skill efficacy worker: %w", err)
-	}
-	defer w.skillEfficacy.Stop()
-
-	if err := w.main.Run(interruptCh); err != nil {
-		return fmt.Errorf("run main worker: %w", err)
-	}
+	<-interruptCh
+	w.Stop()
 	return nil
 }
 
 // Start starts all workers without blocking. Pair with Stop (used by tests).
+//
+// Unlike Run, this deliberately does not register the recurring schedules. A
+// test builds a throwaway namespace per test case and only exercises the
+// workflow it started; installing ~20 scheduler workflows in each of those
+// namespaces made the shared dev server, not the code under test, the
+// bottleneck.
 func (w *Workers) Start() error {
 	if err := w.main.Start(); err != nil {
 		return fmt.Errorf("start main worker: %w", err)
@@ -833,9 +981,13 @@ func (w *Workers) Start() error {
 	return nil
 }
 
+// Stop stops every worker at once. Each stop waits up to workerStopTimeout
+// for its in-flight activities, so stopping them one after another would
+// multiply that wait past the pod's termination budget.
 func (w *Workers) Stop() {
-	w.skillEfficacy.Stop()
-	w.aiUsage.Stop()
-	w.riskAnalysis.Stop()
-	w.main.Stop()
+	var wg sync.WaitGroup
+	for _, stop := range []func(){w.skillEfficacy.Stop, w.aiUsage.Stop, w.riskAnalysis.Stop, w.main.Stop} {
+		wg.Go(stop)
+	}
+	wg.Wait()
 }

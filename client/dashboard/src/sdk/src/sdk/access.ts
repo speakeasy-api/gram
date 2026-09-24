@@ -6,10 +6,16 @@ import { accessCreateRole } from "../funcs/accessCreateRole.js";
 import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
+import { accessListAIDetections } from "../funcs/accessListAIDetections.js";
+import { accessListAIDetectionUsers } from "../funcs/accessListAIDetectionUsers.js";
+import { accessListAudienceOptions } from "../funcs/accessListAudienceOptions.js";
 import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
+import { accessListEmployeeAIDetections } from "../funcs/accessListEmployeeAIDetections.js";
 import { accessListGrants } from "../funcs/accessListGrants.js";
+import { accessListIdentityAccess } from "../funcs/accessListIdentityAccess.js";
 import { accessListMembers } from "../funcs/accessListMembers.js";
+import { accessListResourceAudience } from "../funcs/accessListResourceAudience.js";
 import { accessListRoles } from "../funcs/accessListRoles.js";
 import { accessListScopes } from "../funcs/accessListScopes.js";
 import { accessListShadowMCPInventory } from "../funcs/accessListShadowMCPInventory.js";
@@ -18,13 +24,19 @@ import { accessListShadowMCPInventoryUsers } from "../funcs/accessListShadowMCPI
 import { accessRequestAccess } from "../funcs/accessRequestAccess.js";
 import { accessResolveChallenge } from "../funcs/accessResolveChallenge.js";
 import { accessResolveShadowMCPInventoryRequest } from "../funcs/accessResolveShadowMCPInventoryRequest.js";
+import { accessSetAIToolDecision } from "../funcs/accessSetAIToolDecision.js";
+import { accessSetResourceAudience } from "../funcs/accessSetResourceAudience.js";
 import { accessUpdateMemberRoles } from "../funcs/accessUpdateMemberRoles.js";
 import { accessUpdateRole } from "../funcs/accessUpdateRole.js";
 import { accessUpdateShadowMCPInventoryServerName } from "../funcs/accessUpdateShadowMCPInventoryServerName.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AccessMember } from "../models/components/accessmember.js";
+import { ListAIDetectionsResult } from "../models/components/listaidetectionsresult.js";
+import { ListAIDetectionUsersResult } from "../models/components/listaidetectionusersresult.js";
+import { ListAudienceOptionsResult } from "../models/components/listaudienceoptionsresult.js";
 import { ListChallengeBucketsResult } from "../models/components/listchallengebucketsresult.js";
 import { ListChallengesResult } from "../models/components/listchallengesresult.js";
+import { ListIdentityAccessResult } from "../models/components/listidentityaccessresult.js";
 import { ListMembersResult } from "../models/components/listmembersresult.js";
 import { ListRolesResult } from "../models/components/listrolesresult.js";
 import { ListScopesResult } from "../models/components/listscopesresult.js";
@@ -33,7 +45,9 @@ import { ListShadowMCPInventoryUsersResult } from "../models/components/listshad
 import { ListUserGrantsResult } from "../models/components/listusergrantsresult.js";
 import { RequestAccessResult } from "../models/components/requestaccessresult.js";
 import { ResolveChallengesResult } from "../models/components/resolvechallengesresult.js";
+import { ResourceAudienceResult } from "../models/components/resourceaudienceresult.js";
 import { Role } from "../models/components/role.js";
+import { SetAIToolDecisionResult } from "../models/components/setaitooldecisionresult.js";
 import { ShadowMCPInventoryServer } from "../models/components/shadowmcpinventoryserver.js";
 import { ShadowMCPInventoryURLState } from "../models/components/shadowmcpinventoryurlstate.js";
 import {
@@ -53,6 +67,18 @@ import {
   GetShadowMCPInventoryServerSecurity,
 } from "../models/operations/getshadowmcpinventoryserver.js";
 import {
+  ListAIDetectionsRequest,
+  ListAIDetectionsSecurity,
+} from "../models/operations/listaidetections.js";
+import {
+  ListAIDetectionUsersRequest,
+  ListAIDetectionUsersSecurity,
+} from "../models/operations/listaidetectionusers.js";
+import {
+  ListAudienceOptionsRequest,
+  ListAudienceOptionsSecurity,
+} from "../models/operations/listaudienceoptions.js";
+import {
   ListChallengeBucketsRequest,
   ListChallengeBucketsSecurity,
 } from "../models/operations/listchallengebuckets.js";
@@ -61,13 +87,25 @@ import {
   ListChallengesSecurity,
 } from "../models/operations/listchallenges.js";
 import {
+  ListEmployeeAIDetectionsRequest,
+  ListEmployeeAIDetectionsSecurity,
+} from "../models/operations/listemployeeaidetections.js";
+import {
   ListGrantsRequest,
   ListGrantsSecurity,
 } from "../models/operations/listgrants.js";
 import {
+  ListIdentityAccessRequest,
+  ListIdentityAccessSecurity,
+} from "../models/operations/listidentityaccess.js";
+import {
   ListMembersRequest,
   ListMembersSecurity,
 } from "../models/operations/listmembers.js";
+import {
+  ListResourceAudienceRequest,
+  ListResourceAudienceSecurity,
+} from "../models/operations/listresourceaudience.js";
 import {
   ListRolesRequest,
   ListRolesSecurity,
@@ -100,6 +138,14 @@ import {
   ResolveShadowMCPInventoryRequestRequest,
   ResolveShadowMCPInventoryRequestSecurity,
 } from "../models/operations/resolveshadowmcpinventoryrequest.js";
+import {
+  SetAIToolDecisionRequest,
+  SetAIToolDecisionSecurity,
+} from "../models/operations/setaitooldecision.js";
+import {
+  SetResourceAudienceRequest,
+  SetResourceAudienceSecurity,
+} from "../models/operations/setresourceaudience.js";
 import {
   UpdateMemberRolesRequest,
   UpdateMemberRolesSecurity,
@@ -176,7 +222,7 @@ export class Access extends ClientSDK {
    * getShadowMCPInventoryServer access
    *
    * @remarks
-   * Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.
+   * Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.
    */
   async getShadowMCPInventoryServer(
     request: GetShadowMCPInventoryServerRequest,
@@ -184,6 +230,63 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryServer> {
     return unwrapAsync(accessGetShadowMCPInventoryServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listAIDetectionUsers access
+   *
+   * @remarks
+   * List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.
+   */
+  async listAIDetectionUsers(
+    request: ListAIDetectionUsersRequest,
+    security?: ListAIDetectionUsersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAIDetectionUsersResult> {
+    return unwrapAsync(accessListAIDetectionUsers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listAIDetections access
+   *
+   * @remarks
+   * List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.
+   */
+  async listAIDetections(
+    request?: ListAIDetectionsRequest | undefined,
+    security?: ListAIDetectionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAIDetectionsResult> {
+    return unwrapAsync(accessListAIDetections(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listAudienceOptions access
+   *
+   * @remarks
+   * List the principals that can be given access: everyone, roles, people, and agents.
+   */
+  async listAudienceOptions(
+    request?: ListAudienceOptionsRequest | undefined,
+    security?: ListAudienceOptionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAudienceOptionsResult> {
+    return unwrapAsync(accessListAudienceOptions(
       this,
       request,
       security,
@@ -230,6 +333,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * listEmployeeAIDetections access
+   *
+   * @remarks
+   * List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.
+   */
+  async listEmployeeAIDetections(
+    request: ListEmployeeAIDetectionsRequest,
+    security?: ListEmployeeAIDetectionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAIDetectionsResult> {
+    return unwrapAsync(accessListEmployeeAIDetections(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listGrants access
    *
    * @remarks
@@ -249,6 +371,25 @@ export class Access extends ClientSDK {
   }
 
   /**
+   * listIdentityAccess access
+   *
+   * @remarks
+   * List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.
+   */
+  async listIdentityAccess(
+    request: ListIdentityAccessRequest,
+    security?: ListIdentityAccessSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListIdentityAccessResult> {
+    return unwrapAsync(accessListIdentityAccess(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listMembers access
    *
    * @remarks
@@ -260,6 +401,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListMembersResult> {
     return unwrapAsync(accessListMembers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listResourceAudience access
+   *
+   * @remarks
+   * List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.
+   */
+  async listResourceAudience(
+    request: ListResourceAudienceRequest,
+    security?: ListResourceAudienceSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ResourceAudienceResult> {
+    return unwrapAsync(accessListResourceAudience(
       this,
       request,
       security,
@@ -309,7 +469,7 @@ export class Access extends ClientSDK {
    * listShadowMCPInventory access
    *
    * @remarks
-   * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.
+   * List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.
    */
   async listShadowMCPInventory(
     request: ListShadowMCPInventoryRequest,
@@ -385,7 +545,7 @@ export class Access extends ClientSDK {
    * resolveChallenge access
    *
    * @remarks
-   * Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.
+   * Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.
    */
   async resolveChallenge(
     request: ResolveChallengeRequest,
@@ -412,6 +572,44 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryURLState> {
     return unwrapAsync(accessResolveShadowMCPInventoryRequest(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setAIToolDecision access
+   *
+   * @remarks
+   * Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.
+   */
+  async setAIToolDecision(
+    request: SetAIToolDecisionRequest,
+    security?: SetAIToolDecisionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SetAIToolDecisionResult> {
+    return unwrapAsync(accessSetAIToolDecision(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setResourceAudience access
+   *
+   * @remarks
+   * Replace the rules that name one resource. Organization-wide rules are left untouched.
+   */
+  async setResourceAudience(
+    request: SetResourceAudienceRequest,
+    security?: SetResourceAudienceSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ResourceAudienceResult> {
+    return unwrapAsync(accessSetResourceAudience(
       this,
       request,
       security,

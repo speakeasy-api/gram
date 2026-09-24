@@ -8,7 +8,7 @@ This doc covers how the publish flow works end-to-end: what Gram generates, how 
 
 ## Overview
 
-"Publishing" is the act of generating all plugin package files and pushing them to a GitHub repo that each AI platform's marketplace can index. The GitHub repo is fully managed by Gram — it is read-only to end users and overwritten on every publish.
+"Publishing" is the act of generating all plugin package files and pushing them to a GitHub repo that each AI platform's marketplace can index. The GitHub repo is fully managed by Gram — its contents are overwritten on every publish, so edits made on GitHub do not survive.
 
 ## Triggering a publish
 
@@ -24,10 +24,10 @@ Gram-Project: <project-slug>
 {}
 ```
 
-Or with a collaborator:
+Or with collaborators:
 
 ```json
-{ "github_collaborator": "octocat" }
+{ "github_usernames": ["octocat"] }
 ```
 
 ## What happens during a publish
@@ -50,7 +50,7 @@ Or with a collaborator:
 
 6. **Store connection.** The `plugin_github_connections` row is upserted with `(project_id, installation_id, repo_owner, repo_name)`.
 
-7. **Add collaborator.** If a GitHub username was provided, `AddCollaborator()` grants `push` permission to the repo.
+7. **Add collaborators.** For each GitHub username provided, `AddCollaborator()` grants `admin` permission on the repo. Admin is what the platform marketplaces need from whoever wires the repo up: Cursor only offers **Serve Marketplace From Cursor** — the synced copy that lets teammates install plugins without GitHub access to the source repo — to repository admins. Re-adding an existing collaborator upgrades them to admin, which is how a repo published before this behavior is brought up to date.
 
 > **Keys are minted before the GitHub push.** If the push fails, the keys are discarded and not persisted to the database. On retry the flow starts over.
 
@@ -110,8 +110,18 @@ If `configured` is false, the Publish button should be hidden (the server isn't 
 
 ## Observability plugin
 
-Every publish includes two observability plugins (one for Claude, one for Cursor) that forward hook events to Gram. These are automatically added at the top of the marketplace so they appear first.
+Every publish includes one observability plugin per supported platform, forwarding hook events to Gram. Those with a marketplace are automatically added at the top so they appear first.
 
-The observability plugin slug is `<org-slug>-observability` (Claude) or `<org-slug>-observability-cursor` (Cursor). Users are shown a notice in the README that this plugin is required alongside any MCP server plugins.
+| Platform | Slug                                |
+| -------- | ----------------------------------- |
+| Claude   | `<org-slug>-observability`          |
+| Cursor   | `<org-slug>-observability-cursor`   |
+| Codex    | `<org-slug>-observability-codex`    |
+| OpenCode | `<org-slug>-observability-opencode` |
+| OpenClaw | `<org-slug>-observability-openclaw` |
+| Pi       | `<org-slug>-observability-pi`       |
+| Copilot  | `<org-slug>-observability-copilot`  |
+
+OpenCode, OpenClaw and Pi have no marketplace track, so their packages are installed directly rather than listed. Users are shown a notice in the README that the observability plugin is required alongside any MCP server plugins.
 
 See [Package Format — observability plugin](./package-format.md#observability-plugin) for the hook events registered and the hook script contents.

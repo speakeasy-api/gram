@@ -12,13 +12,26 @@ directory holds the authoring docs:
   constants; pre/postflight isolation asserts abort the transaction on any
   violation). Deliberately NOT a migration: migrations are append-only and
   the seed churns; `CREATE OR REPLACE` + daily rerun is the upgrade path.
-- `server/internal/demoseed/clickhouse.sql` — scoped deletes (source table +
-  every MV target) followed by fresh inserts; MVs repopulate summaries on
-  INSERT. Postflight `throwIf` asserts fail the run on missing or leaked
-  rows. Keep semicolons out of string literals — the runner splits on ';'.
+- `server/internal/demoseed/clickhouse.sql` — scoped deletes of raw/source
+  tables and every incremental MV target followed by fresh inserts. The
+  inserts repopulate those targets automatically; postflight `throwIf` asserts
+  fail the run on missing or leaked rows. Keep semicolons out of string
+  literals — the runner splits on ';'.
 - `PAGES.md` — the acceptance contract: which dashboard page each piece of
   data feeds and its verification status.
 - `verify.md` — the agent-driven page verification playbook.
+
+## Exact upstream-session attachment fixture
+
+The shared SQL seeds two active release agents with one fictional human owner.
+Both reference the same exact upstream session through
+`principal_remote_session_bindings`; the requesting Linear session's issuer is
+linked to its upstream client. This is intentionally inert: `.invalid` issuer,
+invalid ciphertext, no refresh token, and auto-refresh off. No real credentials
+or external account IDs are included. Deterministic `gram-demo-attachment-*`
+IDs are covered by the existing `Spec.NameSeed` rewrite. Cleanup runs before
+any referenced parent deletes; postflight checks enforce two reachable
+bindings and one underlying session. See `PAGES.md` and `verify.md` for UI QA.
 
 ## Fixed constants
 
@@ -30,8 +43,9 @@ directory holds the authoring docs:
 | Demo users | `user_demo_*` / `*@demo.getgram.ai`                                                           |
 
 Timestamps are always `now()`-relative (trailing ~12 days): the daily prod
-rerun regenerates a fresh window, data never goes stale, and no MV backfill is
-ever needed (fresh rows are past every MV date cutoff).
+rerun regenerates a fresh window and data never goes stale. Incremental MVs,
+including billing usage's UTC-day summaries, populate their targets on INSERT.
+Physical duplicate meter deliveries intentionally count independently.
 
 ## Tenants
 
@@ -83,6 +97,19 @@ suffixed slug because the seeded row already holds `speakeasy`.
   grants — use the atlas/owner Postgres URL secret; and run the Cloud SQL
   proxy as an explicit sidecar with --quitquitquit so the Job completes.
 
+### Billing usage summaries
+
+The ClickHouse script deletes the demo tenant's
+`billing_meter_daily_summaries` rows before deleting its raw meter rows. The
+runner waits until both deletions are visible, then the fresh
+`billing_meter_readings_by_time` inserts synchronously trigger the incremental
+materialized view. This makes each seed run scoped and repeatable without a
+full-history reporting scan or a separate rebuild.
+
+Summaries have UTC-day precision. Every physical delivery contributes to the
+daily `SummingMergeTree`; producer-side deduplication is responsible for
+preventing unwanted duplicate accounting.
+
 ## Local-only fixtures
 
 `gram demo-seed --local` runs `RunLocalFixtures`
@@ -94,12 +121,12 @@ needs and the shared demo org must never have:
   a direct `chat:read` grant (Admin deliberately omits it, and without it the
   Agent Sessions list would hide every seeded chat because they belong to the
   fictional teammates).
-- **Fixed credentials.** A `seed-key` API key and the Postgres-MCP tunnel key,
-  both well-known constants rather than generated values — so `mise.toml` ships
-  `GRAM_API_KEY` and `TUNNEL_LOCAL_*` as checked-in defaults and nothing is
-  written back into `mise.local.toml` after a seed run. `server/.golangci.yaml`
-  carries a narrow, commented `G101` exemption for them: they are genuinely
-  hardcoded credentials, deliberately, scoped to one developer's database.
+- **Fixed credentials.** A `seed-key` API key, a well-known constant rather
+  than a generated value — so `mise.toml` ships `GRAM_API_KEY` as a checked-in
+  default and nothing is written back into `mise.local.toml` after a seed run.
+  `server/.golangci.yaml` carries a narrow, commented `G101` exemption for it:
+  it is a genuinely hardcoded credential, deliberately, scoped to one
+  developer's database.
 - **A default environment**, the global `Gram Recommended` MCP registry row
   (not tenant-scoped, so it cannot live in the seed proper), and the
   Playground's MCP App: a Gram Function zipped in-memory from
@@ -149,8 +176,10 @@ and the test asserts:
 2. **Cleanup** — the planted stray demo rows are wiped by the rerun, so seed
    versions can always roll forward.
 3. **Idempotence** — per-table row counts are identical after every run for
-   plain MergeTree tables; Summing/Aggregating MV targets collapse rows on
-   `now()`-bucketed keys, so they are checked for isolation only.
+   published plain MergeTree tables and the merged
+   `billing_meter_daily_summaries` target. Other Summing/Aggregating MV targets
+   collapse rows on `now()`-bucketed keys, so they are checked for isolation
+   only.
 
 What that means when extending the seed: scope every statement to the demo
 constants, pair every insert with a delete (or upsert), keep the

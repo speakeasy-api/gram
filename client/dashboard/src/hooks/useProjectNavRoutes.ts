@@ -13,7 +13,8 @@ export interface ProjectNavRoute {
    * Scopes that grant access — the user needs ANY one of them. Mirrors the
    * per-item `scope` props on `app-sidebar.tsx`'s `ScopeGatedNavItem`s so the
    * command palette gates the same pages the sidebar does. Keep these in sync
-   * with the sidebar when scopes change there.
+   * with the sidebar when scopes change there. An empty array means the page
+   * uses server-side ownership authorization and needs no navigation scope.
    */
   scope: Scope[];
   /** Resource selected for this route's scope check, when applicable. */
@@ -36,9 +37,12 @@ export interface ProjectNavRoute {
 export function useProjectNavRoutes(): ProjectNavRoute[] {
   const routes = useRoutes();
   const { id: projectId } = useProject();
+  const agentManagementFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
+  const userSessionsFlag = useFeatureFlag(FEATURE_FLAGS.userSessionsDashboard);
   const assistantsFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
   const deploymentsPageFlag = useFeatureFlag(FEATURE_FLAGS.deploymentsPage);
   const riskWatchdogFlag = useFeatureFlag(FEATURE_FLAGS.riskWatchdog);
+  const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
   const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
   // Assistants is opt-in: unavailable flags remain hidden.
@@ -48,21 +52,37 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
   const isDeploymentsPageEnabled = deploymentsPageFlag.status !== "disabled";
   // Watchdog is opt-in like Assistants: unavailable flags remain hidden.
   const isRiskWatchdogEnabled = riskWatchdogFlag.status === "enabled";
+  // Explore is opt-in while it is dogfooded: the flag is released to the
+  // organizations trying it, and everyone else never sees the page.
+  const isExploreEnabled = exploreFlag.status === "enabled";
 
   return useMemo<ProjectNavRoute[]>(() => {
     const read: Scope[] = ["project:read"];
     const readWrite: Scope[] = ["project:read", "project:write"];
-    // The Observe surface is gated on org:admin at the page level (each page
-    // renders an "Access restricted" notice for non-admins, like the Secure
-    // section). The nav items themselves stay visible to any project member
-    // (project:read) so the group isn't silently hidden — mirrors Secure's
-    // riskOverview.
+    // Observe navigation stays visible to project readers. The Identities
+    // roster uses that scope; identity detail resolution separately requires
+    // org:read, and the remaining Observe pages render an org-admin notice.
     const observe: Scope[] = ["project:read"];
     return [
       { route: routes.home, scope: read },
       { route: routes.chat, scope: read },
-      { route: routes.sources, scope: readWrite },
-      { route: routes.catalog, scope: ["project:read", "mcp:write"] },
+      { route: routes.identities, scope: observe },
+      ...(agentManagementFlag.status === "enabled"
+        ? [{ route: routes.agents, scope: [] }]
+        : []),
+      ...(userSessionsFlag.status === "enabled"
+        ? [
+            {
+              route: routes.mcpSessions,
+              scope: read,
+              resourceId: projectId,
+            },
+          ]
+        : []),
+      {
+        route: routes.remoteIdentityProviders,
+        scope: ["org:read", "org:admin"],
+      },
       {
         route: routes.playground,
         scope: ["mcp:read", "mcp:write", "mcp:connect"],
@@ -81,32 +101,34 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       },
       { route: routes.plugins, scope: readWrite },
       { route: routes.environments, scope: readWrite },
-      { route: routes.employees, scope: observe },
+      // Watchdog supersedes the Risk Overview page: with the flag on, it is
+      // the Secure section's landing surface and the legacy overview nav item
+      // hides (its route stays reachable by direct URL). Risk Events shows in
+      // both modes, directly below the landing surface.
+      ...(isRiskWatchdogEnabled
+        ? [{ route: routes.watchdog, scope: read }]
+        : [{ route: routes.riskOverview, scope: read }]),
+      { route: routes.riskEvents, scope: ["org:admin"] as Scope[] },
+      { route: routes.policyCenter, scope: readWrite },
+      { route: routes.shadowAI, scope: readWrite },
       { route: routes.costs, scope: observe },
+      ...(isExploreEnabled ? [{ route: routes.explore, scope: observe }] : []),
       { route: routes.insights, scope: observe },
       { route: routes.agentSessions, scope: observe },
       ...(isOrgMemoryEnabled
         ? [{ route: routes.orgMemory, scope: observe }]
         : []),
       { route: routes.logs, scope: observe },
-      // Watchdog supersedes the Risk Overview and Risk Events pages: with the
-      // flag on, it is the Secure section's landing surface and the two
-      // legacy nav items hide (their routes stay reachable by direct URL).
-      ...(isRiskWatchdogEnabled
-        ? [{ route: routes.watchdog, scope: read }]
-        : [{ route: routes.riskOverview, scope: read }]),
-      { route: routes.policyCenter, scope: readWrite },
-      ...(isRiskWatchdogEnabled
-        ? []
-        : [{ route: routes.riskEvents, scope: ["org:admin"] as Scope[] }]),
-      { route: routes.shadowMCP, scope: readWrite },
       { route: routes.settings, scope: ["project:write"] },
     ];
   }, [
     routes,
+    agentManagementFlag.status,
+    userSessionsFlag.status,
     projectId,
     isAssistantsEnabled,
     isDeploymentsPageEnabled,
+    isExploreEnabled,
     isOrgMemoryEnabled,
     isRiskWatchdogEnabled,
   ]);

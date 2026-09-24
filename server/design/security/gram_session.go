@@ -20,10 +20,11 @@ var WriteSessionCookie = func() {
 	Cookie(fmt.Sprintf("session_cookie:%s", constants.SessionCookie), String, func() {
 	})
 	// TODO: We want to restrict cookie domain here
-	CookieMaxAge(2592000) // 30 days in seconds
+	CookieMaxAge(constants.SessionCookieMaxAgeSeconds)
 	CookieSecure()
 	CookieHTTPOnly()
 	CookiePath("/")
+	CookieSameSite(CookieSameSiteLax)
 }
 
 var DeleteSessionCookie = func() {

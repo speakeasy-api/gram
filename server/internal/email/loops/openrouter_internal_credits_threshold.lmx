@@ -1,35 +1,27 @@
-<Style backgroundColor="#FAFAFA" backgroundXPadding="0" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="0" bodyYPadding="0" bodyFontFamily="Inter" bodyFontCategory="ui-sans-serif" borderColor="" borderWidth="0" borderRadius="0" buttonBodyColor="" buttonBodyXPadding="16" buttonBodyYPadding="12" buttonBorderColor="" buttonBorderWidth="0" buttonBorderRadius="4" buttonTextColor="" buttonTextFormat="0" buttonTextFontSize="16" dividerColor="#BABABA" dividerBorderWidth="1" textBaseColor="#545454" textBaseFontSize="16" textBaseLineHeight="165" textBaseLetterSpacing="0" textLinkColor="" heading1Color="#121212" heading1FontSize="44" heading1LineHeight="112" heading1LetterSpacing="-1.5" heading2Color="#121212" heading2FontSize="24" heading2LineHeight="125" heading2LetterSpacing="0" heading3Color="" heading3FontSize="20" heading3LineHeight="125" heading3LetterSpacing="0" />
-<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzwke702cu0j3bz2gats4u.png" width="600" />
-<Columns gap="12" widths="10,45,45" stackOnMobile="false" paddingTop="26" paddingRight="40" paddingBottom="24" paddingLeft="40">
-  <ColumnItem verticalAlignment="middle">
-    <Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmsrzv81y00z60i1dmtf9twha.png" width="28" />
-  </ColumnItem>
-  <ColumnItem verticalAlignment="middle">
-    <Paragraph fontSize="21" lineHeight="100">speakeasy</Paragraph>
-  </ColumnItem>
-  <ColumnItem verticalAlignment="middle">
-    <Paragraph fontSize="12" lineHeight="140" align="right"><Text textColor="#757575">AI CONTROL PLANE</Text></Paragraph>
-  </ColumnItem>
-</Columns>
-<Paragraph fontSize="12" lineHeight="140" paddingTop="44" paddingRight="40" paddingBottom="18" paddingLeft="40"><Strong textColor="#757575">SECURITY INFERENCE CAP ALERT</Strong></Paragraph>
+<Style themeId="cmsnm620801ug0j2jdxiw79j4" backgroundColor="#FAFAFA" backgroundXPadding="0" backgroundYPadding="32" bodyColor="#FFFFFF" bodyXPadding="32" bodyYPadding="32" borderColor="#DCDCDC" borderWidth="1" borderRadius="0" buttonBodyColor="#000000" buttonBodyXPadding="20" buttonBodyYPadding="12" buttonBorderColor="" buttonBorderWidth="0" buttonBorderRadius="0" buttonTextColor="#FAFAFA" buttonTextFontSize="15" dividerColor="#DCDCDC" dividerBorderWidth="1" textBaseColor="#000000" textBaseFontSize="15" textBaseLineHeight="150" textBaseLetterSpacing="0" textLinkColor="#2873D7" heading1Color="#000000" heading1FontSize="26" heading1LineHeight="115" heading1LetterSpacing="-1" heading2Color="#000000" heading2FontSize="20" heading2LineHeight="120" heading2LetterSpacing="0" heading3Color="#000000" heading3FontSize="16" heading3LineHeight="120" heading3LetterSpacing="0" />
+<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmt7eueee05e20izu0frdx1jq.png" alt="Speakeasy" width="160" align="left" paddingBottom="28" />
+<Paragraph fontSize="12" paddingBottom="4"><Text textColor="#6E6E6E">SECURITY INFERENCE / CAP ALERT</Text></Paragraph>
 <Section if="{data.exhausted}" ifOperation="equal" ifValue="false">
-  <H1 paddingRight="40" paddingBottom="26" paddingLeft="40">{data.threshold_percent}% of security inference cap used</H1>
-  <Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">{data.organization_name} is approaching its cap for security inference.</Paragraph>
+  <H1>{data.threshold_percent}% of security inference cap used</H1>
 </Section>
 <Section if="{data.exhausted}" ifOperation="equal" ifValue="true">
-  <H1 paddingRight="40" paddingBottom="26" paddingLeft="40">Security inference is paused</H1>
-  <Paragraph paddingRight="40" paddingBottom="28" paddingLeft="40">{data.organization_name} has reached its security inference cap.</Paragraph>
+  <H1>Security inference is paused</H1>
 </Section>
-<Section blockColor="#FFF1ED" blockBorderWidth="1" blockBorderColor="#E8A18D" if="{data.exhausted}" ifOperation="equal" ifValue="true" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24">
-  <Paragraph fontSize="12" lineHeight="140"><Strong textColor="#C83228">CAP REACHED</Strong></Paragraph>
-  <Paragraph fontSize="14" lineHeight="155" paddingTop="8">Security inference is paused until usage resets or the cap changes.</Paragraph>
+<Image src="https://images.vialoops.com/clydgspni01t0bsa10jmd46rt/cmshilgvx01u30j6t4t0211tl.png" alt="" width="536" paddingTop="12" paddingBottom="20" />
+<Section if="{data.exhausted}" ifOperation="equal" ifValue="false">
+  <Paragraph paddingBottom="16">{data.organization_name} is approaching its cap for security inference.</Paragraph>
 </Section>
-<Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DBDBDB" if="{data.exhausted}" ifOperation="equal" ifValue="false" paddingTop="22" paddingRight="24" paddingBottom="20" paddingLeft="24">
-  <Paragraph fontSize="12" lineHeight="140"><Strong textColor="#757575">ACTION</Strong></Paragraph>
-  <Paragraph fontSize="14" lineHeight="155" paddingTop="8">Review usage before analysis coverage is affected.</Paragraph>
+<Section if="{data.exhausted}" ifOperation="equal" ifValue="true">
+  <Paragraph paddingBottom="16">{data.organization_name} has reached its security inference cap.</Paragraph>
 </Section>
-<Divider />
-<Section blockColor="#FAFAFA" paddingTop="24" paddingRight="40" paddingBottom="30" paddingLeft="40">
-  <Paragraph fontSize="12" lineHeight="160"><Strong textColor="#757575">SPEAKEASY · AI CONTROL PLANE</Strong></Paragraph>
-  <Paragraph fontSize="12" lineHeight="160" paddingTop="8">This is an automated inference cap alert.</Paragraph>
+<Section blockColor="#FFF1ED" blockBorderWidth="1" blockBorderColor="#E8A18D" if="{data.exhausted}" ifOperation="equal" ifValue="true" paddingTop="18" paddingRight="20" paddingBottom="16" paddingLeft="20">
+  <Paragraph fontSize="12" paddingBottom="4"><Strong textColor="#C83228">CAP REACHED</Strong></Paragraph>
+  <Paragraph fontSize="14" lineHeight="150">Security inference is paused until usage resets or the cap changes.</Paragraph>
 </Section>
+<Section blockColor="#FFFFFF" blockBorderWidth="1" blockBorderColor="#DCDCDC" if="{data.exhausted}" ifOperation="equal" ifValue="false" paddingTop="18" paddingRight="20" paddingBottom="16" paddingLeft="20">
+  <Paragraph fontSize="12" paddingBottom="4"><Text textColor="#6E6E6E">ACTION</Text></Paragraph>
+  <Paragraph fontSize="14" lineHeight="150">Review usage before analysis coverage is affected.</Paragraph>
+</Section>
+<Paragraph fontSize="12" lineHeight="100" paddingTop="16"><Br /></Paragraph>
+<Divider paddingBottom="16" />
+<Paragraph fontSize="12"><Text textColor="#6E6E6E">This is an automated inference cap alert.</Text></Paragraph>

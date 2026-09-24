@@ -11,6 +11,7 @@ import { GramCore } from "../core.js";
 import { domainsRegisterDomain } from "../funcs/domainsRegisterDomain.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import { CustomDomain } from "../models/components/customdomain.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -36,7 +37,7 @@ export type RegisterDomainMutationVariables = {
   options?: RequestOptions;
 };
 
-export type RegisterDomainMutationData = void;
+export type RegisterDomainMutationData = CustomDomain;
 
 export type RegisterDomainMutationError =
   | ServiceError

@@ -69,7 +69,7 @@ func TestPrepareContext_skipsNonSessionAuth(t *testing.T) {
 	require.True(t, ok)
 	authCtx.SessionID = nil
 	authCtx.APIKeyID = "api-key-123"
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	ctx = contextvalues.WithLegacyAPIKeyAuthorization(ctx, authCtx)
 
 	ctx, err := engine.PrepareContext(ctx)
 	require.NoError(t, err)

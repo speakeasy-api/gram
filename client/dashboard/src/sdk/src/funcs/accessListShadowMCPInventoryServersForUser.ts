@@ -111,8 +111,10 @@ async function $do(
   const path = pathToFunc("/rpc/access.listShadowMCPInventoryServersForUser")();
 
   const query = encodeFormQuery({
+    "from": payload.from,
     "limit": payload.limit,
     "project_id": payload.project_id,
+    "to": payload.to,
     "user_keys": payload.user_keys,
   });
 

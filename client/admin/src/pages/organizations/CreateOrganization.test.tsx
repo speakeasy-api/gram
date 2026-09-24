@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { QueryClient, useQuery } from "@tanstack/react-query";
 import {
   act,
   cleanup,
@@ -89,7 +89,7 @@ async function open(extra?: React.ReactNode): Promise<void> {
 }
 
 function nameField(): HTMLInputElement {
-  return screen.getByLabelText("Organization name") as HTMLInputElement;
+  return screen.getByLabelText("Company URL") as HTMLInputElement;
 }
 
 function submitButton(): HTMLButtonElement {
@@ -106,6 +106,15 @@ function submitForm(): void {
 
 function type(value: string): void {
   fireEvent.change(nameField(), { target: { value } });
+}
+
+function confirmOwnership(): void {
+  fireEvent.click(screen.getByRole("checkbox"));
+}
+
+function fillConfirmedURL(value = "example.com"): void {
+  type(value);
+  confirmOwnership();
 }
 
 // A refusal that carries a readable body, which is what a deployment with no
@@ -134,7 +143,7 @@ beforeEach(() => {
   mocks.createOrganization.mockReset();
   mocks.createOrganization.mockResolvedValue(CREATED);
   mocks.listOrganizations.mockReset();
-  mocks.listOrganizations.mockResolvedValue({ organizations: [] });
+  mocks.listOrganizations.mockResolvedValue({ total: 0, organizations: [] });
   mocks.getOrganization.mockReset();
   mocks.getOrganization.mockResolvedValue(CREATED);
   announce.mockReset();
@@ -143,6 +152,8 @@ beforeEach(() => {
   mocks.getOrganizationStats.mockResolvedValue({
     total: 0,
     created_last_7_days: 0,
+    customers: 0,
+    customers_created_last_7_days: 0,
     trials_ending_soon: 0,
     disabled: 0,
     disabled_last_7_days: 0,
@@ -152,16 +163,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("creating an organization", () => {
-  it("sends the name and closes", async () => {
+  it("sends the URL and confirmation and closes", async () => {
     await open();
-    type("Placeholder New");
+    fillConfirmedURL();
     // The button itself, once. Everything else here drives the form, so an
     // inert primary control would otherwise go unnoticed.
     fireEvent.click(submitButton());
 
     await waitFor(() => {
       expect(mocks.createOrganization).toHaveBeenCalledWith({
-        name: "Placeholder New",
+        url: "example.com",
+        ownership_confirmed: true,
       });
     });
     await waitFor(() => {
@@ -178,11 +190,11 @@ describe("creating an organization", () => {
       name: "Placeholder New",
     });
     await open();
-    type("placeholder    new");
+    fillConfirmedURL("https://EXAMPLE.com./about");
     submitForm();
 
     await screen.findByText(/Created Placeholder New\./);
-    expect(screen.queryByText(/placeholder    new/)).toBeNull();
+    expect(screen.queryByText(/https:\/\/EXAMPLE/)).toBeNull();
     await waitFor(() => {
       expect(announce).toHaveBeenCalledWith(
         expect.stringContaining("Created Placeholder New."),
@@ -192,7 +204,7 @@ describe("creating an organization", () => {
 
   it("clears the page's failure banner", async () => {
     await open();
-    type("Placeholder New");
+    fillConfirmedURL();
     submitForm();
 
     // A re-enable that failed reports in a banner on the page, and every
@@ -204,7 +216,7 @@ describe("creating an organization", () => {
 
   it("says the new row may not be on the page", async () => {
     await open();
-    type("Placeholder New");
+    fillConfirmedURL();
     submitForm();
 
     // The record is free tier with no trial, so a filtered list can be right
@@ -219,14 +231,15 @@ describe("creating an organization", () => {
     expect(line.getAttribute("title")).toBe(line.textContent);
   });
 
-  it("trims the name before sending it", async () => {
+  it("trims the URL before sending it", async () => {
     await open();
-    type("  Placeholder New  ");
+    fillConfirmedURL("  https://example.com/path  ");
     submitForm();
 
     await waitFor(() => {
       expect(mocks.createOrganization).toHaveBeenCalledWith({
-        name: "Placeholder New",
+        url: "https://example.com/path",
+        ownership_confirmed: true,
       });
     });
   });
@@ -239,8 +252,11 @@ describe("creating an organization", () => {
 
     // The new record belongs wherever the sort, the filter and the cursor put
     // it, so the page is fetched again rather than patched.
-    mocks.listOrganizations.mockResolvedValue({ organizations: [CREATED] });
-    type("Placeholder New");
+    mocks.listOrganizations.mockResolvedValue({
+      total: 1,
+      organizations: [CREATED],
+    });
+    fillConfirmedURL();
     submitForm();
 
     await waitFor(() => {
@@ -250,7 +266,7 @@ describe("creating an organization", () => {
 
   it("fills the detail cache under the slug", async () => {
     await open(<DetailProbe idOrSlug={CREATED.slug} />);
-    type("Placeholder New");
+    fillConfirmedURL();
     submitForm();
 
     await waitFor(() => {
@@ -260,7 +276,7 @@ describe("creating an organization", () => {
   });
 });
 
-describe("an empty name", () => {
+describe("an empty URL", () => {
   it("does not reach the server", async () => {
     await open();
     submitForm();
@@ -285,7 +301,7 @@ describe("an empty name", () => {
     expect(submitButton().disabled).toBe(true);
     type("   ");
     expect(submitButton().disabled).toBe(true);
-    type("Placeholder New");
+    fillConfirmedURL();
     expect(submitButton().disabled).toBe(false);
   });
 });
@@ -306,7 +322,7 @@ describe("cancelling", () => {
 
   it("sends nothing", async () => {
     await open();
-    type("Placeholder New");
+    fillConfirmedURL();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     await act(async () => {
@@ -324,7 +340,7 @@ describe("a write in flight", () => {
   it("sends one request however many times it is submitted", async () => {
     const write = deferred();
     await open();
-    type("Placeholder New");
+    fillConfirmedURL();
     submitForm();
 
     await waitFor(() => {
@@ -345,7 +361,7 @@ describe("a write in flight", () => {
   it("disables both buttons and the close control", async () => {
     const write = deferred();
     await open();
-    type("Placeholder New");
+    fillConfirmedURL();
     submitForm();
 
     await waitFor(() => {
@@ -355,6 +371,9 @@ describe("a write in flight", () => {
     const cancel = screen.getByRole("button", { name: "Cancel" });
     expect((cancel as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    expect(nameField().disabled).toBe(true);
+    expect(screen.getByRole("checkbox").hasAttribute("disabled")).toBe(true);
+    expect(nameField().value).toBe("example.com");
 
     await act(async () => {
       write.resolve(CREATED);
@@ -364,7 +383,7 @@ describe("a write in flight", () => {
   it("does not close on Escape", async () => {
     const write = deferred();
     await open();
-    type("Placeholder New");
+    fillConfirmedURL();
     submitForm();
     await waitFor(() => {
       expect(mocks.createOrganization).toHaveBeenCalledTimes(1);
@@ -386,23 +405,40 @@ describe("a refusal", () => {
   const REASON =
     "this server has no WorkOS configuration, so it cannot create organizations";
 
-  it("stays open holding the reason and the name", async () => {
+  it("shows the sanitized provider refusal without uncertainty or success", async () => {
+    const reason =
+      "WorkOS rejected organization creation. Check the company URL and whether its domain is eligible for verification.";
+    mocks.createOrganization.mockRejectedValue(refusal(reason));
+    await open();
+    fillConfirmedURL("https://example.com");
+    submitForm();
+
+    expect((await screen.findByRole("alert")).textContent).toBe(reason);
+    expect(nameField().value).toBe("https://example.com");
+    expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    expect(announce).not.toHaveBeenCalled();
+    expect(mocks.createOrganization).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays open holding the reason and the URL", async () => {
     mocks.createOrganization.mockRejectedValue(refusal(REASON));
     await open();
-    type("Placeholder New");
+    fillConfirmedURL();
     submitForm();
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toBe(REASON);
     expect(screen.queryByRole("dialog")).not.toBeNull();
     // A rejected name is one the operator wants to edit, not retype.
-    expect(nameField().value).toBe("Placeholder New");
+    expect(nameField().value).toBe("example.com");
   });
 
   it("marks the field invalid and points it at the reason", async () => {
     mocks.createOrganization.mockRejectedValue(refusal(REASON));
     await open();
-    type("Placeholder New");
+    fillConfirmedURL();
     submitForm();
 
     const alert = await screen.findByRole("alert");
@@ -410,14 +446,16 @@ describe("a refusal", () => {
     expect(field.getAttribute("aria-invalid")).toBe("true");
     // The operator tabs back to edit the rejected name, and the alert has
     // already fired by then.
-    expect(field.getAttribute("aria-describedby")).toBe(alert.id);
+    expect(field.getAttribute("aria-describedby")?.split(" ")).toContain(
+      alert.id,
+    );
     expect(alert.id).toBeTruthy();
   });
 
   it("reports nothing as created", async () => {
     mocks.createOrganization.mockRejectedValue(refusal(REASON));
     await open();
-    type("Placeholder New");
+    fillConfirmedURL();
     submitForm();
 
     await screen.findByRole("alert");
@@ -428,16 +466,17 @@ describe("a refusal", () => {
   it("can be submitted again after an edit", async () => {
     mocks.createOrganization.mockRejectedValueOnce(refusal(REASON));
     await open();
-    type("Placeholder New");
+    fillConfirmedURL();
     submitForm();
     await screen.findByRole("alert");
 
-    type("Placeholder Newer");
+    fillConfirmedURL("newer.example.com");
     submitForm();
 
     await waitFor(() => {
       expect(mocks.createOrganization).toHaveBeenLastCalledWith({
-        name: "Placeholder Newer",
+        url: "newer.example.com",
+        ownership_confirmed: true,
       });
     });
     await waitFor(() => {
@@ -447,7 +486,7 @@ describe("a refusal", () => {
 
   it("does not sit beside the previous create's confirmation", async () => {
     await open();
-    type("Placeholder New");
+    fillConfirmedURL();
     submitForm();
     await screen.findByText(/Created Placeholder New\./);
 
@@ -466,7 +505,7 @@ describe("a refusal", () => {
   it("is not still showing when the dialog is reopened", async () => {
     mocks.createOrganization.mockRejectedValue(refusal(REASON));
     await open();
-    type("Placeholder New");
+    fillConfirmedURL();
     submitForm();
     await screen.findByRole("alert");
 
@@ -479,5 +518,135 @@ describe("a refusal", () => {
 
     expect(screen.queryByRole("alert")).toBeNull();
     expect(nameField().value).toBe("");
+    expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe(
+      "false",
+    );
   });
+});
+
+describe("domain ownership", () => {
+  it("previews the exact domain without broadening trust", async () => {
+    await open();
+    type("https://WWW.Example.COM./about");
+    expect(
+      screen.getByText("Trusted email domain: www.example.com"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Invitations must match this domain exactly."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Entering a URL does not prove ownership/),
+    ).toBeTruthy();
+    expect(nameField().type).toBe("text");
+    expect(nameField().inputMode).toBe("url");
+    expect(submitButton().disabled).toBe(true);
+    submitForm();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mocks.createOrganization).not.toHaveBeenCalled();
+  });
+
+  it("resets confirmation on every URL edit", async () => {
+    await open();
+    fillConfirmedURL();
+    expect(submitButton().disabled).toBe(false);
+    type("other.example.com");
+    expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe(
+      "false",
+    );
+    expect(submitButton().disabled).toBe(true);
+    submitForm();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mocks.createOrganization).not.toHaveBeenCalled();
+  });
+
+  it("shows an accessible preview error without sending invalid input", async () => {
+    await open();
+    fillConfirmedURL("https://example.com:443");
+    expect(screen.getByRole("alert").textContent).toContain(
+      "without credentials, ports",
+    );
+    expect(nameField().getAttribute("aria-invalid")).toBe("true");
+    submitForm();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mocks.createOrganization).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    new GramAdminError(
+      500,
+      { message: "private database detail" },
+      "Internal Server Error",
+    ),
+    new GramAdminError(
+      502,
+      { message: "private provider detail" },
+      "Bad Gateway",
+    ),
+    new TypeError("Failed to fetch"),
+  ])("retains the URL with conservative guidance after %s", async (error) => {
+    mocks.createOrganization.mockRejectedValue(error);
+    await open();
+    fillConfirmedURL();
+    submitForm();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe(
+      "Creation could not be confirmed. Check existing organizations before retrying.",
+    );
+    expect(nameField().value).toBe("example.com");
+    expect(announce).not.toHaveBeenCalled();
+    expect(mocks.createOrganization).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    refusal(
+      "WorkOS rejected organization creation. Check the company URL and whether its domain is eligible for verification.",
+    ),
+    new GramAdminError(
+      502,
+      { message: "private provider detail" },
+      "Bad Gateway",
+    ),
+    new GramAdminError(
+      500,
+      { message: "private database detail" },
+      "Internal Server Error",
+    ),
+    new TypeError("Failed to fetch"),
+  ])(
+    "does not retry %s even when application defaults enable retries",
+    async (error) => {
+      const retry = vi.fn(() => true);
+      const queryClient = new QueryClient({
+        defaultOptions: {
+          queries: { retry: false },
+          mutations: { retry, retryDelay: 0 },
+        },
+      });
+      mocks.createOrganization.mockRejectedValue(error);
+      await renderWithApp(<CreateOrganization reporter={REPORTER} />, {
+        queryClient,
+      });
+      fireEvent.click(
+        screen.getByRole("button", { name: "Create organization" }),
+      );
+      await screen.findByRole("dialog");
+      fillConfirmedURL();
+      submitForm();
+
+      await screen.findByRole("alert");
+      expect(retry).not.toHaveBeenCalled();
+      expect(mocks.createOrganization).toHaveBeenCalledTimes(1);
+      expect(announce).not.toHaveBeenCalled();
+      expect(screen.queryByText(/^Created /)).toBeNull();
+      expect(nameField().value).toBe("example.com");
+      expect(submitButton().disabled).toBe(false);
+      queryClient.clear();
+    },
+  );
 });

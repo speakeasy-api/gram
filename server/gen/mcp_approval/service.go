@@ -141,7 +141,10 @@ type ApprovalRequestSummary struct {
 	ArtifactRef *string
 	// Whether the reference names an exact version.
 	VersionPinned bool
-	// The request's current status.
+	// The request's current status: unreviewed, requested, approved, denied, or
+	// superseded (the latest decision was explicitly displaced by a policy
+	// URL-list edit; history preserved, no enforcement derives from it until
+	// re-decided).
 	Status string
 	// How many people have asked for this server.
 	RequesterCount int
@@ -261,7 +264,8 @@ type ListRequestsPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// Only return requests in this status.
+	// Only return requests in this status: unreviewed, requested, approved,
+	// denied, or superseded.
 	Status *string
 	// The number of requests to return per page
 	Limit *int32

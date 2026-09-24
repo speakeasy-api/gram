@@ -114,8 +114,9 @@ type SanitizedMeta struct {
 // 2026-07-28 per-request `_meta` key the header is required to mirror. Both
 // carry the same negotiated-version semantics, so the precedence is purely
 // "header first, body as its mirror" — headerValue may be raw; it is
-// sanitized here. This is the single definition of that precedence; call
-// sites must not re-implement the chain.
+// sanitized here. Callers that can use this precedence must; the one
+// sanctioned re-implementation is the meta surface's validator, which needs
+// the raw bytes to tell an absent declaration from a malformed one.
 func (m SanitizedMeta) DeclaredProtocolVersion(headerValue string) string {
 	if v := mcpversions.Sanitize(headerValue); v != "" {
 		return v

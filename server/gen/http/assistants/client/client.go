@@ -41,6 +41,10 @@ type Client struct {
 	// endpoint.
 	SendMessageDoer goahttp.Doer
 
+	// InterruptTurn Doer is the HTTP client used to make requests to the
+	// interruptTurn endpoint.
+	InterruptTurnDoer goahttp.Doer
+
 	// GetManagedAssistant Doer is the HTTP client used to make requests to the
 	// getManagedAssistant endpoint.
 	GetManagedAssistantDoer goahttp.Doer
@@ -75,6 +79,7 @@ func NewClient(
 		UpdateAssistantDoer:        doer,
 		DeleteAssistantDoer:        doer,
 		SendMessageDoer:            doer,
+		InterruptTurnDoer:          doer,
 		GetManagedAssistantDoer:    doer,
 		EnsureManagedAssistantDoer: doer,
 		RestoreResponseBody:        restoreBody,
@@ -224,6 +229,30 @@ func (c *Client) SendMessage() goa.Endpoint {
 		resp, err := c.SendMessageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("assistants", "sendMessage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// InterruptTurn returns an endpoint that makes HTTP requests to the assistants
+// service interruptTurn server.
+func (c *Client) InterruptTurn() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeInterruptTurnRequest(c.encoder)
+		decodeResponse = DecodeInterruptTurnResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildInterruptTurnRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.InterruptTurnDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assistants", "interruptTurn", err)
 		}
 		return decodeResponse(resp)
 	}

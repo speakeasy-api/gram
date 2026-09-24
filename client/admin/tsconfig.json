@@ -7,7 +7,9 @@
   ],
   "compilerOptions": {
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@gram/admin-client": ["./src/sdk/src/index.ts"],
+      "@gram/admin-client/*": ["./src/sdk/src/*"]
     }
   }
 }

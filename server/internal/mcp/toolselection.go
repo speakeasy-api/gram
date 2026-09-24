@@ -63,8 +63,7 @@ func (e sessionToolSelectionEntry) TTL() time.Duration { return sessionToolSelec
 
 // endpointToolSelectionResource is the server-authored identity a consent
 // selection binds to: the fronting mcp_server when there is one, else the
-// toolset. Empty when the endpoint has neither (remote/tunneled backends do
-// not offer the picker).
+// toolset. Empty when the endpoint has neither, as with meta-MCP.
 func endpointToolSelectionResource(endpoint *ResolvedMcpEndpoint) string {
 	switch {
 	case endpoint.McpServerID.Valid:
@@ -74,6 +73,20 @@ func endpointToolSelectionResource(endpoint *ResolvedMcpEndpoint) string {
 	default:
 		return ""
 	}
+}
+
+// endpointAcceptsToolSelectionResource reports whether a stored consent
+// selection belongs to this endpoint. A toolset-backed wrapper additionally
+// accepts the legacy "toolset:<id>" form: selections consented while the
+// server was still resolved through toolsets.mcp_slug were stored against the
+// toolset resource and must keep authorizing the same server for one
+// access-token lifetime after the backfill (AIS-633; removed with the legacy
+// audience acceptance by AIS-646).
+func endpointAcceptsToolSelectionResource(endpoint *ResolvedMcpEndpoint, resource string) bool {
+	if resource == endpointToolSelectionResource(endpoint) {
+		return true
+	}
+	return endpoint.McpServerID.Valid && endpoint.ToolsetID.Valid && resource == "toolset:"+endpoint.ToolsetID.UUID.String()
 }
 
 // loadSessionToolSelection resolves the tool policy for a validated session

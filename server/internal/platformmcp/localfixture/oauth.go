@@ -14,9 +14,21 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 const oauthRequestMaxBytes int64 = 64 << 10
+
+// supportedAuthMethods is the token_endpoint_auth_method set this fixture
+// accepts, advertised in its metadata document and enforced on registration.
+// Declared here rather than borrowed from usersessions, whose list belongs to
+// the user-session authorization server: this fixture stands in for one
+// specific public client and has no client secret storage at all, so `none`
+// is the only method it could honour whatever that server grows to support.
+var (
+	supportedAuthMethods = []string{oauthwire.AuthMethodNone}
+	supportedGrantTypes  = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
+)
 
 type OAuthHTTP struct {
 	config        *Config
@@ -106,8 +118,8 @@ func (s *OAuthHTTP) handleMetadata(w http.ResponseWriter) {
 		"registration_endpoint":                 s.config.OAuthRegistrationURL(),
 		"revocation_endpoint":                   s.config.OAuthRevocationURL(),
 		"response_types_supported":              []string{"code"},
-		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
-		"token_endpoint_auth_methods_supported": []string{"none"},
+		"grant_types_supported":                 supportedGrantTypes,
+		"token_endpoint_auth_methods_supported": supportedAuthMethods,
 		"code_challenge_methods_supported":      []string{"S256"},
 		"scopes_supported":                      []string{"tools:read"},
 	})
@@ -126,11 +138,11 @@ func (s *OAuthHTTP) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	request.SetDefaults()
-	if err := request.Validate(); err != nil {
+	if err := request.Validate(supportedGrantTypes, supportedAuthMethods); err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_client_metadata", "request does not match the local fixture contract")
 		return
 	}
-	if request.ClientName != OAuthClientName || len(request.RedirectURIs) != 1 || request.RedirectURIs[0] != s.config.RemoteLoginCallbackURL() || request.TokenEndpointAuthMethod != "none" || !sameStrings(request.GrantTypes, []string{"authorization_code", "refresh_token"}) || !sameStrings(request.ResponseTypes, []string{"code"}) {
+	if request.ClientName != OAuthClientName || len(request.RedirectURIs) != 1 || request.RedirectURIs[0] != s.config.RemoteLoginCallbackURL() || request.TokenEndpointAuthMethod != oauthwire.AuthMethodNone || !sameStrings(request.GrantTypes, supportedGrantTypes) || !sameStrings(request.ResponseTypes, []string{oauthwire.ResponseTypeCode}) {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_client_metadata", "request does not match the local fixture contract")
 		return
 	}

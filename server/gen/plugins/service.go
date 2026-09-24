@@ -17,6 +17,12 @@ import (
 
 // Manage distributable plugin bundles of MCP servers and hooks.
 type Service interface {
+	// List minimal distribution targets for a skill the caller can read. Requires
+	// skill:read, not org:read.
+	ListDistributionPlugins(context.Context, *ListDistributionPluginsPayload) (res *ListDistributionPluginsResult, err error)
+	// Get minimal distribution target metadata for a skill the caller can read.
+	// Requires skill:read, not org:read.
+	GetDistributionPlugin(context.Context, *GetDistributionPluginPayload) (res *DistributionPlugin, err error)
 	// List all plugins for the current project.
 	ListPlugins(context.Context, *ListPluginsPayload) (res *ListPluginsResult, err error)
 	// Get a plugin with its servers and assignments.
@@ -43,14 +49,6 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	DownloadPluginPackage(context.Context, *DownloadPluginPackagePayload) (res *DownloadPluginPackageResult, body io.ReadCloser, err error)
-	// Download a credential-free Platform MCP plugin ZIP from the server-owned
-	// package definition. This does not require a GitHub marketplace and does not
-	// mint an API key.
-
-	// If body implements [io.WriterTo], that implementation will be used instead.
-	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
-	// implementations.
-	DownloadPlatformMCPPlugin(context.Context, *DownloadPlatformMCPPluginPayload) (res *DownloadPlatformMCPPluginResult, body io.ReadCloser, err error)
 	// Download a ZIP of the per-org observability plugin (Gram hooks). Mints a
 	// fresh hooks-scoped API key on each download and embeds it in the plugin's
 	// hook script.
@@ -67,12 +65,6 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	DownloadCodexInstallScript(context.Context, *DownloadCodexInstallScriptPayload) (res *DownloadCodexInstallScriptResult, body io.ReadCloser, err error)
-	// Get the organization-scoped Platform MCP package and canonical
-	// default-project marketplace status.
-	GetPlatformMCPPackageStatus(context.Context, *GetPlatformMCPPackageStatusPayload) (res *PlatformMCPPackageStatusResult, err error)
-	// Idempotently publish or repair the Platform MCP package in the
-	// organization's canonical default-project marketplace.
-	RepairPlatformMCPPackage(context.Context, *RepairPlatformMCPPackagePayload) (res *PlatformMCPPackageStatusResult, err error)
 	// Check whether GitHub publishing is configured and connected for this project.
 	GetPublishStatus(context.Context, *GetPublishStatusPayload) (res *PublishStatusResult, err error)
 	// Generate and publish all plugin packages to a GitHub repository.
@@ -106,7 +98,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [20]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "listAudiences", "downloadPluginPackage", "downloadPlatformMCPPlugin", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPlatformMCPPackageStatus", "repairPlatformMCPPackage", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
+var MethodNames = [19]string{"listDistributionPlugins", "getDistributionPlugin", "listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "listAudiences", "downloadPluginPackage", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -148,6 +140,15 @@ type DeletePluginPayload struct {
 	ProjectSlugInput *string
 }
 
+// DistributionPlugin is the result type of the plugins service
+// getDistributionPlugin method.
+type DistributionPlugin struct {
+	ID          string
+	Name        string
+	Description *string
+	IsDefault   bool
+}
+
 // DownloadCodexInstallScriptPayload is the payload type of the plugins service
 // downloadCodexInstallScript method.
 type DownloadCodexInstallScriptPayload struct {
@@ -178,22 +179,6 @@ type DownloadObservabilityPluginResult struct {
 	ContentDisposition string
 }
 
-// DownloadPlatformMCPPluginPayload is the payload type of the plugins service
-// downloadPlatformMCPPlugin method.
-type DownloadPlatformMCPPluginPayload struct {
-	// Target package format.
-	Platform         string
-	SessionToken     *string
-	ProjectSlugInput *string
-}
-
-// DownloadPlatformMCPPluginResult is the result type of the plugins service
-// downloadPlatformMCPPlugin method.
-type DownloadPlatformMCPPluginResult struct {
-	ContentType        string
-	ContentDisposition string
-}
-
 // DownloadPluginPackagePayload is the payload type of the plugins service
 // downloadPluginPackage method.
 type DownloadPluginPackagePayload struct {
@@ -212,17 +197,20 @@ type DownloadPluginPackageResult struct {
 	ContentDisposition string
 }
 
+// GetDistributionPluginPayload is the payload type of the plugins service
+// getDistributionPlugin method.
+type GetDistributionPluginPayload struct {
+	SkillID          string
+	ID               string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // GetMarketplaceSettingsPayload is the payload type of the plugins service
 // getMarketplaceSettings method.
 type GetMarketplaceSettingsPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
-}
-
-// GetPlatformMCPPackageStatusPayload is the payload type of the plugins
-// service getPlatformMCPPackageStatus method.
-type GetPlatformMCPPackageStatusPayload struct {
-	SessionToken *string
 }
 
 // GetPluginPayload is the payload type of the plugins service getPlugin method.
@@ -253,6 +241,20 @@ type ListAudiencesResult struct {
 	Audiences []*PluginAudience
 }
 
+// ListDistributionPluginsPayload is the payload type of the plugins service
+// listDistributionPlugins method.
+type ListDistributionPluginsPayload struct {
+	SkillID          string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListDistributionPluginsResult is the result type of the plugins service
+// listDistributionPlugins method.
+type ListDistributionPluginsResult struct {
+	Plugins []*DistributionPlugin
+}
+
 // ListPluginsPayload is the payload type of the plugins service listPlugins
 // method.
 type ListPluginsPayload struct {
@@ -278,44 +280,9 @@ type MarketplaceSettingsResult struct {
 	// The marketplace name that will be used at publish time (override if set,
 	// otherwise default).
 	EffectiveName string
-}
-
-// PlatformMCPPackageStatusResult is the result type of the plugins service
-// getPlatformMCPPackageStatus method.
-type PlatformMCPPackageStatusResult struct {
-	// Organization package admission: enabled, disabled, or indeterminate.
-	Admission string
-	// Whether organization admission currently permits installing the package.
-	Available bool
-	// Fixed Platform MCP package identity.
-	PackageName string
-	// Deterministic Claude direct-download ZIP filename.
-	ClaudeFilename string
-	// Deterministic portable Agent Plugins direct-download ZIP filename.
-	AgentPluginFilename string
-	// Literal default project that owns the canonical organization marketplace,
-	// when present.
-	CanonicalProjectSlug *string
-	// Effective name of the canonical marketplace, when its default project is
-	// present.
-	MarketplaceName *string
-	// Whether the canonical default project has a published GitHub marketplace.
-	MarketplaceConnected bool
-	// Git URL used by supported clients to register the canonical marketplace.
-	MarketplaceURL *string
-	// Canonical GitHub repository URL.
-	RepoURL *string
-	// Whether the last successful canonical publish recorded the Platform package
-	// fingerprint.
-	PackagePresent bool
-	// Platform package freshness: current, stale, missing, unavailable, or
-	// indeterminate.
-	Freshness string
-	// Whether an organization admin can publish or repair the canonical package
-	// now.
-	RepairAllowed bool
-	// Whether keyless direct downloads are currently admitted.
-	DirectDownloadAvailable bool
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Defaults to true when unset.
+	ObservabilityEnabled bool
 }
 
 // Plugin is the result type of the plugins service getPlugin method.
@@ -426,6 +393,10 @@ type PublishStatusResult struct {
 	// Slug of the generated Codex observability plugin in the published
 	// marketplace — install as `<slug>@<marketplace name>`. Present when connected.
 	CodexObservabilityPlugin *string
+	// Slug of the generated Cursor observability plugin in the published
+	// marketplace — the value to mark required in Cursor's team marketplace.
+	// Present when connected.
+	CursorObservabilityPlugin *string
 	// Whether the repo has at least one directly-added GitHub collaborator
 	// (excludes access granted via org membership/teams). Absent when the project
 	// is not connected.
@@ -454,13 +425,6 @@ type RemovePluginServerPayload struct {
 	ProjectSlugInput *string
 }
 
-// RepairPlatformMCPPackagePayload is the payload type of the plugins service
-// repairPlatformMCPPackage method.
-type RepairPlatformMCPPackagePayload struct {
-	SessionToken     *string
-	ProjectSlugInput *string
-}
-
 // SetPluginAssignmentsPayload is the payload type of the plugins service
 // setPluginAssignments method.
 type SetPluginAssignmentsPayload struct {
@@ -482,11 +446,15 @@ type SetPluginAssignmentsResult struct {
 // updateMarketplaceSettings method.
 type UpdateMarketplaceSettingsPayload struct {
 	// Override for the marketplace name (the identifier users type as
-	// `<plugin>@<marketplace>`). Pass an empty string or omit to clear the
-	// override and fall back to the default.
-	MarketplaceName  *string
-	SessionToken     *string
-	ProjectSlugInput *string
+	// `<plugin>@<marketplace>`). Pass an empty string to clear the override and
+	// fall back to the default. Omit to leave the current override unchanged.
+	MarketplaceName *string
+	// Whether this project's observability plugin is included in the published
+	// marketplace and installed by the device agent. Omit to leave the current
+	// value unchanged.
+	ObservabilityEnabled *bool
+	SessionToken         *string
+	ProjectSlugInput     *string
 }
 
 // UpdateMarketplaceSettingsResult is the result type of the plugins service
@@ -578,6 +546,11 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// MakeUnavailable builds a goa.ServiceError from an error.
+func MakeUnavailable(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unavailable", false, false, true)
 }
 
 // MakeFailedPrecondition builds a goa.ServiceError from an error.

@@ -11,12 +11,15 @@ import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
 import { toolsetsList } from "../funcs/toolsetsList.js";
 import { toolsetsListForOrg } from "../funcs/toolsetsListForOrg.js";
 import { toolsetsListToolFilters } from "../funcs/toolsetsListToolFilters.js";
+import { toolsetsListToolSchemaStaticValues } from "../funcs/toolsetsListToolSchemaStaticValues.js";
 import { toolsetsRemoveOAuthServer } from "../funcs/toolsetsRemoveOAuthServer.js";
 import { toolsetsSetToolVariationsGroup } from "../funcs/toolsetsSetToolVariationsGroup.js";
 import { toolsetsSetUserSessionIssuer } from "../funcs/toolsetsSetUserSessionIssuer.js";
 import { toolsetsUpdateBySlug } from "../funcs/toolsetsUpdateBySlug.js";
+import { toolsetsUpdateExternalOAuthServer } from "../funcs/toolsetsUpdateExternalOAuthServer.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { ListToolFiltersResult } from "../models/components/listtoolfiltersresult.js";
+import { ListToolSchemaStaticValuesResult } from "../models/components/listtoolschemastaticvaluesresult.js";
 import { ListToolsetsResult } from "../models/components/listtoolsetsresult.js";
 import { ListToolsetSummariesResult } from "../models/components/listtoolsetsummariesresult.js";
 import { Toolset } from "../models/components/toolset.js";
@@ -57,6 +60,10 @@ import {
   ListToolsetToolFiltersSecurity,
 } from "../models/operations/listtoolsettoolfilters.js";
 import {
+  ListToolsetToolSchemaStaticValuesRequest,
+  ListToolsetToolSchemaStaticValuesSecurity,
+} from "../models/operations/listtoolsettoolschemastaticvalues.js";
+import {
   RemoveOAuthServerRequest,
   RemoveOAuthServerSecurity,
 } from "../models/operations/removeoauthserver.js";
@@ -68,6 +75,10 @@ import {
   SetToolsetUserSessionIssuerRequest,
   SetToolsetUserSessionIssuerSecurity,
 } from "../models/operations/settoolsetusersessionissuer.js";
+import {
+  UpdateExternalOAuthServerRequest,
+  UpdateExternalOAuthServerSecurity,
+} from "../models/operations/updateexternaloauthserver.js";
 import {
   UpdateToolsetRequest,
   UpdateToolsetSecurity,
@@ -247,6 +258,25 @@ export class Toolsets extends ClientSDK {
   }
 
   /**
+   * listToolSchemaStaticValues toolsets
+   *
+   * @remarks
+   * List every const, default, enum, example, and examples value in each tool input schema. The result is deliberately mechanical: clients decide how to present or interpret the values. This supports reviewing the exact schema contents before changing how a toolset is shared.
+   */
+  async listToolSchemaStaticValues(
+    request: ListToolsetToolSchemaStaticValuesRequest,
+    security?: ListToolsetToolSchemaStaticValuesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListToolSchemaStaticValuesResult> {
+    return unwrapAsync(toolsetsListToolSchemaStaticValues(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * removeOAuthServer toolsets
    *
    * @remarks
@@ -315,6 +345,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsUpdateBySlug(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * updateExternalOAuthServer toolsets
+   *
+   * @remarks
+   * Change an attached external OAuth server between provider-hosted and Gram-hosted authorization-server metadata without replacing the server, registrations, tokens, or toolset association
+   */
+  async updateExternalOAuthServer(
+    request: UpdateExternalOAuthServerRequest,
+    security?: UpdateExternalOAuthServerSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Toolset> {
+    return unwrapAsync(toolsetsUpdateExternalOAuthServer(
       this,
       request,
       security,

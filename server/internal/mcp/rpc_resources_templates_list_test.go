@@ -31,6 +31,8 @@ func TestHandleResourcesTemplatesList_ReturnsEmptyList(t *testing.T) {
 	require.JSONEq(t, `{
 		"resourceTemplates": [],
 		"resultType": "complete",
+		"ttlMs": 0,
+		"cacheScope": "public",
 		"_meta": {
 			"io.modelcontextprotocol/serverInfo": {
 				"name": "Gram",

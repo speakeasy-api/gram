@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -43,7 +43,7 @@ func TestRefreshNow_RacingLazyResolves_SingleUpstreamCall(t *testing.T) {
 
 	tokens := make([]string, concurrentRefreshCallers)
 	errs := make([]error, concurrentRefreshCallers)
-	outcomes := make([]remotesessions.RefreshOutcome, scheduled)
+	outcomes := make([]remotesessionmetrics.RefreshOutcome, scheduled)
 
 	start := make(chan struct{})
 	var wg sync.WaitGroup
@@ -56,7 +56,7 @@ func TestRefreshNow_RacingLazyResolves_SingleUpstreamCall(t *testing.T) {
 	for i := range scheduled {
 		wg.Go(func() {
 			<-start
-			result, err := env.refresher.RefreshNow(ctx, session, "")
+			result, err := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled)
 			tokens[lazy+i], errs[lazy+i] = result.AccessToken, err
 			outcomes[i] = result.Outcome
 		})
@@ -73,7 +73,7 @@ func TestRefreshNow_RacingLazyResolves_SingleUpstreamCall(t *testing.T) {
 	}
 	for i, outcome := range outcomes {
 		require.Contains(t,
-			[]remotesessions.RefreshOutcome{remotesessions.RefreshOutcomeRefreshed, remotesessions.RefreshOutcomeAdoptedConcurrentWinner},
+			[]remotesessionmetrics.RefreshOutcome{remotesessionmetrics.RefreshOutcomeRefreshed, remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner},
 			outcome, "scheduled caller %d reported an unexpected outcome", i)
 	}
 

@@ -28,6 +28,9 @@ describe("AgentProviderIcon", () => {
       "cursor",
       "codex",
       "opencode",
+      "openclaw",
+      "copilot",
+      "pi",
     ]);
   });
 
@@ -54,6 +57,9 @@ describe("AgentProviderIcon", () => {
     ["github-copilot", "copilot"],
     ["microsoft", "copilot"],
     ["opencode", "opencode"],
+    ["pi", "pi"],
+    // "copilot" contains "pi": the Pi mapping must not steal it.
+    ["copilot", "copilot"],
     ["LiteLLM", "litellm"],
     ["devin", "devin"],
     ["mistral", "mistral"],

@@ -221,9 +221,13 @@ func TestGrantExpressionEvaluate_mcpWriteBlocklistSubtractsProductionSelector(t 
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
 }
 
-func TestGrantExpressionEvaluate_mcpReadBlocklistSubtractsMCPWrite(t *testing.T) {
+func TestGrantExpressionEvaluate_mcpReadBlocklistLeavesMCPWrite(t *testing.T) {
 	t.Parallel()
 
+	// The mcp:blocked_* scopes are independent of one another: seeing a
+	// server and administering it are separate capabilities, so a block on
+	// one says nothing about the other. Only mcp:blocked_write subtracts
+	// mcp:write.
 	const projectID = "project_123"
 	grants := []Grant{
 		NewGrant(ScopeMCPWrite, WildcardResource),
@@ -236,31 +240,43 @@ func TestGrantExpressionEvaluate_mcpReadBlocklistSubtractsMCPWrite(t *testing.T)
 
 	result, err := expressionForCheck(MCPCheck(ScopeMCPWrite, "server_in_project", projectID)).Evaluate(grants)
 	require.NoError(t, err)
-	require.False(t, result.Satisfied)
-	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
-
-	result, err = expressionForCheck(MCPCheck(ScopeMCPWrite, "server_other_project", "project_other")).Evaluate(grants)
-	require.NoError(t, err)
 	require.True(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
+
+	// The read it does name is subtracted.
+	result, err = expressionForCheck(MCPCheck(ScopeMCPRead, "server_in_project", projectID)).Evaluate(grants)
+	require.NoError(t, err)
+	require.False(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)
 }
 
-func TestGrantExpressionEvaluate_mcpConnectBlocklistSubtractsMCPWrite(t *testing.T) {
+func TestGrantExpressionEvaluate_mcpConnectBlocklistLeavesMCPWrite(t *testing.T) {
 	t.Parallel()
 
+	// An operator who never calls a server's tools may still have to manage
+	// it, so taking connect away leaves mcp:write standing.
 	const serverID = "server_123"
 	grants := []Grant{
 		NewGrant(ScopeMCPWrite, WildcardResource),
 		NewGrant(ScopeMCPBlockedConnect, serverID),
 	}
 
-	result, err := expressionForCheck(Check{
+	write := Check{
 		Scope:         ScopeMCPWrite,
 		ResourceKind:  "",
 		ResourceID:    serverID,
 		Dimensions:    nil,
 		selectorMatch: selectorMatchNormal,
-	}).Evaluate(grants)
+	}
+	result, err := expressionForCheck(write).Evaluate(grants)
+	require.NoError(t, err)
+	require.True(t, result.Satisfied)
+	require.Equal(t, GrantExpressionReasonMatched, result.Reason)
+
+	// Connect, which mcp:write would otherwise satisfy, is the one it takes.
+	connect := write
+	connect.Scope = ScopeMCPConnect
+	result, err = expressionForCheck(connect).Evaluate(grants)
 	require.NoError(t, err)
 	require.False(t, result.Satisfied)
 	require.Equal(t, GrantExpressionReasonExclusionMatched, result.Reason)

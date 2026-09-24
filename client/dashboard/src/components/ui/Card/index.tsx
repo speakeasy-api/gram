@@ -238,6 +238,8 @@ type CardEntityProps = {
   icon?: ReactNode;
   /** Additional styling for the icon rail surface. */
   iconRailClassName?: string;
+  /** Additional styling for the bordered tile the icon sits in. */
+  iconTileClassName?: string;
   /** Extra content layered on the icon rail (e.g. an "Added" badge). */
   overlay?: ReactNode;
   className?: string;
@@ -253,6 +255,7 @@ const CardEntity: FC<CardEntityProps> = ({
   children,
   icon,
   iconRailClassName,
+  iconTileClassName,
   className,
   overlay,
   onClick,
@@ -274,6 +277,10 @@ const CardEntity: FC<CardEntityProps> = ({
     className={cn(
       "group flex h-full min-h-[156px] flex-row overflow-hidden border bg-card text-card-foreground transition-colors",
       "hover:border-neutral-hover",
+      // A clickable card takes focus, so it has to show it: without a ring the
+      // keyboard user tabbing through a grid has no idea which card is theirs.
+      onClick &&
+        "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
       className,
     )}
   >
@@ -285,7 +292,9 @@ const CardEntity: FC<CardEntityProps> = ({
     >
       {icon && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="border bg-card p-3">{icon}</div>
+          <div className={cn("border bg-card p-3", iconTileClassName)}>
+            {icon}
+          </div>
         </div>
       )}
       {overlay}
@@ -304,6 +313,8 @@ type CardDashboardProps = {
   bodyClassName?: string;
   /** Root classes, e.g. `h-auto` for a panel that should not stretch. */
   className?: string;
+  /** Title-bar classes, e.g. tighter padding above a dense list. */
+  headerClassName?: string;
 };
 
 /**
@@ -317,6 +328,7 @@ function CardDashboard({
   children,
   tooltip,
   bodyClassName,
+  headerClassName,
   className,
 }: CardDashboardProps): JSX.Element {
   return (
@@ -326,7 +338,12 @@ function CardDashboard({
         className,
       )}
     >
-      <div className="flex w-full flex-row items-center justify-between gap-4 border-b px-6 py-4">
+      <div
+        className={cn(
+          "flex w-full flex-row items-center justify-between gap-4 border-b px-6 py-4",
+          headerClassName,
+        )}
+      >
         <div className="flex items-center gap-1.5">
           <h3 className="text-eyebrow">{title}</h3>
           {tooltip && (

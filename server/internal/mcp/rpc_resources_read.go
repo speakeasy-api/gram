@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -63,6 +64,7 @@ func handleResourcesRead(
 	billingRepository billing.Repository,
 	telemLogger *tm.Logger,
 	platformExtras []platformtools.ExternalTool,
+	scan *mcpriskscan.Evaluator,
 ) (json.RawMessage, error) {
 	var params resourceReadParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -161,6 +163,7 @@ func handleResourcesRead(
 			ToolsetID:             &toolset.ID,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
+			MetaMCPServerID:       nil,
 			ChatID:                nil,
 			Type:                  plan.BillingType,
 			ResponseStatusCode:    rw.statusCode,
@@ -174,6 +177,7 @@ func handleResourcesRead(
 		logAttrs.RecordRequestBody(requestBytes)
 		logAttrs.RecordResponseBody(outputBytes)
 		logAttrs.RecordTraceContext(ctx)
+		logAttrs.RecordAuthenticatedActor(ctx)
 		if payload.apiKeyID != "" {
 			logAttrs[attr.APIKeyIDKey] = payload.apiKeyID
 		}
@@ -200,6 +204,23 @@ func handleResourcesRead(
 		telemLogger.Log(ctx, params)
 	}()
 
+	serverID := ""
+	if payload.mcpServerID != nil {
+		serverID = payload.mcpServerID.String()
+	}
+	scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+		Surface:        mcpriskscan.SurfaceHostedMCP,
+		Method:         mcpriskscan.MethodResourcesRead,
+		OrganizationID: descriptor.OrganizationID,
+		ProjectID:      descriptor.ProjectID,
+		ServerID:       serverID,
+		MetaServerID:   payload.metaMcpServerID,
+		ToolsetID:      toolset.ID,
+		ToolName:       "",
+		ResourceURI:    descriptor.URI,
+		PromptName:     "",
+		ChatID:         payload.chatID,
+	}, mcpriskscan.BorrowPayload(nil)))
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
@@ -241,6 +262,7 @@ func handleResourcesRead(
 			ID:             req.ID,
 			Result:         json.RawMessage(rw.body.Bytes()),
 			serverIdentity: serverInfoHostedToolset,
+			cacheHints:     cacheHintsCallerVarying,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP passthrough result").LogError(ctx, logger)
@@ -277,6 +299,11 @@ func handleResourcesRead(
 			Contents: []resourceContent{content},
 		},
 		serverIdentity: serverInfoHostedToolset,
+		// The body is produced by invoking the resource with the caller's own
+		// configuration, and MCP-* request headers reach that configuration on
+		// every server regardless of visibility or authentication. Two callers
+		// reading the same URI can therefore receive different content.
+		cacheHints: cacheHintsCallerVarying,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize resources/read result").LogError(ctx, logger)

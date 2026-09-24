@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -54,24 +53,6 @@ func shadowMCPPolicyAutoName(sources []string, action string, existingNames []st
 	return name
 }
 
-// requireSingleShadowMCPBlockingPolicy rejects creating or enabling a second
-// enabled blocking shadow MCP policy in a project, so block_all and allow_all
-// postures can never conflict at enforcement time. excludePolicyID skips the
-// policy being updated; pass uuid.Nil on create.
-func requireSingleShadowMCPBlockingPolicy(ctx context.Context, queries *repo.Queries, projectID uuid.UUID, excludePolicyID uuid.UUID) error {
-	policies, err := queries.ListEnabledShadowMCPPoliciesByProject(ctx, projectID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list shadow mcp blocking policies")
-	}
-	for _, p := range policies {
-		if p.ID == excludePolicyID || p.Action != "block" {
-			continue
-		}
-		return oops.E(oops.CodeConflict, nil, "project already has an enabled shadow mcp blocking policy %q; disable or delete it first", p.Name)
-	}
-	return nil
-}
-
 // validateShadowMCPBlockedURLs canonicalizes the blocked-URL set of an
 // allow_all policy. Unlike the allow list there is no inventory-observed
 // requirement: blocking a server that has not been seen yet is deliberate,
@@ -85,20 +66,6 @@ func validateShadowMCPBlockedURLs(disposition string, rawURLs []string) ([]strin
 		return nil, oops.E(oops.CodeInvalid, nil, "shadow mcp blocked urls require an allow_all shadow mcp policy")
 	}
 	return canonicalURLs, nil
-}
-
-// effectiveShadowMCPDisposition resolves the stored disposition column for a
-// policy: block_all when unset on a blocking shadow MCP policy (rows created
-// before the column existed), empty for policies where a disposition does not
-// apply.
-func effectiveShadowMCPDisposition(disposition pgtype.Text, sources []string, action string) string {
-	if action != "block" || !slices.Contains(sources, shadowmcp.SourceShadowMCP) {
-		return ""
-	}
-	if disposition.Valid && disposition.String != "" {
-		return disposition.String
-	}
-	return ShadowMCPDispositionBlockAll
 }
 
 // loadShadowMCPBlockedURLs reads the canonical blocked-URL set of an

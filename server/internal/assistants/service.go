@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -86,6 +87,10 @@ const (
 	eventStatusProcessing = "processing"
 	eventStatusCompleted  = "completed"
 	eventStatusFailed     = "failed"
+	// eventStatusCancelled marks a queued turn the user stopped before any
+	// runner claimed it. Terminal like completed/failed: no admission query
+	// matches it, so the turn is never dispatched.
+	eventStatusCancelled = "cancelled"
 
 	// maxEventAttempts caps how many times a single event will be retried
 	// against a live runtime before it's marked terminally failed. Prevents
@@ -397,6 +402,7 @@ type ServiceCore struct {
 	slackClient       *slackclient.SlackClient
 	assistantTokens   *assistanttokens.Manager
 	serverURL         *url.URL
+	siteURL           *url.URL
 	telemetryLogger   *telemetry.Logger
 	contextWindow     *openrouter.ContextWindowResolver
 	wakeCanceller     WakeCanceller
@@ -446,6 +452,7 @@ func NewServiceCore(
 		slackClient:       slackClient,
 		assistantTokens:   assistantTokens,
 		serverURL:         serverURL,
+		siteURL:           nil,
 		telemetryLogger:   telemetryLogger,
 		contextWindow:     contextWindow,
 		wakeCanceller:     nil,
@@ -495,6 +502,14 @@ func (s *ServiceCore) SetAssetStorage(storage assets.BlobStore) {
 // grant off (fail closed).
 func (s *ServiceCore) SetFeatureProvider(p feature.Provider) {
 	s.featureFlags = p
+}
+
+// SetSiteURL wires the dashboard base URL used to smart-link CIMD client
+// metadata back to the assistant UI. Set after construction to match the
+// existing post-construction injection pattern. A nil URL omits client_uri
+// from served documents.
+func (s *ServiceCore) SetSiteURL(u *url.URL) {
+	s.siteURL = u
 }
 
 // resolveAssistantContextWindow returns the smallest context_length the gram
@@ -751,9 +766,12 @@ type resolvedToolsetInsert struct {
 // resolveToolsetRefsForWrite validates that every user-supplied slug exists
 // within the project and returns the FK ids to persist. Failing fast here
 // turns silent dispatch-time errors ("unknown toolset") into 400s at
-// create/update time.
+// create/update time. Resolve and lock targets in the write transaction before
+// touching the assistant or attachments: toolsets first, then MCP servers, each
+// ordered by ID. Deletion takes the target lock before detaching assistants too.
 func (s *ServiceCore) resolveToolsetRefsForWrite(
 	ctx context.Context,
+	tx pgx.Tx,
 	projectID uuid.UUID,
 	refs []*types.AssistantToolsetRef,
 ) ([]resolvedToolsetInsert, error) {
@@ -781,7 +799,7 @@ func (s *ServiceCore) resolveToolsetRefsForWrite(
 		}
 	}
 
-	queries := assistantrepo.New(s.db)
+	queries := assistantrepo.New(tx)
 	toolsetIDs := map[string]uuid.UUID{}
 	toolsetRows, err := queries.ResolveToolsetsForWrite(ctx, assistantrepo.ResolveToolsetsForWriteParams{
 		ProjectID: projectID,
@@ -851,6 +869,7 @@ type resolvedMcpServerInsert struct {
 // ("unknown mcp server") into 400s at create/update time.
 func (s *ServiceCore) resolveMcpServerRefsForWrite(
 	ctx context.Context,
+	tx pgx.Tx,
 	projectID uuid.UUID,
 	refs []*types.AssistantMCPServerRef,
 ) ([]resolvedMcpServerInsert, error) {
@@ -878,7 +897,7 @@ func (s *ServiceCore) resolveMcpServerRefsForWrite(
 		}
 	}
 
-	queries := assistantrepo.New(s.db)
+	queries := assistantrepo.New(tx)
 	serverIDs := map[string]uuid.UUID{}
 	serverRows, err := queries.ResolveMcpServersForWrite(ctx, assistantrepo.ResolveMcpServersForWriteParams{
 		ProjectID: projectID,
@@ -1219,20 +1238,20 @@ func (s *ServiceCore) CreateAssistant(
 		return assistantRecord{}, fmt.Errorf("create assistant: missing user id")
 	}
 
-	resolved, err := s.resolveToolsetRefsForWrite(ctx, projectID, toolsets)
-	if err != nil {
-		return assistantRecord{}, err
-	}
-	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, projectID, mcpServers)
-	if err != nil {
-		return assistantRecord{}, err
-	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+
+	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets)
+	if err != nil {
+		return assistantRecord{}, err
+	}
+	resolvedMcpServers, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
+	if err != nil {
+		return assistantRecord{}, err
+	}
 
 	queries := assistantrepo.New(tx)
 	created, err := queries.CreateAssistant(ctx, assistantrepo.CreateAssistantParams{
@@ -1345,9 +1364,15 @@ func (s *ServiceCore) UpdateAssistant(
 	maxConcurrency *int,
 	status *string,
 ) (assistantRecord, error) {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var resolved []resolvedToolsetInsert
 	if toolsets != nil {
-		r, err := s.resolveToolsetRefsForWrite(ctx, projectID, toolsets)
+		r, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets)
 		if err != nil {
 			return assistantRecord{}, err
 		}
@@ -1355,18 +1380,12 @@ func (s *ServiceCore) UpdateAssistant(
 	}
 	var resolvedMcpServers []resolvedMcpServerInsert
 	if mcpServers != nil {
-		r, err := s.resolveMcpServerRefsForWrite(ctx, projectID, mcpServers)
+		r, err := s.resolveMcpServerRefsForWrite(ctx, tx, projectID, mcpServers)
 		if err != nil {
 			return assistantRecord{}, err
 		}
 		resolvedMcpServers = r
 	}
-
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return assistantRecord{}, fmt.Errorf("begin assistant tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 
 	queries := assistantrepo.New(tx)
 	updated, err := queries.UpdateAssistant(ctx, assistantrepo.UpdateAssistantParams{
@@ -2571,7 +2590,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// and re-pend the event. Further attempts fall through to the
 			// terminal-fail branch so persistent corruption can't loop.
 			if errors.Is(runErr, ErrHistoryCorrupted) && event.Attempts <= 1 {
-				if healErr := s.selfHealCorruptHistory(ctx, thread.ChatID, thread.ProjectID); healErr != nil {
+				if healErr := s.selfHealCorruptHistory(ctx, thread.ChatID, thread.ProjectID, thread.AssistantID); healErr != nil {
 					s.logger.ErrorContext(ctx, "assistant self-heal failed",
 						attr.SlogAssistantThreadID(thread.ID.String()),
 						attr.SlogAssistantEventID(event.ID.String()),
@@ -2742,7 +2761,7 @@ func (s *ServiceCore) processEventTurn(
 		notice = renderAssistantSkillSetChange(claimedSnapshot, currentSnapshot)
 	}
 
-	mcpServers := s.currentRuntimeMCPServers(ctx, assistant, thread.SourceKind)
+	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
 
 	prompt, actorUserID := "", assistant.CreatedByUserID
 	var inputParts []runtimeContentPart
@@ -2799,12 +2818,12 @@ func (s *ServiceCore) processEventTurn(
 // dispatch a turn with bogus URLs. Platform toolsets must be included so
 // the reconcile target matches what bootstrap granted — otherwise the
 // runner would treat them as removed and disconnect them mid-thread.
-func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord, sourceKind string) []runtimeMCPServer {
+func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord) []runtimeMCPServer {
 	serverURL := s.runtime.ServerURL()
 	if serverURL == nil {
 		return nil
 	}
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant, sourceKind)
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve platform toolsets for mcp reconcile failed; skipping reconcile",
 			attr.SlogError(err),
@@ -2819,41 +2838,23 @@ func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant as
 // project's managed assistant additionally gets exactly one managed-only
 // toolset — legacy or Platform MCP, per the rollout variant — which must never
 // be reachable by any other assistant.
-//
-// The Platform MCP variant is exclusive rather than additive: a managed
-// assistant on it is served the Platform MCP catalogue and nothing else, so
-// the legacy platformtools surface — the base assistants toolset included —
-// stays out of its reach. Rolling an organization onto the variant is a
-// statement about which catalogue that assistant speaks, and a half-migrated
-// assistant carrying both would answer "what can you do" with two generations
-// of the same product.
-//
-// The variant is scoped to the dashboard, though, not to the assistant: the
-// same managed assistant also answers Slack, cron and wake turns, and those
-// surfaces are not part of this rollout. They keep the legacy toolsets, so a
-// Slack thread does not silently lose memory, triggers and the insights tools
-// the moment an organization is flipped. Source kind therefore decides the
-// grant, and every thread resolves it independently.
-func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord, sourceKind string) ([]string, error) {
-	legacySlugs := []string{
-		platformtools.AssistantsPlatformToolsetSlug,
-		platformtools.ManagedAssistantPlatformToolsetSlug,
-	}
+func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord) ([]string, error) {
+	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
 	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
 	case mErr == nil:
 		if managed.ID == assistant.ID {
-			if sourceKind == sourceKindDashboard &&
-				s.assistantToolsVariant(ctx, assistant.ProjectID) == feature.VariantAssistantToolsPlatformMCP {
-				return []string{platformtools.PlatformMCPReadToolsetSlug}, nil
+			if s.assistantToolsVariant(ctx, assistant.ProjectID) == feature.VariantAssistantToolsPlatformMCP {
+				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
+			} else {
+				platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
 			}
-			return legacySlugs, nil
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):
 		// Project has no managed assistant; managed-only tools stay ungranted.
 	default:
 		return nil, fmt.Errorf("resolve managed assistant: %w", mErr)
 	}
-	return []string{platformtools.AssistantsPlatformToolsetSlug}, nil
+	return platformSlugs, nil
 }
 
 // assistantToolsVariant reports which managed-assistant platform toolset the
@@ -2901,7 +2902,6 @@ func (s *ServiceCore) startProcessingLeaseHeartbeat(
 	runtimeID uuid.UUID,
 	eventID uuid.UUID,
 ) func() {
-	//nolint:gosec // cancel is returned and invoked by the caller to stop the heartbeat goroutine
 	hbCtx, cancel := context.WithCancel(ctx)
 	go func() {
 		ticker := time.NewTicker(processingLeaseHeartbeatTick)
@@ -3045,7 +3045,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// The managed-assistant platform toolset is granted only to the project's
 	// managed assistant; tools in it must not be reachable by any other
 	// assistant.
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant, thread.SourceKind)
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}
@@ -3419,10 +3419,19 @@ const selfHealRecoveryNoticeTemplate = "[gram self-heal] Earlier conversation hi
 // messages (each truncated to selfHealUserMessageMaxLen runes). The next
 // /configure pulls this generation as the live history; assistant/tool
 // turns are dropped — they're the most likely source of the rejection.
-func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID) error {
+func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, assistantID uuid.UUID) error {
 	if s.chatWriter == nil {
 		return fmt.Errorf("self-heal: chat writer not configured")
 	}
+
+	chatRow, err := chatrepo.New(s.db).GetChat(ctx, chatrepo.GetChatParams{
+		ID:        chatID,
+		ProjectID: projectID,
+	})
+	if err != nil {
+		return fmt.Errorf("self-heal: load chat: %w", err)
+	}
+	billingUserID := conv.FromPGTextOrEmpty[string](chatRow.UserID)
 
 	messages, err := chatrepo.New(s.db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
@@ -3449,6 +3458,7 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 	nextGen := currentGen + 1
 	empty := conv.ToPGTextEmpty("")
 	base := chatrepo.CreateChatMessageParams{
+		ID:               uuid.Nil,
 		Replayed:         false,
 		CreatedAt:        conv.PtrToPGTimestamptz(nil),
 		ChatID:           chatID,
@@ -3476,16 +3486,36 @@ func (s *ServiceCore) selfHealCorruptHistory(ctx context.Context, chatID uuid.UU
 		Generation:       nextGen,
 	}
 
-	rows := make([]chatrepo.CreateChatMessageParams, 0, len(userMessages)+1)
+	rows := make([]chat.MessageWrite, 0, len(userMessages)+1)
 	notice := base
 	notice.Content = fmt.Sprintf(selfHealRecoveryNoticeTemplate, len(userMessages), selfHealUserMessageMaxLen)
-	rows = append(rows, notice)
+	rows = append(rows, chat.MessageWrite{
+		Params:         notice,
+		BillingUserID:  billingUserID,
+		AssistantID:    assistantID,
+		WorkloadSource: metering.WorkloadSourceAssistant,
+		UserEmail:      "",
+		Provider:       "",
+		HookHostname:   "",
+		AccountType:    chatRow.AccountType,
+		BillingMode:    "",
+	})
 	for _, m := range userMessages {
 		row := base
 		row.Content = conv.TruncateString(m.Content, selfHealUserMessageMaxLen)
 		row.UserID = m.UserID
 		row.ExternalUserID = m.ExternalUserID
-		rows = append(rows, row)
+		rows = append(rows, chat.MessageWrite{
+			Params:         row,
+			BillingUserID:  billingUserID,
+			AssistantID:    assistantID,
+			WorkloadSource: metering.WorkloadSourceAssistant,
+			UserEmail:      "",
+			Provider:       "",
+			HookHostname:   "",
+			AccountType:    chatRow.AccountType,
+			BillingMode:    "",
+		})
 	}
 
 	if _, err := s.chatWriter.Write(ctx, projectID, rows); err != nil {

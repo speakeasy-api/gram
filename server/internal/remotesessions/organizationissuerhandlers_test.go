@@ -145,6 +145,64 @@ func TestDeleteIssuer_BlockedByClients(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestDeleteIssuer_BlockedByTrustedUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	issuer, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("admin-delete-trusted", nil))
+	require.NoError(t, err)
+	issuerID, err := uuid.Parse(issuer.ID)
+	require.NoError(t, err)
+	trustedIssuerID := createTrustedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "admin-delete-trusted-usi", issuerID)
+
+	preflight, err := ti.service.GetIssuerDeletePreflight(ctx, &orgissuersgen.GetIssuerDeletePreflightPayload{
+		ID:           issuer.ID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 0, preflight.ClientCount)
+	require.Equal(t, []*orgissuersgen.TrustedUserSessionIssuerReference{{ID: trustedIssuerID.String(), Slug: "admin-delete-trusted-usi"}}, preflight.TrustedUserSessionIssuers)
+
+	err = ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{
+		ID:           issuer.ID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	clearTrustedRemoteSessionIssuer(t, ctx, ti.conn, trustedIssuerID)
+	require.NoError(t, ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{
+		ID:           issuer.ID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	}))
+}
+
+func TestUpdateIssuerRejectsCapabilitiesThatInvalidateTrustedClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuerID, clientID := seedTrustedIdentityProviderClient(t, ctx, ti.conn, "admin-update-trusted-capabilities")
+	createTrustedClientOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "admin-update-trusted-capabilities-usi", issuerID, clientID)
+
+	_, err := ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{
+		ID:              issuerID.String(),
+		ScopesSupported: []string{"openid", "email"},
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "identity-provider login")
+
+	stored, err := repo.New(ti.conn).GetTrustedRemoteSessionIssuerForOrganization(ctx, repo.GetTrustedRemoteSessionIssuerForOrganizationParams{
+		ID:             issuerID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Contains(t, stored.ScopesSupported, "offline_access")
+}
+
 // TestDeleteIssuer_SerializedAgainstClientBinding is the organization-tier
 // counterpart to TestDeleteRemoteSessionIssuer_SerializedAgainstClientBinding:
 // the org-admin delete must take the same client-binding advisory lock, so a
@@ -209,6 +267,50 @@ func TestDeleteIssuer_CrossOrgNotFound(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestIssuerMutations_CrossOrgIDsDoNotWaitForAdvisoryLock(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	otherOrgID := createOrganization(t, ctx, ti.conn, "admin-foreign-lock-other-org")
+	foreignIssuerID := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, otherOrgID, "admin-foreign-lock-issuer")
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, repo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, foreignIssuerID))
+
+	name := "Foreign issuer"
+	updateDone := make(chan error, 1)
+	go func() {
+		_, err := ti.service.UpdateIssuer(ctx, &orgissuersgen.UpdateIssuerPayload{
+			ID:   foreignIssuerID.String(),
+			Name: &name,
+		})
+		updateDone <- err
+	}()
+
+	select {
+	case err := <-updateDone:
+		requireOopsCode(t, err, oops.CodeNotFound)
+	case <-time.After(2 * time.Second):
+		require.NoError(t, tx.Rollback(ctx))
+		t.Fatal("cross-organization update waited for a foreign issuer's advisory lock")
+	}
+
+	deleteDone := make(chan error, 1)
+	go func() {
+		deleteDone <- ti.service.DeleteIssuer(ctx, &orgissuersgen.DeleteIssuerPayload{ID: foreignIssuerID.String()})
+	}()
+
+	select {
+	case err := <-deleteDone:
+		requireOopsCode(t, err, oops.CodeNotFound)
+	case <-time.After(2 * time.Second):
+		require.NoError(t, tx.Rollback(ctx))
+		t.Fatal("cross-organization delete waited for a foreign issuer's advisory lock")
+	}
+
+	require.NoError(t, tx.Rollback(ctx))
+}
+
 func newCreateIssuerPayload(slug string, projectID *string) *orgissuersgen.CreateIssuerPayload {
 	authEP := "https://idp.example.com/authorize"
 	tokenEP := "https://idp.example.com/token"
@@ -232,7 +334,40 @@ func newCreateIssuerPayload(slug string, projectID *string) *orgissuersgen.Creat
 		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic"},
 		Oidc:                              &oidc,
 		Passthrough:                       &passthrough,
+		ClientIDMetadataDocumentSupported: nil,
+		UserinfoEndpoint:                  nil,
+		IntrospectionEndpoint:             nil,
+		IntrospectionEndpointAuthMethodsSupported:  nil,
+		IDTokenSigningAlgValuesSupported:           nil,
+		ClaimsSupported:                            nil,
+		BackchannelLogoutSupported:                 nil,
+		AuthorizationResponseIssParameterSupported: nil,
 	}
+}
+
+// TestCreateIssuer_PersistsDiscoveredCapabilities checks the organization
+// tier accepts the discovered capability fields on create.
+func TestCreateIssuer_PersistsDiscoveredCapabilities(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	userinfo := "https://idp.example.com/userinfo"
+	backchannel := true
+	payload := newCreateIssuerPayload("org-create-capabilities", nil)
+	payload.UserinfoEndpoint = &userinfo
+	payload.ClaimsSupported = []string{"sub"}
+	payload.BackchannelLogoutSupported = &backchannel
+
+	created, err := ti.service.CreateIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, created.UserinfoEndpoint)
+	require.Equal(t, userinfo, *created.UserinfoEndpoint)
+	require.Equal(t, []string{"sub"}, created.ClaimsSupported)
+	require.NotNil(t, created.BackchannelLogoutSupported)
+	require.True(t, *created.BackchannelLogoutSupported)
+	require.Nil(t, created.IntrospectionEndpoint)
+	require.Nil(t, created.AuthorizationResponseIssParameterSupported)
 }
 
 // TestCreateIssuer_Organizational creates an organization-level issuer
@@ -463,6 +598,30 @@ func TestMoveIssuer_OrganizationalToProject(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, projectID, moved.ProjectID)
+}
+
+func TestMoveIssuer_OrganizationalToProjectBlockedByTrustedUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateIssuer(ctx, newCreateIssuerPayload("admin-move-trusted", nil))
+	require.NoError(t, err)
+	issuerID, err := uuid.Parse(created.ID)
+	require.NoError(t, err)
+	createTrustedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "admin-move-trusted-usi", issuerID)
+	projectID := createProject(t, ctx, ti.conn, "admin-move-trusted-project").String()
+
+	_, err = ti.service.MoveIssuer(ctx, &orgissuersgen.MoveIssuerPayload{
+		ID:           created.ID,
+		ProjectID:    &projectID,
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	loaded, err := ti.service.GetIssuer(ctx, &orgissuersgen.GetIssuerPayload{ID: created.ID})
+	require.NoError(t, err)
+	require.Empty(t, loaded.ProjectID)
 }
 
 // TestMoveIssuer_BetweenProjects reassigns a project-specific issuer from one

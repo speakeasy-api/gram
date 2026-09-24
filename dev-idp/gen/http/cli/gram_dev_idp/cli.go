@@ -14,6 +14,10 @@ import (
 	"os"
 
 	devidpc "github.com/speakeasy-api/gram/dev-idp/gen/http/dev_idp/client"
+	emaappassignmentsc "github.com/speakeasy-api/gram/dev-idp/gen/http/ema_app_assignments/client"
+	emaappsc "github.com/speakeasy-api/gram/dev-idp/gen/http/ema_apps/client"
+	emaresourcesc "github.com/speakeasy-api/gram/dev-idp/gen/http/ema_resources/client"
+	ematrustrulesc "github.com/speakeasy-api/gram/dev-idp/gen/http/ema_trust_rules/client"
 	invitationsc "github.com/speakeasy-api/gram/dev-idp/gen/http/invitations/client"
 	membershipsc "github.com/speakeasy-api/gram/dev-idp/gen/http/memberships/client"
 	organizationrolesc "github.com/speakeasy-api/gram/dev-idp/gen/http/organization_roles/client"
@@ -28,6 +32,10 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
 	return []string{
+		"ema-apps (create|update|list|delete)",
+		"ema-resources (create|update|list|delete)",
+		"ema-app-assignments (create|update|list|delete)",
+		"ema-trust-rules (create|update|list|delete|list-issued-grants)",
 		"dev-idp (get-current-user|set-current-user|clear-current-user)",
 		"organizations (create|update|list|delete)",
 		"organization-roles (create|update|list|delete)",
@@ -39,11 +47,11 @@ func UsageCommands() []string {
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + " " + "dev-idp get-current-user --body '{\n      \"mode\": \"oauth2-1\"\n   }'" + "\n" +
-		os.Args[0] + " " + "organizations create --body '{\n      \"account_type\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"workos_id\": \"abc123\"\n   }'" + "\n" +
-		os.Args[0] + " " + "organization-roles create --body '{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"slug\": \"abc123\"\n   }'" + "\n" +
-		os.Args[0] + " " + "invitations create --body '{\n      \"email\": \"abc123\",\n      \"inviter_user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'" + "\n" +
-		os.Args[0] + " " + "memberships create --body '{\n      \"organization_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"role\": \"abc123\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'" + "\n" +
+	return os.Args[0] + " " + "ema-apps create --body '{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"enabled\": false,\n      \"jwks\": \"abc123\",\n      \"name\": \"abc123\"\n   }'" + "\n" +
+		os.Args[0] + " " + "ema-resources create --body '{\n      \"name\": \"abc123\",\n      \"resource_identifier\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'" + "\n" +
+		os.Args[0] + " " + "ema-app-assignments create --body '{\n      \"app_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"granted_scopes\": \"abc123\",\n      \"resource_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'" + "\n" +
+		os.Args[0] + " " + "ema-trust-rules create --body '{\n      \"allowed_client_ids\": \"abc123\",\n      \"allowed_scopes\": \"abc123\",\n      \"enabled\": false,\n      \"resource_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"trusted_issuer\": \"abc123\"\n   }'" + "\n" +
+		os.Args[0] + " " + "dev-idp get-current-user --body '{\n      \"mode\": \"workos\"\n   }'" + "\n" +
 		""
 }
 
@@ -57,6 +65,65 @@ func ParseEndpoint(
 	restore bool,
 ) (goa.Endpoint, any, error) {
 	var (
+		emaAppsFlags = flag.NewFlagSet("ema-apps", flag.ContinueOnError)
+
+		emaAppsCreateFlags    = flag.NewFlagSet("create", flag.ExitOnError)
+		emaAppsCreateBodyFlag = emaAppsCreateFlags.String("body", "REQUIRED", "")
+
+		emaAppsUpdateFlags    = flag.NewFlagSet("update", flag.ExitOnError)
+		emaAppsUpdateBodyFlag = emaAppsUpdateFlags.String("body", "REQUIRED", "")
+
+		emaAppsListFlags    = flag.NewFlagSet("list", flag.ExitOnError)
+		emaAppsListBodyFlag = emaAppsListFlags.String("body", "REQUIRED", "")
+
+		emaAppsDeleteFlags    = flag.NewFlagSet("delete", flag.ExitOnError)
+		emaAppsDeleteBodyFlag = emaAppsDeleteFlags.String("body", "REQUIRED", "")
+
+		emaResourcesFlags = flag.NewFlagSet("ema-resources", flag.ContinueOnError)
+
+		emaResourcesCreateFlags    = flag.NewFlagSet("create", flag.ExitOnError)
+		emaResourcesCreateBodyFlag = emaResourcesCreateFlags.String("body", "REQUIRED", "")
+
+		emaResourcesUpdateFlags    = flag.NewFlagSet("update", flag.ExitOnError)
+		emaResourcesUpdateBodyFlag = emaResourcesUpdateFlags.String("body", "REQUIRED", "")
+
+		emaResourcesListFlags    = flag.NewFlagSet("list", flag.ExitOnError)
+		emaResourcesListBodyFlag = emaResourcesListFlags.String("body", "REQUIRED", "")
+
+		emaResourcesDeleteFlags    = flag.NewFlagSet("delete", flag.ExitOnError)
+		emaResourcesDeleteBodyFlag = emaResourcesDeleteFlags.String("body", "REQUIRED", "")
+
+		emaAppAssignmentsFlags = flag.NewFlagSet("ema-app-assignments", flag.ContinueOnError)
+
+		emaAppAssignmentsCreateFlags    = flag.NewFlagSet("create", flag.ExitOnError)
+		emaAppAssignmentsCreateBodyFlag = emaAppAssignmentsCreateFlags.String("body", "REQUIRED", "")
+
+		emaAppAssignmentsUpdateFlags    = flag.NewFlagSet("update", flag.ExitOnError)
+		emaAppAssignmentsUpdateBodyFlag = emaAppAssignmentsUpdateFlags.String("body", "REQUIRED", "")
+
+		emaAppAssignmentsListFlags    = flag.NewFlagSet("list", flag.ExitOnError)
+		emaAppAssignmentsListBodyFlag = emaAppAssignmentsListFlags.String("body", "REQUIRED", "")
+
+		emaAppAssignmentsDeleteFlags    = flag.NewFlagSet("delete", flag.ExitOnError)
+		emaAppAssignmentsDeleteBodyFlag = emaAppAssignmentsDeleteFlags.String("body", "REQUIRED", "")
+
+		emaTrustRulesFlags = flag.NewFlagSet("ema-trust-rules", flag.ContinueOnError)
+
+		emaTrustRulesCreateFlags    = flag.NewFlagSet("create", flag.ExitOnError)
+		emaTrustRulesCreateBodyFlag = emaTrustRulesCreateFlags.String("body", "REQUIRED", "")
+
+		emaTrustRulesUpdateFlags    = flag.NewFlagSet("update", flag.ExitOnError)
+		emaTrustRulesUpdateBodyFlag = emaTrustRulesUpdateFlags.String("body", "REQUIRED", "")
+
+		emaTrustRulesListFlags    = flag.NewFlagSet("list", flag.ExitOnError)
+		emaTrustRulesListBodyFlag = emaTrustRulesListFlags.String("body", "REQUIRED", "")
+
+		emaTrustRulesDeleteFlags    = flag.NewFlagSet("delete", flag.ExitOnError)
+		emaTrustRulesDeleteBodyFlag = emaTrustRulesDeleteFlags.String("body", "REQUIRED", "")
+
+		emaTrustRulesListIssuedGrantsFlags    = flag.NewFlagSet("list-issued-grants", flag.ExitOnError)
+		emaTrustRulesListIssuedGrantsBodyFlag = emaTrustRulesListIssuedGrantsFlags.String("body", "REQUIRED", "")
+
 		devIdpFlags = flag.NewFlagSet("dev-idp", flag.ContinueOnError)
 
 		devIdpGetCurrentUserFlags    = flag.NewFlagSet("get-current-user", flag.ExitOnError)
@@ -147,6 +214,31 @@ func ParseEndpoint(
 		usersDeleteFlags    = flag.NewFlagSet("delete", flag.ExitOnError)
 		usersDeleteBodyFlag = usersDeleteFlags.String("body", "REQUIRED", "")
 	)
+	emaAppsFlags.Usage = emaAppsUsage
+	emaAppsCreateFlags.Usage = emaAppsCreateUsage
+	emaAppsUpdateFlags.Usage = emaAppsUpdateUsage
+	emaAppsListFlags.Usage = emaAppsListUsage
+	emaAppsDeleteFlags.Usage = emaAppsDeleteUsage
+
+	emaResourcesFlags.Usage = emaResourcesUsage
+	emaResourcesCreateFlags.Usage = emaResourcesCreateUsage
+	emaResourcesUpdateFlags.Usage = emaResourcesUpdateUsage
+	emaResourcesListFlags.Usage = emaResourcesListUsage
+	emaResourcesDeleteFlags.Usage = emaResourcesDeleteUsage
+
+	emaAppAssignmentsFlags.Usage = emaAppAssignmentsUsage
+	emaAppAssignmentsCreateFlags.Usage = emaAppAssignmentsCreateUsage
+	emaAppAssignmentsUpdateFlags.Usage = emaAppAssignmentsUpdateUsage
+	emaAppAssignmentsListFlags.Usage = emaAppAssignmentsListUsage
+	emaAppAssignmentsDeleteFlags.Usage = emaAppAssignmentsDeleteUsage
+
+	emaTrustRulesFlags.Usage = emaTrustRulesUsage
+	emaTrustRulesCreateFlags.Usage = emaTrustRulesCreateUsage
+	emaTrustRulesUpdateFlags.Usage = emaTrustRulesUpdateUsage
+	emaTrustRulesListFlags.Usage = emaTrustRulesListUsage
+	emaTrustRulesDeleteFlags.Usage = emaTrustRulesDeleteUsage
+	emaTrustRulesListIssuedGrantsFlags.Usage = emaTrustRulesListIssuedGrantsUsage
+
 	devIdpFlags.Usage = devIdpUsage
 	devIdpGetCurrentUserFlags.Usage = devIdpGetCurrentUserUsage
 	devIdpSetCurrentUserFlags.Usage = devIdpSetCurrentUserUsage
@@ -200,6 +292,14 @@ func ParseEndpoint(
 	{
 		svcn = flag.Arg(0)
 		switch svcn {
+		case "ema-apps":
+			svcf = emaAppsFlags
+		case "ema-resources":
+			svcf = emaResourcesFlags
+		case "ema-app-assignments":
+			svcf = emaAppAssignmentsFlags
+		case "ema-trust-rules":
+			svcf = emaTrustRulesFlags
 		case "dev-idp":
 			svcf = devIdpFlags
 		case "organizations":
@@ -227,6 +327,73 @@ func ParseEndpoint(
 	{
 		epn = svcf.Arg(0)
 		switch svcn {
+		case "ema-apps":
+			switch epn {
+			case "create":
+				epf = emaAppsCreateFlags
+
+			case "update":
+				epf = emaAppsUpdateFlags
+
+			case "list":
+				epf = emaAppsListFlags
+
+			case "delete":
+				epf = emaAppsDeleteFlags
+
+			}
+
+		case "ema-resources":
+			switch epn {
+			case "create":
+				epf = emaResourcesCreateFlags
+
+			case "update":
+				epf = emaResourcesUpdateFlags
+
+			case "list":
+				epf = emaResourcesListFlags
+
+			case "delete":
+				epf = emaResourcesDeleteFlags
+
+			}
+
+		case "ema-app-assignments":
+			switch epn {
+			case "create":
+				epf = emaAppAssignmentsCreateFlags
+
+			case "update":
+				epf = emaAppAssignmentsUpdateFlags
+
+			case "list":
+				epf = emaAppAssignmentsListFlags
+
+			case "delete":
+				epf = emaAppAssignmentsDeleteFlags
+
+			}
+
+		case "ema-trust-rules":
+			switch epn {
+			case "create":
+				epf = emaTrustRulesCreateFlags
+
+			case "update":
+				epf = emaTrustRulesUpdateFlags
+
+			case "list":
+				epf = emaTrustRulesListFlags
+
+			case "delete":
+				epf = emaTrustRulesDeleteFlags
+
+			case "list-issued-grants":
+				epf = emaTrustRulesListIssuedGrantsFlags
+
+			}
+
 		case "dev-idp":
 			switch epn {
 			case "get-current-user":
@@ -349,6 +516,73 @@ func ParseEndpoint(
 	)
 	{
 		switch svcn {
+		case "ema-apps":
+			c := emaappsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create":
+				endpoint = c.Create()
+				data, err = emaappsc.BuildCreatePayload(*emaAppsCreateBodyFlag)
+			case "update":
+				endpoint = c.Update()
+				data, err = emaappsc.BuildUpdatePayload(*emaAppsUpdateBodyFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = emaappsc.BuildListPayload(*emaAppsListBodyFlag)
+			case "delete":
+				endpoint = c.Delete()
+				data, err = emaappsc.BuildDeletePayload(*emaAppsDeleteBodyFlag)
+			}
+		case "ema-resources":
+			c := emaresourcesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create":
+				endpoint = c.Create()
+				data, err = emaresourcesc.BuildCreatePayload(*emaResourcesCreateBodyFlag)
+			case "update":
+				endpoint = c.Update()
+				data, err = emaresourcesc.BuildUpdatePayload(*emaResourcesUpdateBodyFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = emaresourcesc.BuildListPayload(*emaResourcesListBodyFlag)
+			case "delete":
+				endpoint = c.Delete()
+				data, err = emaresourcesc.BuildDeletePayload(*emaResourcesDeleteBodyFlag)
+			}
+		case "ema-app-assignments":
+			c := emaappassignmentsc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create":
+				endpoint = c.Create()
+				data, err = emaappassignmentsc.BuildCreatePayload(*emaAppAssignmentsCreateBodyFlag)
+			case "update":
+				endpoint = c.Update()
+				data, err = emaappassignmentsc.BuildUpdatePayload(*emaAppAssignmentsUpdateBodyFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = emaappassignmentsc.BuildListPayload(*emaAppAssignmentsListBodyFlag)
+			case "delete":
+				endpoint = c.Delete()
+				data, err = emaappassignmentsc.BuildDeletePayload(*emaAppAssignmentsDeleteBodyFlag)
+			}
+		case "ema-trust-rules":
+			c := ematrustrulesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "create":
+				endpoint = c.Create()
+				data, err = ematrustrulesc.BuildCreatePayload(*emaTrustRulesCreateBodyFlag)
+			case "update":
+				endpoint = c.Update()
+				data, err = ematrustrulesc.BuildUpdatePayload(*emaTrustRulesUpdateBodyFlag)
+			case "list":
+				endpoint = c.List()
+				data, err = ematrustrulesc.BuildListPayload(*emaTrustRulesListBodyFlag)
+			case "delete":
+				endpoint = c.Delete()
+				data, err = ematrustrulesc.BuildDeletePayload(*emaTrustRulesDeleteBodyFlag)
+			case "list-issued-grants":
+				endpoint = c.ListIssuedGrants()
+				data, err = ematrustrulesc.BuildListIssuedGrantsPayload(*emaTrustRulesListIssuedGrantsBodyFlag)
+			}
 		case "dev-idp":
 			c := devidpc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -460,9 +694,371 @@ func ParseEndpoint(
 	return endpoint, data, nil
 }
 
+// emaAppsUsage displays the usage of the ema-apps command and its subcommands.
+func emaAppsUsage() {
+	fmt.Fprintln(os.Stderr, `Enterprise-managed authorization requesting apps: the clients allowed to ask the IdP for an ID-JAG. Permanently unauthenticated.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] ema-apps COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create: Register an app.`)
+	fmt.Fprintln(os.Stderr, `    update: Patch an app. Omitted string fields are left unchanged.`)
+	fmt.Fprintln(os.Stderr, `    list: List apps.`)
+	fmt.Fprintln(os.Stderr, `    delete: Hard-delete an app. Cascades to its assignments and issued grants.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s ema-apps COMMAND --help\n", os.Args[0])
+}
+func emaAppsCreateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-apps create", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Register an app.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-apps create --body '{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"enabled\": false,\n      \"jwks\": \"abc123\",\n      \"name\": \"abc123\"\n   }'")
+}
+
+func emaAppsUpdateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-apps update", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Patch an app. Omitted string fields are left unchanged.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-apps update --body '{\n      \"client_id\": \"abc123\",\n      \"client_secret\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"jwks\": \"abc123\",\n      \"name\": \"abc123\"\n   }'")
+}
+
+func emaAppsListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-apps list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List apps.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-apps list --body '{\n      \"cursor\": \"abc123\",\n      \"limit\": 2\n   }'")
+}
+
+func emaAppsDeleteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-apps delete", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Hard-delete an app. Cascades to its assignments and issued grants.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-apps delete --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+// emaResourcesUsage displays the usage of the ema-resources command and its
+// subcommands.
+func emaResourcesUsage() {
+	fmt.Fprintln(os.Stderr, `Enterprise-managed authorization resource apps. Each is one resource authorization server mounted at /resource-as/<slug>. Permanently unauthenticated.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] ema-resources COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create: Register a resource. Its authorization server becomes reachable immediately.`)
+	fmt.Fprintln(os.Stderr, `    update: Patch a resource. Changing the slug moves its authorization server, and invalidates any ID-JAG already minted for the old issuer.`)
+	fmt.Fprintln(os.Stderr, `    list: List resources.`)
+	fmt.Fprintln(os.Stderr, `    delete: Hard-delete a resource. Cascades to its trust rules, assignments, and issued tokens.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s ema-resources COMMAND --help\n", os.Args[0])
+}
+func emaResourcesCreateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-resources create", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Register a resource. Its authorization server becomes reachable immediately.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-resources create --body '{\n      \"name\": \"abc123\",\n      \"resource_identifier\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
+}
+
+func emaResourcesUpdateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-resources update", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Patch a resource. Changing the slug moves its authorization server, and invalidates any ID-JAG already minted for the old issuer.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-resources update --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"resource_identifier\": \"abc123\",\n      \"slug\": \"abc123\"\n   }'")
+}
+
+func emaResourcesListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-resources list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List resources.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-resources list --body '{\n      \"cursor\": \"abc123\",\n      \"limit\": 2\n   }'")
+}
+
+func emaResourcesDeleteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-resources delete", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Hard-delete a resource. Cascades to its trust rules, assignments, and issued tokens.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-resources delete --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+// emaAppAssignmentsUsage displays the usage of the ema-app-assignments command
+// and its subcommands.
+func emaAppAssignmentsUsage() {
+	fmt.Fprintln(os.Stderr, `Assigns apps to users for a resource. The absence of an assignment is what denies a mint. Permanently unauthenticated.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] ema-app-assignments COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create: Assign an app to a user for a resource. Idempotent on the triple; re-assigning overwrites the scopes.`)
+	fmt.Fprintln(os.Stderr, `    update: Change an assignment's granted scopes.`)
+	fmt.Fprintln(os.Stderr, `    list: List assignments, optionally filtered by app, user, or resource.`)
+	fmt.Fprintln(os.Stderr, `    delete: Revoke an assignment. The next mint for that app, user, and resource is denied.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s ema-app-assignments COMMAND --help\n", os.Args[0])
+}
+func emaAppAssignmentsCreateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-app-assignments create", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Assign an app to a user for a resource. Idempotent on the triple; re-assigning overwrites the scopes.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-app-assignments create --body '{\n      \"app_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"granted_scopes\": \"abc123\",\n      \"resource_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+func emaAppAssignmentsUpdateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-app-assignments update", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Change an assignment's granted scopes.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-app-assignments update --body '{\n      \"granted_scopes\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+func emaAppAssignmentsListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-app-assignments list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List assignments, optionally filtered by app, user, or resource.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-app-assignments list --body '{\n      \"app_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"cursor\": \"abc123\",\n      \"limit\": 2,\n      \"resource_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+func emaAppAssignmentsDeleteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-app-assignments delete", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Revoke an assignment. The next mint for that app, user, and resource is denied.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-app-assignments delete --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+// emaTrustRulesUsage displays the usage of the ema-trust-rules command and its
+// subcommands.
+func emaTrustRulesUsage() {
+	fmt.Fprintln(os.Stderr, `Trust domain rules: which issuer a resource authorization server accepts ID-JAGs from, and the ceiling it applies. Permanently unauthenticated.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] ema-trust-rules COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    create: Trust an issuer for a resource. Idempotent on (resource, issuer).`)
+	fmt.Fprintln(os.Stderr, `    update: Patch a trust rule. Omitted string fields are left unchanged.`)
+	fmt.Fprintln(os.Stderr, `    list: List trust rules, optionally filtered by resource.`)
+	fmt.Fprintln(os.Stderr, `    delete: Remove a trust rule. The resource then refuses ID-JAGs from that issuer.`)
+	fmt.Fprintln(os.Stderr, `    list-issued-grants: Read the ledger of ID-JAGs this IdP minted, newest first. Inspection only.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s ema-trust-rules COMMAND --help\n", os.Args[0])
+}
+func emaTrustRulesCreateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-trust-rules create", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Trust an issuer for a resource. Idempotent on (resource, issuer).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-trust-rules create --body '{\n      \"allowed_client_ids\": \"abc123\",\n      \"allowed_scopes\": \"abc123\",\n      \"enabled\": false,\n      \"resource_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"trusted_issuer\": \"abc123\"\n   }'")
+}
+
+func emaTrustRulesUpdateUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-trust-rules update", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Patch a trust rule. Omitted string fields are left unchanged.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-trust-rules update --body '{\n      \"allowed_client_ids\": \"abc123\",\n      \"allowed_scopes\": \"abc123\",\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"trusted_issuer\": \"abc123\"\n   }'")
+}
+
+func emaTrustRulesListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-trust-rules list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List trust rules, optionally filtered by resource.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-trust-rules list --body '{\n      \"cursor\": \"abc123\",\n      \"limit\": 2,\n      \"resource_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+func emaTrustRulesDeleteUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-trust-rules delete", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Remove a trust rule. The resource then refuses ID-JAGs from that issuer.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-trust-rules delete --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
+func emaTrustRulesListIssuedGrantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] ema-trust-rules list-issued-grants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the ledger of ID-JAGs this IdP minted, newest first. Inspection only.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "ema-trust-rules list-issued-grants --body '{\n      \"limit\": 2,\n      \"resource_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+}
+
 // devIdpUsage displays the usage of the dev-idp command and its subcommands.
 func devIdpUsage() {
-	fmt.Fprintln(os.Stderr, `Dev-only RPCs for the dev-idp itself. Per-mode currentUser get/set (idp-design.md §3, §6.2). Permanently unauthenticated.`)
+	fmt.Fprintln(os.Stderr, `Dev-only RPCs for the dev-idp itself. Per-slot currentUser get/set. Permanently unauthenticated.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] dev-idp COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-current-user: Read the per-mode currentUser. 404s when no row exists yet for that mode.`)
@@ -487,7 +1083,7 @@ func devIdpGetCurrentUserUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp get-current-user --body '{\n      \"mode\": \"oauth2-1\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp get-current-user --body '{\n      \"mode\": \"workos\"\n   }'")
 }
 
 func devIdpSetCurrentUserUsage() {
@@ -505,7 +1101,7 @@ func devIdpSetCurrentUserUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp set-current-user --body '{\n      \"mode\": \"oauth2-1\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workos_sub\": \"abc123\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp set-current-user --body '{\n      \"mode\": \"workos\",\n      \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"workos_sub\": \"abc123\"\n   }'")
 }
 
 func devIdpClearCurrentUserUsage() {
@@ -523,13 +1119,13 @@ func devIdpClearCurrentUserUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp clear-current-user --body '{\n      \"mode\": \"oauth2-1\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "dev-idp clear-current-user --body '{\n      \"mode\": \"workos\"\n   }'")
 }
 
 // organizationsUsage displays the usage of the organizations command and its
 // subcommands.
 func organizationsUsage() {
-	fmt.Fprintln(os.Stderr, `Dev-idp organizations CRUD. Backs both mock-workos and oauth2 modes' org metadata. Permanently unauthenticated (idp-design.md §6).`)
+	fmt.Fprintln(os.Stderr, `Dev-idp organizations CRUD. Backs the local backend's org metadata. Permanently unauthenticated.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] organizations COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Create an organization.`)
@@ -929,7 +1525,7 @@ func membershipsDeleteUsage() {
 
 // usersUsage displays the usage of the users command and its subcommands.
 func usersUsage() {
-	fmt.Fprintln(os.Stderr, `Dev-idp users CRUD. The local-mode currentUser (mock-workos / oauth2-1 / oauth2) references rows in this table by id (idp-design.md §3, §5). Permanently unauthenticated.`)
+	fmt.Fprintln(os.Stderr, `Dev-idp users CRUD. The oauth2-1 currentUser slot references rows in this table by id. Permanently unauthenticated.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] users COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create: Create a user.`)

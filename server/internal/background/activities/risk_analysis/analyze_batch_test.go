@@ -3,6 +3,7 @@ package risk_analysis_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -17,7 +18,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
 
+	"google.golang.org/protobuf/proto"
+
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
@@ -29,6 +34,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -69,6 +76,10 @@ func (j *recordingPromptJudge) Evaluate(_ context.Context, in promptpolicy.Input
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,
+		STokens:          3,
+		Completed:        true,
+		Model:            "test-model",
+		Provider:         "test-provider",
 	}, nil
 }
 
@@ -174,15 +185,15 @@ func capturingFindingsPub(t *testing.T) (*gcp.MockPublisher[*riskv1.Finding], *[
 
 func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	t.Parallel()
-	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), newFindingsPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil, nil)
+	ab, err := risk_analysis.NewAnalyzeBatch(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), nil, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil, newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(), newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newFindingsPub(), mustCustomRuleScanner(t, nil), mustCELEngine(t), nil, nil, metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()), false)
 	require.NoError(t, err)
 	require.NotNil(t, ab)
 
 	result, err := ab.Do(t.Context(), risk_analysis.AnalyzeBatchArgs{
-		ProjectID:        uuid.Nil,
-		OrganizationID:   "",
-		RiskPolicyID:     uuid.Nil,
-		PolicyVersion:    0,
+		ProjectID:        uuid.MustParse("00000000-0000-0000-0000-000000000701"),
+		OrganizationID:   "org",
+		RiskPolicyID:     uuid.MustParse("00000000-0000-0000-0000-000000000702"),
+		PolicyVersion:    1,
 		MessageIDs:       nil,
 		Sources:          []string{"gitleaks"},
 		PresidioEntities: nil,
@@ -191,6 +202,71 @@ func TestAnalyzeBatch_EmptyMessageIDs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, result.Processed)
 	assert.Equal(t, 0, result.Findings)
+}
+
+func TestAnalyzeBatch_MeterPublishFailureDoesNotDiscardFindings(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	logger := testenv.NewLogger(t)
+	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd",
+	})
+	require.NoError(t, err)
+	publisher := gcp.NewMockPublisher[*meteringv1.MeterReading]()
+	publisher.On("Publish", mock.Anything, mock.Anything).
+		Return(gcp.NewErrPublishResult(errors.New("meter transport unavailable"))).Once()
+	ab, err := risk_analysis.NewAnalyzeBatch(
+		logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t),
+		conn, nil, &risk_analysis.StubPIIScanner{}, nil, nil, nil, nil, nil,
+		newPresidioPub(), newGitleaksPub(), newPromptInjectionPub(),
+		newPromptPolicyPub(), newCustomRulesPub(), newLLMPub(), newFindingsPub(),
+		mustCustomRuleScanner(t, conn), mustCELEngine(t), nil, nil,
+		metering.NewRiskRecorder(publisher),
+		false,
+	)
+	require.NoError(t, err)
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:              td.projectID,
+		OrganizationID:         td.orgID,
+		RiskPolicyID:           td.policyID,
+		PolicyVersion:          td.policyVersion,
+		MessageIDs:             []uuid.UUID{msgID},
+		ContentPartIDs:         nil,
+		Sources:                []string{"gitleaks"},
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: 0,
+		CustomRuleIds:          nil,
+		ApprovedEmailDomains:   nil,
+		BuiltinPresetsEnabled:  false,
+		DetectionScopes:        nil,
+	})
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+	require.Equal(t, 1, result.Processed)
+	require.Positive(t, result.Findings)
+	publisher.AssertExpectations(t)
+
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	var persisted bool
+	for _, row := range rows {
+		persisted = persisted || row.Found && row.Source == "gitleaks"
+	}
+	require.True(t, persisted, "gitleaks finding must be persisted despite the meter publication failure")
 }
 
 func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
@@ -234,12 +310,14 @@ func TestAnalyzeBatch_GracefulDegradationWhenPresidioDown(t *testing.T) {
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -318,12 +396,14 @@ func TestAnalyzeBatch_ContentSourcesNotRepublishedToFindingsTopic(t *testing.T) 
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		findingsPub,
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -351,12 +431,157 @@ func TestAnalyzeBatch_ContentSourcesNotRepublishedToFindingsTopic(t *testing.T) 
 	require.Empty(t, *published, "content-source findings must not be mirrored onto the findings topic by the batch path")
 }
 
+func TestContentPartBatchPreservesDeletedChatContentWithoutOwnerAttribution(t *testing.T) {
+	t.Parallel()
+
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	chats := chatrepo.New(conn)
+	chatID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = chats.UpsertChat(t.Context(), chatrepo.UpsertChatParams{
+		ID:             chatID,
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		UserID:         pgtype.Text{String: "test-chat-owner", Valid: true},
+		ExternalUserID: pgtype.Text{},
+		Title:          pgtype.Text{String: "test chat", Valid: true},
+	})
+	require.NoError(t, err)
+	queries := riskrepo.New(conn)
+	partID, err := queries.CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              chatID,
+		ProjectID:           uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Kind:                message.PromptAttachment,
+		ContentAssetUrl:     "test-content-asset",
+		ParentChatMessageID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+	params := riskrepo.GetContentPartBatchParams{
+		Ids:       []uuid.UUID{partID},
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+	}
+	before, err := queries.GetContentPartBatch(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, before, 1)
+	require.Equal(t, "test-chat-owner", before[0].ChatUserID)
+
+	deleted, err := chats.SoftDeleteChat(t.Context(), chatrepo.SoftDeleteChatParams{
+		ProjectID: td.projectID,
+		ID:        chatID,
+	})
+	require.NoError(t, err)
+	require.True(t, deleted.Deleted)
+	after, err := queries.GetContentPartBatch(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, after, 1)
+	require.Equal(t, partID, after[0].ID)
+	require.Equal(t, chatID, after[0].ChatID)
+	require.Equal(t, "test-content-asset", after[0].ContentAssetUrl)
+	require.Empty(t, after[0].ChatUserID)
+}
+
+func TestBatchContentQueriesRejectForeignChatsAndMismatchedParent(t *testing.T) {
+	t.Parallel()
+
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	foreign := seedTestData(t, conn, true)
+	queries := riskrepo.New(conn)
+
+	foreignParentID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    foreign.chatID,
+		ProjectID: uuid.NullUUID{UUID: foreign.projectID, Valid: true},
+		Role:      "user",
+		Content:   "foreign parent",
+	})
+	require.NoError(t, err)
+	foreignChatMessageID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    foreign.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "foreign chat on requested project",
+	})
+	require.NoError(t, err)
+	foreignChatPartID, err := queries.CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              foreign.chatID,
+		ProjectID:           uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Kind:                message.PromptAttachment,
+		ContentAssetUrl:     "unused",
+		ParentChatMessageID: uuid.NullUUID{UUID: foreignParentID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	otherChatID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = chatrepo.New(conn).UpsertChat(t.Context(), chatrepo.UpsertChatParams{
+		ID:             otherChatID,
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		UserID:         pgtype.Text{},
+		ExternalUserID: pgtype.Text{},
+		Title:          pgtype.Text{String: "other chat", Valid: true},
+	})
+	require.NoError(t, err)
+	otherChatParentID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    otherChatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "same-project wrong-chat parent",
+	})
+	require.NoError(t, err)
+	mismatchedParentPartID, err := queries.CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{
+		ChatID:              td.chatID,
+		ProjectID:           uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Kind:                message.PromptAttachment,
+		ContentAssetUrl:     "unused",
+		ParentChatMessageID: uuid.NullUUID{UUID: otherChatParentID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	messageRows, err := queries.GetMessageContentBatch(t.Context(), riskrepo.GetMessageContentBatchParams{
+		Ids:       []uuid.UUID{foreignChatMessageID},
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Empty(t, messageRows)
+
+	rows, err := queries.GetContentPartBatch(t.Context(), riskrepo.GetContentPartBatchParams{
+		Ids:       []uuid.UUID{foreignChatPartID, mismatchedParentPartID},
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, mismatchedParentPartID, rows[0].ID)
+	require.Equal(t, td.chatID, rows[0].ChatID)
+	require.False(t, rows[0].ParentChatMessageID.Valid)
+	require.Empty(t, rows[0].ChatUserID)
+}
+
 func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *testing.T) {
 	t.Parallel()
 
 	conn := cloneDB(t)
 	td := seedTestData(t, conn, true)
 	msgIDs := seedMessages(t, conn, td, 3)
+	otherChatID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = chatrepo.New(conn).UpsertChat(t.Context(), chatrepo.UpsertChatParams{
+		ID:             otherChatID,
+		ProjectID:      td.projectID,
+		OrganizationID: td.orgID,
+		UserID:         pgtype.Text{},
+		ExternalUserID: pgtype.Text{},
+		Title:          pgtype.Text{String: "other chat", Valid: true},
+	})
+	require.NoError(t, err)
+	wrongParentID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    otherChatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "wrong-chat parent",
+	})
+	require.NoError(t, err)
 	assetStorage := assetstest.NewTestBlobStore(t)
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, assetStorage)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
@@ -367,7 +592,7 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 		ProjectID:           uuid.NullUUID{UUID: td.projectID, Valid: true},
 		Kind:                message.PromptAttachment,
 		ContentAssetUrl:     assetURL,
-		ParentChatMessageID: uuid.NullUUID{},
+		ParentChatMessageID: uuid.NullUUID{UUID: wrongParentID, Valid: true},
 	})
 	require.NoError(t, err)
 	promptInjectionPub, published := capturingPromptInjectionPub(t)
@@ -388,12 +613,14 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 		newGitleaksPub(),
 		promptInjectionPub,
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -427,6 +654,100 @@ func TestAnalyzeBatch_PromptInjectionPublishesAsyncRequestsForEveryMessage(t *te
 	require.NotNil(t, partRequest, "expected prompt injection async request for content part")
 	require.Empty(t, partRequest.GetChatMessageId())
 	require.Equal(t, contentPartID.String(), partRequest.GetContentPartId())
+	require.Equal(t, td.chatID.String(), partRequest.GetChatId())
+	require.Empty(t, partRequest.GetParentChatMessageId())
+	require.Equal(t, "content_part_unlinked", partRequest.GetMessageLinkReason())
+	require.Equal(t, "shadow_stream", partRequest.GetExecutionPath())
+	require.Equal(t, td.policyID.String(), partRequest.GetOriginRiskPolicyId())
+	require.Equal(t, td.policyVersion, partRequest.GetOriginRiskPolicyVersion())
+	require.NotEmpty(t, partRequest.GetRequestId())
+}
+
+func TestAnalyzeBatch_PromptInjectionPublishesStrictlyBoundedTrajectory(t *testing.T) {
+	t.Parallel()
+
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	queries := testrepo.New(conn)
+	insert := func(role, content string) uuid.UUID {
+		id, err := queries.InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+			ChatID:    td.chatID,
+			ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+			Role:      role,
+			Content:   content,
+		})
+		require.NoError(t, err)
+		return id
+	}
+
+	staleID := insert("tool", "stale tool result before the latest request")
+	priorUserRequest := "latest request:" + strings.Repeat("u", 4100)
+	recentUntrustedContent := "latest tool result:" + strings.Repeat("t", 4100)
+	userID := insert("user", priorUserRequest)
+	toolID := insert("tool", recentUntrustedContent)
+	// The current event must be a write tool call: the recommended PI scope
+	// exempts plain assistant text and all-read-only tool-call batches.
+	currentID := insertAssistantToolCallWithArgs(t, conn, td, "Bash", map[string]any{"command": "echo current event"})
+
+	// SQL defaults use the database clock; the writer uses the Go clock.
+	// Pin conversation order rather than relying on clock agreement.
+	base := time.Now().UTC().Add(-time.Hour)
+	for i, id := range []uuid.UUID{staleID, userID, toolID, currentID} {
+		err := queries.UpdateChatMessageCreatedAt(t.Context(), testrepo.UpdateChatMessageCreatedAtParams{
+			CreatedAt: pgtype.Timestamptz{Time: base.Add(time.Duration(i) * time.Second), Valid: true},
+			ID:        id,
+		})
+		require.NoError(t, err)
+	}
+
+	promptInjectionPub, published := capturingPromptInjectionPub(t)
+	ab, err := risk_analysis.NewAnalyzeBatch(
+		testenv.NewLogger(t),
+		testenv.NewTracerProvider(t),
+		testenv.NewMeterProvider(t),
+		conn,
+		nil,
+		&risk_analysis.StubPIIScanner{},
+		nil,
+		nil,
+		nil,
+		nil,
+		&feature.InMemory{},
+		newPresidioPub(),
+		newGitleaksPub(),
+		promptInjectionPub,
+		newPromptPolicyPub(),
+		newCustomRulesPub(), newLLMPub(),
+		newFindingsPub(),
+		mustCustomRuleScanner(t, conn),
+		mustCELEngine(t),
+		nil,
+		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
+	)
+	require.NoError(t, err)
+
+	var ts testsuite.WorkflowTestSuite
+	env := ts.NewTestActivityEnvironment()
+	env.RegisterActivity(ab.Do)
+	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
+		ProjectID:        td.projectID,
+		OrganizationID:   td.orgID,
+		RiskPolicyID:     td.policyID,
+		PolicyVersion:    td.policyVersion,
+		MessageIDs:       []uuid.UUID{currentID},
+		Sources:          []string{risk_analysis.SourcePromptInjection},
+		PresidioEntities: nil,
+		CustomRuleIds:    nil,
+	})
+	require.NoError(t, err)
+	var result risk_analysis.AnalyzeBatchResult
+	require.NoError(t, val.Get(&result))
+
+	require.Len(t, *published, 1)
+	require.Equal(t, string([]rune(priorUserRequest)[:4000]), (*published)[0].GetPriorUserRequest())
+	require.Equal(t, string([]rune(recentUntrustedContent)[:4000]), (*published)[0].GetRecentUntrustedContent())
 }
 
 func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(t *testing.T) {
@@ -471,12 +792,14 @@ func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		promptPolicyPub,
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -498,94 +821,6 @@ func TestAnalyzeBatch_PromptPolicyPublishesAsyncRequestsForEveryEligibleMessage(
 	var result risk_analysis.AnalyzeBatchResult
 	require.NoError(t, val.Get(&result))
 	require.Len(t, *published, len(msgIDs))
-}
-
-func TestAnalyzeBatch_FilteredMessagesStillClearExistingResults(t *testing.T) {
-	t.Parallel()
-	conn := cloneDB(t)
-	td := seedTestData(t, conn, true)
-
-	msgID, err := testrepo.New(conn).InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
-		ChatID:    td.chatID,
-		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
-		Role:      "user",
-		Content:   "hello",
-	})
-	require.NoError(t, err)
-
-	_, err = riskrepo.New(conn).InsertRiskResults(t.Context(), []riskrepo.InsertRiskResultsParams{{
-		ID:                uuid.New(),
-		ProjectID:         td.projectID,
-		OrganizationID:    td.orgID,
-		RiskPolicyID:      td.policyID,
-		RiskPolicyVersion: td.policyVersion,
-		ChatMessageID:     uuid.NullUUID{UUID: msgID, Valid: true},
-		Source:            "gitleaks",
-		Found:             true,
-		RuleID:            pgtype.Text{String: "secret.test", Valid: true},
-		Description:       pgtype.Text{String: "stale finding", Valid: true},
-		Match:             pgtype.Text{String: "match", Valid: true},
-		StartPos:          pgtype.Int4{Int32: 0, Valid: true},
-		EndPos:            pgtype.Int4{Int32: 5, Valid: true},
-		Confidence:        pgtype.Float8{Float64: 1, Valid: true},
-		Tags:              []string{},
-		DeadLetterReason:  pgtype.Text{},
-	}})
-	require.NoError(t, err)
-
-	ab, err := risk_analysis.NewAnalyzeBatch(
-		testenv.NewLogger(t),
-		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
-		conn,
-		nil,
-		&risk_analysis.StubPIIScanner{},
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		newPresidioPub(),
-		newGitleaksPub(),
-		newPromptInjectionPub(),
-		newPromptPolicyPub(),
-		newCustomRulesPub(),
-		newFindingsPub(),
-		mustCustomRuleScanner(t, conn),
-		mustCELEngine(t),
-		nil,
-		nil,
-	)
-	require.NoError(t, err)
-
-	var ts testsuite.WorkflowTestSuite
-	env := ts.NewTestActivityEnvironment()
-	env.RegisterActivity(ab.Do)
-
-	val, err := env.ExecuteActivity(ab.Do, risk_analysis.AnalyzeBatchArgs{
-		ProjectID:        td.projectID,
-		OrganizationID:   td.orgID,
-		RiskPolicyID:     td.policyID,
-		PolicyVersion:    td.policyVersion,
-		MessageIDs:       []uuid.UUID{msgID},
-		Sources:          []string{"gitleaks"},
-		MessageTypes:     []string{message.ToolRequest},
-		PresidioEntities: nil,
-		CustomRuleIds:    nil,
-	})
-	require.NoError(t, err)
-
-	var result risk_analysis.AnalyzeBatchResult
-	require.NoError(t, val.Get(&result))
-	require.Equal(t, 0, result.Processed)
-	require.Equal(t, 0, result.Findings)
-
-	rows, err := testrepo.New(conn).ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
-		ProjectID:    td.projectID,
-		RiskPolicyID: td.policyID,
-	})
-	require.NoError(t, err)
-	require.Empty(t, rows)
 }
 
 func TestAnalyzeBatch_DestructiveToolAnnotationFinding(t *testing.T) {
@@ -630,7 +865,6 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		Name:           "prompt policy",
 		PolicyType:     "prompt_based",
 		Sources:        []string{},
-		MessageTypes:   []string{message.ToolRequest},
 		Enabled:        true,
 		Action:         "flag",
 		AudienceType:   "everyone",
@@ -661,12 +895,14 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -681,7 +917,6 @@ func TestAnalyzeBatch_PromptJudgeUsesToolCallPayload(t *testing.T) {
 		PolicyVersion:    td.policyVersion,
 		MessageIDs:       []uuid.UUID{msgID},
 		Sources:          nil,
-		MessageTypes:     []string{message.ToolRequest},
 		PresidioEntities: nil,
 		CustomRuleIds:    nil,
 	})
@@ -729,7 +964,6 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		Name:           "prompt policy",
 		PolicyType:     "prompt_based",
 		Sources:        []string{},
-		MessageTypes:   []string{message.ToolRequest},
 		Enabled:        true,
 		Action:         "flag",
 		AudienceType:   "everyone",
@@ -768,12 +1002,14 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -788,7 +1024,6 @@ func TestAnalyzeBatch_PromptJudgeMultiToolCallAttribution(t *testing.T) {
 		PolicyVersion:    td.policyVersion,
 		MessageIDs:       []uuid.UUID{msgID},
 		Sources:          nil,
-		MessageTypes:     []string{message.ToolRequest},
 		PresidioEntities: nil,
 		CustomRuleIds:    nil,
 	})
@@ -925,14 +1160,14 @@ type deletingPIIScanner struct {
 	policyID  uuid.UUID
 }
 
-func (s *deletingPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, _ []string, _ float64, _ func()) ([][]scanners.Finding, error) {
+func (s *deletingPIIScanner) AnalyzeBatch(ctx context.Context, texts []string, _ []string, _ float64, _ func()) ([]scanners.Result, error) {
 	if err := riskrepo.New(s.conn).DeleteRiskPolicy(ctx, riskrepo.DeleteRiskPolicyParams{
 		ID:        s.policyID,
 		ProjectID: s.projectID,
 	}); err != nil {
 		return nil, fmt.Errorf("delete risk policy mid-analysis: %w", err)
 	}
-	return make([][]scanners.Finding, len(texts)), nil
+	return make([]scanners.Result, len(texts)), nil
 }
 
 func TestAnalyzeBatch_PolicyDeletedMidAnalysisPublishesNothing(t *testing.T) {
@@ -963,12 +1198,14 @@ func TestAnalyzeBatch_PolicyDeletedMidAnalysisPublishesNothing(t *testing.T) {
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		pub,
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1058,7 +1295,7 @@ func TestAnalyzeBatch_Presidio_PIIInToolCallArgsOnly(t *testing.T) {
 		testenv.NewMeterProvider(t),
 		conn,
 		nil,
-		infra.NewPresidioClient(t),
+		newPresidioClient(t),
 		nil,
 		nil,
 		nil,
@@ -1068,12 +1305,14 @@ func TestAnalyzeBatch_Presidio_PIIInToolCallArgsOnly(t *testing.T) {
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		newFindingsPub(),
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1411,7 +1650,7 @@ func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testDa
 	messageID := "msg-" + uuid.NewString()
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
-	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+	_, err = writer.Write(t.Context(), td.projectID, []chat.MessageWrite{{Params: chatrepo.CreateChatMessageParams{
 		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
@@ -1436,7 +1675,7 @@ func insertAssistantToolCallWithArgs(t *testing.T, conn *pgxpool.Pool, td testDa
 		Source:           pgtype.Text{},
 		ContentHash:      nil,
 		Generation:       0,
-	}})
+	}, UserEmail: ""}})
 	require.NoError(t, err)
 
 	messages, err := chatrepo.New(conn).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{
@@ -1481,7 +1720,7 @@ func insertAssistantToolCallsWithArgs(t *testing.T, conn *pgxpool.Pool, td testD
 	messageID := "msg-" + uuid.NewString()
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
-	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+	_, err = writer.Write(t.Context(), td.projectID, []chat.MessageWrite{{Params: chatrepo.CreateChatMessageParams{
 		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
@@ -1506,7 +1745,7 @@ func insertAssistantToolCallsWithArgs(t *testing.T, conn *pgxpool.Pool, td testD
 		Source:           pgtype.Text{},
 		ContentHash:      nil,
 		Generation:       0,
-	}})
+	}, UserEmail: ""}})
 	require.NoError(t, err)
 
 	messages, err := chatrepo.New(conn).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{
@@ -1596,12 +1835,14 @@ func executeAnalyzeBatchForIDs(t *testing.T, conn *pgxpool.Pool, assetStorage as
 		newGitleaksPub(),
 		newPromptInjectionPub(),
 		newPromptPolicyPub(),
-		newCustomRulesPub(),
+		newCustomRulesPub(), newLLMPub(),
 		findingsPub,
 		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
 		nil,
 		nil,
+		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
+		false,
 	)
 	require.NoError(t, err)
 
@@ -1660,7 +1901,6 @@ func seedCustomRulePolicySelection(t *testing.T, conn *pgxpool.Pool, td testData
 		PromptInjectionRules: policy.PromptInjectionRules,
 		DisabledRules:        policy.DisabledRules,
 		CustomRuleIds:        []string{ruleID},
-		MessageTypes:         policy.MessageTypes,
 		Enabled:              policy.Enabled,
 		Action:               "flag",
 		AudienceType:         policy.AudienceType,
@@ -1804,7 +2044,7 @@ func insertAssistantToolCall(t *testing.T, conn *pgxpool.Pool, td testData, call
 	messageID := "msg-" + uuid.NewString()
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, nil)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
-	_, err = writer.Write(t.Context(), td.projectID, []chatrepo.CreateChatMessageParams{{
+	_, err = writer.Write(t.Context(), td.projectID, []chat.MessageWrite{{Params: chatrepo.CreateChatMessageParams{
 		CreatedAt:        pgtype.Timestamptz{},
 		ChatID:           td.chatID,
 		Role:             "assistant",
@@ -1829,7 +2069,7 @@ func insertAssistantToolCall(t *testing.T, conn *pgxpool.Pool, td testData, call
 		Source:           pgtype.Text{},
 		ContentHash:      nil,
 		Generation:       0,
-	}})
+	}, UserEmail: ""}})
 	require.NoError(t, err)
 
 	messages, err := chatrepo.New(conn).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{
@@ -1894,4 +2134,209 @@ func TestAnalyzeBatch_SkipsWhenPolicyDeleted(t *testing.T) {
 	result := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
 	assert.Equal(t, 0, result.Processed)
 	assert.Equal(t, 0, result.Findings)
+}
+
+// TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents pins the redrive
+// contract behind at-least-once delivery: writeResults can commit and a later
+// publish step can still fail the activity, so Temporal re-runs the whole
+// batch. The second Do call below stands in for that redrive — this harness
+// cannot cheaply fail a post-commit publish, since gitleaks findings have no
+// batch-only findings-topic publish to sabotage. The re-run must rebuild the
+// same risk result ids, emit no new webhook outbox events for findings the
+// first run already announced, and carry a reviewer's manual dismissal across
+// the delete/reinsert replacement.
+func TestAnalyzeBatch_RedriveConvergesRowsAndWebhookEvents(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	testQueries := testrepo.New(conn)
+	msgID, err := testQueries.InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd",
+	})
+	require.NoError(t, err)
+
+	first := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	require.GreaterOrEqual(t, first.Findings, 1)
+
+	firstRows, err := testQueries.ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, firstRows)
+	rowIDSet := riskResultIDs(firstRows)
+
+	firstOutbox, err := testQueries.ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, firstOutbox)
+	for _, row := range firstOutbox {
+		require.Equal(t, td.orgID, row.OrganizationID)
+
+		envelope := new(webhooksv1.Event)
+		require.NoError(t, proto.Unmarshal(row.Message, envelope))
+		require.Equal(t, row.PublicID.String(), envelope.GetEventId())
+
+		var payload events.RiskFindingCreatedPayloadV1
+		require.NoError(t, json.Unmarshal(envelope.GetPayload(), &payload))
+		require.Contains(t, rowIDSet, payload.ID, "webhook payload must reference a persisted row id")
+	}
+
+	// A reviewer dismisses one finding between the attempts; the redrive's
+	// delete/reinsert must not undo it.
+	dismissed, err := riskrepo.New(conn).MarkRiskResultsFalsePositive(t.Context(), riskrepo.MarkRiskResultsFalsePositiveParams{
+		ProjectID: td.projectID,
+		Ids:       rowIDSet[:1],
+		Reason:    pgtype.Text{String: "known fixture", Valid: true},
+	})
+	require.NoError(t, err)
+	require.Len(t, dismissed, 1)
+
+	second := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	require.Equal(t, first.Findings, second.Findings)
+
+	secondRows, err := testQueries.ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+	require.ElementsMatch(t, rowIDSet, riskResultIDs(secondRows),
+		"a redrive must rebuild the same risk result ids, not mint fresh ones")
+
+	preserved := false
+	for _, row := range secondRows {
+		if row.ID != rowIDSet[0] {
+			continue
+		}
+		preserved = true
+		require.True(t, row.FalsePositiveAt.Valid, "the dismissal must survive the redrive's delete/reinsert")
+		require.Equal(t, "known fixture", row.FalsePositiveReason.String)
+	}
+	require.True(t, preserved, "the dismissed row must be reinserted under its original id")
+
+	// The redrive replaced every row in place, so it announced nothing new:
+	// the outbox still holds exactly the first attempt's emissions.
+	allOutbox, err := testQueries.ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Len(t, allOutbox, len(firstOutbox), "a redrive must not re-emit webhook events for already-announced findings")
+}
+
+func riskResultIDs(rows []testrepo.RiskResult) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	return ids
+}
+
+// TestAnalyzeBatch_LegacyRandomIDRowsConverge pins the migration path for rows
+// written before row ids became deterministic: the writer matches replaced
+// rows by recomputed identity, never by stored id, so a re-analysis over
+// legacy random-id rows restores their dismissals onto the deterministic
+// reinsertions and does not re-announce findings the legacy rows already
+// announced.
+func TestAnalyzeBatch_LegacyRandomIDRowsConverge(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+
+	testQueries := testrepo.New(conn)
+	msgID, err := testQueries.InsertChatMessage(t.Context(), testrepo.InsertChatMessageParams{
+		ChatID:    td.chatID,
+		ProjectID: uuid.NullUUID{UUID: td.projectID, Valid: true},
+		Role:      "user",
+		Content:   "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd",
+	})
+	require.NoError(t, err)
+
+	// First analysis establishes the canonical rows and their announcements.
+	first := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	require.GreaterOrEqual(t, first.Findings, 1)
+
+	canonical, err := testQueries.ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, canonical)
+
+	announced, err := testQueries.ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, announced)
+
+	// Rewrite history into the pre-rollout shape: identical rows under random
+	// v7 ids, one of them dismissed by a reviewer.
+	riskQueries := riskrepo.New(conn)
+	_, err = riskQueries.DeleteRiskResultsForUnits(t.Context(), riskrepo.DeleteRiskResultsForUnitsParams{
+		RiskPolicyID:   td.policyID,
+		ProjectID:      td.projectID,
+		MessageIds:     []uuid.UUID{msgID},
+		ContentPartIds: nil,
+	})
+	require.NoError(t, err)
+
+	legacy := make([]riskrepo.InsertRiskResultsParams, 0, len(canonical))
+	for _, row := range canonical {
+		legacy = append(legacy, riskrepo.InsertRiskResultsParams{
+			ID:                uuid.Must(uuid.NewV7()),
+			ProjectID:         row.ProjectID,
+			OrganizationID:    row.OrganizationID,
+			RiskPolicyID:      row.RiskPolicyID,
+			RiskPolicyVersion: row.RiskPolicyVersion,
+			ChatMessageID:     row.ChatMessageID,
+			ChatContentPartID: row.ChatContentPartID,
+			Source:            row.Source,
+			Found:             row.Found,
+			RuleID:            row.RuleID,
+			Description:       row.Description,
+			Match:             row.Match,
+			StartPos:          row.StartPos,
+			EndPos:            row.EndPos,
+			Confidence:        row.Confidence,
+			Tags:              row.Tags,
+			Spans:             row.Spans,
+			DeadLetterReason:  row.DeadLetterReason,
+		})
+	}
+	_, err = riskQueries.InsertRiskResults(t.Context(), legacy)
+	require.NoError(t, err)
+
+	dismissed, err := riskQueries.MarkRiskResultsFalsePositive(t.Context(), riskrepo.MarkRiskResultsFalsePositiveParams{
+		ProjectID: td.projectID,
+		Ids:       []uuid.UUID{legacy[0].ID},
+		Reason:    pgtype.Text{String: "legacy dismissal", Valid: true},
+	})
+	require.NoError(t, err)
+	require.Len(t, dismissed, 1)
+
+	// Re-analysis replaces the legacy rows with deterministic ones. Identity
+	// matching must carry the dismissal over and announce nothing new.
+	second := executeAnalyzeBatch(t, conn, td, []uuid.UUID{msgID}, []string{"gitleaks"}, newFindingsPub())
+	require.Equal(t, first.Findings, second.Findings)
+
+	after, err := testQueries.ListRiskResultsAll(t.Context(), testrepo.ListRiskResultsAllParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+	})
+	require.NoError(t, err)
+	require.ElementsMatch(t, riskResultIDs(canonical), riskResultIDs(after),
+		"re-analysis over legacy rows must land back on the deterministic ids")
+
+	preserved := false
+	for _, row := range after {
+		if row.ID != canonical[0].ID {
+			continue
+		}
+		preserved = true
+		require.True(t, row.FalsePositiveAt.Valid, "a legacy row's dismissal must survive by identity, not stored id")
+		require.Equal(t, "legacy dismissal", row.FalsePositiveReason.String)
+	}
+	require.True(t, preserved)
+
+	afterOutbox, err := testQueries.ListPublishOutboxRows(t.Context())
+	require.NoError(t, err)
+	require.Len(t, afterOutbox, len(announced), "legacy rows were already announced; the re-analysis must not re-announce them")
 }

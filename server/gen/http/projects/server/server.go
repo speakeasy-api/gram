@@ -21,6 +21,7 @@ type Server struct {
 	Mounts                   []*MountPoint
 	GetProject               http.Handler
 	CreateProject            http.Handler
+	UpdateProject            http.Handler
 	ListProjects             http.Handler
 	SetLogo                  http.Handler
 	ListAllowedOrigins       http.Handler
@@ -58,6 +59,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetProject", "GET", "/rpc/projects.get"},
 			{"CreateProject", "POST", "/rpc/projects.create"},
+			{"UpdateProject", "POST", "/rpc/projects.update"},
 			{"ListProjects", "GET", "/rpc/projects.list"},
 			{"SetLogo", "POST", "/rpc/projects.setLogo"},
 			{"ListAllowedOrigins", "GET", "/rpc/projects.listAllowedOrigins"},
@@ -67,6 +69,7 @@ func New(
 		},
 		GetProject:               NewGetProjectHandler(e.GetProject, mux, decoder, encoder, errhandler, formatter),
 		CreateProject:            NewCreateProjectHandler(e.CreateProject, mux, decoder, encoder, errhandler, formatter),
+		UpdateProject:            NewUpdateProjectHandler(e.UpdateProject, mux, decoder, encoder, errhandler, formatter),
 		ListProjects:             NewListProjectsHandler(e.ListProjects, mux, decoder, encoder, errhandler, formatter),
 		SetLogo:                  NewSetLogoHandler(e.SetLogo, mux, decoder, encoder, errhandler, formatter),
 		ListAllowedOrigins:       NewListAllowedOriginsHandler(e.ListAllowedOrigins, mux, decoder, encoder, errhandler, formatter),
@@ -83,6 +86,7 @@ func (s *Server) Service() string { return "projects" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetProject = m(s.GetProject)
 	s.CreateProject = m(s.CreateProject)
+	s.UpdateProject = m(s.UpdateProject)
 	s.ListProjects = m(s.ListProjects)
 	s.SetLogo = m(s.SetLogo)
 	s.ListAllowedOrigins = m(s.ListAllowedOrigins)
@@ -98,6 +102,7 @@ func (s *Server) MethodNames() []string { return projects.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetProjectHandler(mux, h.GetProject)
 	MountCreateProjectHandler(mux, h.CreateProject)
+	MountUpdateProjectHandler(mux, h.UpdateProject)
 	MountListProjectsHandler(mux, h.ListProjects)
 	MountSetLogoHandler(mux, h.SetLogo)
 	MountListAllowedOriginsHandler(mux, h.ListAllowedOrigins)
@@ -194,6 +199,59 @@ func NewCreateProjectHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "createProject")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "projects")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUpdateProjectHandler configures the mux to serve the "projects" service
+// "updateProject" endpoint.
+func MountUpdateProjectHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/projects.update", f)
+}
+
+// NewUpdateProjectHandler creates a HTTP handler which loads the HTTP request
+// and calls the "projects" service "updateProject" endpoint.
+func NewUpdateProjectHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUpdateProjectRequest(mux, decoder)
+		encodeResponse = EncodeUpdateProjectResponse(encoder)
+		encodeError    = EncodeUpdateProjectError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "updateProject")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "projects")
 		payload, err := decodeRequest(r)
 		if err != nil {

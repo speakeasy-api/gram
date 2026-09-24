@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
-	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -46,65 +46,115 @@ func TestChallengeRowFromMessage(t *testing.T) {
 	}}, row.MatchedGrants)
 }
 
-func TestChallengeCHWriterPersistsMessage(t *testing.T) {
-	t.Parallel()
+// newChallengeCHWriter builds a writer over a live ClickHouse connection and
+// returns both so tests can assert on the rows the writer persisted.
+func newChallengeCHWriter(t *testing.T) (*ChallengeCHWriter, clickhouse.Conn) {
+	t.Helper()
 
 	conn, err := newClickhouseClient(t)
 	require.NoError(t, err)
-	writer := NewChallengeCHWriter(testenv.NewLogger(t), conn)
+
+	return NewChallengeCHWriter(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn), conn
+}
+
+func TestChallengeCHWriterPersistsMessage(t *testing.T) {
+	t.Parallel()
+
+	writer, conn := newChallengeCHWriter(t)
 	message := testChallengeMessage()
 
-	err = writer.Handle(t.Context(), message, gcp.MessageMetadata{
-		ID:              "message-id",
-		Attributes:      nil,
-		DeliveryAttempt: nil,
-	})
-	require.NoError(t, err)
+	failed := writer.processBatch(t.Context(), []*authzv1.Challenge{message})
+	require.Equal(t, []error{nil}, failed)
 
 	var count uint64
-	err = conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
+	err := conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), count)
+}
+
+func TestChallengeCHWriterPersistsBatch(t *testing.T) {
+	t.Parallel()
+
+	writer, conn := newChallengeCHWriter(t)
+	first := testChallengeMessage()
+	second := testChallengeMessage()
+
+	failed := writer.processBatch(t.Context(), []*authzv1.Challenge{first, second})
+	require.Equal(t, []error{nil, nil}, failed)
+
+	var count uint64
+	err := conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id IN (?, ?)`, first.GetId(), second.GetId()).Scan(&count)
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), count)
+}
+
+// A poison record must not cost the batch its valid rows: the writer drops the
+// bad message and inserts the rest.
+func TestChallengeCHWriterSkipsInvalidMessageInBatch(t *testing.T) {
+	t.Parallel()
+
+	writer, conn := newChallengeCHWriter(t)
+	valid := testChallengeMessage()
+	invalid := testChallengeMessage()
+	invalid.SetTraceId(strings.Repeat("a", maxChallengeTraceIDBytes+1))
+
+	failed := writer.processBatch(t.Context(), []*authzv1.Challenge{invalid, valid})
+	require.Equal(t, []error{nil, nil}, failed)
+
+	var validCount uint64
+	err := conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, valid.GetId()).Scan(&validCount)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), validCount)
+
+	var invalidCount uint64
+	err = conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, invalid.GetId()).Scan(&invalidCount)
+	require.NoError(t, err)
+	require.Zero(t, invalidCount)
+}
+
+// A failing insert says nothing about a poison record, so the poison keeps its
+// nil entry and is acknowledged while only the rows the insert covered redeliver.
+func TestChallengeCHWriterDropsPoisonWhenInsertFails(t *testing.T) {
+	t.Parallel()
+
+	writer, _ := newChallengeCHWriter(t)
+	invalid := testChallengeMessage()
+	invalid.SetTraceId(strings.Repeat("a", maxChallengeTraceIDBytes+1))
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	failed := writer.processBatch(ctx, []*authzv1.Challenge{invalid, testChallengeMessage()})
+	require.Len(t, failed, 2)
+	require.NoError(t, failed[0])
+	require.ErrorContains(t, failed[1], "insert authz challenges")
 }
 
 func TestChallengeCHWriterAcknowledgesInvalidMessage(t *testing.T) {
 	t.Parallel()
 
-	conn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	writer := NewChallengeCHWriter(testenv.NewLogger(t), conn)
+	writer, _ := newChallengeCHWriter(t)
 	id := "not-a-uuid"
 	timestamp := time.Now().UTC().Format(time.RFC3339Nano)
 
-	err = writer.Handle(t.Context(), authzv1.Challenge_builder{
+	failed := writer.processBatch(t.Context(), []*authzv1.Challenge{authzv1.Challenge_builder{
 		Id:        &id,
 		Timestamp: &timestamp,
-	}.Build(), gcp.MessageMetadata{
-		ID:              "message-id",
-		Attributes:      nil,
-		DeliveryAttempt: nil,
-	})
-	require.NoError(t, err)
+	}.Build()})
+	require.Equal(t, []error{nil}, failed)
 }
 
 func TestChallengeCHWriterAcknowledgesOverlongTraceID(t *testing.T) {
 	t.Parallel()
 
-	conn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	writer := NewChallengeCHWriter(testenv.NewLogger(t), conn)
+	writer, conn := newChallengeCHWriter(t)
 	message := testChallengeMessage()
 	message.SetTraceId(strings.Repeat("a", maxChallengeTraceIDBytes+1))
 
-	err = writer.Handle(t.Context(), message, gcp.MessageMetadata{
-		ID:              "message-id",
-		Attributes:      nil,
-		DeliveryAttempt: nil,
-	})
-	require.NoError(t, err)
+	failed := writer.processBatch(t.Context(), []*authzv1.Challenge{message})
+	require.Equal(t, []error{nil}, failed)
 
 	var count uint64
-	err = conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
+	err := conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
 	require.NoError(t, err)
 	require.Zero(t, count)
 }
@@ -112,21 +162,15 @@ func TestChallengeCHWriterAcknowledgesOverlongTraceID(t *testing.T) {
 func TestChallengeCHWriterAcknowledgesOverlongSpanID(t *testing.T) {
 	t.Parallel()
 
-	conn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	writer := NewChallengeCHWriter(testenv.NewLogger(t), conn)
+	writer, conn := newChallengeCHWriter(t)
 	message := testChallengeMessage()
 	message.SetSpanId(strings.Repeat("a", maxChallengeSpanIDBytes+1))
 
-	err = writer.Handle(t.Context(), message, gcp.MessageMetadata{
-		ID:              "message-id",
-		Attributes:      nil,
-		DeliveryAttempt: nil,
-	})
-	require.NoError(t, err)
+	failed := writer.processBatch(t.Context(), []*authzv1.Challenge{message})
+	require.Equal(t, []error{nil}, failed)
 
 	var count uint64
-	err = conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
+	err := conn.QueryRow(t.Context(), `SELECT count() FROM authz_challenges WHERE id = ?`, message.GetId()).Scan(&count)
 	require.NoError(t, err)
 	require.Zero(t, count)
 }
@@ -134,18 +178,13 @@ func TestChallengeCHWriterAcknowledgesOverlongSpanID(t *testing.T) {
 func TestChallengeCHWriterRetriesClickHouseFailure(t *testing.T) {
 	t.Parallel()
 
-	conn, err := newClickhouseClient(t)
-	require.NoError(t, err)
-	writer := NewChallengeCHWriter(testenv.NewLogger(t), conn)
+	writer, _ := newChallengeCHWriter(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	err = writer.Handle(ctx, testChallengeMessage(), gcp.MessageMetadata{
-		ID:              "message-id",
-		Attributes:      nil,
-		DeliveryAttempt: nil,
-	})
-	require.ErrorContains(t, err, "insert authz challenge")
+	failed := writer.processBatch(ctx, []*authzv1.Challenge{testChallengeMessage()})
+	require.Len(t, failed, 1)
+	require.ErrorContains(t, failed[0], "insert authz challenges")
 }
 
 func testChallengeMessage() *authzv1.Challenge {

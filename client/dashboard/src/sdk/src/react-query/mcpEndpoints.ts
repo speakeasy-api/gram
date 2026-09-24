@@ -59,7 +59,7 @@ export type McpEndpointsQueryError =
  * listMcpEndpoints mcpEndpoints
  *
  * @remarks
- * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.
+ * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server or meta MCP server (not both).
  */
 export function useMcpEndpoints(
   request?: ListMcpEndpointsRequest | undefined,
@@ -82,7 +82,7 @@ export function useMcpEndpoints(
  * listMcpEndpoints mcpEndpoints
  *
  * @remarks
- * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server.
+ * List MCP endpoints for a project. Optionally filter to only those associated with a specific MCP server or meta MCP server (not both).
  */
 export function useMcpEndpointsSuspense(
   request?: ListMcpEndpointsRequest | undefined,
@@ -109,6 +109,7 @@ export function setMcpEndpointsData(
   queryKeyBase: [
     parameters: {
       mcpServerId?: string | undefined;
+      metaMcpServerId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -126,6 +127,7 @@ export function invalidateMcpEndpoints(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       mcpServerId?: string | undefined;
+      metaMcpServerId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

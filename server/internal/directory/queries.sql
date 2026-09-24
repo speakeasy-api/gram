@@ -290,6 +290,29 @@ WHERE du.organization_id = @organization_id
   AND attribute.value IS NOT NULL
 ORDER BY email, attribute.key, attribute.value;
 
+-- name: ResolveIDJAGUsersByEmail :many
+-- The directory row is the provisioning gate. A stored user_id wins; only a
+-- NULL link falls back to live email matching. Both paths require an active
+-- Gram user and active membership in the same organization. Two distinct
+-- matches are returned so the caller can fail closed on ambiguity.
+SELECT DISTINCT candidate.id AS user_id
+FROM directory_users AS du
+JOIN users AS candidate
+  ON (du.user_id IS NOT NULL AND candidate.id = du.user_id)
+  OR (du.user_id IS NULL AND LOWER(candidate.email) = LOWER(du.email))
+JOIN organization_user_relationships AS membership
+  ON membership.user_id = candidate.id
+  AND membership.organization_id = du.organization_id
+  AND membership.deleted_at IS NULL
+WHERE du.organization_id = @organization_id
+  AND LOWER(du.email) = LOWER(@email)
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND candidate.deleted_at IS NULL
+  AND candidate.workos_deleted_at IS NULL
+ORDER BY candidate.id
+LIMIT 2;
+
 -- name: DirectoryAttributeValueExists :one
 SELECT EXISTS(
   SELECT 1
@@ -330,6 +353,25 @@ WHERE dg.organization_id = @organization_id
 GROUP BY dg.id, dg.name
 ORDER BY dg.name, dg.id;
 
+-- name: ListActiveDirectoryGroupMemberEmails :many
+SELECT DISTINCT LOWER(du.email) AS email
+FROM directory_users AS du
+JOIN directory_user_group_memberships AS m
+  ON m.directory_user_id = du.id
+  AND m.deleted IS FALSE
+JOIN directory_groups AS dg
+  ON dg.id = m.directory_group_id
+  AND dg.organization_id = du.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE dg.id = @directory_group_id
+  AND du.organization_id = @organization_id
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND du.email IS NOT NULL
+  AND TRIM(du.email) != ''
+ORDER BY email;
+
 -- name: ListActiveDirectoryAttributeValues :many
 SELECT
   attribute.key::text AS attribute_key,
@@ -348,3 +390,17 @@ WHERE du.organization_id = @organization_id
   AND attribute.value IS NOT NULL
 GROUP BY attribute.key, attribute.value
 ORDER BY attribute.key, attribute.value;
+
+-- name: ClearOrganizationDirectoryUserLinksFixture :exec
+-- Test fixture: exercise email fallback without a direct Gram user link.
+UPDATE directory_users SET user_id = NULL WHERE organization_id = @organization_id;
+
+-- name: SetOrganizationDirectoryUserDeletionFixture :exec
+-- Test fixture: independently exercise local and upstream deletion markers.
+UPDATE directory_users
+SET deleted_at = CASE WHEN @local_deleted::boolean THEN clock_timestamp() ELSE deleted_at END,
+    workos_deleted_at = CASE WHEN @workos_deleted::boolean THEN clock_timestamp() ELSE workos_deleted_at END
+WHERE organization_id = @organization_id;
+
+-- name: DeleteOrganizationDirectoryUsersFixture :exec
+DELETE FROM directory_users WHERE organization_id = @organization_id;

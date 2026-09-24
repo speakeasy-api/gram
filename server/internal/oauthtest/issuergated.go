@@ -94,6 +94,7 @@ func CreateIssuerGatedToolset(
 
 	usi, err := usersRepo.CreateUserSessionIssuer(ctx, usersessions_repo.CreateUserSessionIssuerParams{
 		ProjectID:          *authCtx.ProjectID,
+		OrganizationID:     conv.ToPGText(authCtx.ActiveOrganizationID),
 		Slug:               "usi-" + suffix,
 		AuthnChallengeMode: mode,
 		SessionDuration: pgtype.Interval{

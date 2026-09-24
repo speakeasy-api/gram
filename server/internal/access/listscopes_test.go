@@ -17,7 +17,7 @@ func TestService_ListScopes(t *testing.T) {
 
 	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Scopes, 27)
+	require.Len(t, result.Scopes, 35)
 
 	bySlug := make(map[string]*gen.ScopeDefinition, len(result.Scopes))
 	for _, scope := range result.Scopes {
@@ -31,9 +31,18 @@ func TestService_ListScopes(t *testing.T) {
 	require.Equal(t, "environment", bySlug[string(authz.ScopeEnvironmentWrite)].ResourceType)
 	require.Equal(t, "skill", bySlug[string(authz.ScopeSkillRead)].ResourceType)
 	require.Equal(t, "skill", bySlug[string(authz.ScopeSkillWrite)].ResourceType)
+	require.Equal(t, "project", bySlug[string(authz.ScopePluginWrite)].ResourceType)
+	require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(authz.ScopePluginWrite)].Visibility)
+	require.Equal(t, string(authz.ScopePluginBlockedWrite), *bySlug[string(authz.ScopePluginWrite)].ExclusionScope)
+	require.Equal(t, authz.ScopeVisibilityInternal, bySlug[string(authz.ScopePluginBlockedWrite)].Visibility)
 	require.Equal(t, "risk_policy", bySlug[string(authz.ScopeRiskPolicyEvaluate)].ResourceType)
 	require.Equal(t, "risk_policy", bySlug[string(authz.ScopeRiskPolicyBypass)].ResourceType)
 	require.Equal(t, "chat", bySlug[string(authz.ScopeChatRead)].ResourceType)
+	for _, scope := range []authz.Scope{authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer} {
+		require.Equal(t, "agent", bySlug[string(scope)].ResourceType)
+		require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(scope)].Visibility)
+		require.Nil(t, bySlug[string(scope)].ExclusionScope)
+	}
 	require.Equal(t, "Read organization metadata and members.", bySlug[string(authz.ScopeOrgRead)].Description)
 	require.Equal(t, authz.ScopeVisibilityUserVisible, bySlug[string(authz.ScopeProjectWrite)].Visibility)
 	require.Equal(t, authz.ScopeVisibilityInternal, bySlug[string(authz.ScopeProjectBlockedWrite)].Visibility)
@@ -50,6 +59,15 @@ func TestService_ListScopes(t *testing.T) {
 	require.NotNil(t, bySlug[string(authz.ScopeRiskPolicyEvaluate)].ExclusionScope)
 	require.Equal(t, string(authz.ScopeRiskPolicyBypass), *bySlug[string(authz.ScopeRiskPolicyEvaluate)].ExclusionScope)
 	require.Nil(t, bySlug[string(authz.ScopeRiskPolicyBypass)].ExclusionScope)
+
+	// Agent eligibility mirrors the agent runtime scope registry: a role may
+	// carry scopes its agent members cannot hold, and the editor says so.
+	for _, scope := range []authz.Scope{authz.ScopeMCPConnect, authz.ScopeMCPRead, authz.ScopeMCPWrite, authz.ScopeProjectRead, authz.ScopeSkillWrite, authz.ScopeRiskPolicyEvaluate} {
+		require.True(t, bySlug[string(scope)].AgentEligible, scope)
+	}
+	for _, scope := range []authz.Scope{authz.ScopeOrgAdmin, authz.ScopeOrgRead, authz.ScopeChatRead, authz.ScopeAgentWrite, authz.ScopeRiskPolicyBypass, authz.ScopeMCPBlockedConnect} {
+		require.False(t, bySlug[string(scope)].AgentEligible, scope)
+	}
 }
 
 func TestService_ListScopes_Unauthorized(t *testing.T) {

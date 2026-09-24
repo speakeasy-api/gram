@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
@@ -205,6 +207,67 @@ func TestGetInferenceSpendCapsListsOnlyMaterializedPlatformKeys(t *testing.T) {
 	credits.mu.Lock()
 	defer credits.mu.Unlock()
 	require.ElementsMatch(t, []openrouter.KeyType{openrouter.KeyTypeChat, openrouter.KeyTypeInternal}, credits.calls)
+}
+
+func TestDisablePaygOpenRouterChatKeyPreservesClassification(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		disableCauses []string
+		wantCauses    []string
+	}{
+		{name: "legacy unclassified", disableCauses: nil, wantCauses: nil},
+		{name: "classified empty", disableCauses: []string{}, wantCauses: []string{"billing_inactive"}},
+		{name: "classified admin lock", disableCauses: []string{"admin_lock"}, wantCauses: []string{"admin_lock", "billing_inactive"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			organizationID := "org-billing-loss-" + uuid.NewString()[:8]
+			_, db, _, _ := newTUMTestService(t, organizationID)
+			createUsageInferenceKey(t, db, organizationID, openrouter.KeyTypeChat, 100)
+			require.NoError(t, testrepo.New(db).SetOpenRouterAPIKeyClassificationFixture(t.Context(), testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{
+				OrganizationID: organizationID,
+				KeyType:        string(openrouter.KeyTypeChat),
+				Disabled:       false,
+				DisableCauses:  tt.disableCauses,
+			}))
+
+			queries := repo.New(db)
+			require.NoError(t, queries.DisablePaygOpenRouterChatKey(t.Context(), organizationID))
+			require.NoError(t, queries.DisablePaygOpenRouterChatKey(t.Context(), organizationID), "billing loss must be idempotent")
+
+			row, err := openrouterrepo.New(db).GetOpenRouterAPIKey(t.Context(), openrouterrepo.GetOpenRouterAPIKeyParams{
+				OrganizationID: organizationID,
+				KeyType:        string(openrouter.KeyTypeChat),
+			})
+			require.NoError(t, err)
+			require.True(t, row.Disabled)
+			require.Equal(t, tt.wantCauses, row.DisableCauses)
+		})
+	}
+}
+
+func TestMaterializedInferenceKeyReadsUseEffectiveDisabledCompatibility(t *testing.T) {
+	t.Parallel()
+
+	organizationID := "org-inference-cap-compat"
+	_, db, _, _ := newTUMTestService(t, organizationID)
+	createUsageInferenceKey(t, db, organizationID, openrouter.KeyTypeChat, 100)
+	err := testrepo.New(db).SetOpenRouterAPIKeyClassificationFixture(t.Context(), testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: organizationID, KeyType: string(openrouter.KeyTypeChat), Disabled: true, DisableCauses: []string{}})
+	require.NoError(t, err)
+
+	key, err := repo.New(db).GetMaterializedOpenRouterInferenceKey(t.Context(), repo.GetMaterializedOpenRouterInferenceKeyParams{OrganizationID: organizationID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.False(t, key.Disabled)
+
+	err = testrepo.New(db).SetOpenRouterAPIKeyClassificationFixture(t.Context(), testrepo.SetOpenRouterAPIKeyClassificationFixtureParams{OrganizationID: organizationID, KeyType: string(openrouter.KeyTypeChat), Disabled: false, DisableCauses: []string{"billing_inactive"}})
+	require.NoError(t, err)
+	key, err = repo.New(db).GetMaterializedOpenRouterInferenceKey(t.Context(), repo.GetMaterializedOpenRouterInferenceKeyParams{OrganizationID: organizationID, KeyType: "chat"})
+	require.NoError(t, err)
+	require.True(t, key.Disabled)
 }
 
 func TestGetInferenceSpendCapsReturnsEmptyBeforeKeyMaterialization(t *testing.T) {

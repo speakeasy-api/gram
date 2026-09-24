@@ -10,6 +10,21 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
+ * The network surfaces through which a Gram-hosted MCP server may be reached.
+ */
+export const McpServerNetworkAccessMode = {
+  PublicOnly: "public_only",
+  Dual: "dual",
+  PrivateOnly: "private_only",
+} as const;
+/**
+ * The network surfaces through which a Gram-hosted MCP server may be reached.
+ */
+export type McpServerNetworkAccessMode = ClosedEnum<
+  typeof McpServerNetworkAccessMode
+>;
+
+/**
  * The visibility of an MCP server
  */
 export const McpServerVisibility = {
@@ -42,6 +57,10 @@ export type McpServer = {
    * A human-readable display name for the server
    */
   name?: string | undefined;
+  /**
+   * The network surfaces through which a Gram-hosted MCP server may be reached.
+   */
+  networkAccessMode: McpServerNetworkAccessMode;
   /**
    * The project ID this MCP server belongs to
    */
@@ -85,6 +104,11 @@ export type McpServer = {
 };
 
 /** @internal */
+export const McpServerNetworkAccessMode$inboundSchema: z.ZodMiniEnum<
+  typeof McpServerNetworkAccessMode
+> = z.enum(McpServerNetworkAccessMode);
+
+/** @internal */
 export const McpServerVisibility$inboundSchema: z.ZodMiniEnum<
   typeof McpServerVisibility
 > = z.enum(McpServerVisibility);
@@ -100,6 +124,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       environment_id: z.optional(z.string()),
       id: z.string(),
       name: z.optional(z.string()),
+      network_access_mode: McpServerNetworkAccessMode$inboundSchema,
       project_id: z.string(),
       remote_mcp_server_id: z.optional(z.string()),
       slug: z.optional(z.string()),
@@ -118,6 +143,7 @@ export const McpServer$inboundSchema: z.ZodMiniType<McpServer, unknown> = z
       return remap$(v, {
         "created_at": "createdAt",
         "environment_id": "environmentId",
+        "network_access_mode": "networkAccessMode",
         "project_id": "projectId",
         "remote_mcp_server_id": "remoteMcpServerId",
         "tool_variations_group_id": "toolVariationsGroupId",

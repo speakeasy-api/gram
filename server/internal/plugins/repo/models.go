@@ -49,22 +49,25 @@ type PluginGithubConnection struct {
 }
 
 type PluginServer struct {
-	ID          uuid.UUID
-	PluginID    uuid.UUID
-	ToolsetID   uuid.NullUUID
-	McpServerID uuid.NullUUID
-	DisplayName string
-	Policy      string
-	SortOrder   int32
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	DeletedAt   pgtype.Timestamptz
-	Deleted     bool
+	ID              uuid.UUID
+	PluginID        uuid.UUID
+	ProjectID       uuid.NullUUID
+	ToolsetID       uuid.NullUUID
+	McpServerID     uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+	DisplayName     string
+	Policy          string
+	SortOrder       int32
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type ProjectMarketplaceSetting struct {
-	ProjectID       uuid.UUID
-	MarketplaceName pgtype.Text
-	CreatedAt       pgtype.Timestamptz
-	UpdatedAt       pgtype.Timestamptz
+	ProjectID            uuid.UUID
+	MarketplaceName      pgtype.Text
+	ObservabilityEnabled pgtype.Bool
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
 }

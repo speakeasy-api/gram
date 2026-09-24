@@ -41,6 +41,44 @@ func ValidateStrictJSONRPCBody(raw []byte) error {
 	return nil
 }
 
+// hasTopLevelJSONRPCMethod reports whether any top-level method member names
+// target. It intentionally preserves duplicate members so strict private
+// requests cannot hide a tools/call from method preflight by placing another
+// method later in the object.
+func hasTopLevelJSONRPCMethod(raw []byte, target string) bool {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	tok, err := dec.Token()
+	if err != nil || tok != json.Delim('{') {
+		return false
+	}
+
+	for dec.More() {
+		keyTok, err := dec.Token()
+		if err != nil {
+			return false
+		}
+		key, ok := keyTok.(string)
+		if !ok {
+			return false
+		}
+
+		var value json.RawMessage
+		if err := dec.Decode(&value); err != nil {
+			return false
+		}
+		if key != "method" {
+			continue
+		}
+
+		var method string
+		if json.Unmarshal(value, &method) == nil && method == target {
+			return true
+		}
+	}
+
+	return false
+}
+
 // validateStrictValue consumes one complete JSON value from dec, failing on
 // duplicate object member names at any depth. EOF here is mid-structure —
 // truncated input — and reads as an error, unlike the empty-body case the

@@ -267,7 +267,7 @@ func liveRelationshipForDeprovision(ctx context.Context, dbtx database.DBTX, org
 // Postgres only, so cached org access lingers until the cache TTL expires.
 func deprovisionOrganizationAccess(ctx context.Context, dbtx database.DBTX, organizationID, gramUserID string, rel orgrepo.OrganizationUserRelationship, eventUpdatedAt time.Time) error {
 	repo := orgrepo.New(dbtx)
-	if err := repo.MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
+	if _, err := repo.MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
 		OrganizationID:     organizationID,
 		UserID:             conv.ToPGTextEmpty(gramUserID),
 		WorkosUserID:       conv.ToPGTextEmpty(rel.WorkosUserID.String),

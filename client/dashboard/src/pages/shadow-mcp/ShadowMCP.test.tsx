@@ -88,9 +88,16 @@ vi.mock("@/components/ui/Skeleton", () => ({
 
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
-    shadowMCP: {
-      detail: {
-        href: (serverURL: string) => `/shadow-mcp/${serverURL}`,
+    shadowAI: {
+      harnesses: { href: () => "/shadow-ai/harnesses" },
+      assistants: { href: () => "/shadow-ai/assistants" },
+      models: { href: () => "/shadow-ai/models" },
+      mcps: {
+        href: () => "/shadow-ai/mcps",
+        detail: {
+          href: (serverURL: string) => `/shadow-ai/mcps/${serverURL}`,
+          goTo: () => undefined,
+        },
       },
     },
   }),
@@ -101,17 +108,15 @@ vi.mock("@/components/shadow-mcp/ShadowMCPInventoryTable", () => ({
     members,
     roles,
     shadowMCPPolicies,
-    policyState,
     projectID,
   }: {
     members: Array<{ name: string }>;
     roles: Array<{ name: string }>;
     shadowMCPPolicies: Array<{ id: string }>;
-    policyState: string;
     projectID: string;
   }) => (
     <div>
-      Shadow MCP inventory for {projectID} with policy {policyState}
+      Shadow MCP inventory for {projectID}
       <span>
         Shadow MCP policies:{" "}
         {shadowMCPPolicies.map((policy) => policy.id).join(",") || "none"}
@@ -158,8 +163,12 @@ describe("ShadowMCP", () => {
       name: "Demo",
       slug: "demo",
     });
+    // The tab is reachable at project read now; org admin still gates every
+    // action on it.
+    const granted = ["org:admin", "project:read", "project:write"];
     mocks.useRBAC.mockReturnValue({
-      hasAnyScope: (scopes: string[]) => scopes.includes("org:admin"),
+      hasAnyScope: (scopes: string[]) =>
+        scopes.some((scope) => granted.includes(scope)),
       hasAllScopes: () => true,
       isLoading: false,
     });
@@ -183,7 +192,7 @@ describe("ShadowMCP", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("heading", { name: "Shadow MCP" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "MCPs" })).toBeTruthy();
     expect(
       screen.getByText(/Every MCP server this project knows about/),
     ).toBeTruthy();
@@ -193,9 +202,7 @@ describe("ShadowMCP", () => {
         "No policy is enabled. All Shadow MCP servers are allowed.",
       ),
     ).toBeTruthy();
-    expect(
-      screen.getByText("Shadow MCP inventory for project-1 with policy none"),
-    ).toBeTruthy();
+    expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
   });
 
   it("blocks inventory rendering until policy data loads", () => {
@@ -248,11 +255,7 @@ describe("ShadowMCP", () => {
         "Block policy is enabled. Servers without allow rules are not allowed.",
       ),
     ).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Shadow MCP inventory for project-1 with policy blocking",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
     expect(
       screen.getByText("Shadow MCP policies: block-policy-1"),
     ).toBeTruthy();
@@ -279,11 +282,7 @@ describe("ShadowMCP", () => {
         "Warn policy is enabled. Users must acknowledge warnings before continuing.",
       ),
     ).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Shadow MCP inventory for project-1 with policy warning",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
   });
 
   it("renders flagging policy status when no blocking policy is enabled", () => {
@@ -305,11 +304,7 @@ describe("ShadowMCP", () => {
         "Flagging policy is enabled. Servers without allow rules are only flagged.",
       ),
     ).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Shadow MCP inventory for project-1 with policy flagging",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
   });
 
   it("renders no policy when no enabled Shadow MCP policy exists", () => {
@@ -331,9 +326,7 @@ describe("ShadowMCP", () => {
     );
 
     expect(screen.getByText("No Policy")).toBeTruthy();
-    expect(
-      screen.getByText("Shadow MCP inventory for project-1 with policy none"),
-    ).toBeTruthy();
+    expect(screen.getByText("Shadow MCP inventory for project-1")).toBeTruthy();
     expect(screen.getByText("Shadow MCP policies: none")).toBeTruthy();
   });
 });

@@ -13,8 +13,8 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { Text } from "@/components/ui/Text";
-import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
-import { useOrgRoutes } from "@/routes";
+import { useOrganization } from "@/contexts/Auth";
+import { useIssuerHref } from "./useIssuerHref";
 import type { OrganizationRemoteSessionIssuer } from "@gram/client/models/components/organizationremotesessionissuer.js";
 import { useDeleteOrganizationRemoteSessionIssuerMutation } from "@gram/client/react-query/deleteOrganizationRemoteSessionIssuer.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
@@ -65,8 +65,6 @@ export function RemoteIdentityProvidersPage(): JSX.Element {
 
 function RemoteIdentityProvidersOverview() {
   const queryClient = useQueryClient();
-  const orgRoutes = useOrgRoutes();
-  const isPlatformAdmin = useIsPlatformAdmin();
   const { data, isLoading } = useOrganizationRemoteSessionIssuers({});
   const [deleteTarget, setDeleteTarget] =
     useState<OrganizationRemoteSessionIssuer | null>(null);
@@ -239,22 +237,6 @@ function RemoteIdentityProvidersOverview() {
                   Servers.
                 </Text>
               </div>
-              {/* Platform admins curate these on their own page. The CTA is the
-                  only platform-admin-aware chrome on this tenant surface, and it
-                  is a link — it grants nothing that the catalog page does not
-                  gate again on its own. */}
-              {isPlatformAdmin ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="shrink-0"
-                  onClick={() =>
-                    orgRoutes.platformRemoteIdentityProviders.goTo()
-                  }
-                >
-                  <Button.Text>Manage Platform Providers</Button.Text>
-                </Button>
-              ) : null}
             </Stack>
             <IssuerTable
               items={platform}
@@ -351,7 +333,7 @@ function IssuerTable({
   onRefreshMetadata: (item: OrganizationRemoteSessionIssuer) => void;
   refreshPending: boolean;
 }) {
-  const orgRoutes = useOrgRoutes();
+  const issuerHref = useIssuerHref();
 
   const showActions = !readOnly || !!onAddClient;
   const actionsHeader = showActions ? [{ label: "" }] : [];
@@ -397,9 +379,7 @@ function IssuerTable({
               />
             )
           }
-          href={orgRoutes.remoteIdentityProviders.issuerDetail.href(
-            item.issuer.id,
-          )}
+          href={issuerHref(item.issuer)}
           ariaLabel={`View remote identity provider ${issuerDisplayName(item.issuer)}`}
         >
           <td className="px-3 py-3">

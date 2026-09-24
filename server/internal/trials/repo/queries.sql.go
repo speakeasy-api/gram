@@ -11,6 +11,46 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const changeTrialEndDate = `-- name: ChangeTrialEndDate :one
+WITH previous AS (
+    SELECT trials.organization_id, trials.ends_at
+    FROM trials
+    WHERE trials.organization_id = $2
+      AND trials.converted_at IS NULL
+      AND trials.demoted_at IS NULL
+      AND trials.ends_at > clock_timestamp()
+    FOR UPDATE
+)
+UPDATE trials
+SET ends_at = $1::timestamptz,
+    updated_at = clock_timestamp()
+FROM previous
+WHERE trials.organization_id = previous.organization_id
+  AND previous.ends_at > clock_timestamp()
+  AND $1::timestamptz > clock_timestamp()
+RETURNING previous.ends_at AS previous_ends_at, trials.ends_at
+`
+
+type ChangeTrialEndDateParams struct {
+	EndsAt         pgtype.Timestamptz
+	OrganizationID string
+}
+
+type ChangeTrialEndDateRow struct {
+	PreviousEndsAt pgtype.Timestamptz
+	EndsAt         pgtype.Timestamptz
+}
+
+// Lock before checking lifecycle state, just as ExtendTrial does. Validate the
+// requested and locked previous ends again after acquiring the lock. A blocker
+// may roll back without changing the row after its old deadline has passed.
+func (q *Queries) ChangeTrialEndDate(ctx context.Context, arg ChangeTrialEndDateParams) (ChangeTrialEndDateRow, error) {
+	row := q.db.QueryRow(ctx, changeTrialEndDate, arg.EndsAt, arg.OrganizationID)
+	var i ChangeTrialEndDateRow
+	err := row.Scan(&i.PreviousEndsAt, &i.EndsAt)
+	return i, err
+}
+
 const createTrial = `-- name: CreateTrial :exec
 INSERT INTO trials (organization_id, tier, ends_at)
 VALUES ($1, $2, $3)
@@ -284,6 +324,33 @@ func (q *Queries) ListExpiredTrials(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const lockTrialLifecycle = `-- name: LockTrialLifecycle :one
+SELECT tier, ends_at, converted_at, demoted_at
+FROM trials
+WHERE organization_id = $1
+FOR UPDATE
+`
+
+type LockTrialLifecycleRow struct {
+	Tier        string
+	EndsAt      pgtype.Timestamptz
+	ConvertedAt pgtype.Timestamptz
+	DemotedAt   pgtype.Timestamptz
+}
+
+// Lifecycle operations lock this row before taking OpenRouter advisory locks.
+func (q *Queries) LockTrialLifecycle(ctx context.Context, organizationID string) (LockTrialLifecycleRow, error) {
+	row := q.db.QueryRow(ctx, lockTrialLifecycle, organizationID)
+	var i LockTrialLifecycleRow
+	err := row.Scan(
+		&i.Tier,
+		&i.EndsAt,
+		&i.ConvertedAt,
+		&i.DemotedAt,
+	)
+	return i, err
+}
+
 const markTrialConverted = `-- name: MarkTrialConverted :execrows
 UPDATE trials
 SET converted_at = clock_timestamp(),
@@ -356,9 +423,6 @@ type RearmTrialRow struct {
 // ends_at moves to a window measured from now, not left where it is:
 // MarkTrialDemoted only demotes an already-past ends_at, so clearing demoted_at
 // alone leaves a row the next sweep demotes again.
-//
-// converted_at IS NULL guards nothing today, because MarkTrialConverted has no
-// production caller. It is written for the conversion path that will (AGE-3218).
 func (q *Queries) RearmTrial(ctx context.Context, arg RearmTrialParams) (RearmTrialRow, error) {
 	row := q.db.QueryRow(ctx, rearmTrial, arg.RearmForDays, arg.OrganizationID)
 	var i RearmTrialRow
@@ -392,5 +456,72 @@ func (q *Queries) RestoreOrganizationFromTrial(ctx context.Context, arg RestoreO
 	row := q.db.QueryRow(ctx, restoreOrganizationFromTrial, arg.AccountType, arg.OrganizationID)
 	var i RestoreOrganizationFromTrialRow
 	err := row.Scan(&i.Name, &i.Slug)
+	return i, err
+}
+
+const startTrial = `-- name: StartTrial :one
+WITH org AS (
+    SELECT organization_metadata.id
+    FROM organization_metadata
+    WHERE organization_metadata.id = $3
+    FOR UPDATE
+), existing AS (
+    SELECT trials.organization_id, trials.converted_at, trials.demoted_at, trials.ends_at
+    FROM trials
+    WHERE trials.organization_id = $3
+    FOR UPDATE
+)
+INSERT INTO trials (organization_id, tier, ends_at)
+SELECT org.id, $1, clock_timestamp() + make_interval(days => $2::int)
+FROM org
+LEFT JOIN existing ON existing.organization_id = org.id
+WHERE existing.organization_id IS NULL
+   OR (
+        existing.converted_at IS NULL
+        AND existing.demoted_at IS NULL
+        AND existing.ends_at <= clock_timestamp()
+   )
+ON CONFLICT (organization_id) DO UPDATE
+SET tier = EXCLUDED.tier,
+    ends_at = EXCLUDED.ends_at,
+    updated_at = clock_timestamp()
+WHERE trials.converted_at IS NULL
+  AND trials.demoted_at IS NULL
+  AND trials.ends_at <= clock_timestamp()
+RETURNING tier, ends_at
+`
+
+type StartTrialParams struct {
+	Tier           string
+	StartForDays   int32
+	OrganizationID string
+}
+
+type StartTrialRow struct {
+	Tier   string
+	EndsAt pgtype.Timestamptz
+}
+
+// Operator-initiated grant of a new enterprise trial. Inserts when the
+// organization has never trialled, or resets an expired (not converted, not
+// demoted, already-past ends_at) trial to a fresh runway counted from now.
+//
+// Demoted trials are re-arm's job: they also need keys revived and the account
+// type restored from a stamp this statement would not see. Running trials are
+// extend's job. Converted trials have become a contract.
+//
+// ends_at is measured from now rather than from a previous date: an expired
+// trial's old ends_at is already past, and adding days to it can leave a row
+// the next sweep demotes again.
+//
+// The organization row is locked first so a missing id and a blocked trial
+// state both come back as zero rows; the handler tells those apart the same
+// way extend and re-arm do. The trial row is locked when it exists so a
+// concurrent conversion or demotion cannot be overwritten once this statement
+// unblocks.
+func (q *Queries) StartTrial(ctx context.Context, arg StartTrialParams) (StartTrialRow, error) {
+	row := q.db.QueryRow(ctx, startTrial, arg.Tier, arg.StartForDays, arg.OrganizationID)
+	var i StartTrialRow
+	err := row.Scan(&i.Tier, &i.EndsAt)
 	return i, err
 }

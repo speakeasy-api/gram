@@ -1,9 +1,20 @@
 package gram
 
 import (
+	"context"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/marketplace"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestPlatformMCPLocalFixtureConfigIsEnabledByDefaultLocally(t *testing.T) {
@@ -30,4 +41,87 @@ func TestPlatformMCPLocalFixtureConfigDoesNotLeakOutsideLocal(t *testing.T) {
 	fixture, err := platformMCPLocalFixtureConfigFromCLI("production", "https://localhost:8080")
 	require.NoError(t, err)
 	require.Nil(t, fixture)
+}
+
+type allowingPlatformMCPBudget struct{}
+
+func (allowingPlatformMCPBudget) Allow(context.Context, string) (ratelimit.Result, error) {
+	return ratelimit.Result{Allowed: true}, nil
+}
+func (allowingPlatformMCPBudget) AllowN(context.Context, string, int) (ratelimit.Result, error) {
+	return ratelimit.Result{Allowed: true}, nil
+}
+
+// The Shadow AI reads attach separately from the Shadow MCP inventory, so an
+// unrelated failure in one cannot report the other unavailable. Both halves
+// are held to a live org:admin recheck rather than the session that installed
+// the package, which is what this stub stands in for.
+type stubLiveOrgAdminAuthorizer struct{}
+
+func (stubLiveOrgAdminAuthorizer) PrepareExternalContext(ctx context.Context, principal platformmcp.Principal) (context.Context, error) {
+	return platformmcp.ContextWithPrincipal(ctx, principal), nil
+}
+
+func (stubLiveOrgAdminAuthorizer) AuthorizeExternalCall(context.Context, platformmcp.Principal, platformmcp.ExternalAuthorization) error {
+	return nil
+}
+
+func (stubLiveOrgAdminAuthorizer) RequireLiveMembership(context.Context, platformmcp.Principal) error {
+	return nil
+}
+
+func (stubLiveOrgAdminAuthorizer) RequireLiveOrgAdmin(context.Context, platformmcp.Principal) error {
+	return nil
+}
+
+func TestAttachShadowInventoryConstructsWithLocalFixtureDependencies(t *testing.T) {
+	t.Parallel()
+
+	limiter := allowingPlatformMCPBudget{}
+	reader := platformmcp.NewPostgresReader(testenv.NewLogger(t), nil)
+	config := platformMCPConfig{
+		DB: nil, JWTSigningKey: "test-signing-key", FeatureFlags: &feature.InMemory{},
+		ShadowInventory: &access.Service{}, ShadowReview: &mcpapproval.Service{},
+	}
+	budget := platformmcp.OperationBudget{Connection: limiter, Organization: limiter}
+	attached := attachShadowInventory(reader, config, budget)
+	require.True(t, attached)
+	// Attached independently, as the local-fixture surface does in production.
+	attachShadowAI(reader, config, stubLiveOrgAdminAuthorizer{}, budget)
+}
+
+func TestLocalPlatformMCPMarketplaceTokenResolvesDedicatedRepository(t *testing.T) {
+	t.Parallel()
+
+	require.Len(t, localPlatformMCPMarketplaceToken, 43)
+	require.NotContains(t, localPlatformMCPMarketplaceToken, ".")
+
+	resolver := localMarketplaceResolver{projectRepositories: rejectingMarketplaceResolver{}}
+	upstream, err := resolver.Resolve(t.Context(), localPlatformMCPMarketplaceToken)
+	require.NoError(t, err)
+	require.Equal(t, localPlatformMCPMarketplaceOwner, upstream.Owner)
+	require.Equal(t, localPlatformMCPMarketplaceRepo, upstream.Repo)
+	require.True(t, strings.HasPrefix(localPlatformMCPMarketplaceOwner, "local-platform-mcp"))
+
+	require.Equal(
+		t,
+		"https://localhost:8080/marketplace/"+localPlatformMCPMarketplaceToken+".git",
+		localPlatformMCPMarketplaceURL("https://localhost:8080/"),
+	)
+	require.True(t, isLocalPlatformMCPMarketplaceRoute(httptest.NewRequest(
+		"GET",
+		"/marketplace/"+localPlatformMCPMarketplaceToken+".git/info/refs",
+		nil,
+	)))
+	require.False(t, isLocalPlatformMCPMarketplaceRoute(httptest.NewRequest(
+		"GET",
+		"/marketplace/"+strings.Repeat("a", 43)+".git/info/refs",
+		nil,
+	)))
+}
+
+type rejectingMarketplaceResolver struct{}
+
+func (rejectingMarketplaceResolver) Resolve(_ context.Context, _ string) (marketplace.Upstream, error) {
+	return marketplace.Upstream{}, marketplace.ErrNotFound
 }

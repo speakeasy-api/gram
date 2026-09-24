@@ -12,6 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acquireAIScanTargetsLock = `-- name: AcquireAIScanTargetsLock :exec
+
+SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || $1::text, 0))
+`
+
+// Serializes an organization's scan target writes, definition and status
+// alike. Transaction-scoped, and taken before the reads that validate a write
+// so a concurrent edit cannot invalidate them between check and commit.
+// FOR UPDATE cannot stand in for it: a target with no row yet has nothing to
+// lock, so two writers would both read absence and both act on it.
+func (q *Queries) AcquireAIScanTargetsLock(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, acquireAIScanTargetsLock, organizationID)
+	return err
+}
+
 const acquireDeviceAgentConfigurationLock = `-- name: AcquireDeviceAgentConfigurationLock :exec
 
 SELECT pg_advisory_xact_lock(hashtextextended('device_agent_configurations:' || $1::text, 0))
@@ -64,6 +79,79 @@ func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (
 	return blob_url, err
 }
 
+const deleteAIScanTarget = `-- name: DeleteAIScanTarget :one
+DELETE FROM ai_scan_targets
+WHERE organization_id = $1
+  AND id = $2
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+`
+
+type DeleteAIScanTargetParams struct {
+	OrganizationID string
+	ID             string
+}
+
+func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTargetParams) (AiScanTarget, error) {
+	row := q.db.QueryRow(ctx, deleteAIScanTarget, arg.OrganizationID, arg.ID)
+	var i AiScanTarget
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.CimdVendorKeys,
+		&i.OauthClientIds,
+		&i.ClientInfoNames,
+		&i.Status,
+		&i.Rationale,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getAIScanTargetForUpdate = `-- name: GetAIScanTargetForUpdate :one
+SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+FROM ai_scan_targets
+WHERE organization_id = $1
+  AND id = $2
+FOR UPDATE
+`
+
+type GetAIScanTargetForUpdateParams struct {
+	OrganizationID string
+	ID             string
+}
+
+func (q *Queries) GetAIScanTargetForUpdate(ctx context.Context, arg GetAIScanTargetForUpdateParams) (AiScanTarget, error) {
+	row := q.db.QueryRow(ctx, getAIScanTargetForUpdate, arg.OrganizationID, arg.ID)
+	var i AiScanTarget
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.CimdVendorKeys,
+		&i.OauthClientIds,
+		&i.ClientInfoNames,
+		&i.Status,
+		&i.Rationale,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAgentPluginSet = `-- name: GetAgentPluginSet :many
 SELECT
   pr.id AS project_id,
@@ -77,6 +165,10 @@ SELECT
   -- install the plugin that actually exists in the published repo.
   pgc.published_hooks_config,
   pms.marketplace_name AS marketplace_name_override,
+  -- NULL (no settings row, or the column unset) means enabled: observability
+  -- has always shipped with a published marketplace unless a project turns it
+  -- off. The view layer skips synthesizing the plugin when this is false.
+  COALESCE(pms.observability_enabled, TRUE) AS observability_enabled,
   -- The org's default project (oldest by created_at, then id, over ALL
   -- non-deleted projects, not just published ones) keeps the bare org-derived
   -- marketplace name; others
@@ -118,8 +210,8 @@ WHERE pr.organization_id = $1
   AND pgc.marketplace_token IS NOT NULL
   AND (
     -- The org's default project (oldest by created_at, then id) is the org-wide baseline:
-    -- always surface its marketplace + observability, even when the caller has no
-    -- assignment there. Pinned to @organization_id (uncorrelated) so Postgres
+    -- always surface its marketplace + observability (when enabled), even when
+    -- the caller has no assignment there. Pinned to @organization_id (uncorrelated) so Postgres
     -- evaluates it once; the same subquery backs the is_default_project column.
     pr.id = (
       SELECT p2.id
@@ -151,6 +243,7 @@ type GetAgentPluginSetRow struct {
 	MarketplaceUpdatedAt    pgtype.Timestamptz
 	PublishedHooksConfig    []byte
 	MarketplaceNameOverride pgtype.Text
+	ObservabilityEnabled    bool
 	IsDefaultProject        bool
 	PluginID                uuid.NullUUID
 	PluginSlug              pgtype.Text
@@ -162,9 +255,9 @@ type GetAgentPluginSetRow struct {
 // The base is the org's *published* marketplaces (plugin_github_connections rows
 // with a marketplace_token), scoped so the device agent isn't flooded with every
 // project: the org's default project always appears (marketplace + its
-// always-required observability plugin, synthesized in the view layer) as the
-// org-wide baseline, while a non-default project appears only when the caller has
-// a matching assignment there. Plugins whose assignment principal_urn matches the
+// observability plugin when the project has not disabled it, synthesized in the
+// view layer) as the org-wide baseline, while a non-default project appears only
+// when the caller has a matching assignment there. Plugins whose assignment principal_urn matches the
 // caller's resolved principal set (email, user:<id>, user:all, role:<...>, or the
 // org wildcard) are LEFT JOINed on top; the default project still yields one row
 // with null plugin columns when the caller has no assignment there.
@@ -197,6 +290,7 @@ func (q *Queries) GetAgentPluginSet(ctx context.Context, arg GetAgentPluginSetPa
 			&i.MarketplaceUpdatedAt,
 			&i.PublishedHooksConfig,
 			&i.MarketplaceNameOverride,
+			&i.ObservabilityEnabled,
 			&i.IsDefaultProject,
 			&i.PluginID,
 			&i.PluginSlug,
@@ -382,6 +476,103 @@ func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessio
 	return i, err
 }
 
+const listAIScanTargets = `-- name: ListAIScanTargets :many
+
+SELECT organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+FROM ai_scan_targets
+WHERE organization_id = $1
+ORDER BY id
+`
+
+// An organization's Shadow AI scan targets: its own additions and its
+// overrides of the Speakeasy defaults compiled into the server. The served
+// list is built in code by overlaying these rows on the defaults.
+func (q *Queries) ListAIScanTargets(ctx context.Context, organizationID string) ([]AiScanTarget, error) {
+	rows, err := q.db.Query(ctx, listAIScanTargets, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AiScanTarget
+	for rows.Next() {
+		var i AiScanTarget
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.ID,
+			&i.DisplayName,
+			&i.Category,
+			&i.BundleIds,
+			&i.Binaries,
+			&i.ConfigDirs,
+			&i.ProcessNames,
+			&i.VersionPlistKey,
+			&i.CimdVendorKeys,
+			&i.OauthClientIds,
+			&i.ClientInfoNames,
+			&i.Status,
+			&i.Rationale,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBlockedAITargetIDs = `-- name: ListBlockedAITargetIDs :many
+
+SELECT id
+FROM ai_scan_targets
+WHERE organization_id = $1
+  AND status = 'blocked'
+ORDER BY id
+`
+
+// The gateway hot path asks only "does this organization block anything?".
+// Nearly every organization answers with an empty set, and that answer costs
+// one indexed lookup rather than loading the whole scan-target catalog.
+//
+// Status is the only predicate, and that is the point. There is no second
+// column for the gateway to disagree with mid-write: a target is in the
+// organization's inventory or it is not, and its decision is this one value.
+//
+// The matchers are deliberately not filtered here. A built-in stores its
+// decision only: its definition columns, gateway matchers included, are empty
+// by design because the matchers are compiled in. Requiring a non-empty
+// matcher column would silently drop every blocked built-in, which is most of
+// the catalog. No filter is needed for the other case either, but note that
+// the guarantee is not this statement's: UpsertAIScanTarget never touches
+// status. It is a transaction-level invariant kept by the upsert service,
+// which follows the definition write with a status reset (SetAIScanTargetStatus)
+// whenever the target it just wrote can no longer be recognized at the
+// gateway, before committing. Callers of the repository queries directly do
+// not get it for free. Held that way, a committed row with status = 'blocked'
+// always names a target the gateway can still recognize.
+func (q *Queries) ListBlockedAITargetIDs(ctx context.Context, organizationID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, listBlockedAITargetIDs, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDeviceAgentSyncs = `-- name: ListDeviceAgentSyncs :many
 SELECT organization_id, email, first_seen_at, last_seen_at
 FROM device_agent_syncs
@@ -479,6 +670,153 @@ func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedCha
 	return items, nil
 }
 
+const setAIScanTargetStatus = `-- name: SetAIScanTargetStatus :one
+INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, id) DO UPDATE
+SET status = EXCLUDED.status
+  , rationale = EXCLUDED.rationale
+  , updated_at = clock_timestamp()
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+`
+
+type SetAIScanTargetStatusParams struct {
+	OrganizationID string
+	ID             string
+	Status         string
+	Rationale      pgtype.Text
+}
+
+func (q *Queries) SetAIScanTargetStatus(ctx context.Context, arg SetAIScanTargetStatusParams) (AiScanTarget, error) {
+	row := q.db.QueryRow(ctx, setAIScanTargetStatus,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Status,
+		arg.Rationale,
+	)
+	var i AiScanTarget
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.CimdVendorKeys,
+		&i.OauthClientIds,
+		&i.ClientInfoNames,
+		&i.Status,
+		&i.Rationale,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertAIScanTarget = `-- name: UpsertAIScanTarget :one
+
+INSERT INTO ai_scan_targets (
+  organization_id,
+  id,
+  display_name,
+  category,
+  bundle_ids,
+  binaries,
+  config_dirs,
+  process_names,
+  version_plist_key,
+  cimd_vendor_keys,
+  oauth_client_ids,
+  client_info_names
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5::text[],
+  $6::text[],
+  $7::text[],
+  $8::text[],
+  $9,
+  $10::text[],
+  $11::text[],
+  $12::text[]
+)
+ON CONFLICT (organization_id, id) DO UPDATE
+SET display_name = EXCLUDED.display_name
+  , category = EXCLUDED.category
+  , bundle_ids = EXCLUDED.bundle_ids
+  , binaries = EXCLUDED.binaries
+  , config_dirs = EXCLUDED.config_dirs
+  , process_names = EXCLUDED.process_names
+  , version_plist_key = EXCLUDED.version_plist_key
+  , cimd_vendor_keys = EXCLUDED.cimd_vendor_keys
+  , oauth_client_ids = EXCLUDED.oauth_client_ids
+  , client_info_names = EXCLUDED.client_info_names
+  , updated_at = clock_timestamp()
+RETURNING organization_id, id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
+`
+
+type UpsertAIScanTargetParams struct {
+	OrganizationID  string
+	ID              string
+	DisplayName     pgtype.Text
+	Category        pgtype.Text
+	BundleIds       []string
+	Binaries        []string
+	ConfigDirs      []string
+	ProcessNames    []string
+	VersionPlistKey pgtype.Text
+	CimdVendorKeys  []string
+	OauthClientIds  []string
+	ClientInfoNames []string
+}
+
+// The definition and the organization's status are written by different
+// endpoints, so neither upsert touches the other's columns: adding a target
+// must not silently clear a standing block, and blocking one must not wipe
+// the signatures agents scan for.
+func (q *Queries) UpsertAIScanTarget(ctx context.Context, arg UpsertAIScanTargetParams) (AiScanTarget, error) {
+	row := q.db.QueryRow(ctx, upsertAIScanTarget,
+		arg.OrganizationID,
+		arg.ID,
+		arg.DisplayName,
+		arg.Category,
+		arg.BundleIds,
+		arg.Binaries,
+		arg.ConfigDirs,
+		arg.ProcessNames,
+		arg.VersionPlistKey,
+		arg.CimdVendorKeys,
+		arg.OauthClientIds,
+		arg.ClientInfoNames,
+	)
+	var i AiScanTarget
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ID,
+		&i.DisplayName,
+		&i.Category,
+		&i.BundleIds,
+		&i.Binaries,
+		&i.ConfigDirs,
+		&i.ProcessNames,
+		&i.VersionPlistKey,
+		&i.CimdVendorKeys,
+		&i.OauthClientIds,
+		&i.ClientInfoNames,
+		&i.Status,
+		&i.Rationale,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertDeviceAgentConfiguration = `-- name: UpsertDeviceAgentConfiguration :one
 
 INSERT INTO device_agent_configurations (
@@ -561,6 +899,52 @@ func (q *Queries) UpsertDeviceAgentDeviceSync(ctx context.Context, arg UpsertDev
 		arg.OrganizationID,
 		arg.SerialNumber,
 		arg.Email,
+		arg.Hostname,
+	)
+	return err
+}
+
+const upsertDeviceAgentEnvironmentSync = `-- name: UpsertDeviceAgentEnvironmentSync :exec
+INSERT INTO device_agent_environment_syncs (organization_id, email, environment, hostname)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, LOWER(email), environment) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+    -- An agent that stopped reporting a hostname must not blank a known one.
+  , hostname     = COALESCE(EXCLUDED.hostname, device_agent_environment_syncs.hostname)
+WHERE device_agent_environment_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
+   OR (EXCLUDED.hostname IS NOT NULL AND device_agent_environment_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname)
+`
+
+type UpsertDeviceAgentEnvironmentSyncParams struct {
+	OrganizationID string
+	Email          string
+	Environment    string
+	Hostname       pgtype.Text
+}
+
+// Best-effort record that an agent polled from a box that is not somebody's
+// laptop — a cloud sandbox, a container, a shared server. Sibling of
+// UpsertDeviceAgentSync, and deliberately a different table: coverage matches
+// an MDM device's assigned-user email against THAT one, so a cloud session
+// polling under a real person's address would otherwise mark their laptop
+// covered whether or not the laptop runs the agent.
+//
+// Only called when the agent declared a non-laptop environment. A laptop, and
+// every agent predating the header, still writes the sibling.
+//
+// The guard mirrors the device sibling's rather than the plain heartbeat
+// throttle, because hostname is mutable and a ~60s poll cadence keeps
+// last_seen_at almost always fresh — a changed hostname could otherwise go
+// unrecorded for a whole session.
+// Infers device_agent_environment_syncs_org_lower_email_env_key, the unique
+// expression index that is this table's dedup key. Matching the readers'
+// LOWER() comparison is what stops one identity from holding two rows.
+func (q *Queries) UpsertDeviceAgentEnvironmentSync(ctx context.Context, arg UpsertDeviceAgentEnvironmentSyncParams) error {
+	_, err := q.db.Exec(ctx, upsertDeviceAgentEnvironmentSync,
+		arg.OrganizationID,
+		arg.Email,
+		arg.Environment,
 		arg.Hostname,
 	)
 	return err

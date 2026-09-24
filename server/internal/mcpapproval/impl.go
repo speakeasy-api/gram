@@ -87,6 +87,12 @@ const statusRequested = "requested"
 // upgrades in place to requested the moment someone actually asks.
 const statusUnreviewed = "unreviewed"
 
+// statusSuperseded marks a decided request whose decision an admin
+// explicitly overrode from the policy editor: history stays, but no
+// enforcement derives from it until a new decision or re-request moves the
+// row back into the ordinary lifecycle.
+const statusSuperseded = "superseded"
+
 // gatherTimeout is the overall backstop for evidence gathering at intake.
 // Each source inside the assembler carries its own tighter deadline, so one
 // unreachable registry costs its own budget and lands in the document's gaps
@@ -628,7 +634,29 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 		return nil, err
 	}
 
-	raw := strings.TrimSpace(payload.Target)
+	return s.createRequest(ctx, projectID, authCtx.ActiveOrganizationID, authCtx.UserID, authCtx.Email, payload.TargetKind, payload.Target, payload.Note)
+}
+
+// CreatePlatformRequest admits a request from a trusted Platform MCP runtime.
+// The runtime resolves the exact project under the authenticated organization;
+// this method preserves the approval rollout gate, validation, redaction,
+// requester attribution, evidence gathering, audit, and transactional write used
+// by the HTTP API without pretending Platform MCP has a selected-project session.
+func (s *Service) CreatePlatformRequest(ctx context.Context, organizationID string, projectID uuid.UUID, userID, targetKind, target, note string) (*gen.ApprovalRequestSummary, error) {
+	if s == nil || s.db == nil {
+		return nil, oops.E(oops.CodeUnavailable, nil, "MCP review requests are temporarily unavailable")
+	}
+	if strings.TrimSpace(organizationID) == "" || projectID == uuid.Nil || strings.TrimSpace(userID) == "" {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.requireFeature(ctx, organizationID); err != nil {
+		return nil, err
+	}
+	return s.createRequest(ctx, projectID, organizationID, userID, nil, targetKind, target, note)
+}
+
+func (s *Service) createRequest(ctx context.Context, projectID uuid.UUID, organizationID, userID string, userEmail *string, targetKind, target, requestNote string) (*gen.ApprovalRequestSummary, error) {
+	raw := strings.TrimSpace(target)
 	if raw == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "a server reference is required")
 	}
@@ -637,9 +665,9 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 	}
 
 	var key string
-	switch payload.TargetKind {
+	switch targetKind {
 	case targetKindServerURL:
-		canonicalKey, display, err := admittableServerURL(raw)
+		canonicalKey, display, err := admittableSecureServerURL(raw)
 		if err != nil {
 			return nil, err
 		}
@@ -650,6 +678,9 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 		// the server anyway.
 		raw = display
 	case targetKindStdioCommand:
+		if identity.ContainsPlaintextHTTPURL(raw) {
+			return nil, oops.E(oops.CodeBadRequest, nil, "stdio command server URLs must use https")
+		}
 		// The stored reference is the redacted form for the same reason: a
 		// launch command routinely embeds credentials (`--header
 		// "Authorization: Bearer …"`, `--api-key=…`, `TOKEN=… npx …`), and
@@ -665,7 +696,7 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 
 	// The justification is the one input no automated evidence supplies, so
 	// a proactive ask cannot omit it.
-	trimmedNote := strings.TrimSpace(payload.Note)
+	trimmedNote := strings.TrimSpace(requestNote)
 	if trimmedNote == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "a justification is required")
 	}
@@ -674,17 +705,17 @@ func (s *Service) CreateRequest(ctx context.Context, payload *gen.CreateRequestP
 	}
 	note := &trimmedNote
 
-	return s.admit(ctx, projectID, authCtx.ActiveOrganizationID, admission{
-		targetKind:      payload.TargetKind,
+	return s.admit(ctx, projectID, organizationID, admission{
+		targetKind:      targetKind,
 		targetRaw:       raw,
 		targetKey:       key,
 		status:          statusRequested,
 		bypassRequestID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		requesterID:     authCtx.UserID,
-		requesterEmail:  authCtx.Email,
+		requesterID:     userID,
+		requesterEmail:  userEmail,
 		note:            note,
-		actor:           authCtx.UserID,
-		actorEmail:      authCtx.Email,
+		actor:           userID,
+		actorEmail:      userEmail,
 	})
 }
 
@@ -746,6 +777,18 @@ func (s *Service) Promote(ctx context.Context, payload *gen.PromotePayload) (*ge
 		actor:           authCtx.UserID,
 		actorEmail:      authCtx.Email,
 	})
+}
+
+func admittableSecureServerURL(raw string) (key string, display string, err error) {
+	key, display, err = admittableServerURL(raw)
+	if err != nil {
+		return "", "", err
+	}
+	parsed, parseErr := url.Parse(display)
+	if parseErr != nil || !strings.EqualFold(parsed.Scheme, "https") {
+		return "", "", oops.E(oops.CodeBadRequest, parseErr, "target must be an https URL")
+	}
+	return key, display, nil
 }
 
 // admittableServerURL validates a server URL reference for intake and returns
@@ -1169,221 +1212,4 @@ func (s *Service) requestDetail(ctx context.Context, projectID uuid.UUID, reques
 		ResearchReports:     reports,
 		EvidenceDiff:        evidenceDiff,
 	}, nil
-}
-
-func (s *Service) RecordDecision(ctx context.Context, payload *gen.RecordDecisionPayload) (*gen.ApprovalDecision, error) {
-	projectID, organizationID, err := s.project(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if payload.Decision != decisionApproved && payload.Decision != decisionDenied {
-		return nil, oops.E(oops.CodeBadRequest, nil, "decision must be approved or denied").LogError(ctx, s.logger)
-	}
-
-	// The rationale is the artifact cited when explaining the decision to the
-	// requester, so a blank one is rejected rather than recorded.
-	rationale := strings.TrimSpace(payload.Rationale)
-	if rationale == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "a rationale is required").LogError(ctx, s.logger)
-	}
-
-	requestID, err := uuid.Parse(payload.ID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id").LogError(ctx, s.logger)
-	}
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	if authCtx == nil || authCtx.UserID == "" {
-		return nil, oops.C(oops.CodeUnauthorized)
-	}
-
-	// Parsed before any database work, so a malformed id costs no
-	// transaction and never locks the request row.
-	var citedReportID uuid.NullUUID
-	if payload.ResearchReportID != nil {
-		reportID, err := uuid.Parse(*payload.ResearchReportID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid research report id").LogError(ctx, s.logger)
-		}
-		citedReportID = uuid.NullUUID{UUID: reportID, Valid: true}
-	}
-
-	granted := payload.GrantedPrincipalUrns
-	if payload.Decision == decisionDenied {
-		// A denial grants nobody anything, whatever the caller sent.
-		granted = nil
-	}
-	if payload.Decision == decisionApproved && len(granted) == 0 {
-		// An approval that names no principals covers everyone. The resolved
-		// all-users principal is stored rather than an empty set, so the
-		// decision row says who was actually given access instead of leaving
-		// a blank the reader must know the default for.
-		granted = []string{authz.AllUsersPrincipal().String()}
-	}
-	if granted == nil {
-		granted = []string{}
-	}
-
-	// Parsed and validated before the transaction: a bad principal is the
-	// caller's error and must cost no transaction — and since these URNs
-	// become enforcement grants below, a principal that does not resolve in
-	// the caller's organization would record an audience the grants can never
-	// enforce, so it is rejected rather than stored.
-	grantedPrincipals := make([]urn.Principal, 0, len(granted))
-	for _, principalURN := range granted {
-		principal, err := urn.ParsePrincipal(principalURN)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid granted principal urn")
-		}
-		if err := authz.ValidatePrincipal(ctx, s.db, organizationID, principal); err != nil {
-			// Only a verdict on the principal is the caller's error; an
-			// infrastructure failure during the lookup must not read as
-			// invalid input.
-			if errors.Is(err, authz.ErrPrincipalInvalid) || errors.Is(err, authz.ErrPrincipalNotFound) {
-				return nil, oops.E(oops.CodeBadRequest, err, "granted principal does not resolve in this organization")
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "error validating granted principal").LogError(ctx, s.logger)
-		}
-		grantedPrincipals = append(grantedPrincipals, principal)
-	}
-
-	dbtx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error recording decision").LogError(ctx, s.logger)
-	}
-	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
-	queries := repo.New(s.db).WithTx(dbtx)
-
-	// Read the request under the project id before writing anything. The
-	// predicate on the insert would scope it too, but resolving ownership
-	// explicitly is what stops a forgotten predicate becoming a tenancy
-	// crossing — the failure mode behind AIS-424. The read locks the row so
-	// concurrent decisions serialise: the request's status always ends up
-	// matching the newest decision rather than whichever transaction happened
-	// to commit last.
-	request, err := queries.GetApprovalRequestForDecision(ctx, repo.GetApprovalRequestForDecisionParams{ID: requestID, ProjectID: projectID})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "approval request not found")
-		}
-		return nil, oops.E(oops.CodeUnexpected, err, "error reading approval request").LogError(ctx, s.logger)
-	}
-
-	// The request's organization and the session's must agree. Both derive
-	// from the same project — the request row was just resolved under the
-	// session's project id — so a mismatch means tenancy state is corrupt.
-	// Refuse rather than record a decision whose audit trail names one
-	// organization while its grants enforce in another.
-	if request.OrganizationID != organizationID {
-		return nil, oops.E(oops.CodeUnexpected, nil, "approval request organization mismatch").LogError(ctx, s.logger)
-	}
-
-	// A cited report is resolved against the request being decided and the
-	// caller's project before it is written, so a decision can never
-	// attribute research about one server to another.
-	if citedReportID.Valid {
-		if _, err := queries.GetResearchReportForDecision(ctx, repo.GetResearchReportForDecisionParams{
-			ID:                   citedReportID.UUID,
-			OrganizationID:       organizationID,
-			McpApprovalRequestID: requestID,
-			ProjectID:            projectID,
-		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, oops.E(oops.CodeBadRequest, nil, "research report does not belong to this request").LogError(ctx, s.logger)
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "error reading research report").LogError(ctx, s.logger)
-		}
-	}
-
-	// The evidence is frozen as it stood on the request, and its version is
-	// copied rather than defaulted, so a later re-gather cannot rewrite what
-	// this reviewer actually saw.
-	// The organisation is taken from the request that was just resolved under
-	// this project, not from the auth context. The composite foreign key pins
-	// a decision to its request's project but not to its organisation, so
-	// deriving it here is what stops the two ever disagreeing.
-	decision, err := queries.CreateApprovalDecision(ctx, repo.CreateApprovalDecisionParams{
-		OrganizationID:       request.OrganizationID,
-		ProjectID:            projectID,
-		McpApprovalRequestID: requestID,
-		Decision:             payload.Decision,
-		DecidedBy:            authCtx.UserID,
-		Rationale:            pgText(&rationale),
-		EvidenceSnapshot:     request.CurrentEvidence,
-		EvidenceVersion:      request.EvidenceVersion,
-		GrantedPrincipalUrns: granted,
-		McpResearchReportID:  citedReportID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error recording decision").LogError(ctx, s.logger)
-	}
-
-	if err := s.audit.LogMCPApprovalRequestDecide(ctx, dbtx, audit.LogMCPApprovalRequestDecideEvent{
-		OrganizationID:   request.OrganizationID,
-		ProjectID:        projectID,
-		Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		ActorDisplayName: authCtx.Email,
-		ActorSlug:        nil,
-		RequestURN:       urn.NewMCPApprovalRequest(requestID),
-		Approved:         payload.Decision == decisionApproved,
-		TargetRaw:        request.TargetRaw,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error auditing decision").LogError(ctx, s.logger)
-	}
-
-	if err := queries.SetApprovalRequestStatus(ctx, repo.SetApprovalRequestStatusParams{
-		ID:        requestID,
-		ProjectID: projectID,
-		Status:    statusFor[payload.Decision],
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error updating approval request status").LogError(ctx, s.logger)
-	}
-
-	// The snapshot this decision just froze answers any outstanding
-	// evidence-change flag; recording a decision is the only thing that
-	// clears it.
-	if err := queries.ClearApprovalRequestEvidenceChange(ctx, repo.ClearApprovalRequestEvidenceChangeParams{
-		ID:        requestID,
-		ProjectID: projectID,
-	}); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error clearing evidence change flag").LogError(ctx, s.logger)
-	}
-
-	// The decision resolves the legacy bypass rows it answers too — in the
-	// same transaction — so no ask this review covers can stay pending in the
-	// legacy queue (and on the inventory's request counters) after the review
-	// is decided. That means every still-requested row for the same server,
-	// not only the promotion source: bypass rows are per-requester and only
-	// one of them is ever linked. Each transition is audited alongside the
-	// decision.
-	if err := s.drainLegacyBypassRequests(ctx, dbtx, request, projectID, payload.Decision, granted, authCtx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error resolving promoted bypass request").LogError(ctx, s.logger)
-	}
-
-	// The decision enforces in the same transaction it records: the grant
-	// writes and the decision row commit or roll back together, so enforced
-	// state can never disagree with the recorded history. target_key is the
-	// canonical inventory URL for server_url targets — the same key the
-	// shadow-MCP block rules and this org's traffic converge on. An stdio
-	// target has no URL to key a grant on; its decision records without
-	// enforcing.
-	if request.TargetKind == targetKindServerURL {
-		if err := reconcileDecisionGrants(ctx, dbtx, request.OrganizationID, projectID, request.TargetKey, payload.Decision == decisionApproved, grantedPrincipals); err != nil {
-			// An inexpressible blast radius surfaces as the caller's error
-			// with its explanation intact; everything else is unexpected.
-			var shareable *oops.ShareableError
-			if errors.As(err, &shareable) {
-				return nil, err
-			}
-			return nil, oops.E(oops.CodeUnexpected, err, "error enforcing decision").LogError(ctx, s.logger)
-		}
-	}
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error recording decision").LogError(ctx, s.logger)
-	}
-
-	return decisionView(decision), nil
 }

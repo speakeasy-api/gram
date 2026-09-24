@@ -10,6 +10,11 @@ import (
 )
 
 // Codec counts the model-relevant values in structured GenAI input messages.
+//
+// A Codec returned by NewCodec is safe for concurrent use by multiple goroutines.
+// Counting methods do not mutate their inputs. Callers must not mutate input
+// slices, messages, parts, or nested values during a call. Shared values that
+// implement json.Marshaler must support concurrent calls to MarshalJSON.
 type Codec struct {
 	codec tokenizer.Codec
 }
@@ -24,12 +29,36 @@ func NewCodec() *Codec {
 }
 
 // Name returns the tokenizer name recorded alongside token counts.
+// It is safe to call concurrently with all other Codec methods.
 func (c *Codec) Name() string {
 	return c.codec.GetName()
 }
 
+// Count counts arbitrary text content.
+// It is safe to call concurrently with all other Codec methods.
+// The content slice must remain read-only during the call.
+func (c *Codec) Count(ctx context.Context, content ...string) (int, error) {
+	count := 0
+
+	for _, part := range content {
+		if err := ctx.Err(); err != nil {
+			return 0, fmt.Errorf("count aborted: %w", err)
+		}
+
+		c, err := c.codec.Count(part)
+		if err != nil {
+			return 0, fmt.Errorf("codec count: %w", err)
+		}
+		count += c
+	}
+
+	return count, nil
+}
+
 // CountInput counts assistant text, user prompts, tool names, tool inputs, and
 // tool outputs. Other message metadata and part variants do not contribute.
+// It is safe to call concurrently with all other Codec methods.
+// The messages and their nested values must remain read-only during the call.
 func (c *Codec) CountInput(ctx context.Context, messages genaiconv.InputMessages) (int, error) {
 	count := 0
 	for _, message := range messages {
@@ -44,6 +73,8 @@ func (c *Codec) CountInput(ctx context.Context, messages genaiconv.InputMessages
 
 // CountOutput counts assistant text, user prompts, tool names, tool inputs, and
 // tool outputs. Other message metadata and part variants do not contribute.
+// It is safe to call concurrently with all other Codec methods.
+// The messages and their nested values must remain read-only during the call.
 func (c *Codec) CountOutput(ctx context.Context, messages genaiconv.OutputMessages) (int, error) {
 	count := 0
 	for _, message := range messages {

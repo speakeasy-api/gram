@@ -1,43 +1,141 @@
-# Debugging MCP OAuth Flows
+# Debug MCP OAuth Flows
 
-To debug MCP OAuth flows with your local Gram dev server, you'll need to expose
-your local server via ngrok so that external OAuth providers can redirect back
-to your machine.
+Use this runbook to test an MCP OAuth flow with a local Gram server. Use a
+fixed HTTPS tunnel so that the OAuth provider can send redirects to the server.
 
-## Setup
+## Prepare the local server
 
-1. Get setup with ngrok (ask to be added to our team account if needed)
+1. Get access to the team ngrok account.
+2. Create a fixed domain on the
+   [ngrok domains page](https://dashboard.ngrok.com/domains).
+3. Set the server URL:
 
-2. Create a fixed domain like `gram-yourname.ngrok.app` on the
-   [ngrok domains page](https://dashboard.ngrok.com/domains)
-
-3. Configure your local environment to use the ngrok URL:
    ```bash
-   mise set --file mise.local.toml GRAM_SERVER_URL=https://gram-yourname.ngrok.app
+   mise set --file mise.local.toml GRAM_SERVER_URL=https://<NGROK_DOMAIN>
    ```
 
-## Running the Dev Server
+4. Start the development environment.
+5. Start the tunnel in a separate terminal:
 
-You have two options:
+   ```bash
+   ngrok http --url=<NGROK_DOMAIN> https://localhost:8080
+   ```
 
-### Option A: Run with Zero
-
-Run your dev server with zero for the standard development experience.
-
-### Option B: Run with IDE Debugger
-
-Run the debugger in your IDE so you can add breakpoints, and run
+To use an IDE debugger, start the debugger and run
 `pitchfork start dashboard` in a separate terminal.
 
-## Start the ngrok Tunnel
+## Follow the discovery flow
 
-In another terminal, start the ngrok tunnel:
-
-```bash
-ngrok http --url=gram-yourname.ngrok.app https://localhost:8080
+```mermaid
+flowchart LR
+    A[MCP request] --> B[401 challenge]
+    B --> C[Resource metadata]
+    C --> D[Authorization server metadata]
+    D --> E[Authorization flow]
 ```
 
-## Test the OAuth Flow
+Set the test URLs:
 
-Add a Gram MCP server that uses OAuth to your desired app
-and test the authentication flow.
+```bash
+export MCP_RESOURCE=https://mcp.example.com/mcp/example
+export RESOURCE_METADATA=https://mcp.example.com/.well-known/oauth-protected-resource/mcp/example
+export UPSTREAM_ISSUER=https://auth.example.com/tenant/example
+```
+
+### 1. Check the challenge
+
+```bash
+curl -si "$MCP_RESOURCE" | grep -Ei '^(HTTP|WWW-Authenticate:)'
+```
+
+The response must be `401`. The `WWW-Authenticate` header must contain the
+`resource_metadata` URL for this MCP resource.
+
+### 2. Check the resource metadata
+
+```bash
+curl -fsS "$RESOURCE_METADATA" | jq '{resource, authorization_servers}'
+```
+
+| Mode            | `resource`       | `authorization_servers`    |
+| --------------- | ---------------- | -------------------------- |
+| Gram-hosted     | MCP resource URL | MCP resource URL           |
+| Upstream issuer | MCP resource URL | Configured upstream issuer |
+
+Gram owns the MCP resource and its RFC 9728 metadata in both modes. In upstream
+mode, only authorization-server discovery moves to the upstream issuer.
+
+### 3. Check the authorization server metadata
+
+For an issuer that has a path, insert
+`/.well-known/oauth-authorization-server` before the path:
+
+```bash
+curl -fsS https://auth.example.com/.well-known/oauth-authorization-server/tenant/example \
+  | jq '{issuer, authorization_endpoint, token_endpoint, registration_endpoint, authorization_response_iss_parameter_supported}'
+```
+
+- `issuer` must exactly equal `$UPSTREAM_ISSUER`; case and trailing slashes are
+  significant. Do not continue on mismatch.
+- Each endpoint must be an absolute HTTPS URL.
+- An endpoint must not contain user information or a fragment.
+- Endpoint origins can be different from the issuer origin.
+
+### 4. Check the authorization response
+
+Check `authorization_response_iss_parameter_supported` in the provider metadata:
+
+- If the value is `true`, the response must contain `iss`. The value must be
+  exactly equal to the issuer that the client used.
+- If the value is absent or `false`, do not require `iss`.
+
+## Find endpoint connection failures
+
+List all advertised endpoints:
+
+```bash
+metadata=$(curl -fsS https://auth.example.com/.well-known/oauth-authorization-server/tenant/example)
+printf '%s' "$metadata" | jq -r '.authorization_endpoint // empty, .token_endpoint // empty, .registration_endpoint // empty'
+```
+
+- Check DNS, TLS, routing, and allowlists for each endpoint.
+- Make sure that the user's browser can reach the authorization endpoint.
+- Make sure that the OAuth client can reach the token and registration endpoints.
+- An HTTP `400`, `401`, or `405` can show that the network connection works.
+
+Do not put secrets, authorization codes, tokens, or credentials in commands,
+logs, feature-flag data, or rollout notes.
+
+## Change an issuer
+
+Issuer changes create a new identity; case and trailing slashes are significant.
+Clear client discovery and authentication data or reconnect. Then authenticate
+again.
+
+## Repair an older local signing key set
+
+This applies only to local development with a key set whose JWK was published
+before the local KMS stand-in persisted its private key. The old signer kept its
+private key only in memory, so after a restart the saved public JWK cannot be
+paired with that private key. A `private_key_jwt` token request may fail with
+`invalid_client` even though the key set still has an active key. The old
+private key cannot be migrated from the database. Production KMS-backed keys
+are not affected.
+
+Repair the affected local key set once, using an organization admin account:
+
+1. In **Encryption Keys**, open the affected signing key set and select
+   **Publish new key**. The new local signer publishes a different public key.
+   If the set already has an active key, the new key starts as pending.
+2. Make the new public key available to the local dev-idp (or other test
+   verifier). A verifier using Gram's JWKS URI can fetch the updated set; if
+   the app was registered with an inline JWKS, update that registration with
+   the new public key. Allow any JWKS cache to refresh before switching keys.
+3. **Activate** the new key. This retires the old active key and makes new
+   assertions use the new private key. Retry the token exchange.
+
+Do not revoke the old key merely to repair signing: revocation immediately
+withdraws its public key and may invalidate assertions that are still in use.
+Fresh local key sets do not need this repair. Do not automate it at startup:
+switching signing keys before verifiers know the new public key can cause an
+authentication outage.

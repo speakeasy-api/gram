@@ -1,20 +1,28 @@
 export const FEATURE_FLAGS = {
+  agentManagement: "agent-management",
+  agentCredentials: "agent-identity-credentials",
   assistants: "assistants",
   budgets: "gram-budgets",
   deploymentsPage: "gram-deployments-page",
   deviceAgent: "gram-device-agent",
   deviceIntegrations: "gram-device-integrations",
-  enterpriseTrials: "enterprise-trials",
   experimentalChat: "gram-experimental-chat",
-  externalMcpUserSessions: "onboard-external-mcp-to-user-sessions",
+  explore: "gram-explore",
   functions: "gram-functions",
+  gatewayEndpoints: "gram-gateway-endpoints",
+  headlessModeSwitcher: "headless-mode-switcher",
+  killswitches: "gram-killswitches",
   mcpResearch: "gram-mcp-research",
   newCostsPage: "gram-new-costs-page",
+  oktaConnections: "okta-connections",
   paygSelfServeBilling: "gram-payg-self-serve-billing",
-  platformMcp: "platform-mcp",
-  platformMcpDashboard: "platform-mcp-dashboard",
   promptPolicies: "gram-prompt-policies",
   rbac: "gram-rbac",
+  // Multivariate (`off` | `shadow` | `llm`), org-targeted: which risk engine
+  // the organization runs. Read through `useFeatureFlagVariant`; the boolean
+  // read is true for every variant, `off` included. `useDetectorMode` maps it
+  // to the policy editor mode.
+  riskLlmAnalyzer: "gram-risk-llm-analyzer",
   riskWatchdog: "gram-risk-watchdog",
   tunneledMcp: "gram-tunneled-mcp",
   userSessionsDashboard: "user-sessions-dashboard",

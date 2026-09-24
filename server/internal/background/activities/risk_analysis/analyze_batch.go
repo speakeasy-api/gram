@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
@@ -35,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
 	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/stokens"
 )
 
 // AnalyzeBatch scans a batch of messages against one risk policy and replaces
@@ -46,6 +49,7 @@ type AnalyzeBatch struct {
 	db                     *pgxpool.Pool
 	assetStorage           contentPartAssetReader
 	gitleaksScanner        *gitleaks.Scanner
+	stokenCodec            *stokens.Codec
 	piiScanner             PIIScanner
 	promptInjectionScanner *promptinjection.Scanner
 	shadowMCPScanner       *shadowmcpscan.Scanner
@@ -56,7 +60,15 @@ type AnalyzeBatch struct {
 	promptInjectionPub     gcp.Publisher[*riskv1.PromptInjectionAnalysis]
 	promptPolicyPub        gcp.Publisher[*riskv1.PromptPolicyAnalysis]
 	customRulesPub         gcp.Publisher[*riskv1.CustomRulesAnalysis]
+	llmPub                 gcp.Publisher[*riskv1.LLMAnalysis]
+	// llmAnalyzerEnabled reports whether the streams process has a fine-tuned
+	// risk model to evaluate LLM analysis requests (GRAM_RISK_LLM_URL set).
+	// Without it the flag alone must not divert covered sources away from the
+	// legacy engines: the consumer would ack every request with no findings.
+	llmAnalyzerEnabled     bool
+	llmFallbackOnce        sync.Once
 	findingsPub            gcp.Publisher[*riskv1.Finding]
+	riskRecorder           *metering.RiskRecorder
 	customRuleScanner      *customruleanalyzer.Scanner
 	cliDestructiveScanner  *clidestructive.Scanner
 	destructiveToolScanner *destructivetool.Scanner
@@ -84,11 +96,14 @@ func NewAnalyzeBatch(
 	promptInjectionPub gcp.Publisher[*riskv1.PromptInjectionAnalysis],
 	promptPolicyPub gcp.Publisher[*riskv1.PromptPolicyAnalysis],
 	customRulesPub gcp.Publisher[*riskv1.CustomRulesAnalysis],
+	llmPub gcp.Publisher[*riskv1.LLMAnalysis],
 	findingsPub gcp.Publisher[*riskv1.Finding],
 	customRuleScanner *customruleanalyzer.Scanner,
 	celEng *celenv.Engine,
 	builtinPresets *presetlib.Library,
 	shadowMCPBypass shadowmcpscan.BypassChecker,
+	riskRecorder *metering.RiskRecorder,
+	llmAnalyzerEnabled bool,
 ) (*AnalyzeBatch, error) {
 	logger = logger.With(attr.SlogComponent("risk-analysis-dispatcher"))
 
@@ -115,6 +130,7 @@ func NewAnalyzeBatch(
 		db:                     db,
 		assetStorage:           assetStorage,
 		gitleaksScanner:        gitleaks.NewScanner(),
+		stokenCodec:            stokens.NewCodec(),
 		piiScanner:             piiScanner,
 		promptInjectionScanner: promptInjectionScanner,
 		shadowMCPScanner: shadowmcpscan.NewScanner(
@@ -132,13 +148,17 @@ func NewAnalyzeBatch(
 		promptInjectionPub:     promptInjectionPub,
 		promptPolicyPub:        promptPolicyPub,
 		customRulesPub:         customRulesPub,
+		llmPub:                 llmPub,
 		findingsPub:            findingsPub,
+		riskRecorder:           riskRecorder,
 		customRuleScanner:      customRuleScanner,
 		cliDestructiveScanner:  clidestructive.NewScanner(),
 		destructiveToolScanner: destructivetool.NewScanner(shadowMCPClient),
 		celEng:                 celEng,
 		builtinPresets:         builtinPresets,
 		recommended:            recommended,
+		llmAnalyzerEnabled:     llmAnalyzerEnabled,
+		llmFallbackOnce:        sync.Once{},
 	}, nil
 }
 
@@ -150,7 +170,6 @@ type AnalyzeBatchArgs struct {
 	MessageIDs       []uuid.UUID
 	ContentPartIDs   []uuid.UUID
 	Sources          []string
-	MessageTypes     []string
 	PresidioEntities []string
 	// PresidioScoreThreshold is the per-policy minimum recognizer confidence
 	// (0.0-1.0). Do derives it from the refetched policy's analyzer_config, so it
@@ -230,7 +249,6 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	if err != nil {
 		return nil, err
 	}
-	messages = filterBatchMessagesByMessageTypes(messages, args.MessageTypes)
 	scannedCount = len(messages)
 
 	exclusions := NewExclusionSet(nil)
@@ -265,21 +283,19 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 
 	findings := make([][]scanners.Finding, len(messages))
 	if len(messages) > 0 {
-		scope, err := CompileScope(a.celEng, policy.ScopeInclude.String, policy.ScopeExempt.String)
-		if err != nil {
-			return nil, fmt.Errorf("compile policy scope: %w", err)
-		}
 		specified, err := CompileDetectionScopes(a.celEng, args.DetectionScopes)
 		if err != nil {
 			return nil, fmt.Errorf("compile detection scopes: %w", err)
 		}
-		recommendedEnabled := a.projectFlagEnabled(ctx, args.OrganizationID, args.ProjectID, feature.FlagRiskRecommendedScopes)
-		categoryScopes := NewCategoryScopes(scope, a.recommended, specified, recommendedEnabled, a.metrics)
+		categoryScopes := NewCategoryScopes(a.recommended, specified, a.metrics)
 		masks := categoryScopes.Masks(ctx, messages)
 
 		switch policy.PolicyType {
 		case PolicyTypePromptBased:
-			findings = a.scanPromptPolicy(ctx, args, policy, messages, masks)
+			findings, err = a.scanPromptPolicy(ctx, args, policy, messages, masks)
+			if err != nil {
+				return nil, err
+			}
 		default:
 			findings, err = a.scanStandardPolicy(ctx, args, messages, policy.CustomRuleIds, exclusions, masks)
 			if err != nil {
@@ -305,10 +321,12 @@ func (a *AnalyzeBatch) Do(ctx context.Context, args AnalyzeBatchArgs) (_ *Analyz
 	// that have no stream publisher (ClickHouse would otherwise never see
 	// them). Only after a committed write: a batch dropped because its policy
 	// was deleted mid-analysis must not leak findings into ClickHouse that
-	// Postgres never stored. Best-effort — a publish failure logs and never
-	// fails the activity.
+	// Postgres never stored. A publish failure fails the activity — the
+	// redriven batch repeats only idempotent writes, so the retry converges.
 	if written {
-		a.publishBatchOnlyFindings(ctx, args, ids, findings)
+		if err := a.publishBatchOnlyFindings(ctx, args, ids, findings); err != nil {
+			return nil, err
+		}
 	}
 
 	span.SetAttributes(
@@ -364,15 +382,19 @@ func mergeSessionFindings(ids []batchMessage, findings [][]scanners.Finding, ses
 			findings[i] = append(findings[i], kept...)
 		} else {
 			ids = append(ids, batchMessage{
-				ID:           sf.messageID,
-				ContentPart:  false,
-				Type:         "",
-				Content:      "",
-				RawToolCalls: nil,
-				ToolCalls:    nil,
-				UserID:       "",
-				CreatedAt:    time.Time{},
-				Source:       "",
+				ID:                     sf.messageID,
+				ChatID:                 uuid.Nil,
+				ParentChatMessageID:    uuid.Nil,
+				ContentPart:            false,
+				Type:                   "",
+				Content:                "",
+				RawToolCalls:           nil,
+				ToolCalls:              nil,
+				PriorUserRequest:       "",
+				RecentUntrustedContent: "",
+				UserID:                 "",
+				CreatedAt:              time.Time{},
+				Source:                 "",
 			})
 			findings = append(findings, kept)
 		}

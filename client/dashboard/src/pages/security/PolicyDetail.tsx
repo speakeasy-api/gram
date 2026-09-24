@@ -8,17 +8,11 @@ import {
   invalidateShadowMCPPolicyInventory,
   useShadowMCPPolicyInventory,
 } from "@/components/shadow-mcp/useShadowMCPPolicyInventory";
+import { Alert, AlertDescription } from "@/components/ui/Alert";
 import { Card } from "@/components/ui/Card";
 import { Heading } from "@/components/ui/Heading";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { Slider } from "@/components/ui/Slider";
 import {
   Sheet,
@@ -32,6 +26,7 @@ import { Switch } from "@/components/ui/Switch";
 import { TextArea } from "@/components/ui/Textarea";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
+import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useProject } from "@/contexts/Auth";
@@ -79,22 +74,27 @@ import {
   useRef,
   useState,
 } from "react";
-import { useParams } from "react-router";
+import { useLocation, useParams } from "react-router";
+import { toast } from "sonner";
 import { useQueryState } from "nuqs";
 import {
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   shadowMCPAllowedURLsForMutation,
   shadowMCPBlockedURLsForMutation,
+  shadowMCPDecisionConflicts,
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
+  type ShadowMCPDecisionConflict,
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
-import { type Step } from "@/pages/setup/components/onboarding-stepper";
+import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
+
 import {
   DETECTION_RULES,
-  RULE_CATEGORY_META,
+  ruleCategoryMeta,
+  type DetectorMode,
   type PolicyAction,
   type RuleCategory,
 } from "./policy-data";
@@ -112,18 +112,22 @@ import {
   useTogglePolicyEnabled,
 } from "./use-toggle-policy-enabled";
 import {
-  ALL_CATEGORIES,
   AVAILABLE_CATEGORIES,
-  CATEGORY_LEVEL_DETECTORS,
   FLAG_ONLY_CATEGORIES,
-  PRESIDIO_CATEGORIES,
   SCOPE_EXEMPT_CEL_EXAMPLES,
   SCOPE_INCLUDE_CEL_EXAMPLES,
+  allCategories,
   categoriesToPayload,
+  categoryLevelDetectors,
+  normalizeCategoriesForMode,
   parseApprovedEmailDomains,
+  persistedCategories,
+  personalDataCategories,
   pinnedHiddenRuleIds,
   policyToCategories,
 } from "./policy-form";
+import { useDetectorMode } from "./use-detector-mode";
+import { decodeKindScope, encodeKindScope } from "./policy-scope";
 import { SeverityBadge } from "./risk-ui";
 import { CelExpressionField } from "./cel-field";
 import { CelReferenceSheet } from "./cel-reference";
@@ -158,26 +162,11 @@ import {
 import { useChatTranscript } from "@/pages/chatLogs/useChatTranscript";
 import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
 
-// Judge models offered in the workbench (mirrors PolicyCenter's list; the
-// picker is intentionally small until the model catalog is centralized).
-// Sentinel for the "use server default" model option — Radix Select forbids an
-// empty-string item value, so "" is mapped through this and back on change.
-const DEFAULT_MODEL_VALUE = "__default__";
-
-// Gemini 3.5 Flash is deliberately absent: the judge disables reasoning
-// (`reasoning.effort: "none"`), which the Gemini 3.5 generation rejects with a
-// 400 — every evaluation on it would fail into the policy's error mode.
-const JUDGE_MODELS: { value: string; label: string }[] = [
-  { value: "", label: "Default (Gemini 3.1 Flash Lite)" },
-  { value: "anthropic/claude-sonnet-4.6", label: "Claude Sonnet 4.6" },
-  { value: "anthropic/claude-haiku-4.5", label: "Claude Haiku 4.5" },
-];
-
-const PROMPT_STEPS: Step[] = [
+const PROMPT_STEPS: PolicyStep[] = [
   {
     id: "guardrail",
     title: "Guardrail",
-    description: "Describe the behavior to catch and pick the judge.",
+    description: "Describe the behavior to catch and tune the judge.",
   },
   {
     id: "scope",
@@ -201,7 +190,7 @@ const PROMPT_STEPS: Step[] = [
   },
 ];
 
-const STANDARD_STEPS: Step[] = [
+const STANDARD_STEPS: PolicyStep[] = [
   {
     id: "detect",
     title: "Detect",
@@ -224,10 +213,50 @@ const STANDARD_STEPS: Step[] = [
   },
 ];
 
+const POLICY_ACTION_LABEL: Record<PolicyAction, string> = {
+  flag: "Flag",
+  warn: "Warn",
+  block: "Block",
+  quarantine: "Quarantine",
+};
+
+const POLICY_ACTION_MESSAGE: Record<
+  Exclude<PolicyAction, "flag">,
+  { label: string; description: string; placeholder: string }
+> = {
+  warn: {
+    label: "Warning message",
+    description:
+      "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message.",
+    placeholder: "e.g. %{match} looks sensitive. Acknowledge to proceed.",
+  },
+  block: {
+    label: "Block message",
+    description:
+      "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message.",
+    placeholder:
+      "e.g. This action was blocked by your organization's security policy. Contact your admin for help.",
+  },
+  quarantine: {
+    label: "Quarantine message",
+    description:
+      "Shown to the user when this policy quarantines their session. Leave blank to use the default message.",
+    placeholder:
+      "e.g. This session was quarantined by your organization's security policy. Contact your admin for help.",
+  },
+};
+
+interface PolicyStep {
+  id: string;
+  title: string;
+  description: string;
+  badge?: string;
+}
+
 // Back the active step with a `?step=<id>` URL param so browser back/forward
 // (and refresh, and shareable links) traverse the steps. history: "push" makes
 // each step change its own history entry.
-function useStepParam(steps: Step[]): [number, (index: number) => void] {
+function useStepParam(steps: PolicyStep[]): [number, (index: number) => void] {
   const [raw, setRaw] = useQueryState("step", { history: "push" });
   const found = steps.findIndex((s) => s.id === raw);
   const index = found >= 0 ? found : 0;
@@ -258,7 +287,12 @@ export default function PolicyDetail(): JSX.Element {
 }
 
 function PolicyDetailContent({ policyId }: { policyId: string }): JSX.Element {
+  const location = useLocation();
   const { data: policy, isLoading } = useRiskPoliciesGet({ id: policyId });
+  useRecentLabelOverride(
+    location.pathname,
+    policy ? `Guardrail · ${policy.name}` : undefined,
+  );
 
   return (
     <Page>
@@ -393,7 +427,7 @@ function HorizontalStepper({
   current,
   onStep,
 }: {
-  steps: Step[];
+  steps: PolicyStep[];
   current: number;
   onStep: (index: number) => void;
 }): JSX.Element {
@@ -452,7 +486,7 @@ function StepperShell({
   children,
 }: {
   header: React.ReactNode;
-  steps: Step[];
+  steps: PolicyStep[];
   current: number;
   onStep: (index: number) => void;
   children: React.ReactNode;
@@ -714,7 +748,6 @@ function PromptPolicyEditor({
   // defaults (create). Kept local so the author can iterate freely.
   const [name, setName] = useState(policy?.name ?? "");
   const [prompt, setPrompt] = useState(policy?.prompt ?? "");
-  const [model, setModel] = useState(policy?.modelConfig?.model ?? "");
   const [temperature, setTemperature] = useState(
     policy?.modelConfig?.temperature ?? 0,
   );
@@ -744,7 +777,6 @@ function PromptPolicyEditor({
     !!policy &&
     (name !== policy.name ||
       prompt !== (policy.prompt ?? "") ||
-      model !== (policy.modelConfig?.model ?? "") ||
       temperature !== (policy.modelConfig?.temperature ?? 0) ||
       failOpen !== (policy.modelConfig?.failOpen ?? true) ||
       !sameScopeOverrides(
@@ -769,6 +801,7 @@ function PromptPolicyEditor({
     onSuccess: () => {
       void invalidateAllRiskPoliciesGet(queryClient);
       void invalidateAllRiskListPolicies(queryClient);
+      toast.success("Policy updated");
     },
   });
   const createMutation = useRiskCreatePolicyMutation({
@@ -822,7 +855,6 @@ function PromptPolicyEditor({
           name: name.trim() || policy.name,
           prompt,
           modelConfig: {
-            model: model || undefined,
             temperature,
             failOpen,
           },
@@ -845,7 +877,7 @@ function PromptPolicyEditor({
           ...(autoName ? {} : { name: name.trim() }),
           enabled: true,
           prompt,
-          modelConfig: { model: model || undefined, temperature, failOpen },
+          modelConfig: { temperature, failOpen },
           ...(detectionScopes.length > 0 ? { detectionScopes } : {}),
           ...actionPayload(),
           ...(userMessage.trim() ? { userMessage } : {}),
@@ -869,30 +901,19 @@ function PromptPolicyEditor({
     scopeInclude: promptPolicyDef?.recommendedScopeInclude ?? "",
     scopeExempt: promptPolicyDef?.recommendedScopeExempt ?? "",
   };
-  // A preserved legacy policy-level scope still intersects the category scope
-  // in production (scanner: includes AND, exempts OR), so compose it here too.
   const guardrail = useMemo<Guardrail>(
     () => ({
       prompt,
-      model,
       temperature,
       failOpen,
-      messageTypes: policy?.messageTypes ?? [],
-      scopeInclude: intersectScopeExprs(
-        policy?.scopeInclude ?? "",
-        effectiveScope.scopeInclude,
-      ),
-      scopeExempt: unionScopeExprs(
-        policy?.scopeExempt ?? "",
-        effectiveScope.scopeExempt,
-      ),
+      messageTypes: [],
+      scopeInclude: effectiveScope.scopeInclude,
+      scopeExempt: effectiveScope.scopeExempt,
     }),
     [
       prompt,
-      model,
       temperature,
       failOpen,
-      policy,
       effectiveScope.scopeInclude,
       effectiveScope.scopeExempt,
     ],
@@ -924,8 +945,6 @@ function PromptPolicyEditor({
         <>
           <GuardrailCard prompt={prompt} onPromptChange={setPrompt} />
           <JudgeSection
-            model={model}
-            onModelChange={setModel}
             temperature={temperature}
             onTemperatureChange={setTemperature}
             failOpen={failOpen}
@@ -940,7 +959,6 @@ function PromptPolicyEditor({
           selectedCategories={promptPolicyCategories}
           scopeOverrides={scopeOverrides}
           setScopeOverrides={setScopeOverrides}
-          legacyPolicy={policy}
         />
       )}
 
@@ -973,7 +991,6 @@ function PromptPolicyEditor({
       {step === 4 && (
         <PromptReview
           prompt={prompt}
-          model={model}
           temperature={temperature}
           failOpen={failOpen}
           customizedScopeCount={scopeOverrides.size}
@@ -1033,18 +1050,14 @@ function GuardrailCard({
   );
 }
 
-// ── Judge section (model · temperature · fail behavior) ──────────────────────
+// ── Judge section (temperature · fail behavior) ──────────────────────────────
 
 function JudgeSection({
-  model,
-  onModelChange,
   temperature,
   onTemperatureChange,
   failOpen,
   onFailOpenChange,
 }: {
-  model: string;
-  onModelChange: (v: string) => void;
   temperature: number;
   onTemperatureChange: (v: number) => void;
   failOpen: boolean;
@@ -1054,37 +1067,9 @@ function JudgeSection({
     <Card>
       <SectionHeader
         title="Judge"
-        description="The model that evaluates each in-scope message and how it behaves under error."
+        description="How the judge evaluates each in-scope message and how it behaves under error."
       />
       <Stack gap={8}>
-        {/* Model */}
-        <div className="space-y-2">
-          <Text small>Model</Text>
-          <Text small muted>
-            The LLM that judges each in-scope message.
-          </Text>
-          <Select
-            value={model || DEFAULT_MODEL_VALUE}
-            onValueChange={(v) =>
-              onModelChange(v === DEFAULT_MODEL_VALUE ? "" : v)
-            }
-          >
-            <SelectTrigger className="w-[16rem]">
-              <SelectValue placeholder="Default" />
-            </SelectTrigger>
-            <SelectContent>
-              {JUDGE_MODELS.map((m) => (
-                <SelectItem
-                  key={m.value || DEFAULT_MODEL_VALUE}
-                  value={m.value || DEFAULT_MODEL_VALUE}
-                >
-                  {m.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         {/* Temperature */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -1142,13 +1127,11 @@ function ScopeStep({
   selectedCategories,
   scopeOverrides,
   setScopeOverrides,
-  legacyPolicy,
 }: {
   description: string;
   selectedCategories: Set<RuleCategory>;
   scopeOverrides: Map<string, ScopeOverride>;
   setScopeOverrides: (next: Map<string, ScopeOverride>) => void;
-  legacyPolicy?: RiskPolicy | null;
 }): JSX.Element {
   return (
     <Card>
@@ -1159,41 +1142,8 @@ function ScopeStep({
           scopeOverrides={scopeOverrides}
           setScopeOverrides={setScopeOverrides}
         />
-        <LegacyScopeNotice policy={legacyPolicy} />
       </Stack>
     </Card>
-  );
-}
-
-// Read-only reminder for policies that still carry a policy-level scope from
-// before category detection scopes became the only scoping surface. The
-// dashboard no longer edits these fields; a migration will fold them into
-// category scopes.
-function LegacyScopeNotice({
-  policy,
-}: {
-  policy?: RiskPolicy | null;
-}): JSX.Element | null {
-  if (!policy) return null;
-  const parts: string[] = [];
-  if ((policy.messageTypes ?? []).length > 0) {
-    parts.push(`message types: ${(policy.messageTypes ?? []).join(", ")}`);
-  }
-  if ((policy.scopeInclude ?? "").trim() !== "") {
-    parts.push(`include: ${(policy.scopeInclude ?? "").trim()}`);
-  }
-  if ((policy.scopeExempt ?? "").trim() !== "") {
-    parts.push(`exempt: ${(policy.scopeExempt ?? "").trim()}`);
-  }
-  if (parts.length === 0) return null;
-  return (
-    <div className="border-border bg-muted/20 border px-3 py-2">
-      <Text small muted>
-        A legacy policy-level scope still narrows this policy in addition to the
-        category scopes above ({parts.join("; ")}). It is preserved as-is and
-        will be migrated into category scopes.
-      </Text>
-    </div>
   );
 }
 
@@ -1217,8 +1167,10 @@ function RecommendedScopesPanel({
       .filter((category) =>
         selectedCategories.has(category.key as RuleCategory),
       )
-      .filter((category) => hasDisplayableRecommendedScope(category));
-  }, [categoriesQuery.data?.categories, selectedCategories]);
+      .filter((category) =>
+        hasDisplayableScope(category, scopeOverrides.get(category.key)),
+      );
+  }, [categoriesQuery.data?.categories, selectedCategories, scopeOverrides]);
 
   if (categoriesQuery.isLoading) {
     return (
@@ -1296,6 +1248,10 @@ function kindsFromExpr(expr: string): Set<ScopeSurfaceKind> | null {
   const trimmed = expr.trim();
   const out = new Set<ScopeSurfaceKind>();
   if (trimmed === "") return out;
+
+  const decoded = decodeKindScope(trimmed);
+  if (decoded) return new Set(decoded);
+
   for (const part of trimmed.split("||")) {
     const match = /^\(?\s*kind\s*==\s*"(\w+)"\s*\)?$/.exec(part.trim());
     const kind = match?.[1] as ScopeSurfaceKind | undefined;
@@ -1419,9 +1375,9 @@ function scopeFromSurfaces(surfaces: Set<ScopeSurfaceKind>): ScopeOverride {
     return { scopeInclude: "", scopeExempt: `kind == "${missing[0]}"` };
   }
   return {
-    scopeInclude: ALL_SURFACE_KINDS.filter((kind) => surfaces.has(kind))
-      .map((kind) => `kind == "${kind}"`)
-      .join(" || "),
+    scopeInclude: encodeKindScope(
+      ALL_SURFACE_KINDS.filter((kind) => surfaces.has(kind)),
+    ),
     scopeExempt: "",
   };
 }
@@ -1750,9 +1706,13 @@ function RecommendedScopeCodeLine({
   );
 }
 
-function hasDisplayableRecommendedScope(
+// A category with an empty recommendation (e.g. custom rules) still gets a
+// row when the policy carries its own scope for it.
+function hasDisplayableScope(
   category: RiskCategoryDefinition,
+  override: ScopeOverride | undefined,
 ): boolean {
+  if (override !== undefined) return true;
   if (!category.recommendedScopeApplicable) return true;
   return (
     category.recommendedScopeInclude.trim() !== "" ||
@@ -1799,30 +1759,14 @@ function scopeSummaryText(customizedScopeCount: number): string {
     : "Recommended scopes";
 }
 
-// Combine two include expressions: a message must satisfy both.
-function intersectScopeExprs(a: string, b: string): string {
-  const left = a.trim();
-  const right = b.trim();
-  if (left === "") return right;
-  if (right === "") return left;
-  return `(${left}) && (${right})`;
-}
-
-// Combine two exempt expressions: either one takes the message out.
-function unionScopeExprs(a: string, b: string): string {
-  const left = a.trim();
-  const right = b.trim();
-  if (left === "") return right;
-  if (right === "") return left;
-  return `(${left}) || (${right})`;
-}
-
 function detectionScopesPayload(
   selectedCategories: Set<RuleCategory>,
   overrides: Map<string, ScopeOverride>,
+  mode: DetectorMode = "presidio",
 ): RiskDetectionScope[] {
+  const persistedFor = persistedCategories(selectedCategories, mode);
   return [...overrides]
-    .filter(([category]) => selectedCategories.has(category as RuleCategory))
+    .filter(([category]) => persistedFor.has(category as RuleCategory))
     .map(([category, override]) => ({
       category,
       ...(override.scopeInclude.trim()
@@ -1895,6 +1839,20 @@ const PRESIDIO_THRESHOLD_STEP = 0.05;
 const PRESIDIO_THRESHOLD_TICKS = [0, 0.25, 0.5, 0.75, 1];
 const DEFAULT_PRESIDIO_THRESHOLD = 0.5;
 const EMPTY_SHADOW_MCP_URLS: ReadonlySet<string> = new Set<string>();
+
+// Shown on personal-data policies while the LLM analyzer flag is on for the
+// organization. The stored Presidio settings stay on the policy (turning the
+// flag off restores them) but do not drive detection meanwhile.
+export const LLM_ANALYZER_NOTICE =
+  "Entity selection, detection sensitivity and entity-type exclusions are not applied while the LLM analyzer is enabled for this organization. The model decides which personal-data category applies per finding.";
+
+function LlmAnalyzerNotice(): JSX.Element {
+  return (
+    <Alert variant="info" alignTop>
+      <AlertDescription>{LLM_ANALYZER_NOTICE}</AlertDescription>
+    </Alert>
+  );
+}
 
 function SensitivitySection({
   threshold,
@@ -1993,21 +1951,15 @@ function ActionStep({
           {action !== "flag" && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">
-                {action === "warn" ? "Warning message" : "Custom Message"}
+                {POLICY_ACTION_MESSAGE[action].label}
               </Label>
               <p className="text-muted-foreground text-xs">
-                {action === "warn"
-                  ? "Shown to the user when this policy warns on a tool call or prompt. Supports %{match}, %{entity}, %{policy}, and %{rule} placeholders, substituted at warn time. Leave blank to use the default message."
-                  : "Shown to the user when this policy blocks a tool call or prompt. Leave blank to use the default message."}
+                {POLICY_ACTION_MESSAGE[action].description}
               </p>
               <TextArea
                 value={userMessage}
                 onChange={setUserMessage}
-                placeholder={
-                  action === "warn"
-                    ? "e.g. %{match} looks sensitive. Acknowledge to proceed."
-                    : "e.g. This action was blocked by your organization's security policy. Contact your admin for help."
-                }
+                placeholder={POLICY_ACTION_MESSAGE[action].placeholder}
                 rows={3}
               />
             </div>
@@ -2026,7 +1978,6 @@ type EvalMatchFilter = "all" | "flagged" | "clean";
 
 type Guardrail = {
   prompt: string;
-  model: string;
   temperature: number;
   failOpen: boolean;
   messageTypes: string[];
@@ -2042,7 +1993,6 @@ function evalRequestBody(guardrail: Guardrail, chatId: string) {
       chatId,
       prompt: guardrail.prompt,
       modelConfig: {
-        model: guardrail.model || undefined,
         temperature: guardrail.temperature,
         failOpen: guardrail.failOpen,
       },
@@ -2096,7 +2046,6 @@ function usePromptGuardrailEval(
 function guardrailEvalKey(guardrail: Guardrail): string {
   return JSON.stringify({
     prompt: guardrail.prompt,
-    model: guardrail.model || "",
     temperature: guardrail.temperature,
     failOpen: guardrail.failOpen,
     messageTypes: guardrail.messageTypes,
@@ -2353,7 +2302,6 @@ function EvalTuner({
 
 function PromptReview({
   prompt,
-  model,
   temperature,
   failOpen,
   customizedScopeCount,
@@ -2366,7 +2314,6 @@ function PromptReview({
   onVerdictSelect,
 }: {
   prompt: string;
-  model: string;
   temperature: number;
   failOpen: boolean;
   customizedScopeCount: number;
@@ -2379,8 +2326,6 @@ function PromptReview({
   onVerdictSelect: (verdict: EvalVerdict) => void;
 }): JSX.Element {
   const scopeText = scopeSummaryText(customizedScopeCount);
-  const modelLabel =
-    JUDGE_MODELS.find((m) => m.value === model)?.label ?? model;
 
   return (
     <Stack gap={4}>
@@ -2394,7 +2339,7 @@ function PromptReview({
           </SummaryRow>
           <SummaryRow label="Judge">
             <Text small className="text-right">
-              {modelLabel} · temperature {temperature.toFixed(1)} ·{" "}
+              temperature {temperature.toFixed(1)} ·{" "}
               {failOpen ? "fail open" : "fail closed"}
             </Text>
           </SummaryRow>
@@ -2405,11 +2350,7 @@ function PromptReview({
           </SummaryRow>
           <SummaryRow label="Action">
             <Badge variant={action === "flag" ? "neutral" : "warning"}>
-              {action === "block"
-                ? "Block"
-                : action === "warn"
-                  ? "Warn"
-                  : "Flag"}
+              {POLICY_ACTION_LABEL[action]}
             </Badge>
           </SummaryRow>
           <SummaryRow label="Severity">
@@ -3173,6 +3114,10 @@ function JudgeSessionBanner({
   const detail = `${matchedCount} ${
     matchedCount === 1 ? "message" : "messages"
   } matched`;
+  let messageLimitNote = "";
+  if (evalResult.messageLimitHit) {
+    messageLimitNote = ` Only the first ${evalResult.judgedCount} of ${evalResult.inScopeMessageCount} in-scope messages were judged.`;
+  }
 
   if (evalResult.flagged) {
     return (
@@ -3189,7 +3134,7 @@ function JudgeSessionBanner({
           </div>
           <Text small muted>
             {detail} across {judgedLabel}. Matching messages are highlighted
-            below.
+            below.{messageLimitNote}
           </Text>
         </div>
       </div>
@@ -3207,7 +3152,7 @@ function JudgeSessionBanner({
           <Badge variant="neutral">Clean</Badge>
         </div>
         <Text small muted>
-          No messages matched across {judgedLabel}.
+          No messages matched across {judgedLabel}.{messageLimitNote}
         </Text>
       </div>
     </div>
@@ -3503,6 +3448,10 @@ export function StandardPolicyEditor({
   const project = useProject();
   const queryClient = useQueryClient();
   const { customRules } = useDetectionRulesStore();
+  // Under the LLM analyzer flag the personal-data categories collapse into a
+  // single category-level `pii` detector and the Presidio-only controls
+  // (entity selection, sensitivity) leave the form. See `DetectorMode`.
+  const mode = useDetectorMode();
   const [initializedInventoryForPolicy, setInitializedInventoryForPolicy] =
     useState<string | null>(null);
 
@@ -3511,7 +3460,11 @@ export function StandardPolicyEditor({
   // Original values (edit mode) used for dirty tracking.
   const orig = useMemo(() => {
     if (!policy) return null;
-    const cats = policyToCategories(policy.sources, policy.presidioEntities);
+    const cats = policyToCategories(
+      policy.sources,
+      policy.presidioEntities,
+      mode,
+    );
     if ((policy.customRuleIds ?? []).length > 0) cats.add("custom");
     return {
       name: policy.name,
@@ -3534,13 +3487,20 @@ export function StandardPolicyEditor({
       presidioThreshold:
         policy.presidioScoreThreshold ?? DEFAULT_PRESIDIO_THRESHOLD,
     };
-  }, [policy]);
+  }, [policy, mode]);
 
   // ── Local form state, seeded from the policy (edit) or defaults (create). ──
   const [name, setName] = useState(policy?.name ?? "");
   const [selectedCategories, setSelectedCategories] = useState<
     Set<RuleCategory>
   >(() => new Set(orig?.categories ?? initialCategories));
+  // The flag behind `mode` resolves asynchronously, so the seed above may
+  // predate it; fold any legacy personal-data selection into `pii` once the
+  // LLM analyzer applies, or the collapsed card would hide it and a save
+  // would drop the presidio source.
+  useEffect(() => {
+    setSelectedCategories((prev) => normalizeCategoriesForMode(prev, mode));
+  }, [mode]);
   const [disabledRules, setDisabledRules] = useState<Set<string>>(
     () => new Set(policy?.disabledRules ?? []),
   );
@@ -3561,6 +3521,11 @@ export function StandardPolicyEditor({
   >(() => new Set());
   const [originalShadowMCPURLs, setOriginalShadowMCPURLs] =
     useState<Set<string> | null>(null);
+  // Standing decisions the pending save would contradict; non-null opens the
+  // supersede confirmation.
+  const [supersedeConflicts, setSupersedeConflicts] = useState<
+    ShadowMCPDecisionConflict[] | null
+  >(null);
   const [shadowMCPDisposition, setShadowMCPDisposition] =
     useState<ShadowMCPDisposition>(
       () =>
@@ -3641,14 +3606,23 @@ export function StandardPolicyEditor({
   const flagOnlySelected = [...FLAG_ONLY_CATEGORIES].some((c) =>
     selectedCategories.has(c),
   );
-  const presidioActive = PRESIDIO_CATEGORIES.some((c) =>
+  const personalDataActive = personalDataCategories(mode).some((c) =>
     selectedCategories.has(c),
   );
+  // The Presidio confidence threshold only exists for the legacy engine; the
+  // LLM analyzer's score is binary, so the control and the field disappear.
+  const presidioActive = mode === "presidio" && personalDataActive;
+  // The banner tells flagged orgs that the policy's stored Presidio settings
+  // are not what runs: shown for any personal-data policy, stored or drafted.
+  const llmAnalyzerActive =
+    mode === "llm" &&
+    (personalDataActive || (policy?.sources ?? []).includes("presidio"));
+  const modeCategoryLevelDetectors = categoryLevelDetectors(mode);
   const hasEnabledDetector =
     selectedCustomRuleIds.size > 0 ||
     [...selectedCategories].some(
       (c) =>
-        CATEGORY_LEVEL_DETECTORS.has(c) ||
+        modeCategoryLevelDetectors.has(c) ||
         DETECTION_RULES[c]?.some((r) => !r.hidden && !disabledRules.has(r.id)),
     );
   const audienceMissing =
@@ -3693,6 +3667,7 @@ export function StandardPolicyEditor({
 
   const updateMutation = useRiskPoliciesUpdateMutation({
     onSuccess: (_policy, variables) => {
+      setSupersedeConflicts(null);
       const submittedURLs = shadowMCPSelectionBaselineForUpdate(
         variables.request.updateRiskPolicyRequestBody,
       );
@@ -3704,6 +3679,7 @@ export function StandardPolicyEditor({
       void invalidateAllRiskListPolicies(queryClient);
       void invalidateAllShadowMCPInventory(queryClient);
       void invalidateShadowMCPPolicyInventory(queryClient, project.id);
+      toast.success("Policy updated");
     },
   });
   const createMutation = useRiskCreatePolicyMutation({
@@ -3726,7 +3702,12 @@ export function StandardPolicyEditor({
       return;
     }
 
-    const rules = DETECTION_RULES[cat].filter((r) => !r.hidden);
+    // A category-level detector has no rule list to reset; under the LLM
+    // analyzer that includes `pii`, whose stored Presidio overrides must
+    // survive a flip so a flag-off restores them.
+    const rules = modeCategoryLevelDetectors.has(cat)
+      ? []
+      : DETECTION_RULES[cat].filter((r) => !r.hidden);
     const nextCats = new Set(selectedCategories);
     const nextDisabled = new Set(disabledRules);
     if (checked) nextCats.add(cat);
@@ -3744,9 +3725,15 @@ export function StandardPolicyEditor({
     else next.delete(ruleId);
     setSelectedCustomRuleIds(next);
   };
+  // Category-level detectors have no rule list to customize; under the LLM
+  // analyzer that includes `pii`, whose entity picker would be ignored.
+  const customizeCategoryRules = (cat: RuleCategory) => {
+    if (modeCategoryLevelDetectors.has(cat)) return;
+    setCustomizeCategory(cat);
+  };
 
   // Build the full update/create body, mirroring PolicyCenter's standard branch.
-  const save = () => {
+  const save = (options?: { supersedeDecisions?: boolean }) => {
     const {
       sources,
       presidioEntities,
@@ -3756,7 +3743,18 @@ export function StandardPolicyEditor({
       selectedCategories,
       disabledRules,
       pinnedHiddenRuleIds(policy?.presidioEntities),
+      mode,
     );
+    // Under the LLM analyzer the entity list is not what runs, so an edit
+    // echoes the stored list back unchanged rather than the empty list the
+    // collapsed PII card would derive: turning the flag off must restore the
+    // policy exactly as it was. Only while PII stays on, though: once the
+    // presidio source is gone the entities go with it, or a flag-off would
+    // read them back as selected detectors. A create has nothing stored.
+    const updatePresidioEntities =
+      mode === "llm" && sources.includes("presidio")
+        ? (policy?.presidioEntities ?? [])
+        : presidioEntities;
     // Flag-only sources (destructive_tool, cli_destructive, account_identity)
     // are rejected by the server with action=block, so force flag as a safety
     // net in case the form state drifted.
@@ -3776,6 +3774,7 @@ export function StandardPolicyEditor({
     const detectionScopes = detectionScopesPayload(
       selectedCategories,
       scopeOverrides,
+      mode,
     );
     const shadowMcpAllowedUrls = shadowMCPAllowedURLsForMutation({
       action: resolvedAction,
@@ -3796,13 +3795,31 @@ export function StandardPolicyEditor({
     };
 
     if (policy) {
+      // A URL toggle that contradicts a recorded decision needs explicit
+      // confirmation before it supersedes that decision.
+      if (
+        !options?.supersedeDecisions &&
+        targetIsShadowMCPBlock &&
+        originalHasShadowMCPBlockConfiguration
+      ) {
+        const conflicts = shadowMCPDecisionConflicts({
+          servers: inventoryQuery.data ?? [],
+          originalURLs: originalShadowMCPURLs,
+          selectedURLs: selectedShadowMCPURLs,
+          disposition: shadowMCPDisposition,
+        });
+        if (conflicts.length > 0) {
+          setSupersedeConflicts(conflicts);
+          return;
+        }
+      }
       updateMutation.mutate({
         request: {
           updateRiskPolicyRequestBody: {
             id: policy.id,
             name: name.trim() || policy.name,
             sources,
-            presidioEntities,
+            presidioEntities: updatePresidioEntities,
             promptInjectionRules,
             detectionScopes,
             disabledRules: payloadDisabled,
@@ -3813,14 +3830,23 @@ export function StandardPolicyEditor({
             autoName,
             userMessage,
             score,
-            // Always send: default when no Presidio category is active, so
-            // disabling them resets the stored threshold instead of leaving a
-            // stale value that would resurface if Presidio is re-enabled later
-            // (update omits preserve prior values server-side).
-            presidioScoreThreshold: presidioActive
-              ? presidioThreshold
-              : DEFAULT_PRESIDIO_THRESHOLD,
+            // Always send under the legacy engine: default when no Presidio
+            // category is active, so disabling them resets the stored
+            // threshold instead of leaving a stale value that would resurface
+            // if Presidio is re-enabled later (update omits preserve prior
+            // values server-side). Under the LLM analyzer the field is
+            // omitted so the stored value stays untouched for a flag-off.
+            ...(mode === "presidio"
+              ? {
+                  presidioScoreThreshold: presidioActive
+                    ? presidioThreshold
+                    : DEFAULT_PRESIDIO_THRESHOLD,
+                }
+              : {}),
             ...setupFields,
+            ...(options?.supersedeDecisions
+              ? { supersedeDecisions: true }
+              : {}),
             ...(identityActive ? { approvedEmailDomains } : {}),
           },
         },
@@ -3859,6 +3885,8 @@ export function StandardPolicyEditor({
     }
   };
 
+  const categoryCards = allCategories(mode);
+
   const header = (
     <PolicyHeader
       kind="standard"
@@ -3869,12 +3897,18 @@ export function StandardPolicyEditor({
       saving={saving}
       actionDisabled={saveBlocked}
       onSubmit={() => save()}
-      onCreate={save}
+      onCreate={() => save()}
     />
   );
 
   return (
     <>
+      <SupersedeDecisionsDialog
+        conflicts={supersedeConflicts}
+        saving={saving}
+        onCancel={() => setSupersedeConflicts(null)}
+        onConfirm={() => save({ supersedeDecisions: true })}
+      />
       <StepperShell
         header={header}
         steps={STANDARD_STEPS}
@@ -3886,6 +3920,7 @@ export function StandardPolicyEditor({
             <Card>
               <SectionHeader description="Turn on detector categories and attach your organization's custom rules." />
               <Stack gap={5}>
+                {llmAnalyzerActive && <LlmAnalyzerNotice />}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-medium">
@@ -3893,14 +3928,14 @@ export function StandardPolicyEditor({
                     </Label>
                     <span className="text-muted-foreground text-xs">
                       {
-                        ALL_CATEGORIES.filter((c) => selectedCategories.has(c))
+                        categoryCards.filter((c) => selectedCategories.has(c))
                           .length
                       }{" "}
                       on
                     </span>
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {ALL_CATEGORIES.map((cat) => (
+                    {categoryCards.map((cat) => (
                       <DetectorCard
                         key={cat}
                         category={cat}
@@ -3910,8 +3945,9 @@ export function StandardPolicyEditor({
                           cat,
                           selectedCategories,
                         )}
+                        mode={mode}
                         onToggle={(checked) => toggleCategory(cat, checked)}
-                        onCustomize={() => setCustomizeCategory(cat)}
+                        onCustomize={() => customizeCategoryRules(cat)}
                       />
                     ))}
                   </div>
@@ -3924,8 +3960,8 @@ export function StandardPolicyEditor({
                         Attach your organization's custom rules as{" "}
                         <span className="text-foreground font-medium">
                           detectors
-                        </span>{" "}
-                        — a match records a finding.
+                        </span>
+                        . A match records a finding.
                       </>
                     }
                     idPrefix="detector"
@@ -3958,7 +3994,6 @@ export function StandardPolicyEditor({
             selectedCategories={selectedCategories}
             scopeOverrides={scopeOverrides}
             setScopeOverrides={setScopeOverrides}
-            legacyPolicy={policy}
           />
         )}
 
@@ -4022,6 +4057,7 @@ export function StandardPolicyEditor({
             score={score}
             presidioActive={presidioActive}
             presidioThreshold={presidioThreshold}
+            mode={mode}
             audienceType={audienceType}
             audiencePrincipalCount={audiencePrincipalUrns.size}
           />
@@ -4056,6 +4092,7 @@ function StandardReview({
   score,
   presidioActive,
   presidioThreshold,
+  mode,
   audienceType,
   audiencePrincipalCount,
 }: {
@@ -4067,12 +4104,13 @@ function StandardReview({
   score: number;
   presidioActive: boolean;
   presidioThreshold: number;
+  mode: DetectorMode;
   audienceType: "everyone" | "targeted";
   audiencePrincipalCount: number;
 }): JSX.Element {
   const detectorLabels = [...categories]
     .filter((c) => c !== "custom")
-    .map((c) => RULE_CATEGORY_META[c].label);
+    .map((c) => ruleCategoryMeta(c, mode).label);
   if (customRuleCount > 0) {
     detectorLabels.push(
       `${customRuleCount} custom rule${customRuleCount === 1 ? "" : "s"}`,
@@ -4120,7 +4158,7 @@ function StandardReview({
         </SummaryRow>
         <SummaryRow label="Action">
           <Badge variant={action === "flag" ? "neutral" : "warning"}>
-            {action === "block" ? "Block" : action === "warn" ? "Warn" : "Flag"}
+            {POLICY_ACTION_LABEL[action]}
           </Badge>
         </SummaryRow>
         <SummaryRow label="Severity">

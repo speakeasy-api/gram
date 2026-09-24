@@ -168,3 +168,38 @@ describe("policySummary", () => {
     ).toBeNull();
   });
 });
+
+describe("policySummary under the LLM analyzer", () => {
+  const entityLessPii: PolicySummaryPolicy = {
+    name: "Data Guard",
+    policyType: "standard",
+    sources: ["gitleaks", "presidio"],
+    presidioEntities: [],
+  };
+
+  it("summarises an entity-less presidio policy as PII in either mode", () => {
+    expect(policySummary(entityLessPii)).toEqual({
+      kind: "categories",
+      text: "Secrets, Personal Identifiable Information",
+    });
+    expect(policySummary(entityLessPii, "llm")).toEqual({
+      kind: "categories",
+      text: "Secrets, PII",
+    });
+  });
+
+  it("collapses entity-scoped presidio policies into PII under the analyzer", () => {
+    const financial = standardPolicy("Data Guard", ["financial", "healthcare"]);
+    expect(policySummary(financial)).toEqual({
+      kind: "categories",
+      text: "Financial Information, Healthcare Information",
+    });
+    expect(policySummary(financial, "llm")).toEqual({
+      kind: "categories",
+      text: "PII",
+    });
+    expect(
+      policySummary({ ...financial, name: "PII Scanner" }, "llm"),
+    ).toBeNull();
+  });
+});

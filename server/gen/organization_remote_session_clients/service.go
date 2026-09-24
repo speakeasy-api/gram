@@ -26,8 +26,14 @@ type Service interface {
 	// Get a remote_session_client in the caller's organization by id. Requires
 	// org:read.
 	GetClient(context.Context, *GetClientPayload) (res *types.RemoteSessionClient, err error)
+	// Read sanitized delegation observations for the current upstream
+	// configuration in the last 30 days. Requires org:admin. Never exercises
+	// credentials; presence is not proof of future refresh success.
+	GetClientDelegationStatus(context.Context, *GetClientDelegationStatusPayload) (res *OrganizationClientDelegationStatus, err error)
 	// Authoritative impact summary for deleting a remote_session_client:
-	// associated session count and affected MCP server names. Requires org:read.
+	// associated session count, affected MCP server names, and trusted
+	// identity-provider login references that must be explicitly unlinked before
+	// deletion. Requires org:read.
 	GetClientDeletePreflight(context.Context, *GetClientDeletePreflightPayload) (res *OrganizationClientDeletePreflight, err error)
 	// List the MCP servers a remote_session_client is attached to (resolved
 	// through user_session_issuers) in the caller's organization. Requires
@@ -52,6 +58,24 @@ type Service interface {
 	// Update a remote_session_client's non-secret fields in the caller's
 	// organization. Requires org:admin.
 	UpdateClient(context.Context, *UpdateClientPayload) (res *types.RemoteSessionClient, err error)
+	// Attach an organization JSON Web Key Set to a remote_session_client in the
+	// caller's organization, opting it into signing private_key_jwt assertions.
+	// Requires org:admin and the customer_managed_encryption_keys entitlement.
+	AttachClientKeySet(context.Context, *AttachClientKeySetPayload) (res *types.RemoteSessionClient, err error)
+	// Detach the JSON Web Key Set from a remote_session_client in the caller's
+	// organization. Refused while the client declares
+	// token_endpoint_auth_method=private_key_jwt. A no-op when no set is attached.
+	// Requires org:admin and the customer_managed_encryption_keys entitlement.
+	DetachClientKeySet(context.Context, *DetachClientKeySetPayload) (res *types.RemoteSessionClient, err error)
+	// Re-register a dynamically registered remote_session_client with its issuer
+	// in place, replacing the client_id and secret while keeping the row's id,
+	// issuer bindings, MCP server attachments, and key set links. Every remote
+	// session minted against the old client_id is revoked, so users reconnect
+	// once. Use when the issuer reports the registration expired
+	// (upstream_rejected_at is set) or to rotate proactively. The replacement is
+	// registered at the registration_endpoint the client's issuer publishes, so
+	// the issuer must publish one. Requires org:admin.
+	RotateClient(context.Context, *RotateClientPayload) (res *types.RemoteSessionClient, err error)
 	// Soft-delete a remote_session_client in the caller's organization. Cascades
 	// to the remote_sessions minted against it. Requires org:admin.
 	DeleteClient(context.Context, *DeleteClientPayload) (err error)
@@ -80,7 +104,19 @@ const ServiceName = "organizationRemoteSessionClients"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [9]string{"listClients", "getClient", "getClientDeletePreflight", "listClientMcpServers", "createClient", "createCimdClient", "updateClient", "deleteClient", "removeClientFromMcpServer"}
+var MethodNames = [13]string{"listClients", "getClient", "getClientDelegationStatus", "getClientDeletePreflight", "listClientMcpServers", "createClient", "createCimdClient", "updateClient", "attachClientKeySet", "detachClientKeySet", "rotateClient", "deleteClient", "removeClientFromMcpServer"}
+
+// AttachClientKeySetPayload is the payload type of the
+// organizationRemoteSessionClients service attachClientKeySet method.
+type AttachClientKeySetPayload struct {
+	SessionToken *string
+	ApikeyToken  *string
+	// The remote_session_client id.
+	ID string
+	// The organization JSON Web Key Set to sign this client's private_key_jwt
+	// assertions with. Must belong to the client's organization.
+	JSONWebKeySetID string
+}
 
 // CreateCimdClientPayload is the payload type of the
 // organizationRemoteSessionClients service createCimdClient method.
@@ -124,12 +160,41 @@ type CreateClientPayload struct {
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string
+	// Identifier used as the aud claim in private_key_jwt assertions. Omit to use
+	// the issuer identifier; token_endpoint is available for providers that
+	// require the token endpoint URL.
+	TokenEndpointAuthAudienceFormat *string
 	// Explicit upstream OAuth scopes the dance should request for this client.
 	// Omit to fall back to the issuer's scopes_supported.
 	Scope []string
 	// Optional upstream OAuth audience to send on the authorize redirect and token
 	// exchange.
 	Audience *string
+	// When the issuer reported issuing the client_id (RFC 7591
+	// client_id_issued_at). Omit to record the time of this call.
+	ClientIDIssuedAt *string
+	// When the issuer reported the client secret expires (RFC 7591
+	// client_secret_expires_at). Omit when the issuer reported no expiry.
+	ClientSecretExpiresAt *string
+}
+
+// Sanitized count of the latest observation per human, not a history of token
+// requests.
+type DelegationStatusCount struct {
+	// Observed per-human delegation outcome, present only when the top-level
+	// status is observed. A configuration_failure count records past per-human
+	// failures for the current configuration; it is distinct from top-level
+	// configuration_failure, which reports a currently invalid configuration and
+	// returns no observations.
+	Status string
+	// Number of humans with this latest outcome.
+	Count int64
+	// Most recent matching observation.
+	LastObservedAt *string
+	// Most recent credential acquisition, distinct from renewal.
+	LastCredentialObtainedAt *string
+	// Most recent successful assertion renewal.
+	LastRefreshSucceededAt *string
 }
 
 // DeleteClientPayload is the payload type of the
@@ -139,6 +204,23 @@ type DeleteClientPayload struct {
 	ID           string
 	SessionToken *string
 	ApikeyToken  *string
+}
+
+// DetachClientKeySetPayload is the payload type of the
+// organizationRemoteSessionClients service detachClientKeySet method.
+type DetachClientKeySetPayload struct {
+	// The remote_session_client id.
+	ID           string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// GetClientDelegationStatusPayload is the payload type of the
+// organizationRemoteSessionClients service getClientDelegationStatus method.
+type GetClientDelegationStatusPayload struct {
+	// The remote_session_client id.
+	ID           string
+	SessionToken *string
 }
 
 // GetClientDeletePreflightPayload is the payload type of the
@@ -195,6 +277,18 @@ type ListOrganizationRemoteSessionClientsResult struct {
 	NextCursor *string
 }
 
+// OrganizationClientDelegationStatus is the result type of the
+// organizationRemoteSessionClients service getClientDelegationStatus method.
+type OrganizationClientDelegationStatus struct {
+	// unknown means no current observations; observed means matching observations
+	// exist; configuration_failure means the current delegation configuration is
+	// known to be invalid, not a per-human observation.
+	Status string
+	// Inclusive observation window start.
+	WindowStart  string
+	Observations []*DelegationStatusCount
+}
+
 // OrganizationClientDeletePreflight is the result type of the
 // organizationRemoteSessionClients service getClientDeletePreflight method.
 type OrganizationClientDeletePreflight struct {
@@ -202,6 +296,13 @@ type OrganizationClientDeletePreflight struct {
 	SessionCount int
 	// Display names of MCP servers this client is attached to.
 	McpServerNames []string
+	// Organization-owned user-session issuers that use this client for
+	// identity-provider login and block deletion.
+	TrustedUserSessionIssuers []*TrustedClientUserSessionIssuerReference
+	// Whether the client can be deleted now.
+	CanDelete bool
+	// Stable reason deletion is blocked. Present when can_delete is false.
+	BlockingReason *string
 }
 
 // An MCP server attached to a remote_session_client, with the fields the
@@ -245,6 +346,24 @@ type RemoveClientFromMcpServerPayload struct {
 	ApikeyToken  *string
 }
 
+// RotateClientPayload is the payload type of the
+// organizationRemoteSessionClients service rotateClient method.
+type RotateClientPayload struct {
+	// The remote_session_client id.
+	ID           string
+	SessionToken *string
+	ApikeyToken  *string
+}
+
+// An organization-owned user-session issuer that uses this client for
+// identity-provider login.
+type TrustedClientUserSessionIssuerReference struct {
+	// The user_session_issuer id.
+	ID string
+	// The user_session_issuer slug.
+	Slug string
+}
+
 // UpdateClientPayload is the payload type of the
 // organizationRemoteSessionClients service updateClient method.
 type UpdateClientPayload struct {
@@ -256,6 +375,9 @@ type UpdateClientPayload struct {
 	ClientSecret *string
 	// Change how the client authenticates at the issuer's token endpoint.
 	TokenEndpointAuthMethod *string
+	// Change the aud claim format used in private_key_jwt assertions. Omit to
+	// leave unchanged.
+	TokenEndpointAuthAudienceFormat *string
 	// Replace the explicit upstream OAuth scopes for this client. Omit to leave
 	// unchanged.
 	Scope []string
@@ -312,4 +434,9 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// MakeFailedPrecondition builds a goa.ServiceError from an error.
+func MakeFailedPrecondition(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "failed_precondition", false, false, false)
 }

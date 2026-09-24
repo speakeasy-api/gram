@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/google/uuid"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
@@ -15,29 +16,45 @@ import (
 )
 
 func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload, body io.ReadCloser) error {
-	return ingestOTLPExport(ctx, s.logger, otlpIngestSpec[*otelv1.InboundLogRecord]{
+	var export *collectorlogsv1.ExportLogsServiceRequest
+	err := ingestOTLPExport(ctx, s.logger, otlpIngestSpec[*otelv1.InboundLogRecord]{
 		signal:          "log",
 		contentEncoding: payload.ContentEncoding,
 		body:            body,
 		decode: func(raw []byte, tenant otlpIngestTenant) ([]*otelv1.InboundLogRecord, error) {
 			provenance := (&otelv1.InboundLogRecord_Provenance_builder{
-				Source:         new(otelProvenanceSource),
+				Source:         new(ProvenanceSource),
 				OrganizationId: &tenant.organizationID,
 				ProjectId:      &tenant.projectID,
 			}).Build()
-			return decodeOTLPLogExport(raw, provenance)
+			request, err := unmarshalOTLPLogExport(raw)
+			if err != nil {
+				return nil, err
+			}
+			export = request
+			return inboundLogRecordsFromExport(request, provenance)
 		},
-		validate:  validateLogRecord,
+		validate:  ValidateInboundLogRecord,
 		publisher: s.logPublisher,
 	})
+	if err != nil {
+		return err
+	}
+	// Only after the event feed publish is durable: an exporter retry after a
+	// failed publish must not write the hooks telemetry rows twice.
+	s.forwardLogsToHooks(ctx, export)
+	return nil
 }
 
-func decodeOTLPLogExport(raw []byte, provenance *otelv1.InboundLogRecord_Provenance) ([]*otelv1.InboundLogRecord, error) {
+func unmarshalOTLPLogExport(raw []byte) (*collectorlogsv1.ExportLogsServiceRequest, error) {
 	request := &collectorlogsv1.ExportLogsServiceRequest{ResourceLogs: nil}
 	if err := proto.Unmarshal(raw, request); err != nil {
 		return nil, fmt.Errorf("decode OTLP log export: %w", err)
 	}
+	return request, nil
+}
 
+func inboundLogRecordsFromExport(request *collectorlogsv1.ExportLogsServiceRequest, provenance *otelv1.InboundLogRecord_Provenance) ([]*otelv1.InboundLogRecord, error) {
 	records := make([]*otelv1.InboundLogRecord, 0)
 	for _, resourceLogs := range request.GetResourceLogs() {
 		if resourceLogs == nil {
@@ -76,6 +93,13 @@ func decodeOTLPLogExport(raw []byte, provenance *otelv1.InboundLogRecord_Provena
 				}
 
 				converted.SetRecordId(uuid.NewString())
+				// OTLP receivers stamp observed time when the producer did
+				// not. Stamping before the first publish keeps the value
+				// stable across Pub/Sub redeliveries, which downstream
+				// ClickHouse writers rely on for a deterministic dedup key.
+				if converted.GetObservedTimeUnixNano() == 0 {
+					converted.SetObservedTimeUnixNano(uint64(time.Now().UnixNano()))
+				}
 				converted.SetResource(resource)
 				converted.SetProvenance(provenance)
 				converted.SetScope(scope)
@@ -95,7 +119,12 @@ func decodeOTLPLogExport(raw []byte, provenance *otelv1.InboundLogRecord_Provena
 	return records, nil
 }
 
-func validateLogRecord(record *otelv1.InboundLogRecord) error {
+// ValidateInboundLogRecord enforces the ingest-edge contract on a log record
+// before it is published to the inbound pipeline topic: a record id must be
+// assigned, the record must fit the relay export budget, and trace/span ids
+// must be empty or exactly OTLP-sized. Exported so the hooks OTLP tee can
+// apply the same contract when it republishes records into this pipeline.
+func ValidateInboundLogRecord(record *otelv1.InboundLogRecord) error {
 	if record == nil {
 		return errors.New("log record is required")
 	}

@@ -32,6 +32,11 @@ func SetRootMcpEndpointDomainsPath() string {
 	return "/rpc/domain.setRootMcpEndpoint"
 }
 
+// ListRootMcpServersDomainsPath returns the URL path to the domains service listRootMcpServers HTTP endpoint.
+func ListRootMcpServersDomainsPath() string {
+	return "/rpc/domain.listRootMcpServers"
+}
+
 // CheckHealthDomainsPath returns the URL path to the domains service checkHealth HTTP endpoint.
 func CheckHealthDomainsPath() string {
 	return "/rpc/domain.checkHealth"

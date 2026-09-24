@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 )
 
@@ -26,6 +27,7 @@ const instrumentMCPToolCall = "mcp.tool.call"
 // proxy.
 type ProxyMetrics struct {
 	mcpToolCallCounter metric.Int64Counter
+	identityCoverage   *mcpmetrics.IdentityCoverageCounter
 }
 
 // NewProxyMetrics constructs the proxy metrics object. Instrument creation
@@ -43,6 +45,7 @@ func NewProxyMetrics(meter metric.Meter, logger *slog.Logger) *ProxyMetrics {
 
 	return &ProxyMetrics{
 		mcpToolCallCounter: counter,
+		identityCoverage:   mcpmetrics.NewIdentityCoverageCounter(meter, logger),
 	}
 }
 
@@ -71,4 +74,13 @@ func (m *ProxyMetrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpU
 	labels = identity.AppendAttributes(labels)
 
 	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(labels...))
+}
+
+// RecordKillswitchIdentityCoverage records the bounded coverage classes for
+// one private-proxy tools/call checkpoint.
+func (m *ProxyMetrics) RecordKillswitchIdentityCoverage(ctx context.Context, surface mcpmetrics.KillswitchCoverageSurface, identity mcpmetrics.KillswitchIdentityClass, resource mcpmetrics.KillswitchResourceClass) {
+	if m == nil {
+		return
+	}
+	m.identityCoverage.Record(ctx, surface, identity, resource)
 }

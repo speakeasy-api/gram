@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 
 //MISE dir="{{ config_root }}"
 //MISE hide=true
@@ -6,7 +6,7 @@
 
 //USAGE flag "--format <format>" default="mise" { choices "mise" "flat" }
 //USAGE flag "--file <file>" default="mise.worktree.local.toml" help="The file to write the environment variables to. If set to '-', the output will be written to stdout."
-//USAGE flag "--preserve" help="Preserve existing port assignments and dependent declarations already present in mise.local.toml. Only emit newly-introduced ports (randomized) and newly-introduced dependent declarations."
+//USAGE flag "--preserve" help="Preserve existing port assignments and dependent declarations already present in mise.local.toml. Only emit newly-introduced ports (randomized), newly-introduced dependent declarations, and generated dependent declarations whose mise.toml template has changed since they were written."
 
 /**
  * This script is responsible for finding available ports for any environment
@@ -23,6 +23,15 @@
  * up to date with new ports / dependents added on `main` without
  * re-randomizing ports that are already assigned and without clobbering
  * manual edits the user may have made to dependent values.
+ *
+ * One exception: a generated dependent is mise.toml's template copied
+ * verbatim (`{{env.GRAM_DEVIDP_PORT}}` and so on), so when the template in
+ * mise.toml changes -- a URL prefix rename, say -- the pinned copy silently
+ * keeps the old shape and mise.toml's new default never applies. A pinned
+ * value that still carries a template but no longer matches the current one
+ * is therefore re-emitted. Numeric pins cannot be distinguished from manual
+ * overrides and remain untouched. Remove a stale numeric alias explicitly
+ * from mise.local.toml before syncing to adopt the current template.
  */
 
 import { execFileSync } from "node:child_process";
@@ -40,10 +49,11 @@ import { checkPort } from "get-port-please";
  */
 const SHARED_PORT_ENV_VARS = new Set([
   "PRESIDIO_PORT",
-  // The LGTM stack is shared too, so every worktree must reach Grafana, Tempo,
-  // Loki, Prometheus and the OTLP receivers on the same default host port.
-  // OTEL_EXPORTER_OTLP_ENDPOINT is derived from OTLP_GRPC_PORT and is skipped
-  // along with it, so it keeps its mise.toml default as well.
+  "PUBSUB_EMULATOR_PORT",
+  // The LGTM stack is shared, so every worktree must reach it
+  // on the same default host ports.
+  // OTEL_EXPORTER_OTLP_ENDPOINT is derived from skipped ports and therefore
+  // keeps its mise.toml default too.
   "GRAFANA_PORT",
   "TEMPO_HTTP_PORT",
   "LOKI_HTTP_PORT",
@@ -145,8 +155,13 @@ async function main() {
     }
   }
 
+  // Template ports are aliases, not separate listeners. Emit them through
+  // dependency traversal after their source port instead of randomizing them.
   const portEnvVars = Object.keys(config.env).filter(
-    (key) => key.endsWith("_PORT") && !SHARED_PORT_ENV_VARS.has(key),
+    (key) =>
+      key.endsWith("_PORT") &&
+      !SHARED_PORT_ENV_VARS.has(key) &&
+      !isGeneratedDeclaration(config.env[key]),
   );
 
   // Ports this worktree keeps (--preserve) are reserved too, so a newly-added
@@ -159,6 +174,9 @@ async function main() {
   }
 
   const emitted = new Map<string, string>();
+  // A dependent reachable through more than one port is visited more than
+  // once; report a refresh only the first time.
+  const refreshed = new Set<string>();
   const emit = (key: string, value: string) => {
     // delete-then-set moves the key to the end of insertion order, matching
     // the unset+set semantics of `mise set` so dependents end up after the
@@ -175,7 +193,20 @@ async function main() {
     }
 
     for (const [key, value] of findDependentEnvVars(config.env, portEnvVar)) {
-      if (preserve && key in existing) continue;
+      if (preserve && key in existing) {
+        const pinned = existing[key] ?? "";
+        const generatedTemplateChanged =
+          isGeneratedDeclaration(pinned) && pinned !== value;
+        if (!generatedTemplateChanged) continue;
+        if (!refreshed.has(key)) {
+          refreshed.add(key);
+          // stderr on purpose: stdout is the declarations themselves when the
+          // caller asked for them on `-`.
+          const reason =
+            "refreshing a generated declaration whose mise.toml template changed";
+          console.error(`↻ ${key}: ${reason} (was ${JSON.stringify(pinned)})`);
+        }
+      }
       emit(key, value);
     }
   }
@@ -203,6 +234,18 @@ async function main() {
   } else {
     writeFileSync(file, out);
   }
+}
+
+/**
+ * Only `zero:remap-ports` writes a `{{env.…}}` template into mise.local.toml,
+ * so its presence proves a declaration was generated rather than typed in.
+ * `git:worksync` relies on the same marker for its one-off resets.
+ */
+// `existing` is parsed TOML, so a value can be any scalar the format allows
+// even though the parse is cast to strings. Only a string can carry the
+// template marker, and a non-string was never generated by this task.
+function isGeneratedDeclaration(value: unknown): value is string {
+  return typeof value === "string" && value.includes("{{env.");
 }
 
 function findDependentEnvVars(

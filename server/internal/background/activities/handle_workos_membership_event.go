@@ -13,6 +13,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/events"
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
+	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
@@ -80,6 +81,10 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 
 	deleted := workos.EventKind(event.Event) == workos.EventKindOrganizationMembershipDeleted
 	if deleted || payload.Status == string(usermanagement.Inactive) {
+		reason := agentownership.OwnerReassignmentReasonOwnerInactive
+		if deleted {
+			reason = agentownership.OwnerReassignmentReasonMembershipLost
+		}
 		return deprovisionOrganizationAccess(ctx, dbtx, deprovisionOrganizationAccessParams{
 			organizationID:     org.ID,
 			gramUserID:         gramUserID,
@@ -87,6 +92,7 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 			workosMembershipID: payload.ID,
 			eventID:            event.ID,
 			eventUpdatedAt:     payload.UpdatedAt,
+			ownerLossReason:    reason,
 		})
 	}
 
@@ -95,6 +101,10 @@ func handleOrganizationMembershipEvent(ctx context.Context, logger *slog.Logger,
 	}
 	// Membership changes alter which emails resolve in the identity map.
 	none.refreshIdentityMap = true
+	// A cached organization list without this org would keep denying the
+	// member until the TTL ran out; drop it so the next access check sees the
+	// new row. Unknown users have nothing cached.
+	none.invalidateUserInfoCacheUserID = gramUserID
 	return none, nil
 }
 

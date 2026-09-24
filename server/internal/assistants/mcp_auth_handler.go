@@ -128,8 +128,7 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 	r.Body = http.MaxBytesReader(w, r.Body, mcpAuthFlowMaxBodyBytes)
 	var req createMCPAuthFlowRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return oops.E(oops.CodeBadRequest, err, "request body too large")
 		}
 		return oops.E(oops.CodeBadRequest, err, "decode mcp auth flow request")
@@ -169,11 +168,16 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "discover mcp authorization server metadata").LogError(ctx, s.logger)
 	}
-	if metadata.Issuer == "" || metadata.AuthorizationEndpoint == "" || metadata.TokenEndpoint == "" || metadata.RegistrationEndpoint == "" {
+	if metadata.Issuer == "" || metadata.AuthorizationEndpoint == "" || metadata.TokenEndpoint == "" {
 		return oops.E(oops.CodeUnexpected, nil, "mcp authorization server does not advertise RFC 8414 endpoints").LogError(ctx, s.logger)
 	}
 	if len(metadata.Issuer) > mcpOAuthIssuerMaxLength {
 		return oops.E(oops.CodeUnexpected, nil, "mcp authorization server issuer is too long").LogError(ctx, s.logger)
+	}
+
+	useCIMD := s.assistantCIMDAllowed(ctx, claims.OrgID, assistantOrgSlug(ctx)) && issuerSupportsAssistantCIMD(metadata)
+	if !useCIMD && metadata.RegistrationEndpoint == "" {
+		return oops.E(oops.CodeUnexpected, nil, "mcp authorization server does not advertise RFC 8414 endpoints").LogError(ctx, s.logger)
 	}
 
 	credentials, err := s.getOrRegisterMCPAuthClient(
@@ -183,6 +187,7 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 		metadata.Issuer,
 		metadata.RegistrationEndpoint,
 		redirectURI,
+		useCIMD,
 	)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve assistant mcp oauth client").LogError(ctx, s.logger)
@@ -274,6 +279,13 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 	code := r.URL.Query().Get("code")
 	switch {
 	case oauthErr != "":
+		if oauthErr == "invalid_client" || oauthErr == "unauthorized_client" {
+			// The authorization server refused the client itself, not the
+			// grant. Retire the registration so the next flow re-registers
+			// or falls back from CIMD to DCR instead of repeating the
+			// same refusal.
+			s.invalidateMCPAuthClient(ctx, projectID, assistantID, claims.OAuthServerIssuer, claims.ClientID)
+		}
 		payload.Status = mcpAuthStatusFailed
 		payload.Error = oauthErr
 		payload.ErrorDescription = r.URL.Query().Get("error_description")
@@ -405,6 +417,7 @@ func (s *Service) getOrRegisterMCPAuthClient(
 	oauthServerIssuer string,
 	registrationEndpoint string,
 	redirectURI string,
+	useCIMD bool,
 ) (mcpAuthClientCredentials, error) {
 	queries := assistantrepo.New(s.core.db)
 	coordinationCtx, cancel := context.WithTimeout(ctx, mcpOAuthCoordinationMax)
@@ -433,6 +446,13 @@ func (s *Service) getOrRegisterMCPAuthClient(
 			ClaimLease:        claimLease,
 		})
 		if err == nil && existing.Usable.Bool {
+			if !useCIMD && existing.ClientIDMetadataUri.Valid {
+				// CIMD was switched off, or the authorization server stopped
+				// advertising it. A public client_id it no longer accepts
+				// is retired so the row becomes claimable for DCR below.
+				s.invalidateMCPAuthClient(coordinationCtx, projectID, assistantID, oauthServerIssuer, existing.ClientID.String)
+				continue
+			}
 			return mcpAuthClientCredentials{
 				ClientID:              existing.ClientID.String,
 				ClientSecretEncrypted: existing.ClientSecretEncrypted.String,
@@ -442,6 +462,32 @@ func (s *Service) getOrRegisterMCPAuthClient(
 			if err != nil {
 				return mcpAuthClientCredentials{}, fmt.Errorf("get assistant mcp oauth client: %w", err)
 			}
+		}
+
+		if useCIMD {
+			noRow := errors.Is(err, pgx.ErrNoRows)
+			isCIMD := err == nil && existing.ClientIDMetadataUri.Valid
+			invalidatedCIMD := isCIMD && existing.Invalidated.Bool
+			// A live DCR registration is kept; anything else (no row, a
+			// CIMD row, or a DCR row that expired, was invalidated, or was
+			// registered for another redirect) moves to CIMD. An invalidated
+			// CIMD row falls back to DCR, except when there is no
+			// registration endpoint to fall back to: then it is refreshed
+			// and CIMD retried instead of failing every flow from here on.
+			if (noRow || isCIMD || existing.Claimable.Bool) && (!invalidatedCIMD || registrationEndpoint == "") {
+				credentials, cimdErr := s.upsertMCPAuthCIMDClient(coordinationCtx, queries, projectID, assistantID, oauthServerIssuer, redirectURI, usableAfter, claimLease)
+				if cimdErr == nil {
+					return credentials, nil
+				}
+				if errors.Is(cimdErr, pgx.ErrNoRows) {
+					continue
+				}
+				return mcpAuthClientCredentials{}, cimdErr
+			}
+		}
+
+		if registrationEndpoint == "" {
+			return mcpAuthClientCredentials{}, fmt.Errorf("mcp authorization server does not advertise a registration endpoint")
 		}
 
 		if errors.Is(err, pgx.ErrNoRows) || existing.Claimable.Bool {
@@ -569,6 +615,41 @@ func (s *Service) completeMCPAuthClientRegistration(
 	}, nil
 }
 
+func (s *Service) upsertMCPAuthCIMDClient(
+	ctx context.Context,
+	queries *assistantrepo.Queries,
+	projectID uuid.UUID,
+	assistantID uuid.UUID,
+	oauthServerIssuer string,
+	redirectURI string,
+	usableAfter pgtype.Timestamptz,
+	claimLease pgtype.Interval,
+) (mcpAuthClientCredentials, error) {
+	if s.core.serverURL == nil {
+		return mcpAuthClientCredentials{}, fmt.Errorf("assistant mcp auth callback base url not configured")
+	}
+	clientID := AssistantClientMetadataDocumentURL(s.core.serverURL, assistantID)
+	persistenceCtx, persistenceCancel := context.WithTimeout(context.WithoutCancel(ctx), mcpOAuthPersistenceMax)
+	defer persistenceCancel()
+	row, err := queries.UpsertAssistantMCPOAuthClientCIMD(persistenceCtx, assistantrepo.UpsertAssistantMCPOAuthClientCIMDParams{
+		ProjectID:           projectID,
+		AssistantID:         assistantID,
+		OauthServerIssuer:   oauthServerIssuer,
+		RedirectUri:         redirectURI,
+		ClientID:            pgtype.Text{String: clientID, Valid: true},
+		ClientIDMetadataUri: pgtype.Text{String: clientID, Valid: true},
+		UsableAfter:         usableAfter,
+		ClaimLease:          claimLease,
+	})
+	if err != nil {
+		return mcpAuthClientCredentials{}, fmt.Errorf("upsert assistant mcp oauth cimd client: %w", err)
+	}
+	return mcpAuthClientCredentials{
+		ClientID:              row.ClientID.String,
+		ClientSecretEncrypted: row.ClientSecretEncrypted.String,
+	}, nil
+}
+
 func (s *Service) abandonMCPAuthClientRegistration(
 	ctx context.Context,
 	queries *assistantrepo.Queries,
@@ -654,14 +735,28 @@ func (s *Service) registerMCPAuthClient(ctx context.Context, endpoint, redirectU
 	return out, nil
 }
 
+func newMCPAuthTokenRequest(ctx context.Context, endpoint string, form url.Values, clientID, clientSecret string) (*http.Request, error) {
+	if clientSecret == "" {
+		form.Set("client_id", clientID)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("build token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if clientSecret != "" {
+		// RFC 6749 §2.3.1: client credentials must be form-urlencoded before
+		// going into the Basic authorization header. Upstreams that decode per
+		// spec (e.g. Snowflake) reject raw credentials containing '+' or '%'.
+		req.SetBasicAuth(url.QueryEscape(clientID), url.QueryEscape(clientSecret))
+	}
+	return req, nil
+}
+
 func (s *Service) consumeMCPAuthGrant(ctx context.Context, claims *assistanttokens.MCPAuthFlowClaims, code string) error {
 	verifier, err := s.core.encryptionClient.Decrypt(claims.CodeVerifier)
 	if err != nil {
 		return fmt.Errorf("decrypt pkce verifier: %w", err)
-	}
-	clientSecret, err := s.core.encryptionClient.Decrypt(claims.ClientSecret)
-	if err != nil {
-		return fmt.Errorf("decrypt mcp client secret: %w", err)
 	}
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
@@ -669,15 +764,19 @@ func (s *Service) consumeMCPAuthGrant(ctx context.Context, claims *assistanttoke
 	form.Set("redirect_uri", claims.RedirectURI)
 	form.Set("code_verifier", verifier)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, claims.TokenEndpoint, strings.NewReader(form.Encode()))
-	if err != nil {
-		return fmt.Errorf("build token request: %w", err)
+	clientSecret := ""
+	if claims.ClientSecret != "" {
+		decrypted, err := s.core.encryptionClient.Decrypt(claims.ClientSecret)
+		if err != nil {
+			return fmt.Errorf("decrypt mcp client secret: %w", err)
+		}
+		clientSecret = decrypted
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	// RFC 6749 §2.3.1: client credentials must be form-urlencoded before
-	// going into the Basic authorization header. Upstreams that decode per
-	// spec (e.g. Snowflake) reject raw credentials containing '+' or '%'.
-	req.SetBasicAuth(url.QueryEscape(claims.ClientID), url.QueryEscape(clientSecret))
+
+	req, err := newMCPAuthTokenRequest(ctx, claims.TokenEndpoint, form, claims.ClientID, clientSecret)
+	if err != nil {
+		return err
+	}
 	resp, err := s.core.guardianPolicy.Client(guardian.WithDefaultRetryConfig()).Do(req)
 	if err != nil {
 		return fmt.Errorf("send token request: %w", err)

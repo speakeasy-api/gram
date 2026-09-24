@@ -114,8 +114,9 @@ func TestListOrganizationProjects_CountsMCPServerRows(t *testing.T) {
 	seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
 	projectID := seedProject(t, ctx, conn, "org_one", "new-model")
 	backing := seedToolset(t, ctx, conn, "org_one", projectID, "backing", false)
+	backingTwo := seedToolset(t, ctx, conn, "org_one", projectID, "backing-two", false)
 	seedMCPServer(t, ctx, conn, projectID, backing, "one")
-	seedMCPServer(t, ctx, conn, projectID, backing, "two")
+	seedMCPServer(t, ctx, conn, projectID, backingTwo, "two")
 
 	require.Equal(t, map[string]int{"new-model": 2}, listProjects(t, ctx, svc, "org_one"))
 }

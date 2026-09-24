@@ -6,6 +6,7 @@ on:
       - "server/internal/plugins/**"
       - "server/cmd/export-hook-plugin/**"
       - "hooks/relay/config.go"
+      - "hooks/relay/pi_extension.go"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}

@@ -1,11 +1,23 @@
+import { queryKeyGrants } from "@gram/client/react-query/grants.js";
 import { describe, expect, it } from "vitest";
 import {
   exclusionScopesForScope,
   hasScopeInGrants,
+  hasScopeInProject,
   resourceKindForScope,
   selectorMatches,
   selectorMatchesStrict,
 } from "./useRBAC";
+
+describe("grants query key", () => {
+  it("isolates effective grants by session", () => {
+    const first = queryKeyGrants({ gramSession: "session-first" });
+    const second = queryKeyGrants({ gramSession: "session-second" });
+
+    expect(first).not.toEqual(second);
+    expect(first.at(-1)).toEqual({ gramSession: "session-first" });
+  });
+});
 
 describe("resourceKindForScope", () => {
   it("returns 'project' for project scopes", () => {
@@ -54,9 +66,46 @@ describe("resourceKindForScope", () => {
     expect(resourceKindForScope("chat:read")).toBe("chat");
   });
 
+  it("returns 'agent' for agent scopes", () => {
+    expect(resourceKindForScope("agent:read")).toBe("agent");
+  });
+
   it("returns '*' for unknown scope families", () => {
     expect(resourceKindForScope("root")).toBe("*");
     expect(resourceKindForScope("unknown:thing")).toBe("*");
+  });
+});
+
+describe("hasScopeInProject", () => {
+  it("matches MCP grants constrained by the project selector", () => {
+    expect(
+      hasScopeInProject(
+        [
+          {
+            scope: "mcp:read",
+            selectors: [
+              { resourceKind: "mcp", resourceId: "*", projectId: "project_a" },
+            ],
+          },
+        ],
+        "mcp:read",
+        "project_a",
+      ),
+    ).toBe(true);
+    expect(
+      hasScopeInProject(
+        [
+          {
+            scope: "mcp:read",
+            selectors: [
+              { resourceKind: "mcp", resourceId: "*", projectId: "project_a" },
+            ],
+          },
+        ],
+        "mcp:read",
+        "project_b",
+      ),
+    ).toBe(false);
   });
 });
 
@@ -203,15 +252,10 @@ describe("exclusionScopesForScope", () => {
       "project:blocked_write",
       "project:blocked_read",
     ]);
-    expect(exclusionScopesForScope("mcp:read")).toEqual([
-      "mcp:blocked_read",
-      "mcp:blocked_connect",
-    ]);
-    expect(exclusionScopesForScope("mcp:write")).toEqual([
-      "mcp:blocked_write",
-      "mcp:blocked_read",
-      "mcp:blocked_connect",
-    ]);
+    // The mcp:blocked_* scopes are independent of one another: a block on
+    // connect leaves read and write standing.
+    expect(exclusionScopesForScope("mcp:read")).toEqual(["mcp:blocked_read"]);
+    expect(exclusionScopesForScope("mcp:write")).toEqual(["mcp:blocked_write"]);
     expect(exclusionScopesForScope("mcp:connect")).toEqual([
       "mcp:blocked_connect",
     ]);
@@ -326,5 +370,17 @@ describe("hasScopeInGrants", () => {
     ];
 
     expect(hasScopeInGrants(grants, "mcp:connect", "server_a")).toBe(true);
+  });
+});
+
+describe("plugin scope isolation", () => {
+  it("uses project selectors for plugin scopes", () => {
+    expect(resourceKindForScope("plugin:write")).toBe("project");
+    expect(resourceKindForScope("plugin:blocked_write")).toBe("project");
+  });
+  it("does not grant skill or MCP editing through plugin write", () => {
+    const grants = [{ scope: "plugin:write" }];
+    expect(hasScopeInGrants(grants, "skill:write", "project-a")).toBe(false);
+    expect(hasScopeInGrants(grants, "mcp:write", "project-a")).toBe(false);
   });
 });

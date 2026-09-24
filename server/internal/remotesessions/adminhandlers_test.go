@@ -33,8 +33,38 @@ func createGlobalIssuer(t *testing.T, slug string) *adminrsgen.CreateGlobalIssue
 		Oidc:                              nil,
 		Passthrough:                       nil,
 		ClientIDMetadataDocumentSupported: nil,
+		UserinfoEndpoint:                  nil,
+		IntrospectionEndpoint:             nil,
+		IntrospectionEndpointAuthMethodsSupported:  nil,
+		IDTokenSigningAlgValuesSupported:           nil,
+		ClaimsSupported:                            nil,
+		BackchannelLogoutSupported:                 nil,
+		AuthorizationResponseIssParameterSupported: nil,
 	}
 	return payload
+}
+
+func TestAdminRemoteSessions_CreateGlobalIssuer_PersistsDiscoveredCapabilities(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	introspection := "https://global-capabilities.example.com/introspect"
+	issParam := true
+	payload := createGlobalIssuer(t, "global-capabilities")
+	payload.IntrospectionEndpoint = &introspection
+	payload.IntrospectionEndpointAuthMethodsSupported = []string{"client_secret_post"}
+	payload.AuthorizationResponseIssParameterSupported = &issParam
+
+	issuer, err := ti.service.CreateGlobalIssuer(ctx, payload)
+	require.NoError(t, err)
+	require.NotNil(t, issuer.IntrospectionEndpoint)
+	require.Equal(t, introspection, *issuer.IntrospectionEndpoint)
+	require.Equal(t, []string{"client_secret_post"}, issuer.IntrospectionEndpointAuthMethodsSupported)
+	require.NotNil(t, issuer.AuthorizationResponseIssParameterSupported)
+	require.True(t, *issuer.AuthorizationResponseIssParameterSupported)
+	require.Nil(t, issuer.UserinfoEndpoint)
+	require.Nil(t, issuer.BackchannelLogoutSupported)
 }
 
 func TestAdminRemoteSessions_CreateGlobalIssuer_Success(t *testing.T) {
@@ -381,6 +411,40 @@ func TestAdminRemoteSessions_GlobalClientLifecycle(t *testing.T) {
 
 	err = ti.service.DeleteGlobalIssuer(ctx, &adminrsgen.DeleteGlobalIssuerPayload{ID: issuer.ID, SessionToken: nil})
 	require.NoError(t, err)
+}
+
+func TestAdminRemoteSessions_GlobalIssuerTrustedReferenceCountAndDeleteGuard(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	adminCtx := withAdmin(t, ctx)
+	issuer, err := ti.service.CreateGlobalIssuer(adminCtx, createGlobalIssuer(t, "global-trusted-reference"))
+	require.NoError(t, err)
+	issuerID, err := uuid.Parse(issuer.ID)
+	require.NoError(t, err)
+	trustedIssuerID := createTrustedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "global-trusted-reference-usi", issuerID)
+
+	loaded, err := ti.service.GetGlobalIssuer(adminCtx, &adminrsgen.GetGlobalIssuerPayload{ID: issuer.ID})
+	require.NoError(t, err)
+	require.Equal(t, 1, loaded.TrustedUserSessionIssuerCount)
+
+	listed, err := ti.service.ListGlobalIssuers(adminCtx, &adminrsgen.ListGlobalIssuersPayload{})
+	require.NoError(t, err)
+	found := false
+	for _, item := range listed.Items {
+		if item.Issuer.ID == issuer.ID {
+			require.Equal(t, 1, item.TrustedUserSessionIssuerCount)
+			found = true
+			break
+		}
+	}
+	require.True(t, found)
+
+	err = ti.service.DeleteGlobalIssuer(adminCtx, &adminrsgen.DeleteGlobalIssuerPayload{ID: issuer.ID})
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	clearTrustedRemoteSessionIssuer(t, ctx, ti.conn, trustedIssuerID)
+	require.NoError(t, ti.service.DeleteGlobalIssuer(adminCtx, &adminrsgen.DeleteGlobalIssuerPayload{ID: issuer.ID}))
 }
 
 func TestAdminRemoteSessions_GetGlobalClient(t *testing.T) {

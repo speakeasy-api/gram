@@ -1,0 +1,174 @@
+# Admin SDK usage
+
+The Admin application uses the private, same-origin clients in
+[`src/lib/gramAdminClient.ts`](src/lib/gramAdminClient.ts). Keep generated SDK
+imports and request options inside that boundary rather than exposing them to
+page components.
+
+## Organization meter usage
+
+`/organizations/:org-id-or-slug/billing` reports organization totals for storage
+(tokens under management), MCP bandwidth (bytes), and risk scans (tokens).
+It uses the same ordinary meter readings and billing-cycle boundaries as the
+customer dashboard, without facet queries or breakdown controls.
+
+The admin process requires both the primary ClickHouse connection settings
+(`CLICKHOUSE_*`) and the read-replica settings (`CLICKHOUSE_READ_*`), just like
+the main app. PAYG billing operations use the primary connection; meter usage
+reports use the read replica. Startup fails if either connection cannot be
+established. Local development can point both connections at the same instance.
+
+Product, interval, cumulative mode, and custom dates are URL search parameters.
+Daily, Monday-start weekly, and calendar-month totals use UTC. Date ranges
+include both displayed dates and cannot exceed three calendar months.
+Cumulative charts stop at retrieval time rather than projecting future usage.
+Period totals and rollups retain exact integer precision; only chart coordinates
+are converted to JavaScript numbers. These usage reports are not invoice estimates.
+
+The existing demo seed supplies ordinary readings for all three products.
+No additional seed or schema migration is required.
+
+## Image upload mutation variables
+
+The generated `useAdminUploadPlatformImageMutation` hook takes a variables
+object, **not a bare Blob**. Inside the SDK integration layer, given `mutate`
+from that hook and a browser `File` or `Blob`, use:
+
+```ts
+mutate({ request: blob });
+```
+
+For example, a browser file-input handler can submit the selected file without
+Node.js filesystem APIs or an asynchronous form handler:
+
+```ts
+const file = input.files?.[0];
+if (file) {
+  mutate({ request: file });
+}
+```
+
+`File` extends `Blob`. The generated
+[`AdminUploadPlatformImageMutationVariables`](src/sdk/src/react-query/adminUploadPlatformImage.ts)
+type also accepts `ArrayBuffer`, `Uint8Array`, and `ReadableStream<Uint8Array>`
+under `request`; `options` is optional and remains internal to the integration
+layer.
+
+### Generated documentation limitation
+
+The mutation example in [`src/sdk/REACT_QUERY.md`](src/sdk/REACT_QUERY.md)
+currently passes a bare Blob and uses `await openAsBlob(...)` inside a
+non-async browser form handler. Use the wrapped browser example above instead.
+
+The pinned Speakeasy generator (`1.796.1`) owns that file. Its bundled
+`sdk-customization/readme-customization.md` guide documents custom sections in
+`README.md` and `generation.additionalDocs`, but does not document a source
+override for the React Query mutation template. This non-generated guide keeps
+the correction durable without modifying generated output or enabling
+persistent edits. The generated example still needs an upstream template fix.
+
+## Organization list API filters
+
+`GET /admin/organizations.list` accepts these optional query parameters. All
+filters intersect with search, account type and trial state; `total` counts the
+full filtered set independently of cursor, page, offset or limit.
+
+- `min_members` / `max_members`: inclusive nonnegative integer bounds on active
+  member count, including zero. Each can be omitted. Values must fit signed
+  int64 (`0`–`9223372036854775807`), and minimum cannot exceed maximum.
+  The handwritten `listOrganizations` API client accepts safe JavaScript numbers
+  or decimal strings; use strings above `Number.MAX_SAFE_INTEGER` to avoid
+  precision loss. The generated admin SDK instead accepts native `bigint` and
+  serializes it losslessly to decimal query strings.
+- `created_from` / `created_to`: strict `YYYY-MM-DD` UTC calendar dates, **both
+  inclusive**, each independently optional. The service converts the start to
+  UTC midnight and the end to an exclusive bound at the next day's UTC midnight,
+  including the entire end day at database precision. Invalid calendar dates or
+  a reversed range are rejected.
+- `disabled_status`: `all`, `active`, or `disabled`; omission is unrestricted
+  (`all`). Active means `disabled_at IS NULL`, disabled means `IS NOT NULL`.
+  Every filter applies strictly to exact organization and WorkOS ID searches.
+  Unknown status values are rejected by HTTP and direct service validation.
+  The former `include_disabled`, `disabled_states`, and `disabled_only` API
+  parameters are removed. Existing dashboard URL parameters are translated at
+  the request boundary, including legacy active-only links; they are not API
+  compatibility aliases.
+
+Invalid bounds, fractional or overflowing member counts, and invalid dates
+return a 4xx response. Date bounds remain API-only; no date controls or preset-to-date mappings are
+introduced here.
+
+The Organization Status dropdown offers All, Active, and Disabled. New URLs use
+`disabledStatus=active|disabled`, omitting All. Valid canonical values (including
+explicit `all`) win over old URL fields. Otherwise `disabledOnly=true|false`
+wins over legacy `disabled` selections; explicit false means All. Invalid
+canonical values fall back through valid legacy fields, then All. Old fields
+are read for bookmarks but removed on new navigations.
+
+### Member range URLs
+
+The Member count sheet uses optional, inclusive Min / Max bounds. Blank means
+unbounded; zero is valid. UI state and the `minMembers` / `maxMembers` route
+parameters are decimal **strings**, not JavaScript numbers. The UI trims
+whitespace and removes leading zeros before applying.
+
+TanStack Router's default serializer quotes numeric-looking strings. For example,
+applying Min `0` and Max `9223372036854775807` produces:
+
+```text
+/organizations?minMembers=%220%22&maxMembers=%229223372036854775807%22
+```
+
+After percent-decoding, those values are JSON strings (`"0"` and
+`"9223372036854775807"`). Keep the quotes when constructing a link manually.
+Bare numeric URL values are unsupported: Router JSON-parses them before route
+validation, potentially losing integer precision or the original syntax. The
+route rejects all such numbers, even safe ones: `?maxMembers=0` drops that bound
+and therefore means **unbounded**, not zero. Use `?maxMembers=%220%22` instead.
+This route contract is distinct from the API's unquoted decimal query parameters
+(`min_members=0`, for example).
+
+Invalid bounds are dropped individually while valid counterparts are retained;
+a reversed pair drops both. Invalid sheet drafts instead show inline errors and
+disable Apply until corrected or cleared.
+
+#### Keyboard verification
+
+The admin test dependencies do not include `@testing-library/user-event`.
+`FilterSheet.test.tsx` checks initial Max autofocus and the Cancel restoration
+callback, not native Tab navigation. Read-only Chromium verification using the
+repository Playwright CLI covers actual Tab and Shift+Tab traversal between
+Min, Max, and the Clear all / Cancel / Apply footer controls, plus Cancel focus
+restoration to the Members trigger. Recheck this in a browser when changing
+sheet focus order; manually calling `.focus()` in a DOM test is not equivalent.
+
+### Bigint React Query keys
+
+The generated normal and infinite organization-list key factories normalize only
+`minMembers` and `maxMembers` to lossless decimal strings. Request payloads remain
+native `bigint`; HTTP serialization is unchanged. This keeps the keys compatible
+with TanStack Query's default JSON hashing without narrowing the int64 range.
+
+The two-factory fix is maintained in the admin SDK's
+[Speakeasy native patch](src/sdk/.speakeasy/patches/src/react-query/adminListOrganizations.core.ts.patch),
+not by editing generated files or adding a custom post-generation script.
+`mise run gen:sdk` applies the patch during generation. If the generator changes
+these factories, update the patch and run the real QueryClient regression tests
+in `src/lib/gramAdminApi.test.ts`; missing targets can otherwise be reported only
+as generator warnings. See [Speakeasy patch files](https://www.speakeasy.com/docs/sdks/customize/code/patch-files/patch-files).
+
+## Organization created-date filters
+
+`createdFrom` and `createdTo` are optional, independently inclusive UTC calendar
+dates (`YYYY-MM-DD`). The default is All time. URLs store only absolute dates,
+not a moving preset: shared links retain the same boundaries tomorrow. Invalid
+URL bounds are dropped individually; a reversed pair is dropped together.
+
+Today and Last 7/14/30 days include the current UTC day (Last 7 starts six days
+before today). Apply resolves the selected preset against the clock at that
+moment, even if the sheet crossed midnight. Opening the sheet recognizes presets
+against the current day; an old Today becomes Custom. Applied summaries always
+show absolute inclusive bounds, never stale relative labels. Custom edits and
+Cancel do not alter the applied dates. Custom fields intentionally use text with
+strict validation: native date inputs can erase incomplete/invalid drafts into
+an empty value, which would otherwise silently remove an optional bound.

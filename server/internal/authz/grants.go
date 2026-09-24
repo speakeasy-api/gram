@@ -40,13 +40,30 @@ type ScopedGrant struct {
 	Selectors []Selector
 }
 
-// GrantsSatisfy reports whether the loaded grant set authorizes check.
+// GrantsSatisfy reports whether the loaded grant set has an allow grant matching
+// check. It intentionally does not evaluate exclusion scopes; callers answering
+// an effective authorization question should use GrantsAuthorize.
 func GrantsSatisfy(grants []Grant, check Check) bool {
 	if err := validateInput(check); err != nil {
 		return false
 	}
 	grant, _ := matchingGrant(grants, check.expand())
 	return grant != nil
+}
+
+// GrantsAuthorize evaluates one check against already-loaded grants with the
+// same scope expansion, selector matching, and exclusion semantics as Engine.
+// Read-only projections use this when they need to explain another principal's
+// effective access without replacing the request context's acting principal.
+func GrantsAuthorize(grants []Grant, check Check) (bool, error) {
+	if err := validateInput(check); err != nil {
+		return false, err
+	}
+	evaluation, err := evaluateGrantCheck(grants, check)
+	if err != nil {
+		return false, err
+	}
+	return evaluation.Grant != nil && !evaluation.Denied, nil
 }
 
 // SystemRoleGrants defines the canonical grant sets for the built-in system

@@ -278,6 +278,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetObservabilityOverview", "type": "query"}`)
 	})
 
+	Method("getMetaMcpServerUsage", func() {
+		Description("Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetMetaMcpServerUsagePayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetMetaMcpServerUsageResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getMetaMcpServerUsage")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMetaMcpServerUsage")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMetaMcpServerUsage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMetaMcpServerUsage", "type": "query"}`)
+	})
+
 	Method("getProjectOverview", func() {
 		Description("Get project-level overview including total chats, tool calls, active servers/users, and top lists")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -623,7 +652,7 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageSummary", "type": "query"}`)
 	})
 
-	// The seven getToolUsage* methods below expose the individual aggregates of
+	// The getToolUsage* methods below expose the individual aggregates of
 	// getToolUsageSummary as standalone endpoints so the MCP & Tools dashboard can
 	// fetch and render each panel independently as its data arrives, rather than
 	// blocking on the slowest aggregate. They share GetToolUsageSummaryPayload.
@@ -713,6 +742,64 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:operationId", "getToolUsageUsers")
 		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageUsers")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageUsers", "type": "query"}`)
+	})
+
+	Method("getToolUsageClients", func() {
+		Description("Get top MCP clients by tool usage")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageClientsResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageClients")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageClients")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageClients")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageClients", "type": "query"}`)
+	})
+
+	Method("getToolUsageClientToolBreakdown", func() {
+		Description("Get per-tool MCP and tool usage grouped by MCP client")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetToolUsageSummaryPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetToolUsageClientToolBreakdownResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getToolUsageClientToolBreakdown")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getToolUsageClientToolBreakdown")
+		Meta("openapi:extension:x-speakeasy-name-override", "getToolUsageClientToolBreakdown")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetToolUsageClientToolBreakdown", "type": "query"}`)
 	})
 
 	Method("getToolUsageTargetTimeSeries", func() {
@@ -1511,6 +1598,7 @@ var UserAccountType = Type("UserAccount", func() {
 	Description("A linked AI account for a user. The identity is (provider, email): the same email registered on two providers is two distinct accounts.")
 
 	Attribute("id", String, "Account record id (user_accounts.id); used to scope chat/session views to this account")
+	Attribute("user_id", String, "Gram user id of the directory owner of this account; the authoritative link between account-email-keyed usage and the org member")
 	Attribute("provider", String, "AI provider the account belongs to ('anthropic', 'openai', 'cursor')")
 	Attribute("email", String, "Email associated with the account; may differ from the user's work email for personal accounts")
 	Attribute("account_type", String, "'team' (enterprise) or 'personal' (individual); empty when not yet classified")
@@ -1747,6 +1835,9 @@ var queryDimensions = []any{
 var queryMeasures = []any{
 	"total_cost",
 	"total_tokens",
+	// Computed rank: input + output, the population person-facing surfaces
+	// display (total_tokens additionally counts cache writes).
+	"llm_tokens",
 	"total_input_tokens",
 	"total_output_tokens",
 	"cache_read_input_tokens",
@@ -1775,6 +1866,9 @@ var QueryPayload = Type("QueryPayload", func() {
 	})
 	Attribute("filters", ArrayOf(QueryFilter), "Optional filters; all filters are ANDed together.")
 	Attribute("granularity_seconds", Int64, "Optional timeseries bucket size in seconds. Defaults to an interval derived from the time range and is floored to 3600 (the source data is bucketed hourly).")
+	Attribute("include_dimension_values", Boolean, "Whether to include distinct values for other dimensions in each table row. When omitted, defaults to true.", func() {
+		Default(true)
+	})
 	Attribute("top_n", Int, "When group_by is set, keep at most this many groups (ranked by sort_by); the remainder are rolled into an 'Other' group. Defaults to 10.", func() {
 		Default(10)
 		Minimum(1)
@@ -1966,6 +2060,9 @@ var GetObservabilityOverviewPayload = Type("GetObservabilityOverviewPayload", fu
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, "Optional MCP server ID filter (fronting server; spans both remote-backed and toolset-backed activity)", func() {
+		Format(FormatUUID)
+	})
+	Attribute("meta_mcp_server_id", String, "Optional gateway (meta MCP server) ID filter; scopes to traffic dispatched through that gateway", func() {
 		Format(FormatUUID)
 	})
 	Attribute("event_source", String, "Optional event source filter (e.g. 'hook')")
@@ -2388,7 +2485,7 @@ var GetHooksSummaryResult = Type("GetHooksSummaryResult", func() {
 
 var ToolUsageTargetType = Type("ToolUsageTargetType", String, func() {
 	Description("Tool usage target type")
-	Enum("hosted_mcp_server", "tunneled_mcp_server", "shadow_mcp_server", "local_tool", "skill")
+	Enum("hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server", "shadow_mcp_server", "local_tool", "skill")
 })
 
 var ToolUsageTargetKind = Type("ToolUsageTargetKind", String, func() {
@@ -2403,7 +2500,7 @@ var ToolUsageStatus = Type("ToolUsageStatus", String, func() {
 
 var ToolUsageUserKind = Type("ToolUsageUserKind", String, func() {
 	Description("Tool usage user identity kind")
-	Enum("email", "external_user_id", "user_id", "unknown")
+	Enum("email", "external_user_id", "user_id", "agent_id", "unknown")
 })
 
 var ToolUsageUserFilter = Type("ToolUsageUserFilter", func() {
@@ -2415,7 +2512,7 @@ var ToolUsageUserFilter = Type("ToolUsageUserFilter", func() {
 
 var ToolUsageFilterOptionType = Type("ToolUsageFilterOptionType", String, func() {
 	Description("Tool usage filter option type")
-	Enum("hosted_servers", "shadow_servers", "users")
+	Enum("hosted_servers", "shadow_servers", "gateways", "users", "clients")
 })
 
 var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
@@ -2432,9 +2529,19 @@ var GetToolUsageSummaryPayload = Type("GetToolUsageSummaryPayload", func() {
 	Attribute("target_types", ArrayOf(ToolUsageTargetType), "Target types to include. Empty means all target types.")
 	Attribute("hosted_toolset_slugs", ArrayOf(String), "Hosted MCP toolset slugs to include")
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
+	Attribute("meta_mcp_server_ids", ArrayOf(String), "Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
+	Attribute("client_keys", ArrayOf(String), "MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include")
 	Attribute("account_type", String, "Optional account type filter ('team' or 'personal').")
+	// The same three narrowing inputs the trace listing takes. Without them the
+	// summary cards and the timeline answer for the whole window while the rows
+	// beneath them answer for a filtered one, and the page has to apologise for
+	// the difference. A query or a filter drops this read onto the same raw log
+	// scan the listing falls back to, which is the cost of the two agreeing.
+	Attribute("statuses", ArrayOf(ToolUsageStatus), "Trace outcomes to include (error, success, blocked, pending). Empty means all.")
+	Attribute("query", String, "Free-text attribute search string from the q URL param, applied as the trace listing applies it.")
+	Attribute("filters", ArrayOf(LogFilter), "Arbitrary attribute filter conditions from the af URL param")
 
 	Required("from", "to")
 })
@@ -2449,8 +2556,10 @@ var GetToolUsageSummaryResult = Type("GetToolUsageSummaryResult", func() {
 	Attribute("user_time_series", ArrayOf(ToolUsageUserTimeSeriesPoint), "Time-series usage buckets grouped by user identity")
 	Attribute("users_by_target", ArrayOf(ToolUsageUsersByTargetRow), "Cross-dimensional usage rows grouped by target and user identity")
 	Attribute("target_tool_breakdown", ArrayOf(ToolUsageTargetToolBreakdownRow), "Per-tool usage rows grouped by target")
+	Attribute("clients", ArrayOf(ToolUsageClientSummary), "Top MCP clients for the selected filters and time range")
+	Attribute("client_tool_breakdown", ArrayOf(ToolUsageClientToolBreakdownRow), "Per-tool usage rows grouped by MCP client")
 
-	Required("totals", "targets", "users", "target_time_series", "user_time_series", "users_by_target", "target_tool_breakdown")
+	Required("totals", "targets", "users", "target_time_series", "user_time_series", "users_by_target", "target_tool_breakdown", "clients", "client_tool_breakdown")
 })
 
 var GetToolUsageTotalsResult = Type("GetToolUsageTotalsResult", func() {
@@ -2469,6 +2578,18 @@ var GetToolUsageUsersResult = Type("GetToolUsageUsersResult", func() {
 	Description("Top MCP and tool usage user identities for the selected filters and time range")
 	Attribute("users", ArrayOf(ToolUsageUserSummary), "Top user identities for the selected filters and time range")
 	Required("users")
+})
+
+var GetToolUsageClientsResult = Type("GetToolUsageClientsResult", func() {
+	Description("Top MCP clients for the selected filters and time range")
+	Attribute("clients", ArrayOf(ToolUsageClientSummary), "Top MCP clients for the selected filters and time range")
+	Required("clients")
+})
+
+var GetToolUsageClientToolBreakdownResult = Type("GetToolUsageClientToolBreakdownResult", func() {
+	Description("Per-tool MCP and tool usage grouped by MCP client")
+	Attribute("client_tool_breakdown", ArrayOf(ToolUsageClientToolBreakdownRow), "Per-tool usage rows grouped by MCP client")
+	Required("client_tool_breakdown")
 })
 
 var GetToolUsageTargetTimeSeriesResult = Type("GetToolUsageTargetTimeSeriesResult", func() {
@@ -2509,8 +2630,10 @@ var ListToolUsageTracesPayload = Type("ListToolUsageTracesPayload", func() {
 	Attribute("target_types", ArrayOf(ToolUsageTargetType), "Target types to include. Empty means all target types.")
 	Attribute("hosted_toolset_slugs", ArrayOf(String), "Hosted MCP toolset slugs to include")
 	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to include")
+	Attribute("meta_mcp_server_ids", ArrayOf(String), "Gateway (meta MCP server) ids to include: calls dispatched through the gateway to its members plus calls observed against the gateway itself")
 	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to include")
 	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to include. Direct hosted MCP calls have no hook source and are excluded when this filter is set.")
+	Attribute("client_keys", ArrayOf(String), "MCP client keys (lowercased self-reported client names; 'unattributed' selects calls Gram never saw an initialize handshake for) to include")
 	Attribute("account_type", String, "Optional account type filter ('team' or 'personal'). 'team' includes unclassified traces.")
 	Attribute("statuses", ArrayOf(ToolUsageStatus), "Trace outcomes to include (error, success, blocked, pending). Empty means all.")
 	Attribute("query", String, "Free-text attribute search string from the q URL param. Matches useful identifier attributes such as Gram URN, conversation ID, and trigger instance ID.")
@@ -2563,8 +2686,13 @@ var ToolUsageTraceSummary = Type("ToolUsageTraceSummary", func() {
 	})
 	Attribute("block_reason", String, "Hook block reason when hook_status is blocked")
 	Attribute("account_type", String, "AI account classification ('team' or 'personal'); empty/absent when unclassified")
+	Attribute("via_meta_mcp_server_id", String, "Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself")
+	Attribute("via_meta_mcp_server_name", String, "Display name of the dispatching gateway; a deleted gateway keeps its last name")
+	Attribute("client_key", String, "Stable MCP client identity used by filters; 'unattributed' when the caller never reported one")
+	Attribute("client_label", String, "User-facing MCP client label as the client reported it")
+	Attribute("client_version", String, "MCP client version when the client reported one alongside its name")
 
-	Required("id", "log_group", "start_time_unix_nano", "log_count", "gram_urn", "tool_name", "target_type", "target_kind", "target_id", "target_label", "user_key", "user_label", "user_kind", "event_source")
+	Required("id", "log_group", "start_time_unix_nano", "log_count", "gram_urn", "tool_name", "target_type", "target_kind", "target_id", "target_label", "user_key", "user_label", "user_kind", "event_source", "client_key", "client_label")
 })
 
 var ToolUsageTraceLogGroupKind = Type("ToolUsageTraceLogGroupKind", String, func() {
@@ -2602,9 +2730,11 @@ var GetToolUsageFilterOptionsResult = Type("GetToolUsageFilterOptionsResult", fu
 
 	Attribute("hosted_servers", ArrayOf(ToolUsageHostedServerFilterOption), "Hosted MCP servers with usage in the selected time range")
 	Attribute("shadow_servers", ArrayOf(ToolUsageShadowServerFilterOption), "Shadow MCP servers with usage in the selected time range")
+	Attribute("gateways", ArrayOf(ToolUsageGatewayFilterOption), "Gateways (meta MCP servers) with usage in the selected time range")
 	Attribute("users", ArrayOf(ToolUsageUserFilterOption), "User identities with usage in the selected time range")
+	Attribute("clients", ArrayOf(ToolUsageClientFilterOption), "MCP clients with usage in the selected time range")
 
-	Required("hosted_servers", "shadow_servers", "users")
+	Required("hosted_servers", "shadow_servers", "gateways", "users", "clients")
 })
 
 var ToolUsageHostedServerFilterOption = Type("ToolUsageHostedServerFilterOption", func() {
@@ -2626,6 +2756,16 @@ var ToolUsageShadowServerFilterOption = Type("ToolUsageShadowServerFilterOption"
 	Required("server_name", "event_count")
 })
 
+var ToolUsageGatewayFilterOption = Type("ToolUsageGatewayFilterOption", func() {
+	Description("Gateway (meta MCP server) filter option with usage in the selected time window")
+
+	Attribute("meta_mcp_server_id", String, "Gateway (meta MCP server) id")
+	Attribute("name", String, "Gateway display name; a deleted gateway keeps its last name")
+	Attribute("event_count", Int64, "Number of tool usage events dispatched through or observed against the gateway")
+
+	Required("meta_mcp_server_id", "name", "event_count")
+})
+
 var ToolUsageUserFilterOption = Type("ToolUsageUserFilterOption", func() {
 	Description("Tool usage user filter option with usage in the selected time window")
 
@@ -2637,6 +2777,16 @@ var ToolUsageUserFilterOption = Type("ToolUsageUserFilterOption", func() {
 	Required("user_key", "user_label", "user_kind", "event_count")
 })
 
+var ToolUsageClientFilterOption = Type("ToolUsageClientFilterOption", func() {
+	Description("MCP client filter option with usage in the selected time window")
+
+	Attribute("client_key", String, "Stable MCP client identity used by filters")
+	Attribute("client_label", String, "User-facing label for the MCP client")
+	Attribute("event_count", Int64, "Number of tool usage events observed for the MCP client")
+
+	Required("client_key", "client_label", "event_count")
+})
+
 var ToolUsageTotals = Type("ToolUsageTotals", func() {
 	Description("Target-aware MCP and tool usage totals")
 
@@ -2644,11 +2794,13 @@ var ToolUsageTotals = Type("ToolUsageTotals", func() {
 	Attribute("success_count", Int64, "Number of successful tool usage events")
 	Attribute("failure_count", Int64, "Number of failed tool usage events")
 	Attribute("failure_rate", Float64, "Fraction of completed tool usage events that failed")
+	Attribute("blocked_count", Int64, "Number of tool usage events a policy denied")
+	Attribute("blocked_rate", Float64, "Fraction of all tool usage events a policy denied")
 	Attribute("unique_tools", Int64, "Number of distinct tools observed")
 	Attribute("unique_users", Int64, "Number of distinct user identities observed")
 	Attribute("unique_targets", Int64, "Number of distinct usage targets observed")
 
-	Required("event_count", "success_count", "failure_count", "failure_rate", "unique_tools", "unique_users", "unique_targets")
+	Required("event_count", "success_count", "failure_count", "failure_rate", "blocked_count", "blocked_rate", "unique_tools", "unique_users", "unique_targets")
 })
 
 var ToolUsageTargetSummary = Type("ToolUsageTargetSummary", func() {
@@ -2682,6 +2834,20 @@ var ToolUsageUserSummary = Type("ToolUsageUserSummary", func() {
 	Required("user_key", "user_label", "user_kind", "event_count", "unique_tools", "success_count", "failure_count", "failure_rate")
 })
 
+var ToolUsageClientSummary = Type("ToolUsageClientSummary", func() {
+	Description("Aggregated tool usage metrics for one MCP client")
+
+	Attribute("client_key", String, "Stable MCP client identity used by filters and chart grouping")
+	Attribute("client_label", String, "User-facing label for the MCP client")
+	Attribute("event_count", Int64, "Total number of tool usage events for the MCP client")
+	Attribute("unique_tools", Int64, "Number of distinct tools observed for the MCP client")
+	Attribute("success_count", Int64, "Number of successful tool usage events for the MCP client")
+	Attribute("failure_count", Int64, "Number of failed tool usage events for the MCP client")
+	Attribute("failure_rate", Float64, "Fraction of completed tool usage events for the MCP client that failed")
+
+	Required("client_key", "client_label", "event_count", "unique_tools", "success_count", "failure_count", "failure_rate")
+})
+
 var ToolUsageTargetTimeSeriesPoint = Type("ToolUsageTargetTimeSeriesPoint", func() {
 	Description("A time-series bucket for one tool usage target")
 
@@ -2692,8 +2858,13 @@ var ToolUsageTargetTimeSeriesPoint = Type("ToolUsageTargetTimeSeriesPoint", func
 	Attribute("target_label", String, "User-facing label for the target")
 	Attribute("event_count", Int64, "Number of tool usage events in the bucket")
 	Attribute("failure_count", Int64, "Number of failed tool usage events in the bucket")
+	// Counted apart from failures: a denial is the policy working and a pending
+	// call has not finished, so folding either into "failed" overstates how much
+	// is broken.
+	Attribute("blocked_count", Int64, "Number of tool usage events denied by a hook in the bucket")
+	Attribute("pending_count", Int64, "Number of tool usage events observed starting but never finishing in the bucket")
 
-	Required("bucket_start_ns", "target_type", "target_kind", "target_id", "target_label", "event_count", "failure_count")
+	Required("bucket_start_ns", "target_type", "target_kind", "target_id", "target_label", "event_count", "failure_count", "blocked_count", "pending_count")
 })
 
 var ToolUsageUserTimeSeriesPoint = Type("ToolUsageUserTimeSeriesPoint", func() {
@@ -2741,6 +2912,20 @@ var ToolUsageTargetToolBreakdownRow = Type("ToolUsageTargetToolBreakdownRow", fu
 	Required("target_type", "target_kind", "target_id", "target_label", "tool_name", "event_count", "success_count", "failure_count", "failure_rate")
 })
 
+var ToolUsageClientToolBreakdownRow = Type("ToolUsageClientToolBreakdownRow", func() {
+	Description("Aggregated tool usage metrics for one MCP client and tool")
+
+	Attribute("client_key", String, "Stable MCP client identity used by filters and chart grouping")
+	Attribute("client_label", String, "User-facing label for the MCP client")
+	Attribute("tool_name", String, "Observed tool name")
+	Attribute("event_count", Int64, "Total number of tool usage events for the MCP client and tool")
+	Attribute("success_count", Int64, "Number of successful tool usage events for the MCP client and tool")
+	Attribute("failure_count", Int64, "Number of failed tool usage events for the MCP client and tool")
+	Attribute("failure_rate", Float64, "Fraction of completed tool usage events for the MCP client and tool that failed")
+
+	Required("client_key", "client_label", "tool_name", "event_count", "success_count", "failure_count", "failure_rate")
+})
+
 var GetMcpServerActivityPayload = Type("GetMcpServerActivityPayload", func() {
 	Description("Payload for per-MCP-server tool-call activity used by the Distribute MCP listing indicators")
 
@@ -2754,24 +2939,74 @@ var GetMcpServerActivityPayload = Type("GetMcpServerActivityPayload", func() {
 var GetMcpServerActivityResult = Type("GetMcpServerActivityResult", func() {
 	Description("Per-MCP-server tool-call activity. Only servers with at least one tool call inside the lookback window are returned; a server absent from the list has never received a tool call (within the telemetry retention window).")
 
-	Attribute("activity", ArrayOf(McpServerActivity), "One entry per MCP server (hosted or tunneled) that has received at least one tool call within the lookback window")
+	Attribute("activity", ArrayOf(McpServerActivity), "One entry per MCP server (hosted, tunneled, or gateway) that has received at least one tool call within the lookback window")
 	Attribute("recent_window_days", Int, "The recent-activity window size in days that was applied")
 	Attribute("lookback_days", Int, "The overall lookback window size in days (bounded by telemetry retention)")
 
 	Required("activity", "recent_window_days", "lookback_days")
 })
 
+var GetMetaMcpServerUsagePayload = Type("GetMetaMcpServerUsagePayload", func() {
+	Attribute("meta_mcp_server_id", String, "The gateway (meta MCP server) ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Required("meta_mcp_server_id", "from", "to")
+})
+
+var MetaMcpDiscoveryFunnel = Type("MetaMcpDiscoveryFunnel", func() {
+	Description("Counts of each gateway drill-down stage in the window. Discovery stages come from meta_discovery events; executions from gateway-attributed tool calls.")
+
+	Attribute("list_servers", Int64, "list_servers calls")
+	Attribute("describe_server", Int64, "describe_server calls")
+	Attribute("describe_tools", Int64, "describe_tools calls")
+	Attribute("execute_tool", Int64, "Tool executions dispatched through the gateway")
+
+	Required("list_servers", "describe_server", "describe_tools", "execute_tool")
+})
+
+var MetaMcpMemberUsage = Type("MetaMcpMemberUsage", func() {
+	Description("Gateway-dispatched execution activity for one member server.")
+
+	Attribute("mcp_server_id", String, "The member's mcp_servers row id", func() {
+		Format(FormatUUID)
+	})
+	Attribute("tool_calls", Int64, "Tool calls dispatched to this member through the gateway")
+	Attribute("error_count", Int64, "Calls that returned an HTTP error status")
+	Attribute("last_called_at", String, "ISO 8601 timestamp of the most recent call", func() {
+		Format(FormatDateTime)
+	})
+
+	Required("mcp_server_id", "tool_calls", "error_count")
+})
+
+var GetMetaMcpServerUsageResult = Type("GetMetaMcpServerUsageResult", func() {
+	Description("Discovery funnel plus per-member execution breakdown for one gateway (meta MCP server). Zero counts mean no rows were observed in the window within telemetry retention — they do not distinguish an idle gateway from traffic outside the window or the 90-day retention; telemetry-disabled organizations get a not-found error instead of zeros.")
+
+	Attribute("funnel", MetaMcpDiscoveryFunnel)
+	Attribute("members", ArrayOf(MetaMcpMemberUsage), "Per-member execution breakdown, most active first")
+
+	Required("funnel", "members")
+})
+
 var McpServerActivityTargetType = Type("McpServerActivityTargetType", String, func() {
-	Description("MCP server activity target type. Only the two server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.")
-	Enum("hosted_mcp_server", "tunneled_mcp_server")
+	Description("MCP server activity target type. Only the server-backed kinds this endpoint reports are valid, unlike the broader tool-usage target types.")
+	Enum("hosted_mcp_server", "tunneled_mcp_server", "meta_mcp_server")
 })
 
 var McpServerActivity = Type("McpServerActivity", func() {
-	Description("Tool-call activity for one MCP server, keyed by the same target identifier used elsewhere (toolset slug for hosted servers, MCP server slug for tunneled/remote servers)")
+	Description("Tool-call activity for one MCP server, keyed by the same target identifier used elsewhere (toolset slug for hosted servers, MCP server slug for tunneled/remote servers, meta MCP server id for gateways)")
 
-	Attribute("target_type", McpServerActivityTargetType, "Specific kind of MCP server target (hosted_mcp_server or tunneled_mcp_server)")
-	Attribute("target_id", String, "Stable target identifier: toolset slug for hosted servers, MCP server slug for tunneled/remote servers")
-	Attribute("target_label", String, "User-facing label for the target")
+	Attribute("target_type", McpServerActivityTargetType, "Specific kind of MCP server target")
+	Attribute("target_id", String, "Stable target identifier: toolset slug for hosted servers, MCP server slug for tunneled/remote servers, meta MCP server id for gateways")
+	Attribute("target_label", String, "User-facing label for the target. Gateway rows carry the gateway name, falling back to the meta MCP server id when the gateway no longer exists")
 	Attribute("total_tool_calls", Int64, "Number of tool calls observed across the whole lookback window")
 	Attribute("recent_tool_calls", Int64, "Number of tool calls observed inside the recent-activity window")
 	Attribute("last_tool_call_at", String, "ISO 8601 timestamp of the most recent tool call", func() {

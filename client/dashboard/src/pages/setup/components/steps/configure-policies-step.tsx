@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link as RouterLink, useLocation } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRiskCategories } from "@gram/client/react-query/riskCategories.js";
 import { useRiskCreatePolicyMutation } from "@gram/client/react-query/riskCreatePolicy.js";
 import {
   invalidateAllRiskListPolicies,
@@ -39,19 +40,28 @@ import { Button } from "@/components/ui/Button";
 import { useSlugs } from "@/contexts/Sdk";
 import { StepContainer } from "../step-container";
 import {
-  RULE_CATEGORY_META,
-  DETECTION_RULES,
+  ruleCategoryMeta,
   POLICY_MESSAGE_TYPE_META,
+  type DetectorMode,
   type RuleCategory,
   type PolicyAction,
   type PolicyMessageType,
 } from "@/pages/security/policy-data";
-import { ruleIdToPresidioEntity } from "@/pages/security/rule-ids";
+import { policyDetectionCategories } from "@/pages/security/policy-form";
+import { useDetectorMode } from "@/pages/security/use-detector-mode";
+import { buildPolicyPayload } from "./configure-policies-payload";
+import {
+  acceptsDetectionScope,
+  categoryRecommendationScope,
+  policyScopeUpdateForCategoryEdit,
+  effectivePolicyScopeKinds,
+  narrowScopeToKinds,
+  type CategoryScopeRecommendation,
+} from "@/pages/security/policy-scope";
 import { cn } from "@/lib/utils";
 
 interface ConfigurePoliciesStepProps {
   onComplete: () => void;
-  onBack: () => void;
 }
 
 const CATEGORY_ICONS: Partial<Record<RuleCategory, LucideIcon>> = {
@@ -81,6 +91,18 @@ const WIZARD_CATEGORIES: RuleCategory[] = [
   "government_ids",
   "healthcare",
 ];
+
+// Under the LLM analyzer the model decides the personal-data category per
+// finding, so the wizard offers one PII row in place of the four Presidio ones.
+const LLM_WIZARD_CATEGORIES: RuleCategory[] = [
+  "secrets",
+  "pii",
+  "prompt_injection",
+];
+
+function wizardCategories(mode: DetectorMode): RuleCategory[] {
+  return mode === "llm" ? LLM_WIZARD_CATEGORIES : WIZARD_CATEGORIES;
+}
 
 // Smart defaults per category. Mirrors what we'd seed in the Policy Center if
 // the user just clicked through onboarding accepting everything.
@@ -161,59 +183,14 @@ const MESSAGE_TYPES: PolicyMessageType[] = [
   "assistant_message",
 ];
 
-// The risk policy API returns `action`/`messageTypes` as free-form strings, so
-// values are validated before entering local state — an unknown value would
-// otherwise crash `formatMessageTypes` (POLICY_MESSAGE_TYPE_META[t].label).
+// The risk policy API returns `action` as a free-form string.
 function isPolicyAction(value: unknown): value is PolicyAction {
-  return value === "flag" || value === "block" || value === "warn";
-}
-
-function isPolicyMessageType(value: unknown): value is PolicyMessageType {
-  return (MESSAGE_TYPES as string[]).includes(value as string);
-}
-
-const PRESIDIO_CATEGORIES: RuleCategory[] = [
-  "financial",
-  "pii",
-  "government_ids",
-  "healthcare",
-];
-
-function buildPolicyPayload(cat: RuleCategory): {
-  sources: string[];
-  presidioEntities?: string[];
-} {
-  if (cat === "shadow_mcp") return { sources: ["shadow_mcp"] };
-  if (cat === "secrets") return { sources: ["gitleaks"] };
-  if (cat === "prompt_injection") return { sources: ["prompt_injection"] };
-  if (PRESIDIO_CATEGORIES.includes(cat)) {
-    return {
-      sources: ["presidio"],
-      presidioEntities: DETECTION_RULES[cat]
-        .filter((r) => !r.hidden)
-        .map((r) => ruleIdToPresidioEntity(r.id)),
-    };
-  }
-  return { sources: [] };
-}
-
-function categoryMatchesPolicy(
-  cat: RuleCategory,
-  sources: string[],
-  presidioEntities?: string[],
-): boolean {
-  if (cat === "shadow_mcp") return sources.includes("shadow_mcp");
-  if (cat === "secrets") return sources.includes("gitleaks");
-  if (cat === "prompt_injection") return sources.includes("prompt_injection");
-  if (PRESIDIO_CATEGORIES.includes(cat)) {
-    if (!sources.includes("presidio") || !presidioEntities?.length)
-      return false;
-    const wire = new Set(
-      DETECTION_RULES[cat].map((r) => ruleIdToPresidioEntity(r.id)),
-    );
-    return presidioEntities.some((e) => wire.has(e));
-  }
-  return false;
+  return (
+    value === "flag" ||
+    value === "block" ||
+    value === "warn" ||
+    value === "quarantine"
+  );
 }
 
 function formatMessageTypes(types: Set<PolicyMessageType>): string {
@@ -224,12 +201,55 @@ function formatMessageTypes(types: Set<PolicyMessageType>): string {
     .join(", ");
 }
 
+function sameMessageTypes(
+  a: Set<PolicyMessageType>,
+  b: Set<PolicyMessageType>,
+): boolean {
+  return a.size === b.size && [...a].every((type) => b.has(type));
+}
+
+type ScopedPolicy = {
+  detectionScopes?: {
+    category: string;
+    scopeInclude?: string;
+    scopeExempt?: string;
+  }[];
+  messageTypes?: string[];
+  scopeInclude?: string;
+  scopeExempt?: string;
+};
+
+/** Message types the server actually scans for `cat`: the category's own scope
+ *  (or its recommendation) intersected with the policy's legacy message types
+ *  and policy-level CEL.
+ *
+ *  Null when a CEL predicate we cannot decode is in play. The decoded kinds are
+ *  only an upper bound there, and checkboxes claim an exact selection — so the
+ *  picker steps aside and points at the Policy Center instead of inviting an
+ *  edit that would rewrite a scope we cannot read. */
+function scopeMessageTypesForCategory(
+  policy: ScopedPolicy,
+  cat: RuleCategory,
+  categoryDefinitions: CategoryScopeRecommendation[],
+): Set<PolicyMessageType> | null {
+  const scope = effectivePolicyScopeKinds({
+    categories: [cat],
+    detectionScopes: policy.detectionScopes,
+    categoryDefinitions,
+    messageTypes: policy.messageTypes,
+    scopeInclude: policy.scopeInclude,
+    scopeExempt: policy.scopeExempt,
+  });
+  return scope.custom ? null : scope.kinds;
+}
+
 export function ConfigurePoliciesStep({
   onComplete,
-  onBack,
 }: ConfigurePoliciesStepProps): JSX.Element {
   const { orgSlug = "" } = useSlugs();
   const location = useLocation();
+  const mode = useDetectorMode();
+  const categories = wizardCategories(mode);
 
   const projectSlug = useMemo(
     () => new URLSearchParams(location.search).get("projectSlug") || "default",
@@ -251,18 +271,39 @@ export function ConfigurePoliciesStep({
 
   const queryClient = useQueryClient();
   const { data: policiesData } = useRiskListPolicies();
+  const { data: categoriesData } = useRiskCategories();
+  const categoryDefinitions = categoriesData?.categories;
   const policies = useMemo(() => policiesData?.policies ?? [], [policiesData]);
 
   const policyForCategory = useMemo(() => {
     const map = new Map<RuleCategory, (typeof policies)[number]>();
-    for (const cat of ["shadow_mcp" as RuleCategory, ...WIZARD_CATEGORIES]) {
-      const policy = policies.find((p) =>
-        categoryMatchesPolicy(cat, p.sources ?? [], p.presidioEntities),
-      );
-      if (policy) map.set(cat, policy);
+    // The same category resolution the scope editor and the delete dialog
+    // use, so an entity-less presidio policy (what the LLM analyzer writes
+    // for PII) backs the personal-data rows after a flag-off instead of
+    // hiding behind them and getting duplicated.
+    const resolved = policies.map(
+      (p) => [p, policyDetectionCategories(p, mode)] as const,
+    );
+    for (const cat of ["shadow_mcp" as RuleCategory, ...categories]) {
+      const hit = resolved.find(([, cats]) => cats.has(cat));
+      if (hit) map.set(cat, hit[0]);
     }
     return map;
-  }, [policies]);
+  }, [policies, categories, mode]);
+
+  // Categories whose stored scope no checkbox set can express faithfully.
+  const customScopeCategories = useMemo(() => {
+    const cats = new Set<RuleCategory>();
+    if (!categoryDefinitions) return cats;
+    for (const [cat, policy] of policyForCategory) {
+      if (
+        scopeMessageTypesForCategory(policy, cat, categoryDefinitions) === null
+      ) {
+        cats.add(cat);
+      }
+    }
+    return cats;
+  }, [policyForCategory, categoryDefinitions]);
 
   const invalidatePolicies = () => {
     void invalidateAllRiskListPolicies(queryClient);
@@ -279,9 +320,44 @@ export function ConfigurePoliciesStep({
     onSuccess: invalidatePolicies,
   });
 
-  const persistConfigChange = (cat: RuleCategory, nextCfg: CategoryConfig) => {
+  // `scope: false` leaves every scope field out of the request: the API keeps
+  // the stored value for omitted fields, so an action-only edit never disturbs
+  // the policy's detection scopes.
+  const persistConfigChange = (
+    cat: RuleCategory,
+    nextCfg: CategoryConfig,
+    { scope }: { scope: boolean },
+  ) => {
     const existing = policyForCategory.get(cat);
     if (!existing) return;
+    const writesCategoryScope =
+      categoryDefinitions !== undefined &&
+      acceptsDetectionScope(categoryDefinitions.find((d) => d.key === cat));
+    const scopeFields = !scope
+      ? {}
+      : writesCategoryScope && categoryDefinitions
+        ? policyScopeUpdateForCategoryEdit({
+            category: cat,
+            kinds: [...nextCfg.messageTypes],
+            policyCategories: policyDetectionCategories(existing, mode),
+            detectionScopes: existing.detectionScopes,
+            categoryDefinitions,
+          })
+        : categoryDefinitions === undefined
+          ? // Recommendations have not loaded, so there is nothing to compose
+            // with; scope to the selected kinds alone. The legacy list is no
+            // longer accepted on the wire.
+            {
+              detectionScopes: [
+                {
+                  category: cat,
+                  ...narrowScopeToKinds(undefined, [...nextCfg.messageTypes]),
+                },
+              ],
+            }
+          : // Loaded, and the category takes no message scope (session-scoped).
+            // Sending one would fail the whole update, so send none.
+            {};
     updatePolicyMutation.mutate({
       request: {
         updateRiskPolicyRequestBody: {
@@ -293,7 +369,7 @@ export function ConfigurePoliciesStep({
           promptInjectionRules: existing.promptInjectionRules,
           disabledRules: existing.disabledRules,
           customRuleIds: existing.customRuleIds ?? [],
-          messageTypes: [...nextCfg.messageTypes],
+          ...scopeFields,
           action: nextCfg.action,
           autoName: existing.autoName ?? true,
           userMessage: existing.userMessage ?? "",
@@ -310,7 +386,7 @@ export function ConfigurePoliciesStep({
     setConfigs((prev) => {
       let changed = false;
       const next = { ...prev };
-      for (const cat of ["shadow_mcp" as RuleCategory, ...WIZARD_CATEGORIES]) {
+      for (const cat of ["shadow_mcp" as RuleCategory, ...categories]) {
         const existing = policyForCategory.get(cat);
         if (!existing) {
           if (next[cat].enabled) {
@@ -322,27 +398,25 @@ export function ConfigurePoliciesStep({
         const serverAction = isPolicyAction(existing.action)
           ? existing.action
           : next[cat].action;
-        const serverMessageTypes = new Set<PolicyMessageType>(
-          (existing.messageTypes ?? []).filter(isPolicyMessageType),
-        );
-        // Server returned no recognizable message types — keep local defaults
-        // rather than rendering an empty ("Off") policy.
-        if (serverMessageTypes.size === 0) {
-          for (const t of next[cat].messageTypes) serverMessageTypes.add(t);
-        }
-        const messageTypesEqual =
-          formatMessageTypes(serverMessageTypes) ===
-          formatMessageTypes(next[cat].messageTypes);
+        // Scope hydration needs the category recommendations; until they
+        // load, leave the local selection alone rather than showing a scope
+        // wider than the one the server applies.
+        const serverMessageTypes = categoryDefinitions
+          ? scopeMessageTypesForCategory(existing, cat, categoryDefinitions)
+          : null;
+        const messageTypesChanged =
+          serverMessageTypes !== null &&
+          !sameMessageTypes(serverMessageTypes, next[cat].messageTypes);
         if (
           !next[cat].enabled ||
           next[cat].action !== serverAction ||
-          !messageTypesEqual
+          messageTypesChanged
         ) {
           next[cat] = {
             ...next[cat],
             enabled: true,
             action: serverAction,
-            messageTypes: serverMessageTypes,
+            messageTypes: serverMessageTypes ?? next[cat].messageTypes,
           };
           changed = true;
         }
@@ -355,7 +429,20 @@ export function ConfigurePoliciesStep({
         requestAnimationFrame(() => setAnimationsReady(true));
       });
     }
-  }, [policiesData, policyForCategory]);
+  }, [policiesData, policyForCategory, categoryDefinitions, categories]);
+
+  // The flag behind `mode` can resolve while a sheet is open; if its row is
+  // no longer offered, close it rather than leave controls whose edits go
+  // nowhere.
+  useEffect(() => {
+    if (
+      openCategory &&
+      openCategory !== "shadow_mcp" &&
+      !categories.includes(openCategory)
+    ) {
+      setOpenCategory(null);
+    }
+  }, [openCategory, categories]);
 
   const handleCategoryToggle = (cat: RuleCategory, checked: boolean) => {
     setConfigs((prev) => ({
@@ -371,8 +458,32 @@ export function ConfigurePoliciesStep({
           request: {
             createRiskPolicyRequestBody: {
               enabled: true,
-              ...buildPolicyPayload(cat),
-              messageTypes: [...cfg.messageTypes],
+              ...buildPolicyPayload(cat, mode),
+              ...(categoryDefinitions
+                ? {
+                    detectionScopes: [
+                      {
+                        category: cat,
+                        ...narrowScopeToKinds(
+                          categoryRecommendationScope(
+                            categoryDefinitions.find((d) => d.key === cat),
+                          ),
+                          [...cfg.messageTypes],
+                        ),
+                      },
+                    ],
+                  }
+                : // Recommendations have not loaded, so there is nothing to
+                  // compose with; scope to the selected kinds alone rather
+                  // than writing the legacy list.
+                  {
+                    detectionScopes: [
+                      {
+                        category: cat,
+                        ...narrowScopeToKinds(undefined, [...cfg.messageTypes]),
+                      },
+                    ],
+                  }),
               action: cfg.action,
               autoName: true,
             },
@@ -424,10 +535,11 @@ export function ConfigurePoliciesStep({
       next = { ...prev[cat], ...patch };
       return { ...prev, [cat]: next };
     });
-    if (next) persistConfigChange(cat, next);
+    if (next) persistConfigChange(cat, next, { scope: false });
   };
 
   const toggleMessageType = (cat: RuleCategory, t: PolicyMessageType) => {
+    if (!categoryDefinitions || customScopeCategories.has(cat)) return;
     let next: CategoryConfig | undefined;
     setConfigs((prev) => {
       const types = new Set(prev[cat].messageTypes);
@@ -436,34 +548,29 @@ export function ConfigurePoliciesStep({
       next = { ...prev[cat], messageTypes: types };
       return { ...prev, [cat]: next };
     });
-    if (next) persistConfigChange(cat, next);
+    if (next) persistConfigChange(cat, next, { scope: true });
   };
 
   const shadow = configs.shadow_mcp;
-  const enabledCount = WIZARD_CATEGORIES.filter(
-    (c) => configs[c].enabled,
-  ).length;
+  const enabledCount = categories.filter((c) => configs[c].enabled).length;
 
   const activeCategory = openCategory;
-  const activeMeta = activeCategory ? RULE_CATEGORY_META[activeCategory] : null;
+  const activeMeta = activeCategory
+    ? ruleCategoryMeta(activeCategory, mode)
+    : null;
   const activeConfig = activeCategory ? configs[activeCategory] : null;
   const ActiveIcon = activeCategory
     ? (CATEGORY_ICONS[activeCategory] ?? ShieldCheck)
     : ShieldCheck;
   const isShadowMcp = activeCategory === "shadow_mcp";
+  const activeScopeIsCustom = activeCategory
+    ? customScopeCategories.has(activeCategory)
+    : false;
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <ShieldCheck className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Configure policies"
       description="Pick what Speakeasy should flag or block in agent traffic. You can refine actions, message scopes, and individual rules any time in the Policy Center."
       onContinue={onComplete}
-      continueLabel="Continue"
-      showBack
-      onBack={onBack}
     >
       <div className="space-y-12">
         <div className={animationsReady ? "" : "[&_*]:!duration-0"}>
@@ -481,7 +588,7 @@ export function ConfigurePoliciesStep({
                 Detection categories
               </p>
               <span className="text-muted-foreground/70 text-[11px] tabular-nums">
-                {enabledCount}/{WIZARD_CATEGORIES.length} enabled
+                {enabledCount}/{categories.length} enabled
               </span>
             </div>
             <RouterLink
@@ -496,8 +603,8 @@ export function ConfigurePoliciesStep({
           </div>
 
           <div className="border-border bg-card divide-border/60 divide-y overflow-hidden border">
-            {WIZARD_CATEGORIES.map((cat) => {
-              const meta = RULE_CATEGORY_META[cat];
+            {categories.map((cat) => {
+              const meta = ruleCategoryMeta(cat, mode);
               const cfg = configs[cat];
               const Icon = CATEGORY_ICONS[cat] ?? ShieldCheck;
               return (
@@ -529,9 +636,11 @@ export function ConfigurePoliciesStep({
                       {meta.label}
                     </p>
                     <p className="text-muted-foreground mt-1 truncate text-xs">
-                      {cfg.enabled
-                        ? formatMessageTypes(cfg.messageTypes)
-                        : "Disabled"}
+                      {!cfg.enabled
+                        ? "Disabled"
+                        : customScopeCategories.has(cat)
+                          ? "Custom scope"
+                          : formatMessageTypes(cfg.messageTypes)}
                     </p>
                   </div>
                   <ActionPill action={cfg.enabled ? cfg.action : "off"} />
@@ -631,7 +740,7 @@ export function ConfigurePoliciesStep({
                       })
                     }
                     disabled={!activeConfig.enabled || isShadowMcp}
-                    className="grid grid-cols-3 gap-2"
+                    className="grid grid-cols-2 gap-2 xl:grid-cols-4"
                   >
                     <ActionRadio
                       value="flag"
@@ -654,6 +763,13 @@ export function ConfigurePoliciesStep({
                       disabled={!activeConfig.enabled || isShadowMcp}
                       selected={activeConfig.action === "block"}
                     />
+                    <ActionRadio
+                      value="quarantine"
+                      label="Quarantine"
+                      description="Reject the call and freeze the session until an admin releases it"
+                      disabled={!activeConfig.enabled || isShadowMcp}
+                      selected={activeConfig.action === "quarantine"}
+                    />
                   </RadioGroup>
                 </section>
 
@@ -661,40 +777,58 @@ export function ConfigurePoliciesStep({
                   <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
                     Apply to
                   </p>
-                  <div className="space-y-2">
-                    {MESSAGE_TYPES.map((t) => {
-                      const meta = POLICY_MESSAGE_TYPE_META[t];
-                      const checked = activeConfig.messageTypes.has(t);
-                      const id = `msg-${activeCategory}-${t}`;
-                      return (
-                        <label
-                          key={t}
-                          htmlFor={id}
-                          className={cn(
-                            "border-border bg-secondary/20 flex items-start gap-3 border p-3",
-                            !activeConfig.enabled && "opacity-50",
-                          )}
-                        >
-                          <Checkbox
-                            id={id}
-                            checked={checked}
-                            disabled={!activeConfig.enabled}
-                            onCheckedChange={() =>
-                              toggleMessageType(activeCategory, t)
-                            }
-                          />
-                          <div className="min-w-0 flex-1">
-                            <Label htmlFor={id} className="cursor-pointer">
-                              {meta.label}
-                            </Label>
-                            <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-                              {meta.description}
-                            </p>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
+                  {activeScopeIsCustom ? (
+                    <p className="text-muted-foreground text-xs leading-relaxed">
+                      This category runs on a custom scope that these checkboxes
+                      cannot describe. Review or change it in the{" "}
+                      <RouterLink
+                        to={policyCenterHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                      >
+                        Policy Center
+                      </RouterLink>
+                      .
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {MESSAGE_TYPES.map((t) => {
+                        const meta = POLICY_MESSAGE_TYPE_META[t];
+                        const checked = activeConfig.messageTypes.has(t);
+                        const id = `msg-${activeCategory}-${t}`;
+                        return (
+                          <label
+                            key={t}
+                            htmlFor={id}
+                            className={cn(
+                              "border-border bg-secondary/20 flex items-start gap-3 border p-3",
+                              !activeConfig.enabled && "opacity-50",
+                            )}
+                          >
+                            <Checkbox
+                              id={id}
+                              checked={checked}
+                              disabled={
+                                !activeConfig.enabled || !categoryDefinitions
+                              }
+                              onCheckedChange={() =>
+                                toggleMessageType(activeCategory, t)
+                              }
+                            />
+                            <div className="min-w-0 flex-1">
+                              <Label htmlFor={id} className="cursor-pointer">
+                                {meta.label}
+                              </Label>
+                              <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                                {meta.description}
+                              </p>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
                 </section>
               </div>
 
@@ -837,6 +971,7 @@ const ACTION_PILL_VARIANT: Record<
   "destructive" | "warning" | "neutral"
 > = {
   block: "destructive",
+  quarantine: "destructive",
   warn: "warning",
   flag: "neutral",
   off: "neutral",
@@ -844,6 +979,7 @@ const ACTION_PILL_VARIANT: Record<
 
 const ACTION_PILL_LABEL: Record<ActionPillKind, string> = {
   block: "Block",
+  quarantine: "Quarantine",
   warn: "Warn",
   flag: "Flag",
   off: "Off",

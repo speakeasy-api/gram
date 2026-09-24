@@ -8,11 +8,13 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
+	"github.com/speakeasy-api/gram/server/internal/risk/exclusioncore"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
 type CreateRiskExclusion struct {
-	risk RiskService
+	risk     RiskService
+	redactor exclusioncore.Redactor
 }
 
 type createRiskExclusionInput struct {
@@ -24,8 +26,8 @@ type createRiskExclusionInput struct {
 	Enabled      *bool   `json:"enabled,omitempty" jsonschema:"Whether the exclusion is active. Defaults to true."`
 }
 
-func NewCreateRiskExclusionTool(riskSvc RiskService) *CreateRiskExclusion {
-	return &CreateRiskExclusion{risk: riskSvc}
+func NewCreateRiskExclusionTool(riskSvc RiskService, redactionKey string) *CreateRiskExclusion {
+	return &CreateRiskExclusion{risk: riskSvc, redactor: exclusioncore.NewRedactor(redactionKey)}
 }
 
 func (s *CreateRiskExclusion) Descriptor() core.ToolDescriptor {
@@ -147,7 +149,7 @@ func (s *CreateRiskExclusion) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		return err
 	}
 	if existing != nil {
-		return core.EncodeResult(wr, toExclusionView(existing))
+		return core.EncodeResult(wr, toExclusionView(s.redactor, existing))
 	}
 
 	result, err := s.risk.CreateRiskExclusion(ctx, &risk.CreateRiskExclusionPayload{
@@ -167,5 +169,5 @@ func (s *CreateRiskExclusion) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 
 	// Same view as the listing so the two tools agree on shape. The model
 	// supplied this match_value itself, so nothing new is hidden from it.
-	return core.EncodeResult(wr, toExclusionView(result))
+	return core.EncodeResult(wr, toExclusionView(s.redactor, result))
 }

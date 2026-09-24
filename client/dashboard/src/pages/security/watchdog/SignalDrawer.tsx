@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -15,7 +16,7 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import { useRiskListResults } from "@gram/client/react-query/riskListResults.js";
 import { cn } from "@/lib/utils";
-import { formatDistanceToNow } from "date-fns";
+import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { Loader2 } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -27,14 +28,18 @@ import {
   RevealAllToggle,
 } from "../risk-ui";
 import {
+  evidenceShowsRuleTitle,
   getCategoryCodeForFinding,
   getRuleTitleFallback,
   hasJudgeSource,
+  hasOnlyRationaleSources,
   isJudgeSource,
+  isRationaleSource,
   scoreToRating,
 } from "../risk-utils";
 import { useDismissFinding } from "../useDismissFinding";
 import { collectFindingsForRules } from "./collect-findings";
+import { EvidenceTitle } from "./EvidenceTitle";
 import { SuppressFindingsDialog } from "./SuppressFindingsDialog";
 import { SuppressMenu } from "./SuppressMenu";
 import { SCORE_TEXT_COLOR } from "./signals-helpers";
@@ -113,10 +118,12 @@ function EvidenceRow({
   result,
   onExclude,
   onDismiss,
+  onOpenChat,
 }: {
   result: RiskResult;
   onExclude: (result: RiskResult) => void;
   onDismiss: (result: RiskResult) => void;
+  onOpenChat: (chatId: string, chatMessageId?: string) => void;
 }): JSX.Element {
   // A judge finding's "match" is the entire flagged event (often absent on
   // the realtime path), and its description carries the verdict rationale —
@@ -126,18 +133,26 @@ function EvidenceRow({
   // the whole detector), so the row offers only suppression. Every other
   // detector gets the shared Suppress menu: a one-off manual suppression or
   // exclusion rule creation, same affordance as the drawer and list actions.
+  //
+  // LLM analyzer findings sit in between: their evidence is the model's
+  // rationale (no match to redact), and their single rule per category
+  // restates the category code, so the footer names the category alone
+  // (except the dead-letter sentinel, whose title is the only hint that the
+  // analysis never ran) — but a rule exclusion silences just that category,
+  // so they keep the menu.
   const judge = isJudgeSource(result.source);
+  const rationale = isRationaleSource(result.source);
+  const showRuleTitle = evidenceShowsRuleTitle(result.source, result.ruleId);
   return (
     <div className="border-border overflow-hidden rounded-md border">
-      <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <span className="text-muted-foreground truncate font-mono text-xs">
-          {result.chatTitle || getRuleTitleFallback(result.ruleId)}
-        </span>
-        <span className="text-muted-foreground shrink-0 font-mono text-xs">
-          {formatDistanceToNow(result.createdAt, { addSuffix: true })}
-        </span>
-      </div>
-      {judge ? (
+      <EvidenceTitle
+        title={result.chatTitle || getRuleTitleFallback(result.ruleId)}
+        createdAt={result.createdAt}
+        chatId={result.chatId}
+        chatMessageId={result.chatMessageId}
+        onOpenChat={onOpenChat}
+      />
+      {rationale ? (
         <div className="px-3 py-3">
           <EventMatchDialog
             resultId={result.id}
@@ -160,9 +175,11 @@ function EvidenceRow({
       <div className="flex items-center justify-between gap-2 px-3 py-2">
         <Text small muted className="truncate font-mono">
           {/* Category code, never the raw scanner source — and no rule title
-              for judge findings, whose single rule restates the category. */}
+              for judge or LLM analyzer category findings, whose single rule
+              restates the category. */}
           Triggered: {getCategoryCodeForFinding(result.source, result.ruleId)}
-          {!judge && ` · ${getRuleTitleFallback(result.ruleId)}`} (conf{" "}
+          {showRuleTitle &&
+            ` · ${getRuleTitleFallback(result.ruleId)}`} (conf{" "}
           {(result.confidence ?? 0).toFixed(2)})
         </Text>
         <span className="flex shrink-0 gap-1">
@@ -195,13 +212,9 @@ function EvidenceRow({
  */
 export function SignalDrawer({
   signal,
-  window,
   onClose,
 }: {
   signal: RiskSignal | null;
-  /** The page's active time window; scopes signal-level suppression the same
-   * way the list's bulk Suppress action is scoped. */
-  window: { from?: Date; to?: Date };
   onClose: () => void;
 }): JSX.Element {
   const client = useSdkClient();
@@ -212,6 +225,12 @@ export function SignalDrawer({
     null,
   );
   const [collecting, setCollecting] = useState(false);
+  // Keyed to its signal, so a chat left open never reappears under another.
+  const [openChat, setOpenChat] = useState<{
+    signalKey: string;
+    chatId: string;
+    chatMessageId: string | undefined;
+  } | null>(null);
   // Set when leaving the exclusion editor so the remounting detail view
   // slides back in from the left — but never on the drawer's first open,
   // where the Sheet's own slide already animates the content.
@@ -221,6 +240,9 @@ export function SignalDrawer({
     setExclusionState(null);
     setReturningFromEditor(true);
   };
+
+  const shownChat =
+    openChat && openChat.signalKey === signal?.key ? openChat : null;
 
   const ruleId = signal?.ruleId ?? "";
   // The list endpoint's rule filter is substring-match, so an id that is a
@@ -263,31 +285,27 @@ export function SignalDrawer({
 
   // Judge-backed signals get suppression as the signal-level action instead of
   // an exclusion rule. Same collect-then-confirm shape as the list's bulk
-  // action, scoped to this signal's rule and window.
+  // action, scoped to this signal's rule.
   const judgeSignal =
     signal !== null && hasJudgeSource(signal.detectionSources);
+  // Judge and LLM analyzer evidence shows rationales, not redacted matches,
+  // so for a signal backed only by such sources the "redacted" label and the
+  // reveal-all toggle (which only drives MaskedMatch rows) would both
+  // mislead.
+  const rationaleSignal =
+    signal !== null && hasOnlyRationaleSources(signal.detectionSources);
 
-  // Signal and window both live in the URL, so back/forward can swap either
-  // while the drawer stays mounted, and a dismissal belongs to the pair it was
-  // started from: surfacing one after a swap would confirm the previous
-  // selection's findings under the new one's name, or leave its action
-  // spinning. Bumping the token makes an in-flight collection drop its result —
-  // and its spinner reset — rather than land on the new selection; the request
-  // itself still runs to completion. Keyed by timestamps rather than Date
-  // identity, and by signal key rather than the signal object, so neither an
-  // equal window nor a list refetch discards a live collection.
-  //
-  // Both resets run before paint: a passive effect would let the swap commit
-  // first, painting one frame of the previous selection's dialog or editor
-  // under the new signal's name.
+  // The signal lives in the URL, so back/forward can swap it mid-collection;
+  // bumping the token makes an in-flight collection drop its result instead
+  // of confirming the previous signal's findings under the new one's name.
+  // Keyed by signal key (not object identity) so refetches don't cancel;
+  // useLayoutEffect so the swap can't paint one frame of the old dialog.
   const collectionToken = useRef(0);
-  const windowFrom = window.from?.getTime();
-  const windowTo = window.to?.getTime();
   useLayoutEffect(() => {
     collectionToken.current += 1;
     setPendingDismiss(null);
     setCollecting(false);
-  }, [signal?.key, windowFrom, windowTo]);
+  }, [signal?.key]);
 
   // Editor state follows the signal alone: an open editor would go on targeting
   // the previous signal's rule (and keep the sheet's close affordance hidden),
@@ -305,12 +323,19 @@ export function SignalDrawer({
     const token = collectionToken.current;
     setCollecting(true);
     try {
-      const results = await collectFindingsForRules(
-        client,
-        [signal.ruleId],
-        window,
-      );
+      // Unwindowed on purpose: the listing filters by message event time,
+      // signals exist by scan time, so a windowed collection can miss the
+      // very findings the signal displays. See the evidence query above.
+      const results = await collectFindingsForRules(client, [signal.ruleId], {
+        from: undefined,
+        to: undefined,
+      });
       if (collectionToken.current !== token) return;
+      if (results.length === 0) {
+        // dismiss() ignores empty batches — fail loudly instead.
+        toast.error("No suppressible findings found for this signal.");
+        return;
+      }
       setPendingDismiss(results);
     } catch {
       if (collectionToken.current !== token) return;
@@ -341,6 +366,7 @@ export function SignalDrawer({
             setExclusionState(null);
             setReturningFromEditor(false);
             setPendingDismiss(null);
+            setOpenChat(null);
             onClose();
           }
         }}
@@ -466,6 +492,11 @@ export function SignalDrawer({
                           <SignalTrend sparkline={signal.sparkline} />
                         </StatCell>
                       </div>
+                      {/* Windowed stats vs unwindowed evidence can disagree
+                          — say so. */}
+                      <Text small muted>
+                        Counts reflect the page's selected time window.
+                      </Text>
 
                       {signal.topUsers.length > 0 && (
                         <>
@@ -490,7 +521,23 @@ export function SignalDrawer({
                                   </Avatar>
                                   <div className="min-w-0 flex-1">
                                     <Text small className="truncate">
-                                      {user.email}
+                                      {/* Risk keys on the reported agent id
+                                          when it has one; the address is the
+                                          fallback. */}
+                                      <IdentityLink
+                                        identifier={
+                                          user.externalUserId
+                                            ? {
+                                                externalUserId:
+                                                  user.externalUserId,
+                                              }
+                                            : user.email.includes("@")
+                                              ? { email: user.email }
+                                              : null
+                                        }
+                                      >
+                                        {user.email}
+                                      </IdentityLink>
                                     </Text>
                                     {user.team && (
                                       <Text small muted className="truncate">
@@ -516,13 +563,11 @@ export function SignalDrawer({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <Text small muted className="font-medium uppercase">
-                            {/* Judge evidence shows rationales, not redacted
-                                matches, so the label and the reveal-all
-                                toggle (which only drives MaskedMatch rows)
-                                would both mislead there. */}
-                            {judgeSignal ? "Evidence" : "Evidence · redacted"}
+                            {rationaleSignal
+                              ? "Latest evidence"
+                              : "Latest evidence · redacted"}
                           </Text>
-                          {!judgeSignal && <RevealAllToggle />}
+                          {!rationaleSignal && <RevealAllToggle />}
                         </div>
                         {evidenceQuery.isLoading && (
                           <Text small muted>
@@ -547,7 +592,7 @@ export function SignalDrawer({
                           !evidenceQuery.isError &&
                           evidence.length === 0 && (
                             <Text small muted>
-                              No evidence rows in this window.
+                              No evidence rows for this rule.
                             </Text>
                           )}
                         <ExpandableList
@@ -565,6 +610,13 @@ export function SignalDrawer({
                                 })
                               }
                               onDismiss={(r) => dismiss([r])}
+                              onOpenChat={(chatId, chatMessageId) =>
+                                setOpenChat({
+                                  signalKey: signal.key,
+                                  chatId,
+                                  chatMessageId,
+                                })
+                              }
                             />
                           )}
                         />
@@ -575,6 +627,15 @@ export function SignalDrawer({
               </div>
             </RevealAllProvider>
           )}
+          {/* Nested in this sheet so closing it doesn't read as an outside
+              click and close the drawer too. */}
+          <ChatDetailSheet
+            chatId={shownChat?.chatId ?? null}
+            focusedMessageId={shownChat?.chatMessageId}
+            onClose={() => setOpenChat(null)}
+            onDelete={() => setOpenChat(null)}
+            riskFocus
+          />
         </SheetContent>
       </Sheet>
       <SuppressFindingsDialog

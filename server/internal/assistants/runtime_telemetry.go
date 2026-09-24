@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
@@ -127,6 +129,24 @@ func (t *telemetryRuntimeBackend) RecycleImage(ctx context.Context, runtime assi
 		t.emit(ctx, runtime, "runtime_recycle", "runtime image recycle skipped", "INFO", nil)
 	}
 	return result, nil
+}
+
+func (t *telemetryRuntimeBackend) InterruptTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID) (bool, error) {
+	interrupted, err := t.inner.InterruptTurn(ctx, runtime, threadID)
+	// A v2 runtime serves every thread on its assistant, and its record names
+	// the thread that admitted it — rarely the one being stopped. These events
+	// are about the thread the caller named, so report that one.
+	runtime.AssistantThreadID = threadID
+	if err != nil {
+		t.emit(ctx, runtime, "runtime_interrupt", "runtime turn interrupt failed", "ERROR", err)
+		return interrupted, fmt.Errorf("runtime interrupt turn: %w", err)
+	}
+	if interrupted {
+		t.emit(ctx, runtime, "runtime_interrupt", "runtime turn interrupted", "INFO", nil)
+	} else {
+		t.emit(ctx, runtime, "runtime_interrupt", "runtime had no turn to interrupt", "INFO", nil)
+	}
+	return interrupted, nil
 }
 
 func (t *telemetryRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntimeRecord, turn runTurnRequest) error {

@@ -39,6 +39,8 @@ type OrganizationMetadatum struct {
 	FreeTrialEndsAt    pgtype.Timestamptz
 	ScimEnabled        pgtype.Bool
 	SsoEnabled         pgtype.Bool
+	VerifiedDomains    []string
+	CreationSource     pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
@@ -56,6 +58,17 @@ type OrganizationRoleAssignment struct {
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
+}
+
+type OrganizationSetupTask struct {
+	OrganizationID string
+	TaskKey        string
+	Status         string
+	AssigneeUserID pgtype.Text
+	AssigneeEmail  pgtype.Text
+	HiddenAt       pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type OrganizationUserRelationship struct {

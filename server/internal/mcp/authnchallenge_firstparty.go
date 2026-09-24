@@ -42,8 +42,8 @@ func (s *Service) HandleFirstPartyConnect(w http.ResponseWriter, r *http.Request
 // This is deliberately decoupled from the dashboard session: the subject is
 // stamped onto the challenge by HandleIDPCallback from authoritative IDP
 // claims, and the only state is the challenge in Redis keyed by the OIDC
-// `state` param. Nothing here reads, sets, or clears a cookie, so opening this
-// page can never touch the dashboard's session (and the org-membership gate in
+// `state` param. Federation uses a separate short-lived browser-binding cookie,
+// never the dashboard session (and the org-membership gate in
 // HandleIDPCallback enforces access once the IDP identifies the user).
 //
 // No ClientID/RedirectURI: a first-party challenge has no MCP client to grant
@@ -61,21 +61,34 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	baseURL := s.BaseURLForRequest(r)
 	flowID := uuid.NewString()
 	challengeID := uuid.NewString()
-	challengeState := AuthnChallengeState{
-		ID:                  challengeID,
-		FlowID:              flowID,
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		Endpoint:            endpoint.EndpointRef(baseURL),
-		ClientID:            "",
-		RedirectURI:         "",
-		State:               "",
-		CodeChallenge:       "",
-		CodeChallengeMethod: "",
-		CSRFToken:           csrfToken,
+	endpointRef, err := endpoint.EndpointRef(ctx, s.db, baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
+	}
+	challengeState := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
+		Browser:    nil,
+		Federation: nil,
+
+		ID:                       challengeID,
+		FlowID:                   flowID,
+		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
+		AuthorizerUserID:         "",
+		AuthorizerImpersonated:   nil,
+		AgentAuthorizationTarget: nil,
+		Endpoint:                 endpointRef,
+		ClientID:                 "",
+		RedirectURI:              "",
+		State:                    "",
+		CodeChallenge:            "",
+		CodeChallengeMethod:      "",
+		CSRFToken:                csrfToken,
+
 		// Subject is stamped by HandleIDPCallback from authoritative IDP claims.
 		Subject:    nil,
 		CreatedAt:  time.Now(),
 		FirstParty: true,
+		// Auto-connect has not run for a challenge this new.
+		AutoConnectDone: false,
 	}
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
@@ -83,6 +96,18 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
 
+	federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
+	if err != nil {
+		_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+		failureCode, cause := federatedFailure(err)
+		return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
+	}
+	if federatedURL != nil {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		http.Redirect(w, r, federatedURL.String(), http.StatusFound)
+		return nil
+	}
 	callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)

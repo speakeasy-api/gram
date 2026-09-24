@@ -15,6 +15,7 @@ import { PolicyBypassRequests } from "./policybypassrequests.js";
 import { PolicyChallenges } from "./policychallenges.js";
 import { Results } from "./results.js";
 import { Rules } from "./rules.js";
+import { SessionQuarantines } from "./sessionquarantines.js";
 import { Signals } from "./signals.js";
 
 export class Risk extends ClientSDK {
@@ -50,6 +51,11 @@ export class Risk extends ClientSDK {
     return (this._policies ??= new Policies(this._options));
   }
 
+  private _signals?: Signals;
+  get signals(): Signals {
+    return (this._signals ??= new Signals(this._options));
+  }
+
   private _blocks?: Blocks;
   get blocks(): Blocks {
     return (this._blocks ??= new Blocks(this._options));
@@ -60,11 +66,6 @@ export class Risk extends ClientSDK {
     return (this._overview ??= new Overview(this._options));
   }
 
-  private _signals?: Signals;
-  get signals(): Signals {
-    return (this._signals ??= new Signals(this._options));
-  }
-
   private _categories?: Categories;
   get categories(): Categories {
     return (this._categories ??= new Categories(this._options));
@@ -73,6 +74,11 @@ export class Risk extends ClientSDK {
   private _results?: Results;
   get results(): Results {
     return (this._results ??= new Results(this._options));
+  }
+
+  private _sessionQuarantines?: SessionQuarantines;
+  get sessionQuarantines(): SessionQuarantines {
+    return (this._sessionQuarantines ??= new SessionQuarantines(this._options));
   }
 
   private _rules?: Rules;

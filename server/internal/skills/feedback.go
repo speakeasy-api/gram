@@ -11,6 +11,17 @@ type ManualSuggestionSignaler interface {
 	SignalManual(ctx context.Context, projectID, skillID uuid.UUID) error
 }
 
+// PluginPublishSignaler enqueues a republish of a project's marketplace
+// packages. A skill distributed to (or revoked from) a plugin changes what
+// that plugin's package contains, so the change signals its own project rather
+// than waiting for the periodic rollout sweep to notice.
+//
+// Implemented by background.TemporalPluginPublisher. Declared here rather than
+// reused from the plugins package, which already imports this one.
+type PluginPublishSignaler interface {
+	SignalPluginPublish(ctx context.Context, projectID uuid.UUID, createdByUserID string) error
+}
+
 // MaxFeedbackNoteRunes caps a feedback note everywhere it is handled: the wire
 // contract, ingest validation, and the suggestion prompt all admit the full
 // note so recorded evidence is never silently truncated downstream.

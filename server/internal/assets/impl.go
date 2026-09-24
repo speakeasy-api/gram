@@ -210,15 +210,16 @@ func (s *Service) ServeImage(ctx context.Context, payload *gen.ServeImageForm) (
 	}
 
 	return &gen.ServeImageResult{
-		ContentType:              row.ContentType,
-		ContentLength:            row.ContentLength,
-		LastModified:             row.UpdatedAt.Time.Format(time.RFC1123),
-		AccessControlAllowOrigin: new("*"),
+		ContentType:               row.ContentType,
+		ContentLength:             row.ContentLength,
+		LastModified:              row.UpdatedAt.Time.Format(time.RFC1123),
+		AccessControlAllowOrigin:  new("*"),
+		CrossOriginResourcePolicy: "cross-origin",
 	}, body, nil
 }
 
 func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm, reader io.ReadCloser) (res *gen.UploadImageResult, err error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close image upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -227,7 +228,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -235,7 +236,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up image upload", func() error {
 		return result.cleanup()
 	})
 
@@ -336,7 +337,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 }
 
 func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFunctionsForm, reader io.ReadCloser) (*gen.UploadFunctionsResult, error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close functions upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -347,7 +348,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 
 	logger := s.logger
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeFunctions,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -355,7 +356,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up functions upload", func() error {
 		return result.cleanup()
 	})
 
@@ -458,7 +459,7 @@ func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFuncti
 }
 
 func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAPIv3Form, reader io.ReadCloser) (*gen.UploadOpenAPIv3Result, error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close openapi v3 upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -469,7 +470,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 
 	logger := s.logger
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeOpenAPI,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -477,7 +478,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up openapi v3 upload", func() error {
 		return result.cleanup()
 	})
 
@@ -575,7 +576,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	}, nil
 }
 
-type downloadPendingAssetParams struct {
+type downloadAuthorizedAssetParams struct {
 	maxLength     int64
 	contentLength int64
 	contentType   string
@@ -586,7 +587,7 @@ type downloadPendingAssetResult struct {
 	cleanup func() error
 }
 
-func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, params *downloadPendingAssetParams) (*downloadPendingAssetResult, error) {
+func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, params *downloadAuthorizedAssetParams) (*downloadPendingAssetResult, error) {
 	// Handlers authenticate and resolve their asset owner before calling this,
 	// so the check here is tier-agnostic defense-in-depth: no anonymous path
 	// may buffer request bytes to disk.
@@ -595,6 +596,11 @@ func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, pa
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	return s.downloadAuthorizedAsset(ctx, reader, params)
+}
+
+// downloadAuthorizedAsset is called only after the owning handler authenticates.
+func (s *Service) downloadAuthorizedAsset(ctx context.Context, reader io.Reader, params *downloadAuthorizedAssetParams) (*downloadPendingAssetResult, error) {
 	if params.contentLength == 0 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "no content")
 	}
@@ -734,7 +740,7 @@ func (s *Service) uploadAsset(ctx context.Context, params *uploadAssetParams) (*
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("write to blob storage: %w", err), "error writing document")
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close blob storage writer", func() error {
 		if err := dst.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
 			return fmt.Errorf("close blob storage: %w", err)
 		}
@@ -897,7 +903,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 	if err != nil {
 		return nil, fetchURLRequestError(err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close openapi document fetch response body", func() error {
 		return resp.Body.Close()
 	})
 
@@ -961,7 +967,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 		return nil, oops.E(oops.CodeBadRequest, nil, "content length exceeds 10 MiB limit")
 	}
 
-	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeOpenAPI,
 		contentLength: contentLength,
 		contentType:   mediaType,
@@ -969,7 +975,7 @@ func (s *Service) FetchOpenAPIv3FromURL(ctx context.Context, payload *gen.FetchO
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up fetched openapi document", func() error {
 		return result.cleanup()
 	})
 
@@ -1101,7 +1107,7 @@ func (s *Service) FetchImageAssetFromURL(ctx context.Context, imageURL string) (
 	if err != nil {
 		return nil, fetchURLRequestError(err)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close image fetch response body", func() error {
 		return resp.Body.Close()
 	})
 
@@ -1117,7 +1123,7 @@ func (s *Service) FetchImageAssetFromURL(ctx context.Context, imageURL string) (
 		return nil, oops.E(oops.CodeBadRequest, nil, "content length exceeds 4 MiB limit")
 	}
 
-	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, resp.Body, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeImage,
 		contentLength: contentLength,
 		contentType:   resp.Header.Get("Content-Type"),
@@ -1125,7 +1131,7 @@ func (s *Service) FetchImageAssetFromURL(ctx context.Context, imageURL string) (
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up fetched image", func() error {
 		return result.cleanup()
 	})
 
@@ -1344,7 +1350,7 @@ func validateChatAttachmentContentType(contentType string) (mimeType, ext string
 }
 
 func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadChatAttachmentForm, reader io.ReadCloser) (*gen.UploadChatAttachmentResult, error) {
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to close chat attachment upload reader", func() error {
 		return reader.Close()
 	})
 
@@ -1353,7 +1359,7 @@ func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadC
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadAuthorizedAssetParams{
 		maxLength:     MaxFileSizeChatAttachment,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
@@ -1361,7 +1367,7 @@ func (s *Service) UploadChatAttachment(ctx context.Context, payload *gen.UploadC
 	if err != nil {
 		return nil, err
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
+	defer o11y.LogDefer(ctx, s.logger, "failed to clean up chat attachment upload", func() error {
 		return result.cleanup()
 	})
 

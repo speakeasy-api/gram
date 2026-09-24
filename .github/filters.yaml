@@ -2,6 +2,7 @@ server:
   - ".github/**"
   - "go.mod"
   - "go.sum"
+  - "glint/**"
   - "agents/**"
   - "ci/**"
   - "server/**"
@@ -43,16 +44,30 @@ tsframework:
   - "ts-framework/**"
 
 sdk:
+  - "client/admin/src/sdk/**"
   - "client/dashboard/src/sdk/**"
   - "package.json"
   - "pnpm-lock.yaml"
 
 sdk-gen:
+  - ".mise-tasks/gen/**"
+  - ".mise-tasks/test/gen-resolve.sh"
+  - ".mise-tasks/test/sdk-overlays.sh"
+  - ".speakeasy/out.admin.openapi.yaml"
   - ".speakeasy/workflow.yaml"
+  - "client/admin/src/sdk/**"
   - "client/dashboard/src/sdk/.speakeasy/gen.yaml"
   - "hooks/sdk/.speakeasy/gen.yaml"
   - "mise.toml"
   - "overlays/**"
+  - "server/design/**"
+  - "server/internal/constants/accounts.go"
+  - "server/internal/constants/auth.go"
+  - "server/internal/constants/spend_cap.go"
+  - "server/internal/constants/trials.go"
+  - "server/internal/conv/from.go"
+  - "server/internal/oops/codes.go"
+  - "server/internal/productfeatures/features.go"
   - "server/gen/http/openapi3.yaml"
 
 migrations:
@@ -63,15 +78,26 @@ migrations:
   - "server/clickhouse/migrations/**"
   - "server/clickhouse/local/golang_migrate/**"
   - "server/clickhouse/schema.sql"
+  - "server/clickhouse/mart.sql"
+  - "server/atlas.hcl"
+  - "local/clickhouse/initdb/**"
 
 database-changes:
   - "server/migrations/**"
   - "server/clickhouse/migrations/**"
   - "server/clickhouse/schema.sql"
+  - "server/clickhouse/mart.sql"
+  - "local/clickhouse/initdb/**"
 
 db-migrations:
   - "server/migrations/**"
   - "server/clickhouse/migrations/**"
+
+glint:
+  - ".github/**"
+  - "glint/**"
+  - ".mise-tasks/go/tidy.sh"
+  - ".mise-tasks/test/glint.sh"
 
 plog:
   - ".github/**"
@@ -110,6 +136,16 @@ webhooks-catalog:
 
 otel-collector:
   - "otel-collector/**"
+
+# PRs that change rendered dashboard UI. Gates the automatic `preview` label
+# in .github/workflows/pr.yaml. Deliberately narrower than the `client`
+# filter, which also matches ".github/**" and the root lockfiles and so would
+# put a preview environment on every CI or dependency PR.
+preview-ui:
+  - "client/admin/**/*.tsx"
+  - "client/dashboard/**/*.tsx"
+  - "client/admin/**/*.css"
+  - "client/dashboard/**/*.css"
 
 # Paths that were moved or retired. PRs must not add or modify files here —
 # stale generators, cherry-picks, or muscle memory can silently resurrect a

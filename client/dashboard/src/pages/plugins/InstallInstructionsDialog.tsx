@@ -38,6 +38,55 @@ const CLAUDE_CODE_SETTINGS_DOCS_URL =
 
 const CURSOR_DASHBOARD_URL = "https://cursor.com/dashboard";
 
+/**
+ * Downloads the server-generated observability plugin ZIP. opencode and copilot
+ * differ only in the `platform` query value and the fallback filename.
+ */
+function useObservabilityPluginDownload(
+  platform: string,
+  fallbackName: string,
+) {
+  const { fetch: authFetch } = useFetcher();
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const download = async () => {
+    setIsDownloading(true);
+    try {
+      const resp = await authFetch(
+        `/rpc/plugins.downloadObservabilityPlugin?platform=${platform}`,
+        {},
+      );
+      if (!resp.ok) {
+        toast.error(
+          resp.status === 403
+            ? "Downloading the observability plugin requires an org admin."
+            : "Failed to download observability plugin",
+        );
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        resp.headers
+          .get("Content-Disposition")
+          ?.match(/filename="(.+)"/)?.[1] ?? fallbackName;
+      a.click();
+      // Revoke on the next task: some browsers kick the blob download off
+      // asynchronously and a same-task revoke aborts it.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err) {
+      toast.error("Failed to download observability plugin");
+      console.error("observability plugin download failed", err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  return { isDownloading, download };
+}
+
 type ContentProps = {
   repoOwner: string;
   repoName: string;
@@ -506,13 +555,15 @@ function CodexInstallContent({
         <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
         <p className="text-muted-foreground mb-3 text-sm">
           Download a one-command install script that registers the marketplace,
-          enables hooks in{" "}
+          enables hooks, and configures compatible Codex OpenTelemetry logs,
+          traces, and metrics in{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">
             ~/.codex/config.toml
           </code>
-          , and pre-approves all hook events — no manual Settings → Hooks step
-          required. Suitable for MDM deployment. This script sets up Speakeasy's
-          observability plugin specifically.
+          . Existing exporters are preserved and may require manual Gram setup.
+          The script also pre-approves all hook events, so no manual Settings →
+          Hooks step is required. Suitable for MDM deployment. This script sets
+          up Speakeasy's observability plugin specifically.
         </p>
         <Button
           variant="secondary"
@@ -626,8 +677,8 @@ function CodexInstallContent({
  * hosted install page.
  */
 function OpencodeInstallContent(): JSX.Element {
-  const { fetch: authFetch } = useFetcher();
-  const [isDownloading, setIsDownloading] = useState(false);
+  const { isDownloading, download: handleDownloadPlugin } =
+    useObservabilityPluginDownload("opencode", "observability-opencode.zip");
 
   const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
 
@@ -647,39 +698,6 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
     }
   }
 }`;
-
-  const handleDownloadPlugin = async () => {
-    setIsDownloading(true);
-    try {
-      const resp = await authFetch(
-        "/rpc/plugins.downloadObservabilityPlugin?platform=opencode",
-        {},
-      );
-      if (!resp.ok) {
-        toast.error(
-          resp.status === 403
-            ? "Downloading the observability plugin requires an org admin."
-            : "Failed to download observability plugin",
-        );
-        return;
-      }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        resp.headers
-          .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ?? "observability-opencode.zip";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      toast.error("Failed to download observability plugin");
-      console.error("observability plugin download failed", err);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
 
   return (
     <div className="min-w-0 space-y-6">
@@ -753,6 +771,198 @@ speakeasy-hooks install --provider=opencode --dir=. --project=your-project-slug`
           Replace the placeholders with the name, URL, and auth token from that
           server's own install page — that token is separate from the Gram hooks
           credential.
+        </p>
+        <CodeBlock language="json" className="bg-background">
+          {mcpConfig}
+        </CodeBlock>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * GitHub Copilot install. Same server-generated observability ZIP as opencode
+ * (plugins.downloadObservabilityPlugin?platform=copilot) — plugin.json +
+ * hooks/hooks.json + speakeasy.json + bootstrappers, with a freshly-minted
+ * hooks-scoped key already embedded. Exported so the hooks setup dialog can
+ * show the same instructions without a second copy of them.
+ */
+export function CopilotInstallContent(): JSX.Element {
+  const { isDownloading, download: handleDownloadPlugin } =
+    useObservabilityPluginDownload("copilot", "observability-copilot.zip");
+
+  return (
+    <div className="min-w-0 space-y-6">
+      {/* ── Quick install ─────────────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Download the Gram observability plugin as a ZIP — a self-contained
+          Copilot plugin with a hooks-scoped API key already embedded (no CLI,
+          no key to export).
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isDownloading}
+          onClick={() => void handleDownloadPlugin()}
+          className="inline-flex items-center gap-2"
+        >
+          <Download className="size-4" />
+          {isDownloading ? "Downloading…" : "Download Plugin"}
+        </Button>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Then extract and load it:{" "}
+          <code className="bg-muted px-1 py-0.5">
+            unzip observability-copilot.zip -d gram-hooks && copilot
+            --plugin-dir gram-hooks
+          </code>
+        </p>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Caveats ───────────────────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Before you install
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Hooks run in{" "}
+          <span className="text-foreground font-medium">Copilot CLI</span> only.
+          MCP servers and skills from your Gram plugin also load in VS Code and
+          the Copilot app, but those surfaces never fire hooks — so no
+          telemetry, spend gating, or policy enforcement there.
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Copilot stops running a tool's hook chain at the first deny. If
+          another plugin denies a tool call before Gram's entry runs, that call
+          is never reported.
+        </p>
+      </div>
+
+      <RelatedLinks
+        links={[
+          {
+            href: "https://docs.github.com/en/copilot/reference/hooks-reference",
+            label: "Hooks Reference",
+          },
+          {
+            href: "https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference",
+            label: "Plugin Reference",
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+/**
+ * Pi install. Pi has no plugin marketplace, no hook configuration, and no MCP
+ * client of its own — every integration point is a TypeScript extension loaded
+ * into the Pi process — so the primary path is the server-generated
+ * observability ZIP (plugins.downloadObservabilityPlugin?platform=pi): the
+ * generated extension plus speakeasy.json and bootstrappers, with a
+ * freshly-minted hooks-scoped key already embedded. The CLI path
+ * (speakeasy-hooks install --provider=pi) renders the same extension. The MCP
+ * snippet is the config a Pi MCP extension reads; Speakeasy reads the same
+ * file to report which servers a workspace can reach.
+ */
+function PiInstallContent(): JSX.Element {
+  const { isDownloading, download: handleDownloadPlugin } =
+    useObservabilityPluginDownload("pi", "observability-pi.zip");
+
+  const installBinary = `curl -fsSL https://raw.githubusercontent.com/speakeasy-api/gram/main/hooks/install.sh | sh`;
+
+  const installCommand = `GRAM_HOOKS_ORG_KEY="your-hooks-scoped-api-key" \\
+speakeasy-hooks install --provider=pi --dir=. --project=your-project-slug`;
+
+  const mcpConfig = `{
+  "mcpServers": {
+    "<server-name>": {
+      "transport": "streamable-http",
+      "url": "<mcp-server-url>"
+    }
+  }
+}`;
+
+  return (
+    <div className="min-w-0 space-y-6">
+      {/* ── Quick install ─────────────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Download the Gram observability plugin as a ZIP — a self-contained Pi
+          extension with a hooks-scoped API key already embedded (no CLI, no key
+          to export). Extract it into your repo&apos;s{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">.pi/</code> (or{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">~/.pi/agent/</code> for
+          every repo) and Pi loads it on next start.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={isDownloading}
+          onClick={() => void handleDownloadPlugin()}
+          className="inline-flex items-center gap-2"
+        >
+          <Download className="size-4" />
+          {isDownloading ? "Downloading…" : "Download Plugin"}
+        </Button>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Then extract:{" "}
+          <code className="bg-muted px-1 py-0.5">
+            unzip observability-pi.zip -d .pi
+          </code>
+          , or for every repo:{" "}
+          <code className="bg-muted px-1 py-0.5">
+            unzip observability-pi.zip -d ~/.pi/agent
+          </code>
+        </p>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Project-local extensions load only after you trust the project, so
+          answer Pi&apos;s trust prompt on first start.
+        </p>
+      </div>
+
+      <div className="border-t" />
+
+      {/* ── Manual setup ──────────────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
+          Manual setup
+        </p>
+        <p className="text-muted-foreground text-sm">
+          Prefer the CLI? Install the{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">speakeasy-hooks</code>{" "}
+          binary:
+        </p>
+        <CodeBlock language="bash" className="bg-background">
+          {installBinary}
+        </CodeBlock>
+        <p className="text-muted-foreground text-sm">
+          Then run it from your repo to render the same extension into{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">.pi/extensions/</code>:
+        </p>
+        <CodeBlock language="bash" className="bg-background">
+          {installCommand}
+        </CodeBlock>
+      </div>
+
+      {/* ── Connect an MCP server ─────────────────────────────────────────── */}
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Pi ships no MCP client. Install an MCP extension for Pi, then declare
+          servers in{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">.pi/mcp.json</code> (or{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">
+            ~/.pi/agent/mcp.json
+          </code>
+          ). Speakeasy reads the same file, so every server a Pi workspace can
+          reach shows up in your MCP inventory and its tool calls are attributed
+          to it. Replace the placeholders with the name and URL from that
+          server&apos;s own install page.
         </p>
         <CodeBlock language="json" className="bg-background">
           {mcpConfig}
@@ -1027,6 +1237,8 @@ export function InstallInstructionsDialog({
                 />
               )}
               {selected === "opencode" && <OpencodeInstallContent />}
+              {selected === "copilot" && <CopilotInstallContent />}
+              {selected === "pi" && <PiInstallContent />}
             </div>
           </div>
         </div>

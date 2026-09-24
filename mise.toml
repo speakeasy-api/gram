@@ -1,6 +1,6 @@
 #:schema https://mise.en.dev/schema/mise.json
 
-min_version = "2026.7.6"
+min_version = "2026.9.9"
 
 [settings]
 pin = true
@@ -12,32 +12,31 @@ pin = true
 # file, you can specify more tools or different version of listed ones below as
 # well as overriding environment variables.
 [tools]
-"aqua:ariga/atlas" = "1.0.0"
+"aqua:ariga/atlas" = "1.3.0"
 "github:speakeasy-api/openapi" = "1.24.0"
 # Keep in sync with speakeasyVersion in .speakeasy/workflow.yaml, otherwise the
 # installed version and the version generation runs on can mismatch.
-"github:speakeasy-api/speakeasy" = "1.791.1"
+"github:speakeasy-api/speakeasy" = "1.796.1"
 "github:FiloSottile/mkcert" = "1.4.4"
 apko = "1.2.31"
 flyctl = "0.4.77"
-go = "1.26.5"
-golangci-lint = "2.12.2"
+gh = "2.100.0"
+go = "1.27.1"
+golangci-lint = "2.13.2"
 gomigrate = "4.19.1"
 gum = "0.17.0"
 jq = "1.8.2"
+stripe = "1.50.11"
 melange = "0.56.5"
 # Authoritative Node pin. `.node-version` mirrors it and must be kept in sync:
 # aube resolves its own runtime and cannot read this file, so without that
 # mirror it falls through to whatever `node` is first on PATH.
 nodejs = "24.16.0"
 aube = "1.38.1"
-# Kept for `changeset publish` only, which shells out to a package manager by
-# name and has no aube branch — it picks between pnpm, yarn and npm. Both
-# versions resolve to pnpm here, off different inputs: 2.31.0 (what we pin)
-# asks package-manager-detector, which answers pnpm because pnpm-lock.yaml is
-# on disk; 3.0.0 asks manypkg for the workspace tool, which answers pnpm
-# because pnpm-workspace.yaml is. aube keeps writing both files in place, so
-# releases need a real pnpm on PATH either way.
+# Kept for `changeset publish` only. Changesets v3 asks manypkg for the
+# workspace tool, which answers pnpm because pnpm-workspace.yaml is present.
+# Release versioning uses the custom aube command in the release workflow.
+# Changesets formatting is disabled because oxfmt ignores CHANGELOG.md files.
 #
 # Publishing via npm instead is not a drop-in: our public packages carry
 # `workspace:` and `catalog:` specifiers that pnpm rewrites at pack time and
@@ -46,9 +45,7 @@ aube = "1.38.1"
 watchexec = "2.5.1"
 uv = "0.12.1"
 yq = "4.53.3"
-# hk ≥1.47 fails to evaluate the json.Parser usage in hk.pkl
-# ("unknown method 'parse'"); keep 1.46.0 until hk.pkl is ported.
-hk = "1.46.0"
+hk = "1.56.1"
 pkl = "0.32.1"
 "github:temporalio/cli" = "1.8.2"
 "github:pb33f/openapi-changes" = "0.2.10"
@@ -92,17 +89,24 @@ CLICKHOUSE_PASSWORD = "gram"
 CLICKHOUSE_HOST = "127.0.0.1"
 CLICKHOUSE_HTTP_PORT = "8123"
 CLICKHOUSE_NATIVE_PORT = "9440"
-CLICKHOUSE_DATABASE = "default"
+CLICKHOUSE_DATABASE = "gram"
 CLICKHOUSE_INSECURE = true
+CLICKHOUSE_READ_USERNAME = "{{env.CLICKHOUSE_USERNAME}}"
+CLICKHOUSE_READ_PASSWORD = "{{env.CLICKHOUSE_PASSWORD}}"
+CLICKHOUSE_READ_HOST = "{{env.CLICKHOUSE_HOST}}"
+CLICKHOUSE_READ_NATIVE_PORT = "{{env.CLICKHOUSE_NATIVE_PORT}}"
+CLICKHOUSE_READ_DATABASE = "{{env.CLICKHOUSE_DATABASE}}"
+CLICKHOUSE_READ_CA_FILE = "{{config_root}}/local/clickhouse/certs/ca-cert.pem"
 GRAM_CLICKHOUSE_URL = "clickhouse://{{env.CLICKHOUSE_USERNAME}}:{{env.CLICKHOUSE_PASSWORD}}@{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?secure=true&skip_verify=true"
-## golang-migrate requires username/password as query parameters instead of in the URL
-GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true&x-multi-statement=true"
+## golang-migrate requires database, username, and password as query parameters.
+GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}?database={{env.CLICKHOUSE_DATABASE}}&username={{env.CLICKHOUSE_USERNAME}}&password={{env.CLICKHOUSE_PASSWORD}}&secure=true&skip_verify=true&x-multi-statement=true"
 
 ############################
 ## Temporal configuration ##
 ############################
 TEMPORAL_HOST = "127.0.0.1"
-TEMPORAL_PORT = "7233"
+# Avoid the legacy shared server on 7233 during migration.
+TEMPORAL_PORT = "17233"
 TEMPORAL_NAMESPACE = "default"
 TEMPORAL_TASK_QUEUE = "main"
 ## When using Temporal Cloud, the following variable should like something like:
@@ -114,6 +118,13 @@ TEMPORAL_ADDRESS = "{{env.TEMPORAL_HOST}}:{{env.TEMPORAL_PORT}}"
 ##############################
 PRESIDIO_PORT = "5050"
 PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
+
+## Fine-tuned risk LLM analyzer (OpenAI-compatible chat endpoint, URL includes
+## /v1). An empty URL disables it; real values belong in mise.local.toml.
+## Runbook: server/internal/scanners/llmanalyzer/README.md (Local development).
+GRAM_RISK_LLM_URL = ""
+GRAM_RISK_LLM_MODEL = "risk-judge-4b"
+GRAM_RISK_LLM_API_KEY = ""
 
 ##########################################
 ## Gram server, admin and worker config ##
@@ -154,10 +165,6 @@ GRAM_REDIS_ENABLE_TRACING = "false"
 ## back into mise.local.toml after a seed run — a fresh clone is configured
 ## before it is ever seeded. Keep in sync with server/internal/demoseed/local.go.
 GRAM_API_KEY = "gram_local_5eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca11"
-TUNNEL_LOCAL_ID = "10ca1000-0000-4000-a000-000000007001"
-TUNNEL_LOCAL_MCP_SERVER_ID = "10ca1000-0000-4000-a000-000000007002"
-TUNNEL_LOCAL_KEY = "gram_tunnel_localpostgresmcpseedkey000000000000000000000000000000"
-TUNNEL_LOCAL_MCP_ENDPOINT_SLUG = "default-seeded-local-postgres-mcp"
 
 ## Local-only value; real deployments inject this via secrets.
 GRAM_TUNNEL_FORWARD_TOKEN = "local-dev-tunnel-forward-token"
@@ -172,32 +179,29 @@ GRAM_DEVIDP_HOST = "localhost"
 GRAM_DEVIDP_PORT = "35291"
 GRAM_DEVIDP_CONTROL_PORT = "35292"
 GRAM_DEVIDP_DASHBOARD_PORT = "35293"
-GRAM_DEVIDP_ADDRESS = ":{{env.GRAM_DEVIDP_PORT}}"
-GRAM_DEVIDP_CONTROL_ADDRESS = ":{{env.GRAM_DEVIDP_CONTROL_PORT}}"
+GRAM_DEVIDP_ADDRESS = "127.0.0.1:{{env.GRAM_DEVIDP_PORT}}"
+GRAM_DEVIDP_CONTROL_ADDRESS = "127.0.0.1:{{env.GRAM_DEVIDP_CONTROL_PORT}}"
 GRAM_DEVIDP_EXTERNAL_URL = "http://{{env.GRAM_DEVIDP_HOST}}:{{env.GRAM_DEVIDP_PORT}}"
 GRAM_DEVIDP_DB = "file:{{ config_root }}/local/devidp/devidp.db"
-GRAM_IDP_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2"
+GRAM_IDP_BASE_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/oauth2-1"
 GRAM_IDP_CLIENT_ID = "gram-local-dev"
-## WorkOS API key. In mock-workos mode the mock endpoint accepts any value.
-## Override in mise.local.toml with a real sk_test_... key for workos mode.
+## Shared secret used by Gram clients to authenticate to dev-idp. `./zero`
+## generates a per-checkout value in mise.local.toml.
 GRAM_IDP_CLIENT_SECRET = "unset"
-## IDP mode: "mock-workos" (default) or "workos".
-##
-## mock-workos — fully local, zero config. dev-idp emulates the WorkOS API.
-##               No overrides needed.
-##
-## workos      — real WorkOS via dev-idp proxy. Add these to mise.local.toml:
-##                 GRAM_IDP_MODE = "workos"
-##                 GRAM_IDP_CLIENT_SECRET = "sk_test_..."
-##                 WORKOS_API_URL = "https://api.workos.com"
-##                 GRAM_IDP_CLIENT_ID = "<your WorkOS client ID>"
-##
+## Upstream WorkOS API key, used only by dev-idp's workos backend.
+## Override in mise.local.toml with a real sk_test_... key for the workos backend.
+WORKOS_API_KEY = "unset"
+## Identity backend: "local" (default) or "workos". Login stays
+## non-interactive either way. For real WorkOS, set in mise.local.toml:
+##   GRAM_DEVIDP_BACKEND = "workos"
+##   WORKOS_API_KEY = "sk_test_..."
 ## See CONTRIBUTING.md "Local auth and identity" for details.
-GRAM_IDP_MODE = "mock-workos"
-## Points the Gram server and dev-idp at the WorkOS-compatible API.
-## In mock-workos mode this is the dev-idp emulator; override in
-## mise.local.toml for workos mode.
-WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/mock-workos"
+GRAM_DEVIDP_BACKEND = "local"
+## Points the Gram server at the dev-idp's WorkOS surface. Constant across
+## backends — the backend flag decides what serves it.
+WORKOS_API_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}/workos"
+## Real WorkOS API the workos backend proxies to.
+# GRAM_DEVIDP_WORKOS_UPSTREAM_URL = "https://api.workos.com"
 ## PEM-encoded RSA private key for stable JWKS across dev-idp restarts.
 # GRAM_DEVIDP_RSA_PRIVATE_KEY = ""
 ## The following variables are only needed if you want to do one of the following:
@@ -226,6 +230,11 @@ OTLP_HTTP_PORT = "4318"
 OTEL_EXPORTER_OTLP_ENDPOINT = "http://{{env.OTLP_GRPC_HOST}}:{{env.OTLP_GRPC_PORT}}"
 OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
 OTEL_RESOURCE_ATTRIBUTES = "worktree=main"
+## Where the shared collector's demo-activity pipeline posts rewritten Claude
+## Code logs (see local/otel/gram-demo-forward.yaml). host.docker.internal
+## because localhost inside that container is the container; the port follows
+## this worktree's, which git:workinit remaps for parallel trees.
+GRAM_DEMO_OTLP_LOGS_ENDPOINT = "https://host.docker.internal:{{env.GRAM_SERVER_PORT}}/rpc/hooks.otel/v1/logs"
 ## Change these to 0 to disable OpenTelemetry traces and metrics to be emitted.
 GRAM_ENABLE_OTEL_TRACES = 1
 GRAM_ENABLE_OTEL_METRICS = 1
@@ -250,7 +259,7 @@ VITE_DEV_HOSTNAMES = "localhost"
 ## renderBuiltUrl comment in client/dashboard/vite.config.ts). Unset locally
 ## and by default in production — assets are then served same-origin.
 # GRAM_CDN_URL = "https://cdn.dev.getgram.ai"
-TEMPORAL_WEB_PORT = "8233"
+TEMPORAL_WEB_PORT = "18233"
 ## If you want to enable/disable certain feature flags during local development,
 ## copy the following line to mise.local.toml and point to a CSV file containing
 ## flag settings. The server and worker run from the `server/` directory, and
@@ -315,11 +324,15 @@ GRAM_RISK_FINGERPRINT_PEPPER_KEYRING = '{"current": "v1", "keys": {"v1": "bmvSy6
 ## Stripe configuration ##
 ##########################
 ## PAYG self-serve billing. Run `mise run stripe:setup` to provision and
-## validate the sandbox TUM meter, product, and metered price. The task writes
-## the catalog values into mise.local.toml. Requires a Stripe sandbox API key.
+## validate the sandbox TUM meter, product, and metered price, and resolve
+## existing monthly metered prices by lookup keys payg-mcp-egress and
+## payg-risk-scans. The task writes catalog values into mise.local.toml.
+## Requires a Stripe sandbox API key.
 STRIPE_API_KEY = { default = "unset" }
 STRIPE_WEBHOOK_SECRET = { default = "unset" }
 STRIPE_PRICE_ID_TUM = { default = "" }
+STRIPE_PRICE_ID_MCP_EGRESS = { default = "" }
+STRIPE_PRICE_ID_RISK_SCANS = { default = "" }
 STRIPE_METER_ID_TUM = { default = "" }
 STRIPE_METER_EVENT_NAME = { default = "tum" }
 STRIPE_PORTAL_CONFIGURATION_ID = { default = "" }
@@ -375,7 +388,8 @@ GRAM_SVIX_API_KEY = { default = "unset" }
 ################
 ## GCP config ##
 ################
-## Typically this variable is omitted and the GCP SDK will detect project ID
-## from the environment. However, for local development, it can be set to a
-## static value.
+## The Pub/Sub emulator namespaces resources by project ID. The main tree keeps
+## this stable default; git:workinit overrides it with the worktree's unique
+## Compose project so one shared emulator can isolate identical topic and
+## subscription IDs from concurrent worktrees.
 GRAM_GCP_PROJECT_ID = "local-dev-project"

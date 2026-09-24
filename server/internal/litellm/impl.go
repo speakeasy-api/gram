@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -109,6 +110,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, scheme *security.A
 	ctx, err := s.auth.Authorize(ctx, key, scheme)
 	if err != nil {
 		err = fmt.Errorf("authorize LiteLLM request: %w", err)
+		s.health.Record(ctx, healthSignalNone, "", err)
+		return ctx, err
+	}
+	// Agent-principal keys ingest through the hooks service, which enforces their grant.
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		err := oops.C(oops.CodeForbidden)
 		s.health.Record(ctx, healthSignalNone, "", err)
 		return ctx, err
 	}
@@ -373,8 +380,8 @@ func noneResult() *gen.LitellmIngestResult {
 }
 
 func latestUserPrompt(messages []*gen.LiteLLMStructuredMessage) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		message := messages[i]
+	for _, message := range slices.Backward(messages) {
+
 		if message != nil && strings.EqualFold(strings.TrimSpace(message.Role), "user") {
 			return messageText(message.Content)
 		}

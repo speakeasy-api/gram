@@ -2,8 +2,10 @@
 <html lang="en" class="dark:scheme-dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" id="favicon" href="/favicon.png" />
-    <link rel="alternate icon" id="favicon-alt" href="/favicon.ico" />
+    <!-- The SVG adapts to the browser color scheme on its own; the .ico is the
+         fallback for browsers that don't render SVG favicons. -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="alternate icon" href="/favicon.ico" />
 
     <!-- Apply the theme class before first paint to avoid a flash of the
          wrong theme on load. Mirrors App.tsx (key: "preferred-theme",
@@ -13,6 +15,7 @@
     <!-- Nothing on this host wants search indexing: the app is behind login
          and /shared/* pages are tokenized capability URLs. -->
     <meta name="robots" content="noindex, nofollow" />
+    <meta name="gram-admin-server-url" content="${GRAM_ADMIN_SERVER_URL}" />
 
     <meta property="og:title" content="Speakeasy AI Control Plane" />
     <meta
@@ -27,6 +30,16 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Speakeasy" />
     <meta property="og:locale" content="en_US" />
+
+    <!-- Preview provenance, read by the Gutternote widget below, and
+         substituted by the container entrypoint at container start
+         (41-preview-runtime-values.sh) from the environment the deployment
+         supplies. These default to empty in the image, so any host whose
+         deployment does not set them renders blanks. Under `vite dev` the
+         entrypoint never runs and they stay as literal ${...} text. -->
+    <meta name="gutternote:branch" content="${GRAM_BRANCH}" />
+    <meta name="gutternote:commit" content="${GRAM_COMMIT_SHA}" />
+    <meta name="gutternote:pr" content="${GRAM_PR_NUMBER}" />
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -74,5 +87,12 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!-- Gutternote feedback widget, on PR previews only. Placed before </body>
+         as its docs require. The container entrypoint composes the whole tag
+         (41-preview-runtime-values.sh), so this expands to nothing at all
+         unless the deployment set both GRAM_IS_PREVIEW=true and a key — prod,
+         shared staging and local dev get no tag. -->
+    ${GRAM_GUTTERNOTE_SCRIPT}
   </body>
 </html>

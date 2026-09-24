@@ -18,7 +18,9 @@
     "jsx": "react-jsx",
 
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@gram/admin-client": ["./src/sdk/src/index.ts"],
+      "@gram/admin-client/*": ["./src/sdk/src/*"]
     },
 
     /* Dead-code guards */

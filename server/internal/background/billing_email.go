@@ -51,8 +51,7 @@ func (s *TemporalBillingEmailScheduler) enqueue(ctx context.Context, workflowIDP
 		WorkflowRunTimeout:                       billingEmailWorkflowRunTimeout,
 	}, workflowFunc, input)
 	if err != nil {
-		var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
-		if errors.As(err, &alreadyStarted) {
+		if _, ok := errors.AsType[*serviceerror.WorkflowExecutionAlreadyStarted](err); ok {
 			return nil
 		}
 		return err

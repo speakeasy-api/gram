@@ -1,8 +1,4 @@
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { randomSlugSuffix } from "@/lib/slug";
-
-export const ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG =
-  FEATURE_FLAGS.externalMcpUserSessions;
 
 export const DEFAULT_USER_SESSION_DURATION_HOURS = 24 * 14;
 

@@ -394,6 +394,7 @@ describe("StartPaygCheckoutCTA", () => {
 
   // A link the dashboard would refuse to open is a failure, not a navigation.
   it.each([
+    ["an insecure checkout link", "http://checkout.stripe.test/c/pay/session"],
     ["an unsafe scheme", "javascript:alert(1)"],
     ["a protocol-relative link", "//evil.test/checkout"],
     ["an empty link", ""],

@@ -46,7 +46,7 @@ import {
   BRAND_MESH_SURFACE_CLASS,
   BrandMeshLayers,
 } from "@/components/brand-mesh";
-import { getIdentityTint } from "@/components/gradient-colors";
+import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import {
   useHideInsightsDock,
@@ -92,7 +92,12 @@ export function ChatHome(): ReactElement {
     // grain. Scrolling lives on an inner wrapper so the mesh (and the back
     // affordance) stay pinned to the viewport instead of scrolling away with
     // the content.
-    <div className={cn(BRAND_MESH_SURFACE_CLASS, "flex h-full flex-col")}>
+    <div
+      className={cn(
+        BRAND_MESH_SURFACE_CLASS,
+        "flex h-[calc(100vh-var(--banner-offset,0px))] flex-col",
+      )}
+    >
       <BrandMeshLayers />
       {/* Header row on the same --header-height grid as Page.Header, but with
           no rule below it — the mesh surface should read unbroken here. */}
@@ -830,6 +835,7 @@ function RecentRowIcon({
   userId?: string;
   externalUserId?: string;
 }): ReactElement {
+  const isDark = useIsDarkTheme();
   const { data: membersData } = useMembers();
   const member = resolveChatOwner(membersData?.members, {
     userId,
@@ -845,7 +851,7 @@ function RecentRowIcon({
         ) : null}
         <AvatarFallback
           className="text-xs font-medium"
-          style={getIdentityTint(display)}
+          style={getIdentityTint(display, isDark)}
         >
           {initialsOf(display)}
         </AvatarFallback>

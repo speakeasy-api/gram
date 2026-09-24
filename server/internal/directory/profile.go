@@ -1,6 +1,10 @@
 package directory
 
-import "github.com/google/uuid"
+import (
+	"strings"
+
+	"github.com/google/uuid"
+)
 
 // Group describes an active directory group assigned to a user.
 type Group struct {
@@ -24,6 +28,21 @@ type UserProfile struct {
 
 	// Email is the email supplied by the directory provider.
 	Email string
+
+	// DepartmentName is the directory department attribute.
+	DepartmentName string
+
+	// JobTitle is the directory job title attribute.
+	JobTitle string
+
+	// EmployeeType is the directory employment type attribute.
+	EmployeeType string
+
+	// DivisionName is the directory division attribute.
+	DivisionName string
+
+	// CostCenterName is the directory cost centre attribute.
+	CostCenterName string
 
 	// RawAttributes contains the complete directory provider payload.
 	RawAttributes map[string]any
@@ -51,16 +70,14 @@ func (a UserAttributes) IsZero() bool {
 	return a == zero
 }
 
-// Attributes returns the supported enrichment attributes from the raw
-// directory payload. Null and non-string values are ignored so downstream
-// stores receive a consistent string schema.
+// Attributes returns the supported enrichment attributes of a profile.
 func (p UserProfile) Attributes() UserAttributes {
 	return UserAttributes{
-		DepartmentName: stringAttribute(p.RawAttributes, "department_name"),
-		JobTitle:       stringAttribute(p.RawAttributes, "job_title"),
-		EmployeeType:   stringAttribute(p.RawAttributes, "employee_type"),
-		DivisionName:   stringAttribute(p.RawAttributes, "division_name"),
-		CostCenterName: stringAttribute(p.RawAttributes, "cost_center_name"),
+		DepartmentName: p.DepartmentName,
+		JobTitle:       p.JobTitle,
+		EmployeeType:   p.EmployeeType,
+		DivisionName:   p.DivisionName,
+		CostCenterName: p.CostCenterName,
 	}
 }
 
@@ -73,7 +90,11 @@ func (p UserProfile) GroupNames() []string {
 	return names
 }
 
+// stringAttribute reads one supported attribute from the raw directory
+// payload. Mappings are customer-controlled, so anything that is not a string
+// is ignored, and a value that is only whitespace is the same as an absent
+// one.
 func stringAttribute(attributes map[string]any, key string) string {
 	value, _ := attributes[key].(string)
-	return value
+	return strings.TrimSpace(value)
 }

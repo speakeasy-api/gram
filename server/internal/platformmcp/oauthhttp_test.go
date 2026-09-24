@@ -20,6 +20,7 @@ import (
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 type memoryCache struct {
@@ -92,8 +93,8 @@ func (testIdentity) BuildAuthorizationURL(_ context.Context, params identity.Aut
 func (testIdentity) ExchangeCodeForTokens(_ context.Context, _ string) (*identity.IDPUserInfo, error) {
 	return &identity.IDPUserInfo{}, nil
 }
-func (testIdentity) UpsertUserFromIDP(_ context.Context, _ *identity.IDPUserInfo) (string, error) {
-	return "user-1", nil
+func (testIdentity) CompleteIDPLogin(_ context.Context, _ *identity.IDPUserInfo, _ identity.IDPLoginOptions) (identity.IDPLoginResult, error) {
+	return identity.IDPLoginResult{UserID: "user-1", Reactivated: false, UserInfo: nil}, nil
 }
 
 type allowGate struct{}
@@ -109,12 +110,28 @@ func (g oauthTestGate) Enabled(context.Context, string) (bool, error) { return g
 
 type allowAuthorizer struct{}
 
-func (allowAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return nil }
+func (allowAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
+	return contextWithPrincipal(ctx, principal), nil
+}
+func (allowAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
+	return nil
+}
+func (allowAuthorizer) RequireLiveMembership(context.Context, Principal) error { return nil }
+func (allowAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error   { return nil }
 
 type oauthTestAuthorizer struct {
 	err error
 }
 
+func (a oauthTestAuthorizer) PrepareExternalContext(ctx context.Context, principal Principal) (context.Context, error) {
+	return contextWithPrincipal(ctx, principal), a.err
+}
+func (a oauthTestAuthorizer) AuthorizeExternalCall(context.Context, Principal, ExternalAuthorization) error {
+	return a.err
+}
+func (a oauthTestAuthorizer) RequireLiveMembership(context.Context, Principal) error {
+	return a.err
+}
 func (a oauthTestAuthorizer) RequireLiveOrgAdmin(context.Context, Principal) error { return a.err }
 
 type testOrganizationSelector struct {
@@ -135,6 +152,8 @@ func TestOAuthHTTPProviderSetupCompletionDoesNotExposeState(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code)
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 	require.NotContains(t, response.Body.String(), "secret")
+	require.Contains(t, response.Body.String(), "setting up Platform MCP")
+	require.NotContains(t, response.Body.String(), "AICP")
 }
 
 func TestOAuthHTTPMetadataAndClientRegistration(t *testing.T) {
@@ -145,6 +164,7 @@ func TestOAuthHTTPMetadataAndClientRegistration(t *testing.T) {
 	service.AuthorizationServerHandler().ServeHTTP(metadata, httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server/platform-mcp", nil))
 	require.Equal(t, http.StatusOK, metadata.Code)
 	require.Contains(t, metadata.Body.String(), `"registration_endpoint"`)
+	require.NotContains(t, metadata.Body.String(), oauthwire.GrantTypeJWTBearer)
 
 	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/register", strings.NewReader(`{"client_name":"test client","redirect_uris":["http://127.0.0.1:3000/callback"],"token_endpoint_auth_method":"none"}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -153,6 +173,20 @@ func TestOAuthHTTPMetadataAndClientRegistration(t *testing.T) {
 	require.Equal(t, http.StatusCreated, response.Code)
 	require.Contains(t, response.Body.String(), `"client_id"`)
 	require.NotContains(t, response.Body.String(), `"client_secret"`)
+}
+
+func TestOAuthHTTPClientRegistrationRejectsIDJAG(t *testing.T) {
+	t.Parallel()
+
+	service := newTestOAuthHTTP(t)
+	body := fmt.Sprintf(`{"client_name":"ID-JAG client","grant_types":[%q],"token_endpoint_auth_method":"client_secret_basic"}`, oauthwire.GrantTypeJWTBearer)
+	request := httptest.NewRequest(http.MethodPost, "/platform-mcp/register", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	service.RegisterHandler().ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), `"invalid_client_metadata"`)
 }
 
 func TestOAuthHTTPRequireJSONAcceptsMediaTypeParameters(t *testing.T) {
@@ -222,6 +256,8 @@ func TestOAuthHTTPSelectsOrganizationAfterIDPCallback(t *testing.T) {
 	require.Equal(t, http.StatusOK, selection.Code)
 	require.Contains(t, selection.Body.String(), "Organization one")
 	require.Contains(t, selection.Body.String(), "Choose an organization")
+	require.Contains(t, selection.Body.String(), "requests access to Platform MCP")
+	require.NotContains(t, selection.Body.String(), "AICP")
 	require.Contains(t, selection.Body.String(), "auth-consent-container")
 	require.Contains(t, selection.Body.String(), "font-diatype-mono")
 	require.NotContains(t, selection.Body.String(), "fonts.googleapis.com")
@@ -266,7 +302,7 @@ func TestOAuthHTTPCompletesChallengeStateHandoff(t *testing.T) {
 	state := selectionURL.Query().Get("state")
 	require.Contains(t, selection.Body.String(), `name="csrf_token" value="`)
 	csrfStart := strings.Index(selection.Body.String(), `name="csrf_token" value="`) + len(`name="csrf_token" value="`)
-	csrf := strings.Split(selection.Body.String()[csrfStart:], `"`)[0]
+	csrf, _, _ := strings.Cut(selection.Body.String()[csrfStart:], `"`)
 
 	selected := httptest.NewRecorder()
 	selectionForm := url.Values{"state": {state}, "csrf_token": {csrf}, "organization_id": {"org-1"}}

@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const acceptInvitation = `-- name: AcceptInvitation :execrows
+const acceptInvitation = `-- name: AcceptInvitation :one
 UPDATE organization_invitations
 SET state = 'accepted',
     accepted_at = clock_timestamp(),
@@ -20,14 +20,27 @@ SET state = 'accepted',
 WHERE id = $1
   AND state = 'pending'
   AND expires_at > clock_timestamp()
+RETURNING id, organization_id, email, token_hash, inviter_user_id, role_slug, state, expires_at, accepted_at, revoked_at, created_at, updated_at
 `
 
-func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, acceptInvitation, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) AcceptInvitation(ctx context.Context, id uuid.UUID) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, acceptInvitation, id)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.TokenHash,
+		&i.InviterUserID,
+		&i.RoleSlug,
+		&i.State,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const acceptPendingInvitationForMember = `-- name: AcceptPendingInvitationForMember :one
@@ -65,6 +78,36 @@ func (q *Queries) AcceptPendingInvitationForMember(ctx context.Context, arg Acce
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const addVerifiedDomainByWorkosID = `-- name: AddVerifiedDomainByWorkosID :exec
+UPDATE organization_metadata
+SET verified_domains = CASE
+        WHEN EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(organization_metadata.verified_domains, '{}'::text[])) AS existing (domain)
+            WHERE lower(existing.domain) = lower($1::text)
+        ) THEN COALESCE(organization_metadata.verified_domains, '{}'::text[])
+        ELSE array_append(COALESCE(organization_metadata.verified_domains, '{}'::text[]), $1::text)
+    END,
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE workos_id = $3
+`
+
+type AddVerifiedDomainByWorkosIDParams struct {
+	Domain            string
+	WorkosLastEventID pgtype.Text
+	WorkosID          pgtype.Text
+}
+
+// Add one domain to an organization's verified domains after a WorkOS
+// organization_domain.verified event. The match ignores case, so a domain
+// already in the list is not added twice. The event cursor is recorded even
+// when the list does not change.
+func (q *Queries) AddVerifiedDomainByWorkosID(ctx context.Context, arg AddVerifiedDomainByWorkosIDParams) error {
+	_, err := q.db.Exec(ctx, addVerifiedDomainByWorkosID, arg.Domain, arg.WorkosLastEventID, arg.WorkosID)
+	return err
 }
 
 const attachWorkOSUserToOrg = `-- name: AttachWorkOSUserToOrg :exec
@@ -188,16 +231,18 @@ INSERT INTO organization_metadata (
     slug,
     workos_id,
     workos_updated_at,
-    workos_last_event_id
+    workos_last_event_id,
+    verified_domains
 ) VALUES (
     $1,
     $2,
     $3,
     $4,
     $5,
-    $6
+    $6,
+    $7::text[]
 )
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
 
 type CreateOrganizationMetadataFromWorkOSParams struct {
@@ -207,6 +252,7 @@ type CreateOrganizationMetadataFromWorkOSParams struct {
 	WorkosID          pgtype.Text
 	WorkosUpdatedAt   pgtype.Timestamptz
 	WorkosLastEventID pgtype.Text
+	VerifiedDomains   []string
 }
 
 // Create a Gram organization row from a WorkOS organization event. The caller
@@ -220,6 +266,7 @@ func (q *Queries) CreateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		arg.WorkosID,
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
+		arg.VerifiedDomains,
 	)
 	var i OrganizationMetadatum
 	err := row.Scan(
@@ -237,6 +284,8 @@ func (q *Queries) CreateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -408,7 +457,7 @@ func (q *Queries) GetInvitationByTokenHash(ctx context.Context, tokenHash string
 }
 
 const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE workos_id = $1
 `
@@ -431,6 +480,8 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -439,7 +490,7 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID pgtype
 }
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -462,6 +513,8 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -470,7 +523,7 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 }
 
 const getOrganizationMetadataBySlug = `-- name: GetOrganizationMetadataBySlug :one
-SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE slug = $1
 `
@@ -493,6 +546,8 @@ func (q *Queries) GetOrganizationMetadataBySlug(ctx context.Context, slug string
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -541,6 +596,34 @@ func (q *Queries) GetOrganizationRelationshipForUser(ctx context.Context, arg Ge
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
+	)
+	return i, err
+}
+
+const getOrganizationSetupTask = `-- name: GetOrganizationSetupTask :one
+SELECT organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at, created_at, updated_at
+FROM organization_setup_tasks
+WHERE organization_id = $1
+  AND task_key = $2
+`
+
+type GetOrganizationSetupTaskParams struct {
+	OrganizationID string
+	TaskKey        string
+}
+
+func (q *Queries) GetOrganizationSetupTask(ctx context.Context, arg GetOrganizationSetupTaskParams) (OrganizationSetupTask, error) {
+	row := q.db.QueryRow(ctx, getOrganizationSetupTask, arg.OrganizationID, arg.TaskKey)
+	var i OrganizationSetupTask
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.TaskKey,
+		&i.Status,
+		&i.AssigneeUserID,
+		&i.AssigneeEmail,
+		&i.HiddenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -630,6 +713,56 @@ func (q *Queries) GetRoleAssignmentLinkedToDifferentWorkOSUser(ctx context.Conte
 	return i, err
 }
 
+const getSetupTaskCompletionFacts = `-- name: GetSetupTaskCompletionFacts :one
+WITH default_project AS (
+    SELECT id
+    FROM projects
+    WHERE organization_id = $1
+      AND deleted IS FALSE
+    ORDER BY created_at, id
+    LIMIT 1
+)
+SELECT
+    COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_configured,
+    COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
+    (COALESCE(cardinality(organization_metadata.verified_domains), 0) > 0)::boolean AS domain_verified,
+    EXISTS (
+        SELECT 1
+        FROM plugin_github_connections
+        JOIN default_project ON default_project.id = plugin_github_connections.project_id
+    ) AS marketplace_published,
+    (
+        SELECT COUNT(DISTINCT organization_features.feature_name) = 3
+        FROM organization_features
+        WHERE organization_features.organization_id = $1
+          AND organization_features.feature_name IN ('logs', 'tool_io_logs', 'session_capture')
+          AND organization_features.deleted IS FALSE
+    )::boolean AS logging_enabled
+FROM organization_metadata
+WHERE organization_metadata.id = $1
+`
+
+type GetSetupTaskCompletionFactsRow struct {
+	SsoConfigured        bool
+	DsyncConfigured      bool
+	DomainVerified       bool
+	MarketplacePublished bool
+	LoggingEnabled       bool
+}
+
+func (q *Queries) GetSetupTaskCompletionFacts(ctx context.Context, organizationID string) (GetSetupTaskCompletionFactsRow, error) {
+	row := q.db.QueryRow(ctx, getSetupTaskCompletionFacts, organizationID)
+	var i GetSetupTaskCompletionFactsRow
+	err := row.Scan(
+		&i.SsoConfigured,
+		&i.DsyncConfigured,
+		&i.DomainVerified,
+		&i.MarketplacePublished,
+		&i.LoggingEnabled,
+	)
+	return i, err
+}
+
 const getSvixAppID = `-- name: GetSvixAppID :one
 SELECT svix_app_id
 FROM organization_metadata
@@ -686,6 +819,51 @@ type HasOrganizationUserRelationshipParams struct {
 
 func (q *Queries) HasOrganizationUserRelationship(ctx context.Context, arg HasOrganizationUserRelationshipParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasOrganizationUserRelationship, arg.OrganizationID, arg.UserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasOtherActiveOrganizationUsers = `-- name: HasOtherActiveOrganizationUsers :one
+SELECT EXISTS (
+    SELECT 1
+    FROM organization_user_relationships AS relationship
+    JOIN users ON users.id = relationship.user_id
+    WHERE relationship.organization_id = $1
+      AND relationship.deleted_at IS NULL
+      AND users.deleted_at IS NULL
+      AND users.id <> $2
+)
+`
+
+type HasOtherActiveOrganizationUsersParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+func (q *Queries) HasOtherActiveOrganizationUsers(ctx context.Context, arg HasOtherActiveOrganizationUsersParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOtherActiveOrganizationUsers, arg.OrganizationID, arg.UserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasPendingInvitationForEmail = `-- name: HasPendingInvitationForEmail :one
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_invitations
+  WHERE email = $1
+    AND state = 'pending'
+    AND expires_at > clock_timestamp()
+)
+`
+
+// Reports whether any organization has a live invitation outstanding for this
+// address. It is asked at first-time user creation to tell an invited signup
+// from an organic one, so it deliberately spans every organization rather than
+// one: the user does not exist yet and belongs to none.
+func (q *Queries) HasPendingInvitationForEmail(ctx context.Context, email string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPendingInvitationForEmail, email)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -902,6 +1080,41 @@ func (q *Queries) ListOrganizationRoleAssignmentsByWorkOSUser(ctx context.Contex
 	return items, nil
 }
 
+const listOrganizationSetupTasks = `-- name: ListOrganizationSetupTasks :many
+SELECT organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at, created_at, updated_at
+FROM organization_setup_tasks
+WHERE organization_id = $1
+`
+
+func (q *Queries) ListOrganizationSetupTasks(ctx context.Context, organizationID string) ([]OrganizationSetupTask, error) {
+	rows, err := q.db.Query(ctx, listOrganizationSetupTasks, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrganizationSetupTask
+	for rows.Next() {
+		var i OrganizationSetupTask
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.TaskKey,
+			&i.Status,
+			&i.AssigneeUserID,
+			&i.AssigneeEmail,
+			&i.HiddenAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationUsers = `-- name: ListOrganizationUsers :many
 SELECT
   our.id, our.organization_id, our.user_id, our.workos_user_id, our.workos_membership_id, our.workos_updated_at, our.workos_last_event_id, our.created_at, our.updated_at, our.deleted_at, our.deleted,
@@ -1057,6 +1270,97 @@ func (q *Queries) ListPendingInvitations(ctx context.Context, organizationID str
 	return items, nil
 }
 
+const lockActiveOrganizationUser = `-- name: LockActiveOrganizationUser :one
+SELECT our.user_id
+FROM organization_user_relationships AS our
+JOIN users AS u ON u.id = our.user_id
+WHERE our.user_id = $1
+  AND our.organization_id = $2
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+FOR SHARE OF our, u
+`
+
+type LockActiveOrganizationUserParams struct {
+	UserID         pgtype.Text
+	OrganizationID string
+}
+
+func (q *Queries) LockActiveOrganizationUser(ctx context.Context, arg LockActiveOrganizationUserParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, lockActiveOrganizationUser, arg.UserID, arg.OrganizationID)
+	var user_id pgtype.Text
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
+const lockOrganizationForInviteAcceptance = `-- name: LockOrganizationForInviteAcceptance :one
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockOrganizationForInviteAcceptance(ctx context.Context, id string) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationForInviteAcceptance, id)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const lockOrganizationForSetupTaskUpdate = `-- name: LockOrganizationForSetupTaskUpdate :one
+SELECT id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
+FROM organization_metadata
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockOrganizationForSetupTaskUpdate(ctx context.Context, organizationID string) (OrganizationMetadatum, error) {
+	row := q.db.QueryRow(ctx, lockOrganizationForSetupTaskUpdate, organizationID)
+	var i OrganizationMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GramAccountType,
+		&i.WorkosID,
+		&i.WorkosUpdatedAt,
+		&i.WorkosLastEventID,
+		&i.SvixAppID,
+		&i.WebhooksEnabled,
+		&i.Whitelisted,
+		&i.FreeTrialStartedAt,
+		&i.FreeTrialEndsAt,
+		&i.ScimEnabled,
+		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
 const lockOrganizationSlug = `-- name: LockOrganizationSlug :exec
 SELECT pg_advisory_xact_lock(hashtext($1))
 `
@@ -1094,20 +1398,24 @@ func (q *Queries) MarkRoleAssignmentsDeleted(ctx context.Context, arg MarkRoleAs
 	return err
 }
 
-const markWorkOSMembershipDeleted = `-- name: MarkWorkOSMembershipDeleted :exec
+const markWorkOSMembershipDeleted = `-- name: MarkWorkOSMembershipDeleted :many
 WITH updated_existing_user_relationship AS (
     UPDATE organization_user_relationships
-    SET workos_user_id = $3,
-        workos_membership_id = $4,
-        workos_updated_at = $5,
-        workos_last_event_id = $6,
+    SET workos_user_id = $1,
+        workos_membership_id = $2,
+        workos_updated_at = $3,
+        workos_last_event_id = $4,
         deleted_at = COALESCE(deleted_at, clock_timestamp()),
         updated_at = clock_timestamp()
-    WHERE organization_id = $1
-      AND user_id = $2
-      AND $2::text IS NOT NULL
-    RETURNING id
-)
+    WHERE organization_user_relationships.organization_id = $5
+      AND (
+          ($6::text IS NOT NULL AND organization_user_relationships.user_id = $6)
+          OR ($1::text IS NOT NULL AND organization_user_relationships.workos_user_id = $1)
+          OR ($2::text IS NOT NULL AND organization_user_relationships.workos_membership_id = $2)
+      )
+    RETURNING organization_user_relationships.user_id
+),
+inserted AS (
 INSERT INTO organization_user_relationships (
     organization_id,
     user_id,
@@ -1118,12 +1426,12 @@ INSERT INTO organization_user_relationships (
     deleted_at
 )
 SELECT
+    $5,
+    $6,
     $1,
     $2,
     $3,
     $4,
-    $5,
-    $6,
     clock_timestamp()
 WHERE NOT EXISTS (SELECT 1 FROM updated_existing_user_relationship)
 ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
@@ -1134,28 +1442,182 @@ ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     deleted_at = COALESCE(organization_user_relationships.deleted_at, clock_timestamp()),
     updated_at = clock_timestamp()
+RETURNING user_id
+)
+SELECT user_id FROM updated_existing_user_relationship
+UNION ALL
+SELECT user_id FROM inserted
 `
 
 type MarkWorkOSMembershipDeletedParams struct {
-	OrganizationID     string
-	UserID             pgtype.Text
 	WorkosUserID       pgtype.Text
 	WorkosMembershipID pgtype.Text
 	WorkosUpdatedAt    pgtype.Timestamptz
 	WorkosLastEventID  pgtype.Text
+	OrganizationID     string
+	UserID             pgtype.Text
 }
 
 // Record a WorkOS membership delete, inserting a tombstone when the local
 // relationship did not exist so stale replayed creates cannot resurrect it.
-func (q *Queries) MarkWorkOSMembershipDeleted(ctx context.Context, arg MarkWorkOSMembershipDeletedParams) error {
-	_, err := q.db.Exec(ctx, markWorkOSMembershipDeleted,
-		arg.OrganizationID,
-		arg.UserID,
+func (q *Queries) MarkWorkOSMembershipDeleted(ctx context.Context, arg MarkWorkOSMembershipDeletedParams) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, markWorkOSMembershipDeleted,
 		arg.WorkosUserID,
 		arg.WorkosMembershipID,
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
+		arg.OrganizationID,
+		arg.UserID,
 	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Text
+	for rows.Next() {
+		var user_id pgtype.Text
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const reassignOrganizationRoleAssignmentWorkOSID = `-- name: ReassignOrganizationRoleAssignmentWorkOSID :exec
+UPDATE organization_role_assignments
+SET workos_user_id = $1,
+    updated_at = clock_timestamp()
+WHERE user_id = $2
+  AND workos_user_id <> $1
+  AND deleted_at IS NULL
+`
+
+type ReassignOrganizationRoleAssignmentWorkOSIDParams struct {
+	NewWorkosUserID string
+	UserID          pgtype.Text
+}
+
+// Move leftover assignments onto the new WorkOS id after colliding rows
+// have been retired.
+func (q *Queries) ReassignOrganizationRoleAssignmentWorkOSID(ctx context.Context, arg ReassignOrganizationRoleAssignmentWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, reassignOrganizationRoleAssignmentWorkOSID, arg.NewWorkosUserID, arg.UserID)
+	return err
+}
+
+const reassignOrganizationUserWorkOSID = `-- name: ReassignOrganizationUserWorkOSID :exec
+UPDATE organization_user_relationships
+SET workos_user_id = $1,
+    updated_at = clock_timestamp()
+WHERE user_id = $2
+  AND workos_user_id IS NOT NULL
+  AND workos_user_id IS DISTINCT FROM $1
+`
+
+type ReassignOrganizationUserWorkOSIDParams struct {
+	NewWorkosUserID pgtype.Text
+	UserID          pgtype.Text
+}
+
+// Login reuses a Gram user after WorkOS delete-and-signup, so membership
+// rows still pointing at a previous WorkOS user id must follow the new one.
+// Matches any leftover id so a retry after overwrite still converges.
+func (q *Queries) ReassignOrganizationUserWorkOSID(ctx context.Context, arg ReassignOrganizationUserWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, reassignOrganizationUserWorkOSID, arg.NewWorkosUserID, arg.UserID)
+	return err
+}
+
+const removeVerifiedDomainByWorkosID = `-- name: RemoveVerifiedDomainByWorkosID :exec
+UPDATE organization_metadata
+SET verified_domains = ARRAY(
+        SELECT existing.domain
+        FROM unnest(COALESCE(organization_metadata.verified_domains, '{}'::text[])) WITH ORDINALITY AS existing (domain, position)
+        WHERE lower(existing.domain) <> lower($1::text)
+        ORDER BY existing.position
+    ),
+    workos_last_event_id = $2,
+    updated_at = clock_timestamp()
+WHERE workos_id = $3
+`
+
+type RemoveVerifiedDomainByWorkosIDParams struct {
+	Domain            string
+	WorkosLastEventID pgtype.Text
+	WorkosID          pgtype.Text
+}
+
+// Remove one domain from an organization's verified domains after a WorkOS
+// organization_domain.deleted event. The match ignores case and keeps the
+// order of the remaining domains. The event cursor is recorded even when the
+// domain was not in the list.
+func (q *Queries) RemoveVerifiedDomainByWorkosID(ctx context.Context, arg RemoveVerifiedDomainByWorkosIDParams) error {
+	_, err := q.db.Exec(ctx, removeVerifiedDomainByWorkosID, arg.Domain, arg.WorkosLastEventID, arg.WorkosID)
+	return err
+}
+
+const retireCollidingOrganizationRoleAssignments = `-- name: RetireCollidingOrganizationRoleAssignments :exec
+UPDATE organization_role_assignments AS old
+SET deleted_at = COALESCE(old.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE old.user_id = $1
+  AND old.workos_user_id <> $2
+  AND old.deleted_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM organization_role_assignments AS neu
+      WHERE neu.organization_id = old.organization_id
+        AND neu.workos_user_id = $2
+        AND neu.role_urn = old.role_urn
+        AND neu.deleted_at IS NULL
+  )
+`
+
+type RetireCollidingOrganizationRoleAssignmentsParams struct {
+	UserID          pgtype.Text
+	NewWorkosUserID string
+}
+
+// Soft-delete leftover assignments that would unique-violate if remapped
+// onto a WorkOS id that already holds the same org+role.
+func (q *Queries) RetireCollidingOrganizationRoleAssignments(ctx context.Context, arg RetireCollidingOrganizationRoleAssignmentsParams) error {
+	_, err := q.db.Exec(ctx, retireCollidingOrganizationRoleAssignments, arg.UserID, arg.NewWorkosUserID)
+	return err
+}
+
+const retireDuplicateLeftoverOrganizationRoleAssignments = `-- name: RetireDuplicateLeftoverOrganizationRoleAssignments :exec
+UPDATE organization_role_assignments AS dest
+SET deleted_at = COALESCE(dest.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+FROM (
+  SELECT id
+  FROM (
+    SELECT leftover.id,
+           ROW_NUMBER() OVER (
+             PARTITION BY leftover.organization_id, leftover.role_urn
+             ORDER BY leftover.created_at DESC, leftover.id DESC
+           ) AS rn
+    FROM organization_role_assignments leftover
+    WHERE leftover.user_id = $1
+      AND leftover.workos_user_id <> $2
+      AND leftover.deleted_at IS NULL
+  ) ranked
+  WHERE rn > 1
+) extras
+WHERE dest.id = extras.id
+`
+
+type RetireDuplicateLeftoverOrganizationRoleAssignmentsParams struct {
+	UserID          pgtype.Text
+	NewWorkosUserID string
+}
+
+// Soft-delete extra leftover assignments that share org+role so remapping
+// them onto one WorkOS id cannot unique-violate. Keeps the newest leftover.
+func (q *Queries) RetireDuplicateLeftoverOrganizationRoleAssignments(ctx context.Context, arg RetireDuplicateLeftoverOrganizationRoleAssignmentsParams) error {
+	_, err := q.db.Exec(ctx, retireDuplicateLeftoverOrganizationRoleAssignments, arg.UserID, arg.NewWorkosUserID)
 	return err
 }
 
@@ -1233,7 +1695,7 @@ SET gram_account_type = $1,
 WHERE id = $2
   AND gram_account_type = $3
   AND gram_account_type NOT IN ('payg', 'enterprise')
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
 
 type SetAccountTypeIfUnchangedParams struct {
@@ -1260,6 +1722,8 @@ func (q *Queries) SetAccountTypeIfUnchanged(ctx context.Context, arg SetAccountT
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -1273,7 +1737,7 @@ SET workos_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $2 AND
     workos_id IS NULL
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
 
 type SetOrgWorkosIDParams struct {
@@ -1299,6 +1763,8 @@ func (q *Queries) SetOrgWorkosID(ctx context.Context, arg SetOrgWorkosIDParams) 
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -1329,6 +1795,26 @@ func (q *Queries) SetOrganizationRelationshipWorkOSCursor(ctx context.Context, a
 		arg.OrganizationID,
 		arg.UserID,
 	)
+	return err
+}
+
+const setOrganizationUserWorkOSID = `-- name: SetOrganizationUserWorkOSID :exec
+UPDATE organization_user_relationships
+SET workos_user_id = $1,
+    updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND user_id = $3
+  AND deleted_at IS NULL
+`
+
+type SetOrganizationUserWorkOSIDParams struct {
+	WorkosUserID   pgtype.Text
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
+func (q *Queries) SetOrganizationUserWorkOSID(ctx context.Context, arg SetOrganizationUserWorkOSIDParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationUserWorkOSID, arg.WorkosUserID, arg.OrganizationID, arg.UserID)
 	return err
 }
 
@@ -1374,10 +1860,10 @@ func (q *Queries) SetSSOEnabled(ctx context.Context, arg SetSSOEnabledParams) er
 	return err
 }
 
-const setUserWorkOSMemberships = `-- name: SetUserWorkOSMemberships :exec
+const setUserWorkOSMemberships = `-- name: SetUserWorkOSMemberships :many
 WITH input_memberships AS (
-    SELECT unnest($2::text[]) AS workos_org_id,
-           unnest($3::text[]) AS workos_membership_id
+    SELECT unnest($3::text[]) AS workos_org_id,
+           unnest($4::text[]) AS workos_membership_id
 ),
 resolved AS (
     SELECT organization_metadata.id AS organization_id,
@@ -1417,32 +1903,83 @@ upserted AS (
         workos_membership_id = EXCLUDED.workos_membership_id,
         deleted_at = NULL,
         updated_at = clock_timestamp()
+    WHERE organization_user_relationships.deleted IS FALSE
+       OR organization_user_relationships.workos_membership_id IS DISTINCT FROM EXCLUDED.workos_membership_id
     RETURNING organization_id
 )
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.user_id = $1
-  AND organization_user_relationships.deleted_at IS NULL
+  AND NOT $2::boolean
+  AND organization_user_relationships.deleted IS FALSE
   AND organization_user_relationships.organization_id NOT IN (SELECT organization_id FROM resolved)
   AND organization_user_relationships.organization_id IN (
       SELECT id FROM organization_metadata WHERE workos_id IS NOT NULL
   )
+RETURNING organization_id, user_id
 `
 
 type SetUserWorkOSMembershipsParams struct {
 	UserID              pgtype.Text
+	PreserveExisting    bool
 	WorkosOrgIds        []string
 	WorkosMembershipIds []string
 }
 
+type SetUserWorkOSMembershipsRow struct {
+	OrganizationID string
+	UserID         pgtype.Text
+}
+
 // Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs
 // (not Speakeasy org IDs) and resolves them via organization_metadata. Upserts
-// the provided (workos_org_id, workos_membership_id) pairs and soft-deletes any
-// other relationships where the org has a non-NULL workos_id. Orgs without a
-// workos_id are unaffected. Other users' memberships are never modified.
-func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) error {
-	_, err := q.db.Exec(ctx, setUserWorkOSMemberships, arg.UserID, arg.WorkosOrgIds, arg.WorkosMembershipIds)
+// the provided (workos_org_id, workos_membership_id) pairs and, unless
+// preserve_existing is true, soft-deletes any other relationships where the org
+// has a non-NULL workos_id. Other users' memberships are never modified.
+func (q *Queries) SetUserWorkOSMemberships(ctx context.Context, arg SetUserWorkOSMembershipsParams) ([]SetUserWorkOSMembershipsRow, error) {
+	rows, err := q.db.Query(ctx, setUserWorkOSMemberships,
+		arg.UserID,
+		arg.PreserveExisting,
+		arg.WorkosOrgIds,
+		arg.WorkosMembershipIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SetUserWorkOSMembershipsRow
+	for rows.Next() {
+		var i SetUserWorkOSMembershipsRow
+		if err := rows.Scan(&i.OrganizationID, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setVerifiedDomains = `-- name: SetVerifiedDomains :exec
+UPDATE organization_metadata
+SET verified_domains = $1::text[],
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND cardinality(COALESCE(verified_domains, '{}'::text[])) = 0
+`
+
+type SetVerifiedDomainsParams struct {
+	VerifiedDomains []string
+	ID              string
+}
+
+// Fill an empty verified domains list with the result of a live WorkOS check.
+// A non-empty list is owned by the event sync and may be newer than the live
+// check, so it is never overwritten here.
+func (q *Queries) SetVerifiedDomains(ctx context.Context, arg SetVerifiedDomainsParams) error {
+	_, err := q.db.Exec(ctx, setVerifiedDomains, arg.VerifiedDomains, arg.ID)
 	return err
 }
 
@@ -1598,9 +2135,10 @@ SET name = $1,
     workos_id = $2,
     workos_updated_at = $3,
     workos_last_event_id = $4,
+    verified_domains = $5::text[],
     updated_at = clock_timestamp()
-WHERE id = $5
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+WHERE id = $6
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
 
 type UpdateOrganizationMetadataFromWorkOSParams struct {
@@ -1608,6 +2146,7 @@ type UpdateOrganizationMetadataFromWorkOSParams struct {
 	WorkosID          pgtype.Text
 	WorkosUpdatedAt   pgtype.Timestamptz
 	WorkosLastEventID pgtype.Text
+	VerifiedDomains   []string
 	ID                string
 }
 
@@ -1621,6 +2160,7 @@ func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		arg.WorkosID,
 		arg.WorkosUpdatedAt,
 		arg.WorkosLastEventID,
+		arg.VerifiedDomains,
 		arg.ID,
 	)
 	var i OrganizationMetadatum
@@ -1639,6 +2179,8 @@ func (q *Queries) UpdateOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -1652,13 +2194,15 @@ INSERT INTO organization_metadata (
     name,
     slug,
     workos_id,
-    whitelisted
+    whitelisted,
+    creation_source
 ) VALUES (
     $1,
     $2,
     $3,
     $4,
-    COALESCE($5::boolean, FALSE)
+    COALESCE($5::boolean, FALSE),
+    $6::text
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -1669,16 +2213,23 @@ ON CONFLICT (id) DO UPDATE SET
         WHEN $5::boolean IS NOT NULL THEN $5::boolean
         ELSE organization_metadata.whitelisted
     END,
+    -- The conflict arm is reachable because WorkOS organization sync can insert
+    -- the row first, and it records no source. A caller that knows the flow
+    -- therefore has to be able to fill that gap. A caller that does not know it
+    -- passes null and leaves whatever is already recorded alone, so a later
+    -- upsert from an unrelated path cannot erase the flow that created the row.
+    creation_source = COALESCE(EXCLUDED.creation_source, organization_metadata.creation_source),
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataParams struct {
-	ID          string
-	Name        string
-	Slug        string
-	WorkosID    pgtype.Text
-	Whitelisted pgtype.Bool
+	ID             string
+	Name           string
+	Slug           string
+	WorkosID       pgtype.Text
+	Whitelisted    pgtype.Bool
+	CreationSource pgtype.Text
 }
 
 func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrganizationMetadataParams) (OrganizationMetadatum, error) {
@@ -1688,6 +2239,7 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		arg.Slug,
 		arg.WorkosID,
 		arg.Whitelisted,
+		arg.CreationSource,
 	)
 	var i OrganizationMetadatum
 	err := row.Scan(
@@ -1705,6 +2257,8 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -1734,7 +2288,7 @@ ON CONFLICT (id) DO UPDATE SET
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, created_at, updated_at, disabled_at
+RETURNING id, name, slug, gram_account_type, workos_id, workos_updated_at, workos_last_event_id, svix_app_id, webhooks_enabled, whitelisted, free_trial_started_at, free_trial_ends_at, scim_enabled, sso_enabled, verified_domains, creation_source, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataFromWorkOSParams struct {
@@ -1775,9 +2329,68 @@ func (q *Queries) UpsertOrganizationMetadataFromWorkOS(ctx context.Context, arg 
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const upsertOrganizationSetupTask = `-- name: UpsertOrganizationSetupTask :one
+INSERT INTO organization_setup_tasks (
+    organization_id,
+    task_key,
+    status,
+    assignee_user_id,
+    assignee_email,
+    hidden_at
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4::text,
+    $5::text,
+    $6::timestamptz
+)
+ON CONFLICT (organization_id, task_key) DO UPDATE SET
+    status = EXCLUDED.status,
+    assignee_user_id = EXCLUDED.assignee_user_id,
+    assignee_email = EXCLUDED.assignee_email,
+    hidden_at = EXCLUDED.hidden_at,
+    updated_at = clock_timestamp()
+RETURNING organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at, created_at, updated_at
+`
+
+type UpsertOrganizationSetupTaskParams struct {
+	OrganizationID string
+	TaskKey        string
+	Status         string
+	AssigneeUserID pgtype.Text
+	AssigneeEmail  pgtype.Text
+	HiddenAt       pgtype.Timestamptz
+}
+
+func (q *Queries) UpsertOrganizationSetupTask(ctx context.Context, arg UpsertOrganizationSetupTaskParams) (OrganizationSetupTask, error) {
+	row := q.db.QueryRow(ctx, upsertOrganizationSetupTask,
+		arg.OrganizationID,
+		arg.TaskKey,
+		arg.Status,
+		arg.AssigneeUserID,
+		arg.AssigneeEmail,
+		arg.HiddenAt,
+	)
+	var i OrganizationSetupTask
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.TaskKey,
+		&i.Status,
+		&i.AssigneeUserID,
+		&i.AssigneeEmail,
+		&i.HiddenAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

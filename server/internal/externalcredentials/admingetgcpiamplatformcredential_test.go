@@ -16,7 +16,7 @@ func TestGetGcpIamPlatformCredential_Success(t *testing.T) {
 
 	created := createPlatformGCPAmbientCredential(t, ctx, ti, "platform-get")
 
-	got, err := ti.service.GetGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.GetGcpIamPlatformCredentialPayload{
+	got, err := ti.service.GetGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.GetGcpIamPlatformCredentialPayload{
 		ID:           created.ID,
 		SessionToken: nil,
 	})
@@ -31,7 +31,7 @@ func TestGetGcpIamPlatformCredential_NotFound(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	_, err := ti.service.GetGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.GetGcpIamPlatformCredentialPayload{
+	_, err := ti.service.GetGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.GetGcpIamPlatformCredentialPayload{
 		ID:           uuid.NewString(),
 		SessionToken: nil,
 	})
@@ -42,7 +42,7 @@ func TestGetGcpIamPlatformCredential_InvalidID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 
-	_, err := ti.service.GetGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.GetGcpIamPlatformCredentialPayload{
+	_, err := ti.service.GetGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.GetGcpIamPlatformCredentialPayload{
 		ID:           "not-a-uuid",
 		SessionToken: nil,
 	})
@@ -57,7 +57,7 @@ func TestGetGcpIamPlatformCredential_ExcludesOrgCredential(t *testing.T) {
 
 	orgCred := createGCPImpersonationCredential(t, ctx, ti, "org-scoped")
 
-	_, err := ti.service.GetGcpIamPlatformCredential(withAdmin(t, ctx), &adminecgen.GetGcpIamPlatformCredentialPayload{
+	_, err := ti.service.GetGcpIamPlatformCredential(withAdmin(t, ctx, ti), &adminecgen.GetGcpIamPlatformCredentialPayload{
 		ID:           orgCred.ID,
 		SessionToken: nil,
 	})

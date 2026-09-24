@@ -7,6 +7,16 @@
 
 package server
 
+// ListDistributionPluginsPluginsPath returns the URL path to the plugins service listDistributionPlugins HTTP endpoint.
+func ListDistributionPluginsPluginsPath() string {
+	return "/rpc/plugins.listDistributionPlugins"
+}
+
+// GetDistributionPluginPluginsPath returns the URL path to the plugins service getDistributionPlugin HTTP endpoint.
+func GetDistributionPluginPluginsPath() string {
+	return "/rpc/plugins.getDistributionPlugin"
+}
+
 // ListPluginsPluginsPath returns the URL path to the plugins service listPlugins HTTP endpoint.
 func ListPluginsPluginsPath() string {
 	return "/rpc/plugins.listPlugins"
@@ -62,11 +72,6 @@ func DownloadPluginPackagePluginsPath() string {
 	return "/rpc/plugins.downloadPluginPackage"
 }
 
-// DownloadPlatformMCPPluginPluginsPath returns the URL path to the plugins service downloadPlatformMCPPlugin HTTP endpoint.
-func DownloadPlatformMCPPluginPluginsPath() string {
-	return "/rpc/plugins.downloadPlatformMCPPlugin"
-}
-
 // DownloadObservabilityPluginPluginsPath returns the URL path to the plugins service downloadObservabilityPlugin HTTP endpoint.
 func DownloadObservabilityPluginPluginsPath() string {
 	return "/rpc/plugins.downloadObservabilityPlugin"
@@ -75,16 +80,6 @@ func DownloadObservabilityPluginPluginsPath() string {
 // DownloadCodexInstallScriptPluginsPath returns the URL path to the plugins service downloadCodexInstallScript HTTP endpoint.
 func DownloadCodexInstallScriptPluginsPath() string {
 	return "/rpc/plugins.downloadCodexInstallScript"
-}
-
-// GetPlatformMCPPackageStatusPluginsPath returns the URL path to the plugins service getPlatformMCPPackageStatus HTTP endpoint.
-func GetPlatformMCPPackageStatusPluginsPath() string {
-	return "/rpc/plugins.getPlatformMCPPackageStatus"
-}
-
-// RepairPlatformMCPPackagePluginsPath returns the URL path to the plugins service repairPlatformMCPPackage HTTP endpoint.
-func RepairPlatformMCPPackagePluginsPath() string {
-	return "/rpc/plugins.repairPlatformMCPPackage"
 }
 
 // GetPublishStatusPluginsPath returns the URL path to the plugins service getPublishStatus HTTP endpoint.

@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -164,6 +165,14 @@ func (p *recordingOpenRouterProvisioner) RefreshAPIKeyLimitWithDB(ctx context.Co
 	return p.RefreshAPIKeyLimit(ctx, organizationID, keyType, limit)
 }
 
+func (*recordingOpenRouterProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return openrouter.DisableCauseChange{}, nil
+}
+
+func (*recordingOpenRouterProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, nil
+}
+
 func (*recordingOpenRouterProvisioner) DisableAPIKey(context.Context, string, openrouter.KeyType) error {
 	return fmt.Errorf("not implemented")
 }
@@ -201,6 +210,8 @@ func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, 
 	tp := testenv.NewTracerProvider(t)
 	db, err := infra.CloneTestDatabase(t, "usage")
 	require.NoError(t, err)
+	meterReadConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
 	seedEnabledToolsets(t, db, orgID, serverCount)
 
 	authzEngine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
@@ -213,11 +224,13 @@ func newTestService(t *testing.T, billingRepo billing.Repository, orgID string, 
 		repo:          repo.New(db),
 		billingRepo:   billingRepo,
 		orgRepo:       orgRepo.New(db),
+		meterReadConn: meterReadConn,
 		posthogClient: posthog.New(t.Context(), logger, "", "", ""),
 		openRouter:    openrouter.NewDevelopment(""),
 		stripeClient:  nil,
 		stripeHandler: nil,
 		trial:         trialemails.NoopNotifier{},
+		now:           time.Now,
 	}
 }
 

@@ -141,7 +141,7 @@ func (v *Verifier) refreshSession(ctx context.Context, session Session) (Session
 }
 
 func (v *Verifier) refreshSessionLocked(ctx context.Context, session Session, lockKey, owner string) (Session, string, error) {
-	defer o11y.LogDefer(ctx, v.logger, func() error {
+	defer o11y.LogDefer(ctx, v.logger, "failed to release admin session refresh lock", func() error {
 		releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), adminRefreshReleaseTimeout)
 		defer cancel()
 		return v.locks.ReleaseLease(releaseCtx, lockKey, owner)

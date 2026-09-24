@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	extcredrepo "github.com/speakeasy-api/gram/server/internal/externalcredentials/repo"
+	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
@@ -330,6 +331,35 @@ func TestVerifyGcpKmsKey_RescreensTargetInGramProject(t *testing.T) {
 	require.Equal(t, "credential_unusable", result.ProbeOutcome)
 	require.False(t, probed, "must not probe a target inside gram's own project")
 	require.Equal(t, 0, ti.kms.Closed())
+}
+
+// A platform administrator can grant a credential an exemption from that same
+// refusal, which is how Speakeasy staff dogfood the feature. This path has no
+// request actor to consult, so the exemption has to be readable from the row:
+// without it the credential would save and then be refused on every probe.
+func TestVerifyGcpKmsKey_HonorsStoredProjectVerificationExemption(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	credID := createGcpIamCredentialDirect(t, ctx, ti, "staff-exempted", extcredrepo.CreateGcpIamCredentialParams{
+		ExternalCredentialID:      uuid.Nil,
+		ImpersonateServiceAccount: conv.ToPGText(gramProjectServiceAccount("internal")),
+		WifPoolID:                 pgtype.Text{String: "", Valid: false},
+		WifProviderID:             pgtype.Text{String: "", Valid: false},
+		WifProjectNumber:          pgtype.Text{String: "", Valid: false},
+		SkipProjectVerification:   true,
+	})
+	keyID := provisiontest.CreateGcpKmsKeyDirect(t, ctx, ti.conn, ti.orgID, "behind-exempted-sa", credID)
+
+	result, err := ti.service.VerifyGcpKmsKey(adminCtx(t, ctx), &gen.VerifyGcpKmsKeyPayload{
+		ID:           keyID,
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+
+	require.True(t, result.Verified)
+	require.Equal(t, "verified", result.ProbeOutcome)
+	require.Equal(t, 1, ti.kms.Closed())
 }
 
 // external_credentials.deleted is a generated column, so a soft delete never

@@ -1,19 +1,26 @@
 package remotesessions_test
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
 	orgissuersgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_issuers"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -35,6 +42,19 @@ func newIssuerPayloadForURL(slug, issuerURL string) *gen.CreateRemoteSessionIssu
 	payload.RegistrationEndpoint = conv.PtrEmpty("https://stale.example.com/register")
 	payload.JwksURI = conv.PtrEmpty("https://stale.example.com/jwks")
 	return payload
+}
+
+// refreshIssuer refreshes the project-tier issuer id and requires success.
+func refreshIssuer(t *testing.T, ctx context.Context, ti *testInstance, id string) *types.RemoteSessionIssuerRefresh {
+	t.Helper()
+	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               id,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	return result
 }
 
 func TestRefreshRemoteSessionIssuerMetadata_OverwritesStaleEndpoints(t *testing.T) {
@@ -63,6 +83,453 @@ func TestRefreshRemoteSessionIssuerMetadata_OverwritesStaleEndpoints(t *testing.
 	require.Equal(t, upstream.URL+"/jwks", *result.Issuer.JwksURI)
 	require.Equal(t, []string{"openid"}, result.Issuer.ScopesSupported)
 	require.Equal(t, []string{"S256"}, result.Issuer.CodeChallengeMethodsSupported, "a refresh captures the advertised PKCE methods over the create-time NULL")
+}
+
+func TestRefreshRemoteSessionIssuerMetadata_PersistsAndRevalidatesJWKSAtomically(t *testing.T) {
+	t.Parallel()
+
+	var (
+		omitJWKS           atomic.Bool
+		failJWKS           atomic.Bool
+		changeEndpoint     atomic.Bool
+		keySetRequests     atomic.Int32
+		conditionalRequest atomic.Bool
+		upstream           *httptest.Server
+	)
+	upstream = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/oauth-authorization-server":
+			authorizationEndpoint := upstream.URL + "/authorize"
+			if changeEndpoint.Load() {
+				authorizationEndpoint = upstream.URL + "/authorize-v2"
+			}
+			doc := map[string]any{
+				"issuer":                                upstream.URL,
+				"authorization_endpoint":                authorizationEndpoint,
+				"token_endpoint":                        upstream.URL + "/token",
+				"grant_types_supported":                 []string{"authorization_code"},
+				"response_types_supported":              []string{"code"},
+				"token_endpoint_auth_methods_supported": []string{"client_secret_basic"},
+			}
+			if !omitJWKS.Load() {
+				doc["jwks_uri"] = upstream.URL + "/jwks"
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(doc)
+		case "/.well-known/openid-configuration":
+			http.NotFound(w, r)
+		case "/jwks":
+			keySetRequests.Add(1)
+			if failJWKS.Load() {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			if r.Header.Get("If-None-Match") == `"issuer-keys-v1"` {
+				conditionalRequest.Store(true)
+				w.Header().Set("Cache-Control", "max-age=600")
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			w.Header().Set("Content-Type", "application/jwk-set+json")
+			w.Header().Set("Cache-Control", "max-age=300")
+			w.Header().Set("ETag", `"issuer-keys-v1"`)
+			_, _ = w.Write([]byte(`{"keys":[]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-jwks", upstream.URL))
+	require.NoError(t, err)
+
+	first := refreshIssuer(t, ctx, ti, created.ID)
+	require.NotNil(t, first.Issuer.JwksFetchedAt)
+	require.NotNil(t, first.Issuer.JwksCacheExpiresAt)
+	firstRow := loadIssuerRow(t, ctx, ti, first.Issuer)
+	require.JSONEq(t, `{"keys":[]}`, string(firstRow.Jwks))
+	require.Equal(t, `"issuer-keys-v1"`, firstRow.JwksEtag.String)
+	require.True(t, firstRow.JwksFetchedAt.Valid)
+	require.True(t, firstRow.JwksCacheExpiresAt.Valid)
+	require.WithinDuration(t, firstRow.JwksFetchedAt.Time.Add(5*time.Minute), firstRow.JwksCacheExpiresAt.Time, time.Second)
+
+	second := refreshIssuer(t, ctx, ti, created.ID)
+	require.True(t, conditionalRequest.Load(), "an explicit refresh should revalidate a usable stored JWK Set with its ETag")
+	require.EqualValues(t, 2, keySetRequests.Load())
+	secondRow := loadIssuerRow(t, ctx, ti, second.Issuer)
+	require.JSONEq(t, string(firstRow.Jwks), string(secondRow.Jwks))
+	require.WithinDuration(t, secondRow.JwksFetchedAt.Time.Add(10*time.Minute), secondRow.JwksCacheExpiresAt.Time, time.Second)
+
+	failJWKS.Store(true)
+	changeEndpoint.Store(true)
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{ID: created.ID})
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	failedRow := loadIssuerRow(t, ctx, ti, second.Issuer)
+	require.Equal(t, secondRow.AuthorizationEndpoint, failedRow.AuthorizationEndpoint, "metadata must not partially persist when the key fetch fails")
+	require.Equal(t, secondRow.Metadata, failedRow.Metadata)
+	require.Equal(t, secondRow.Jwks, failedRow.Jwks)
+	require.Equal(t, secondRow.JwksFetchedAt, failedRow.JwksFetchedAt)
+	require.Equal(t, secondRow.JwksCacheExpiresAt, failedRow.JwksCacheExpiresAt)
+	require.Equal(t, secondRow.JwksEtag, failedRow.JwksEtag)
+
+	failJWKS.Store(false)
+	omitJWKS.Store(true)
+	withoutKeys := refreshIssuer(t, ctx, ti, created.ID)
+	require.Nil(t, withoutKeys.Issuer.JwksURI)
+	require.Nil(t, withoutKeys.Issuer.JwksFetchedAt)
+	require.Nil(t, withoutKeys.Issuer.JwksCacheExpiresAt)
+	clearedRow := loadIssuerRow(t, ctx, ti, withoutKeys.Issuer)
+	require.Nil(t, clearedRow.Jwks)
+	require.False(t, clearedRow.JwksFetchedAt.Valid)
+	require.False(t, clearedRow.JwksCacheExpiresAt.Valid)
+	require.False(t, clearedRow.JwksEtag.Valid)
+
+	omitJWKS.Store(false)
+	refilled := refreshIssuer(t, ctx, ti, created.ID)
+	require.NotNil(t, refilled.Issuer.JwksFetchedAt)
+	newURI := "https://keys-v2.example.com/jwks"
+	manuallyUpdated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:      created.ID,
+		JwksURI: &newURI,
+	})
+	require.NoError(t, err)
+	require.Equal(t, newURI, *manuallyUpdated.JwksURI)
+	require.Nil(t, manuallyUpdated.JwksFetchedAt)
+	require.Nil(t, manuallyUpdated.JwksCacheExpiresAt)
+	invalidatedRow := loadIssuerRow(t, ctx, ti, manuallyUpdated)
+	require.Nil(t, invalidatedRow.Jwks)
+	require.False(t, invalidatedRow.JwksFetchedAt.Valid)
+	require.False(t, invalidatedRow.JwksCacheExpiresAt.Valid)
+	require.False(t, invalidatedRow.JwksEtag.Valid)
+}
+
+func TestUpdateRemoteSessionIssuer_ExplicitEmptyJWKSURIClearsInconsistentCache(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayload("clear-inconsistent-jwks"))
+	require.NoError(t, err)
+
+	stored, err := repo.New(ti.conn).GetRemoteSessionIssuerByIDProjectOwned(ctx, repo.GetRemoteSessionIssuerByIDProjectOwnedParams{
+		ID:        uuid.MustParse(created.ID),
+		ProjectID: uuid.NullUUID{UUID: uuid.MustParse(created.ProjectID), Valid: true},
+	})
+	require.NoError(t, err)
+	params := discoveredMetadataParams(stored)
+	params.JwksUri = ""
+	params.Jwks = `{"keys":[]}`
+	params.JwksFetchedAt = conv.ToPGTimestamptz(time.Now())
+	params.JwksCacheExpiresAt = conv.ToPGTimestamptz(time.Now().Add(time.Hour))
+	params.JwksEtag = `"stale"`
+	inconsistent, err := repo.New(ti.conn).UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
+	require.NoError(t, err)
+	require.False(t, inconsistent.JwksUri.Valid)
+	require.NotEmpty(t, inconsistent.Jwks)
+
+	empty := ""
+	updated, err := ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		ID:      created.ID,
+		JwksURI: &empty,
+	})
+	require.NoError(t, err)
+	require.Nil(t, updated.JwksURI)
+	require.Nil(t, updated.JwksFetchedAt)
+	require.Nil(t, updated.JwksCacheExpiresAt)
+
+	cleared := loadIssuerRow(t, ctx, ti, updated)
+	require.Nil(t, cleared.Jwks)
+	require.False(t, cleared.JwksFetchedAt.Valid)
+	require.False(t, cleared.JwksCacheExpiresAt.Valid)
+	require.False(t, cleared.JwksEtag.Valid)
+}
+
+func TestRefreshRemoteSessionIssuerMetadata_RejectsUnsafeJWKSWithoutPartialWrite(t *testing.T) {
+	t.Parallel()
+
+	var upstream *httptest.Server
+	upstream = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/oauth-authorization-server":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"issuer":                 upstream.URL,
+				"authorization_endpoint": upstream.URL + "/authorize",
+				"token_endpoint":         upstream.URL + "/token",
+				"jwks_uri":               upstream.URL + "/jwks",
+			})
+		case "/.well-known/openid-configuration":
+			http.NotFound(w, r)
+		case "/jwks":
+			w.Header().Set("Content-Type", "application/jwk-set+json")
+			_, _ = w.Write([]byte(`{"keys":[{"kty":"oct","kid":"unsafe","k":"c2VjcmV0"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-unsafe-jwks", upstream.URL))
+	require.NoError(t, err)
+
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{ID: created.ID})
+	requireOopsCode(t, err, oops.CodeInvalid)
+
+	stored := loadIssuerRow(t, ctx, ti, created)
+	require.Equal(t, "https://stale.example.com/authorize", stored.AuthorizationEndpoint.String)
+	require.Nil(t, stored.Metadata)
+	require.Nil(t, stored.Jwks)
+	require.False(t, stored.JwksFetchedAt.Valid)
+}
+
+// A refresh is the capture event for the session-enrichment capabilities: a
+// row created from the form stores NULL for them, and the first refresh fills
+// in what the upstream advertises, including fields it publishes only in its
+// OpenID document.
+func TestRefreshRemoteSessionIssuerMetadata_CapturesEnrichmentCapabilities(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	upstream := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
+		doc["introspection_endpoint"] = "https://introspect.example/introspect"
+		doc["introspection_endpoint_auth_methods_supported"] = []string{"client_secret_post"}
+		doc["authorization_response_iss_parameter_supported"] = true
+	}})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-enrich", upstream.URL))
+	require.NoError(t, err)
+	require.Nil(t, created.UserinfoEndpoint, "not on the create form, so NULL until a refresh captures it")
+	require.Nil(t, created.ClaimsSupported)
+	require.Nil(t, created.BackchannelLogoutSupported)
+
+	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, upstream.URL+"/userinfo", *result.Issuer.UserinfoEndpoint)
+	require.Equal(t, "https://introspect.example/introspect", *result.Issuer.IntrospectionEndpoint)
+	require.Equal(t, []string{"client_secret_post"}, result.Issuer.IntrospectionEndpointAuthMethodsSupported)
+	require.Equal(t, []string{"RS256"}, result.Issuer.IDTokenSigningAlgValuesSupported)
+	require.Equal(t, []string{"sub", "email", "email_verified"}, result.Issuer.ClaimsSupported)
+	require.Equal(t, upstream.URL+"/jwks", *result.Issuer.JwksURI, "jwks_uri came from the OpenID document")
+	require.NotNil(t, result.Issuer.BackchannelLogoutSupported)
+	require.True(t, *result.Issuer.BackchannelLogoutSupported)
+	require.NotNil(t, result.Issuer.AuthorizationResponseIssParameterSupported)
+	require.True(t, *result.Issuer.AuthorizationResponseIssParameterSupported)
+
+	stored := loadIssuerRow(t, ctx, ti, created)
+	var members map[string]any
+	require.NoError(t, json.Unmarshal(stored.Metadata, &members), "the merged document is persisted")
+	require.Equal(t, "kept", members["oauth_only_extension"])
+	require.Contains(t, members, "claims_supported")
+}
+
+// When a same-origin candidate fails transiently after the primary document
+// was read, the fields only it advertises are not treated as withdrawn: the
+// stored values stand and the caller is warned. A definitive miss on the next
+// refresh clears them.
+func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateKeepsCapturedFields(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	var oidcStatus atomic.Int32
+	oidcStatus.Store(http.StatusOK)
+	upstream := metadataServer(t, metadataServerOptions{oidcStatus: &oidcStatus})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-unreadable", upstream.URL))
+	require.NoError(t, err)
+
+	complete := refreshIssuer(t, ctx, ti, created.ID)
+	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
+	require.Equal(t, []string{"sub", "email", "email_verified"}, complete.Issuer.ClaimsSupported)
+
+	oidcStatus.Store(http.StatusServiceUnavailable)
+	kept := refreshIssuer(t, ctx, ti, created.ID)
+	require.Equal(t, upstream.URL+"/jwks", *kept.Issuer.JwksURI, "a transient miss does not withdraw the field")
+	require.Equal(t, upstream.URL+"/userinfo", *kept.Issuer.UserinfoEndpoint)
+	require.Equal(t, []string{"sub", "email", "email_verified"}, kept.Issuer.ClaimsSupported)
+	require.True(t, slices.ContainsFunc(kept.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "was unreadable")
+	}), "the caller is told which candidate was skipped: %v", kept.DiscoveryWarnings)
+
+	oidcStatus.Store(http.StatusNotFound)
+	withdrawn := refreshIssuer(t, ctx, ti, created.ID)
+	require.Nil(t, withdrawn.Issuer.JwksURI, "a definitive miss withdraws the field")
+	require.Nil(t, withdrawn.Issuer.UserinfoEndpoint)
+	require.Empty(t, withdrawn.Issuer.ClaimsSupported)
+	require.False(t, slices.ContainsFunc(withdrawn.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "was unreadable")
+	}), "a 404 is definitive and raises no unreadable warning: %v", withdrawn.DiscoveryWarnings)
+}
+
+// The unreadable candidate may come first: when the RFC 8414 document is
+// down and the OpenID one becomes the primary, the members only the RFC 8414
+// document carries are kept from the stored row rather than withdrawn.
+func TestRefreshRemoteSessionIssuerMetadata_UnreadableFirstCandidateKeepsCapturedFields(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	var oauthStatus atomic.Int32
+	oauthStatus.Store(http.StatusOK)
+	upstream := metadataServer(t, metadataServerOptions{oauthStatus: &oauthStatus})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-unreadable-first", upstream.URL))
+	require.NoError(t, err)
+
+	complete := refreshIssuer(t, ctx, ti, created.ID)
+	require.Equal(t, upstream.URL+"/register", *complete.Issuer.RegistrationEndpoint)
+	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
+
+	oauthStatus.Store(http.StatusServiceUnavailable)
+	kept := refreshIssuer(t, ctx, ti, created.ID)
+	require.Equal(t, upstream.URL+"/register", *kept.Issuer.RegistrationEndpoint, "a member only the unreadable document carries is not withdrawn")
+	require.Equal(t, upstream.URL+"/jwks", *kept.Issuer.JwksURI)
+	require.True(t, slices.ContainsFunc(kept.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "was unreadable")
+	}), "the caller is told which candidate was skipped: %v", kept.DiscoveryWarnings)
+
+	oauthStatus.Store(http.StatusNotFound)
+	withdrawn := refreshIssuer(t, ctx, ti, created.ID)
+	require.Nil(t, withdrawn.Issuer.RegistrationEndpoint, "a definitive miss withdraws the member")
+	require.Equal(t, upstream.URL+"/jwks", *withdrawn.Issuer.JwksURI)
+}
+
+// A row repointed to another issuer still holds the previous issuer's
+// document. A refresh with an unreadable candidate against the new issuer must not fill its gaps
+// from that document: the old issuer's key set or endpoints would otherwise
+// be attributed to the new one.
+func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotFillFromPreviousIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	previous := metadataServer(t, metadataServerOptions{})
+	var oidcStatus atomic.Int32
+	oidcStatus.Store(http.StatusServiceUnavailable)
+	current := metadataServer(t, metadataServerOptions{oidcStatus: &oidcStatus})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-repointed", previous.URL))
+	require.NoError(t, err)
+
+	complete := refreshIssuer(t, ctx, ti, created.ID)
+	require.Equal(t, previous.URL+"/jwks", *complete.Issuer.JwksURI)
+
+	_, err = ti.service.UpdateRemoteSessionIssuer(ctx, &gen.UpdateRemoteSessionIssuerPayload{
+		SessionToken:                      nil,
+		ApikeyToken:                       nil,
+		ProjectSlugInput:                  nil,
+		ID:                                created.ID,
+		Slug:                              nil,
+		Issuer:                            conv.PtrEmpty(current.URL),
+		Name:                              nil,
+		LogoAssetID:                       nil,
+		ClientSetupDocumentationURL:       nil,
+		AuthorizationEndpoint:             nil,
+		TokenEndpoint:                     nil,
+		RevocationEndpoint:                nil,
+		RegistrationEndpoint:              nil,
+		JwksURI:                           nil,
+		ServiceDocumentation:              nil,
+		OpPolicyURI:                       nil,
+		OpTosURI:                          nil,
+		ScopesSupported:                   nil,
+		GrantTypesSupported:               nil,
+		ResponseTypesSupported:            nil,
+		TokenEndpointAuthMethodsSupported: nil,
+		CodeChallengeMethodsSupported:     nil,
+		Oidc:                              nil,
+		Passthrough:                       nil,
+		ClientIDMetadataDocumentSupported: nil,
+	})
+	require.NoError(t, err)
+
+	kept := refreshIssuer(t, ctx, ti, created.ID)
+	require.Nil(t, kept.Issuer.JwksURI, "the previous issuer's key set must not be attributed to the new one")
+	require.Equal(t, current.URL+"/authorize", *kept.Issuer.AuthorizationEndpoint)
+	require.True(t, slices.ContainsFunc(kept.DiscoveryWarnings, func(w string) bool {
+		return strings.Contains(w, "was unreadable")
+	}), "the unreadable candidate is still reported: %v", kept.DiscoveryWarnings)
+}
+
+// A document Postgres cannot hold as jsonb is not retained verbatim; the
+// typed columns still capture it and the refresh succeeds.
+func TestRefreshRemoteSessionIssuerMetadata_DoesNotRetainUnstorableDocument(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	upstream := metadataServer(t, metadataServerOptions{mutateOIDC: func(doc map[string]any) {
+		doc["vendor_note"] = "a\x00b"
+	}})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-nul", upstream.URL))
+	require.NoError(t, err)
+
+	refreshed, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, upstream.URL+"/jwks", *refreshed.Issuer.JwksURI)
+	require.Nil(t, loadIssuerRow(t, ctx, ti, refreshed.Issuer).Metadata, "the verbatim document is dropped, not the refresh")
+}
+
+// The stored document only fills gaps after the fetched one has passed the
+// distrust gate on its own. A primary that advertises no issuer is rejected
+// even when a transient miss on the other candidate would otherwise have let
+// the stored issuer stand in for it.
+func TestRefreshRemoteSessionIssuerMetadata_UnreadableCandidateDoesNotBorrowStoredIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	var oidcStatus atomic.Int32
+	oidcStatus.Store(http.StatusOK)
+	var dropIssuer atomic.Bool
+	upstream := metadataServer(t, metadataServerOptions{
+		oidcStatus: &oidcStatus,
+		mutateOAuth: func(doc map[string]any) {
+			if dropIssuer.Load() {
+				delete(doc, "issuer")
+			}
+		},
+	})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-unreadable-issuer", upstream.URL))
+	require.NoError(t, err)
+
+	complete := refreshIssuer(t, ctx, ti, created.ID)
+	require.Equal(t, upstream.URL+"/jwks", *complete.Issuer.JwksURI)
+
+	dropIssuer.Store(true)
+	oidcStatus.Store(http.StatusServiceUnavailable)
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.Contains(t, err.Error(), "advertises no issuer")
+}
+
+// loadIssuerRow reads the stored row for an issuer the test service created
+// in the test project.
+func loadIssuerRow(t *testing.T, ctx context.Context, ti *testInstance, issuer *types.RemoteSessionIssuer) repo.RemoteSessionIssuer {
+	t.Helper()
+	row, err := repo.New(ti.conn).GetRemoteSessionIssuerByID(ctx, repo.GetRemoteSessionIssuerByIDParams{
+		ID:                    uuid.MustParse(issuer.ID),
+		ProjectID:             uuid.NullUUID{UUID: uuid.MustParse(issuer.ProjectID), Valid: true},
+		IncludeOrganizational: false,
+		OrganizationID:        pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	return row
 }
 
 // A refresh restates the issuer's whole discovered surface, so an endpoint the
@@ -186,12 +653,105 @@ func TestRefreshRemoteSessionIssuerMetadata_UnreachableUpstreamIsGatewayError(t 
 	require.Contains(t, err.Error(), "Unexpected HTTP 503")
 }
 
-// issuerProbeCandidates falls back to the origin-root well-known URL when the
-// path-aware candidates miss, and gateways serving metadata only there advertise
-// the origin rather than the configured path. That mismatch is created by
-// Gram's own probe order, so a refresh must tolerate it or every issuer created
-// through the fallback becomes permanently unrefreshable.
-func TestRefreshRemoteSessionIssuerMetadata_AcceptsOriginWhenIssuerHasPath(t *testing.T) {
+// A path-form issuer whose own well-known locations are down is not described
+// by the origin root: on a multi-tenant host that document belongs to another
+// tenant or to the host itself. The outage is reported as transient and the
+// stored endpoints stand; once the path locations answer 404 the origin
+// document is adopted as before.
+func TestRefreshRemoteSessionIssuerMetadata_TransientPathOutageDoesNotAdoptOriginDocument(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	var pathStatus atomic.Int32
+	pathStatus.Store(http.StatusServiceUnavailable)
+	var upstream *httptest.Server
+	upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"issuer":                           upstream.URL,
+				"authorization_endpoint":           upstream.URL + "/authorize",
+				"token_endpoint":                   upstream.URL + "/token",
+				"code_challenge_methods_supported": []string{"S256"},
+			})
+		default:
+			w.WriteHeader(int(pathStatus.Load()))
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-path-outage", upstream.URL+"/tenant"))
+	require.NoError(t, err)
+
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	require.Contains(t, err.Error(), "Unexpected HTTP 503")
+	require.Equal(t, "https://stale.example.com/authorize", loadIssuerRow(t, ctx, ti, created).AuthorizationEndpoint.String, "the origin document was not adopted")
+
+	pathStatus.Store(http.StatusNotFound)
+	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err, "a definitive miss on the path locations still reaches the origin fallback")
+	require.Equal(t, upstream.URL+"/authorize", *result.Issuer.AuthorizationEndpoint)
+}
+
+// An endpoint-less document is returned only when it is all the issuer has.
+// While another candidate is unreadable the real document may be behind the
+// outage, so the run is transient rather than a 422 verdict on the issuer.
+func TestRefreshRemoteSessionIssuerMetadata_EndpointlessDocumentWithUnreadableCandidateIsTransient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	var oauthStatus atomic.Int32
+	oauthStatus.Store(http.StatusServiceUnavailable)
+	upstream := metadataServer(t, metadataServerOptions{
+		oauthStatus: &oauthStatus,
+		mutateOIDC: func(doc map[string]any) {
+			delete(doc, "authorization_endpoint")
+			delete(doc, "token_endpoint")
+		},
+	})
+
+	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-endpointless-outage", upstream.URL))
+	require.NoError(t, err)
+
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeGatewayError)
+	require.Contains(t, err.Error(), "Unexpected HTTP 503")
+
+	oauthStatus.Store(http.StatusNotFound)
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+		ID:               created.ID,
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.Contains(t, err.Error(), "advertises no authorization_endpoint")
+}
+
+// Origin metadata cannot bind keys for a path-scoped issuer. The ordinary
+// metadata fallback remains available when no jwks_uri is advertised, but a
+// key URL requires the document's issuer to match byte for byte.
+func TestRefreshRemoteSessionIssuerMetadata_RejectsOriginKeysWhenIssuerHasPath(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -200,16 +760,22 @@ func TestRefreshRemoteSessionIssuerMetadata_AcceptsOriginWhenIssuerHasPath(t *te
 	created, err := ti.service.CreateRemoteSessionIssuer(ctx, newIssuerPayloadForURL("idp-refresh-origin", upstream.URL+"/tenant"))
 	require.NoError(t, err)
 
-	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
 		ID:               created.ID,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.Contains(t, err.Error(), "refusing to trust its jwks_uri")
+
+	stored, err := repo.New(ti.conn).GetRemoteSessionIssuerByIDProjectOwned(t.Context(), repo.GetRemoteSessionIssuerByIDProjectOwnedParams{
+		ID:        uuid.MustParse(created.ID),
+		ProjectID: uuid.NullUUID{UUID: uuid.MustParse(created.ProjectID), Valid: true},
+	})
 	require.NoError(t, err)
-	require.Equal(t, upstream.URL+"/authorize", *result.Issuer.AuthorizationEndpoint)
-	require.Equal(t, upstream.URL+"/tenant", result.Issuer.Issuer, "the stored issuer URL is never rewritten")
-	require.NotEmpty(t, result.DiscoveryWarnings, "the divergence is still surfaced")
+	require.Equal(t, "https://stale.example.com/authorize", stored.AuthorizationEndpoint.String)
+	require.Equal(t, "https://stale.example.com/jwks", stored.JwksUri.String)
 }
 
 // The origin relaxation is no wider than the fallback that motivates it: a
@@ -373,16 +939,15 @@ func TestRefreshRemoteSessionIssuerMetadata_RecordsAuditEvent(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
-// An edit that commits while discovery is in flight must not show up in the
-// refresh's audit diff. Refresh reads the row before the transaction opens, to
-// learn which URL to discover against, but its audit before-snapshot has to
-// come from a locked re-read inside the transaction; otherwise the operator's
-// rename lands in the refresh's before/after diff and is attributed to it.
+// An edit that commits while discovery is in flight wins. Refresh reads the
+// row before the transaction opens to learn which URL to discover against, so
+// its locked re-read must reject the stale result instead of overwriting the
+// operator's newer metadata or attributing their edit to the refresh.
 //
 // The upstream handler is the one place guaranteed to run inside that window,
 // so the competing write is issued from there. That makes the interleaving
 // deterministic rather than a timing hope.
-func TestRefreshRemoteSessionIssuerMetadata_AuditSnapshotExcludesConcurrentEdit(t *testing.T) {
+func TestRefreshRemoteSessionIssuerMetadata_RejectsConcurrentEdit(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -434,31 +999,82 @@ func TestRefreshRemoteSessionIssuerMetadata_AuditSnapshotExcludesConcurrentEdit(
 	require.NoError(t, err)
 	issuerID.Store(&created.ID)
 
-	result, err := ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
+	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &gen.RefreshRemoteSessionIssuerMetadataPayload{
 		ID:               created.ID,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
-	require.NoError(t, err)
 	require.NoError(t, <-renameErr, "the competing rename must land during discovery for this test to mean anything")
+	requireOopsCode(t, err, oops.CodeConflict)
 
-	// The refresh writes the newest update entry, since it commits after the
-	// rename it raced.
-	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionRemoteSessionIssuerUpdate)
+	stored, err := repo.New(ti.conn).GetRemoteSessionIssuerByIDProjectOwned(ctx, repo.GetRemoteSessionIssuerByIDProjectOwnedParams{
+		ID:        uuid.MustParse(created.ID),
+		ProjectID: uuid.NullUUID{UUID: uuid.MustParse(created.ProjectID), Valid: true},
+	})
 	require.NoError(t, err)
+	require.Equal(t, "Renamed During Discovery", stored.Name.String)
+	require.Equal(t, "https://stale.example.com/authorize", stored.AuthorizationEndpoint.String, "the stale refresh writes nothing")
+}
 
-	before, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+func TestRefreshGlobalIssuerMetadata_RejectsConcurrentEdit(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ctx = withAdmin(t, ctx)
+
+	var issuerID atomic.Pointer[string]
+	var once sync.Once
+	renameErr := make(chan error, 1)
+	upstream := fakeIssuerServer(t, func(_ map[string]any) {
+		once.Do(func() {
+			id := issuerID.Load()
+			if id == nil {
+				renameErr <- nil
+				return
+			}
+			_, err := ti.service.UpdateGlobalIssuer(ctx, &adminrsgen.UpdateGlobalIssuerPayload{
+				SessionToken:                      nil,
+				ID:                                *id,
+				Slug:                              nil,
+				Issuer:                            nil,
+				Name:                              conv.PtrEmpty("Renamed During Discovery"),
+				LogoAssetID:                       nil,
+				AuthorizationEndpoint:             nil,
+				TokenEndpoint:                     nil,
+				RegistrationEndpoint:              nil,
+				JwksURI:                           nil,
+				ScopesSupported:                   nil,
+				GrantTypesSupported:               nil,
+				ResponseTypesSupported:            nil,
+				TokenEndpointAuthMethodsSupported: nil,
+				Oidc:                              nil,
+				Passthrough:                       nil,
+				ClientIDMetadataDocumentSupported: nil,
+			})
+			renameErr <- err
+		})
+	})
+
+	payload := createGlobalIssuer(t, "global-refresh-concurrent")
+	payload.Issuer = upstream.URL
+	payload.Name = conv.PtrEmpty("Original Name")
+	payload.AuthorizationEndpoint = conv.PtrEmpty("https://stale.example.com/authorize")
+	created, err := ti.service.CreateGlobalIssuer(ctx, payload)
 	require.NoError(t, err)
-	require.Equal(t, "Renamed During Discovery", before["Name"],
-		"the before-snapshot must come from the locked read inside the transaction, not the pre-discovery read")
+	issuerID.Store(&created.ID)
 
-	after, err := audittest.DecodeAuditData(record.AfterSnapshot)
+	_, err = ti.service.RefreshGlobalIssuerMetadata(ctx, &adminrsgen.RefreshGlobalIssuerMetadataPayload{
+		ID:           created.ID,
+		SessionToken: nil,
+	})
+	require.NoError(t, <-renameErr)
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	stored, err := repo.New(ti.conn).GetGlobalRemoteSessionIssuerByID(ctx, uuid.MustParse(created.ID))
 	require.NoError(t, err)
-	require.Equal(t, "Renamed During Discovery", after["Name"],
-		"a refresh never writes name, so it is unchanged across the entry")
-
-	require.Equal(t, "Renamed During Discovery", *result.Issuer.Name)
+	require.Equal(t, "Renamed During Discovery", stored.Name.String)
+	require.Equal(t, "https://stale.example.com/authorize", stored.AuthorizationEndpoint.String)
 }
 
 func TestRefreshRemoteSessionIssuerMetadata_RequiresProjectWrite(t *testing.T) {
@@ -724,13 +1340,12 @@ func TestRefreshIssuerMetadata_RejectsGlobalIssuer(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-// --- Shared update query: the identity match that stands in for a row lock ---
+// --- Shared update query: identity matching beneath the row lock ---
 //
 // Discovery runs outside the transaction, so the row is read before the write.
-// UpdateRemoteSessionIssuerDiscoveredMetadata re-asserts the row's identity
-// instead of taking a lock, and the handlers turn a zero-row result into a 409.
-// These pin each clause of that WHERE: without them the whole no-lock argument
-// rests on an untested query.
+// UpdateRemoteSessionIssuerDiscoveredMetadata also re-asserts the row's
+// identity, and the handlers turn a zero-row result into a 409. These pin each
+// clause of that final write guard.
 
 // discoveredMetadataParams builds a minimal valid parameter set targeting the
 // supplied row, which each test then perturbs on exactly one axis.

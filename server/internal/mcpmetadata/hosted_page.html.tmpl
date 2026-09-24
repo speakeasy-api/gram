@@ -1001,70 +1001,109 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
         </ol>
       </div>
     </template>
-    <template class="install-target-template" data-install-target="gemini-cli">
+    {{ define "antigravityMCPConfigSnippet" }}
+            <div class="card code-container">
+              <button class="copy-button waiting">
+                <svg
+                  class="icon icon-copy"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
+                  <use href="#icon-copy"></use>
+                </svg>
+                <svg
+                  class="icon icon-copy-success"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
+                  <use href="#icon-copy-check"></use>
+                </svg>
+              </button>
+              <!-- prettier-ignore -->
+              <code class="code-snippet language-json" data-scope-url-text>{
+  "mcpServers": {
+    "{{ .MCPSlug }}": {
+      "serverUrl": "{{ .MCPURL }}"{{- if .SecurityInputs }},
+      "headers": {
+        {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
+        "{{ $input.SystemName | asHTTPHeader }}": "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }}
+      }
+      {{- end }}
+    }
+  }
+}</code>
+            </div>
+    {{ end }}
+    <template class="install-target-template" data-install-target="antigravity-cli">
       <div class="modal-content">
         <h1>Instructions</h1>
         <ol>
           <li class="instruction-item">
-            Ensure the Gemini CLI executable is available in your path
+            Ensure the Antigravity CLI (<code>agy</code>) executable is available
+            in your path
           </li>
           <li class="instruction-item">
-            Execute the following snippet in your shell:
-            <div class="card code-container">
-              <button class="copy-button waiting">
-                <svg
-                  class="icon icon-copy"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                >
-                  <use href="#icon-copy"></use>
-                </svg>
-                <svg
-                  class="icon icon-copy-success"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                >
-                  <use href="#icon-copy-check"></use>
-                </svg>
-              </button>
-              <!-- prettier-ignore -->
-              <code class="code-snippet language-sh" data-scope-url-text>gemini mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range .SecurityInputs }} \
-  --header '{{ .SystemName | asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName) }}'{{- end }}</code>
-            </div>
+            Merge the following into your global
+            <code>~/.gemini/config/mcp_config.json</code> or workspace
+            <code>.agents/mcp_config.json</code>:
+            {{ template "antigravityMCPConfigSnippet" . }}
           </li>
-          {{- if .SecurityInputs }}
+          {{- if .IsOAuth }}
           <li class="instruction-item">
-            Set these environment variables in your shell before running the
-            command above:
-            <div class="card code-container">
-              <button class="copy-button waiting">
-                <svg
-                  class="icon icon-copy"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                >
-                  <use href="#icon-copy"></use>
-                </svg>
-                <svg
-                  class="icon icon-copy-success"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                >
-                  <use href="#icon-copy-check"></use>
-                </svg>
-              </button>
-              <!-- prettier-ignore -->
-              <code class="code-snippet language-sh">{{- range .SecurityInputs -}}
-export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{- end }}</code>
-            </div>
+            This server uses OAuth. Antigravity can authenticate automatically
+            via dynamic client registration. If prompted, open Agent Settings and
+            click <strong>Authenticate</strong> next to the server.
+          </li>
+          {{- else if .SecurityInputs }}
+          <li class="instruction-item">
+            Replace each <code>your-*-value</code> placeholder above with your
+            actual credential. Antigravity also expands
+            <code>${VAR}</code> environment-variable references in this file.
           </li>
           {{- end }}
           <li class="instruction-item">
-            Restart Gemini CLI to load the new configuration
+            Restart Antigravity CLI, or type <code>/mcp</code> in an active
+            session, to load the new configuration
+          </li>
+        </ol>
+      </div>
+    </template>
+    <template class="install-target-template" data-install-target="antigravity-ide">
+      <div class="modal-content">
+        <h1>Instructions</h1>
+        <ol>
+          <li class="instruction-item">
+            In Antigravity IDE, click <strong>…</strong> at the top of the
+            editor's agent side panel and select <strong>MCP Servers</strong>
+          </li>
+          <li class="instruction-item">
+            Click <strong>Manage MCP Servers</strong>, then
+            <strong>View raw config</strong>. This opens
+            <code>~/.gemini/config/mcp_config.json</code> (or workspace
+            <code>.agents/mcp_config.json</code>)
+          </li>
+          <li class="instruction-item">
+            Merge in the following configuration:
+            {{ template "antigravityMCPConfigSnippet" . }}
+          </li>
+          {{- if .IsOAuth }}
+          <li class="instruction-item">
+            This server uses OAuth. Antigravity can authenticate automatically
+            via dynamic client registration. If prompted, open Agent Settings and
+            click <strong>Authenticate</strong> next to the server.
+          </li>
+          {{- else if .SecurityInputs }}
+          <li class="instruction-item">
+            Replace each <code>your-*-value</code> placeholder above with your
+            actual credential. Antigravity also expands
+            <code>${VAR}</code> environment-variable references in this file.
+          </li>
+          {{- end }}
+          <li class="instruction-item">
+            Save the file. Toggle the server off and on in Manage MCP Servers, or
+            restart Antigravity IDE, to load the new configuration
           </li>
         </ol>
       </div>
@@ -1477,9 +1516,16 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
                   <button
                     class="popover-button"
                     data-install-method="modal"
-                    data-install-target="gemini-cli"
+                    data-install-target="antigravity-cli"
                   >
-                    Gemini CLI
+                    Antigravity CLI
+                  </button>
+                  <button
+                    class="popover-button"
+                    data-install-method="modal"
+                    data-install-target="antigravity-ide"
+                  >
+                    Antigravity IDE
                   </button>
                   <button
                     class="popover-button"
@@ -1732,38 +1778,50 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
               tabindex="0"
               class="card install-target"
               data-install-method="modal"
-              data-install-target="gemini-cli"
+              data-install-target="antigravity-cli"
+            >
+              <div class="target">
+                <!-- Official Antigravity logomark. Source: Google Antigravity
+                     press assets / lobehub/lobe-icons antigravity.svg -->
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
+                >
+                  <path
+                    fill-rule="evenodd"
+                    d="M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12.037 1 5.17 1 6.342 15.74.815 21.1c-2.01 2.009.167 2.511 1.507 1.506 5.192-3.517 4.857-9.714 9.715-9.714 4.857 0 4.522 6.197 9.714 9.715z"
+                    fill="currentColor"
+                  />
+                </svg>
+                <span>Antigravity CLI</span>
+              </div>
+            </div>
+            <div
+              tabindex="0"
+              class="card install-target"
+              data-install-method="modal"
+              data-install-target="antigravity-ide"
             >
               <div class="target">
                 <svg
                   width="32"
                   height="32"
-                  viewBox="0 0 32 32"
+                  viewBox="0 0 24 24"
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden="true"
                 >
                   <path
-                    d="M16 2L19.5 12.5L30 16L19.5 19.5L16 30L12.5 19.5L2 16L12.5 12.5L16 2Z"
-                    fill="url(#gemini-gradient)"
+                    fill-rule="evenodd"
+                    d="M21.751 22.607c1.34 1.005 3.35.335 1.508-1.508C17.73 15.74 18.904 1 12.037 1 5.17 1 6.342 15.74.815 21.1c-2.01 2.009.167 2.511 1.507 1.506 5.192-3.517 4.857-9.714 9.715-9.714 4.857 0 4.522 6.197 9.714 9.715z"
+                    fill="currentColor"
                   />
-                  <defs>
-                    <linearGradient
-                      id="gemini-gradient"
-                      x1="2"
-                      y1="2"
-                      x2="30"
-                      y2="30"
-                      gradientUnits="userSpaceOnUse"
-                    >
-                      <stop offset="0%" stop-color="#4285F4" />
-                      <stop offset="25%" stop-color="#34A853" />
-                      <stop offset="50%" stop-color="#FBBC04" />
-                      <stop offset="75%" stop-color="#EA4335" />
-                      <stop offset="100%" stop-color="#4285F4" />
-                    </linearGradient>
-                  </defs>
                 </svg>
-                <span>Gemini CLI</span>
+                <span>Antigravity IDE</span>
               </div>
             </div>
             <div

@@ -576,6 +576,80 @@ func (q *Queries) GetApprovalRequestForRecheck(ctx context.Context, arg GetAppro
 	return i, err
 }
 
+const getApprovalRequestTarget = `-- name: GetApprovalRequestTarget :one
+SELECT
+  r.id
+  , r.target_kind
+  , r.target_raw
+  , r.target_key
+  , r.status
+  , r.evidence_changed_at
+  , r.created_at
+  , r.updated_at
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
+  , (
+      SELECT count(*)
+      FROM mcp_approval_request_requesters req
+      WHERE req.mcp_approval_request_id = r.id
+        AND req.project_id = r.project_id
+        AND req.deleted IS FALSE
+    ) AS requester_count
+FROM mcp_approval_requests r
+WHERE r.project_id = $1
+  AND r.target_kind = $2
+  AND r.target_key = $3
+  AND r.deleted IS FALSE
+`
+
+type GetApprovalRequestTargetParams struct {
+	ProjectID  uuid.UUID
+	TargetKind string
+	TargetKey  string
+}
+
+type GetApprovalRequestTargetRow struct {
+	ID                uuid.UUID
+	TargetKind        string
+	TargetRaw         string
+	TargetKey         string
+	Status            string
+	EvidenceChangedAt pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	LatestDecision    string
+	RequesterCount    int64
+}
+
+// Exact projection for one inventory target. This carries the same latest
+// decision and requester count as ListApprovalRequestTargets without scanning
+// every review in the project for a get-by-reference call. The partial unique
+// index on (project_id, target_kind, target_key) guarantees one live row.
+func (q *Queries) GetApprovalRequestTarget(ctx context.Context, arg GetApprovalRequestTargetParams) (GetApprovalRequestTargetRow, error) {
+	row := q.db.QueryRow(ctx, getApprovalRequestTarget, arg.ProjectID, arg.TargetKind, arg.TargetKey)
+	var i GetApprovalRequestTargetRow
+	err := row.Scan(
+		&i.ID,
+		&i.TargetKind,
+		&i.TargetRaw,
+		&i.TargetKey,
+		&i.Status,
+		&i.EvidenceChangedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LatestDecision,
+		&i.RequesterCount,
+	)
+	return i, err
+}
+
 const getBypassRequestForPromotion = `-- name: GetBypassRequestForPromotion :one
 SELECT id, organization_id, project_id, target_kind, target_label, target_key,
        target_dimensions, requester_user_id, requester_email, note
@@ -627,6 +701,83 @@ func (q *Queries) GetBypassRequestForPromotion(ctx context.Context, arg GetBypas
 		&i.RequesterUserID,
 		&i.RequesterEmail,
 		&i.Note,
+	)
+	return i, err
+}
+
+const getPlatformRequesterApprovalRequest = `-- name: GetPlatformRequesterApprovalRequest :one
+SELECT
+  r.id
+  , r.target_kind
+  , r.target_raw
+  , r.status
+  , CASE
+      WHEN r.status = 'superseded' THEN ''
+      ELSE COALESCE((
+        SELECT d.decision
+        FROM mcp_approval_decisions d
+        WHERE d.mcp_approval_request_id = r.id
+          AND d.project_id = r.project_id
+          AND d.deleted IS FALSE
+          AND d.decision IN ('approved', 'denied')
+        ORDER BY d.decided_at DESC, d.id DESC
+        LIMIT 1
+      ), '')
+    END::text AS standing_decision
+  , req.requested_at
+  , r.created_at
+  , r.updated_at
+FROM mcp_approval_requests r
+JOIN mcp_approval_request_requesters req
+  ON req.mcp_approval_request_id = r.id
+  AND req.organization_id = r.organization_id
+  AND req.project_id = r.project_id
+  AND req.deleted IS FALSE
+WHERE r.id = $1
+  AND r.organization_id = $2
+  AND r.project_id = $3
+  AND req.user_id = $4
+  AND r.deleted IS FALSE
+`
+
+type GetPlatformRequesterApprovalRequestParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	UserID         string
+}
+
+type GetPlatformRequesterApprovalRequestRow struct {
+	ID               uuid.UUID
+	TargetKind       string
+	TargetRaw        string
+	Status           string
+	StandingDecision string
+	RequestedAt      pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+// Returns one request only when the calling user is attached as a requester.
+// The organization, project, request, and user pins make cross-tenant and
+// other-requester reads indistinguishable from a missing request.
+func (q *Queries) GetPlatformRequesterApprovalRequest(ctx context.Context, arg GetPlatformRequesterApprovalRequestParams) (GetPlatformRequesterApprovalRequestRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformRequesterApprovalRequest,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserID,
+	)
+	var i GetPlatformRequesterApprovalRequestRow
+	err := row.Scan(
+		&i.ID,
+		&i.TargetKind,
+		&i.TargetRaw,
+		&i.Status,
+		&i.StandingDecision,
+		&i.RequestedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -707,6 +858,53 @@ func (q *Queries) GetRunningResearchReport(ctx context.Context, arg GetRunningRe
 	return i, err
 }
 
+const getStandingServerDecisionForAdmission = `-- name: GetStandingServerDecisionForAdmission :one
+SELECT
+    r.id
+  , d.decision
+  , d.granted_principal_urns
+FROM mcp_approval_requests r
+JOIN LATERAL (
+    SELECT decision, granted_principal_urns
+    FROM mcp_approval_decisions
+    WHERE mcp_approval_request_id = r.id
+      AND project_id = r.project_id
+      AND deleted IS FALSE
+    ORDER BY decided_at DESC, id DESC
+    LIMIT 1
+) d ON TRUE
+WHERE r.organization_id = $1
+  AND r.project_id = $2
+  AND r.target_kind = 'server_url'
+  AND r.target_key = $3
+  AND r.status IN ('unreviewed', 'requested', 'approved', 'denied')
+  AND r.deleted IS FALSE
+`
+
+type GetStandingServerDecisionForAdmissionParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TargetKey      string
+}
+
+type GetStandingServerDecisionForAdmissionRow struct {
+	ID                   uuid.UUID
+	Decision             string
+	GrantedPrincipalUrns []string
+}
+
+// Exact standing decision used by distribution admission after the caller has
+// acquired LockProjectEnforcementState. Organization, project, kind, and the
+// canonical target key are all part of the predicate so a missing or
+// cross-tenant target has the same no-row result. Unknown or superseded request
+// states and deleted decision history never authorize distribution.
+func (q *Queries) GetStandingServerDecisionForAdmission(ctx context.Context, arg GetStandingServerDecisionForAdmissionParams) (GetStandingServerDecisionForAdmissionRow, error) {
+	row := q.db.QueryRow(ctx, getStandingServerDecisionForAdmission, arg.OrganizationID, arg.ProjectID, arg.TargetKey)
+	var i GetStandingServerDecisionForAdmissionRow
+	err := row.Scan(&i.ID, &i.Decision, &i.GrantedPrincipalUrns)
+	return i, err
+}
+
 const interruptStaleResearchReports = `-- name: InterruptStaleResearchReports :execrows
 UPDATE mcp_research_reports
 SET status = 'failed'
@@ -756,6 +954,16 @@ SELECT
   , r.evidence_changed_at
   , r.created_at
   , r.updated_at
+  -- Same latest-decision join as ListApprovalRequestsByTargetKeys.
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -778,6 +986,7 @@ type ListApprovalRequestTargetsRow struct {
 	EvidenceChangedAt pgtype.Timestamptz
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
+	LatestDecision    string
 	RequesterCount    int64
 }
 
@@ -802,6 +1011,7 @@ func (q *Queries) ListApprovalRequestTargets(ctx context.Context, projectID uuid
 			&i.EvidenceChangedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LatestDecision,
 			&i.RequesterCount,
 		); err != nil {
 			return nil, err
@@ -914,6 +1124,17 @@ SELECT
   , r.target_key
   , r.status
   , r.evidence_changed_at
+  -- The latest decision independent of lifecycle status: a reopened
+  -- request's prior decision still stands until re-decided.
+  , COALESCE((
+      SELECT d.decision
+      FROM mcp_approval_decisions d
+      WHERE d.mcp_approval_request_id = r.id
+        AND d.project_id = r.project_id
+        AND d.deleted IS FALSE
+      ORDER BY d.decided_at DESC, d.id DESC
+      LIMIT 1
+    ), '')::text AS latest_decision
   , (
       SELECT count(*)
       FROM mcp_approval_request_requesters req
@@ -938,6 +1159,7 @@ type ListApprovalRequestsByTargetKeysRow struct {
 	TargetKey         string
 	Status            string
 	EvidenceChangedAt pgtype.Timestamptz
+	LatestDecision    string
 	RequesterCount    int64
 }
 
@@ -959,6 +1181,7 @@ func (q *Queries) ListApprovalRequestsByTargetKeys(ctx context.Context, arg List
 			&i.TargetKey,
 			&i.Status,
 			&i.EvidenceChangedAt,
+			&i.LatestDecision,
 			&i.RequesterCount,
 		); err != nil {
 			return nil, err
@@ -1226,7 +1449,8 @@ func (q *Queries) ListServerURLApprovalRequests(ctx context.Context, projectID u
 
 const listStandingServerDecisionsForProject = `-- name: ListStandingServerDecisionsForProject :many
 SELECT
-    r.target_key
+    r.id
+  , r.target_key
   , r.target_raw
   , d.decision
   , d.granted_principal_urns
@@ -1242,10 +1466,12 @@ JOIN LATERAL (
 ) d ON TRUE
 WHERE r.project_id = $1
   AND r.target_kind = 'server_url'
+  AND r.status != 'superseded'
   AND r.deleted IS FALSE
 `
 
 type ListStandingServerDecisionsForProjectRow struct {
+	ID                   uuid.UUID
 	TargetKey            string
 	TargetRaw            string
 	Decision             string
@@ -1253,9 +1479,10 @@ type ListStandingServerDecisionsForProjectRow struct {
 }
 
 // The latest decision per server_url review in a project — what enforcement
-// derived its grants from. Read by the policy-creation backfill so a blocking
-// policy created after decisions were recorded honors them, instead of
-// blocking servers whose rows still read approved.
+// derived its grants from. Read by the policy-creation backfill and by the
+// policy URL-list conflict check (which is why the request id rides along).
+// Superseded requests are excluded: their decisions were explicitly
+// overridden and must never be replayed.
 func (q *Queries) ListStandingServerDecisionsForProject(ctx context.Context, projectID uuid.UUID) ([]ListStandingServerDecisionsForProjectRow, error) {
 	rows, err := q.db.Query(ctx, listStandingServerDecisionsForProject, projectID)
 	if err != nil {
@@ -1266,6 +1493,7 @@ func (q *Queries) ListStandingServerDecisionsForProject(ctx context.Context, pro
 	for rows.Next() {
 		var i ListStandingServerDecisionsForProjectRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.TargetKey,
 			&i.TargetRaw,
 			&i.Decision,
@@ -1315,14 +1543,12 @@ const lockProjectEnforcementState = `-- name: LockProjectEnforcementState :exec
 SELECT pg_advisory_xact_lock(hashtextextended('mcp-approval-enforcement:' || $1::text, 0))
 `
 
-// Serializes the two writers of a project's enforcement grants: recording a
-// decision (which writes onto every blocking policy) and creating or
-// transitioning a blocking policy (which replays every standing decision).
-// Without a shared lock the two transactions can each miss the other's
-// uncommitted row and both commit, leaving a decision unenforced on the new
-// policy — the exact contradiction the backfill exists to remove. An
-// advisory transaction lock releases on commit or rollback, so neither
-// writer can forget to unlock.
+// Serializes every writer and admission reader of a project's Shadow MCP
+// enforcement state. Decisions, supersession, policy mutations, and policy
+// deletion acquire this before their domain locks so an admission check can
+// observe one complete ordering of policy and standing-decision state.
+// The advisory transaction lock releases on commit or rollback, so no caller
+// can forget to unlock it.
 func (q *Queries) LockProjectEnforcementState(ctx context.Context, projectID string) error {
 	_, err := q.db.Exec(ctx, lockProjectEnforcementState, projectID)
 	return err
@@ -1544,7 +1770,7 @@ ON CONFLICT (project_id, target_kind, target_key) WHERE deleted IS FALSE DO UPDA
 SET updated_at = clock_timestamp()
   , status = CASE
       WHEN EXCLUDED.status = 'requested'
-        AND mcp_approval_requests.status IN ('denied', 'unreviewed')
+        AND mcp_approval_requests.status IN ('denied', 'unreviewed', 'superseded')
         THEN EXCLUDED.status
       ELSE mcp_approval_requests.status
     END

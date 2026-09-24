@@ -1,35 +1,27 @@
 import { useSyncExternalStore } from "react";
 
-/**
- * Creates a localStorage-backed, slug-scoped boolean flag with a module-level
- * pub/sub. Used for "dismiss to the sidebar" CTAs whose two surfaces live in
- * different parts of the tree (e.g. a banner or dock plus a sidebar resume
- * button), so they sync off a single source of truth instead of a shared
- * React context.
- */
-export function createDismissedCtaStore(prefix: string): {
-  useDismissed: (slug: string | undefined) => boolean;
-  write: (slug: string, value: boolean) => void;
-} {
+type ScopedStorageStore<T> = {
+  useValue: (slug: string | undefined) => T;
+  write: (slug: string, value: T) => void;
+};
+
+export function createScopedStorageStore<T>(
+  prefix: string,
+  defaultValue: T,
+  decode: (stored: string | null) => T,
+  encode: (value: T) => string | null,
+): ScopedStorageStore<T> {
   const listeners = new Set<() => void>();
   const storageKey = (slug: string) => `${prefix}:${slug}`;
-  // Session-scoped fallback for when localStorage is unavailable (storage
-  // disabled, some private-browsing modes): writes land here regardless, so
-  // dismiss/resume still works for the session — it just won't persist.
-  const memory = new Map<string, boolean>();
+  const memory = new Map<string, T>();
 
-  function read(slug: string): boolean {
-    // `write()` always lands the value in `memory`, so once this session has
-    // touched a slug, `memory` is the freshest source of truth — prefer it.
-    // localStorage may be stale (its write threw on quota/disabled) or simply
-    // unreadable here, and we must not let either case mask a just-applied
-    // dismiss/resume.
-    const cached = memory.get(slug);
-    if (cached !== undefined) return cached;
+  function read(slug: string | undefined): T {
+    if (!slug) return defaultValue;
+    if (memory.has(slug)) return memory.get(slug)!;
     try {
-      return localStorage.getItem(storageKey(slug)) === "true";
+      return decode(localStorage.getItem(storageKey(slug)));
     } catch {
-      return false;
+      return defaultValue;
     }
   }
 
@@ -44,7 +36,7 @@ export function createDismissedCtaStore(prefix: string): {
       if (!event.key.startsWith(`${prefix}:`)) return;
       const slug = event.key.slice(prefix.length + 1);
       if (!slug) return;
-      memory.set(slug, event.newValue === "true");
+      memory.set(slug, decode(event.newValue));
       listener();
     };
     window.addEventListener("storage", onStorage);
@@ -54,28 +46,49 @@ export function createDismissedCtaStore(prefix: string): {
     };
   }
 
-  function write(slug: string, value: boolean) {
+  function write(slug: string, value: T) {
     memory.set(slug, value);
     try {
-      if (value) {
-        localStorage.setItem(storageKey(slug), "true");
-      } else {
+      const serialized = encode(value);
+      if (serialized === null) {
         localStorage.removeItem(storageKey(slug));
+      } else {
+        localStorage.setItem(storageKey(slug), serialized);
       }
     } catch {
       // localStorage unavailable — `memory` above keeps the value readable
-      // for the session
+      // for the session.
     }
     listeners.forEach((listener) => listener());
   }
 
-  function useDismissed(slug: string | undefined): boolean {
+  function useValue(slug: string | undefined): T {
     return useSyncExternalStore(
       subscribe,
-      () => (slug ? read(slug) : false),
-      () => false,
+      () => read(slug),
+      () => defaultValue,
     );
   }
 
-  return { useDismissed, write };
+  return { useValue, write };
+}
+
+/**
+ * Creates a localStorage-backed, slug-scoped boolean flag with a module-level
+ * pub/sub. Used for "dismiss to the sidebar" CTAs whose two surfaces live in
+ * different parts of the tree (e.g. a banner or dock plus a sidebar resume
+ * button), so they sync off a single source of truth instead of a shared
+ * React context.
+ */
+export function createDismissedCtaStore(prefix: string): {
+  useDismissed: (slug: string | undefined) => boolean;
+  write: (slug: string, value: boolean) => void;
+} {
+  const store = createScopedStorageStore(
+    prefix,
+    false,
+    (stored) => stored === "true",
+    (value) => (value ? "true" : null),
+  );
+  return { useDismissed: store.useValue, write: store.write };
 }

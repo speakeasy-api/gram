@@ -1,7 +1,0 @@
----
-"dashboard": minor
----
-
-Rework the Shadow MCP server detail page around a summary strip and remove the repetition beneath it. Status, calls, people and last-called now read as one bordered strip of metric tiles sharing a row with the review's own header, replacing a status badge and two lines of prose that left most of the row empty. The figures the strip reports no longer appear a second time as an "Are we already exposed?" fact list — the traffic table answers that question directly, and the one thing it cannot say, what a denial would cost, rides beside its heading instead. Per-source counts drop out of the traffic table when a user has a single source, where they only restated the call count next to them.
-
-The evidence groups line up: the caveats that used to sit as paragraphs under each question now hang off an icon beside it, so every box in a row starts at the same top edge, and a group whose whole answer is one sentence stretches to its row's height with that sentence centred rather than stranded in a corner. The gaps banner no longer repeats failures that the group beneath it already reports as unknown, and the "unreviewed" badge reads Unreviewed instead of "Review requested", which contradicted the notice under it saying no one had asked. Long user lists collapse behind a toggle, and the web research panel drops its intro, its credits warning and its empty state when research is not part of the plan.

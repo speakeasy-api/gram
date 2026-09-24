@@ -3,22 +3,33 @@
  */
 
 import { agentCreateSessionHandoff } from "../funcs/agentCreateSessionHandoff.js";
+import { agentDeleteAiScanTarget } from "../funcs/agentDeleteAiScanTarget.js";
 import { agentGetConfiguration } from "../funcs/agentGetConfiguration.js";
 import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
 import { agentGetSessionMeta } from "../funcs/agentGetSessionMeta.js";
+import { agentListAiScanTargets } from "../funcs/agentListAiScanTargets.js";
 import { agentListSyncedUsers } from "../funcs/agentListSyncedUsers.js";
+import { agentReportAIScan } from "../funcs/agentReportAIScan.js";
 import { agentReportSessionMoved } from "../funcs/agentReportSessionMoved.js";
 import { agentUpdateConfiguration } from "../funcs/agentUpdateConfiguration.js";
+import { agentUpsertAiScanTarget } from "../funcs/agentUpsertAiScanTarget.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AiScanTargetMutationResult } from "../models/components/aiscantargetmutationresult.js";
 import { CreateSessionHandoffResult } from "../models/components/createsessionhandoffresult.js";
+import { DeleteAiScanTargetResult } from "../models/components/deleteaiscantargetresult.js";
 import { DeviceAgentConfiguration } from "../models/components/deviceagentconfiguration.js";
 import { GetPluginsResult } from "../models/components/getpluginsresult.js";
 import { GetSessionMetaResult } from "../models/components/getsessionmetaresult.js";
+import { ListAiScanTargetsResult } from "../models/components/listaiscantargetsresult.js";
 import { ListSyncedUsersResult } from "../models/components/listsyncedusersresult.js";
 import {
   CreateAgentSessionHandoffRequest,
   CreateAgentSessionHandoffSecurity,
 } from "../models/operations/createagentsessionhandoff.js";
+import {
+  DeleteAiScanTargetRequest,
+  DeleteAiScanTargetSecurity,
+} from "../models/operations/deleteaiscantarget.js";
 import {
   GetAgentPluginsRequest,
   GetAgentPluginsSecurity,
@@ -32,9 +43,17 @@ import {
   GetDeviceAgentConfigurationSecurity,
 } from "../models/operations/getdeviceagentconfiguration.js";
 import {
+  ListAiScanTargetsRequest,
+  ListAiScanTargetsSecurity,
+} from "../models/operations/listaiscantargets.js";
+import {
   ListSyncedAgentUsersRequest,
   ListSyncedAgentUsersSecurity,
 } from "../models/operations/listsyncedagentusers.js";
+import {
+  ReportAgentAIScanRequest,
+  ReportAgentAIScanSecurity,
+} from "../models/operations/reportagentaiscan.js";
 import {
   ReportAgentSessionMovedRequest,
   ReportAgentSessionMovedSecurity,
@@ -43,6 +62,10 @@ import {
   UpdateDeviceAgentConfigurationRequest,
   UpdateDeviceAgentConfigurationSecurity,
 } from "../models/operations/updatedeviceagentconfiguration.js";
+import {
+  UpsertAiScanTargetRequest,
+  UpsertAiScanTargetSecurity,
+} from "../models/operations/upsertaiscantarget.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class Agent extends ClientSDK {
@@ -58,6 +81,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<CreateSessionHandoffResult> {
     return unwrapAsync(agentCreateSessionHandoff(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * deleteAiScanTarget agent
+   *
+   * @remarks
+   * Remove a target the organization added, or clear the row a built-in carries so it returns to having no recorded decision. A built-in itself cannot be removed here; it leaves the list only by leaving Speakeasy's catalog. Requires a session with the org:admin scope.
+   */
+  async deleteAiScanTarget(
+    request: DeleteAiScanTargetRequest,
+    security?: DeleteAiScanTargetSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<DeleteAiScanTargetResult> {
+    return unwrapAsync(agentDeleteAiScanTarget(
       this,
       request,
       security,
@@ -123,6 +165,25 @@ export class Agent extends ClientSDK {
   }
 
   /**
+   * listAiScanTargets agent
+   *
+   * @remarks
+   * List the Shadow AI scan targets this organization's device agents probe for: the Speakeasy built-ins plus the organization's own additions, with the catalog version agents echo on scan receipts. Everything listed is probed for; a built-in leaves the list by leaving Speakeasy's catalog, an organization target by being deleted. Requires a session with the org:admin scope.
+   */
+  async listAiScanTargets(
+    request?: ListAiScanTargetsRequest | undefined,
+    security?: ListAiScanTargetsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAiScanTargetsResult> {
+    return unwrapAsync(agentListAiScanTargets(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * listSyncedUsers agent
    *
    * @remarks
@@ -134,6 +195,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListSyncedUsersResult> {
     return unwrapAsync(agentListSyncedUsers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * reportAIScan agent
+   *
+   * @remarks
+   * Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent's perspective: the daemon must never block on this call.
+   */
+  async reportAIScan(
+    request: ReportAgentAIScanRequest,
+    security?: ReportAgentAIScanSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<void> {
+    return unwrapAsync(agentReportAIScan(
       this,
       request,
       security,
@@ -172,6 +252,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<DeviceAgentConfiguration> {
     return unwrapAsync(agentUpdateConfiguration(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * upsertAiScanTarget agent
+   *
+   * @remarks
+   * Add a scan target for this organization or replace one it added earlier. Built-in targets are system-supplied and read-only: a write under a built-in's id is accepted only when it carries that built-in's definition unchanged. Every field is a full replacement except gateway_client, which an existing target keeps when the field is omitted, so a write need not restate the target's matchers; sending gateway_client with empty lists still clears them. Clearing a target's last verifiable matcher also clears any access decision recorded about it, since nothing could enforce it any more; the organization decides again once the target can be recognized at the gateway. Agents pick the change up on their next policy poll. Requires a session with the org:admin scope.
+   */
+  async upsertAiScanTarget(
+    request: UpsertAiScanTargetRequest,
+    security?: UpsertAiScanTargetSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<AiScanTargetMutationResult> {
+    return unwrapAsync(agentUpsertAiScanTarget(
       this,
       request,
       security,

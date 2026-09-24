@@ -58,6 +58,29 @@ describe("renderVerb", () => {
         }),
       ),
     ).toBe("sent org admin invite to");
+
+    expect(
+      renderVerb(
+        log({
+          action: "organization:product_feature_enabled",
+          metadata: { feature_name: "sso" },
+        }),
+      ),
+    ).toBe("enabled the sso feature for");
+
+    expect(
+      renderVerb(
+        log({
+          action: "organization:product_feature_disabled",
+          metadata: { feature_name: "custom_model_keys" },
+        }),
+      ),
+    ).toBe("disabled the custom model keys feature for");
+
+    // Without metadata the fixed phrase still reads as a sentence.
+    expect(
+      renderVerb(log({ action: "organization:product_feature_disabled" })),
+    ).toBe("disabled a product feature for");
   });
 
   // Every billing action is recorded against the same fixed subject display

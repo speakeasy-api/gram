@@ -60,11 +60,12 @@ func TestTracesRejectsInvalidExportBeforePublishing(t *testing.T) {
 	publisher := gcp.NewMockPublisher[*otelv1.InboundSpan]()
 	publisher.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult()).Maybe()
 	service := &Service{
-		logger:        testenv.NewLogger(t),
-		tracer:        testenv.NewTracerProvider(t).Tracer("test"),
-		auth:          nil,
-		logPublisher:  nil,
-		spanPublisher: publisher,
+		logger:          testenv.NewLogger(t),
+		tracer:          testenv.NewTracerProvider(t).Tracer("test"),
+		auth:            nil,
+		logPublisher:    nil,
+		metricPublisher: nil,
+		spanPublisher:   publisher,
 	}
 	projectID := uuid.New()
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{

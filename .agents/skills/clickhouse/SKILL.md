@@ -1,6 +1,6 @@
 ---
 name: clickhouse
-description: Use when changing or reviewing Gram ClickHouse schemas, migrations, queries, inserts, tests, or performance for analytics, telemetry, risk, authz, and spend features
+description: Use when changing or reviewing Gram ClickHouse schemas, migrations, queries, inserts, access principals, bootstrap SQL, Cloud compatibility, partial migration failures, or performance for analytics, telemetry, risk, authz, and spend features
 ---
 
 ## Official ClickHouse guidance
@@ -10,9 +10,40 @@ Gram conventions and the checked-in schema remain authoritative. Also use:
 - `clickhouse-best-practices` when reviewing or changing a ClickHouse schema, query, insert strategy, or configuration. Read its applicable rule files and cite the rules in review findings.
 - `clickhouse-architecture-advisor` when choosing between ingestion patterns, raw tables and materialized views, partitioning or retention strategies, joins or enrichment, or mutable-state models.
 
+## Infrastructure ownership and Cloud compatibility
+
+Local ClickHouse success is **not** proof of ClickHouse Cloud compatibility. Local containers and CI accept DDL and authentication settings that Cloud rejects.
+
+| Object                                                         | Owner                                          |
+| -------------------------------------------------------------- | ---------------------------------------------- |
+| Databases, users, roles, credentials, role settings            | Terraform; never application schema migrations |
+| Tables, views, materialized views, schema-bound grants/revokes | Atlas migrations, mirrored in golang-migrate   |
+| Local/CI/Atlas development-database prerequisites              | `local/clickhouse/initdb/01-marts-definer.sql` |
+
+Provision infrastructure prerequisites **before** applying dependent migrations. Do not put `CREATE DATABASE`, `CREATE USER`, or `CREATE ROLE` into desired schema files or either migration flavor, or drop infrastructure-owned objects in down migrations. If generation proposes these statements, fix the bootstrap/baseline and regenerate; do not accept them just because local replay passes.
+
+**Cloud footguns:**
+
+- `CREATE DATABASE ... ENGINE = Atomic` is not supported in ClickHouse Cloud. Do not explicitly select the local database engine for Cloud.
+- `CREATE USER ... HOST NONE` without authentication is still a passwordless user definition. Cloud's default policy rejects it; `HOST NONE` does not waive the password requirement. Never relax that policy to accommodate a definer.
+- Provision Cloud definers through Terraform with a generated password that is not exposed to people, logs, outputs, or this repository. A definer does not need an interactive login, but still needs valid authentication configuration.
+
+**Local bootstrap is an exception, not a deployment template.** `01-marts-definer.sql` supplies the `marts` database, `marts_reader` role/limits, and `marts_definer` principal to local containers, CI replay, and Atlas's development database (`server/atlas.hcl`). Keep it idempotent. Its passwordless `HOST NONE` user is local-only; never copy it into Cloud provisioning or migrations.
+
+For marts, edit `server/clickhouse/mart.sql`. Views use `DEFINER = marts_definer SQL SECURITY DEFINER`: reads of underlying tables run with the definer's privileges, not the reader's. Migrations own the definer's narrowly scoped source grants and the reader's grants on approved views, **not** the principals. Atlas ignores grants in desired state, so keep explicit matching grants/revokes in both migration flavors. See [ClickHouse view SQL security](https://clickhouse.com/docs/sql-reference/statements/create/view#sql_security).
+
+## Partially applied migrations
+
+ClickHouse migrations can fail after earlier statements have taken effect. Editing the failed file and rehashing does **not** reconcile those effects with Atlas's recorded progress; repeated in-place edits can leave the runner stuck.
+
+- Treat published/applied migration files as immutable during normal development. Use a forward migration; if a failed revision prevents progress, recovery requires an explicit operator-controlled repair, not another automatic retry.
+- Before repair, stop concurrent migration/reconciliation attempts and inspect both the actual objects/grants and Atlas revision state. Identify the exact corrected migration artifact and which statements already ran.
+- Reconcile the database to that artifact deliberately. Rewinding with `atlas migrate set` changes revision bookkeeping; it does **not** undo SQL. Only consider rewinding to the preceding revision and applying one migration after proving **every** statement is safe to replay and accounting for existing effects. `IF NOT EXISTS` alone does not prove existing objects have the intended definition.
+- Verify database state and migration status before resuming automated reconciliation. Never blindly rewind, mark a failed migration applied, or clear its error to bypass unfinished work.
+
 ## Schema design and evolution
 
-The ClickHouse schema is defined in `server/clickhouse/schema.sql`. To change it, edit that file and generate a migration:
+The ClickHouse schema is defined in `server/clickhouse/schema.sql`, with marts views in `server/clickhouse/mart.sql`. Edit the relevant desired schema file and generate a migration:
 
 ```sh
 mise run clickhouse:diff <migration-name>
@@ -23,7 +54,7 @@ This produces migrations in **two flavors** that must always stay in sync:
 - `server/clickhouse/migrations/` — **Atlas** format. This is the source of truth: only these migrations are carried forward and applied in production.
 - `server/clickhouse/local/golang_migrate/` — **golang-migrate** format (`.up.sql`/`.down.sql` pairs). Used only for local development, so contributors without an Atlas Pro login can still run migrations.
 
-`mise run clickhouse:diff` generates both flavors together. If you ever hand-edit a migration (or the diff output), make the equivalent change in **both** directories, then run `mise run clickhouse:hash` to regenerate `atlas.sum`. Apply pending migrations locally with `mise run clickhouse:migrate`.
+`mise run clickhouse:diff` generates both flavors together. When adjusting a newly generated, unpublished migration (for example, adding grants Atlas ignores), make the equivalent change in **both** directories, then run `mise run clickhouse:hash` to regenerate `atlas.sum`. Hashing updates checksums, not database or revision state. Apply pending migrations locally with `mise run clickhouse:migrate`.
 
 **No semicolons in `COMMENT '...'` strings.** golang-migrate splits statements naively, so a semicolon inside a column/table comment breaks its parser and the local migrations fail to replay. Rephrase the comment instead.
 

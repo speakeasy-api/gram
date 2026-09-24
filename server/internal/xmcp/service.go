@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
+	"github.com/speakeasy-api/gram/server/internal/netingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -55,6 +56,46 @@ func NewService(
 		db:         db,
 		enc:        enc,
 		mcpService: mcpService,
+	}
+}
+
+// AttachPrivate registers the slug-scoped /x/mcp routes accepted by private
+// network ingress. Global callbacks stay exclusively on the public listener.
+func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
+	for _, route := range netingress.PrivateRoutes(netingress.RouteSurfaceXMCP) {
+		var handler http.Handler
+		switch route.ID {
+		case netingress.RouteRuntime:
+			handler = oops.MCPErrHandle(service.logger, service.ServeMCP)
+		case netingress.RouteInstall:
+			handler = oops.ErrHandle(service.logger, metadataService.ServeInstallPage)
+		case netingress.RouteProtectedResource:
+			handler = oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata)
+		case netingress.RouteAuthorizationServer:
+			handler = oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata)
+		case netingress.RouteRegister:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthRegister)
+		case netingress.RouteAuthorize:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthAuthorize)
+		case netingress.RouteConnect:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthConsent)
+		case netingress.RouteConnectRemoteSession:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthConsentAction)
+		case netingress.RouteConnectMCP:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthConsentMCP)
+		case netingress.RouteConnectFirstParty:
+			handler = oops.ErrHandle(service.logger, service.handleFirstPartyConnect)
+		case netingress.RouteToken:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthToken)
+		case netingress.RouteRevoke:
+			handler = oops.ErrHandle(service.logger, service.handleOAuthRevoke)
+		default:
+			panic(fmt.Sprintf("unsupported private xMCP route id %q", route.ID))
+		}
+		if handler == nil {
+			panic(fmt.Sprintf("private xMCP route %s %s has no handler", route.Method, route.Path))
+		}
+		o11y.AttachHandler(mux, route.Method, route.Path, handler.ServeHTTP)
 	}
 }
 
@@ -110,6 +151,26 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, http.MethodPost, "/x/mcp/{mcpSlug}/revoke", oops.ErrHandle(service.logger, service.handleOAuthRevoke).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/idp_callback", oops.ErrHandle(service.logger, service.mcpService.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.mcpService.HandleRemoteLoginCallback).ServeHTTP)
+}
+
+// AttachAuthenticationHost mounts the /x/mcp authorization server routes on
+// the authentication host. It is a no-op when the host is disabled. As on
+// [Attach], the login callbacks stay on the platform host.
+func AttachAuthenticationHost(host *mcp.AuthenticationHost, service *Service) {
+	handle := func(method, pattern string, handler func(http.ResponseWriter, *http.Request) error) {
+		host.Handle(method, pattern, oops.ErrHandle(service.logger, handler).ServeHTTP)
+	}
+	handle(http.MethodGet, wellknown.OAuthAuthorizationServerPath+"/x/mcp/{mcpSlug}", service.HandleWellKnownOAuthServerMetadata)
+	handle(http.MethodPost, "/x/mcp/{mcpSlug}/register", service.handleOAuthRegister)
+	handle(http.MethodGet, "/x/mcp/{mcpSlug}/authorize", service.handleOAuthAuthorize)
+	handle(http.MethodGet, "/x/mcp/{mcpSlug}/connect", service.handleOAuthConsent)
+	handle(http.MethodPost, "/x/mcp/{mcpSlug}/connect", service.handleOAuthConsent)
+	handle(http.MethodPost, "/x/mcp/{mcpSlug}/connect/remote-session", service.handleOAuthConsentAction)
+	handle(http.MethodPost, "/x/mcp/{mcpSlug}/connect/mcp", service.handleOAuthConsentMCP)
+	handle(http.MethodDelete, "/x/mcp/{mcpSlug}/connect/mcp", service.handleOAuthConsentMCP)
+	handle(http.MethodGet, "/x/mcp/{mcpSlug}/connect/first-party", service.handleFirstPartyConnect)
+	handle(http.MethodPost, "/x/mcp/{mcpSlug}/token", service.handleOAuthToken)
+	handle(http.MethodPost, "/x/mcp/{mcpSlug}/revoke", service.handleOAuthRevoke)
 }
 
 // handleOAuthRegister adapts the chi /x/mcp/{mcpSlug}/register route to

@@ -2,21 +2,27 @@ package plugins_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 func TestEnsureDefaultPlugin_CreatesWhenMissing(t *testing.T) {
@@ -39,7 +45,7 @@ func TestEnsureDefaultPlugin_CreatesWhenMissing(t *testing.T) {
 	// A freshly-created Default plugin in the org's default project (the test's
 	// only, and thus oldest, project) is assigned to the org wildcard so it
 	// delivers to everyone under agent.getPlugins' per-principal scoping.
-	assignments, err := pluginsrepo.New(tx).ListPluginAssignments(ctx, result.Plugin.ID)
+	assignments, err := pluginsrepo.New(tx).ListPluginAssignments(ctx, pluginsrepo.ListPluginAssignmentsParams{PluginID: result.Plugin.ID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.Len(t, assignments, 1)
 	require.Equal(t, "*", assignments[0].PrincipalUrn)
@@ -72,7 +78,7 @@ func TestEnsureDefaultPlugin_NonDefaultProjectSeedsNoAudience(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.Created)
 
-	assignments, err := pluginsrepo.New(tx).ListPluginAssignments(ctx, result.Plugin.ID)
+	assignments, err := pluginsrepo.New(tx).ListPluginAssignments(ctx, pluginsrepo.ListPluginAssignmentsParams{PluginID: result.Plugin.ID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: other.ID})
 	require.NoError(t, err)
 	require.Empty(t, assignments,
 		"a non-default project's Default plugin starts with no audience")
@@ -406,7 +412,7 @@ func TestListPluginPublishCandidates_IncludesNeverPublishedDefaultPlugin(t *test
 	// This project has a Default plugin but has never published — no
 	// plugin_github_connections row and no plugins-mcp API key. It must
 	// still show up as a candidate (the periodic safety net for a lost
-	// initial-publish enqueue), with a 'system' actor fallback.
+	// initial-publish enqueue), with a real org member as the actor.
 	_, err := queries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
 		OrganizationID: authCtx.ActiveOrganizationID,
 		ProjectID:      *authCtx.ProjectID,
@@ -420,7 +426,7 @@ func TestListPluginPublishCandidates_IncludesNeverPublishedDefaultPlugin(t *test
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
-	require.Equal(t, "system", candidates[0].CreatedByUserID)
+	require.Equal(t, authCtx.ActiveOrganizationID, candidates[0].OrganizationID)
 }
 
 func TestListPluginPublishCandidates_ExcludesProjectWithoutDefaultPlugin(t *testing.T) {
@@ -471,4 +477,99 @@ func TestListPluginPublishCandidates_IncludesConnectedProjectWithoutDefaultPlugi
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Equal(t, *authCtx.ProjectID, candidates[0].ProjectID)
+	require.Equal(t, authCtx.ActiveOrganizationID, candidates[0].OrganizationID)
+}
+
+func TestPublishProject_NonMemberActorPublishesAsMember(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	plugin, err := ti.service.CreatePlugin(ctx, &gen.CreatePluginPayload{Name: "Actor Test"})
+	require.NoError(t, err)
+	toolset := createTestToolset(t, ctx, ti.conn, "actor-toolset")
+	_, err = ti.service.AddPluginServer(ctx, &gen.AddPluginServerPayload{
+		PluginID:    plugin.ID,
+		ToolsetID:   conv.PtrEmpty(toolset.ID.String()),
+		DisplayName: conv.PtrEmpty("Actor Server"),
+		Policy:      "required",
+		SortOrder:   0,
+	})
+	require.NoError(t, err)
+
+	_, err = usersrepo.New(ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID:          "user_foreign_org",
+		Email:       "foreign-org-creator@example.test",
+		DisplayName: "Foreign",
+		PhotoUrl:    pgtype.Text{},
+		Admin:       false,
+	})
+	require.NoError(t, err)
+
+	mintedBy := func() []string {
+		keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+		require.NoError(t, err)
+		creators := make([]string, 0, len(keys))
+		for _, key := range keys {
+			if strings.HasPrefix(key.Name, "plugins-") {
+				creators = append(creators, key.CreatedByUserID)
+			}
+		}
+		return creators
+	}
+
+	// A user from another organization (a Speakeasy admin editing this one)
+	// triggers the publish, but the keys it mints must belong to a member of
+	// this organization or GetAPIKeyByKeyHash never finds them.
+	result, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: "user_foreign_org",
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	})
+	require.NoError(t, err)
+	require.False(t, result.Skipped)
+	require.True(t, mock.pushFilesCalled)
+	creators := mintedBy()
+	require.NotEmpty(t, creators)
+	for _, creator := range creators {
+		require.Equal(t, authCtx.UserID, creator)
+	}
+
+	// The historical placeholder resolves the same way instead of being
+	// refused.
+	result, err = ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: "system",
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: false,
+	})
+	require.NoError(t, err)
+	require.False(t, result.Skipped)
+	for _, creator := range mintedBy() {
+		require.Equal(t, authCtx.UserID, creator)
+	}
+}
+
+func TestPublishProject_RejectsWhenOrganizationHasNoMember(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	ctx, ti := newTestPluginsServiceWithGitHub(t, mock)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	require.NoError(t, testrepo.New(ti.conn).ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx, authCtx.ActiveOrganizationID))
+
+	_, err := ti.service.PublishProject(ctx, plugins.PublishProjectInput{
+		ProjectID:       *authCtx.ProjectID,
+		CreatedByUserID: authCtx.UserID,
+		CommitMessage:   "Update plugin packages",
+		SkipIfUnchanged: true,
+	})
+	require.ErrorIs(t, err, plugins.ErrPluginAPIKeyCreatorNotMember)
+	require.False(t, mock.pushFilesCalled)
 }

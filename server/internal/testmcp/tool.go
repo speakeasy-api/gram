@@ -88,6 +88,8 @@ func (t Tool) mcpToolHandler() mcp.ToolHandler {
 			IsError:           response.IsError,
 			Meta:              nil,
 			StructuredContent: nil,
+			InputRequests:     nil,
+			RequestState:      "",
 		}, nil
 	}
 }

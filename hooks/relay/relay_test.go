@@ -148,6 +148,32 @@ func TestEnvelopeClaudePreToolUse(t *testing.T) {
 	require.NotEmpty(t, got.Raw)
 }
 
+// TestEnvelopeCopilotPreToolUse proves attribution is correct by construction:
+// with a native ProviderCopilot, adapterSlug falls through to the provider
+// slug, so Copilot sessions land under adapter=copilot with no override.
+func TestEnvelopeCopilotPreToolUse(t *testing.T) {
+	payload := agenthookstest.Fixture(t, "copilot/pre_tool_use.json")
+	runner := agenthooks.New()
+	var got components.IngestRequestBody
+	runner.OnToolPre(func(_ context.Context, e *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
+		got = buildEnvelope(e, "test-host")
+		return agenthooks.NoDecision(), nil
+	})
+	agenthookstest.Invoke(t, runner, agenthooks.ProviderCopilot, payload)
+
+	require.Equal(t, "copilot", got.Source.Adapter)
+	require.NotNil(t, got.Source.RawEventName)
+	require.Equal(t, "preToolUse", *got.Source.RawEventName)
+	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	require.NotNil(t, got.Session)
+	require.NotNil(t, got.Session.ID)
+	require.Equal(t, "sess-copilot-1", *got.Session.ID)
+	require.NotNil(t, got.Data)
+	require.NotNil(t, got.Data.ToolCall)
+	require.NotNil(t, got.Data.ToolCall.Name)
+	require.Equal(t, "bash", *got.Data.ToolCall.Name)
+}
+
 func TestEnvelopeClaudeMCPToolResolvesServer(t *testing.T) {
 	payload := agenthookstest.Fixture(t, "claude/pre_tool_use_mcp.json")
 	runner := agenthooks.New(agenthooks.WithoutMCPResolution())
@@ -365,6 +391,30 @@ func TestRatchetEstablishedFailsClosed(t *testing.T) {
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`, "established machine with broken creds must fail closed")
+	require.Equal(t, 0, fs.count())
+}
+
+// TestRatchetCopilotFailsClosedWithoutExitingNonZero pins the rule the whole
+// Copilot codec is built around: Copilot denies a tool call on ANY non-zero
+// exit from a preToolUse hook, so a broken credential must still exit 0 and
+// carry the deny in stdout. A non-zero exit here would turn ordinary
+// credential expiry into a total tool-call outage with an unexplained message.
+func TestRatchetCopilotFailsClosedWithoutExitingNonZero(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	authFile := filepath.Join(t.TempDir(), "hooks-auth.env")
+	require.NoError(t, os.WriteFile(authFile+".established", []byte{}, 0o600))
+	t.Setenv("GRAM_HOOKS_AUTH_FILE", authFile)
+	t.Setenv("GRAM_HOOKS_DISABLE_LOCAL_AUTH", "1")
+	t.Setenv("GRAM_HOOKS_API_KEY", "")
+	cfg := Config{ServerURL: fs.URL, ProjectSlug: "default", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}
+
+	res := invoke(t, cfg, agenthooks.ProviderCopilot, "copilot/pre_tool_use.json")
+
+	require.Equal(t, 0, res.ExitCode, "copilot denies on any non-zero exit; the verdict must ride stdout")
+	var out map[string]any
+	require.NoError(t, json.Unmarshal(res.Stdout, &out))
+	require.Equal(t, "deny", out["permissionDecision"], "established machine with broken creds must fail closed")
+	require.Contains(t, out["permissionDecisionReason"], "login", "the deny must name the fix")
 	require.Equal(t, 0, fs.count())
 }
 
@@ -668,6 +718,11 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 			path:     "hooks.json",
 			want:     []string{"PermissionRequest", "PostToolUse", "PreToolUse", "SessionEnd", "SessionStart", "Stop", "UserPromptSubmit"},
 		},
+		{
+			provider: "copilot",
+			path:     filepath.Join("hooks", "hooks.json"),
+			want:     []string{"agentStop", "notification", "permissionRequest", "postToolUse", "postToolUseFailure", "preToolUse", "sessionEnd", "sessionStart", "userPromptSubmitted"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.provider, func(t *testing.T) {
@@ -693,6 +748,15 @@ func TestWritePluginMatchesPublishedEventSets(t *testing.T) {
 				var entries []map[string]any
 				require.NoError(t, json.Unmarshal(doc.Hooks["sessionStart"], &entries))
 				require.Equal(t, true, entries[0]["failClosed"])
+			}
+			if tt.provider == "copilot" {
+				// An empty matcher is fatal to the whole hook config — see
+				// package-format.md#copilot-observability.
+				require.NotContains(t, string(b), `"matcher"`)
+				var entries []map[string]any
+				require.NoError(t, json.Unmarshal(doc.Hooks["preToolUse"], &entries))
+				require.Equal(t, "command", entries[0]["type"])
+				require.Contains(t, entries[0]["command"], "--provider=copilot")
 			}
 		})
 	}
@@ -723,6 +787,19 @@ func TestWritePluginOpenCodeRendersShim(t *testing.T) {
 	require.Equal(t, "https://gram.test", cfg.ServerURL)
 }
 
+// unsetClaudeLaunch clears the env a live Claude Code session exports. Launch
+// recovery reads CLAUDE_PID, then that process's argv and absolute executable —
+// so a test run from inside Claude Code probes the real `claude mcp list`,
+// against the real repo, and collects servers the test never set up. $PATH
+// sandboxing cannot prevent it: the recovered path is absolute. Unset, the
+// probe falls back to a PATH lookup that the sandboxed $PATH fails, which is
+// what these tests assume and what CI gets for free.
+func unsetClaudeLaunch(t *testing.T) {
+	t.Helper()
+	t.Setenv("CLAUDE_PID", "")
+	t.Setenv("CLAUDE_PROJECT_DIR", "")
+}
+
 func TestClaudeConfigChangeIsRelayedAfterMCPInventory(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
@@ -731,6 +808,7 @@ func TestClaudeConfigChangeIsRelayedAfterMCPInventory(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
 	t.Setenv("PATH", t.TempDir())
+	unsetClaudeLaunch(t)
 	payload := []byte(`{"session_id":"session-1","hook_event_name":"ConfigChange","source":"project_settings"}`)
 
 	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")
@@ -1184,6 +1262,8 @@ func TestUnparseable2xxBlocksGatingEvent(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	cfg := authedConfig(t, srv.URL)
+	// Cached posture: without it the cold-start pass would fail this open.
+	writeOrgSettings(cfg, false)
 
 	res := invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
 	require.Contains(t, string(res.Stdout), `"permissionDecision":"deny"`)
@@ -1573,6 +1653,7 @@ func TestRunnerRelaysMCPInventoryBeforeFirstMCPTool(t *testing.T) {
 	fs := newFakeServer(t, nil)
 	cfg := authedConfig(t, fs.URL)
 	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "speakeasy-hooks-test-missing-device-agent")
+	unsetClaudeLaunch(t)
 	payload := []byte(`{"session_id":"ordered-inventory-session","hook_event_name":"PreToolUse","tool_name":"mcp__remote__call","tool_input":{},"tool_use_id":"tool-1"}`)
 
 	res := agenthookstest.Invoke(t, NewRunner(cfg), agenthooks.ProviderClaudeCode, payload, "--variant=cli")

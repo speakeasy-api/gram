@@ -50,6 +50,7 @@ export type ToolUsageTraceSummaryTargetKind = ClosedEnum<
 export const ToolUsageTraceSummaryTargetType = {
   HostedMcpServer: "hosted_mcp_server",
   TunneledMcpServer: "tunneled_mcp_server",
+  MetaMcpServer: "meta_mcp_server",
   ShadowMcpServer: "shadow_mcp_server",
   LocalTool: "local_tool",
   Skill: "skill",
@@ -68,6 +69,7 @@ export const ToolUsageTraceSummaryUserKind = {
   Email: "email",
   ExternalUserId: "external_user_id",
   UserId: "user_id",
+  AgentId: "agent_id",
   Unknown: "unknown",
 } as const;
 /**
@@ -89,6 +91,18 @@ export type ToolUsageTraceSummary = {
    * Hook block reason when hook_status is blocked
    */
   blockReason?: string | undefined;
+  /**
+   * Stable MCP client identity used by filters; 'unattributed' when the caller never reported one
+   */
+  clientKey: string;
+  /**
+   * User-facing MCP client label as the client reported it
+   */
+  clientLabel: string;
+  /**
+   * MCP client version when the client reported one alongside its name
+   */
+  clientVersion?: string | undefined;
   /**
    * Telemetry event source
    */
@@ -161,6 +175,14 @@ export type ToolUsageTraceSummary = {
    * User-facing user identity label
    */
   userLabel: string;
+  /**
+   * Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself
+   */
+  viaMetaMcpServerId?: string | undefined;
+  /**
+   * Display name of the dispatching gateway; a deleted gateway keeps its last name
+   */
+  viaMetaMcpServerName?: string | undefined;
 };
 
 /** @internal */
@@ -191,6 +213,9 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
   z.object({
     account_type: z.optional(z.string()),
     block_reason: z.optional(z.string()),
+    client_key: z.string(),
+    client_label: z.string(),
+    client_version: z.optional(z.string()),
     event_source: z.string(),
     gram_urn: z.string(),
     hook_source: z.optional(z.string()),
@@ -209,11 +234,16 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
     user_key: z.string(),
     user_kind: ToolUsageTraceSummaryUserKind$inboundSchema,
     user_label: z.string(),
+    via_meta_mcp_server_id: z.optional(z.string()),
+    via_meta_mcp_server_name: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "account_type": "accountType",
       "block_reason": "blockReason",
+      "client_key": "clientKey",
+      "client_label": "clientLabel",
+      "client_version": "clientVersion",
       "event_source": "eventSource",
       "gram_urn": "gramUrn",
       "hook_source": "hookSource",
@@ -231,6 +261,8 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
       "user_key": "userKey",
       "user_kind": "userKind",
       "user_label": "userLabel",
+      "via_meta_mcp_server_id": "viaMetaMcpServerId",
+      "via_meta_mcp_server_name": "viaMetaMcpServerName",
     });
   }),
 );

@@ -12,6 +12,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearOrganizationDirectoryUserLinksFixture = `-- name: ClearOrganizationDirectoryUserLinksFixture :exec
+UPDATE directory_users SET user_id = NULL WHERE organization_id = $1
+`
+
+// Test fixture: exercise email fallback without a direct Gram user link.
+func (q *Queries) ClearOrganizationDirectoryUserLinksFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, clearOrganizationDirectoryUserLinksFixture, organizationID)
+	return err
+}
+
 const closeDirectoryUserGroupMembership = `-- name: CloseDirectoryUserGroupMembership :execrows
 UPDATE directory_user_group_memberships
 SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
@@ -140,6 +150,15 @@ func (q *Queries) DeleteDirectoryUserByWorkOSID(ctx context.Context, arg DeleteD
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteOrganizationDirectoryUsersFixture = `-- name: DeleteOrganizationDirectoryUsersFixture :exec
+DELETE FROM directory_users WHERE organization_id = $1
+`
+
+func (q *Queries) DeleteOrganizationDirectoryUsersFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationDirectoryUsersFixture, organizationID)
+	return err
 }
 
 const directoryAttributeValueExists = `-- name: DirectoryAttributeValueExists :one
@@ -553,6 +572,51 @@ func (q *Queries) ListActiveDirectoryGroupIDsByEmails(ctx context.Context, arg L
 	return items, nil
 }
 
+const listActiveDirectoryGroupMemberEmails = `-- name: ListActiveDirectoryGroupMemberEmails :many
+SELECT DISTINCT LOWER(du.email) AS email
+FROM directory_users AS du
+JOIN directory_user_group_memberships AS m
+  ON m.directory_user_id = du.id
+  AND m.deleted IS FALSE
+JOIN directory_groups AS dg
+  ON dg.id = m.directory_group_id
+  AND dg.organization_id = du.organization_id
+  AND dg.deleted IS FALSE
+  AND dg.workos_deleted IS FALSE
+WHERE dg.id = $1
+  AND du.organization_id = $2
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND du.email IS NOT NULL
+  AND TRIM(du.email) != ''
+ORDER BY email
+`
+
+type ListActiveDirectoryGroupMemberEmailsParams struct {
+	DirectoryGroupID uuid.UUID
+	OrganizationID   string
+}
+
+func (q *Queries) ListActiveDirectoryGroupMemberEmails(ctx context.Context, arg ListActiveDirectoryGroupMemberEmailsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listActiveDirectoryGroupMemberEmails, arg.DirectoryGroupID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			return nil, err
+		}
+		items = append(items, email)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveDirectoryGroups = `-- name: ListActiveDirectoryGroups :many
 SELECT
   dg.id,
@@ -695,6 +759,74 @@ func (q *Queries) OpenDirectoryUserGroupMembership(ctx context.Context, arg Open
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const resolveIDJAGUsersByEmail = `-- name: ResolveIDJAGUsersByEmail :many
+SELECT DISTINCT candidate.id AS user_id
+FROM directory_users AS du
+JOIN users AS candidate
+  ON (du.user_id IS NOT NULL AND candidate.id = du.user_id)
+  OR (du.user_id IS NULL AND LOWER(candidate.email) = LOWER(du.email))
+JOIN organization_user_relationships AS membership
+  ON membership.user_id = candidate.id
+  AND membership.organization_id = du.organization_id
+  AND membership.deleted_at IS NULL
+WHERE du.organization_id = $1
+  AND LOWER(du.email) = LOWER($2)
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND candidate.deleted_at IS NULL
+  AND candidate.workos_deleted_at IS NULL
+ORDER BY candidate.id
+LIMIT 2
+`
+
+type ResolveIDJAGUsersByEmailParams struct {
+	OrganizationID string
+	Email          string
+}
+
+// The directory row is the provisioning gate. A stored user_id wins; only a
+// NULL link falls back to live email matching. Both paths require an active
+// Gram user and active membership in the same organization. Two distinct
+// matches are returned so the caller can fail closed on ambiguity.
+func (q *Queries) ResolveIDJAGUsersByEmail(ctx context.Context, arg ResolveIDJAGUsersByEmailParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, resolveIDJAGUsersByEmail, arg.OrganizationID, arg.Email)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setOrganizationDirectoryUserDeletionFixture = `-- name: SetOrganizationDirectoryUserDeletionFixture :exec
+UPDATE directory_users
+SET deleted_at = CASE WHEN $1::boolean THEN clock_timestamp() ELSE deleted_at END,
+    workos_deleted_at = CASE WHEN $2::boolean THEN clock_timestamp() ELSE workos_deleted_at END
+WHERE organization_id = $3
+`
+
+type SetOrganizationDirectoryUserDeletionFixtureParams struct {
+	LocalDeleted   bool
+	WorkosDeleted  bool
+	OrganizationID string
+}
+
+// Test fixture: independently exercise local and upstream deletion markers.
+func (q *Queries) SetOrganizationDirectoryUserDeletionFixture(ctx context.Context, arg SetOrganizationDirectoryUserDeletionFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationDirectoryUserDeletionFixture, arg.LocalDeleted, arg.WorkosDeleted, arg.OrganizationID)
+	return err
 }
 
 const upsertDirectoryGroup = `-- name: UpsertDirectoryGroup :one

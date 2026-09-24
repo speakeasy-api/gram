@@ -42,7 +42,7 @@ func NewMockPublisher[M any]() *MockPublisher[M] {
 	return &MockPublisher[M]{}
 }
 
-func (m *MockPublisher[M]) Publish(ctx context.Context, msg M) PublishResult {
+func (m *MockPublisher[M]) Publish(ctx context.Context, msg M, _ ...PublishOption) PublishResult {
 	args := m.Called(ctx, msg)
 
 	a0 := args.Get(0)

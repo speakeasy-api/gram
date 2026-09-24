@@ -11,17 +11,12 @@ import {
 
 const TRIAL_ENDS_AT = "2026-05-06T00:00:00Z";
 
-// The stale pair is set, and set to a different date, on every record here.
-// A surface that goes back to reading `free_trial_ends_at` then renders the
-// wrong date rather than the right one by luck.
 const ORG: AdminOrganization = {
   id: "org_placeholder_one",
   name: "Placeholder One",
   slug: "placeholder-one",
   account_type: "pro",
   whitelisted: true,
-  free_trial_started_at: "2026-02-01T00:00:00Z",
-  free_trial_ends_at: "2026-11-12T00:00:00Z",
   member_count: 3,
   created_at: "2026-01-02T00:00:00Z",
   updated_at: "2026-01-07T00:00:00Z",
@@ -239,11 +234,8 @@ describe("Trial", () => {
     (state) => {
       renderTrial(orgWith({ trial_state: state, trial_ends_at: undefined }));
 
-      // `free_trial_ends_at` still dates this record. Falling back to it,
-      // which is the shape a "be defensive about a missing date" edit takes,
-      // is this ticket's own bug coming back. A trailing bare `ends`, or a
-      // `Running-`, is the other way this goes wrong.
-      expect(trialText()).not.toContain(shortDate("2026-11-12T00:00:00Z"));
+      // A missing factual date must not produce a trailing bare `ends` or
+      // `Running-`; there is no fallback date for this state.
       expect(trialText()).not.toContain("ends");
       expect(trialText()).not.toContain("-");
       expect(trialText()).toBe(badge().textContent);

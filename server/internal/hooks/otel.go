@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -45,6 +46,21 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		attr.SlogProjectID(projectID),
 	)
 
+	// Tee the export into the OTel event feed pipeline before the per-client
+	// split below, so every client's records in the batch are mirrored.
+	sanitizeTeedLogsPayload(ctx, payload)
+	s.teeOTELLogsToEventFeed(ctx, payload, orgID, projectID)
+	s.ingestOTLPLogs(ctx, logger, payload, orgID, *authCtx.ProjectID)
+	return nil
+}
+
+// ingestOTLPLogs runs the hooks telemetry writers for one authenticated OTLP
+// logs export: the Codex split, Claude session attribution, and the
+// telemetry_logs inserts. Shared by the hooks endpoint and the native /otel
+// ingest sink, which has already published the export to the event feed.
+func (s *Service) ingestOTLPLogs(ctx context.Context, logger *slog.Logger, payload *gen.LogsPayload, orgID string, projectUUID uuid.UUID) {
+	projectID := projectUUID.String()
+
 	// Codex resources persist as a raw log stream like Claude's; they carry no
 	// Claude session to seed, so they skip the attribution path below. Split
 	// per resource rather than routing the whole payload: a collector can
@@ -55,11 +71,12 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		s.writeCodexOTELLogsToClickHouse(ctx, codexPayload, orgID, projectID)
 	}
 	if claudePayload == nil {
-		return nil
+		return
 	}
 	payload = claudePayload
 
 	sessions := extractSessionMetadata(payload)
+	agent := isAgentActor(ctx)
 
 	// Resolve and attribute each session before writing the raw OTEL log rows so
 	// those rows can be stamped with the account attribution (provider,
@@ -103,13 +120,16 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// with provider=openai entries whose shape — AccountType set, no
 		// account UUID — would otherwise satisfy the company-credential arm
 		// below and stamp Claude rows with Codex attribution.
-		var cached SessionMetadata
-		if err := s.cache.Get(ctx, sessionCacheKey(session.SessionID), &cached); err == nil &&
+		cached, cachedErr := s.getSessionMetadata(ctx, session.SessionID)
+		if cachedErr == nil && !agent &&
 			cached.Provider == providerAnthropic && cached.GramOrgID == orgID && cached.ProjectID == projectID &&
 			(cached.UserAccountID != "" || (cached.AccountType != "" && cached.ExternalAccountUUID == "")) &&
 			!sessionEnrichesAttribution(session, cached) {
 			attributionBySession[session.SessionID] = cached
 			continue
+		}
+		if agent {
+			cached = agentSessionView(cached, orgID, projectID)
 		}
 
 		// Merge this batch's identity over anything an earlier (incomplete) batch
@@ -117,6 +137,12 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// identity rather than only the fields this single batch happened to carry.
 		userEmail := conv.Default(session.UserEmail, cached.UserEmail)
 		userID := ""
+		// The OTEL email is the AI account's report; for an agent actor it is
+		// observed only and never resolves to a human.
+		observedEmail := userEmail
+		if agent {
+			userEmail, observedEmail = "", session.UserEmail
+		}
 		if userEmail != "" {
 			lookup := conv.NormalizeEmail(userEmail)
 			id, ok := userIDByEmail[lookup]
@@ -150,28 +176,40 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			UserAccountID: "",
 			// On this path user.email is the account's own report, so it doubles
 			// as the observed email consumers keep separate from actor identity.
-			ObservedUserEmail: userEmail,
+			ObservedUserEmail: observedEmail,
 			GramOrgID:         orgID,
 			ProjectID:         projectID,
+		}
+		if agent {
+			clearAgentAccountIdentity(&completeMetadata)
 		}
 
 		sessionLogger := logger.With(
 			attr.SlogServiceName(session.ServiceName),
 			attr.SlogGenAIConversationID(session.SessionID),
-			attr.SlogAuthUserEmail(session.UserEmail),
+			attr.SlogAuthUserEmail(userEmail),
 		)
 
 		_, metadataErr := s.getSessionMetadata(ctx, completeMetadata.SessionID)
+		// owned: this project holds the session id (its entry is cached, or this
+		// batch's write succeeds). foreign: another project holds it, so this
+		// batch stamps its own rows but adopts neither the cached identity nor
+		// the unauthenticated hooks. A cache error sets neither.
+		owned := metadataErr == nil
+		foreign := errors.Is(metadataErr, errSessionMetadataOtherProject)
 
 		// Attribute the account: classify team vs personal, link it to the
 		// owning employee (directly for team accounts, via the device bridge for
 		// personal ones), and persist the account entity. Failures are
 		// non-fatal — session capture/enforcement must continue regardless.
-		if err := s.attributeSession(ctx, &completeMetadata); err != nil {
-			sessionLogger.WarnContext(ctx, "failed to attribute AI account for session",
-				attr.SlogEvent("account_attribution_failed"),
-				attr.SlogError(err),
-			)
+		// Agent actors skip it: attribution (incl. the device bridge) links to employees.
+		if !agent {
+			if err := s.attributeSession(ctx, &completeMetadata); err != nil {
+				sessionLogger.WarnContext(ctx, "failed to attribute AI account for session",
+					attr.SlogEvent("account_attribution_failed"),
+					attr.SlogError(err),
+				)
+			}
 		}
 
 		attributionBySession[completeMetadata.SessionID] = completeMetadata
@@ -187,7 +225,7 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			if _, err := s.repo.LinkChatUserAccount(ctx, repo.LinkChatUserAccountParams{
 				UserAccountID: conv.StringToNullUUID(completeMetadata.UserAccountID),
 				ID:            sessionIDToUUID(completeMetadata.SessionID),
-				ProjectID:     *authCtx.ProjectID,
+				ProjectID:     projectUUID,
 			}); err != nil {
 				linkFailed = true
 				sessionLogger.ErrorContext(ctx, "failed to backfill chat account link",
@@ -206,27 +244,32 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 		// lets the next batch re-attribute and retry the link. Process each
 		// session independently so a single cache failure does not abort
 		// flushing the remaining sessions in the batch.
-		if !linkFailed {
-			if err := s.cache.Set(ctx, sessionCacheKey(completeMetadata.SessionID), completeMetadata, 24*time.Hour); err != nil {
+		// Agent sessions never seed the human-keyed session cache.
+		if !linkFailed && !agent && !foreign {
+			switch err := s.cacheSessionMetadata(ctx, completeMetadata); {
+			case err == nil:
+				owned = true
+			case errors.Is(err, errSessionMetadataOtherProject):
+				foreign = true
+			default:
 				sessionLogger.ErrorContext(ctx, "Failed to store session metadata",
 					attr.SlogEvent("claude_logs_cache_set_failed"),
 					attr.SlogError(err),
 				)
 			}
 		}
-		if metadataErr != nil {
-			entries, err := s.getCachedMCPList(ctx, completeMetadata.SessionID)
-			if err == nil {
-				s.upsertShadowMCPInventoryURLs(ctx, completeMetadata.GramOrgID, completeMetadata.ProjectID, completeMetadata.SessionID, entries)
-			} else {
-				sessionLogger.WarnContext(ctx, "failed to read cached MCP list for shadow inventory capture",
-					attr.SlogEvent("claude_otel_mcp_list_cache_miss"),
-					attr.SlogError(err),
-				)
-			}
+		if foreign {
+			owned = false
+			sessionLogger.WarnContext(ctx, "session id already attributed to another project; not adopting it",
+				attr.SlogEvent("claude_logs_session_owned_by_other_project"),
+			)
 		}
 
-		s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata)
+		// Agent batches never adopt buffered hooks. Unauthenticated hooks flush
+		// only once this project owns the session id.
+		if !agent {
+			s.flushPendingHooks(ctx, completeMetadata.SessionID, &completeMetadata, owned)
+		}
 
 		sessionLogger.InfoContext(ctx, "Stored session metadata",
 			attr.SlogEvent("session_validated"),
@@ -240,8 +283,6 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload) error {
 			attr.SlogEvent("claude_logs_no_session"),
 		)
 	}
-
-	return nil
 }
 
 // sessionEnrichesAttribution reports whether this OTEL batch carries an identity
@@ -389,6 +430,7 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 		}
 
 		resourceAttrs := resourceAttributesMap(resourceLog.Resource)
+		sanitizeResourceAttrs(ctx, resourceAttrs)
 		resourceServiceName := stringAttr(resourceAttrs, attr.ServiceNameKey)
 
 		for _, scopeLog := range resourceLog.ScopeLogs {
@@ -464,13 +506,16 @@ func (s *Service) writeClaudeOTELLogsToClickHouse(ctx context.Context, payload *
 				if sessionMeta.UserID != "" {
 					userInfo = telemetry.UserInfoByIDAndEmail(sessionMeta.UserID, sessionMeta.UserEmail)
 				}
+				if isAgentActor(ctx) {
+					userInfo = telemetry.UserInfoByEmail("")
+				}
 
 				timestamp, observedTimestamp := otelLogTimestamps(logRecord)
 				logParams := telemetry.WithOTELMetadata(telemetry.LogParams{
 					Timestamp:  timestamp,
 					ToolInfo:   claudeOTELLogToolInfo(surface, orgID, parsedProjectID.String()),
 					UserInfo:   userInfo,
-					Attributes: logAttrs,
+					Attributes: withAgentActor(ctx, logAttrs),
 				}, observedTimestamp, resourceAttrs)
 
 				// Claude redacts user-configured MCP server/tool names to
@@ -762,6 +807,13 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 	orgID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
 
+	s.ingestOTLPMetrics(ctx, logger, payload, orgID, projectID)
+	return nil
+}
+
+// ingestOTLPMetrics runs the hooks metrics writers for one authenticated OTLP
+// metrics export. Shared by the hooks endpoint and the native /otel ingest sink.
+func (s *Service) ingestOTLPMetrics(ctx context.Context, logger *slog.Logger, payload *gen.MetricsPayload, orgID string, projectID string) {
 	// Codex metrics (event counters, not token usage) must not run through the
 	// Claude usage extractor — it would find no claude_code.* metrics and can
 	// reject on temporality. Persist them verbatim instead, splitting per
@@ -779,7 +831,7 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 		s.writeCodexMetricsToClickHouse(ctx, codexMetrics, orgID, projectID)
 	}
 	if claudeMetrics == nil {
-		return nil
+		return
 	}
 	payload = claudeMetrics
 
@@ -791,6 +843,4 @@ func (s *Service) Metrics(ctx context.Context, payload *gen.MetricsPayload) erro
 
 	// Write metrics to ClickHouse
 	s.writeMetricsToClickHouse(ctx, payload, orgID, projectID)
-
-	return nil
 }

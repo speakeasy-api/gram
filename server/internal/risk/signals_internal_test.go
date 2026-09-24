@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 )
 
 func TestSignalScore_GoldenValues(t *testing.T) {
@@ -66,4 +68,27 @@ func TestTopScoresDescending(t *testing.T) {
 	require.Equal(t, []float64{9, 7, 5}, topScoresDescending([]float64{5, 9, 1, 7, 3}, 3))
 	require.Equal(t, []float64{4, 2}, topScoresDescending([]float64{2, 4}, 3))
 	require.Equal(t, []float64{8}, topScoresDescending([]float64{8, 8, 8}, 1))
+}
+
+// TestSignalTopUsersByRule_SkipsUnattributed pins top users to the Users
+// stat's id-based predicate: rows it doesn't count never render as rows.
+func TestSignalTopUsersByRule_SkipsUnattributed(t *testing.T) {
+	t.Parallel()
+
+	rows := []chrepo.RiskSignalUserCount{
+		{RuleID: "r1", UserID: "", ExternalUserID: "", Email: "", Team: "", Findings: 3},
+		// Stamped email without ids: skipped too, the predicate is id-based.
+		{RuleID: "r1", UserID: "", ExternalUserID: "", Email: "ghost@example.com", Team: "", Findings: 2},
+		{RuleID: "r1", UserID: "u1", ExternalUserID: "", Email: "alice@example.com", Team: "", Findings: 1},
+	}
+
+	out := signalTopUsersByRule(rows)
+	require.Len(t, out["r1"], 1)
+	require.Equal(t, "alice@example.com", out["r1"][0].Email)
+
+	// A rule with only unattributed findings yields no top users at all.
+	onlyUnattributed := signalTopUsersByRule([]chrepo.RiskSignalUserCount{
+		{RuleID: "r2", UserID: "", ExternalUserID: "", Email: "", Team: "", Findings: 2},
+	})
+	require.Empty(t, onlyUnattributed["r2"])
 }

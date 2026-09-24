@@ -30,6 +30,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -142,7 +143,9 @@ type httpClientOptions struct {
 	retryConfig       *RetryConfig
 	resolver          *net.Resolver
 	allowedCIDRBlocks []*net.IPNet
+	dialTimeout       *time.Duration
 	resilience        *resilienceOptions
+	checkRedirect     func(req *http.Request, via []*http.Request) error
 }
 
 // ClientOption configures a single [Policy.Client] / [Policy.PooledClient]
@@ -185,6 +188,66 @@ func WithAllowedCIDRBlocks(cidrs ...string) func(*httpClientOptions) {
 				o.allowedCIDRBlocks = append(o.allowedCIDRBlocks, block)
 			}
 		}
+	}
+}
+
+// WithDialTimeout bounds only the TCP connect phase for this client,
+// replacing the policy dialer's default. A non-positive value disables the
+// dial timeout, leaving connects bounded only by request contexts. A raw
+// negative [net.Dialer.Timeout] would instead fail every dial with an
+// already-expired deadline, so it is normalized to zero here.
+func WithDialTimeout(timeout time.Duration) func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
+		if timeout < 0 {
+			timeout = 0
+		}
+		o.dialTimeout = &timeout
+	}
+}
+
+// WithCheckRedirect installs the client's redirect policy, the same hook as
+// [http.Client.CheckRedirect]. It is invoked once per redirect by the client
+// that follows them, which sits inside the retry layer when
+// [WithRetryConfig] is also set. Return [http.ErrUseLastResponse] to hand
+// 3xx responses back to the caller untouched; any other error fails the
+// request without a retry, since the refusal would repeat.
+func WithCheckRedirect(fn func(req *http.Request, via []*http.Request) error) func(*httpClientOptions) {
+	return func(o *httpClientOptions) {
+		o.checkRedirect = fn
+	}
+}
+
+// redirectRefusedError marks a redirect the client's [WithCheckRedirect]
+// policy rejected. The refusal is deterministic, so the retry layer never
+// re-sends the request.
+type redirectRefusedError struct{ err error }
+
+func (e *redirectRefusedError) Error() string { return e.err.Error() }
+func (e *redirectRefusedError) Unwrap() error { return e.err }
+
+// markRedirectRefusals wraps a redirect policy so every refusal other than
+// [http.ErrUseLastResponse] is recognisable to noRetryOnRedirectRefusal.
+func markRedirectRefusals(fn func(req *http.Request, via []*http.Request) error) func(req *http.Request, via []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		err := fn(req, via)
+		if err == nil || errors.Is(err, http.ErrUseLastResponse) {
+			return err
+		}
+		return &redirectRefusedError{err: err}
+	}
+}
+
+// noRetryOnRedirectRefusal stops the retry policy from re-sending a request
+// whose redirect the client's policy refused.
+func noRetryOnRedirectRefusal(next retryablehttp.CheckRetry) retryablehttp.CheckRetry {
+	if next == nil {
+		next = retryablehttp.DefaultRetryPolicy
+	}
+	return func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		if _, ok := errors.AsType[*redirectRefusedError](err); ok {
+			return false, err
+		}
+		return next(ctx, resp, err)
 	}
 }
 
@@ -336,7 +399,11 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	if len(opts.allowedCIDRBlocks) > 0 {
 		dialOpts = append(dialOpts, WithDialerAllowedCIDRBlocks(opts.allowedCIDRBlocks))
 	}
-	transport.DialContext = p.Dialer(dialOpts...).DialContext
+	dialer := p.Dialer(dialOpts...)
+	if opts.dialTimeout != nil {
+		dialer.Timeout = *opts.dialTimeout
+	}
+	transport.DialContext = dialer.DialContext
 
 	// Merge into any existing transport TLS config rather than replacing
 	// it, so a future option that sets client certificates or pinning is
@@ -379,18 +446,23 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 
 	if opts.retryConfig == nil {
-		return &http.Client{Transport: roundTripper}
+		return &http.Client{Transport: roundTripper, CheckRedirect: opts.checkRedirect}
 	}
 
 	retryClient := retryablehttp.NewClient()
 	retryClient.Logger = nil // avoid noisy logs from retryablehttp
 	retryClient.HTTPClient = &http.Client{
-		Transport: roundTripper,
+		Transport:     roundTripper,
+		CheckRedirect: opts.checkRedirect,
 	}
 
 	checkRetry := opts.retryConfig.CheckRetry
 	if opts.resilience != nil {
 		checkRetry = noRetryOnResilienceDenial(checkRetry)
+	}
+	if opts.checkRedirect != nil {
+		retryClient.HTTPClient.CheckRedirect = markRedirectRefusals(opts.checkRedirect)
+		checkRetry = noRetryOnRedirectRefusal(checkRetry)
 	}
 
 	retryClient.RetryWaitMin = opts.retryConfig.WaitMin
@@ -409,6 +481,14 @@ func (p *Policy) clientWithBaseTransport(transport *http.Transport, options ...f
 	}
 
 	client := retryClient.StandardClient()
+	// The inner client owns the redirect policy, so the only 3xx that reaches
+	// this layer is one the callback already chose to hand back; stop here
+	// without invoking the callback a second time.
+	if opts.checkRedirect != nil {
+		client.CheckRedirect = func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
 	client.Transport = &closeIdleRoundTripper{
 		RoundTripper:         client.Transport,
 		closeIdleConnections: transport.CloseIdleConnections,

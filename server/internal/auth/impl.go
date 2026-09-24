@@ -25,6 +25,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	srv "github.com/speakeasy-api/gram/server/gen/http/auth/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -40,6 +41,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -50,6 +53,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const dispositionAssistants = "assistants"
@@ -121,6 +125,7 @@ type Service struct {
 	billing              billing.Repository
 	cancelSubsScheduler  AssistantsSubscriptionCancelScheduler
 	posthog              *posthog.Posthog
+	growth               *growthsignals.Emitter
 	nonceStore           cache.Cache
 	supportHandoffs      *supporthandoff.Store
 	supportHandoffIssuer *supporthandoff.Issuer
@@ -152,6 +157,7 @@ func NewService(
 	billingRepo billing.Repository,
 	cancelSubsScheduler AssistantsSubscriptionCancelScheduler,
 	posthogClient *posthog.Posthog,
+	growthEmitter *growthsignals.Emitter,
 	nonceStore cache.Cache,
 	authzProvisioner *authz.Provisioner,
 	organizationSeeder OrganizationFeatureSeeder,
@@ -177,6 +183,7 @@ func NewService(
 		billing:              billingRepo,
 		cancelSubsScheduler:  cancelSubsScheduler,
 		posthog:              posthogClient,
+		growth:               growthEmitter,
 		nonceStore:           nonceStore,
 		supportHandoffs:      supportHandoffs,
 		supportHandoffIssuer: supporthandoff.NewIssuer(supportHandoffs),
@@ -363,16 +370,6 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		trace.SpanFromContext(ctx).SetAttributes(attr.AuthImpersonatorEmail(ie))
 	}
 
-	userID, err := s.identity.UpsertUserFromIDP(ctx, idpUser)
-	if err != nil {
-		return redirectWithError(authErrInit, err)
-	}
-
-	userInfo, _, err := s.identity.GetUserInfo(ctx, userID)
-	if err != nil {
-		return redirectWithError(authErrInit, err)
-	}
-
 	// Only a server-issued handoff may establish trusted support state. Legacy
 	// browser-controlled override cookies and headers have no authority.
 	supportOrgID := ""
@@ -380,15 +377,14 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		supportOrgID = supportLogin.OrganizationID
 	}
 
-	if supportOrgID == "" && idpUser.Sub != "" {
-		if err := s.identity.SyncMembershipsFromWorkOS(ctx, userID, idpUser.Sub); err != nil {
-			return redirectWithError(authErrInit, err)
-		}
-		userInfo, _, err = s.identity.GetUserInfo(ctx, userID)
-		if err != nil {
-			return redirectWithError(authErrInit, err)
-		}
+	login, err := s.identity.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{
+		SkipMembershipSync: supportOrgID != "",
+	})
+	if err != nil {
+		return redirectWithError(authErrInit, err)
 	}
+	userID := login.UserID
+	userInfo := login.UserInfo
 
 	sessionID, err := sessions.NewSessionID()
 	if err != nil {
@@ -442,14 +438,15 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 				Whitelisted:    true,
 				ProvisionTrial: true,
 				ActorEmail:     userInfo.Email,
+				CreationSource: orgprovision.SourceSignup,
 			})
 			if err != nil {
-				return s.redirectSignupError(ctx, err)
+				return s.redirectSignupError(ctx, payload, err)
 			}
 
 			session.ActiveOrganizationID = org.ID
 			if err := s.sessions.StoreSession(ctx, session); err != nil {
-				return s.redirectSignupError(ctx, err)
+				return s.redirectSignupError(ctx, payload, err)
 			}
 
 			if err := s.trialNotifier.TrialStarted(ctx, org.ID); err != nil {
@@ -511,6 +508,13 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	if orgMetadata.DisabledAt.Valid {
 		return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
+	}
+
+	if login.Reactivated && intent != nil && intent.OrgName != "" {
+		activeOrgID, orgMetadata, err = s.applySignupWhitelist(ctx, userInfo.Organizations, activeOrgID, orgMetadata)
+		if err != nil {
+			return s.redirectSignupError(ctx, payload, err)
+		}
 	}
 
 	session.ActiveOrganizationID = activeOrgID
@@ -580,6 +584,25 @@ func (s *Service) acceptPendingInvitationForMember(ctx context.Context, organiza
 	if err := s.sessions.InvalidateUserInfoCache(ctx, gramUserID); err != nil {
 		return fmt.Errorf("invalidate user info cache: %w", err)
 	}
+
+	// Reported only once the membership is durable. An invitation that was
+	// accepted but whose role sync failed has not produced a member yet, and
+	// the early returns above leave before this point.
+	s.growth.Emit(ctx, growthsignals.ActivityEvent{
+		Activity:       growthsignals.ActivityMemberJoinedOrganization,
+		OrganizationID: invite.OrganizationID,
+		ProjectID:      uuid.Nil,
+		ActorID:        gramUserID,
+		ActorType:      urn.PrincipalTypeUser,
+		ActorEmail:     inviteeEmail,
+		ActorName:      "",
+		SubjectName:    inviteeEmail,
+		ActingSurface:  "",
+		AuditAction:    "",
+		DashboardURL:   "",
+		Extra:          map[string]string{growthsignals.PropertyRole: conv.FromPGTextOrEmpty[string](invite.RoleSlug)},
+	})
+
 	return nil
 }
 
@@ -843,6 +866,9 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 		Slug:        selected.Slug,
 		WorkosID:    conv.PtrToPGText(selected.WorkosID),
 		Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+		// Switching into an organization says nothing about what created it,
+		// and null leaves whatever was recorded alone.
+		CreationSource: pgtype.Text{String: "", Valid: false},
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error upserting organization metadata").LogError(ctx, s.logger)
 	}
@@ -851,8 +877,9 @@ func (s *Service) SwitchScopes(ctx context.Context, payload *gen.SwitchScopesPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
 	}
-	existingSession.ActiveOrganizationID = authCtx.ActiveOrganizationID
-	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
+	updatedSession := existingSession
+	updatedSession.ActiveOrganizationID = authCtx.ActiveOrganizationID
+	if err := s.sessions.UpdateSession(ctx, existingSession, updatedSession); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").LogError(ctx, s.logger)
 	}
 
@@ -886,13 +913,14 @@ func (s *Service) EnterDemo(ctx context.Context, payload *gen.EnterDemoPayload) 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
 	}
-	existingSession.ActiveOrganizationID = constants.DemoOrganizationID
+	updatedSession := existingSession
+	updatedSession.ActiveOrganizationID = constants.DemoOrganizationID
 	// Entering the shared demo ends support access. Otherwise the support
 	// target would no longer match the active organization and the next
 	// authenticated request would reject the session.
-	existingSession.SupportOrganizationID = ""
-	existingSession.SupportExpiresAt = time.Time{}
-	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
+	updatedSession.SupportOrganizationID = ""
+	updatedSession.SupportExpiresAt = time.Time{}
+	if err := s.sessions.UpdateSession(ctx, existingSession, updatedSession); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating auth session").LogError(ctx, s.logger)
 	}
 
@@ -1100,6 +1128,40 @@ func loadTrial(
 	}
 }
 
+// applySignupWhitelist keeps the book-a-demo gate off for a signup that
+// reused a Gram identity. Prefer an already-whitelisted membership; otherwise
+// whitelist the org the session is about to activate.
+func (s *Service) applySignupWhitelist(ctx context.Context, organizations []sessions.Organization, activeOrgID string, orgMetadata orgRepo.OrganizationMetadatum) (string, orgRepo.OrganizationMetadatum, error) {
+	if orgMetadata.Whitelisted {
+		return activeOrgID, orgMetadata, nil
+	}
+
+	for _, org := range organizations {
+		meta, err := s.orgRepo.GetOrganizationMetadata(ctx, org.ID)
+		if err != nil {
+			return "", orgRepo.OrganizationMetadatum{}, fmt.Errorf("get organization metadata: %w", err)
+		}
+		if meta.Whitelisted {
+			return org.ID, meta, nil
+		}
+	}
+
+	whitelisted, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+		ID:          orgMetadata.ID,
+		Name:        orgMetadata.Name,
+		Slug:        orgMetadata.Slug,
+		WorkosID:    orgMetadata.WorkosID,
+		Whitelisted: pgtype.Bool{Bool: true, Valid: true},
+		// Whitelisting an existing organization is not creating one. Null so
+		// the source the creating flow recorded survives this write.
+		CreationSource: pgtype.Text{String: "", Valid: false},
+	})
+	if err != nil {
+		return "", orgRepo.OrganizationMetadatum{}, fmt.Errorf("whitelist organization for signup: %w", err)
+	}
+	return whitelisted.ID, whitelisted, nil
+}
+
 // orgProvisionOptions carries the per-caller choices for a new organization.
 // The choices are a struct rather than positional booleans because every call
 // site then names what it asks for, and exhaustruct forces a new field to be
@@ -1117,6 +1179,11 @@ type orgProvisionOptions struct {
 	// unauthenticated callback, which has no auth context to read it from.
 	// Empty stores no display name, leaving the entry showing a bare actor id.
 	ActorEmail string
+
+	// CreationSource names the flow asking for the organization, one of the
+	// orgprovision source constants. It is recorded on the row for admin
+	// operators to read and decides nothing.
+	CreationSource string
 }
 
 // provisionOrgForUser creates an organization and attaches a user to it as the
@@ -1179,6 +1246,7 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 		Whitelisted:    true,
 		ProvisionTrial: true,
 		ActorEmail:     conv.PtrValOr(authCtx.Email, ""),
+		CreationSource: orgprovision.SourceSignup,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error creating organization").LogError(ctx, s.logger)
@@ -1188,8 +1256,9 @@ func (s *Service) Register(ctx context.Context, payload *gen.RegisterPayload) (e
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error loading existing session").LogError(ctx, s.logger)
 	}
-	existingSession.ActiveOrganizationID = org.ID
-	if err := s.sessions.UpdateSession(ctx, existingSession); err != nil {
+	updatedSession := existingSession
+	updatedSession.ActiveOrganizationID = org.ID
+	if err := s.sessions.UpdateSession(ctx, existingSession, updatedSession); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error storing session").LogError(ctx, s.logger)
 	}
 
@@ -1205,6 +1274,7 @@ func (s *Service) autoProvisionForAssistants(ctx context.Context, userInfo *sess
 		Whitelisted:    true,
 		ProvisionTrial: false,
 		ActorEmail:     userInfo.Email,
+		CreationSource: orgprovision.SourceAssistants,
 	})
 	if err != nil {
 		return "", err
@@ -1276,6 +1346,9 @@ func (s *Service) persistProvisionedOrganization(
 		Slug:        slug,
 		WorkosID:    pgtype.Text{String: provisionedOrg.WorkOSOrganizationID, Valid: provisionedOrg.WorkOSOrganizationID != ""},
 		Whitelisted: pgtype.Bool{Bool: opts.Whitelisted, Valid: true},
+		// Empty writes null rather than an empty string, so "nothing recorded a
+		// source" stays one value on the read side.
+		CreationSource: conv.ToPGTextEmpty(opts.CreationSource),
 	})
 	if err != nil {
 		return orgRepo.OrganizationMetadatum{}, fmt.Errorf("create organization metadata: %w", err)
@@ -1325,12 +1398,19 @@ func (s *Service) persistProvisionedOrganization(
 // the blanket zero-org redirect in the dashboard's app layout and lands on
 // /register — making that split persist would mean storing the flow origin on
 // the session, which is not worth it for this path.
-func (s *Service) redirectSignupError(ctx context.Context, err error) (*gen.CallbackResult, error) {
+func (s *Service) redirectSignupError(ctx context.Context, payload *gen.CallbackPayload, err error) (*gen.CallbackResult, error) {
 	s.logger.ErrorContext(ctx, "signup provisioning failed", attr.SlogError(err), attr.SlogReason(string(authErrInit)))
 
 	base := strings.TrimRight(s.cfg.SignInRedirectURL, "/")
+	location := fmt.Sprintf("%s/sign-up?signin_error=%s", base, authErrInit)
+	// Keep the destination on the retry: /sign-up threads ?redirect= back
+	// through the next login attempt, so a signup that arrived with one (e.g.
+	// a marketing CTA deep link) still lands there once provisioning succeeds.
+	if dest := s.destinationFromState(payload); dest != "" {
+		location += "&redirect=" + url.QueryEscape(dest)
+	}
 	return &gen.CallbackResult{
-		Location:      fmt.Sprintf("%s/sign-up?signin_error=%s", base, authErrInit),
+		Location:      location,
 		SessionToken:  "",
 		SessionCookie: "",
 	}, nil
@@ -1372,14 +1452,34 @@ func (s *Service) captureSignupTelemetry(ctx context.Context, email, orgName str
 	}); err != nil {
 		s.logger.ErrorContext(ctx, "failed to set signup created_via person property", attr.SlogError(err), attr.SlogOrganizationID(org.ID))
 	}
+
+	s.growth.Emit(ctx, growthsignals.ActivityEvent{
+		Activity:       growthsignals.ActivityOrganizationCreated,
+		OrganizationID: org.ID,
+		ProjectID:      uuid.Nil,
+		ActorID:        email,
+		ActorType:      urn.PrincipalTypeEmail,
+		ActorEmail:     email,
+		ActorName:      "",
+		SubjectName:    orgName,
+		ActingSurface:  "",
+		AuditAction:    "",
+		DashboardURL:   "",
+		Extra:          map[string]string{createdViaProperty: createdViaSignup},
+	})
 }
 
+// createdViaProperty says which flow produced an organization. It is the same
+// tag the onboarding funnel already carries, repeated on the activity so a
+// Slack reader can tell a self-serve signup from a platform-admin invite
+// without opening PostHog.
+const (
+	createdViaProperty = "created_via"
+	createdViaSignup   = "signup"
+)
+
 func (s *Service) dispositionFromState(payload *gen.CallbackPayload) string {
-	state := decodeStateParam(payload)
-	if state == nil {
-		return ""
-	}
-	parsed, err := url.Parse(safeRedirectPath(state.FinalDestinationURL, s.siteOrigin))
+	parsed, err := url.Parse(s.destinationFromState(payload))
 	if err != nil {
 		return ""
 	}
@@ -1585,11 +1685,7 @@ func (s *Service) callbackRedirectURL(
 	ctx context.Context,
 	payload *gen.CallbackPayload,
 ) string {
-	var location string
-
-	if state := decodeStateParam(payload); state != nil {
-		location = safeRedirectPath(state.FinalDestinationURL, s.siteOrigin)
-	}
+	location := s.destinationFromState(payload)
 
 	if location != "" {
 		msg := fmt.Sprintf("Found destination URL in state: '%s'", location)
@@ -1599,4 +1695,14 @@ func (s *Service) callbackRedirectURL(
 	}
 
 	return s.cfg.SignInRedirectURL
+}
+
+// destinationFromState extracts the sanitized post-login destination carried
+// through the IDP round trip, or "" when the state holds none worth honoring.
+func (s *Service) destinationFromState(payload *gen.CallbackPayload) string {
+	state := decodeStateParam(payload)
+	if state == nil {
+		return ""
+	}
+	return safeRedirectPath(state.FinalDestinationURL, s.siteOrigin)
 }

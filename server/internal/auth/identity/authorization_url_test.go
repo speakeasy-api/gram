@@ -28,6 +28,7 @@ func newURLResolver(t *testing.T, idpBaseURL, idpClientID string) *identity.Reso
 		nil, // userRepo
 		nil, // pylon
 		nil, // posthog
+		nil, // growth signals
 		"",  // cache suffix
 	)
 }

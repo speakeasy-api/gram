@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -32,7 +33,7 @@ func TestUpdateMcpEndpoint_FullReplace(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      frontendA,
+		McpServerID:      conv.PtrEmpty(frontendA),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-original"),
 	})
 	require.NoError(t, err)
@@ -46,12 +47,13 @@ func TestUpdateMcpEndpoint_FullReplace(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               created.ID,
 		CustomDomainID:   nil,
-		McpServerID:      frontendB,
+		McpServerID:      conv.PtrEmpty(frontendB),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-renamed"),
 	})
 	require.NoError(t, err)
 	require.Equal(t, created.ID, updated.ID)
-	require.Equal(t, frontendB, updated.McpServerID)
+	require.NotNil(t, updated.McpServerID)
+	require.Equal(t, frontendB, *updated.McpServerID)
 	require.Equal(t, authCtx.OrganizationSlug+"-renamed", string(updated.Slug))
 
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpEndpointUpdate)
@@ -80,7 +82,7 @@ func TestUpdateMcpEndpoint_RootSlugRenameRetainsMapping(t *testing.T) {
 	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
-		McpServerID:    serverID,
+		McpServerID:    uuid.NullUUID{UUID: serverID, Valid: true},
 		Slug:           "before",
 	})
 	require.NoError(t, err)
@@ -92,7 +94,7 @@ func TestUpdateMcpEndpoint_RootSlugRenameRetainsMapping(t *testing.T) {
 	updated, err := ti.service.UpdateMcpEndpoint(ctx, &gen.UpdateMcpEndpointPayload{
 		ID:             endpoint.ID.String(),
 		CustomDomainID: new(domain.ID.String()),
-		McpServerID:    serverID.String(),
+		McpServerID:    conv.PtrEmpty(serverID.String()),
 		Slug:           types.McpEndpointSlug("after"),
 	})
 	require.NoError(t, err)
@@ -121,7 +123,7 @@ func TestUpdateMcpEndpoint_RootMoveAndDisabledServerClearMapping(t *testing.T) {
 	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
-		McpServerID:    activeServerID,
+		McpServerID:    uuid.NullUUID{UUID: activeServerID, Valid: true},
 		Slug:           "root",
 	})
 	require.NoError(t, err)
@@ -135,7 +137,7 @@ func TestUpdateMcpEndpoint_RootMoveAndDisabledServerClearMapping(t *testing.T) {
 	updated, err := ti.service.UpdateMcpEndpoint(ctx, &gen.UpdateMcpEndpointPayload{
 		ID:             endpoint.ID.String(),
 		CustomDomainID: new(domain.ID.String()),
-		McpServerID:    disabledServerID.String(),
+		McpServerID:    conv.PtrEmpty(disabledServerID.String()),
 		Slug:           types.McpEndpointSlug("root"),
 	})
 	require.NoError(t, err)
@@ -153,7 +155,7 @@ func TestUpdateMcpEndpoint_RootMoveAndDisabledServerClearMapping(t *testing.T) {
 	updated, err = ti.service.UpdateMcpEndpoint(ctx, &gen.UpdateMcpEndpointPayload{
 		ID:             endpoint.ID.String(),
 		CustomDomainID: nil,
-		McpServerID:    activeServerID.String(),
+		McpServerID:    conv.PtrEmpty(activeServerID.String()),
 		Slug:           types.McpEndpointSlug(authCtx.OrganizationSlug + "-moved"),
 	})
 	require.NoError(t, err)
@@ -176,7 +178,7 @@ func TestUpdateMcpEndpoint_PlatformDomainRejectsUnprefixedSlug(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-base"),
 	})
 	require.NoError(t, err)
@@ -187,7 +189,7 @@ func TestUpdateMcpEndpoint_PlatformDomainRejectsUnprefixedSlug(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               created.ID,
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug("bad-prefix"),
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
@@ -209,7 +211,7 @@ func TestUpdateMcpEndpoint_NotFound(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               uuid.NewString(),
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-whatever"),
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
@@ -233,7 +235,7 @@ func TestUpdateMcpEndpoint_RBACForbidden(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               uuid.NewString(),
 		CustomDomainID:   nil,
-		McpServerID:      mcpServerID,
+		McpServerID:      conv.PtrEmpty(mcpServerID),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-whatever"),
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -253,7 +255,7 @@ func TestUpdateMcpEndpoint_RejectsCrossTenantMcpFrontend(t *testing.T) {
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		CustomDomainID:   nil,
-		McpServerID:      ownFrontendID,
+		McpServerID:      conv.PtrEmpty(ownFrontendID),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-legit"),
 	})
 	require.NoError(t, err)
@@ -266,7 +268,7 @@ func TestUpdateMcpEndpoint_RejectsCrossTenantMcpFrontend(t *testing.T) {
 		ProjectSlugInput: nil,
 		ID:               created.ID,
 		CustomDomainID:   nil,
-		McpServerID:      otherFrontendID,
+		McpServerID:      conv.PtrEmpty(otherFrontendID),
 		Slug:             types.McpEndpointSlug(authCtx.OrganizationSlug + "-legit"),
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)

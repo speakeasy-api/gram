@@ -53,6 +53,14 @@ func TestSeedSystemRoleGrantsBootstrapsGlobalRoles(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, grants)
 
+	seededScopes := make([]Scope, 0, len(grants))
+	for _, grant := range grants {
+		seededScopes = append(seededScopes, Scope(grant.Scope))
+	}
+	for _, scope := range []Scope{ScopeAgentRead, ScopeAgentWrite, ScopeAgentAuthorize, ScopeAgentTransfer} {
+		require.Contains(t, seededScopes, scope, "new Admin role must contain explicit %s grant", scope)
+	}
+
 	q := accessrepo.New(conn)
 	adminPrincipal := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+adminRole.ID.String())
 	adminRows, err := q.ListPrincipalGrantsByOrg(ctx, accessrepo.ListPrincipalGrantsByOrgParams{

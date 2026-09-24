@@ -57,8 +57,6 @@ export function resolveEntityLink(
       return newTab(`/blocks/${enc(rest)}`);
 
     // --- Org-scoped ---
-    case "collection":
-      return newTab(`${org}/collections/${enc(rest)}`);
     case "remote_idp":
       return newTab(`${org}/remote-identity-providers/${enc(rest)}`);
     case "remote_session_client":

@@ -2,6 +2,7 @@ import { useOrganization, useSession } from "@/contexts/Auth.tsx";
 import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { cn } from "@/lib/utils";
 import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
+import { logoutToLogin } from "@/lib/logout-to-login";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { Icon } from "@/components/ui/Icon";
@@ -19,6 +20,12 @@ import {
 } from "./side-panel/SidePanel.tsx";
 import { SidebarInset, SidebarProvider } from "@/components/ui/Sidebar";
 import { useShowsImpersonationBanner } from "./impersonation-banner-state";
+import { ModeSurface } from "./mode-switch-stage.tsx";
+import { ModeSwitcher } from "./mode-switcher.tsx";
+
+// Height of the impersonation banner above the app surface (h-9 / 2.25rem).
+const chromeTopOffset = (isImpersonating: boolean): string =>
+  isImpersonating ? "2.25rem" : "0px";
 
 // Layout to handle unauthenticated landing pages and the authenticated webapp experience
 export const LoginCheck = (): JSX.Element => {
@@ -32,7 +39,7 @@ export const LoginCheck = (): JSX.Element => {
 
   if (!session.activeOrganizationId) {
     const redirectTo = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/register?redirect=${redirectTo}`} />;
+    return <Navigate to={`/sign-up?redirect=${redirectTo}`} />;
   }
 
   return <Outlet />;
@@ -40,14 +47,17 @@ export const LoginCheck = (): JSX.Element => {
 
 export const AppLayout = (): JSX.Element => {
   const isImpersonating = useShowsImpersonationBanner();
+  const chromeOffset = chromeTopOffset(isImpersonating);
 
   return (
     <SidebarProvider
       style={
         {
           "--sidebar-width": "16rem",
-          "--header-offset": isImpersonating ? "2.25rem" : "0px",
-          ...(isImpersonating ? { "--banner-offset": "2.25rem" } : undefined),
+          // The mode switcher overlays the page header, so only the
+          // impersonation banner offsets the fixed app surface.
+          "--header-offset": chromeOffset,
+          "--banner-offset": chromeOffset,
         } as React.CSSProperties
       }
     >
@@ -100,12 +110,13 @@ export const ImpersonationBanner = (): JSX.Element => {
         window.location.replace("/");
         return;
       }
-      await client.auth.logout();
-      window.location.href = "/login";
+      await logoutToLogin(client);
     })();
   };
 
   // Height must stay 2.25rem (h-9) to match --header-offset / --banner-offset.
+  // Sticky so it stays above the fixed sidebar and sticky page header while
+  // the document scrolls.
   // Solid ink-family bars (editorial): demo = ink, impersonation = deep brand
   // red. White mono label; the exit action is a hairline-outlined light chip.
   const toneClasses = isDemo
@@ -116,7 +127,7 @@ export const ImpersonationBanner = (): JSX.Element => {
   return (
     <div
       className={cn(
-        "flex h-9 items-center justify-center gap-3 border-b px-4",
+        "sticky top-0 z-40 flex h-9 items-center justify-center gap-3 border-b px-4",
         toneClasses,
       )}
       role="alert"
@@ -144,9 +155,10 @@ const AppLayoutContent = ({
   isImpersonating: boolean;
 }) => {
   return (
-    <div className="flex h-screen w-full flex-col">
+    <div className="relative flex min-h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
-      <div className="flex w-full flex-1 overflow-hidden">
+      <ModeSwitcher mode="canvas" />
+      <ModeSurface mode="canvas" className="flex w-full flex-1 overflow-x-clip">
         {/* Default (non-inset) variant: flat panes divided by a hairline
             instead of a floating bordered card. */}
         <AppSidebar />
@@ -157,10 +169,11 @@ const AppLayoutContent = ({
             </MembershipSyncGuard>
           </GlobalInsightsWrapper>
         </SidebarInset>
-        {/* Sibling of the content, not an overlay: the page reflows into the
-            remaining width so nothing sits behind the panel. */}
+        {/* Floats over the content rather than displacing it: opening a detail
+            sheet used to reflow the page and move whatever had just been
+            clicked. The page keeps its width; the panel covers its right edge. */}
         <SidePanelSurface />
-      </div>
+      </ModeSurface>
       {/* Above the outlet so the suggestion → chat bubble morph survives the
           navigation into the chat route. */}
       <ChatLaunchOverlay />
@@ -218,10 +231,7 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
           type="button"
           className="bg-primary text-primary-foreground hover:bg-primary/90 mt-2 px-4 py-2 text-sm font-medium"
           onClick={() => {
-            void (async () => {
-              await client.auth.logout();
-              window.location.href = "/login";
-            })();
+            void logoutToLogin(client);
           }}
         >
           Log out
@@ -233,27 +243,34 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
 
 export const OrgLayout = (): JSX.Element => {
   const isImpersonating = useShowsImpersonationBanner();
+  const chromeOffset = chromeTopOffset(isImpersonating);
 
   return (
     <SidebarProvider
       style={
         {
           "--sidebar-width": "16rem",
-          "--header-offset": isImpersonating ? "2.25rem" : "0px",
-          ...(isImpersonating ? { "--banner-offset": "2.25rem" } : undefined),
+          // The mode switcher overlays the page header, so only the
+          // impersonation banner offsets the fixed app surface.
+          "--header-offset": chromeOffset,
+          "--banner-offset": chromeOffset,
         } as React.CSSProperties
       }
     >
-      <div className="flex h-screen w-full flex-col">
+      <div className="relative flex min-h-screen w-full flex-col">
         {isImpersonating && <ImpersonationBanner />}
-        <div className="flex w-full flex-1 overflow-hidden">
+        <ModeSwitcher mode="canvas" />
+        <ModeSurface
+          mode="canvas"
+          className="flex w-full flex-1 overflow-x-clip"
+        >
           <OrgSidebar />
           <SidebarInset>
             <MembershipSyncGuard>
               <Outlet />
             </MembershipSyncGuard>
           </SidebarInset>
-        </div>
+        </ModeSurface>
       </div>
     </SidebarProvider>
   );

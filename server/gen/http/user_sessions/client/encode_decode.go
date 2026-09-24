@@ -986,23 +986,25 @@ func DecodeRevokeUserSessionResponse(decoder func(*http.Response) goahttp.Decode
 // *types.UserSession from a value of type *UserSessionResponseBody.
 func unmarshalUserSessionResponseBodyToTypesUserSession(v *UserSessionResponseBody) *types.UserSession {
 	res := &types.UserSession{
-		ID:                  *v.ID,
-		UserSessionIssuerID: *v.UserSessionIssuerID,
-		SubjectUrn:          *v.SubjectUrn,
-		Jti:                 *v.Jti,
-		RefreshExpiresAt:    *v.RefreshExpiresAt,
-		ExpiresAt:           *v.ExpiresAt,
-		CreatedAt:           *v.CreatedAt,
-		UpdatedAt:           *v.UpdatedAt,
-		IssuerSlug:          *v.IssuerSlug,
-		UserSessionClientID: v.UserSessionClientID,
-		ClientName:          v.ClientName,
-		ClientIDMetadataURI: v.ClientIDMetadataURI,
-		SubjectType:         *v.SubjectType,
-		SubjectDisplayName:  v.SubjectDisplayName,
-		SubjectPhotoURL:     v.SubjectPhotoURL,
-		RevokedAt:           v.RevokedAt,
-		LastUsedAt:          v.LastUsedAt,
+		ID:                            *v.ID,
+		UserSessionIssuerID:           *v.UserSessionIssuerID,
+		SubjectUrn:                    *v.SubjectUrn,
+		Jti:                           *v.Jti,
+		RefreshExpiresAt:              *v.RefreshExpiresAt,
+		ExpiresAt:                     *v.ExpiresAt,
+		CreatedAt:                     *v.CreatedAt,
+		UpdatedAt:                     *v.UpdatedAt,
+		IssuerSlug:                    *v.IssuerSlug,
+		UserSessionClientID:           v.UserSessionClientID,
+		ClientName:                    v.ClientName,
+		ClientIDMetadataURI:           v.ClientIDMetadataURI,
+		ClientCredentialKind:          v.ClientCredentialKind,
+		ClientTokenEndpointAuthMethod: v.ClientTokenEndpointAuthMethod,
+		SubjectType:                   *v.SubjectType,
+		SubjectDisplayName:            v.SubjectDisplayName,
+		SubjectPhotoURL:               v.SubjectPhotoURL,
+		RevokedAt:                     v.RevokedAt,
+		LastUsedAt:                    v.LastUsedAt,
 	}
 	res.Upstreams = make([]*types.UserSessionUpstream, len(v.Upstreams))
 	for i, val := range v.Upstreams {
@@ -1011,6 +1013,9 @@ func unmarshalUserSessionResponseBodyToTypesUserSession(v *UserSessionResponseBo
 			continue
 		}
 		res.Upstreams[i] = unmarshalUserSessionUpstreamResponseBodyToTypesUserSessionUpstream(val)
+	}
+	if v.Workload != nil {
+		res.Workload = unmarshalUserSessionWorkloadResponseBodyToTypesUserSessionWorkload(v.Workload)
 	}
 
 	return res
@@ -1035,6 +1040,47 @@ func unmarshalUserSessionUpstreamResponseBodyToTypesUserSessionUpstream(v *UserS
 	res.Scopes = make([]string, len(v.Scopes))
 	for i, val := range v.Scopes {
 		res.Scopes[i] = val
+	}
+
+	return res
+}
+
+// unmarshalUserSessionWorkloadResponseBodyToTypesUserSessionWorkload builds a
+// value of type *types.UserSessionWorkload from a value of type
+// *UserSessionWorkloadResponseBody.
+func unmarshalUserSessionWorkloadResponseBodyToTypesUserSessionWorkload(v *UserSessionWorkloadResponseBody) *types.UserSessionWorkload {
+	if v == nil {
+		return nil
+	}
+	res := &types.UserSessionWorkload{
+		WorkloadIssuerID:   *v.WorkloadIssuerID,
+		ExternalSubject:    *v.ExternalSubject,
+		WorkloadIssuerName: v.WorkloadIssuerName,
+		WorkloadIssuerURL:  v.WorkloadIssuerURL,
+		AgentID:            v.AgentID,
+		AgentName:          v.AgentName,
+		AgentStatus:        v.AgentStatus,
+	}
+	res.Admissions = make([]*types.UserSessionWorkloadAdmission, len(v.Admissions))
+	for i, val := range v.Admissions {
+		if val == nil {
+			res.Admissions[i] = nil
+			continue
+		}
+		res.Admissions[i] = unmarshalUserSessionWorkloadAdmissionResponseBodyToTypesUserSessionWorkloadAdmission(val)
+	}
+
+	return res
+}
+
+// unmarshalUserSessionWorkloadAdmissionResponseBodyToTypesUserSessionWorkloadAdmission
+// builds a value of type *types.UserSessionWorkloadAdmission from a value of
+// type *UserSessionWorkloadAdmissionResponseBody.
+func unmarshalUserSessionWorkloadAdmissionResponseBodyToTypesUserSessionWorkloadAdmission(v *UserSessionWorkloadAdmissionResponseBody) *types.UserSessionWorkloadAdmission {
+	res := &types.UserSessionWorkloadAdmission{
+		ID:   *v.ID,
+		Tier: *v.Tier,
+		Name: v.Name,
 	}
 
 	return res

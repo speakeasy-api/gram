@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"log/slog"
 	"net"
 	"net/http"
@@ -17,7 +19,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
-	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
@@ -42,8 +43,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
-const adminBillingTelemetryEnabledFlag = "admin-billing-telemetry-enabled"
-
 func newAdminStripeClient(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -56,6 +55,25 @@ func newAdminStripeClient(
 		return nil
 	}
 	return client
+}
+
+// resolveAdminAssetStorage never guesses a filesystem location. A gs URI is
+// self-describing; other locations require an explicit backend.
+func resolveAdminAssetStorage(backend, uri string) (assetStorageOptions, error) {
+	if uri == "" {
+		return assetStorageOptions{}, errors.New("assets URI is not configured")
+	}
+	if backend == "fs" {
+		return assetStorageOptions{assetsBackend: backend, assetsURI: uri}, nil
+	}
+	if backend != "" && backend != "gcs" {
+		return assetStorageOptions{}, errors.New("unsupported explicit assets backend")
+	}
+	parsed, err := url.Parse(uri)
+	if err != nil || parsed.Scheme != "gs" || parsed.Hostname() == "" || parsed.Host != parsed.Hostname() || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return assetStorageOptions{}, errors.New("assets backend unresolved: GCS requires a valid gs URI with a bucket")
+	}
+	return assetStorageOptions{assetsBackend: "gcs", assetsURI: uri}, nil
 }
 
 func newAdminCommand() *cli.Command {
@@ -217,10 +235,9 @@ func newAdminCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name: "workos-api-key",
-			Usage: "WorkOS API key for user identity lookups and organization creation. " +
-				"Falls back to the same secret the server and worker read, so a deployment that already sets one does not need a second.",
-			EnvVars:  []string{"WORKOS_API_KEY", "GRAM_IDP_CLIENT_SECRET"},
+			Name:     "workos-api-key",
+			Usage:    "WorkOS API key for user identity lookups and organization creation.",
+			EnvVars:  []string{"WORKOS_API_KEY"},
 			Required: false,
 		},
 		&cli.StringFlag{
@@ -235,6 +252,14 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_IDP_CLIENT_ID"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "idp-client-secret",
+			Usage:    "Client secret for local admin API calls through dev-idp",
+			EnvVars:  []string{"GRAM_IDP_CLIENT_SECRET"},
+			Required: false,
+		},
+		&cli.StringFlag{Name: "assets-backend", EnvVars: []string{"GRAM_ASSETS_BACKEND"}, Usage: "Asset backend (fs or gcs); inferred only from a gs:// URI when omitted"},
+		&cli.StringFlag{Name: "assets-uri", EnvVars: []string{"GRAM_ASSETS_URI"}, Usage: "Shared asset storage location; logos are unavailable when unresolved"},
 		// The server's own flag names and environment variables, so a deployment
 		// already running gram-server needs no new secrets. The encryption key
 		// is the application-wide one, not admin-encryption-key.
@@ -260,31 +285,10 @@ func newAdminCommand() *cli.Command {
 			EnvVars:  []string{"LOOPS_API_KEY"},
 			Required: false,
 		},
-		&cli.StringFlag{
-			Name: "stripe-api-key", Usage: "The Stripe API key", EnvVars: []string{"STRIPE_API_KEY"},
-		},
-		&cli.StringFlag{
-			Name: "stripe-webhook-secret", Usage: "The Stripe webhook signing secret", EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},
-		},
-		&cli.BoolFlag{
-			Name:    adminBillingTelemetryEnabledFlag,
-			Usage:   "Enable PAYG billing telemetry from ClickHouse",
-			EnvVars: []string{"GRAM_ADMIN_BILLING_TELEMETRY_ENABLED"},
-		},
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name: "stripe-price-id-tum", Aliases: []string{"stripe.price_id_tum"}, EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name: "stripe-meter-id-tum", Aliases: []string{"stripe.meter_id_tum"}, EnvVars: []string{"STRIPE_METER_ID_TUM"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name: "stripe-meter-event-name", Aliases: []string{"stripe.meter_event_name"}, EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name: "stripe-portal-configuration-id", Aliases: []string{"stripe.portal_configuration_id"}, EnvVars: []string{"STRIPE_PORTAL_CONFIGURATION_ID"},
-		}),
 	}
+	flags = append(flags, stripeFlags()...)
 	flags = append(flags, clickHouseFlags()...)
+	flags = append(flags, clickHouseReadFlags()...)
 
 	return &cli.Command{
 		Name:  "admin",
@@ -340,10 +344,12 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("failed to create temporal client: %w", err)
 			}
 			chatAnalysisSignaler := analysis.Signaler(admin.ChatAnalysisTriggerUnavailable{})
+			var openRouterSpendCap admin.OpenRouterSpendCapScheduler
 			temporalHealth := []*o11y.NamedResource[client.Client]{}
 			if temporalEnv != nil {
 				shutdownFuncs = append(shutdownFuncs, temporalShutdown)
 				chatAnalysisSignaler = &background.TemporalChatAnalysisSignaler{TemporalEnv: temporalEnv, Logger: logger}
+				openRouterSpendCap = &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}
 				temporalHealth = append(temporalHealth, &o11y.NamedResource[client.Client]{Name: "default", Resource: temporalEnv.Client()})
 			}
 
@@ -375,16 +381,18 @@ func newAdminCommand() *cli.Command {
 			}
 
 			stripeClient := newAdminStripeClient(ctx, logger, guardianPolicy, c)
-			var billingTelemetry *telemetryrepo.Queries
-			if c.Bool(adminBillingTelemetryEnabledFlag) {
-				chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
-				if err != nil {
-					logger.WarnContext(ctx, "billing usage telemetry unavailable; continuing without ClickHouse", attr.SlogError(err))
-				} else {
-					defer o11y.LogDefer(ctx, logger, func() error { return chShutdown(ctx) })
-					billingTelemetry = telemetryrepo.New(chDB)
-				}
+			chDB, chShutdown, err := newClickhouseClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("connect to clickhouse database: %w", err)
 			}
+			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse client", func() error { return chShutdown(ctx) })
+			billingTelemetry := telemetryrepo.New(chDB)
+
+			meterReadConn, meterReadShutdown, err := newClickhouseReadClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("connect to clickhouse read replica: %w", err)
+			}
+			defer o11y.LogDefer(ctx, logger, "failed to shut down clickhouse read client", func() error { return meterReadShutdown(ctx) })
 
 			adminEncryption, err := encryption.New(c.String("admin-encryption-key"))
 			if err != nil {
@@ -437,8 +445,32 @@ func newAdminCommand() *cli.Command {
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
 			trialNotifier := trialemails.NewService(db, loopsWorkflowClient, logger, c.String("site-url"))
 
-			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger())
-			admin.Attach(mux, admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, billingOperations, siteURL))
+			billingOperations := usage.NewBillingOperations(logger, db, stripeClient, billingTelemetry, audit.NewLogger(), meterReadConn)
+			if err := admin.SeedSupportMatrix(ctx, db); err != nil {
+				return fmt.Errorf("initialize support matrix: %w", err)
+			}
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL)
+			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
+			if err != nil {
+				return err
+			}
+			if applicationEncryption != nil {
+				adminService.SetRemoteSessionService(remotesessions.NewGlobalService(logger, tracerProvider, meterProvider, db, applicationEncryption, guardianPolicy))
+			} else {
+				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
+			}
+			assetOptions, err := resolveAdminAssetStorage(c.String("assets-backend"), c.String("assets-uri"))
+			if err != nil {
+				logger.WarnContext(ctx, "Admin logos unavailable; continuing without asset storage", attr.SlogError(err))
+			} else {
+				assetStorage, assetShutdown, err := newAssetStorage(ctx, logger, assetOptions)
+				if err != nil {
+					return fmt.Errorf("initialize admin asset storage: %w", err)
+				}
+				defer o11y.LogDefer(ctx, logger, "shut down admin asset storage", func() error { return assetShutdown(ctx) })
+				adminService.SetAssetService(assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage))
+			}
+			admin.Attach(mux, adminService)
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
@@ -535,4 +567,16 @@ func newAdminCommand() *cli.Command {
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}
+}
+
+// newAdminIssuerEncryption preserves optional issuer setup without accepting a malformed configured key.
+func newAdminIssuerEncryption(key string) (*encryption.Client, error) {
+	if key == "" {
+		return nil, nil
+	}
+	client, err := encryption.New(key)
+	if err != nil {
+		return nil, fmt.Errorf("create remote session encryption client: %w", err)
+	}
+	return client, nil
 }

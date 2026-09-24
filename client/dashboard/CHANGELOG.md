@@ -1,5 +1,401 @@
 # dashboard
 
+## 0.124.0
+
+### Minor Changes
+
+- 1c9ceab: Jump into a project from Cmd+K. The palette now carries a Projects group that matches on a project's name, slug, or id — offered from the moment the palette opens at the organization level, where picking a project is its main job, and once you start typing inside a project, where it doubles as the fastest way to switch.
+
+### Patch Changes
+
+- 85734c6: Load delegable API key permissions for all of an agent's MCP servers in one request instead of one per server, so the create API key dialog no longer fails with lock timeouts on agents with many servers.
+- fce61bb: Serialize project-bound agent creation with project deletion. Show the agent creation empty state when a project has no visible agents, and align settings headings with their visible controls.
+
+## 0.123.0
+
+### Minor Changes
+
+- 36cee24: Create agent keys with a server-scoped permission wizard and manage agent access to MCP servers.
+- 5757d84: Show agent identities and their attached upstream accounts in session management.
+- 6efa45c: Adds the Okta page to organization settings: the connection card with the console checklist, client ID and verification steps, the applications snapshot with on-demand sync, and the Cross App Access readiness checklist with bulk confirmation.
+- 1768893: Offer permission-aware Platform MCP setup and task prompts to non-admin members from MCP troubleshooting, skill workflows, Plugins and organisation home.
+- 40279e9: Organizations now verify a domain before setting up single sign-on. WorkOS refuses to start an SSO connection until a domain is verified, so the IdP and SSO page gains a Domain verification card that opens the WorkOS Admin Portal. Once verified, the card lists every verified domain, because SSO only applies to users on those domains. Until a domain is verified, the Single Sign-On and Directory Sync cards are dimmed, their Configure buttons are disabled, and an amber warning explains why. The setup board adds a "Verify your domain" task that the identity provider task now depends on. Organizations that already have an active SSO connection are treated as verified and are not blocked.
+  
+  The verified domains are kept in sync from WorkOS events: `organization_domain.verified` adds a domain, `organization_domain.deleted` removes one, and `organization.created` / `organization.updated` replace the list from the organization's full domain set. Onboarding status reports `domain_verified` and `verified_domains`.
+- 11c951b: Scope agent MCP credentials to live delegable access, support agent-owned upstream account bindings, and preserve agent identity in sessions and usage views.
+- 8794f71: MCP servers can select an existing organization- or project-owned user session issuer during creation or from authentication settings. Interactive creation prefers a sole organization issuer, requires a choice when several exist, and keeps project-specific issuer creation as an explicit fallback. Organization-owned issuer settings remain read-only from project pages.
+- 391d796: Open your own profile from the sidebar account menu. The avatar and name in the sidebar footer are now the menu's only trigger — the separate dots button is gone — and the menu carries a "View user profile" item that opens your identity page. The item appears only for readers who can open that page.
+
+### Patch Changes
+
+- 8df3dad: Agent API keys can now poll `agent.getPlugins` when the agent holds the new `org:device_agent_sync` grant. The response includes the agent's principal, and plugins resolve for the agent, its roles, and the org wildcard. Adds the agent-runtime-safe `org:device_agent_sync` and `org:hooks_ingest` scopes in registry and delegated-policy version 2.
+- e23ba04: Adds audit feed phrases for Cross App Access readiness confirmations and resets.
+- 5db7eef: Dashboard pages scroll with the browser's own scrollbar. The page header, mode switcher, and assistant composer stay pinned with `position: sticky` / `fixed` instead of living inside an inner `overflow-y: auto` container.
+- de55aca: Allow MCP gateways to use private network ingress from their dashboard settings.
+- 6efa45c: Make the applications list footer an explicit, centered expand/collapse button and keep empty snapshots within their container. Correct Okta admin-console links and verification guidance without presenting unrelated edits as verification times. Describe an existing Okta connection without prompting the admin to connect again. Group Cross App Access configuration into compact labelled rows with consistent spacing, aligned copy controls, and quieter confirmation metadata. Long values remain available in full on hover and copy without breaking the table layout. Correct small copy-button padding and accessible labels. Highlight the entire copied value line when its copy button is hovered or keyboard-focused.
+  
+  Distinguish saved Cross App Access confirmations from actual Okta connections. Guide admins to review and reuse existing connections before creating new ones, edit saved settings without clearing them first, and recover cleared confirmations with Undo while staying on the page. Preserve recorded application references when editing without a replacement. Vertically center Cross App Access row content alongside the multi-line Okta configuration.
+  
+  Link issuer-URL guidance directly to Okta Applications and include the Resource Server → Cross App Access navigation path, distinguishing Issuer URL from Okta’s separate Audience/tenant ID.
+  
+  Clarify that saved confirmations do not verify Okta configuration or access, without implying that Okta has no connection API.
+  
+  Complete the Connect checklist from existing authentication and API-read verification results. Distinguish unchecked steps from those needing attention, and show fully verified setup as six of six complete without claiming specific Okta role assignments were inspected.
+  
+  Simplify setup, application updates, and Cross App Access wording for organization administrators. Explain permissions and token protection, retain exact Okta field names, and distinguish unverified settings from successful access checks.
+  
+  Organize Enterprise Managed Auth under Team → IDP and SSO, separate from employee single sign-on. Add a provider overview and an Okta workspace for Setup, Applications, and Cross App Access and independent provider-specific setup flows.
+  
+  Clarify that the AI Agent setup registers Speakeasy in Okta rather than creating a Speakeasy assistant. Restrict Okta console links to HTTPS on supported tenant domains, keep Undo independent across upstream issuer identities, and use consistent application-update labels. Strengthen checklist evidence, provider delegation, and tab navigation regression coverage.
+  
+  Keep initial Okta onboarding focused on adding the organization URL. Hide workspace tabs, setup progress, and Cross App Access instructions until a connection exists, and offer only the custom-app creation path until catalog availability is verified.
+  
+  Move the AI agent ID fields and Save action into the agent-creation checklist step, preserving draft edits when collapsed and opening the step for existing agent setup links.
+  
+  Replace obsolete agent Delegations instructions with the current registration, permanent user-access app binding, Client registration, User access, and Resource connections sequence. Explicitly distinguish the API Services management credential from agent authentication, require separate runtime configuration before activation, and clarify that recorded IDs do not provision or verify delegated access.
+  
+  Replace the non-actionable agent registration checklist with optional existing-agent ID recording. State that this setup does not connect agent authentication, and remove prompts to configure unsupported client registration or user access settings.
+- 6efa45c: Show seven applications initially with expand and collapse controls. Clarify Okta setup next steps and verification recovery, validate client IDs before submission, and preserve unfinished Cross App Access confirmations for retry after partial failures.
+- 6efa45c: Splits the Okta AI agent setup into separate checklist steps, ending with setting up a first Cross App Access connection. Speakeasy now ticks the linked app steps from the applications sync, flags a linked app that is inactive or has nobody assigned, and collapses the checklist once setup is complete. The checklist moves above the connection details.
+  
+  The checklist item `key` is now an enumerated value in the API. The Okta settings code is reorganized by tab with no change in behavior, and links to settings URLs that were never released are removed.
+- 6efa45c: Okta readiness dashboard: gate the applications snapshot on a clean verification and explain a degraded connection inline, scroll to the connection card after verifying, show when a degraded check ran, confirm before resetting a Cross App Access confirmation, surface confirmed rows under the Needs action filter, fit the readiness table at 1440px, disambiguate duplicate app instances, say Speakeasy consistently in the console checklist, move Sync now feedback to a toast, and fold the Okta page into the Identity page as concern tabs (`identity?tab=sso|provider|applications|cross-app-access`; `/okta` and `identity?tab=okta` redirect there) with a vendor-neutral provider picker. The console checklist is now two groups, Connect and Cross App Access setup, with the steps a verification can observe ticked automatically, the per-app steps left to the Cross App Access tab, and the agent credential step deferred until the token exchange consumes it.
+- 7ce576e: Open your identity overview by clicking your name inside the sidebar account menu.
+- 9a08893: Risk Events can be filtered by MCP server, and findings from MCP tool calls now show up there with their server, tool and enforcement outcome even when no chat is attached.
+- 1d2bc0f: Watchdog evidence cards can now show the message behind a finding. In the signal drawer, a chevron after each card's session title shows the full message the finding was flagged in, clicking the title opens the session transcript scrolled to that finding, and a link opens the session in Agent Sessions. Flagged secrets and PII stay masked in the expanded message. These controls only appear for users with the `chat:read` scope.
+
+## 0.122.0
+
+### Minor Changes
+
+- ddc0c6c: Explore filters pick their values from what the dimension holds inside the window, with a count beside each, instead of being typed blind. A value that is not listed can still be typed.
+- db02c08: Explore runs a query when you press Run: a run scans the dataset across its whole window, so nothing runs as a side effect of editing. The window opens on the last 24 hours, filters sit above the measures in the builder, and the results panel names the query it answers. Timeseries charts draw with a summary table beneath them; tables and number tiles draw the whole-window figures.
+- a5c64f9: Add the Explore page (preview) to the Observability navigation, behind the `gram-explore` rollout flag: a query builder generated from the analytics catalog, so each dataset reconfigures the measures, filters, and breakdowns it offers.
+- 85ad1d0: Add a metered-product spend breakdown endpoint and stacked billing chart for agent session storage, per-scanner risk scanning, and MCP egress. Show exact server-calculated estimates at current PAYG list prices with daily, weekly, monthly, cumulative, product, and date-range controls. Inference, credits, discounts, taxes, and billing adjustments are excluded; these ordinary-usage estimates are not invoices.
+  
+  Restrict spend estimates to PAYG organizations using server-owned availability. Other plans return `unsupported_plan`, empty products, and a `"0"` total without querying usage; the dashboard hides the entire spend section while retaining the ordinary usage explorer.
+- 728a2bb: Label workload sessions on the MCP Sessions page. `userSessions.list` now returns a `workload` object for `workload:` subjects, with the workload issuer's name and URL, the external subject, the assigned agent and its state, and every admission (project or organization tier) currently letting the workload in. The dashboard marks these rows as workloads rather than people. The revoke dialog lists the controls that can stop a workload, from narrowest to widest, and shows which ones stop it from reconnecting. Revoking a workload session ends only that session: the workload can exchange a new token and reconnect.
+
+### Patch Changes
+
+- 7ea4e5b: Adds audit feed phrases for identity provider connection actions.
+- df903af: Adds the audit feed phrase for identity provider applications sync requests.
+- ac147cd: Link the cost breakdown chart to the table beneath it: rows carry their bar segment's swatch, hovering either one spotlights the other, and clicking a bar segment drills into that group without throwing away your scroll position. Retune the shared chart palette so the Costs and MCP & Tools boards read as one system, and give trend colours their own dark-mode steps.
+- f8e5896: Open project links in their owning organization instead of combining the active organization with a project from another workspace.
+- e9df905: Add an optional second step in Platform MCP setup for bringing existing remote MCP servers from Claude Code into Speakeasy management. The reviewed workflow verifies the agent's connection, requests informed discovery consent or a sanitized manual inventory, and prefers catalogue entries matched by endpoint or confirmed provider/name before using custom URLs. It confirms the destination and selected servers and reports each registration separately. Authentication stays in Speakeasy without migrating local credentials.
+- 72128df: Include all PAYG metered prices in Checkout, preserve resumable billing setup, and apply trial conversion only after confirmed completion. Handle delayed completion and subscription deletion without losing inference-key conversion or post-checkout cleanup, preserve existing Checkout sessions, and show setup actions only to eligible users.
+  
+  Remove the obsolete platform-admin TUM contract controls and contract price estimator from the billing page.
+  
+  Show the PAYG risk scanning rate of $0.99 per million tokens scanned and MCP gateway egress rate of $20 per GiB alongside token management pricing.
+  
+  Place Payment beside PAYG pricing on wider screens and stack them on smaller screens. Prioritize payment setup and recovery above usage, keep healthy subscriptions usage-first, and retain the Organization eyebrow at the top of the billing page.
+  
+  Use Agent session storage as the billing product name and Stored sessions for usage labels and charts. Rename the Meter usage section to Usage without changing token-based metering or rates.
+- 5ad2b81: AI integration syncs now stop retrying when the provider rejects the request outright (HTTP 400/401/403/404/422), show the provider's reason on the integration, and pause the schedule after repeated rejections instead of retrying forever. Chat analysis and skill efficacy judging retry transient model failures without failing the background task, and expected API responses such as permission denied or not found are no longer reported as frontend errors.
+- d52b737: Add a structured Remote MCP `probeURL` endpoint with availability, authentication, invalid-response, and unreachable outcomes while retaining the deprecated `verifyURL` endpoint for compatibility.
+- b5e9295: Restore the source management surfaces lost when Sources moved under MCP: source deletion, uploading a new OpenAPI version, the usage, format and deployment-error filters, failed-deployment signalling and row actions on the sources list; the activity panel, editable tools list, versions log and danger zone on the source page; public access, tunnel key rotation, live connections, resource identifier and setup snippets for tunneled servers; upstream URL and source name editing for remote servers; a cascading delete for source-backed servers; and legacy source URLs that resolve to the right page.
+- 9059ae1: Allow staff to enable Tailscale private access for an organization from the admin feature controls without requiring a separate PostHog rollout flag.
+
+## 0.121.1
+
+### Patch Changes
+
+- bba144d: Show the no-data state on a tool usage timeline whose every bucket is empty, rather than a labelled but blank chart, and stop the log detail sheet from holding the previous record's payload on screen while the next one is highlighted — one call's arguments could appear under another call's heading
+
+## 0.121.0
+
+### Minor Changes
+
+- 6f0271b: Capture Pi (pi.dev) sessions, and enforce policy on them, alongside the agents
+  Gram already observes. Pi has no hook configuration dialect to render into and
+  no MCP client of its own: its only integration point is a TypeScript extension
+  loaded into the Pi process. The observability package for Pi is therefore a
+  generated extension that forwards Pi's lifecycle events to the hooks relay over
+  NDJSON stdio, where the existing redaction, credential, and decision paths turn
+  them into canonical hook events. Prompts, tool calls and their results, per-turn
+  tokens and cost, and session start/end all land in the dashboard under the `pi`
+  source, and a policy deny blocks the prompt or tool call inside Pi rather than
+  being reported after the fact.
+  
+  MCP for Pi comes from third-party extensions that bridge servers in as ordinary
+  Pi tools, which leaves tool names as the only signal that a call left the
+  machine. The relay reads the config those extensions share (`.pi/mcp.json`,
+  `~/.pi/agent/mcp.json`), reports the servers a workspace can reach as an
+  inventory snapshot at session start — with credentials redacted — and attributes
+  tool calls to the matching server so Pi traffic is visible to Shadow MCP rather
+  than appearing as unattributed local tools.
+  
+  The package is downloadable per platform from the plugins page, ships in the
+  published marketplace repo for extraction into `~/.pi/agent/` or a repository's
+  `.pi/`, and `speakeasy-hooks install --provider=pi` renders the same extension
+  locally. Pi also joins the setup walkthrough and the shared agent-provider
+  catalog, so it carries its own name and mark everywhere a captured session's
+  source is shown.
+- 8464d04: Add `private_key_jwt` authentication for remote OAuth token exchanges and refreshes. Remote session clients can select an attached organization JSON Web Key Set and configure whether signed client assertions use the issuer URL or token endpoint URL as their audience.
+
+### Patch Changes
+
+- 6f6ab02: Replace the admin trial extension action with Change end date. Operators can shorten or extend a running trial to any future UTC calendar date, with an audit record of the previous and new end dates. New and restarted trials still default to fourteen days.
+- 0fecf64: Assign access challenge roles before resolving requests.
+- 29b0b09: Reduce noisy failures from canceled guardrail workbench evaluations and limit oversized session replays. The workbench now reports when a session contains more messages than the replay can evaluate.
+- 57312da: Grant marketplace repo collaborators admin access so platforms that gate marketplace setup on repository admin — such as Cursor's "Serve Marketplace From Cursor" — can be enabled without editing the repo on GitHub.
+- 57312da: Report adding marketplace collaborators as "Collaborators added" instead of "Plugins published to GitHub" on the plugins list and plugin detail pages.
+- 8fafae0: Remote session issuers can be bound to a tunneled MCP server, so Gram routes persisted issuer metadata refreshes and back-channel OAuth calls through the tunnel when the authorization server is unreachable from the public internet. That covers the whole back channel: the code exchange, token refresh, revocation, dynamic client registration, the issuer's JWK Set, and the userinfo and introspection calls that name a session's owner. Every issuer endpoint routed through the tunnel must be reachable from the same local origin as `TUNNEL_LOCAL_MCP_URL`; the agent pins tunneled requests to that origin while preserving their paths and queries. Discover by URL still uses Gram's direct egress; private issuer endpoints, including the DCR endpoint, can be entered manually in issuer settings. Platform admins can manage the binding from the issuer settings page; tunnel bindings and tunneled dynamic client registration remain platform-admin-only. Adding an MCP Catalogue server whose provider is already set up as a bound issuer is refused rather than registered over direct egress. Replacing a client registration the identity provider no longer recognizes also rides the binding, so a private provider's clients recover on their own instead of failing every login until an administrator re-registers them by hand.
+- e116bae: The dashboard gains a Shadow AI section listing the AI tools running on an organization's devices, split into coding harnesses, assistants, and open model runners, with each tool's logo and its access decision. A new AI scan targets page shows the detection library behind it — built-in targets grouped by kind and collapsed by default, an organization's own targets above them — and lets an admin add a target by pasting its JSON or by fetching it from a URL.
+- 4918df0: The Watchdog page now shows when risk analysis last ran: "Analyzing now", "Last analyzed 4m ago", or "No recent analysis". The same status is available as `risk.getAnalysisStatus` in the management API and as the `get_risk_analysis_status` Platform MCP tool.
+
+## 0.120.0
+
+### Minor Changes
+
+- c7fa413: Surface the MCP catalog as a tab on the MCP page, next to MCP Servers, Sources and Deployments. The catalog keeps the same Add-from-catalog flow and now lives at `/mcp/catalog` rather than inside the add flow; `/catalog`, `/sources/add-from-catalog` and `/mcp/add/catalog` all redirect there, and "From the catalog" on the Add MCP server page still leads to it.
+  
+  Catalog entries are also searchable from the command palette, in an "MCP Catalog" group kept separate from the "MCP Servers" group so a third-party server you could add is never mistaken for one the project already runs. The group appears once you start typing, and selecting an entry opens its catalog page.
+- 8710c79: Add incremental meter usage reporting for stored-message tokens, MCP ingress/egress bytes, and risk-scanning volume. The additive `usage.getMeterUsage` API returns exact integer daily totals and bounded facet breakdowns for UTC-midnight windows up to three calendar months. The API and dashboard report ordinary usage only; correction readings are excluded.
+  
+  The billing explorer now uses these readings while retaining independent contract-position and invoice estimates. Totals, daily averages, chart axes, and breakdown rows use compact KTok/MTok/BTok or binary KiB/MiB/GiB units, with full values available on hover. Project breakdowns show available project slugs consistently in charts and tables, falling back to IDs when unavailable. Switching breakdowns keeps the chart and legend synchronized, including transitions between total-only and stacked views. Reset sits beside the period controls and matches the Refresh button's sizing. API deployments must configure the dedicated `CLICKHOUSE_READ_*` connection with a SELECT-only reader before rollout; meter reporting never falls back to the writer connection.
+  
+  Insert-triggered materialized views maintain daily SummingMergeTree series without historical rebuilds. Queries sum unmerged increments and rank series in storage order with bounded top-six state. Duplicate deliveries count unless prevented by the producer or corrected out of band; raw-table replacement merges do not retract summary contributions. The single schema migration does not backfill existing readings, and no summary worker or publication privileges are required.
+
+### Patch Changes
+
+- f5fb216: Operators can start or restart an enterprise trial from the admin organization overview trial panel, including orgs that never trialled and expired trials that have not converted or been demoted.
+- 8936131: Gateway server instructions are editable: the gateway settings tab gains an Instructions section, and the metaMcp update endpoint accepts `instructions` and `instructions_mode`. Custom text is appended to Gram's built-in drill-down guidance by default, or replaces it when the mode is set to replace. Gateways without custom text keep serving the built-in text.
+- 1c632ce: Recover automatically from expired upstream dynamic client registrations. Remote session clients now record the expiry the identity provider reported at registration. When a provider stops recognizing a client (`invalid_client` on refresh), Gram confirms it against the token endpoint and re-registers the client in place at the identity provider's registration endpoint before the next login, revoking the sessions bound to the old client. Organization administrators can also rotate a client on demand from its settings page.
+
+## 0.119.0
+
+### Minor Changes
+
+- 8b5b56f: Add rollout-gated Tailscale private network setup and hosted MCP server network access controls.
+
+## 0.118.0
+
+### Minor Changes
+
+- 4147092: Setup's Enable logging step now says that an admin sees only their own agent sessions by default, and offers to create a Session Auditor role carrying chat:read and add the admin to it, so the Confirm traffic step can see the conversation an Anthropic inference hook delivers. Once traffic is confirmed, the step offers to take the role back off them again. Directory-synced organizations create the role and map it from a directory group instead.
+- 67f9908: Move platform issuer management out of the dashboard to standalone admin, while preserving tenant issuer management and read-only access to inherited platform providers.
+- cfe318b: Bring back the linear setup wizard at /setup/wizard, walking the board's cards in order, with a header button that swaps between the board and the wizard.
+
+### Patch Changes
+
+- e28870b: Expose standalone admin global issuer management and regenerate SDK metadata while preserving legacy internal SDK operation naming.
+- e65573a: Stop policing the shape of an AI scan target config dir. Any path the device agent can resolve is accepted, including one written with a trailing slash such as `~/Library/Application Support/com.openai.chat/`.
+- 6d2ded6: Show project names instead of project IDs when choosing MCP servers for a killswitch.
+- 3606376: The risk policy create and update endpoints no longer accept the policy-level `message_types`, `scope_include`, and `scope_exempt` fields. New policies leave those legacy columns empty and updates carry stored values forward unchanged; scope through `detection_scopes` instead. The fields remain readable on a policy until the legacy scope migration folds them. The dashboard's secrets guide now scopes its default policy through a detection scope.
+- 9ca6e44: The setup board gains a Set up LiteLLM card, hidden by default until a platform admin reveals it. Its page creates a LiteLLM instance in place, shows that instance's proxy environment, guardrail fragment, and verification requests exactly as the AI Integrations page does, and confirms traffic from the instance's connection diagnostics. LiteLLM guardrail events no longer count toward the other-platforms card.
+- b2454d5: Setup wizard rail rows are no longer focusable or announced as buttons while a card's completion is settling.
+
+## 0.117.0
+
+### Minor Changes
+
+- 2cdbf54: Add a "Set up Anthropic observability" card to organization setup that turns on Anthropic inference hooks, which capture ordinary Claude conversations rather than only the ones a coding agent has. Speakeasy mints the endpoint Claude posts each conversation to; the card walks an admin through Claude.ai's own inference hook settings in one pass — pasting the endpoint, switching Enforce verdicts on, starting the rollout in Shadow mode — and saves the signing secret Claude reveals. It confirms traffic from the conversations the hook delivers rather than from hook events, which an inference hook never produces. The webhook URL and signing secret controls are now shared with the integrations sheet instead of written twice. The marketplace, Cowork and Claude Code card keeps every section it had under the name "Set up Anthropic admin controls", and is hidden by default.
+- 1f69b26: Reshape organization onboarding around outcomes. "Connect identity provider" and "Directory sync" merge into one "Set up identity provider" card; publishing the plugin marketplace becomes a section at the front of the cards that need it instead of a card of its own; Claude Code and Claude Cowork (which the device agent cannot reach) move into a new "Set up Anthropic observability" card and every other coding assistant into "Set up observability in other platforms"; and confirming traffic becomes the last section of both of those cards, filtered to the platforms each one covers. Claude Code and Claude Cowork each get a step of their own on the Anthropic card, with every platform's instructions laid out inline in its step instead of behind a sheet. The board is now the only way into setup: the linear wizard at /setup/wizard and the Wizard/Board switcher are gone, and that URL lands on the board.
+- 20d276c: Edit an MCP server's access one scope at a time, from a single list. Each principal — everyone, a person, a role — gets a row showing whether it can connect, view and manage the server, and each of the three can be changed on its own. A role that reaches the server through an organization-wide rule can now be narrowed or closed for that one server without touching the role elsewhere. Taking connect away no longer takes view and manage with it.
+
+### Patch Changes
+
+- fd2c0c1: Remove the Beta badge from the Risk Events and Shadow MCP page headers. The sidebar entries for both pages dropped their Beta label earlier, so the page titles now match the navigation.
+
+## 0.116.0
+
+### Minor Changes
+
+- 3b59a94: Add agent-safe runtime scope metadata and independent agent management capabilities to authorization APIs and custom roles.
+- 82beb97: Add human-only direct policy CRUD for first-class agents with allow-only runtime-safe grants.
+- 25d1e5f: Add human-only APIs and setup controls for creating and managing first-class agent principals.
+- 5ee3df1: Add durable agent owner-loss handling and human-only transfer and reassignment APIs.
+- 2a8a212: feat: manage the Shadow AI scan targets your device agents probe for from the Device Agent configuration tab
+  
+  Organization admins can add their own targets, switch a Speakeasy default off and back on, and edit or delete the targets they added, from a new section on the Device Agent Configuration tab. Targets are entered as tags: a comma, Enter, or Tab turns the typed text into a chip.
+- 42ec185: Connect Anthropic inference hooks from organization settings without environment variables. Receive signed Anthropic Enterprise inference hooks, archive deduplicated conversation history, and enforce project security policies before inference.
+- 08310ee: Allow disabling a project's observability plugin so it is omitted from the published marketplace and is not installed by the device agent. Marketplace settings changes are recorded in the audit log.
+- 7df2aa5: Let users choose provider-hosted or Gram-hosted OAuth metadata and safely switch existing configurations after reviewing live discovery results.
+- 56b3a81: Set up Platform MCP from headless mode instead of a separate settings page, and keep old `/platform-mcp` links working by redirecting them there.
+- 762cce3: Issuer metadata discovery now probes every well-known candidate and merges same-issuer OpenID Connect and RFC 8414 documents, so fields a provider publishes only in one of them (`jwks_uri`, `claims_supported`, ID token signing algorithms) are captured. Discovery and refresh also record the issuer's userinfo and introspection endpoints, back-channel logout and RFC 9207 support, and keep every member of the merged documents; the create forms accept the same fields so an issuer created from a discovery result carries them immediately.
+- fbf5d43: Manage killswitches from the Access tab of the person they restrict, instead of a separate organization-wide Killswitch screen. Listing, creating, editing, lifting and the full version history of a killswitch all happen on that person's page; team, connection and session entry points open it. The killswitch mark beside a person's name is now an icon whose hover text says what the state stops. The retired Killswitch addresses redirect: the roster to Identities, and a single killswitch to its subject's Access tab with that record open, so audit-log links still land on the exact record. A link onto a person opens the project and time period it was read from, rather than resetting to the default.
+- 03f3311: Unify how MCP servers are added: every way in starts from the MCP page, with the catalog, remote and tunneled servers, and an Advanced group covering OpenAPI documents, functions, and building a server from a source the project already has. Remote servers must verify connectivity before they can be saved.
+  
+  Sources move under MCP rather than going away: a shelf at `/mcp/sources` and a page per source showing its file, the tools it produced, the deployments it is versioned by, and a download. Deploying a function now offers the flow that builds a server from it, scoped to the right project, instead of the dashboard root.
+- 62c2b7d: Administer who can use an MCP server from the server's own Access page: grant people and roles, set what each one can do, and narrow a rule to particular tools or to tools carrying an annotation. Role authoring moves onto its own page, where permissions are picked from one searchable menu and narrowed on their own row.
+- 4dc6bcd: Project settings now show the project's display name and slug, and project admins can update the display name.
+  
+  The new session-authenticated `projects.update` endpoint validates and audits display-name changes, and the dashboard updates its project cache after a successful rename.
+- b2975df: Restore the Wizard/Board switcher on organization setup, bringing back the linear setup wizard at /setup/wizard alongside the board.
+- 16760a4: Add project-scoped risk finding data exports that deliver new, non-excluded findings as privacy-safe OTLP log events without exposing matched content.
+
+### Patch Changes
+
+- 7c5f3b7: Allow API keys to be bound to an authorized project during creation, while keeping organization-wide keys as the default. Display project bindings separately from permission scopes.
+- c1dce38: Gateway activity now hides members no longer on the gateway, hook-observed calls on a gateway URL classify as the gateway instead of shadow MCP, and the activity charts link to the tool logs and insights pages filtered to that gateway.
+- de720fa: Keep Dashboard SDK product-feature contracts aligned with the standalone Admin API extraction.
+- 60f17e8: Keep the Observability sidebar group open on identity pages, add a breadcrumb back to the roster from an identity, and even out cell sizes and spacing on the identity roster.
+- 6699e08: Redirect to the login page after account-menu logout. Chromium never settles a fetch whose response includes Clear-Site-Data: "cache", so that directive is omitted. The page still navigates if logout rejects or stalls.
+- 3c10720: Reorganize the MCP server Authentication settings into separate rows for session length, client access and connected services, and move the verified client catalog and your own allowed client URLs into one table.
+- fc5aa7b: Replace the full-width organization setup banner at the top of every org page with a persistent "Finish organization setup" entry in the sidebar footer, and put the organization home headline on one line.
+- c30bb11: Policy setup now saves message type selections as category detection scopes, preserving the scopes a policy's other categories relied on.
+- 7ef5eb3: Show gated features on preview environments when a flag is missing from the dev PostHog project, while still honoring flags that are explicitly turned off.
+- 825df72: Removed the legacy session-aware `/register` compatibility flow. Stale links now redirect directly to `/sign-up`.
+- 27dada0: Restore the Cowork manual setup callout in organization onboarding.
+- f3b7efa: Restore the grid/table view toggle on the MCP servers and sources lists and the plugin skills section, add a search box to the Environments page, and bring back the source page's MCP servers list, OpenAPI document and function manifest viewer, and function runtime and sizing details.
+- 4e1fef3: Organization setup gets its "Enable logging" step back, in both the wizard and the board, with a single switch that turns on Enable Logs, Record Tool I/O, and Agent Session Capture together. The board marks the task done on its own once all three are on, and the wizard resumes past it. New organizations still start with the bundle enabled.
+- 27dada0: Improve organization setup task ownership, support escalation, completion persistence, traffic verification, and responsive layout.
+- 8c4d047: Preserve typed agent policy selectors in create and update request bodies and regenerate the dashboard API client contracts.
+- 4257942: Highlight one category at a time in the Watchdog exposure bar by dimming the other slices on hover, and give Custom Rules its own color so no category reads as inactive grey.
+- 4e1fef3: The organization home "enterprise rollout" card now opens the linear setup wizard it describes instead of the setup board.
+
+## 0.115.0
+
+### Minor Changes
+
+- 32500ca: Add the feature-flagged multi-owner organization setup board and generated setup task SDK methods.
+
+## 0.114.0
+
+### Minor Changes
+
+- f985a39: Attach a JSON Web Key Set to a remote session client. `remoteSessionClients` and `organizationRemoteSessionClients` each gain `attachKeySet` and `detachKeySet`, which set and clear the client's `json_web_key_set_id` behind the `customer_managed_encryption_keys` entitlement; the rest of client management stays ungated. The set must belong to the client's organization, a client that declares `private_key_jwt` cannot be left without one, and `jsonWebKeySets.delete` now refuses a set a live client still references, with `jsonWebKeySets.getDeletePreflight` reporting the clients that would block it.
+- 1629347: Add contextual Killswitch status and actions to Team and MCP session surfaces, with safe member/server prefill and direct audit links.
+- 0570bd9: Add project-scoped data export configuration under the organization Data navigation.
+- 0809b17: Remove MCP collections. The `collections` service and its `/rpc/collections.*` endpoints are gone, along with the Collections pages and sidebar entry, the Publishing section on MCP server settings, the collection group panel in access grant rules, the "Catalog kind" filter on Sources, and the Collection origin label on catalog sources. Collection audit actions are no longer recorded or rendered. The backing tables and the `organization_mcp_collection_registry_id` column are dropped in a follow-up migration.
+- 3cec1a4: Show organization-scoped Shadow AI detections on each employee identity's Connections page, including device counts, signals, detected versions, and first and last seen activity.
+- fa05d58: Tunneled MCP source settings gain a Resource Identifier section for recording the server's RFC 9728 protected resource identifier, which routes user credentials to the server by exact match. Clearing the field unsets it. The creation form also accepts the identifier upfront, for operators who already know it.
+
+### Patch Changes
+
+- f284c2b: Data Exports now loads with a bounded number of requests for organizations with many projects.
+- 2ac3d62: Keep Explore demo org reachable from the account menu after the trial welcome banner no longer shows it.
+- aa0eddf: Stop reading and writing the collection registry link on external MCP attachments. `organization_mcp_collection_registry_id` no longer appears on deployment or catalog responses, is no longer accepted when adding an external MCP server, and is no longer copied when a deployment is cloned. Attachments that were published from a collection kept a null registry id; they still describe, but can no longer be redeployed. The column itself is dropped in a follow-up migration.
+- 1014d72: Fix the "Explore demo org" item in the account menu doing nothing when clicked. Route helpers silently stubbed out `goTo` for absolute-path routes such as `/explore-demo`, so the click closed the menu and stayed on the current page. Absolute routes now navigate the same way every other route does.
+- 38325d2: The gateway Activity section now labels its stat tiles and time series as dispatched calls, and when agents used the discovery tools without executing anything, the empty states say so instead of reporting no tool calls beside a populated gateway tool usage chart.
+- b8d1eea: Show gateway activity on the Gateway Endpoint overview (usage scoped to the gateway, discovery funnel, calls by member) and activity markers on gateway cards in the MCP listing
+- 9dbeb4e: Gateways can now add hosted MCP servers as members directly from the Add member picker; previously only servers that already had a standalone MCP server entry were offered. A gateway also no longer serves a hosted member whose MCP server is turned off. The detail sidebar's readiness and at-a-glance counts now update live when members change, instead of waiting for a reload.
+- 12f11ca: Gateway endpoints: fix dashboard issues found in prod E2E testing. Deleting a tunneled MCP source no longer leaves its confirm dialog stuck on "Deleting…" — the mutation no longer blocks on refetching the just-deleted resource, so the dialog closes and navigates on success. The gateway add-member sheet no longer implies unproxied or slugless servers can be added: the copy is corrected and their Add button is disabled (the backend rejects them), while disabled servers can still be added but stay excluded from serving.
+- b2defd1: Polish the gateway UX on the MCP listing and detail pages: gateway cards show their member servers' logos and a status dot consistent with server rows, the listing copy and table columns account for gateways, member management (reorder, add, remove) moves onto the Overview tab and the separate Members tab is removed (its URL redirects to overview), detail-page tab switches scroll back to the top, the gateway sidebar URL truncates instead of wrapping mid-token, absent MCP metadata no longer replays 404 requests on every remount, and team-access rows (gateways and MCP servers alike) click through to the Access page's pre-filled grant dialog — "No access" cells deep-link the specific missing scope. Clickable table rows across the dashboard now highlight more strongly on hover.
+- 6793315: Add gateway telemetry query support: observability overview meta MCP filter, gateway usage endpoint (funnel + member breakdown), and gateway rows in MCP activity
+- 54fdd25: Hosted (toolset-backed) MCP servers resolved through `mcp_endpoints` now derive their identity from the resolved endpoint and `mcp_servers` wrapper instead of the toolset columns. The well-known OAuth documents key the OAuth slug and resource URL on the endpoint the request arrived at; session mint accepts any issuer-gated `mcp_server_id` and builds the issuer URL from the server's primary endpoint, with `toolset_id` mints resolving to the wrapper when one exists; the install page takes publicness and security mode from the wrapper (the toolset's external OAuth reference remains the only toolset input) and the install URL from the endpoint; instance MCP URLs come from the wrapper's primary endpoint. Legacy toolset paths are unchanged for servers without a wrapper, and no toolset-backed wrappers exist in production yet, so no traffic changes on deploy.
+- ec94eae: Add Identities as an org-level section: an index of every person and agent the organization has seen, whether or not they have an account here, and a page per identity gathering their access, usage, security, cost, devices and activity from every subsystem. Each tab answers its own question rather than repeating a list — tool calls carry their failure share, cost shows where the tokens went and what came from cache, activity plots the rhythm a row list cannot — and figures are ranked against peers for the same window, since a bare number cannot be read without one. Overview flags anyone working through a personal AI account rather than the team one.
+  
+  Person references across the dashboard link here, including the budgets tables, project home top-user cards, chat transcripts and killswitch detail; names on row-click surfaces are now real anchors, so they support cmd+click and copy-link. Employee Enrollment folds into the index and its old URL redirects.
+  
+  Also fixes shared chrome this surfaced: avatar tints follow the theme instead of always emitting light-theme values, and the sidebar's current page keeps its own marker so hovering elsewhere no longer hides where you are.
+  
+  The Usage tab filters by AI account class — all, team, or personal — so the work someone puts through a subscription the organization does not govern can be read on its own, and the choice rides in the URL. Linked accounts and managed devices carry their provider and platform marks, and ranked figures are written compactly so a ten-digit token count no longer overruns its column onto the bar beside it.
+- f3375dc: Filter the Identities index by the things an administrator actually asks it: enrollment, how recently someone was last seen working, the agent coverage on their managed devices, the roles they hold, and the department and team their identity provider reports. Personal-account usage gains its own yes/no question, so the people holding an account the organization does not govern — and the people holding none — can each be read on their own.
+  
+  A filter only appears when the data behind it has something to say: an organization with no device integration connected sees no device filter, and one with no directory synced sees neither department nor team, rather than a control whose every option empties the table.
+- ec94eae: Identity page widgets now honour the selected time range. The audit trail, authorization challenges and per-person shadow MCP servers were reading their whole history regardless of the picker, so a 7-day view could report 233 findings alongside a device's worth of activity from a year ago and give no sign the two were counted over different periods. `auditlogs.list`, `access.listChallenges` and `access.listShadowMCPInventoryServersForUser` take optional `from`/`to` bounds — half-open, and absent bounds still return the whole history for every existing caller — and the Overview, Activity, Access and Security tabs pass the window they are showing.
+  
+  Managed devices deliberately stay outside the range: it is the current MDM inventory rather than a stream of events, and a machine that has been quietly missing its agent for a month is exactly the one worth seeing. The panel and the Overview tile now say so instead of leaving the reader to assume the picker applied.
+  
+  Each widget also shows a skeleton shaped like what it is loading rather than its empty state, so a panel that has not answered yet no longer claims there is nothing to report, and the detail page keeps room below the last panel instead of ending flush with the viewport.
+  
+  A failed read is now told apart from a quiet window everywhere on these pages. Panels whose request errored say so and offer a retry instead of rendering "no roles assigned", "no managed device assigned" or "not enrolled" off data that never arrived, and the Cost and Usage tiles show a dash rather than `$0` when the metrics request fails or the identity carries no identifier the endpoint can key on. Two narrower cases go with it: an address claimed by more than one member no longer resolves to whichever came first, so the Access panels cannot show a stranger's roles; and the shadow-MCP lookup deduplicates and bounds the identifiers it sends, since an over-long list was rejected outright and read on screen as "no shadow servers".
+  
+  Audit actor names resolve through the reading organization's memberships rather than straight at the global directory, so an actor id that never belonged to the organization falls back to the stored value instead of naming someone from another tenant. Soft-deleted memberships still resolve — a departed member is exactly the actor whose name the feed is meant to keep.
+  
+  Retrying a failed panel now re-runs only the reads that actually failed. A query held behind a permission or a missing identifier never errors, but an explicit refetch runs it anyway, so a blanket retry could have asked for audit logs with no actor filter or for the viewer's own chats without `chat:read` and rendered either under the subject's name. A failed _refresh_ also keeps the rows it already had — those were really returned — and says above them that they are no longer current, rather than blanking a panel that still has something true to show. The Overview stat row picks up the dash treatment the Cost and Usage tiles already had.
+  
+  Identity links are gated on `org:read`, matching the page they lead to: previously an org reader lost the link while a project reader got one to a page they cannot open. Authorization challenges fall back to the Gram user id rather than the WorkOS one, which is what the authz engine records principals against — the WorkOS id matched nothing, so the panel reported a clean history for people who may not have one.
+- 470d6d6: Give Platform MCP onboarding sheets a visible bottom gutter so the last card no longer sits flush against the sheet edge.
+- 424d211: New organizations now have Enable Logs, Record Tool I/O, and Agent Session Capture on by default. Existing organizations are unchanged, and org admins can still turn the settings off.
+- 81e2a93: Unify MCP slug availability across toolsets and mcp_endpoints into a single namespace per address scope. A shared check (spanning both `toolsets.mcp_slug` and `mcp_endpoints.slug`) now backs `toolsets.checkMCPSlugAvailability`, `mcpEndpoints.checkMcpEndpointSlugAvailability`, toolset MCP slug updates, and MCP endpoint create/update, so an endpoint can no longer be created with a slug a live hosted (toolset-backed) server still resolves under, and vice versa. Owner exclusions let a hosted server's mirrored address validate against itself. The dashboard endpoint-slug validation hook drops its second RPC now that the endpoint check covers both tables.
+- 12b280d: The Watchdog page now explains the org risk score with an info tooltip: each signal's score is inherited from its policy, and the overall score weights the most severe signal, the average of the top signals, and the total number of findings rather than a plain average.
+
+## 0.113.0
+
+### Minor Changes
+
+- b482d24: Custom domains now support apex/root domains, which cannot carry a CNAME record. The server advertises its static ingress IPs (new `GRAM_CUSTOM_DOMAIN_A_RECORDS` setting) through `domain.list`'s new `dns_config` field and a per-domain `suggested_record_type`, and the setup wizard offers A-record instructions with a CNAME/A toggle. DNS verification tolerates slow propagation: instead of failing fast on missing records, registration polls with capped backoff for up to 24 hours (under a row-scoped workflow identity) and "Check now" wakes the pending check immediately. Routing and health checks judge A-record setups against the configured ingress IPs (flagging stray A or AAAA records), and health emails name the record type that fits the domain.
+  
+  A default MCP server can now be staged while configuring the domain: `domain.register` creates the pending domain synchronously and returns it, the new `domain.listRootMcpServers` endpoint lists every eligible server in the organization, and `domain.setRootMcpEndpoint` accepts an `mcp_server_id` — attaching the server to the domain (creating its endpoint from the server slug) and mapping it to the root in one call, before DNS cuts over. Migrations from another MCP host can therefore configure everything up front and let cutover converge asynchronously.
+  
+  Reconciliation no longer marks a domain verified or activated without the TXT ownership proof, closing a path where settings updates could activate an unverified domain.
+- 3497998: Default CIMD client admission to `open` for issuers that were never configured, instead of the internal `reporting` mode. No client that authenticates today stops authenticating: both modes admit every spec-valid client ID metadata document. What changes is that the resting policy is now a real, readable, operator-changeable value: new issuers are created as `open`, the settings page shows Open selected with its warning rather than nothing selected, and `presets` enforcement becomes something an operator opts into rather than a default anyone lands on.
+  
+  Catalog-gap measurement survives the change. An open-mode admission still computes what `presets` would have decided and records it on `cimd.admission.decisions`, under the new `admitted_open_not_listed` outcome for a client no rule covers.
+  
+  The custom client URL list now follows the unsaved selection in the admission mode field, so the URLs that `presets` enforces can be added before switching to it rather than after.
+- 912e95b: Consolidate the billing page: pay-as-you-go organizations now get the same token usage view as enterprise (usage card, breakdown chart, details table) with the invoice estimate at its head, sections are ordered Usage → Inference caps → Plan → Billing notifications, and organizations with no recorded usage see an explicit empty state instead of a blank chart.
+- fbd07b1: Support GitHub Copilot as a fifth observability platform. Copilot hook events
+  are accepted on the unified ingest path — its native camelCase event names
+  resolve to the same canonical events the other platforms report, so Copilot
+  sessions show up in the same timelines, spend gates, and policy checks. The
+  dashboard offers a downloadable Copilot plugin package (root `plugin.json`,
+  `hooks/hooks.json` in Copilot's own dialect, and bash plus PowerShell
+  bootstrappers) with a hooks-scoped key already embedded, and a root
+  `marketplace.json` so Copilot installs that package rather than falling
+  through to the Claude one.
+  
+  Hooks fire in Copilot CLI only. MCP servers and skills from the same plugin
+  load in VS Code and the Copilot app, but those surfaces never fire hooks, so
+  they report no telemetry.
+- 2ed1222: Collapse gateway auth setup into defaults: creating a meta MCP server mints its sign-in issuer, attaching a member binds its OAuth client to the gateway issuer, the Inspect tab diagnoses anonymous sessions, the member sheet links catalog install-and-attach, and Attach Provider stays available after the first provider
+- d6604a5: Gateway Endpoints can now be created and managed from the dashboard, behind the `gram-gateway-endpoints` rollout flag. A gateway is one MCP endpoint fronting a curated set of MCP servers, so it appears in the MCP inventory alongside hosted and remote servers and gets its own detail page: Overview (canonical URL and member summary), Members (add, remove, reorder), Inspect, Clients and Sessions, and Settings (name, addresses including custom domains, authentication, delete). Creating one asks for a name and provisions a default address.
+  
+  Inspect reads the endpoint live over MCP and shows exactly what a client receives — the tool surface, the instructions sent on connect, the current `list_servers` state, and a `describe_server` drill-down — rather than anything derived from dashboard state. It connects as the signed-in user, so `userSessions.mint` accepts a `meta_mcp_server_id` target alongside the existing toolset and MCP-server ones; that arm requires the same `mcp:connect` permission the runtime gate enforces, so a caller whose grant is restricted to other resources cannot mint for a gateway. Where the endpoint serves the caller fewer members than are configured, the tab says so and why. Member status likewise reports only what the backend attests: hosted members are available, proxied members read unknown until the gateway runtime holds live upstream sessions.
+- a90994d: Add the restricted organization Killswitch list, detail, and principal-first management flows.
+- 17758ae: Organization admins can now manage JSON Web Key Sets from the Encryption Keys page: a new Signing Keys (JWKS) section lists an organization's key sets, a guided sheet creates one from a GCP KMS key, and each set's detail page shows its history, its published keys with activate / retire / revoke actions and a publish flow that re-points the backing key, and a settings tab for renaming and deleting the set. The `auditlogs.list` endpoint gains an optional repeated `subject_ids` filter so a resource's feed can include the child resources whose events name the child as the subject.
+- ef765d4: New org-level Data > Event Feed page showing every OTel signal ingested through Gram: search and kind/source/name filters, a stacked logs-vs-spans volume chart, an infinite-scrolling event table, and a detail sheet with Parsed and Raw views.
+- c13dd2d: Add a quarantine risk policy action that freezes an entire agent session on violation, with an org-admin release surface in the dashboard.
+- 1e03370: Add list_my_sessions and continue_session platform-MCP tools: owner-scoped recall of captured coding-agent sessions as a redacted handoff digest, recorded as a chat_session:recall audit event with a lineage edge.
+- e8a118b: The MCP connections list now shows how a registered agent authenticates. `UserSessionClient` gains `credential_kind` (`public`, `secret`, `key`, or `misconfigured`) alongside the raw declared `token_endpoint_auth_method`, and `UserSession` carries the same pair for the registration a session was issued through. The kind is derived on the server by the rule the token endpoint already enforces, so a registration that predates the recorded method still resolves rather than reading as unknown, and one whose columns contradict each other is reported as `misconfigured` instead of as the method it declared.
+  
+  In the dashboard, agent rows badge only the two kinds worth interrupting a scan for — key-authenticated and cannot-authenticate — while the registration detail sheet states the kind for every client and writes out the declared protocol value. That sheet is reachable again, from a "View registration" item in an agent row's menu; it had no entry point since the connections list replaced the old clients table.
+
+### Patch Changes
+
+- 1f4321c: Assistant surfaces now count MCP servers attached directly to the assistant, not only through a toolset. The composer @-picker stays visible and explains empty tools (no servers, list failed, or zero tools) instead of hiding the Tools section.
+- 2ed1222: Keep the Attach Provider action available after the first remote identity provider is attached
+- 99c6b4c: Token numbers on the costs page (KPI tile, time series, breakdown table, session drill-down, entity profile, CSV exports) and the project overview widgets now show plain LLM tokens (input + output), matching the employee pages. The TUM billing population (which additionally counts cache writes) is no longer shown on person-facing surfaces; cache-creation tokens remain visible as their own explicitly labeled metric.
+  
+  The employee page's tool-call counts now include hook-reported tool calls alongside Gram MCP tool spans (the same shape as the data-flow graph), so scoping to a single account no longer shows zero tool calls.
+- 6dbe4d9: Employee views now fold a person's full identity — gram user id, directory email, and linked provider-account emails — everywhere. The employee detail page's account selector and breakdowns include all linked accounts, its numbers agree with the stat tiles, and the enrollment list attributes usage under a linked personal-account email to the owning member instead of undercounting them and duplicating an unattributed row.
+- 0d4459f: Event Feed description now says Speakeasy's /otel/v1 endpoints, matching product branding.
+- a0c92bd: The Skills list now loads activation, efficacy, and estimated-savings metrics without calculating unused session cost or regression signals. Regression evaluation also avoids scanning raw session telemetry when only efficacy scores are needed.
+- 6b8de96: The browser tab icon now follows the browser's own light/dark setting instead of the theme selected inside the dashboard, so it no longer disappears when the two disagree.
+- ca22ca9: The login page now links to sign-up so visitors can start a 14-day trial.
+- 4c4a9d1: Meta MCP gateway sessions now serve with a subset of providers connected: an unconnected provider degrades only its own members (anonymous upstream call, member-scoped errors) instead of rejecting the whole session with a 401. Direct MCP endpoints keep the all-or-nothing re-auth challenge.
+- ce2b02e: Hide OpenClaw's inbound-metadata envelope (conversation info, reply targets, chat history, delivery hints, timestamp prefix) when rendering session transcripts and when generating session titles and summaries, matching the treatment of the assistant runtime's `<message-context>` framing. Stored messages are unchanged.
+- 6d5ac10: Add a catch-all "Other agent" option to the Platform MCP connect flow, for agents outside the certified set. `client_family` accepts `other`, so an install on an uncertified agent is recorded as itself rather than mislabelled as a certified agent or left untracked.
+  
+  No reviewed plugin package is built for such an agent, so both packaged install routes are closed for it and the walkthrough offers the remote MCP configuration alone. The install-method step lists only that route instead of showing the packaged ones greyed out, which read as an organization problem rather than what it is.
+  
+  The agent list on the headless connect page also sets its own text color, so the marks drawn in `currentColor` — Cursor, Codex, opencode, and the new catch-all globe — no longer inherit the ink foreground and disappear into the dark panel.
+- 37c4a66: Ensure risk policies only offer supported Presidio detections.
+- 24d1e8d: Deleting a project now returns the user to the organization home instead of the default project's settings.
+
+## 0.112.0
+
+### Minor Changes
+
+- eb0b4bd: The composer's stop button now actually stops the assistant. It previously only aborted the browser's view of the turn: the reply kept generating server-side, kept calling tools, kept spending, and reappeared in the transcript on reload. Pressing stop now calls a new `assistants.interruptTurn` endpoint, which cancels turns still queued on the conversation's thread — the case that matters while a cold runtime is booting — and asks the runtime to interrupt the turn in flight. The runner cancels cooperatively, so the partial reply stays in the transcript instead of being discarded, and a terminal frame goes out on the turn stream so every tab watching the chat settles rather than tailing a turn that has ended.
+- 0be309a: The Shadow MCP inventory reports enforcement truthfully, from one server-computed verdict. Each row now carries a typed access summary — state, the reach of explicit allow and block mechanisms, the blocking default, and the recorded decision with how much of it enforcement delivers — and the dashboard renders from it instead of re-deriving enforcement from policy lists and review status.
+  
+  Reach is a per-policy set question, not a principal string match: a URL is allowed for everyone when its bypass grants cover each deny-by-default policy's audience — the all-users principal, or grants naming the policy's whole audience, which under a targeted policy frees everyone it ever blocked. Several over-reports fall out: a server approved for part of an audience reads Restricted ("Allowed for selected users") instead of a blanket Allowed; a denial only a targeted policy carries reads Restricted instead of Blocked; a decision the current rules contradict or nothing enforces says so, naming what displaced it ("Denied by review, but overridden by an allow rule", "Approved by review, but its allow grants were removed", "not enforced until a blocking policy exists") instead of vanishing; and decisions on local stdio commands, which record without writing enforcement, report coverage none. Stdio targets join the policy-state universe, so a page of only local commands still reports the project's posture, and one row's verdict no longer depends on which rows share the page. The Pending badge turns information-blue on both the inventory and the detail strip, leaving orange to the partial-access family. access_summary ships optional for one release so a client ahead of a rolled-back server degrades to the legacy access string — which stays one release, with its values corrected the same way — before both flips land together.
+- 8f79411: Policy URL-list edits can no longer contradict recorded MCP access decisions silently. Editing an already-blocking shadow MCP policy's allow or block list now reviews the change against the project's standing decisions: unchecking an approved server, allow-listing a denied one, block-listing an approved one, or unblocking a denied one is refused with a conflict unless the save explicitly confirms superseding those decisions (`supersede_decisions` on `risk.updatePolicy`). A confirmed save transitions each displaced review to the new `superseded` status — actor-attributed, audit-logged (`mcp_approval_request:supersede`), decision history and rationale preserved — and the policy replay and drift recheck stop deriving enforcement from it until someone re-decides. Ordinary re-saves also stop rewriting decision-written grant audiences with the policy audience: a scoped approval's blast radius now survives unrelated policy edits. The dashboard policy editor shows a confirmation dialog listing the contradicted servers before such a save, and superseded reviews render with their own badge and inventory filter.
+- 4bd52d2: Rework the Shadow MCP server detail page around a summary strip and remove the repetition beneath it. Status, calls, people and last-called now read as one bordered strip of metric tiles sharing a row with the review's own header, replacing a status badge and two lines of prose that left most of the row empty. The figures the strip reports no longer appear a second time as an "Are we already exposed?" fact list — the traffic table answers that question directly, and the one thing it cannot say, what a denial would cost, rides beside its heading instead. Per-source counts drop out of the traffic table when a user has a single source, where they only restated the call count next to them.
+  
+  The evidence groups line up: the caveats that used to sit as paragraphs under each question now hang off an icon beside it, so every box in a row starts at the same top edge, and a group whose whole answer is one sentence stretches to its row's height with that sentence centred rather than stranded in a corner. The gaps banner no longer repeats failures that the group beneath it already reports as unknown, and the "unreviewed" badge reads Unreviewed instead of "Review requested", which contradicted the notice under it saying no one had asked. Long user lists collapse behind a toggle, and the web research panel drops its intro, its credits warning and its empty state when research is not part of the plan.
+
+### Patch Changes
+
+- 9f53288: Loading the assistant onboarding page directly — a fresh navigation or a browser refresh on `/assistants/new` or `/assistants/:id` — no longer crashes the page with "Rendered more hooks than during the previous render". `FrontendTools` called each tool component inline instead of rendering it, so every tool's hooks ran inside `FrontendTools`' own hook list. The onboarding tool set is gated on RBAC grants and `hasScope` returns false until those grants load, so the first render after a hard load saw a trimmed set and a later render saw the full one — growing the component's hook count and tripping React's hook-order invariant. Reaching the page by in-app navigation happened to work because the grants query was already cached. Each tool now renders as its own keyed element, giving it its own hook list.
+- 81e7f18: Remote session issuers now capture the upstream's advertised PKCE support (RFC 8414 `code_challenge_methods_supported`) through discovery, refresh, and the create/update forms, and report it without refusing anything. The value is exposed on issuer reads and drafts (serialized without `omitempty` so null, meaning never captured, stays distinct from an empty array), rendered read-only on the issuer Overview tab, and instrumented with an unsampled `gram.remote_session.upstream_authorize` counter dimensioned by the issuer's PKCE support state at every authorize-URL build. Discovery also warns operators when an identity provider does not advertise S256, since MCP requires clients to verify PKCE support and a future change may enforce it. A null value ("never captured") stays distinct from an empty array ("the issuer advertises no methods") end to end.
+- 2198e8b: The command palette's "MCP Servers" group now searches `mcp_servers`-backed servers as well as toolset-backed ones. Previously the group was built entirely from toolsets, so a remote-, tunneled-, or unproxied-backed server never appeared in ⌘K and could only be reached by navigating to the MCP list by hand. Both kinds are listed under the one heading, matching how the MCP list page presents them, and each row still matches on name and slug.
+- 82582b2: The Secure section's navigation is now Watchdog, Guardrails, and Shadow MCP: the Risk Policies page is renamed Guardrails and gains a Detection Rules tab alongside Policies and Exclusion Rules, replacing the standalone Detection Rules page (its old URL redirects, deep links included).
+- 1011140: access.createRole no longer requires a description. The Create Role dialog accepts an empty description field and omits it from the request, so roles can be created without one.
+- d95abb5: Add the meta MCP control plane: a `metaMcp` management service for creating meta MCP servers with explicitly managed, ordered member sets, plus MCP endpoint support for addressing either an MCP server or a meta MCP server as its backend.
+- a33a07b: OTEL forwarding updates now preserve encrypted values for unchanged headers while still treating the submitted header list as the complete desired set. Adding or removing one header no longer clears the values of retained headers.
+- d3d58fe: The Risk Events page is back in the Secure navigation, directly below Watchdog (previously it was hidden whenever Watchdog was enabled).
+- cdd18f1: Session portability can now be enabled per organization from both admin surfaces: the standalone admin Features page and the in-app platform-admin Features page. Previously the flag was provisioning-time state with no toggle anywhere.
+- 9a19eb0: Proxy `/shared/handoffs` to the Go server in local dashboard dev so session-handoff capability URLs return markdown instead of the SPA shell. `/shared/skills` stays on the dashboard — it is a public React page, not a server document.
+- 1c55b90: The signal drawer and the signal list's multi-select toolbar now offer one "Suppress" dropdown in place of the separate suppress and exclusion-rule buttons, with "Suppress Once" (manual suppression) and "Create Rule" (exclusion rule creation) options.
+- 2211d34: Watchdog suppression now collects a signal's findings without the page's time window, fixing the silent no-op when a signal contained findings whose messages predate the window (signals exist by scan time, the listing filters by message event time). An empty collection now shows an error toast instead of doing nothing. The signal drawer labels its window-scoped stats and unwindowed latest-evidence list so their counts can't read as contradictory, and the top-affected-users list no longer shows an "Unknown user" row for findings with no user attribution (matching the Users count).
+- e09ea80: The Windows device-agent setup walkthrough now installs from the signed MSI instead of raw binaries. The install step downloads the installer from a stable link that always resolves to the current signed version, and `msiexec` registers the machine-wide service itself — no separate service-registration step. The raw-binary PowerShell script remains available as an alternative for scripted installs, an Intune Win32/LOB note covers fleet deployment, and the enroll/verify commands now invoke the CLI by its install path (the MSI does not add it to PATH).
+
 ## 0.111.0
 
 ### Minor Changes

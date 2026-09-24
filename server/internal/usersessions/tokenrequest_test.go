@@ -13,11 +13,13 @@ func TestAuthCodeTokenRequestFromForm(t *testing.T) {
 	form.Set("code", "auth_code_123")
 	form.Set("redirect_uri", "https://app.acme.test/callback")
 	form.Set("code_verifier", "verifier_xyz")
+	form.Set("resource", "https://acme.example.com/mcp/support-bot")
 
 	req := AuthCodeTokenRequestFromForm(form)
 	require.Equal(t, "auth_code_123", req.Code)
 	require.Equal(t, "https://app.acme.test/callback", req.RedirectURI)
 	require.Equal(t, "verifier_xyz", req.CodeVerifier)
+	require.Equal(t, []string{"https://acme.example.com/mcp/support-bot"}, req.Resources)
 }
 
 func TestAuthCodeTokenRequest_Validate(t *testing.T) {
@@ -62,8 +64,10 @@ func TestRefreshTokenRequestFromForm(t *testing.T) {
 	t.Parallel()
 	form := url.Values{}
 	form.Set("refresh_token", "refresh_xyz")
+	form.Set("resource", "https://acme.example.com/mcp/support-bot")
 	req := RefreshTokenRequestFromForm(form)
 	require.Equal(t, "refresh_xyz", req.RefreshToken)
+	require.Equal(t, []string{"https://acme.example.com/mcp/support-bot"}, req.Resources)
 }
 
 func TestRefreshTokenRequest_Validate(t *testing.T) {
@@ -79,5 +83,34 @@ func TestRefreshTokenRequest_Validate(t *testing.T) {
 		t.Parallel()
 		req := &RefreshTokenRequest{}
 		assertOAuthError(t, req.Validate(), "invalid_request", "refresh_token")
+	})
+}
+
+func TestJWTBearerTokenRequestFromForm(t *testing.T) {
+	t.Parallel()
+	form := url.Values{}
+	form.Set("assertion", "signed-id-jag")
+	form.Add("resource", "https://acme.example.com/mcp/support-bot")
+	form.Add("resource", "https://acme.example.com/mcp/other-bot")
+
+	req := JWTBearerTokenRequestFromForm(form)
+	require.Equal(t, "signed-id-jag", req.Assertion)
+	require.Equal(t, []string{
+		"https://acme.example.com/mcp/support-bot",
+		"https://acme.example.com/mcp/other-bot",
+	}, req.Resources)
+}
+
+func TestJWTBearerTokenRequest_Validate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("accepts a populated assertion", func(t *testing.T) {
+		t.Parallel()
+		require.NoError(t, (&JWTBearerTokenRequest{Assertion: "signed-id-jag", Resources: nil}).Validate())
+	})
+
+	t.Run("rejects missing assertion", func(t *testing.T) {
+		t.Parallel()
+		assertOAuthError(t, (&JWTBearerTokenRequest{Assertion: "", Resources: nil}).Validate(), "invalid_request", "assertion")
 	})
 }

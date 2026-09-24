@@ -1,3 +1,4 @@
+import { assistantsInterruptTurn } from "@gram/client/funcs/assistantsInterruptTurn";
 import { assistantsSendMessage } from "@gram/client/funcs/assistantsSendMessage";
 import { chatLoad } from "@gram/client/funcs/chatLoad";
 import type { GramCore } from "@gram/client/core";
@@ -178,6 +179,46 @@ export function createServerAssistantTransport(
           writer.write({ type: "start" });
 
           let chatId = ctx.getChatId();
+
+          // The stop button aborts `abortSignal`, which ends this client's
+          // view of the turn — but the assistant runs server-side, on a
+          // runtime that has never heard of this browser. Without telling it,
+          // stopping only hides a reply that keeps generating (and keeps
+          // spending) until it finishes on its own. Fire-and-forget, and
+          // deliberately NOT on `pollSignal`: that also fires when the next
+          // send reaps this turn's poll loop, which would cancel a turn the
+          // user is still waiting on.
+          //
+          // A chat id is required, so a turn aborted before the server minted
+          // one (a brand-new conversation stopped within the send's own round
+          // trip) has nothing to name — `assistants.sendMessage` has not
+          // returned yet. Its own abort signal cancels that POST, so the turn
+          // is dropped at the source anyway.
+          const requestInterrupt = () => {
+            const target = chatId;
+            if (!target) return;
+            // Deliberately without `fetchOptions.signal`: the request has to
+            // outlive the very abort that triggers it.
+            void assistantsInterruptTurn(deps.client, {
+              gramProject: deps.projectSlug,
+              interruptTurnRequestBody: {
+                assistantId: deps.assistantId,
+                chatId: target,
+              },
+            })
+              .then((res) => {
+                if (!res.ok) throw res.error;
+              })
+              .catch((err: unknown) => {
+                // Nothing to retry and nothing to show: the composer has already
+                // returned to its idle state. Logged because a failure here means
+                // the assistant is still generating in the background.
+                console.error("[interrupt] failed to stop the turn:", err);
+              });
+          };
+          abortSignal?.addEventListener("abort", requestInterrupt, {
+            once: true,
+          });
           // Bind the local thread identity at send-start so a server-minted
           // chat id is reconciled with THIS thread even if a parallel send on
           // another thread (or a user thread-switch) shifts the runtime's
@@ -296,6 +337,12 @@ export function createServerAssistantTransport(
               pendingToolCalls,
             });
           }
+
+          // The turn is over, so an abort from here on belongs to whatever
+          // comes next — and this chat's next turn is the likeliest candidate.
+          // Detaching keeps a late stop from cancelling a reply this turn never
+          // started.
+          abortSignal?.removeEventListener("abort", requestInterrupt);
 
           writer.write({ type: "finish" });
         },

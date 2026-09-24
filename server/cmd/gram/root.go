@@ -39,11 +39,17 @@ func newApp() *cli.App {
 		},
 		Commands: []*cli.Command{
 			newStartCommand(),
+			newMCPCommand(),
+			newNetworkIngressServerCommand(),
+			newNetingressAttestorCommand(),
+			newNetworkIngressWorkerCommand(),
 			newWorkerCommand(),
 			newAdminCommand(),
 			newGenWebhookSpecCommand(),
+			newRenderPlatformMCPCommand(),
 			newStreamsCommand(),
 			newDemoSeedCommand(),
+			newAdminSeedCommand(),
 			newVersionCommand(),
 		},
 		Before: func(c *cli.Context) error {

@@ -1,0 +1,838 @@
+import {
+  DangerSettingsSection,
+  FormPage,
+  ResourceListPage,
+  SettingsPage,
+  SettingsSection,
+} from "@/components/page-templates";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/Avatar";
+import { Table, type Column } from "@/components/ui/Table";
+import { useSdkClient } from "@/contexts/Sdk";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/Label";
+import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
+import {
+  useIsPlatformAdmin,
+  useOrganization,
+  useProject,
+  useSession,
+} from "@/contexts/Auth";
+import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { DEMO_ORG_SLUG } from "@/lib/demo";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { Text } from "@/components/ui/Text";
+import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
+
+import { useAgentsDeleteMutation } from "@gram/client/react-query/agentsDelete.js";
+import { useAgentsResumeMutation } from "@gram/client/react-query/agentsResume.js";
+import { useAgentsRevokeMutation } from "@gram/client/react-query/agentsRevoke.js";
+import { useAgentsSuspendMutation } from "@gram/client/react-query/agentsSuspend.js";
+import { useCreateAgentMutation } from "@gram/client/react-query/createAgent.js";
+import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
+import { hashKey, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Plus } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router";
+import { toast } from "sonner";
+import { AgentAPIKeys } from "./AgentAPIKeys";
+import {
+  agentPolicyGrantsFromDraft,
+  invalidateAgentPolicy,
+  type AgentPolicyDraft,
+} from "./agent-policy-grants";
+import { AgentPolicyEditor } from "./AgentPolicyEditor";
+import { AgentPolicySection } from "./AgentPolicySection";
+import { ManagedAgentSessions } from "./ManagedAgentSessions";
+
+export default function AgentsPage(): JSX.Element {
+  const flag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
+  if (flag.status !== "enabled") {
+    return (
+      <FormPage
+        title={
+          flag.status === "loading"
+            ? "Loading agent management"
+            : "Agent management unavailable"
+        }
+        description={
+          flag.status === "loading"
+            ? "Checking feature availability."
+            : flag.status === "disabled"
+              ? "Agent management is not enabled for this organization."
+              : "Unable to determine agent management availability. Try again later."
+        }
+      >
+        {null}
+      </FormPage>
+    );
+  }
+
+  // Do not mount inventory, detail, or policy discovery until rollout is enabled.
+  return <AgentManagementPage />;
+}
+
+function AgentManagementPage(): JSX.Element {
+  const organization = useOrganization();
+  const session = useSession();
+  const isPlatformAdmin = useIsPlatformAdmin();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const agentID = searchParams.get("id");
+  const isDemo = organization.slug === DEMO_ORG_SLUG;
+  const hasUnsupportedSession =
+    session.organizationOverride || Boolean(session.impersonatorEmail);
+  const hasScopeOverride =
+    getRBACScopeOverrideHeader(import.meta.env.DEV || isPlatformAdmin) !== null;
+
+  if (hasUnsupportedSession || hasScopeOverride) {
+    return (
+      <FormPage
+        title="Agent management unavailable"
+        description={
+          hasUnsupportedSession
+            ? "Support and impersonated sessions cannot manage agents. Switch to an ordinary Gram session."
+            : "Agent management is disabled while an RBAC scope override is active."
+        }
+      >
+        {null}
+      </FormPage>
+    );
+  }
+
+  if (!agentID && searchParams.get("create") === "true") {
+    return (
+      <CreateAgent
+        // Switching any of these would otherwise submit a name and permissions
+        // chosen in a different context.
+        key={`${organization.id}:${session.user.id}:${isDemo}`}
+        disabled={isDemo}
+        onCreated={(id) => {
+          setSearchParams({ id });
+        }}
+      />
+    );
+  }
+
+  if (isDemo) {
+    return (
+      <FormPage
+        title="Agent management unavailable"
+        description="Agent management is unavailable in the shared demo because it requires active organization membership."
+      >
+        {null}
+      </FormPage>
+    );
+  }
+
+  if (!agentID) {
+    return (
+      <AgentList
+        onSelect={(id) => setSearchParams({ id })}
+        onCreate={() => setSearchParams({ create: "true" })}
+      />
+    );
+  }
+
+  return (
+    <AgentSettings
+      key={`${organization.id}-${agentID}`}
+      agentID={agentID}
+      onBack={() => setSearchParams({})}
+    />
+  );
+}
+
+function AgentList({
+  onSelect,
+  onCreate,
+}: {
+  onSelect: (id: string) => void;
+  onCreate: () => void;
+}) {
+  // Ownership is an independent authorization path. Do not gate this query on RBAC.
+  const agents = useReadableAgents(true);
+  const project = useProject();
+  const [search, setSearch] = useState("");
+  const visibleAgents = (agents.data ?? []).filter(
+    (agent) =>
+      // An agent bound to another project is that project's to manage, so
+      // showing it here reads as a listing bug. Organization-wide agents have
+      // no home project and belong in every project's list.
+      !agent.projectId || agent.projectId === project.id,
+  );
+  const rows = visibleAgents.filter((agent) =>
+    agent.name.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+  const columns: Column<ManagedAgent>[] = [
+    {
+      key: "name",
+      header: "Name",
+      render: (agent) => (
+        <Button variant="tertiary" onClick={() => onSelect(agent.id)}>
+          {agent.name}
+        </Button>
+      ),
+    },
+    {
+      key: "ownerUserId",
+      header: "Owner",
+      render: (agent) => <AgentOwner agent={agent} />,
+    },
+    {
+      key: "lifecycle",
+      header: "Status",
+      render: (agent) => <LifecycleBadge lifecycle={agent.lifecycle} />,
+    },
+  ];
+  return (
+    <ResourceListPage
+      title="Agents"
+      description="Agents visible to you."
+      primaryAction={<Button onClick={onCreate}>New agent identity</Button>}
+      search={{
+        value: search,
+        onChange: setSearch,
+        placeholder: "Search agents",
+      }}
+      isLoading={agents.isLoading}
+      isEmpty={!agents.isError && visibleAgents.length === 0 && !search.trim()}
+      empty={{
+        icon: "bot",
+        heading: "No agents yet",
+        description: "Create an agent to give it a dedicated identity.",
+      }}
+      onRefresh={() => void agents.refetch()}
+      isRefreshing={agents.isFetching}
+    >
+      {agents.isError ? (
+        <Text role="alert">
+          {agents.error instanceof GramError && agents.error.statusCode === 404
+            ? "Agent management is not enabled for this organization."
+            : "Unable to load agents. Try again."}
+        </Text>
+      ) : rows.length === 0 ? (
+        <Text>No matching agents</Text>
+      ) : (
+        <Table columns={columns} data={rows} rowKey={(agent) => agent.id} />
+      )}
+    </ResourceListPage>
+  );
+}
+
+function AgentOwner({ agent }: { agent: ManagedAgent }) {
+  const { user } = useSession();
+  const profile =
+    agent.ownerProfile ??
+    (agent.ownerUserId === user.id
+      ? { displayName: user.displayName || user.email, photoUrl: user.photoUrl }
+      : undefined);
+  const name = profile?.displayName || "Unavailable owner";
+  return (
+    <span className="flex items-center gap-2">
+      <Avatar>
+        <AvatarImage src={profile?.photoUrl} alt="" />
+        <AvatarFallback>{name.slice(0, 1).toUpperCase()}</AvatarFallback>
+      </Avatar>
+      <span>{name}</span>
+    </span>
+  );
+}
+
+/** Where a new agent belongs. Mirrors the optional project binding on API keys. */
+type AgentScope = "organization" | "project";
+
+/**
+ * Names the project an agent belongs to, or says it belongs to none. An agent
+ * bound to another project can still be reached by id, so this reports the
+ * binding rather than assuming it is the project being viewed.
+ */
+function AgentScopeLabel({ agent }: { agent: ManagedAgent }) {
+  const organization = useOrganization();
+  if (!agent.projectId) {
+    return <Text>{organization.name} (all projects)</Text>;
+  }
+  // Named from the organization's own project list rather than the active
+  // project, so an agent reached by id from elsewhere still says where it
+  // belongs. A project the caller cannot see falls back to its id.
+  const bound = organization.projects?.find(
+    (candidate) => candidate.id === agent.projectId,
+  );
+  return <Text>{bound?.name ?? agent.projectId}</Text>;
+}
+
+function CreateAgent({
+  disabled,
+  onCreated,
+}: {
+  disabled: boolean;
+  onCreated: (id: string) => void;
+}) {
+  const organization = useOrganization();
+  const project = useProject();
+  const [name, setName] = useState("");
+  // null until the person picks, so the default can follow the project as it
+  // resolves. A useState initializer would run once, before useProject has an
+  // id, and strand the form on organization scope.
+  const [chosenScope, setChosenScope] = useState<AgentScope | null>(null);
+  const [draft, setDraft] = useState<AgentPolicyDraft>({});
+  const [error, setError] = useState<string | null>(null);
+  // Project leads once one is available; an explicit pick always wins.
+  const scope: AgentScope =
+    chosenScope ?? (project.id ? "project" : "organization");
+  const { user } = useSession();
+  const queryClient = useQueryClient();
+  const create = useCreateAgentMutation({
+    onSuccess: (agent) => {
+      void invalidateAgentPolicy(
+        queryClient,
+        organization.id,
+        user.id,
+        agent.id,
+      );
+      toast.success("Agent created");
+      onCreated(agent.id);
+    },
+    // The create is one transaction, so a failure leaves no agent behind and
+    // the draft is still exactly what to retry.
+    onError: (error) =>
+      setError(
+        error.message ||
+          "Unable to create agent. Your name and permissions have been kept.",
+      ),
+  });
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
+    // useProject yields an empty id before a project resolves. Sending that
+    // would read as "omitted" and quietly create an organization-wide agent
+    // after the user asked for a project one.
+    if (scope === "project" && !project.id) {
+      setError("Select a project before scoping an agent to one.");
+      return;
+    }
+    const policyGrants = agentPolicyGrantsFromDraft(draft);
+    setError(null);
+    create.mutate({
+      request: {
+        createAgentForm: {
+          name: trimmedName,
+          // Omitted, not blank: an organization-wide agent carries no project
+          // binding at all.
+          ...(scope === "project" ? { projectId: project.id } : {}),
+          ...(policyGrants.length > 0 ? { policyGrants } : {}),
+        },
+      },
+    });
+  }
+
+  return (
+    <FormPage
+      // The scope cards sit side by side and the permissions table carries a
+      // tab strip and a button on one row; both are cramped at form measure.
+      width="wide"
+      title="Agents · Create"
+      description={
+        disabled
+          ? "Agent management is unavailable in the shared demo because it requires active organization membership."
+          : "You will be the owner. Ownership gives you intrinsic setup access without creating a reusable permission grant."
+      }
+    >
+      <form onSubmit={onSubmit} className="w-full">
+        <div className="space-y-2">
+          <Label htmlFor="agent-name">Agent name</Label>
+          <Input
+            id="agent-name"
+            value={name}
+            onChange={setName}
+            placeholder="Release assistant"
+            maxLength={120}
+            disabled={disabled}
+            autoFocus
+          />
+        </div>
+        <div className="mt-8 space-y-2">
+          <Label>Scope</Label>
+          <Text muted small>
+            Where this agent is listed and managed. Scope does not change what
+            it can reach — permissions below decide that.
+          </Text>
+          <RadioCardGroup
+            orientation="horizontal"
+            value={scope}
+            onValueChange={(value) => setChosenScope(value as AgentScope)}
+            disabled={disabled || create.isPending}
+            aria-label="Agent scope"
+          >
+            <RadioCard value="project" title="Project" disabled={!project.id}>
+              <Text muted small>
+                {project.id
+                  ? `Sits with ${project.name}, so the team working there finds and manages it alongside their own servers.`
+                  : "Select a project first."}
+              </Text>
+            </RadioCard>
+            <RadioCard value="organization" title="Organization">
+              <Text muted small>
+                Sits above every project in {organization.name}. Use this for a
+                shared agent that serves more than one team.
+              </Text>
+            </RadioCard>
+          </RadioCardGroup>
+        </div>
+        <div className="mt-8 space-y-2">
+          <Label>Permissions</Label>
+          <Text muted small>
+            The most this agent may ever be delegated. An agent with no
+            permissions can hold API keys, but they will not authorize anything.
+            Each key is narrowed again at issuance, against your live
+            permissions and the owner's.
+          </Text>
+          <div className="pt-2">
+            <AgentPolicyEditor
+              draft={draft}
+              onChange={setDraft}
+              disabled={disabled || create.isPending}
+            />
+          </div>
+        </div>
+        {error && (
+          <p role="alert" className="mt-4 text-sm">
+            {error}
+          </p>
+        )}
+        <div className="mt-6 flex justify-end">
+          <Button
+            type="submit"
+            disabled={disabled || !name.trim() || create.isPending}
+          >
+            <Button.LeftIcon>
+              <Plus className="size-4" />
+            </Button.LeftIcon>
+            <Button.Text>
+              {create.isPending ? "Creating\u2026" : "Create agent"}
+            </Button.Text>
+          </Button>
+        </div>
+      </form>
+    </FormPage>
+  );
+}
+
+function AgentSettings({
+  agentID,
+  onBack,
+}: {
+  agentID: string;
+  onBack: () => void;
+}) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [credentialBusy, setCredentialBusy] = useState(false);
+  const queryClient = useQueryClient();
+  const organization = useOrganization();
+  const sdk = useSdkClient();
+  const agentQuery = useQuery({
+    queryKey: ["managed-agents", organization.id, "detail", agentID],
+    queryKeyHashFn: hashKey,
+    queryFn: ({ signal }) =>
+      sdk.agents.get({ id: agentID }, undefined, { signal }),
+    throwOnError: false,
+    retry: false,
+  });
+
+  if (agentQuery.isLoading) {
+    return (
+      <SettingsPage title="Agent" description="Loading agent settings…">
+        <SkeletonTable />
+      </SettingsPage>
+    );
+  }
+
+  if (!agentQuery.data || agentQuery.isError) {
+    return (
+      <FormPage
+        title="Agent unavailable"
+        description="This agent does not exist or you do not have permission to read it."
+      >
+        <Button variant="secondary" onClick={onBack}>
+          Back to agents
+        </Button>
+      </FormPage>
+    );
+  }
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({
+      queryKey: ["managed-agents", organization.id],
+    });
+  };
+
+  if (searchParams.get("credential") === "new")
+    return (
+      <FormPage
+        title="Create API key"
+        description={`Choose what ${agentQuery.data.name} can access.`}
+        width="wide"
+        primaryAction={
+          <Button
+            variant="secondary"
+            onClick={() => setSearchParams({ id: agentID })}
+            disabled={credentialBusy}
+          >
+            Back to agent
+          </Button>
+        }
+      >
+        <AgentAPIKeys
+          agent={agentQuery.data}
+          creation
+          onBusy={setCredentialBusy}
+          onDone={() => setSearchParams({ id: agentID })}
+        />
+      </FormPage>
+    );
+
+  return (
+    <SettingsPage
+      title={agentQuery.data.name}
+      description="Manage this agent's identity and lifecycle."
+      primaryAction={
+        <Button variant="secondary" onClick={onBack}>
+          <Button.LeftIcon>
+            <ArrowLeft className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text>All agents</Button.Text>
+        </Button>
+      }
+    >
+      <AgentIdentity
+        key={`identity-${agentQuery.data.id}`}
+        agent={agentQuery.data}
+        refresh={refresh}
+      />
+      <AgentPolicySection
+        key={`policy-${agentQuery.data.id}`}
+        agent={agentQuery.data}
+      />
+      <AgentAPIKeys
+        agent={agentQuery.data}
+        onCreate={() => setSearchParams({ id: agentID, credential: "new" })}
+      />
+      <ManagedAgentSessions
+        key={`sessions-${agentQuery.data.id}`}
+        agent={agentQuery.data}
+      />
+      <AgentLifecycle
+        agent={agentQuery.data}
+        refresh={refresh}
+        onDeleted={onBack}
+      />
+    </SettingsPage>
+  );
+}
+
+function AgentIdentity({
+  agent,
+  refresh,
+}: {
+  agent: ManagedAgent;
+  refresh: () => void;
+}) {
+  const [name, setName] = useState(agent.name);
+  const rename = useRenameAgentMutation({
+    onSuccess: () => {
+      toast.success("Agent renamed");
+      refresh();
+    },
+    onError: (error) => toast.error(error.message || "Unable to rename agent"),
+  });
+
+  return (
+    <SettingsSection>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Identity</SettingsSection.Title>
+        <SettingsSection.Description>
+          The principal ID and owner are durable. The display name can change.
+        </SettingsSection.Description>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-3 text-sm">
+            <dt className="text-muted-foreground">Principal</dt>
+            <dd className="font-mono">agent:{agent.id}</dd>
+            <dt className="text-muted-foreground">Owner</dt>
+            <dd>
+              <AgentOwner agent={agent} />
+            </dd>
+            <dt className="text-muted-foreground">Scope</dt>
+            <dd>
+              <AgentScopeLabel agent={agent} />
+            </dd>
+            <dt className="text-muted-foreground">Lifecycle</dt>
+            <dd>
+              <LifecycleBadge lifecycle={agent.lifecycle} />
+            </dd>
+          </dl>
+          <div className="max-w-xl space-y-2 pt-2">
+            <Label htmlFor="managed-agent-name">Name</Label>
+            <Input
+              id="managed-agent-name"
+              value={name}
+              onChange={setName}
+              maxLength={120}
+              disabled={!agent.permissions.write || rename.isPending}
+            />
+          </div>
+        </SettingsSection.Body>
+        <SettingsSection.Footer>
+          <Text muted small>
+            {agent.permissions.write
+              ? "Name changes are recorded in the organization audit log."
+              : "You have read-only access to this agent."}
+          </Text>
+          <Button
+            onClick={() =>
+              rename.mutate({
+                request: {
+                  renameAgentForm: { id: agent.id, name: name.trim() },
+                },
+              })
+            }
+            disabled={
+              !agent.permissions.write ||
+              !name.trim() ||
+              name.trim() === agent.name ||
+              rename.isPending
+            }
+          >
+            Save name
+          </Button>
+        </SettingsSection.Footer>
+      </SettingsSection.Panel>
+    </SettingsSection>
+  );
+}
+
+function AgentLifecycle({
+  agent,
+  refresh,
+  onDeleted,
+}: {
+  agent: ManagedAgent;
+  refresh: () => void;
+  onDeleted: () => void;
+}) {
+  const [confirm, setConfirm] = useState<"revoke" | "delete" | null>(null);
+  const common = {
+    onError: (error: Error) =>
+      toast.error(error.message || "Unable to update agent"),
+  };
+  const suspend = useAgentsSuspendMutation({
+    ...common,
+    onSuccess: () => {
+      toast.success("Agent suspended");
+      refresh();
+    },
+  });
+  const resume = useAgentsResumeMutation({
+    ...common,
+    onSuccess: () => {
+      toast.success("Agent resumed");
+      refresh();
+    },
+  });
+  const revoke = useAgentsRevokeMutation({
+    ...common,
+    onSuccess: () => {
+      toast.success("Agent revoked");
+      setConfirm(null);
+      refresh();
+    },
+  });
+  const remove = useAgentsDeleteMutation({
+    ...common,
+    onSuccess: () => {
+      toast.success("Agent deleted");
+      refresh();
+      onDeleted();
+    },
+  });
+  const pending =
+    suspend.isPending ||
+    resume.isPending ||
+    revoke.isPending ||
+    remove.isPending;
+  const canWrite = agent.permissions.write;
+
+  return (
+    <>
+      <SettingsSection>
+        <SettingsSection.Header>
+          <SettingsSection.Title>Availability</SettingsSection.Title>
+          <SettingsSection.Description>
+            Suspension is reversible. It blocks credentials without changing the
+            owner or stored policy.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
+        <SettingsSection.Panel>
+          <SettingsSection.Body className="flex items-center justify-between gap-6">
+            <div>
+              <Text className="font-medium">Agent is {agent.lifecycle}</Text>
+              <Text muted small className="mt-1">
+                {canWrite
+                  ? "Lifecycle changes take effect for new authorization immediately."
+                  : "You do not have permission to change this lifecycle."}
+              </Text>
+            </div>
+            {agent.lifecycle === "suspended" ? (
+              <Button
+                onClick={() =>
+                  resume.mutate({
+                    request: { agentIDForm: { agentId: agent.id } },
+                  })
+                }
+                disabled={!canWrite || pending}
+              >
+                Resume
+              </Button>
+            ) : agent.lifecycle === "active" ? (
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  suspend.mutate({
+                    request: { agentIDForm: { agentId: agent.id } },
+                  })
+                }
+                disabled={!canWrite || pending}
+              >
+                Suspend
+              </Button>
+            ) : null}
+          </SettingsSection.Body>
+        </SettingsSection.Panel>
+      </SettingsSection>
+
+      <DangerSettingsSection>
+        <DangerSettingsSection.Header>
+          <DangerSettingsSection.Title>Danger zone</DangerSettingsSection.Title>
+          <DangerSettingsSection.Description>
+            Revocation is terminal. Deletion releases the name but retains audit
+            history.
+          </DangerSettingsSection.Description>
+        </DangerSettingsSection.Header>
+        <DangerSettingsSection.Panel>
+          <DangerSettingsSection.Body className="space-y-5">
+            {agent.lifecycle !== "revoked" && (
+              <DangerAction
+                title="Revoke agent"
+                description="Permanently prevent this agent from becoming active again."
+                confirm={confirm === "revoke"}
+                disabled={!canWrite || pending}
+                pending={revoke.isPending}
+                onStart={() => setConfirm("revoke")}
+                onCancel={() => setConfirm(null)}
+                onConfirm={() =>
+                  revoke.mutate({
+                    request: { agentIDForm: { agentId: agent.id } },
+                  })
+                }
+              />
+            )}
+            <DangerAction
+              title="Delete agent"
+              description="Tombstone this agent and release its name for reuse."
+              confirm={confirm === "delete"}
+              disabled={!canWrite || pending}
+              pending={remove.isPending}
+              onStart={() => setConfirm("delete")}
+              onCancel={() => setConfirm(null)}
+              onConfirm={() =>
+                remove.mutate({
+                  request: { agentIDForm: { agentId: agent.id } },
+                })
+              }
+            />
+          </DangerSettingsSection.Body>
+        </DangerSettingsSection.Panel>
+      </DangerSettingsSection>
+    </>
+  );
+}
+
+function DangerAction({
+  title,
+  description,
+  confirm,
+  disabled,
+  pending,
+  onStart,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  description: string;
+  confirm: boolean;
+  disabled: boolean;
+  pending: boolean;
+  onStart: () => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-6 border-b pb-5 last:border-b-0 last:pb-0">
+      <div>
+        <Text className="font-medium">{title}</Text>
+        <Text muted small className="mt-1">
+          {description}
+        </Text>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        {confirm ? (
+          <>
+            <Button variant="tertiary" onClick={onCancel} disabled={pending}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive-primary"
+              onClick={onConfirm}
+              disabled={disabled}
+            >
+              Confirm {title.toLowerCase()}
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="destructive-secondary"
+            onClick={onStart}
+            disabled={disabled}
+          >
+            {title}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LifecycleBadge({
+  lifecycle,
+}: {
+  lifecycle: ManagedAgent["lifecycle"];
+}) {
+  const variant =
+    lifecycle === "active"
+      ? "success"
+      : lifecycle === "suspended"
+        ? "warning"
+        : "destructive";
+  return (
+    <Badge variant={variant} size="sm">
+      {lifecycle}
+    </Badge>
+  );
+}

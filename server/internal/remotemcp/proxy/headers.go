@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -50,6 +51,16 @@ func isSkippedRequestHeader(name string) bool {
 		"proxy-authenticate",
 		"proxy-authorization",
 		"referer",
+		// Sec-Fetch-* describe the dashboard's own fetch, not the caller's
+		// intent toward the upstream, and are dropped for the same reason as
+		// Origin above. Forwarding them is doubly wrong now that Gram enforces
+		// the same protection inbound: "cross-site" 403s any upstream running
+		// net/http.CrossOriginProtection, while "same-origin" would falsely
+		// satisfy that upstream's check on Gram's behalf.
+		"sec-fetch-dest",
+		"sec-fetch-mode",
+		"sec-fetch-site",
+		"sec-fetch-user",
 		"te",
 		"trailer",
 		"transfer-encoding",
@@ -103,6 +114,9 @@ func isSkippedResponseHeader(name string) bool {
 // [http.ResponseWriter.WriteHeader]; once the status line is written, header
 // mutations are silently dropped.
 func applyResponseHeaders(w http.ResponseWriter, remoteResp *http.Response, wwwAuthenticate string) {
+	// Marks the access log's gram.http.response.external attribute so relayed
+	// upstream statuses (including 5xx) are distinguishable from Gram faults.
+	w.Header().Set(constants.HeaderProxiedResponse, "1")
 	replaceChallenge := wwwAuthenticate != "" &&
 		(remoteResp.StatusCode == http.StatusUnauthorized || remoteResp.StatusCode == http.StatusForbidden)
 	for name, values := range remoteResp.Header {
@@ -130,6 +144,31 @@ func applyResponseHeaders(w http.ResponseWriter, remoteResp *http.Response, wwwA
 // are not meaningful upstream. When [Proxy.AuthorizationOverride] is
 // non-empty, the proxy emits its own "Authorization: Bearer <override>"
 // upstream; configured headers may further override that.
+// stripConfiguredCredentials removes every credential this proxy attaches on
+// a project's behalf, for use when a redirect leaves the origin the
+// credentials were configured for.
+//
+// net/http drops Authorization and Cookie itself, but only when the redirect
+// leaves the initial hostname: it keeps them across a subdomain, a port
+// change, and a downgrade to another scheme, and it knows nothing about
+// configured headers. Without this an upstream could redirect to a host it
+// controls and collect a project's API key.
+func (p *Proxy) stripConfiguredCredentials(header http.Header) {
+	header.Del("Authorization")
+	header.Del("Cookie")
+
+	for _, h := range p.Headers {
+		if h.Name != "" {
+			header.Del(h.Name)
+		}
+		// The inbound header a pass-through reads from is forwarded verbatim
+		// as well, so it has to go with the header it populates.
+		if h.ValueFromRequestHeader != "" {
+			header.Del(h.ValueFromRequestHeader)
+		}
+	}
+}
+
 func (p *Proxy) applyRequestHeaders(ctx context.Context, userReq *http.Request, remoteReq *http.Request) error {
 	for name, values := range userReq.Header {
 		if isSkippedRequestHeader(name) {

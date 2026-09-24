@@ -112,8 +112,8 @@ type PlatformMCPOnboardingSetupHandoff struct {
 // PlatformMCPOnboardingState is the result type of the platformMcp service
 // getOnboarding method.
 type PlatformMCPOnboardingState struct {
-	// Whether the active organization currently passes the Platform MCP capability
-	// and rollout gates.
+	// Whether the active organization currently has the Platform MCP product
+	// feature enabled.
 	Enabled bool
 	// Current server-derived onboarding stage.
 	Stage string
@@ -293,4 +293,9 @@ func MakeUnexpected(err error) *goa.ServiceError {
 // MakeGatewayError builds a goa.ServiceError from an error.
 func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
+}
+
+// MakeUnavailable builds a goa.ServiceError from an error.
+func MakeUnavailable(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unavailable", false, false, true)
 }

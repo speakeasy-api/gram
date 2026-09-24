@@ -871,6 +871,34 @@ func (f *FlyRuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	return nil
 }
 
+func (f *FlyRuntimeBackend) InterruptTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID) (bool, error) {
+	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
+		return false, err
+	}
+	metadata, err := decodeFlyRuntimeMetadata(runtime.BackendMetadataJSON)
+	if err != nil {
+		return false, err
+	}
+	if metadata.AppURL == "" {
+		return false, fmt.Errorf("assistant fly runtime app url is not available")
+	}
+
+	// Pinned to this thread's machine like every other per-thread call: an
+	// interrupt that round-robins to a sibling would stop the wrong turn.
+	body, err := f.runtimeRequest(ctx, targetFromMetadata(metadata), runtimeHTTPRequest{
+		Method:         http.MethodPost,
+		Path:           "/threads/" + threadID.String() + "/interrupt",
+		ContentType:    "",
+		Body:           nil,
+		IdempotencyKey: "",
+		MaxTimeSeconds: runnerInterruptTimeoutSeconds,
+	})
+	if err != nil {
+		return false, fmt.Errorf("execute fly interrupt request: %w", err)
+	}
+	return decodeRunnerInterrupt(body)
+}
+
 func (f *FlyRuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {
 	if err := validateRuntimeBackend(f, runtime.Backend); err != nil {
 		return RuntimeBackendStatus{}, err

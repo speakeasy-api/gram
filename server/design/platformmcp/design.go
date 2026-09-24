@@ -5,11 +5,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var OnboardingState = Type("PlatformMCPOnboardingState", func() {
 	Description("Safe, session-authenticated Platform MCP onboarding projection. It contains no provider URLs, credentials, OAuth values, setup handoffs, or internal resource identifiers.")
-	Attribute("enabled", Boolean, "Whether the active organization currently passes the Platform MCP capability and rollout gates.")
+	Attribute("enabled", Boolean, "Whether the active organization currently has the Platform MCP product feature enabled.")
 	Attribute("stage", String, "Current server-derived onboarding stage.", func() {
 		Enum("not_started", "install_instructions", "authorized", "connection_ready")
 	})
@@ -63,6 +64,14 @@ var _ = Service("platformMcp", func() {
 	Description("Session-authenticated onboarding and lifecycle projection for the organization-level Gram Platform MCP.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
+	HTTP(func() {
+		shared.DeclareHTTPErrorResponses()
+		Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() { ContentType("application/json") })
+	})
 
 	Method("getOnboarding", func() {
 		Description("Get the current user's safe Platform MCP onboarding projection for the active organization.")
@@ -121,7 +130,7 @@ var _ = Service("platformMcp", func() {
 		Description("Record a selected manual-install client family for the current user's Platform MCP workflow.")
 		Payload(func() {
 			Attribute("client_family", String, "Manual-install client family.", func() {
-				Enum("claude_code", "claude_cowork", "codex", "cursor", "opencode")
+				Enum("claude_code", "claude_cowork", "codex", "cursor", "opencode", "other")
 			})
 			Required("client_family")
 			security.SessionPayload()

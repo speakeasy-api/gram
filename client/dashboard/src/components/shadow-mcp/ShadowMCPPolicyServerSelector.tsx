@@ -15,6 +15,7 @@ import {
   ShadowMCPInventoryUsageCell,
 } from "./ShadowMCPInventoryCells";
 import {
+  shadowMCPAccessSummaryOf,
   shadowMCPInventoryStatusBadgeVariant,
   shadowMCPInventoryStatusLabel,
   type ShadowMCPInventoryStatus,
@@ -99,14 +100,18 @@ function selectorEmptyMessage(search: string): string {
 function inventoryAccessStatus(
   server: ShadowMCPInventoryServer,
 ): ShadowMCPInventoryStatus {
-  switch (server.access) {
+  // The server-computed verdict, not the deprecated access string — for
+  // stdio rows the two deliberately disagree (legacy stays "none" for wire
+  // parity while the summary carries the honest posture), and the legacy
+  // field is scheduled for removal.
+  switch (shadowMCPAccessSummaryOf(server).state) {
     case "allowed":
       return "allowed";
     case "blocked":
       return "blocked";
     case "restricted":
       return "restricted";
-    case "none":
+    case "unenforced":
       return "observed";
   }
 }

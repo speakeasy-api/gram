@@ -5,7 +5,6 @@ import { WorkosModePane } from "@/components/providers/WorkosModePane";
 import { CapabilitiesCard } from "@/components/providers/CapabilitiesCard";
 import { ActivationCard } from "@/components/providers/ActivationCard";
 import { MODES, type Mode } from "@/lib/devidp";
-import { isActivatable } from "@/lib/provider-info";
 
 function isMode(s: string): s is Mode {
   return (MODES as readonly string[]).includes(s);
@@ -28,7 +27,7 @@ function ProviderModePage() {
         <div className="flex-1 min-w-0">
           <CapabilitiesCard mode={mode} />
         </div>
-        {isActivatable(mode) && <ActivationCard mode={mode} />}
+        <ActivationCard backend={mode === "workos" ? "workos" : "local"} />
       </div>
       {match(mode)
         .with("workos", () => <WorkosModePane />)

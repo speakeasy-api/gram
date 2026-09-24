@@ -159,8 +159,10 @@ func TestClaimHookIdempotency_ReplayedClaimsLongWindow(t *testing.T) {
 	t.Parallel()
 	_, ti := newTestHooksService(t)
 
+	// Swap the recording cache onto the per-test service instance in place:
+	// Service now holds a sync.WaitGroup, so it must not be copied by value.
 	rec := &ttlRecordingCache{Cache: ti.service.cache, ttls: nil}
-	svc := *ti.service
+	svc := ti.service
 	svc.cache = rec
 
 	require.True(t, svc.claimHookIdempotency(t.Context(), uuid.NewString(), false))

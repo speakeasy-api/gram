@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -460,6 +461,21 @@ func (g *GKERuntimeBackend) RunTurn(ctx context.Context, runtime assistantRuntim
 	}
 
 	return g.runner.turn(ctx, g.endpoint(metadata), runtime, turn, gkeRuntimeTurnTimeout)
+}
+
+func (g *GKERuntimeBackend) InterruptTurn(ctx context.Context, runtime assistantRuntimeRecord, threadID uuid.UUID) (bool, error) {
+	if err := validateRuntimeBackend(g, runtime.Backend); err != nil {
+		return false, err
+	}
+	metadata, err := decodeGKERuntimeMetadata(runtime.BackendMetadataJSON)
+	if err != nil {
+		return false, err
+	}
+	if metadata.PodIP == "" {
+		return false, fmt.Errorf("%w: gke runtime pod ip is not available", ErrRuntimeUnhealthy)
+	}
+
+	return g.runner.interrupt(ctx, g.endpoint(metadata), threadID)
 }
 
 func (g *GKERuntimeBackend) Status(ctx context.Context, runtime assistantRuntimeRecord) (RuntimeBackendStatus, error) {

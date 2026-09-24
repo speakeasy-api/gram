@@ -12,6 +12,10 @@ import {
 
 export type CreateRoleForm = {
   /**
+   * Optional agent IDs to assign to this role on creation. Scopes an agent cannot hold at runtime are simply not granted to it.
+   */
+  agentIds?: Array<string> | undefined;
+  /**
    * Optional description of what this role can do.
    */
   description?: string | undefined;
@@ -31,6 +35,7 @@ export type CreateRoleForm = {
 
 /** @internal */
 export type CreateRoleForm$Outbound = {
+  agent_ids?: Array<string> | undefined;
   description?: string | undefined;
   grants: Array<RoleGrant$Outbound>;
   member_ids?: Array<string> | undefined;
@@ -43,6 +48,7 @@ export const CreateRoleForm$outboundSchema: z.ZodMiniType<
   CreateRoleForm
 > = z.pipe(
   z.object({
+    agentIds: z.optional(z.array(z.string())),
     description: z.optional(z.string()),
     grants: z.array(RoleGrant$outboundSchema),
     memberIds: z.optional(z.array(z.string())),
@@ -50,6 +56,7 @@ export const CreateRoleForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      agentIds: "agent_ids",
       memberIds: "member_ids",
     });
   }),

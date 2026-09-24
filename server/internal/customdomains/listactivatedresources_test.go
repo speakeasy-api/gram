@@ -77,7 +77,7 @@ func TestListActivatedCustomDomainResourcesReportsEligibleRootMapping(t *testing
 			endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 				ProjectID:      *authCtx.ProjectID,
 				CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
-				McpServerID:    serverID,
+				McpServerID:    uuid.NullUUID{UUID: serverID, Valid: true},
 				Slug:           "root-" + uuid.NewString(),
 			})
 			require.NoError(t, err)
@@ -155,7 +155,7 @@ func TestGetCustomDomainRouteConfigExcludesDeletedProjectRoot(t *testing.T) {
 	endpoint, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:      projectID,
 		CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
-		McpServerID:    serverID,
+		McpServerID:    uuid.NullUUID{UUID: serverID, Valid: true},
 		Slug:           "root-" + uuid.NewString(),
 	})
 	require.NoError(t, err)

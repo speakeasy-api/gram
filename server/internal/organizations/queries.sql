@@ -4,13 +4,15 @@ INSERT INTO organization_metadata (
     name,
     slug,
     workos_id,
-    whitelisted
+    whitelisted,
+    creation_source
 ) VALUES (
     @id,
     @name,
     @slug,
     @workos_id,
-    COALESCE(sqlc.narg('whitelisted')::boolean, FALSE)
+    COALESCE(sqlc.narg('whitelisted')::boolean, FALSE),
+    sqlc.narg('creation_source')::text
 )
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
@@ -21,6 +23,12 @@ ON CONFLICT (id) DO UPDATE SET
         WHEN sqlc.narg('whitelisted')::boolean IS NOT NULL THEN sqlc.narg('whitelisted')::boolean
         ELSE organization_metadata.whitelisted
     END,
+    -- The conflict arm is reachable because WorkOS organization sync can insert
+    -- the row first, and it records no source. A caller that knows the flow
+    -- therefore has to be able to fill that gap. A caller that does not know it
+    -- passes null and leaves whatever is already recorded alone, so a later
+    -- upsert from an unrelated path cannot erase the flow that created the row.
+    creation_source = COALESCE(EXCLUDED.creation_source, organization_metadata.creation_source),
     updated_at = clock_timestamp()
 RETURNING *;
 
@@ -43,6 +51,23 @@ RETURNING *;
 SELECT *
 FROM organization_metadata
 WHERE id = @id;
+
+-- name: LockOrganizationForInviteAcceptance :one
+SELECT *
+FROM organization_metadata
+WHERE id = @id
+FOR UPDATE;
+
+-- name: HasOtherActiveOrganizationUsers :one
+SELECT EXISTS (
+    SELECT 1
+    FROM organization_user_relationships AS relationship
+    JOIN users ON users.id = relationship.user_id
+    WHERE relationship.organization_id = @organization_id
+      AND relationship.deleted_at IS NULL
+      AND users.deleted_at IS NULL
+      AND users.id <> @user_id
+);
 
 -- name: GetOrganizationMetadataBySlug :one
 SELECT *
@@ -90,6 +115,16 @@ SELECT EXISTS(
     AND organization_user_relationships.organization_id = @organization_id
     AND organization_user_relationships.deleted_at IS NULL
 ) AS exists;
+
+-- name: LockActiveOrganizationUser :one
+SELECT our.user_id
+FROM organization_user_relationships AS our
+JOIN users AS u ON u.id = our.user_id
+WHERE our.user_id = @user_id
+  AND our.organization_id = @organization_id
+  AND our.deleted_at IS NULL
+  AND u.deleted_at IS NULL
+FOR SHARE OF our, u;
 
 -- name: GetOrganizationUserRelationship :one
 SELECT *
@@ -157,12 +192,12 @@ ON CONFLICT (organization_id, user_id) DO UPDATE SET
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.deleted_at IS NULL;
 
--- name: SetUserWorkOSMemberships :exec
+-- name: SetUserWorkOSMemberships :many
 -- Declaratively set all WorkOS memberships for a user. Takes WorkOS org IDs
 -- (not Speakeasy org IDs) and resolves them via organization_metadata. Upserts
--- the provided (workos_org_id, workos_membership_id) pairs and soft-deletes any
--- other relationships where the org has a non-NULL workos_id. Orgs without a
--- workos_id are unaffected. Other users' memberships are never modified.
+-- the provided (workos_org_id, workos_membership_id) pairs and, unless
+-- preserve_existing is true, soft-deletes any other relationships where the org
+-- has a non-NULL workos_id. Other users' memberships are never modified.
 WITH input_memberships AS (
     SELECT unnest(@workos_org_ids::text[]) AS workos_org_id,
            unnest(@workos_membership_ids::text[]) AS workos_membership_id
@@ -205,17 +240,21 @@ upserted AS (
         workos_membership_id = EXCLUDED.workos_membership_id,
         deleted_at = NULL,
         updated_at = clock_timestamp()
+    WHERE organization_user_relationships.deleted IS FALSE
+       OR organization_user_relationships.workos_membership_id IS DISTINCT FROM EXCLUDED.workos_membership_id
     RETURNING organization_id
 )
 UPDATE organization_user_relationships
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE organization_user_relationships.user_id = @user_id
-  AND organization_user_relationships.deleted_at IS NULL
+  AND NOT @preserve_existing::boolean
+  AND organization_user_relationships.deleted IS FALSE
   AND organization_user_relationships.organization_id NOT IN (SELECT organization_id FROM resolved)
   AND organization_user_relationships.organization_id IN (
       SELECT id FROM organization_metadata WHERE workos_id IS NOT NULL
-  );
+  )
+RETURNING organization_id, user_id;
 
 -- name: SetOrgWorkosID :one
 UPDATE organization_metadata
@@ -296,14 +335,15 @@ WHERE id = @id
   AND expires_at > clock_timestamp()
 RETURNING *;
 
--- name: AcceptInvitation :execrows
+-- name: AcceptInvitation :one
 UPDATE organization_invitations
 SET state = 'accepted',
     accepted_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND state = 'pending'
-  AND expires_at > clock_timestamp();
+  AND expires_at > clock_timestamp()
+RETURNING *;
 
 -- name: AcceptPendingInvitationForMember :one
 UPDATE organization_invitations
@@ -315,6 +355,19 @@ WHERE organization_id = @organization_id
   AND state = 'pending'
   AND expires_at > clock_timestamp()
 RETURNING *;
+
+-- name: HasPendingInvitationForEmail :one
+-- Reports whether any organization has a live invitation outstanding for this
+-- address. It is asked at first-time user creation to tell an invited signup
+-- from an organic one, so it deliberately spans every organization rather than
+-- one: the user does not exist yet and belongs to none.
+SELECT EXISTS (
+  SELECT 1
+  FROM organization_invitations
+  WHERE email = @email
+    AND state = 'pending'
+    AND expires_at > clock_timestamp()
+);
 
 -- name: ExpireInvitationForTest :exec
 UPDATE organization_invitations
@@ -397,7 +450,7 @@ ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
     deleted_at = NULL,
     updated_at = clock_timestamp();
 
--- name: MarkWorkOSMembershipDeleted :exec
+-- name: MarkWorkOSMembershipDeleted :many
 -- Record a WorkOS membership delete, inserting a tombstone when the local
 -- relationship did not exist so stale replayed creates cannot resurrect it.
 WITH updated_existing_user_relationship AS (
@@ -408,11 +461,15 @@ WITH updated_existing_user_relationship AS (
         workos_last_event_id = @workos_last_event_id,
         deleted_at = COALESCE(deleted_at, clock_timestamp()),
         updated_at = clock_timestamp()
-    WHERE organization_id = @organization_id
-      AND user_id = @user_id
-      AND @user_id::text IS NOT NULL
-    RETURNING id
-)
+    WHERE organization_user_relationships.organization_id = @organization_id
+      AND (
+          (sqlc.narg('user_id')::text IS NOT NULL AND organization_user_relationships.user_id = sqlc.narg('user_id'))
+          OR (@workos_user_id::text IS NOT NULL AND organization_user_relationships.workos_user_id = @workos_user_id)
+          OR (@workos_membership_id::text IS NOT NULL AND organization_user_relationships.workos_membership_id = @workos_membership_id)
+      )
+    RETURNING organization_user_relationships.user_id
+),
+inserted AS (
 INSERT INTO organization_user_relationships (
     organization_id,
     user_id,
@@ -424,7 +481,7 @@ INSERT INTO organization_user_relationships (
 )
 SELECT
     @organization_id,
-    @user_id,
+    sqlc.narg('user_id'),
     @workos_user_id,
     @workos_membership_id,
     @workos_updated_at,
@@ -438,7 +495,12 @@ ON CONFLICT (workos_membership_id) WHERE deleted IS FALSE DO UPDATE SET
     workos_updated_at = EXCLUDED.workos_updated_at,
     workos_last_event_id = EXCLUDED.workos_last_event_id,
     deleted_at = COALESCE(organization_user_relationships.deleted_at, clock_timestamp()),
-    updated_at = clock_timestamp();
+    updated_at = clock_timestamp()
+RETURNING user_id
+)
+SELECT user_id FROM updated_existing_user_relationship
+UNION ALL
+SELECT user_id FROM inserted;
 
 -- name: SyncUserOrganizationRoleAssignments :exec
 -- Declaratively set all WorkOS role assignments for a known Gram user in an
@@ -583,6 +645,76 @@ WHERE user_id = @user_id
 ORDER BY updated_at DESC
 LIMIT 1;
 
+-- name: SetOrganizationUserWorkOSID :exec
+UPDATE organization_user_relationships
+SET workos_user_id = @workos_user_id,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND user_id = @user_id
+  AND deleted_at IS NULL;
+
+-- name: ReassignOrganizationUserWorkOSID :exec
+-- Login reuses a Gram user after WorkOS delete-and-signup, so membership
+-- rows still pointing at a previous WorkOS user id must follow the new one.
+-- Matches any leftover id so a retry after overwrite still converges.
+UPDATE organization_user_relationships
+SET workos_user_id = @new_workos_user_id,
+    updated_at = clock_timestamp()
+WHERE user_id = @user_id
+  AND workos_user_id IS NOT NULL
+  AND workos_user_id IS DISTINCT FROM @new_workos_user_id;
+
+-- name: RetireCollidingOrganizationRoleAssignments :exec
+-- Soft-delete leftover assignments that would unique-violate if remapped
+-- onto a WorkOS id that already holds the same org+role.
+UPDATE organization_role_assignments AS old
+SET deleted_at = COALESCE(old.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+WHERE old.user_id = @user_id
+  AND old.workos_user_id <> @new_workos_user_id
+  AND old.deleted_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM organization_role_assignments AS neu
+      WHERE neu.organization_id = old.organization_id
+        AND neu.workos_user_id = @new_workos_user_id
+        AND neu.role_urn = old.role_urn
+        AND neu.deleted_at IS NULL
+  );
+
+-- name: RetireDuplicateLeftoverOrganizationRoleAssignments :exec
+-- Soft-delete extra leftover assignments that share org+role so remapping
+-- them onto one WorkOS id cannot unique-violate. Keeps the newest leftover.
+UPDATE organization_role_assignments AS dest
+SET deleted_at = COALESCE(dest.deleted_at, clock_timestamp()),
+    updated_at = clock_timestamp()
+FROM (
+  SELECT id
+  FROM (
+    SELECT leftover.id,
+           ROW_NUMBER() OVER (
+             PARTITION BY leftover.organization_id, leftover.role_urn
+             ORDER BY leftover.created_at DESC, leftover.id DESC
+           ) AS rn
+    FROM organization_role_assignments leftover
+    WHERE leftover.user_id = sqlc.arg(user_id)
+      AND leftover.workos_user_id <> sqlc.arg(new_workos_user_id)
+      AND leftover.deleted_at IS NULL
+  ) ranked
+  WHERE rn > 1
+) extras
+WHERE dest.id = extras.id;
+
+-- name: ReassignOrganizationRoleAssignmentWorkOSID :exec
+-- Move leftover assignments onto the new WorkOS id after colliding rows
+-- have been retired.
+UPDATE organization_role_assignments
+SET workos_user_id = @new_workos_user_id,
+    updated_at = clock_timestamp()
+WHERE user_id = @user_id
+  AND workos_user_id <> @new_workos_user_id
+  AND deleted_at IS NULL;
+
 -- name: ListOrganizationRoleAssignmentsByWorkOSUser :many
 SELECT *
 FROM organization_role_assignments
@@ -603,14 +735,16 @@ INSERT INTO organization_metadata (
     slug,
     workos_id,
     workos_updated_at,
-    workos_last_event_id
+    workos_last_event_id,
+    verified_domains
 ) VALUES (
     @id,
     @name,
     @slug,
     @workos_id,
     @workos_updated_at,
-    @workos_last_event_id
+    @workos_last_event_id,
+    @verified_domains::text[]
 )
 RETURNING *;
 
@@ -652,6 +786,7 @@ SET name = @name,
     workos_id = @workos_id,
     workos_updated_at = @workos_updated_at,
     workos_last_event_id = @workos_last_event_id,
+    verified_domains = @verified_domains::text[],
     updated_at = clock_timestamp()
 WHERE id = @id
 RETURNING *;
@@ -728,6 +863,50 @@ SET scim_enabled = @enabled,
     updated_at = clock_timestamp()
 WHERE workos_id = @workos_id;
 
+-- name: AddVerifiedDomainByWorkosID :exec
+-- Add one domain to an organization's verified domains after a WorkOS
+-- organization_domain.verified event. The match ignores case, so a domain
+-- already in the list is not added twice. The event cursor is recorded even
+-- when the list does not change.
+UPDATE organization_metadata
+SET verified_domains = CASE
+        WHEN EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(organization_metadata.verified_domains, '{}'::text[])) AS existing (domain)
+            WHERE lower(existing.domain) = lower(@domain::text)
+        ) THEN COALESCE(organization_metadata.verified_domains, '{}'::text[])
+        ELSE array_append(COALESCE(organization_metadata.verified_domains, '{}'::text[]), @domain::text)
+    END,
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE workos_id = @workos_id;
+
+-- name: RemoveVerifiedDomainByWorkosID :exec
+-- Remove one domain from an organization's verified domains after a WorkOS
+-- organization_domain.deleted event. The match ignores case and keeps the
+-- order of the remaining domains. The event cursor is recorded even when the
+-- domain was not in the list.
+UPDATE organization_metadata
+SET verified_domains = ARRAY(
+        SELECT existing.domain
+        FROM unnest(COALESCE(organization_metadata.verified_domains, '{}'::text[])) WITH ORDINALITY AS existing (domain, position)
+        WHERE lower(existing.domain) <> lower(@domain::text)
+        ORDER BY existing.position
+    ),
+    workos_last_event_id = @workos_last_event_id,
+    updated_at = clock_timestamp()
+WHERE workos_id = @workos_id;
+
+-- name: SetVerifiedDomains :exec
+-- Fill an empty verified domains list with the result of a live WorkOS check.
+-- A non-empty list is owned by the event sync and may be newer than the live
+-- check, so it is never overwritten here.
+UPDATE organization_metadata
+SET verified_domains = @verified_domains::text[],
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND cardinality(COALESCE(verified_domains, '{}'::text[])) = 0;
+
 -- name: ClearWorkosOrgID :exec
 UPDATE organization_metadata
 SET workos_id = NULL,
@@ -750,3 +929,72 @@ LEFT JOIN global_roles gr
 WHERE ora.organization_id = @organization_id
   AND ora.user_id IS NOT NULL
   AND ora.deleted_at IS NULL;
+
+-- name: ListOrganizationSetupTasks :many
+SELECT *
+FROM organization_setup_tasks
+WHERE organization_id = @organization_id;
+
+-- name: LockOrganizationForSetupTaskUpdate :one
+SELECT *
+FROM organization_metadata
+WHERE id = @organization_id
+FOR UPDATE;
+
+-- name: GetOrganizationSetupTask :one
+SELECT *
+FROM organization_setup_tasks
+WHERE organization_id = @organization_id
+  AND task_key = @task_key;
+
+-- name: UpsertOrganizationSetupTask :one
+INSERT INTO organization_setup_tasks (
+    organization_id,
+    task_key,
+    status,
+    assignee_user_id,
+    assignee_email,
+    hidden_at
+) VALUES (
+    @organization_id,
+    @task_key,
+    @status,
+    sqlc.narg('assignee_user_id')::text,
+    sqlc.narg('assignee_email')::text,
+    sqlc.narg('hidden_at')::timestamptz
+)
+ON CONFLICT (organization_id, task_key) DO UPDATE SET
+    status = EXCLUDED.status,
+    assignee_user_id = EXCLUDED.assignee_user_id,
+    assignee_email = EXCLUDED.assignee_email,
+    hidden_at = EXCLUDED.hidden_at,
+    updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: GetSetupTaskCompletionFacts :one
+WITH default_project AS (
+    SELECT id
+    FROM projects
+    WHERE organization_id = @organization_id
+      AND deleted IS FALSE
+    ORDER BY created_at, id
+    LIMIT 1
+)
+SELECT
+    COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_configured,
+    COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
+    (COALESCE(cardinality(organization_metadata.verified_domains), 0) > 0)::boolean AS domain_verified,
+    EXISTS (
+        SELECT 1
+        FROM plugin_github_connections
+        JOIN default_project ON default_project.id = plugin_github_connections.project_id
+    ) AS marketplace_published,
+    (
+        SELECT COUNT(DISTINCT organization_features.feature_name) = 3
+        FROM organization_features
+        WHERE organization_features.organization_id = @organization_id
+          AND organization_features.feature_name IN ('logs', 'tool_io_logs', 'session_capture')
+          AND organization_features.deleted IS FALSE
+    )::boolean AS logging_enabled
+FROM organization_metadata
+WHERE organization_metadata.id = @organization_id;

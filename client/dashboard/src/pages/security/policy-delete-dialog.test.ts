@@ -84,6 +84,21 @@ describe("getPolicyRuleGroupNamesForDeleteDialog", () => {
     ).toEqual(["Financial Information", "Personal Identifiable Information"]);
   });
 
+  it("returns a single PII group for any Presidio policy under the LLM analyzer", () => {
+    expect(
+      getPolicyRuleGroupNamesForDeleteDialog(
+        policy({ sources: ["gitleaks", "presidio"] }),
+        "llm",
+      ),
+    ).toEqual(["Secrets", "PII"]);
+    expect(
+      getPolicyRuleGroupNamesForDeleteDialog(
+        policy({ sources: ["presidio"], presidioEntities: ["CREDIT_CARD"] }),
+        "llm",
+      ),
+    ).toEqual(["PII"]);
+  });
+
   it("returns all Presidio-backed categories when Presidio has no entity filter", () => {
     expect(
       getPolicyRuleGroupNamesForDeleteDialog(
@@ -123,6 +138,12 @@ describe("getPolicyDeleteRuleActionLabel", () => {
       "flag",
     );
   });
+
+  it("returns quarantine for quarantine policies", () => {
+    expect(
+      getPolicyDeleteRuleActionLabel(policy({ action: "quarantine" })),
+    ).toBe("quarantine");
+  });
 });
 
 describe("getPolicyDeleteImpactText", () => {
@@ -135,6 +156,14 @@ describe("getPolicyDeleteImpactText", () => {
   it("uses action-specific fallback text when no groups are present", () => {
     expect(getPolicyDeleteImpactText(policy({ action: "flag" }), false)).toBe(
       "Any flag action this policy applies will stop immediately.",
+    );
+  });
+
+  it("explains that existing quarantines remain active", () => {
+    expect(
+      getPolicyDeleteImpactText(policy({ action: "quarantine" }), true),
+    ).toBe(
+      "This policy will stop opening new session quarantines. Existing quarantines remain active until an admin releases them.",
     );
   });
 });

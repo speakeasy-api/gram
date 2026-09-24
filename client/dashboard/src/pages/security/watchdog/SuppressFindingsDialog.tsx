@@ -35,10 +35,10 @@ export function SuppressFindingsDialog({
         <Dialog.Title>Suppress findings?</Dialog.Title>
         <Dialog.Description>
           {count === 0
-            ? `No findings for ${subject} in the selected window; there is nothing to suppress.`
+            ? `No findings for ${subject}; there is nothing to suppress.`
             : `This suppresses ${count.toLocaleString()} ${
                 count === 1 ? "finding" : "findings"
-              } for ${subject} in the selected window — they drop out of the risk score and every finding count.`}
+              } for ${subject}, regardless of the selected time window — they drop out of the risk score and every finding count.`}
           {capped &&
             ` Only the first ${SIGNAL_DISMISS_CAP.toLocaleString()} findings can be suppressed at once; run this again if more remain.`}
         </Dialog.Description>

@@ -1,5 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
-import { getIdentityTint } from "@/components/gradient-colors";
+import { useIdentityTint } from "@/components/gradient-colors";
+import { IdentityLink } from "@/components/identity-link";
 import {
   Popover,
   PopoverContent,
@@ -40,7 +41,7 @@ function MemberAvatar({
   className?: string;
 }): React.JSX.Element {
   // Deterministic per-member flat tint so each fallback face is unique.
-  const tint = getIdentityTint(member.id || member.name);
+  const tint = useIdentityTint(member.id || member.name);
   return (
     <Avatar className={className}>
       {member.photoUrl && (
@@ -142,7 +143,7 @@ export function MemberFacepile({
           the pile's total width is deterministic — no negative-margin growth
           that would overflow the table column. */}
       <div
-        className="grid grid-flow-col items-center justify-start [grid-auto-columns:1.15rem]"
+        className="grid grid-flow-col items-center justify-start [grid-auto-columns:1.4rem]"
         // Clear only when leaving the whole pile. Moving between overlapping
         // faces just updates which is active, avoiding the flicker from
         // racing per-face enter/leave events.
@@ -210,7 +211,17 @@ export function MemberFacepile({
         </div>
         <div className="max-h-64 overflow-y-auto py-1">
           {sorted.map((m) => (
-            <div key={m.id} className="flex items-center gap-2.5 px-3 py-1.5">
+            // The popover list is where a face becomes clickable: the pile
+            // itself is a single trigger, and a row is big enough to aim at.
+            <IdentityLink
+              key={m.id}
+              // A facepile entry falls back to the principal URN when the
+              // directory holds no member for it, and that URN already names
+              // its own namespace — wrapping it again would address
+              // `user:user:<id>`, which resolves to nobody.
+              identifier={m.id.includes(":") ? { urn: m.id } : { userId: m.id }}
+              className="hover:bg-accent/40 flex items-center gap-2.5 px-3 py-1.5 no-underline hover:no-underline"
+            >
               <MemberAvatar member={m} className="size-6" />
               <div className="min-w-0">
                 <Text small className="truncate font-medium">
@@ -220,7 +231,7 @@ export function MemberFacepile({
                   {m.email}
                 </Text>
               </div>
-            </div>
+            </IdentityLink>
           ))}
         </div>
       </PopoverContent>

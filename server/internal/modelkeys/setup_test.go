@@ -7,8 +7,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
@@ -67,6 +69,14 @@ func (p *stubProvisioner) RefreshAPIKeyLimit(ctx context.Context, orgID string, 
 	return 0, nil
 }
 
+func (*stubProvisioner) AddAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause) (openrouter.DisableCauseChange, error) {
+	return openrouter.DisableCauseChange{}, nil
+}
+
+func (*stubProvisioner) RemoveAPIKeyDisableCause(context.Context, string, openrouter.KeyType, openrouter.DisableCause, *int) (int, openrouter.DisableCauseChange, error) {
+	return 0, openrouter.DisableCauseChange{}, nil
+}
+
 func (p *stubProvisioner) DisableAPIKey(ctx context.Context, orgID string, keyType openrouter.KeyType) error {
 	return nil
 }
@@ -106,7 +116,8 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 // the product-feature cache on its own redis database. Every test shares
 // mockidp.MockOrgID while cloning its own Postgres database, so a feature
 // cached as enabled by one test would leak into a parallel test asserting the
-// disabled path.
+// disabled path. Dedicated databases still retain cached values across -count
+// repetitions, so those variants also get a private Redis instance.
 func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *testInstance) {
 	t.Helper()
 
@@ -118,8 +129,14 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
-	redisClient, err := infra.NewRedisClient(t, redisDB)
-	require.NoError(t, err)
+	var redisClient *redis.Client
+	if redisDB == 0 {
+		redisClient, err = infra.NewRedisClient(t, redisDB)
+		require.NoError(t, err)
+	} else {
+		redisClient = redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
+		t.Cleanup(func() { require.NoError(t, redisClient.Close()) })
+	}
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)

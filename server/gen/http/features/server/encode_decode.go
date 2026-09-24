@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	features "github.com/speakeasy-api/gram/server/gen/features"
+	featuresviews "github.com/speakeasy-api/gram/server/gen/features/views"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -23,9 +24,9 @@ import (
 // by the features getProductFeatures endpoint.
 func EncodeGetProductFeaturesResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*features.GetProductFeaturesResult)
+		res := v.(*featuresviews.ProductFeatures)
 		enc := encoder(ctx, w)
-		body := NewGetProductFeaturesResponseBody(res)
+		body := NewGetProductFeaturesResponseBody(res.Projected)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}

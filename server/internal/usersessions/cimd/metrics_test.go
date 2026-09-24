@@ -345,6 +345,67 @@ func TestMetrics_NamesPinned(t *testing.T) {
 	require.Equal(t, "cimd.fetch.duration_seconds", meterFetchDurationSeconds)
 	require.Equal(t, "cimd.fetch.response_size", meterFetchResponseSize)
 	require.Equal(t, "cimd.validation.failures", meterValidationFailures)
+	require.Equal(t, "cimd.redirect_uris.cross_origin", meterCrossOriginRedirects)
+}
+
+// TestResolverMetrics_CrossOriginRedirects pins the observability that
+// replaced the redirect-URI same-origin binding (AIS-597): a document that
+// validates with a cross-origin redirect_uri resolves successfully and
+// records one cimd.redirect_uris.cross_origin point carrying only the
+// bounded client_id origin — the redirect origins themselves stay out of
+// metric labels.
+func TestResolverMetrics_CrossOriginRedirects(t *testing.T) {
+	t.Parallel()
+
+	var clientID string
+	srv, resolver, reader := newObservedResolver(t, func(w http.ResponseWriter, r *http.Request) {
+		doc := validDocumentJSON(clientID)
+		doc["redirect_uris"] = []string{"https://api.other.example/callback"}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(doc); err != nil {
+			t.Errorf("encode document: %v", err)
+		}
+	})
+	clientID = srv.URL + "/client.json"
+	srvURL, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+
+	result, err := resolver.Resolve(t.Context(), clientID, noCache)
+	require.NoError(t, err)
+	require.NotNil(t, result.Document)
+
+	rm := collectMetrics(t, reader)
+
+	crossOrigin := counterPoints(t, rm, meterCrossOriginRedirects)
+	require.Len(t, crossOrigin, 1)
+	require.Equal(t, int64(1), crossOrigin[0].Value)
+	requireAttr(t, crossOrigin[0].Attributes, attr.CIMDOriginKey, srvURL.Host)
+	require.Equal(t, 1, crossOrigin[0].Attributes.Len(), "only the client_id origin may label this counter")
+}
+
+// TestResolverMetrics_SameOriginRecordsNoCrossOrigin pins the counter's
+// absence on the ordinary case: a document whose redirect_uris are loopback
+// or same-origin records no cimd.redirect_uris.cross_origin point at all, so
+// the instrument stays silent until the event it watches for occurs.
+func TestResolverMetrics_SameOriginRecordsNoCrossOrigin(t *testing.T) {
+	t.Parallel()
+
+	var clientID string
+	srv, resolver, reader := newObservedResolver(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(validDocumentJSON(clientID)); err != nil {
+			t.Errorf("encode document: %v", err)
+		}
+	})
+	clientID = srv.URL + "/client.json"
+
+	_, err := resolver.Resolve(t.Context(), clientID, noCache)
+	require.NoError(t, err)
+
+	rm := collectMetrics(t, reader)
+
+	_, ok := findMetric(rm, meterCrossOriginRedirects)
+	require.False(t, ok)
 }
 
 // TestMetrics_CacheResultLabelsPinned pins the wire spellings of the two

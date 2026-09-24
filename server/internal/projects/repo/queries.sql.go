@@ -149,6 +149,64 @@ func (q *Queries) GetProjectByIDAndOrganizationID(ctx context.Context, arg GetPr
 	return i, err
 }
 
+const getProjectByIDAndOrganizationIDForUpdate = `-- name: GetProjectByIDAndOrganizationIDForUpdate :one
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetProjectByIDAndOrganizationIDForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetProjectByIDAndOrganizationIDForUpdate(ctx context.Context, arg GetProjectByIDAndOrganizationIDForUpdateParams) (Project, error) {
+	row := q.db.QueryRow(ctx, getProjectByIDAndOrganizationIDForUpdate, arg.ID, arg.OrganizationID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getProjectByIDForUpdate = `-- name: GetProjectByIDForUpdate :one
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE id = $1
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+func (q *Queries) GetProjectByIDForUpdate(ctx context.Context, id uuid.UUID) (Project, error) {
+	row := q.db.QueryRow(ctx, getProjectByIDForUpdate, id)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getProjectBySlug = `-- name: GetProjectBySlug :one
 SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects
@@ -188,7 +246,7 @@ SELECT
     p.slug as project_slug,
     
     -- Organization metadata fields
-    om.id, om.name, om.slug, om.gram_account_type, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.created_at, om.updated_at, om.disabled_at
+    om.id, om.name, om.slug, om.gram_account_type, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.verified_domains, om.creation_source, om.created_at, om.updated_at, om.disabled_at
     
 FROM projects p
 INNER JOIN organization_metadata om ON p.organization_id = om.id
@@ -214,6 +272,8 @@ type GetProjectWithOrganizationMetadataRow struct {
 	FreeTrialEndsAt    pgtype.Timestamptz
 	ScimEnabled        pgtype.Bool
 	SsoEnabled         pgtype.Bool
+	VerifiedDomains    []string
+	CreationSource     pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
@@ -240,6 +300,8 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 		&i.FreeTrialEndsAt,
 		&i.ScimEnabled,
 		&i.SsoEnabled,
+		&i.VerifiedDomains,
+		&i.CreationSource,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,
@@ -397,6 +459,53 @@ func (q *Queries) ListProjectsByOrganizationLimited(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listProjectsByOrganizationPage = `-- name: ListProjectsByOrganizationPage :many
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+FROM projects
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND id > $2
+ORDER BY id ASC
+LIMIT LEAST(GREATEST($3::integer, 1), 100)
+`
+
+type ListProjectsByOrganizationPageParams struct {
+	OrganizationID string
+	AfterID        uuid.UUID
+	LimitValue     int32
+}
+
+func (q *Queries) ListProjectsByOrganizationPage(ctx context.Context, arg ListProjectsByOrganizationPageParams) ([]Project, error) {
+	rows, err := q.db.Query(ctx, listProjectsByOrganizationPage, arg.OrganizationID, arg.AfterID, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Project
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.OrganizationID,
+			&i.LogoAssetID,
+			&i.FunctionsRunnerVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setOrganizationWhitelist = `-- name: SetOrganizationWhitelist :exec
 UPDATE organization_metadata
 SET whitelisted = $1,
@@ -412,6 +521,38 @@ type SetOrganizationWhitelistParams struct {
 func (q *Queries) SetOrganizationWhitelist(ctx context.Context, arg SetOrganizationWhitelistParams) error {
 	_, err := q.db.Exec(ctx, setOrganizationWhitelist, arg.Whitelisted, arg.OrganizationID)
 	return err
+}
+
+const updateProject = `-- name: UpdateProject :one
+UPDATE projects
+SET name = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND deleted IS FALSE
+RETURNING id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateProjectParams struct {
+	Name      string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
+	row := q.db.QueryRow(ctx, updateProject, arg.Name, arg.ProjectID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const uploadProjectLogo = `-- name: UploadProjectLogo :one

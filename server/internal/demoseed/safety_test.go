@@ -85,8 +85,44 @@ func TestDemoSeedSafety(t *testing.T) {
 	pgBaseline, err := demoseedtest.SnapshotPostgres(ctx, db)
 	require.NoError(t, err)
 
-	// Provision the other tenant from the transformed seed scripts.
+	// Provision the other tenant from the transformed seed scripts, including
+	// realistic MCP server dependents that the demo cleanup must not touch.
 	require.NoError(t, demoseedtest.ExecPostgresScript(ctx, db, asOtherTenant(t, postgresSQL)))
+	require.NoError(t, demoseedtest.PlantMCPServerDependents(
+		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
+	))
+	require.NoError(t, demoseedtest.PlantPrivateNetworkState(
+		ctx, db, otherTenantSpec.OrgID,
+	))
+	organizationMismatches, err := demoseedtest.ProjectOrganizationMismatchCounts(
+		ctx, db, []string{otherTenantSpec.ProjectID()},
+	)
+	require.NoError(t, err)
+	require.Empty(t, organizationMismatches,
+		"seeded project rows must carry the organization_id of their owning project")
+	milestoneCount, err := demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, milestoneCount,
+		"MCP dependent fixture must plant one project-scoped onboarding milestone")
+
+	// A missing target server must not leave the fixture's assistant or plugin
+	// parents behind. Snapshot every table so the regression covers all orphans,
+	// not only the two parent classes that exposed the bug.
+	const noServerProjectID = "0ddba110-0000-4000-8000-0000000000ff"
+	require.NoError(t, demoseedtest.CreateProjectWithoutMCPServer(
+		ctx, db, otherTenantSpec.OrgID, noServerProjectID,
+	))
+	pgBeforeNoServer, err := demoseedtest.SnapshotPostgres(ctx, db)
+	require.NoError(t, err)
+	err = demoseedtest.PlantMCPServerDependents(ctx, db, otherTenantSpec.OrgID, noServerProjectID)
+	require.ErrorContains(t, err, "expected 1 complete dependent set, got 0")
+	pgAfterNoServer, snapshotErr := demoseedtest.SnapshotPostgres(ctx, db)
+	require.NoError(t, snapshotErr)
+	require.Equal(t, pgBeforeNoServer, pgAfterNoServer,
+		"MCP dependent fixture created orphan rows without a target server")
+
 	require.NoError(t, demoseedtest.ExecClickHouseStatements(ctx, ch, splitStatements(asOtherTenant(t, clickhouseSQL))))
 
 	demoProjects := []string{DefaultSpec().ProjectID()}
@@ -115,12 +151,24 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, err)
 
 	requirePostgresRowsPreserved(t, pgBefore, pgAfter1)
+	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, milestoneCount,
+		"demo seed modified or deleted another tenant's onboarding milestone")
 	requireNoLeakIntoOtherTenants(t, addedRows(pgBefore, pgAfter1), fixtureUUIDs)
 	requireClickHouseOutsideUnchanged(t, chBefore, chAfter1)
 
 	// Plant stray demo-scope rows: the next run must clean them up, restoring
 	// the exact per-table counts of the first run.
 	require.NoError(t, demoseedtest.TamperDemoRows(ctx, db, ch, constants.DemoOrganizationID, DefaultSpec().ProjectID()))
+	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, constants.DemoOrganizationID, DefaultSpec().ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, milestoneCount,
+		"demo tamper fixture must plant one project-scoped onboarding milestone")
 
 	// Second real seed run.
 	require.NoError(t, Run(ctx, logger, db, ch, blob, DefaultSpec()))
@@ -131,6 +179,18 @@ func TestDemoSeedSafety(t *testing.T) {
 	require.NoError(t, err)
 
 	requirePostgresRowsPreserved(t, pgBefore, pgAfter2)
+	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, milestoneCount,
+		"demo reseed modified or deleted another tenant's onboarding milestone")
+	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
+		ctx, db, constants.DemoOrganizationID, DefaultSpec().ProjectID(),
+	)
+	require.NoError(t, err)
+	require.Zero(t, milestoneCount,
+		"demo reseed did not clean up the project-scoped onboarding milestone")
 	requireNoLeakIntoOtherTenants(t, addedRows(pgBefore, pgAfter2), fixtureUUIDs)
 	requireClickHouseOutsideUnchanged(t, chBefore, chAfter2)
 
@@ -145,10 +205,10 @@ func TestDemoSeedSafety(t *testing.T) {
 		require.True(t, ok, "postgres table %s appeared between seed runs", table)
 	}
 
-	// ClickHouse: the seed writes deterministic row counts into plain
-	// MergeTree tables. Summing/Aggregating MV targets collapse rows by
-	// time-bucketed keys that shift with now(), so only their isolation is
-	// asserted (above), not exact demo-scope counts.
+	// Plain MergeTree targets have stable counts. Summary row counts can
+	// change when now()-relative timestamps cross UTC day boundaries.
+	// Meter cleanup is checked by the seed's delivery-total postflight;
+	// all tables retain the tenant-isolation checks above.
 	for table, s1 := range chAfter1 {
 		s2 := chAfter2[table]
 		if isPlainMergeTree(s1.Engine) {

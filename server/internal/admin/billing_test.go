@@ -2,20 +2,60 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
-	"github.com/speakeasy-api/gram/server/internal/audit"
+	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
+	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
+	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
+
+type fakeOpenRouterSpendCapScheduler struct {
+	operationID      string
+	organizationID   string
+	keyType          openrouter.KeyType
+	limit            int
+	actor            urn.Principal
+	actorDisplayName *string
+	effectiveLimit   int
+	err              error
+}
+
+func (f *fakeOpenRouterSpendCapScheduler) SetAdminOpenRouterSpendCap(_ context.Context, operationID, organizationID string, keyType openrouter.KeyType, limit int, actor urn.Principal, actorDisplayName *string) (int, error) {
+	f.operationID = operationID
+	f.organizationID = organizationID
+	f.keyType = keyType
+	f.limit = limit
+	f.actor = actor
+	f.actorDisplayName = actorDisplayName
+	if f.err != nil {
+		return 0, f.err
+	}
+	if f.effectiveLimit != 0 {
+		return f.effectiveLimit, nil
+	}
+	return limit, nil
+}
 
 type fakeOpenRouterUsage struct {
 	creditsByKeyType map[openrouter.KeyType]float64
@@ -31,15 +71,89 @@ func (f *fakeOpenRouterUsage) GetCreditsUsed(_ context.Context, _ string, keyTyp
 }
 
 type fakeBillingOperations struct {
-	organizationID string
-	cancel         *bool
-	actor          usage.BillingActor
-	subscription   *usage.StripeSubscription
+	mu              sync.Mutex
+	organizationID  string
+	cancel          *bool
+	actor           usage.BillingActor
+	subscription    *usage.StripeSubscription
+	customer        *stripeclient.CustomerDetails
+	customerErr     error
+	customerLookups []string
 }
 
 func (f *fakeBillingOperations) GetPaygBillingSummaryForOrganization(_ context.Context, organizationID string) (*usage.PaygBillingSummary, error) {
 	f.organizationID = organizationID
 	return &usage.PaygBillingSummary{PeriodStart: "2026-08-01T00:00:00Z", PeriodEnd: "2026-09-01T00:00:00Z", TumTokens: 42, TumUnitPriceUsd: "0.1", TumCostUsd: "4.2", OtherInferenceSpendUsd: "1.0", EstimatedTotalUsd: "5.2"}, nil
+}
+func (f *fakeBillingOperations) GetMeterUsageForOrganization(_ context.Context, organizationID string, payload *usagegen.GetMeterUsagePayload) (*usagegen.MeterUsageResponse, error) {
+	f.organizationID = organizationID
+	return &usagegen.MeterUsageResponse{
+		Family: payload.Family,
+		Window: &usagegen.MeterUsageWindow{
+			From: "2026-08-01T00:00:00Z",
+			To:   "2026-08-03T00:00:00Z",
+		},
+		BillingCycles: []*usagegen.MeterUsageWindow{
+			{From: "2026-08-01T00:00:00Z", To: "2026-09-01T00:00:00Z"},
+		},
+		Unit:              "stokens",
+		MeasurementMethod: "tiktoken_o200k_base",
+		Total:             "42",
+		Buckets: []*usagegen.MeterUsageBucket{
+			{From: "2026-08-01T00:00:00Z", To: "2026-08-02T00:00:00Z", Total: "40"},
+			{From: "2026-08-02T00:00:00Z", To: "2026-08-03T00:00:00Z", Total: "2"},
+		},
+		Breakdown: &usagegen.MeterUsageBreakdown{Dimension: "total", Series: []*usagegen.MeterUsageSeries{}},
+		QueriedAt: "2026-08-03T01:00:00Z",
+	}, nil
+}
+
+func (f *fakeBillingOperations) GetSpendBreakdownForOrganization(_ context.Context, organizationID string, payload *usagegen.GetSpendBreakdownPayload) (*usagegen.SpendBreakdownResponse, error) {
+	f.organizationID = organizationID
+	from, to := "2026-08-01T00:00:00Z", "2026-08-03T00:00:00Z"
+	if payload.From != nil {
+		from = *payload.From
+	}
+	if payload.To != nil {
+		to = *payload.To
+	}
+	return &usagegen.SpendBreakdownResponse{
+		Availability: "available",
+		Window:       &usagegen.MeterUsageWindow{From: from, To: to},
+		BillingCycles: []*usagegen.MeterUsageWindow{
+			{From: "2026-08-01T00:00:00Z", To: "2026-09-01T00:00:00Z"},
+		},
+		Currency:     "USD",
+		PricingBasis: "current_payg_list_price",
+		QueriedAt:    "2026-08-03T01:00:00Z",
+		TotalCostUsd: "0.00000035",
+		Products: []*usagegen.SpendProduct{
+			{
+				ID: "agent_session_storage", Label: "Agent session storage", Unit: "stokens", Quantity: "1",
+				RateQuantity: "1000000", RateUsd: "0.35", CostUsd: "0.00000035",
+				Buckets: []*usagegen.SpendBucket{{From: from, To: to, Quantity: "1", CostUsd: "0.00000035"}},
+			},
+		},
+	}, nil
+}
+
+func (f *fakeBillingOperations) GetStripeCustomer(_ context.Context, customerID string) (*stripeclient.CustomerDetails, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.customerLookups = append(f.customerLookups, customerID)
+	if f.customerErr != nil {
+		return nil, f.customerErr
+	}
+	if f.customer != nil {
+		return f.customer, nil
+	}
+	return &stripeclient.CustomerDetails{ID: customerID, Name: "", Email: "", Description: "", LiveMode: false}, nil
+}
+
+func (f *fakeBillingOperations) customerLookupCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.customerLookups)
 }
 
 func (f *fakeBillingOperations) GetStripeSubscriptionForOrganization(_ context.Context, organizationID string) (*usage.StripeSubscription, error) {
@@ -55,6 +169,154 @@ func (f *fakeBillingOperations) SetStripeSubscriptionCancelAtPeriodEndForOrganiz
 	f.cancel = &cancel
 	f.actor = actor
 	return &usage.StripeSubscription{Status: "active", CurrentPeriodStart: "2026-08-01T00:00:00Z", CurrentPeriodEnd: "2026-09-01T00:00:00Z", CancelAtPeriodEnd: cancel}, nil
+}
+func TestGetMeterUsageSelectsCanonicalOrganizationAndBoundedFamily(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db, meterConn := newTestAdminMeterService(t)
+	organizationID := "org_meter_usage_" + uuid.NewString()
+	organizationSlug := "meter-usage"
+	otherOrganizationID := "org_other_meter_usage_" + uuid.NewString()
+	seedOrg(t, ctx, db, orgFixture{id: organizationID, name: "Meter Usage", slug: organizationSlug})
+	seedOrg(t, ctx, db, orgFixture{id: otherOrganizationID, name: "Other Meter Usage", slug: "other-meter-usage"})
+
+	from := time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC)
+	to := from.AddDate(0, 0, 2)
+	require.NoError(t, chrepo.New(meterConn).InsertReadings(ctx, []chrepo.ReadingRow{
+		adminMeterUsageReading(organizationID, metering.MeterAgentSessionStorage, 11, from.Add(time.Hour), map[string]string{metering.AttributeModel: "first-model"}),
+		adminMeterUsageReading(organizationID, metering.MeterAgentSessionStorage, 13, from.AddDate(0, 0, 1).Add(time.Hour), map[string]string{metering.AttributeModel: "second-model"}),
+		adminMeterUsageReading(organizationID, metering.MeterAgentSessionStorage, 100, from.Add(-time.Hour), nil),
+		adminMeterUsageReading(organizationID, metering.MeterAgentSessionStorage, 200, to, nil),
+		adminMeterUsageReading(organizationID, metering.MeterMCPBandwidthIngress, 500, from.Add(time.Hour), nil),
+		adminMeterUsageReading(otherOrganizationID, metering.MeterAgentSessionStorage, 1_000, from.Add(time.Hour), nil),
+	}))
+
+	fromText, toText := from.Format(time.RFC3339), to.Format(time.RFC3339)
+	getUsage := func(organization string, family metering.UsageFamily) *gen.AdminMeterUsageResponse {
+		t.Helper()
+		result, err := svc.GetMeterUsage(ctx, &gen.GetMeterUsagePayload{
+			OrganizationID: organization,
+			Family:         string(family),
+			From:           &fromText,
+			To:             &toText,
+		})
+		require.NoError(t, err)
+		return result
+	}
+
+	byID := getUsage(organizationID, metering.UsageFamilyAgentSessionStorage)
+	bySlug := getUsage(organizationSlug, metering.UsageFamilyAgentSessionStorage)
+	require.Equal(t, string(metering.UsageFamilyAgentSessionStorage), byID.Family)
+	require.Equal(t, "24", byID.Total)
+	require.Equal(t, string(metering.UnitSTokens), byID.Unit)
+	require.Equal(t, string(metering.MeasurementTiktokenO200kBase), byID.MeasurementMethod)
+	require.Equal(t, &gen.MeterUsageWindow{From: fromText, To: toText}, byID.Window)
+	require.Equal(t, []*gen.AdminMeterUsageBucket{
+		{From: fromText, To: from.AddDate(0, 0, 1).Format(time.RFC3339), Total: "11"},
+		{From: from.AddDate(0, 0, 1).Format(time.RFC3339), To: toText, Total: "13"},
+	}, byID.Buckets)
+	require.Equal(t, byID.Family, bySlug.Family)
+	require.Equal(t, byID.Window, bySlug.Window)
+	require.Equal(t, byID.Unit, bySlug.Unit)
+	require.Equal(t, byID.MeasurementMethod, bySlug.MeasurementMethod)
+	require.Equal(t, byID.Total, bySlug.Total)
+	require.Equal(t, byID.Buckets, bySlug.Buckets)
+
+	bandwidth := getUsage(organizationSlug, metering.UsageFamilyMCPBandwidth)
+	require.Equal(t, "500", bandwidth.Total)
+	require.Equal(t, string(metering.UnitBytes), bandwidth.Unit)
+
+	recorder := httptest.NewRecorder()
+	require.NoError(t, adminserver.EncodeGetMeterUsageResponse(goahttp.ResponseEncoder)(ctx, recorder, byID))
+	var wireResponse map[string]any
+	require.NoError(t, json.NewDecoder(recorder.Body).Decode(&wireResponse))
+	require.NotContains(t, wireResponse, "breakdown")
+}
+
+func TestGetSpendBreakdownReturnsEnterpriseSpendByCanonicalOrganizationWithoutSubscription(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db, meterConn := newTestAdminMeterService(t)
+	organizationID := "org_admin_spend_" + uuid.NewString()
+	organizationSlug := "admin-spend-" + uuid.NewString()
+	otherOrganizationID := "org_admin_spend_other_" + uuid.NewString()
+	seedOrg(t, ctx, db, orgFixture{id: organizationID, name: "Admin Spend", slug: organizationSlug, accountType: "enterprise"})
+	seedOrg(t, ctx, db, orgFixture{id: otherOrganizationID, name: "Other Admin Spend", slug: "other-" + organizationSlug, accountType: "enterprise"})
+	fromTime := time.Date(2026, time.April, 1, 0, 0, 0, 0, time.UTC)
+	toTime := fromTime.AddDate(0, 0, 2)
+	require.NoError(t, chrepo.New(meterConn).InsertReadings(ctx, []chrepo.ReadingRow{
+		adminMeterUsageReading(organizationID, metering.MeterAgentSessionStorage, 1_000_000, fromTime.Add(time.Hour), nil),
+		adminMeterUsageReading(organizationID, metering.MeterRiskGitleaks, 1_000_000, fromTime.Add(2*time.Hour), nil),
+		adminMeterUsageReading(organizationID, metering.MeterMCPBandwidthEgress, 1_073_741_824, fromTime.Add(3*time.Hour), nil),
+		adminMeterUsageReading(otherOrganizationID, metering.MeterAgentSessionStorage, 9_000_000, fromTime.Add(time.Hour), nil),
+	}))
+	from, to := fromTime.Format(time.RFC3339), toTime.Format(time.RFC3339)
+
+	result, err := svc.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{
+		OrganizationID: organizationSlug,
+		From:           &from,
+		To:             &to,
+	})
+	require.NoError(t, err)
+	require.Equal(t, &gen.MeterUsageWindow{From: from, To: to}, result.Window)
+	require.Equal(t, "USD", result.Currency)
+	require.Equal(t, "current_payg_list_price", result.PricingBasis)
+	require.Equal(t, "21.34", result.TotalCostUsd)
+	require.Len(t, result.Products, 3)
+	require.Equal(t, []string{"agent_session_storage", "risk_content_scans", "mcp_egress"}, []string{
+		result.Products[0].ID, result.Products[1].ID, result.Products[2].ID,
+	})
+	require.Equal(t, []string{"1000000", "1000000", "1073741824"}, []string{
+		result.Products[0].Quantity, result.Products[1].Quantity, result.Products[2].Quantity,
+	})
+	require.Equal(t, []string{"0.35", "0.99", "20"}, []string{
+		result.Products[0].CostUsd, result.Products[1].CostUsd, result.Products[2].CostUsd,
+	})
+	for _, product := range result.Products {
+		require.Len(t, product.Buckets, 2)
+	}
+}
+
+func TestGetSpendBreakdownRejectsMalformedBoundsAndUnknownOrganizations(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db, _ := newTestAdminMeterService(t)
+	seedOrg(t, ctx, db, orgFixture{id: "org_admin_spend_bounds", name: "Admin Spend Bounds", slug: "admin-spend-bounds"})
+	from, to := "not-a-date", "2026-04-03T00:00:00Z"
+
+	_, err := svc.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{
+		OrganizationID: "admin-spend-bounds",
+		From:           &from,
+		To:             &to,
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	_, err = svc.GetSpendBreakdown(ctx, &gen.GetSpendBreakdownPayload{OrganizationID: "org_admin_spend_missing"})
+	requireOopsCode(t, err, oops.CodeNotFound)
+}
+
+func adminMeterUsageReading(organizationID string, meterID metering.MeterID, value int64, occurredAt time.Time, attributes map[string]string) chrepo.ReadingRow {
+	unit := metering.UnitSTokens
+	measurementMethod := metering.MeasurementTiktokenO200kBase
+	if meterID == metering.MeterMCPBandwidthIngress || meterID == metering.MeterMCPBandwidthEgress {
+		unit = metering.UnitBytes
+		measurementMethod = metering.MeasurementHTTPBodyBytes
+	}
+	if attributes == nil {
+		attributes = map[string]string{}
+	}
+	return chrepo.ReadingRow{
+		ID:                uuid.New(),
+		OrganizationID:    organizationID,
+		ProjectID:         uuid.New(),
+		MeterID:           string(meterID),
+		OperationID:       "admin-meter-usage:" + uuid.NewString(),
+		Unit:              string(unit),
+		MeasurementMethod: string(measurementMethod),
+		Value:             value,
+		OccurredAt:        occurredAt,
+		ProducedAt:        occurredAt,
+		InsertedAt:        occurredAt,
+		CorrectsReadingID: nil,
+		Attributes:        attributes,
+	}
 }
 
 func TestGetInferenceKeysUsesCanonicalOrganizationIDAndReturnsConfiguredState(t *testing.T) {
@@ -74,6 +336,14 @@ func TestGetInferenceKeysUsesCanonicalOrganizationIDAndReturnsConfiguredState(t 
 		OrganizationID: "org_inference", KeyType: "internal", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-internal", MonthlyCredits: 50,
 	})
 	require.NoError(t, err)
+	_, err = openRouterRepo.AddOpenRouterAPIKeyDisableCause(ctx, orrepo.AddOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID: "org_inference", KeyType: "chat", KeyHash: "hash-chat", DisableCause: "admin_lock",
+	})
+	require.NoError(t, err)
+	_, err = openRouterRepo.AddOpenRouterAPIKeyDisableCause(ctx, orrepo.AddOpenRouterAPIKeyDisableCauseParams{
+		OrganizationID: "org_inference", KeyType: "chat", KeyHash: "hash-chat", DisableCause: "future_policy",
+	})
+	require.NoError(t, err)
 	err = openRouterRepo.DisableOpenRouterAPIKey(ctx, orrepo.DisableOpenRouterAPIKeyParams{
 		OrganizationID: "org_inference", KeyType: "internal",
 	})
@@ -82,8 +352,8 @@ func TestGetInferenceKeysUsesCanonicalOrganizationIDAndReturnsConfiguredState(t 
 	result, err := svc.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: "org_inference"})
 	require.NoError(t, err)
 	require.Equal(t, []*gen.AdminInferenceKey{
-		{KeyType: "chat", CreditsUsed: 42.75, MonthlyCredits: 100, Disabled: false},
-		{KeyType: "internal", CreditsUsed: 12.5, MonthlyCredits: 50, Disabled: true},
+		{KeyType: "chat", CreditsUsed: 42.75, MonthlyCredits: 100, Disabled: true, DisableCauses: []string{"admin_lock", "future_policy"}, DisableCausesClassified: true},
+		{KeyType: "internal", CreditsUsed: 12.5, MonthlyCredits: 50, Disabled: true, DisableCauses: []string{"admin_lock"}, DisableCausesClassified: true},
 	}, result)
 }
 
@@ -120,7 +390,7 @@ func TestGetInferenceKeysOmitsUnsupportedAndAbsentKeys(t *testing.T) {
 	result, err := svc.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: "org_inference_filtered"})
 	require.NoError(t, err)
 	require.Equal(t, []*gen.AdminInferenceKey{
-		{KeyType: "chat", CreditsUsed: 7.25, MonthlyCredits: 100, Disabled: false},
+		{KeyType: "chat", CreditsUsed: 7.25, MonthlyCredits: 100, Disabled: false, DisableCauses: []string{}, DisableCausesClassified: true},
 	}, result)
 
 }
@@ -151,6 +421,168 @@ func TestGetInferenceKeysFailsWhenOpenRouterUsageCannotBeRead(t *testing.T) {
 
 	_, err = svc.GetInferenceKeys(ctx, &gen.GetInferenceKeysPayload{OrganizationID: "org_inference_usage_error"})
 	requireOopsCode(t, err, oops.CodeUnexpected)
+}
+
+func TestSetInferenceKeyMonthlyLimitSchedulesDurableAdminOperation(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	seedOrg(t, ctx, db, orgFixture{id: "org_limit", name: "Inference Limit", slug: "inference-limit"})
+	_, err := orrepo.New(db).CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: "org_limit", KeyType: "internal", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-internal", MonthlyCredits: 50,
+	})
+	require.NoError(t, err)
+	scheduler := &fakeOpenRouterSpendCapScheduler{effectiveLimit: 274}
+	svc.openRouterSpendCap = scheduler
+	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{
+		SessionID: "session-limit", Email: "operator@example.test", OIDCSubject: "oidc-subject-limit", Name: "Test Operator", HD: "example.test",
+	})
+
+	result, err := svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
+		OrganizationID: "org_limit", KeyType: "internal", MonthlyCredits: 275,
+	})
+	require.NoError(t, err)
+	require.Equal(t, &gen.AdminInferenceKeyLimit{KeyType: "internal", MonthlyCredits: 274}, result)
+	require.NotEmpty(t, scheduler.operationID)
+	require.Equal(t, "org_limit", scheduler.organizationID)
+	require.Equal(t, openrouter.KeyTypeInternal, scheduler.keyType)
+	require.Equal(t, 275, scheduler.limit)
+	require.Equal(t, "oidc-subject-limit", scheduler.actor.ID)
+	require.Equal(t, urn.PrincipalTypeUser, scheduler.actor.Type)
+	require.NotNil(t, scheduler.actorDisplayName)
+	require.Equal(t, "Test Operator", *scheduler.actorDisplayName)
+}
+
+func TestSetInferenceKeyMonthlyLimitReportsSchedulerFailure(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	seedOrg(t, ctx, db, orgFixture{id: "org_limit_failure", name: "Inference Limit Failure", slug: "inference-limit-failure"})
+	_, err := orrepo.New(db).CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: "org_limit_failure", KeyType: "chat", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-chat-failure", MonthlyCredits: 50,
+	})
+	require.NoError(t, err)
+	svc.openRouterSpendCap = &fakeOpenRouterSpendCapScheduler{err: errors.New("workflow failed")}
+
+	_, err = svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
+		OrganizationID: "org_limit_failure", KeyType: "chat", MonthlyCredits: 275,
+	})
+	requireOopsCode(t, err, oops.CodeUnexpected)
+}
+
+func TestSetInferenceKeyMonthlyLimitValidatesExplicitKeyAndBounds(t *testing.T) {
+	t.Parallel()
+	_, svc, _ := newTestAdminService(t)
+
+	for _, payload := range []*gen.SetInferenceKeyMonthlyLimitPayload{
+		{OrganizationID: "unused", KeyType: "", MonthlyCredits: 100},
+		{OrganizationID: "unused", KeyType: "unsupported", MonthlyCredits: 100},
+		{OrganizationID: "unused", KeyType: "chat", MonthlyCredits: 0},
+		{OrganizationID: "unused", KeyType: "chat", MonthlyCredits: 10001},
+	} {
+		_, err := svc.SetInferenceKeyMonthlyLimit(t.Context(), payload)
+		requireOopsCode(t, err, oops.CodeInvalid)
+	}
+}
+
+func TestSetInferenceKeyMonthlyLimitReportsUnavailableWithoutScheduler(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	seedOrg(t, ctx, db, orgFixture{id: "org_limit_unavailable", name: "Inference Limit Unavailable", slug: "inference-limit-unavailable"})
+
+	_, err := svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
+		OrganizationID: "org_limit_unavailable", KeyType: "chat", MonthlyCredits: 100,
+	})
+	requireOopsCode(t, err, oops.CodeUnavailable)
+}
+
+func TestSetInferenceKeyMonthlyLimitRejectsAbsentAndDisabledKeys(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	seedOrg(t, ctx, db, orgFixture{id: "org_limit_reject", name: "Inference Limit Reject", slug: "inference-limit-reject"})
+	scheduler := &fakeOpenRouterSpendCapScheduler{}
+	svc.openRouterSpendCap = scheduler
+
+	_, err := svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
+		OrganizationID: "org_limit_reject", KeyType: "internal", MonthlyCredits: 100,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+	require.Empty(t, scheduler.operationID)
+
+	_, err = orrepo.New(db).CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+		OrganizationID: "org_limit_reject", KeyType: "internal", KeyEncrypted: pgtype.Text{}, KeyHash: "hash-disabled", MonthlyCredits: 50,
+	})
+	require.NoError(t, err)
+	require.NoError(t, orrepo.New(db).DisableOpenRouterAPIKey(ctx, orrepo.DisableOpenRouterAPIKeyParams{OrganizationID: "org_limit_reject", KeyType: "internal"}))
+
+	_, err = svc.SetInferenceKeyMonthlyLimit(ctx, &gen.SetInferenceKeyMonthlyLimitPayload{
+		OrganizationID: "org_limit_reject", KeyType: "internal", MonthlyCredits: 100,
+	})
+	requireOopsCode(t, err, oops.CodeConflict)
+	require.Empty(t, scheduler.operationID)
+}
+
+func TestGetInferenceSpendHistoryReturnsCompleteMonths(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	const organizationID = "org_inference_history"
+	seedOrg(t, ctx, db, orgFixture{id: organizationID, name: "Inference History", slug: "inference-history"})
+
+	now := time.Now().UTC()
+	currentMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	firstMonth := currentMonth.AddDate(0, -2, 0)
+	openRouterRepo := orrepo.New(db)
+	for _, keyType := range []string{"chat", "internal"} {
+		_, err := openRouterRepo.CreateOpenRouterAPIKey(ctx, orrepo.CreateOpenRouterAPIKeyParams{
+			OrganizationID: organizationID, KeyType: keyType, KeyEncrypted: pgtype.Text{}, KeyHash: "hash-" + keyType, MonthlyCredits: 100,
+		})
+		require.NoError(t, err)
+	}
+	fixtures := testrepo.New(db)
+	err := fixtures.SetOpenRouterAPIKeyCreatedAtFixture(ctx, testrepo.SetOpenRouterAPIKeyCreatedAtFixtureParams{
+		CreatedAt:      pgtype.Timestamptz{Time: firstMonth, Valid: true},
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	for keyType, spendUSD := range map[string]string{"chat": "1.0", "internal": "0.5"} {
+		err = fixtures.SeedOpenRouterSpendRangeFixture(ctx, testrepo.SeedOpenRouterSpendRangeFixtureParams{
+			OrganizationID: organizationID,
+			KeyType:        keyType,
+			SpendUsd:       spendUSD,
+			StartDay:       pgtype.Date{Time: firstMonth, Valid: true},
+			EndDay:         pgtype.Date{Time: currentMonth.AddDate(0, 0, -1), Valid: true},
+		})
+		require.NoError(t, err)
+	}
+	err = fixtures.SeedOpenRouterSpendRangeFixture(ctx, testrepo.SeedOpenRouterSpendRangeFixtureParams{
+		OrganizationID: organizationID,
+		KeyType:        "unsupported",
+		SpendUsd:       "999.0",
+		StartDay:       pgtype.Date{Time: firstMonth, Valid: true},
+		EndDay:         pgtype.Date{Time: firstMonth, Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := svc.GetInferenceSpendHistory(ctx, &gen.GetInferenceSpendHistoryPayload{OrganizationID: organizationID})
+	require.NoError(t, err)
+	require.Len(t, result, 2)
+	for index, month := range result {
+		periodStart := firstMonth.AddDate(0, index, 0)
+		periodEnd := periodStart.AddDate(0, 1, 0)
+		days := periodEnd.Sub(periodStart).Hours() / 24
+		require.Equal(t, periodStart.Format(time.DateOnly), month.PeriodStart)
+		require.Equal(t, periodEnd.Format(time.DateOnly), month.PeriodEnd)
+		require.Equal(t, fmt.Sprintf("%.6f", days*1.5), month.SpendUsd)
+	}
+
+	err = fixtures.DeleteOpenRouterSpendDayFixture(ctx, testrepo.DeleteOpenRouterSpendDayFixtureParams{
+		OrganizationID: organizationID,
+		KeyType:        "internal",
+		Day:            pgtype.Date{Time: firstMonth, Valid: true},
+	})
+	require.NoError(t, err)
+	result, err = svc.GetInferenceSpendHistory(ctx, &gen.GetInferenceSpendHistoryPayload{OrganizationID: organizationID})
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.Equal(t, firstMonth.AddDate(0, 1, 0).Format(time.DateOnly), result[0].PeriodStart)
 }
 
 func TestGetPaygBillingSummaryUsesCanonicalOrganizationID(t *testing.T) {
@@ -184,7 +616,7 @@ func TestCancelStripeSubscriptionUsesExplicitOrganization(t *testing.T) {
 	require.True(t, result.CancelAtPeriodEnd)
 	require.Equal(t, "oidc-subject-billing", fake.actor.Principal.ID)
 	require.NotNil(t, fake.actor.DisplayName)
-	require.Equal(t, audit.SpeakeasyTeamActorLabel, *fake.actor.DisplayName)
+	require.Equal(t, "Test Operator", *fake.actor.DisplayName)
 	require.NotEqual(t, "operator@example.test", *fake.actor.DisplayName)
 }
 

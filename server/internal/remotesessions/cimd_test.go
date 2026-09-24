@@ -8,7 +8,6 @@ package remotesessions_test
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,15 +16,20 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -113,6 +117,7 @@ func newCIMDChallengeManager(t *testing.T, ti *testInstance, serverURL string) *
 		ti.conn,
 		testenv.NewEncryptionClient(t),
 		policy,
+		nil,
 		cache.NoopCache,
 		mustURL(t, serverURL),
 	)
@@ -145,7 +150,8 @@ func TestBuildClientMetadataDocument(t *testing.T) {
 	const clientID = "https://app.getgram.ai/.well-known/oauth-client/abc"
 	const redirectURI = "https://app.getgram.ai/mcp/remote_login_callback"
 
-	doc := remotesessions.BuildClientMetadataDocument(clientID, redirectURI, []string{"read", "write"})
+	const jwksURI = "https://app.getgram.ai/.well-known/oauth-client/abc/jwks.json"
+	doc := remotesessions.BuildClientMetadataDocument(clientID, redirectURI, remotesessions.TokenEndpointAuthMethodPrivateKeyJWT, jwksURI, []string{"read", "write"})
 
 	body, err := json.Marshal(doc)
 	require.NoError(t, err)
@@ -158,14 +164,21 @@ func TestBuildClientMetadataDocument(t *testing.T) {
 	require.Equal(t, []any{redirectURI}, got["redirect_uris"])
 	require.Equal(t, []any{"authorization_code", "refresh_token"}, got["grant_types"])
 	require.Equal(t, []any{"code"}, got["response_types"])
-	require.Equal(t, "none", got["token_endpoint_auth_method"], "CIMD is public-mode only")
+	require.Equal(t, jwksURI, got["jwks_uri"])
+	require.Equal(t, "private_key_jwt", got["token_endpoint_auth_method"])
 	require.Equal(t, "read write", got["scope"], "scope is space-delimited per RFC 7591")
 }
 
 func TestBuildClientMetadataDocument_OmitsEmptyScope(t *testing.T) {
 	t.Parallel()
 
-	doc := remotesessions.BuildClientMetadataDocument("https://app.getgram.ai/.well-known/oauth-client/abc", "https://app.getgram.ai/mcp/remote_login_callback", nil)
+	doc := remotesessions.BuildClientMetadataDocument(
+		"https://app.getgram.ai/.well-known/oauth-client/abc",
+		"https://app.getgram.ai/mcp/remote_login_callback",
+		remotesessions.TokenEndpointAuthMethodNone,
+		"",
+		nil,
+	)
 
 	body, err := json.Marshal(doc)
 	require.NoError(t, err)
@@ -174,6 +187,8 @@ func TestBuildClientMetadataDocument_OmitsEmptyScope(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &got))
 	_, present := got["scope"]
 	require.False(t, present, "scope must be omitted when the client has no explicit scopes")
+	_, present = got["jwks_uri"]
+	require.False(t, present, "jwks_uri must be omitted when the client has no attached key set")
 }
 
 func TestClientMetadataDocumentURL(t *testing.T) {
@@ -214,6 +229,35 @@ func TestHandleClientMetadataDocument_ServesDocument(t *testing.T) {
 	require.Equal(t, []any{cimdServerURL + "/mcp/remote_login_callback"}, redirectURIs)
 	require.Equal(t, "none", got["token_endpoint_auth_method"])
 	require.Equal(t, "read:tools", got["scope"])
+	_, present := got["jwks_uri"]
+	require.False(t, present)
+}
+
+func TestHandleClientMetadataDocument_PublishesAttachedKeySetAndStoredAuthMethod(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	ti.enableCustomerManagedKeys(t, ctx, authCtx.ActiveOrganizationID)
+
+	issuerID := createCIMDIssuer(t, ctx, ti, "cimd-jwks", "https://idp.example.com/authorize", "https://idp.example.com/token")
+	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cimd-jwks-usi")
+	created := createCimdClient(t, ctx, ti, issuerID.String(), userIssuer.String(), nil)
+	clientID := uuid.MustParse(created.ID)
+	setID := createJsonWebKeySet(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "cimd-jwks-set")
+	attachJsonWebKeySet(t, ctx, ti, created.ID, setID)
+	forceTokenEndpointAuthMethod(t, ctx, ti.conn, clientID, *authCtx.ProjectID, string(remotesessions.TokenEndpointAuthMethodPrivateKeyJWT))
+
+	mgr := newCIMDChallengeManager(t, ti, cimdServerURL)
+	rec := httptest.NewRecorder()
+	require.NoError(t, mgr.HandleClientMetadataDocument(rec, cimdDocumentRequest(t, created.ID, false)))
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Equal(t, "private_key_jwt", got["token_endpoint_auth_method"])
+	require.Equal(t, remotesessions.ClientJSONWebKeySetURL(mustURL(t, cimdServerURL), clientID), got["jwks_uri"])
 }
 
 func TestHandleClientMetadataDocument_NotFoundUnknownID(t *testing.T) {
@@ -344,6 +388,116 @@ func TestCIMD_BuildAuthorizationUrlUsesMetadataURLAsClientID(t *testing.T) {
 	require.Equal(t, *created.ClientIDMetadataURI, parsed.Query().Get("client_id"), "authorize leg must send the CIMD document URL as client_id")
 }
 
+func TestCIMD_CallbackAuthorizationFailureRecordsRegistrationOutcome(t *testing.T) {
+	t.Parallel()
+
+	mgr, reader, state := newCIMDCallbackFailureFixture(t)
+	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=unauthorized_client&error_description="+url.QueryEscape(" rejected\nclient ")+"&state="+url.QueryEscape(state), nil)
+	untrustedCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=unauthorized_client&state=unknown", nil)
+
+	require.Error(t, mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), untrustedCallback))
+	require.Empty(t, registrationFailurePoints(t, reader), "an error without trusted state must not emit registration telemetry")
+	err := mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callback)
+	require.Error(t, err)
+
+	points := registrationFailurePoints(t, reader)
+	require.Len(t, points, 1)
+	require.EqualValues(t, 1, points[0].Value, "one denied callback records one failure, not a point that aggregated several")
+	require.Equal(t, attribute.NewSet(
+		attr.OAuthRegistrationMethod(registration.MethodCIMD),
+		attr.OAuthRegistrationOutcome(registration.OutcomeRefused),
+		attr.OAuthRegistrationReason(registration.ReasonAuthorizationRejected),
+		attr.OAuthRegistrationRetryable(false),
+	), points[0].Attributes)
+}
+
+func TestCIMD_CallbackAccessDeniedDoesNotRecordRegistrationFailure(t *testing.T) {
+	t.Parallel()
+
+	mgr, reader, state := newCIMDCallbackFailureFixture(t)
+	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=access_denied&state="+url.QueryEscape(state), nil)
+
+	err := mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callback)
+	require.Error(t, err)
+	require.Empty(t, registrationFailurePoints(t, reader))
+}
+
+// A provider that answers temporarily_unavailable has not refused; it is the
+// retryable half of the completed CIMD outcomes, and it reaches the counter
+// through the same callback path as a refusal.
+func TestCIMD_CallbackUpstreamUnavailableRecordsRetryableFailure(t *testing.T) {
+	t.Parallel()
+
+	mgr, reader, state := newCIMDCallbackFailureFixture(t)
+	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=temporarily_unavailable&state="+url.QueryEscape(state), nil)
+
+	err := mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callback)
+	require.Error(t, err)
+
+	points := registrationFailurePoints(t, reader)
+	require.Len(t, points, 1)
+	require.EqualValues(t, 1, points[0].Value)
+	require.Equal(t, attribute.NewSet(
+		attr.OAuthRegistrationMethod(registration.MethodCIMD),
+		attr.OAuthRegistrationOutcome(registration.OutcomeUnreachable),
+		attr.OAuthRegistrationReason(registration.ReasonUpstreamUnavailable),
+		attr.OAuthRegistrationRetryable(true),
+	), points[0].Attributes)
+}
+
+func newCIMDCallbackFailureFixture(t *testing.T) (*remotesessions.ChallengeManager, *sdkmetric.ManualReader, string) {
+	t.Helper()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	issuerID := createCIMDIssuer(t, ctx, ti, "cimd-callback-failure-"+uuid.NewString(), "https://idp.example.com/authorize", "https://idp.example.com/token")
+	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cimd-callback-failure-usi-"+uuid.NewString())
+	createCimdClient(t, ctx, ti, issuerID.String(), userIssuer.String(), nil)
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), meterProvider, ti.conn, testenv.NewEncryptionClient(t), policy, nil, ti.redisCache, mustURL(t, cimdServerURL))
+	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
+	require.NoError(t, err)
+	require.Len(t, clients, 1)
+	subject := urn.NewUserSubject("cimd-callback-failure-subject")
+	authorizationURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		ID:                  uuid.NewString(),
+		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		UserSessionIssuerID: userIssuer,
+		Subject:             &subject,
+		McpSlug:             "cimd-callback-failure",
+	}, clients[0])
+	require.NoError(t, err)
+	parsed, err := url.Parse(authorizationURL)
+	require.NoError(t, err)
+	require.NotEmpty(t, parsed.Query().Get("state"))
+	return mgr, reader, parsed.Query().Get("state")
+}
+
+func registrationFailurePoints(t *testing.T, reader *sdkmetric.ManualReader) []metricdata.DataPoint[int64] {
+	t.Helper()
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+	for _, scope := range rm.ScopeMetrics {
+		for _, metric := range scope.Metrics {
+			if metric.Name != "gram.oauth.client_registration.failures" {
+				continue
+			}
+			sum, ok := metric.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			return sum.DataPoints
+		}
+	}
+	return nil
+}
+
 func TestCIMD_RefreshUsesMetadataURLAsClientIDWithoutBasicAuth(t *testing.T) {
 	t.Parallel()
 
@@ -353,24 +507,7 @@ func TestCIMD_RefreshUsesMetadataURLAsClientIDWithoutBasicAuth(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	var spy upstreamSpy
-	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			spy.handlerErr = err
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		form, err := url.ParseQuery(string(body))
-		if err != nil {
-			spy.handlerErr = err
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		spy.form = form
-		spy.authHdr = r.Header.Get("Authorization")
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"refreshed-access","token_type":"Bearer","expires_in":3600,"refresh_token":"refreshed-refresh"}`))
-	}))
+	tokenServer := httptest.NewServer(spyRefreshHandler(&spy))
 	t.Cleanup(tokenServer.Close)
 
 	// One encryption client shared between the manager (which decrypts the
@@ -379,7 +516,7 @@ func TestCIMD_RefreshUsesMetadataURLAsClientIDWithoutBasicAuth(t *testing.T) {
 	tracerProvider := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
-	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, enc, policy, cache.NoopCache, mustURL(t, cimdServerURL))
+	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, enc, policy, nil, cache.NoopCache, mustURL(t, cimdServerURL))
 
 	issuerID := createCIMDIssuer(t, ctx, ti, "cimd-refresh", tokenServer.URL+"/authorize", tokenServer.URL+"/token")
 	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cimd-refresh-usi")

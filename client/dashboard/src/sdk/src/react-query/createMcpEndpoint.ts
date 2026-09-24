@@ -54,7 +54,7 @@ export type CreateMcpEndpointMutationError =
  * createMcpEndpoint mcpEndpoints
  *
  * @remarks
- * Create a new MCP endpoint for an MCP server
+ * Create a new MCP endpoint for an MCP server or a meta MCP server. Provide exactly one of mcp_server_id or meta_mcp_server_id.
  */
 export function useCreateMcpEndpointMutation(
   options?: MutationHookOptions<

@@ -19,6 +19,10 @@ import (
 // call — which now passes. Transports that cannot complete that round-trip fall
 // back to block (fail-safe).
 //
+// "quarantine" is block plus a session circuit: the triggering event is denied,
+// and later deniable events in the same hook conversation are denied until an
+// org admin releases the quarantine.
+//
 // "redact" is intentionally absent. Genuine in-transit redaction would need
 // to rewrite both user prompts and tool inputs before they reach the model.
 // Tool-input rewriting is supported by every coding-agent hook protocol we
@@ -32,7 +36,7 @@ import (
 //   - https://docs.claude.com/en/docs/claude-code/hooks
 //   - https://cursor.com/docs/agent/hooks
 func RiskPolicyActionEnum() {
-	Enum("flag", "warn", "block")
+	Enum("flag", "warn", "block", "quarantine")
 }
 
 // RiskPolicyTypeEnum applies the allowed-values constraint to a policy_type
@@ -43,13 +47,13 @@ func RiskPolicyTypeEnum() {
 	Enum("standard", "prompt_based")
 }
 
-// RiskPolicyModelConfig is the per-policy LLM-judge model configuration for
+// RiskPolicyModelConfig is the per-policy LLM-judge configuration for
 // `prompt_based` policies. All fields are optional; unset fields fall back to
-// judge defaults (default model, low temperature, fail-open on judge error).
+// judge defaults (low temperature, fail-open on judge error). The judge model
+// itself is not configurable - every policy runs on the one benchmarked model.
 var RiskPolicyModelConfig = Type("RiskPolicyModelConfig", func() {
 	Meta("struct:pkg:path", "types")
 
-	Attribute("model", String, "OpenRouter model id the judge should use. Empty selects the default judge model.")
 	Attribute("temperature", Float64, "Sampling temperature for the judge. Defaults to a low value for deterministic verdicts.")
 	Attribute("fail_open", Boolean, "When the judge errors or times out: true allows the message (fail-open), false blocks it (fail-closed). Defaults to fail-open.")
 })
@@ -151,11 +155,8 @@ var RiskPolicy = Type("RiskPolicy", func() {
 	Attribute("detection_scopes", ArrayOf(RiskDetectionScope), "Per-category detection scopes specified for this policy. The scan surface merges these with the recommended scopes, the specified scope winning on category conflict. Empty means every recommendation applies unchanged.")
 	Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids (e.g. 'secret.aws_access_token', 'pii.credit_card') the policy author has unchecked within an otherwise-enabled category. Empty means every rule in the selected categories runs; matching findings are dropped at scan time.")
 	Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids attached as detectors: a match produces a finding. Custom rules are pure detectors.")
-	Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, applies to all types. Valid values: user_message, tool_request, tool_response, assistant_message, prompt_attachment.")
-	Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Null/empty means all messages are in scope.")
-	Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Null/empty means no inline exemption.")
 	Attribute("enabled", Boolean, "Whether the policy is active.")
-	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), or block (deny in real-time).", func() {
+	Attribute("action", String, "Policy action: flag (log only), warn (challenge: warn the user and require acknowledgement to proceed), block (deny in real-time), or quarantine (deny and freeze the hook session).", func() {
 		RiskPolicyActionEnum()
 		Default("flag")
 	})
@@ -249,6 +250,24 @@ var RiskExclusion = Type("RiskExclusion", func() {
 	Required("id", "project_id", "match_type", "match_value", "rule_id_filter", "source_filter", "enabled", "created_at", "updated_at")
 })
 
+// riskExecutionAttributes describes mediated execution metadata without
+// implying that a finding has a durable chat anchor or revealable payload.
+func riskExecutionAttributes() {
+	Attribute("execution_id", String, "Identity of the concrete mediated execution.")
+	Attribute("mcp_server_id", String, "Concrete MCP server that executed the operation.")
+	Attribute("meta_mcp_server_id", String, "Outer gateway that routed the execution, when present.")
+	Attribute("toolset_id", String, "Toolset serving the execution, when present.")
+	Attribute("tool_name", String, "Name of the concrete tool, when applicable.")
+	Attribute("phase", String, "Execution phase inspected by risk.")
+	Attribute("mediation_surface", String, "Concrete mediation surface where the execution was observed.")
+	Attribute("mcp_method", String, "MCP method or equivalent mediated operation.")
+	Attribute("principal_kind", String, "Credential provenance class resolved by MCP identity.")
+	Attribute("identity_stamped", Boolean, "Whether MCP identity stamped validated principal provenance.")
+	Attribute("enforcement_outcome", String, "Recorded enforcement outcome, independent of policy configuration.", func() {
+		Enum("logged", "denied", "withheld", "warned_pending", "warned_acknowledged", "warned_abandoned", "quarantined")
+	})
+}
+
 var RiskResult = Type("RiskResult", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -259,6 +278,7 @@ var RiskResult = Type("RiskResult", func() {
 		Format(FormatUUID)
 	})
 	Attribute("policy_version", Int64, "Policy version when this result was produced.")
+	riskExecutionAttributes()
 	Attribute("block_id", String, "ID of the durable tool call block recorded for this finding's message, when one exists. Links to the block page at /blocks/:id.", func() {
 		Format(FormatUUID)
 	})
@@ -349,6 +369,7 @@ var RiskResultRedacted = Type("RiskResultRedacted", func() {
 		Format(FormatUUID)
 	})
 	Attribute("policy_version", Int64, "Policy version when this result was produced.")
+	riskExecutionAttributes()
 	Attribute("chat_message_id", String, "The chat message that was scanned, when the finding is anchored to a message.", func() {
 		Format(FormatUUID)
 	})

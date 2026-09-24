@@ -16,19 +16,25 @@ export default defineConfig({
     __PLAYGROUND_PROXY_URL__: "undefined",
     __GRAM_GIT_SHA__: JSON.stringify(""),
     __GRAM_API_URL__: JSON.stringify(""),
+    __GRAM_DEV_WORKTREE__: JSON.stringify(""),
+    __GRAM_DEV_BRANCH__: JSON.stringify(""),
+    __GRAM_DEV_BRANCH_EVENT__: JSON.stringify(""),
   },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@gram/client": path.resolve(__dirname, "./src/sdk/src"),
+      "@": path.resolve(import.meta.dirname, "./src"),
+      "@gram/client": path.resolve(import.meta.dirname, "./src/sdk/src"),
     },
   },
   build: {
-    outDir: path.resolve(__dirname, "../../server/internal/mcp/consent_assets"),
+    outDir: path.resolve(
+      import.meta.dirname,
+      "../../server/internal/mcp/consent_assets",
+    ),
     emptyOutDir: true,
     sourcemap: false,
     rolldownOptions: {
-      input: path.resolve(__dirname, "src/consent-tools/main.tsx"),
+      input: path.resolve(import.meta.dirname, "src/consent-tools/main.tsx"),
       output: {
         format: "iife",
         entryFileNames: "consent-tools.js",

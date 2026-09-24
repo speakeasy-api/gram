@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalkeys/repo"
+	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -168,12 +169,13 @@ func (s *Service) CreateAwsKmsKey(ctx context.Context, payload *gen.CreateAwsKms
 	}
 
 	ek, err := q.CreateExternalKey(ctx, repo.CreateExternalKeyParams{
-		OrganizationID:         conv.ToPGText(authCtx.ActiveOrganizationID),
-		ExternalCredentialID:   credentialID,
-		Provider:               "aws_kms",
-		Algorithm:              payload.Algorithm,
-		Name:                   name,
-		CustomerGrantReference: grantReference,
+		OrganizationID:               conv.ToPGText(authCtx.ActiveOrganizationID),
+		ExternalCredentialID:         credentialID,
+		Provider:                     "aws_kms",
+		Algorithm:                    payload.Algorithm,
+		Name:                         name,
+		CustomerGrantReference:       grantReference,
+		IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating external key").LogError(ctx, logger)
@@ -246,6 +248,10 @@ func (s *Service) UpdateAwsKmsKey(ctx context.Context, payload *gen.UpdateAwsKms
 		return nil, oops.E(oops.CodeNotFound, err, "aws kms key not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading aws kms key").LogError(ctx, logger)
+	}
+
+	if err := managedrows.RequireUnmanaged(current.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
+		return nil, err
 	}
 
 	if err := s.validateBackingCredential(ctx, logger, q, authCtx.ActiveOrganizationID, credentialID, "aws_kms"); err != nil {
@@ -336,12 +342,13 @@ func (s *Service) CreateGcpKmsKey(ctx context.Context, payload *gen.CreateGcpKms
 	}
 
 	ek, err := q.CreateExternalKey(ctx, repo.CreateExternalKeyParams{
-		OrganizationID:         conv.ToPGText(authCtx.ActiveOrganizationID),
-		ExternalCredentialID:   credentialID,
-		Provider:               "gcp_kms",
-		Algorithm:              payload.Algorithm,
-		Name:                   name,
-		CustomerGrantReference: grantReference,
+		OrganizationID:               conv.ToPGText(authCtx.ActiveOrganizationID),
+		ExternalCredentialID:         credentialID,
+		Provider:                     "gcp_kms",
+		Algorithm:                    payload.Algorithm,
+		Name:                         name,
+		CustomerGrantReference:       grantReference,
+		IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating external key").LogError(ctx, logger)
@@ -414,6 +421,10 @@ func (s *Service) UpdateGcpKmsKey(ctx context.Context, payload *gen.UpdateGcpKms
 		return nil, oops.E(oops.CodeNotFound, err, "gcp kms key not found")
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "error loading gcp kms key").LogError(ctx, logger)
+	}
+
+	if err := managedrows.RequireUnmanaged(current.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
+		return nil, err
 	}
 
 	if err := s.validateBackingCredential(ctx, logger, q, authCtx.ActiveOrganizationID, credentialID, "gcp_kms"); err != nil {
@@ -568,9 +579,8 @@ func (s *Service) DeleteGcpKmsKey(ctx context.Context, payload *gen.DeleteGcpKms
 // FOR UPDATE, because a JWKS insert takes FOR KEY SHARE on this row and only
 // FOR UPDATE conflicts with that.
 //
-// The refusal path has no test here: no Go package owns json_web_key_sets /
-// json_web_keys yet, and tests may not write raw SQL. AIS-240 introduces that
-// repo and owns the coverage.
+// The refusal path's coverage lives with the jsonwebkeysets package tests,
+// which own the JWKS fixtures this package's tests cannot create.
 func (s *Service) deleteExternalKey(ctx context.Context, provider, rawID string) error {
 	authCtx, logger, err := s.requireOrgAccess(ctx, authz.ScopeOrgAdmin)
 	if err != nil {
@@ -592,7 +602,7 @@ func (s *Service) deleteExternalKey(ctx context.Context, provider, rawID string)
 
 	// Lock the key before checking for references so a concurrent JWKS write
 	// cannot commit between the check and the delete.
-	_, err = q.LockExternalKeyForDelete(ctx, repo.LockExternalKeyForDeleteParams{
+	locked, err := q.LockExternalKeyForDelete(ctx, repo.LockExternalKeyForDeleteParams{
 		ID:             id,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 		Provider:       provider,
@@ -602,6 +612,10 @@ func (s *Service) deleteExternalKey(ctx context.Context, provider, rawID string)
 		return nil
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "error deleting external key").LogError(ctx, logger)
+	}
+
+	if err := managedrows.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, locked.IdentityProviderConnectionID, "this external key"); err != nil {
+		return err
 	}
 
 	referenced, err := q.ExternalKeyHasJsonWebKeyReferences(ctx, repo.ExternalKeyHasJsonWebKeyReferencesParams{
@@ -678,7 +692,7 @@ func (s *Service) validateBackingCredential(ctx context.Context, logger *slog.Lo
 		return oops.E(oops.CodeUnexpected, fmt.Errorf("unexpected key provider: %s", keyProvider), "unexpected key provider").LogError(ctx, logger)
 	}
 
-	got, err := q.GetExternalCredentialProviderForKey(ctx, repo.GetExternalCredentialProviderForKeyParams{
+	cred, err := q.GetExternalCredentialProviderForKey(ctx, repo.GetExternalCredentialProviderForKeyParams{
 		ExternalCredentialID: credentialID,
 		OrganizationID:       conv.ToPGText(organizationID),
 	})
@@ -689,8 +703,13 @@ func (s *Service) validateBackingCredential(ctx context.Context, logger *slog.Lo
 		return oops.E(oops.CodeUnexpected, err, "error loading external credential").LogError(ctx, logger)
 	}
 
-	if got != want {
-		return oops.E(oops.CodeBadRequest, nil, "external credential provider %q does not match key provider %q (expected %q)", got, keyProvider, want).LogError(ctx, logger)
+	if cred.Provider != want {
+		return oops.E(oops.CodeBadRequest, nil, "external credential provider %q does not match key provider %q (expected %q)", cred.Provider, keyProvider, want).LogError(ctx, logger)
+	}
+
+	// An exempted credential signs as Speakeasy's own project; never behind an organization key.
+	if cred.SkipProjectVerification {
+		return oops.E(oops.CodeBadRequest, nil, "a credential exempted from project verification cannot back an organization key").LogError(ctx, logger)
 	}
 
 	return nil

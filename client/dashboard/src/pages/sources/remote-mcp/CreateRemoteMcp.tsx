@@ -1,3 +1,5 @@
+import { GatewayAttachmentStatus } from "@/pages/mcp/gateway/GatewayAttachmentStatus";
+import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { FormPage } from "@/components/page-templates";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
@@ -5,65 +7,130 @@ import { mcpServerRouteParam, validateMcpServerUrl } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Stack } from "@/components/ui/Stack";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { useIsSpeakeasyStaff } from "@/contexts/Auth";
+import { AlertCircle, Loader2, Plug } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
+import { useCreateUnproxiedMcpSource } from "../unproxied-mcp/hooks";
 import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
+import { VerifyRemoteMcpUrlAlert } from "./VerifyRemoteMcpUrlButton";
+import { UserSessionIssuerSelect } from "@/components/user-session-issuer-select";
 import {
-  VerifyRemoteMcpUrlAlert,
-  VerifyRemoteMcpUrlButton,
-} from "./VerifyRemoteMcpUrlButton";
+  PROJECT_SPECIFIC_ISSUER_VALUE,
+  defaultCreationUserSessionIssuerValue,
+} from "@/components/user-session-issuer-select.utils";
+import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
+
+// Both backends are, to the administrator, the same thing: a server that lives
+// at a URL somewhere else. The only difference is whether Gram sits in the
+// request path, so that is the one question the form asks — and only of staff,
+// since unproxied servers are staff-only today.
+type ProxyMode = "proxied" | "unproxied";
 
 export default function CreateRemoteMcp(): JSX.Element {
   return <CreateRemoteMcpForm />;
 }
 
 function CreateRemoteMcpForm() {
+  const flow = useGatewayCreation();
+  const creationLocked = flow.createdServerId !== null || flow.isAttaching;
   const routes = useRoutes();
-  const createSource = useCreateRemoteMcpSource();
+  const isSpeakeasyStaff = useIsSpeakeasyStaff();
+  const createRemote = useCreateRemoteMcpSource();
+  const createUnproxied = useCreateUnproxiedMcpSource();
+  const issuerQuery = useEffectiveUserSessionIssuers();
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [mode, setMode] = useState<ProxyMode>("proxied");
+  const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
   // Track whether the field has been touched so we don't surface "URL is
   // required" the moment the page renders.
   const [touched, setTouched] = useState(false);
 
   const verify = useVerifyRemoteMcpUrl(url);
 
+  const isPending = createRemote.isPending || createUnproxied.isPending;
+  // Read from the mutation the current mode would run, so switching Connection
+  // after a failure doesn't leave the other backend's error standing.
+  const activeCreate = mode === "unproxied" ? createUnproxied : createRemote;
+  const createError = activeCreate.error;
+  const isCreateError = activeCreate.isError;
+
   const validationError = touched ? validateMcpServerUrl(url) : null;
-  const submitDisabled =
-    createSource.isPending || !url.trim() || validateMcpServerUrl(url) !== null;
-  const verifyDisabled =
-    createSource.isPending || !url.trim() || validateMcpServerUrl(url) !== null;
+  const urlUsable = !!url.trim() && validateMcpServerUrl(url) === null;
+  // The verify result is cleared whenever the URL changes (see
+  // useVerifyRemoteMcpUrl), so this can only be true for the URL on screen.
+  const isVerified = verify.result?.verified === true;
+  const defaultIssuerSelection = defaultCreationUserSessionIssuerValue(
+    issuerQuery.organizationIssuers,
+  );
+  const selectedIssuer = issuerSelection ?? defaultIssuerSelection;
+  const issuerSelectionBlocked =
+    mode === "proxied" &&
+    (issuerQuery.isLoading || issuerQuery.isError || selectedIssuer === "");
+
+  const handleVerify = () => {
+    setTouched(true);
+    if (!urlUsable) return;
+    void verify.trigger();
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (creationLocked) return;
     setTouched(true);
-    if (validateMcpServerUrl(url) !== null) {
+    if (!urlUsable) return;
+    // Connectivity is part of saving rather than a side errand: an unverified
+    // URL falls through to a verify instead of creating a server nobody can
+    // reach.
+    if (!isVerified) {
+      void verify.trigger();
       return;
     }
+    if (issuerSelectionBlocked) return;
+
+    const trimmedName = name.trim();
     try {
-      const trimmedName = name.trim();
-      const { authAutoConfig, mcpServer } = await createSource.mutateAsync({
+      if (mode === "unproxied" && !flow.gatewayId) {
+        const { mcpServer } = await createUnproxied.mutateAsync({
+          name: trimmedName === "" ? undefined : trimmedName,
+          url: url.trim(),
+        });
+        toast.success("MCP server added");
+        routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
+        return;
+      }
+
+      const { authAutoConfig, mcpServer } = await createRemote.mutateAsync({
         name: trimmedName === "" ? undefined : trimmedName,
         url: url.trim(),
+        userSessionIssuerId:
+          selectedIssuer === PROJECT_SPECIFIC_ISSUER_VALUE
+            ? undefined
+            : selectedIssuer,
+        organizationOwnedUserSessionIssuer:
+          selectedIssuer !== PROJECT_SPECIFIC_ISSUER_VALUE,
       });
       if (authAutoConfig.status === "configured") {
-        toast.success("Remote MCP server added and authentication configured");
+        toast.success("MCP server added and authentication configured");
       } else {
-        toast.success("Remote MCP server added");
+        toast.success("MCP server added");
         if (authAutoConfig.warn) {
           toast.warning(authAutoConfig.message);
         }
       }
-      routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
+      if (flow.gatewayId) {
+        await flow.complete(mcpServer.id);
+      } else {
+        routes.mcp.x.overview.goTo(mcpServerRouteParam(mcpServer));
+      }
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to add remote MCP server";
+        error instanceof Error ? error.message : "Failed to add MCP server";
       toast.error(message);
     }
   };
@@ -72,7 +139,7 @@ function CreateRemoteMcpForm() {
     <FormPage
       scope="mcp:write"
       title="New remote MCP server"
-      description="Register an existing remote MCP server by URL. We'll proxy requests to it using streamable-http transport."
+      description="Register a server that already runs somewhere else by its URL."
     >
       <form
         onSubmit={(e) => {
@@ -81,92 +148,189 @@ function CreateRemoteMcpForm() {
         noValidate
       >
         <Stack gap={4}>
-          <Stack gap={1}>
-            <label
-              htmlFor="remote-mcp-name"
-              className="text-sm leading-none font-medium"
-            >
-              Display name (optional)
-            </label>
-            <Input
-              id="remote-mcp-name"
-              autoFocus
-              placeholder="My MCP server"
-              value={name}
-              onChange={setName}
-            />
-          </Stack>
-
-          <Stack gap={1}>
-            <label
-              htmlFor="remote-mcp-url"
-              className="text-sm leading-none font-medium"
-            >
-              Remote MCP server URL
-            </label>
-            <Input
-              id="remote-mcp-url"
-              placeholder="https://example.com/mcp"
-              value={url}
-              onChange={(value) => {
-                setUrl(value);
-                if (!touched) setTouched(true);
-              }}
-              onBlur={() => setTouched(true)}
-              aria-invalid={validationError ? true : undefined}
-              aria-describedby={
-                validationError ? "remote-mcp-url-error" : undefined
-              }
-            />
-            {validationError && (
-              <div
-                id="remote-mcp-url-error"
-                role="alert"
-                className="text-destructive mt-2 flex items-center gap-1.5 text-xs"
+          <fieldset disabled={creationLocked} className="contents">
+            <Stack gap={1}>
+              <label
+                htmlFor="remote-mcp-name"
+                className="text-sm leading-none font-medium"
               >
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                <span>{validationError}</span>
-              </div>
+                Display name (optional)
+              </label>
+              <Input
+                id="remote-mcp-name"
+                autoFocus
+                placeholder="My MCP server"
+                value={name}
+                onChange={setName}
+              />
+            </Stack>
+
+            <Stack gap={1}>
+              <label
+                htmlFor="remote-mcp-url"
+                className="text-sm leading-none font-medium"
+              >
+                MCP server URL
+              </label>
+              <Input
+                id="remote-mcp-url"
+                placeholder="https://example.com/mcp"
+                value={url}
+                onChange={(value) => {
+                  setUrl(value);
+                  if (!touched) setTouched(true);
+                }}
+                onBlur={() => setTouched(true)}
+                aria-invalid={validationError ? true : undefined}
+                aria-describedby={
+                  validationError ? "remote-mcp-url-error" : undefined
+                }
+              />
+              {validationError && (
+                <div
+                  id="remote-mcp-url-error"
+                  role="alert"
+                  className="text-destructive mt-2 flex items-center gap-1.5 text-xs"
+                >
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span>{validationError}</span>
+                </div>
+              )}
+              <VerifyRemoteMcpUrlAlert state={verify} />
+            </Stack>
+
+            {isSpeakeasyStaff && (
+              <Stack gap={2}>
+                <label className="text-sm leading-none font-medium">
+                  Connection
+                </label>
+                <RadioGroup
+                  value={mode}
+                  onValueChange={(value) => setMode(value as ProxyMode)}
+                >
+                  <label className="flex items-start gap-2.5">
+                    <RadioGroupItem value="proxied" className="mt-0.5" />
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-sm">Proxy through Speakeasy</span>
+                      <Text muted small>
+                        Requests route through us over streamable-http, so we
+                        can manage authentication and see the traffic.
+                      </Text>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2.5">
+                    <RadioGroupItem
+                      value="unproxied"
+                      className="mt-0.5"
+                      disabled={!!flow.gatewayId}
+                    />
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-sm">
+                        Clients connect directly{" "}
+                        <span className="text-muted-foreground">
+                          (Speakeasy staff only)
+                        </span>
+                      </span>
+                      <Text muted small>
+                        We list the server but never sit in the request path, so
+                        the vendor&apos;s own OAuth applies. Use this to
+                        sidestep per-vendor callback allowlisting.
+                      </Text>
+                    </span>
+                  </label>
+                </RadioGroup>
+                {flow.gatewayId && (
+                  <Text muted small>
+                    Gateway members must proxy through Speakeasy; direct
+                    connections are not supported.
+                  </Text>
+                )}
+              </Stack>
             )}
-            <VerifyRemoteMcpUrlAlert state={verify} />
-          </Stack>
 
-          <Stack gap={1}>
-            <label className="text-sm leading-none font-medium">
-              Transport
-            </label>
-            <Text muted small>
-              streamable-http
-            </Text>
-          </Stack>
-
-          {createSource.isError && (
+            {mode === "proxied" ? (
+              <Stack gap={1}>
+                <label className="text-sm leading-none font-medium">
+                  User session issuer
+                </label>
+                <UserSessionIssuerSelect
+                  issuers={issuerQuery.organizationIssuers}
+                  value={selectedIssuer}
+                  onValueChange={setIssuerSelection}
+                  includeProjectSpecific
+                  disabled={issuerQuery.isLoading || issuerQuery.isError}
+                />
+                <Text muted small>
+                  Organization issuers are shared across projects. Creating a
+                  project-specific issuer is available for exceptional setups.
+                </Text>
+                {issuerQuery.isError ? (
+                  <Alert variant="error" dismissible={false}>
+                    Failed to load organization user session issuers.
+                  </Alert>
+                ) : null}
+              </Stack>
+            ) : null}
+          </fieldset>
+          <GatewayAttachmentStatus flow={flow} />
+          {isCreateError && createError && (
             <Alert variant="error" dismissible={false}>
-              {createSource.error.message}
+              {createError.message}
             </Alert>
           )}
 
           <Stack direction="horizontal" gap={2}>
-            <VerifyRemoteMcpUrlButton
-              state={verify}
-              url={url}
-              disabled={verifyDisabled}
-            />
-            <Button type="submit" variant="primary" disabled={submitDisabled}>
-              {createSource.isPending ? (
+            {/* One primary action that advances through the flow: verify, then
+                add. A server that cannot be reached is never worth saving, so
+                the two steps are the same button rather than a check the user
+                can skip. */}
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={
+                creationLocked ||
+                !urlUsable ||
+                verify.isPending ||
+                isPending ||
+                issuerSelectionBlocked
+              }
+            >
+              {verify.isPending || isPending ? (
                 <Button.LeftIcon>
                   <Loader2 className="size-4 animate-spin" />
                 </Button.LeftIcon>
+              ) : !isVerified ? (
+                <Button.LeftIcon>
+                  <Plug className="size-4" />
+                </Button.LeftIcon>
               ) : null}
               <Button.Text>
-                {createSource.isPending ? "Adding" : "Add server"}
+                {verify.isPending
+                  ? "Verifying"
+                  : isPending
+                    ? "Saving"
+                    : isVerified
+                      ? "Save"
+                      : "Verify connectivity"}
               </Button.Text>
             </Button>
+            {isVerified && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={creationLocked || verify.isPending || isPending}
+                onClick={handleVerify}
+              >
+                <Button.Text>Re-verify</Button.Text>
+              </Button>
+            )}
             <Button
               type="button"
               variant="secondary"
-              disabled={createSource.isPending}
-              onClick={() => routes.sources.goTo()}
+              disabled={isPending || flow.isAttaching}
+              onClick={() => {
+                if (!flow.cancel()) routes.mcp.add.goTo();
+              }}
             >
               <Button.Text>Cancel</Button.Text>
             </Button>

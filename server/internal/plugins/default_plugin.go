@@ -191,15 +191,7 @@ func AttachToDefaultPlugin(ctx context.Context, tx pgx.Tx, params AttachToDefaul
 // existing default plugin and writes the matching plugin-server audit event in
 // the caller's transaction. It never creates or promotes a plugin.
 func AttachToExistingDefaultPluginAudited(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, organizationID string, projectID, mcpServerID uuid.UUID, displayName string) (*AttachToDefaultPluginResult, error) {
-	if _, err := projectsrepo.New(tx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID, OrganizationID: organizationID}); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrDefaultPluginNotFound
-		}
-		return nil, fmt.Errorf("validate existing default plugin project ownership: %w", err)
-	}
-	q := repo.New(tx)
-
-	plugin, err := q.GetDefaultPlugin(ctx, repo.GetDefaultPluginParams{
+	plugin, err := repo.New(tx).GetDefaultPlugin(ctx, repo.GetDefaultPluginParams{
 		OrganizationID: organizationID,
 		ProjectID:      projectID,
 	})
@@ -208,6 +200,34 @@ func AttachToExistingDefaultPluginAudited(ctx context.Context, tx pgx.Tx, auditL
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get existing default plugin: %w", err)
+	}
+	return AttachToExistingPluginAudited(ctx, tx, auditLogger, authCtx, organizationID, projectID, plugin.ID, mcpServerID, displayName)
+}
+
+// AttachToExistingPluginAudited attaches one MCP server to the exact existing
+// plugin the caller named and writes the matching plugin-server audit event in
+// the caller's transaction. It never creates, promotes, or substitutes a
+// plugin: a plugin id that is not a live plugin in this project is reported as
+// missing rather than resolved to the project's default.
+func AttachToExistingPluginAudited(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, authCtx *contextvalues.AuthContext, organizationID string, projectID, pluginID, mcpServerID uuid.UUID, displayName string) (*AttachToDefaultPluginResult, error) {
+	if _, err := projectsrepo.New(tx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID, OrganizationID: organizationID}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrDefaultPluginNotFound
+		}
+		return nil, fmt.Errorf("validate existing plugin project ownership: %w", err)
+	}
+	q := repo.New(tx)
+
+	plugin, err := q.GetPlugin(ctx, repo.GetPluginParams{
+		ID:             pluginID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrDefaultPluginNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get existing plugin: %w", err)
 	}
 
 	server, err := q.GetMcpServerForPluginServer(ctx, repo.GetMcpServerForPluginServerParams{

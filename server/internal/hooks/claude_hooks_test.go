@@ -23,7 +23,7 @@ import (
 // without standing up the real risk-policy stack.
 type stubBlockingShadowMCPScanner struct{}
 
-func (stubBlockingShadowMCPScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
+func (stubBlockingShadowMCPScanner) ScanForEnforcement(_ context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 	return nil, nil
 }
 
@@ -46,7 +46,7 @@ type userScopedShadowMCPScanner struct {
 	userID string
 }
 
-func (s userScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
+func (s userScopedShadowMCPScanner) ScanForEnforcement(_ context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 	return nil, nil
 }
 
@@ -177,7 +177,7 @@ func TestNormalizeClaudeHookEvent_ResolvesAuthContextActorFromCachedEmail(t *tes
 		UserID:        "",
 		ExternalOrgID: "claude_org",
 		GramOrgID:     authCtx.ActiveOrganizationID,
-		ProjectID:     uuid.NewString(),
+		ProjectID:     authCtx.ProjectID.String(),
 	}, 0))
 
 	normalized, err := ti.service.normalizeClaudeHookEvent(ctx, &gen.ClaudePayload{
@@ -290,7 +290,7 @@ func TestClaude_PreToolUse_DeniesWhenMatchedServerNotGramHosted(t *testing.T) {
 
 	// Seed the cache with an entry that resolves the tool's server prefix
 	// but points at a non-Gram host.
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "plugin", PluginName: "slack", Name: "slack", URL: "https://mcp.slack.com/mcp"}},
 		sessionMCPListTTL,
 	))
@@ -328,7 +328,7 @@ func TestClaude_PreToolUse_DeniesLocalStdioServer(t *testing.T) {
 	toolUseID := "toolu_local_stdio"
 	userEmail := "claude-local-stdio@example.com"
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
 		sessionMCPListTTL,
 	))
@@ -368,7 +368,7 @@ func TestClaude_PreToolUse_TargetedShadowMCPPolicyUsesResolvedHookUser(t *testin
 	toolName := "mcp__mise__install_tool"
 	toolUseID := "toolu_claude_specific_user_policy"
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
 		sessionMCPListTTL,
 	))
@@ -403,7 +403,7 @@ func TestClaude_PreToolUse_AllowsGramHostedServer(t *testing.T) {
 	toolUseID := "toolu_gram_hosted_ok"
 	userEmail := "claude-gram-hosted@example.com"
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
 		sessionMCPListTTL,
 	))
@@ -528,7 +528,7 @@ func TestClaude_PreToolUse_FreshPayloadInventorySupersedesCache(t *testing.T) {
 	userEmail := "claude-fresh-supersedes@example.com"
 
 	// Cache holds a Gram-hosted entry that would allow on its own.
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
 		sessionMCPListTTL,
 	))
@@ -578,7 +578,7 @@ func TestClaude_PreToolUse_StaleReplayDoesNotOverrideCache(t *testing.T) {
 	toolUseID := "toolu_stale_replay"
 	userEmail := "claude-stale-replay@example.com"
 
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "gram", URL: "https://app.getgram.ai/mcp/team-foo"}},
 		sessionMCPListTTL,
 	))
@@ -649,7 +649,7 @@ func TestClaude_PreToolUse_CacheTransportErrorFailsClosedDespiteReplay(t *testin
 	// (session metadata, auth) still resolves through the real cache.
 	ti.service.cache = mcpGetErrorCache{
 		Cache:   ti.service.cache,
-		failKey: sessionMCPListCacheKey(sessionID),
+		failKey: sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		err:     errors.New("redis: connection refused"),
 	}
 
@@ -706,7 +706,9 @@ func TestMergeClaudeAuthContextMetadata_DoesNotSelectUserID(t *testing.T) {
 	assert.Equal(t, "claude_org", metadata.ExternalOrgID)
 }
 
-func TestClaude_RecordHook_PersistsAuthContextProjectOverCachedMetadata(t *testing.T) {
+// Another project's cached metadata for the same session id is ignored: the
+// hook persists into its authenticated project on its own reported identity.
+func TestClaude_RecordHook_PersistsAuthContextProjectIgnoringOtherProjectMetadata(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -719,20 +721,32 @@ func TestClaude_RecordHook_PersistsAuthContextProjectOverCachedMetadata(t *testi
 	chatID := sessionIDToUUID(sessionID)
 	prompt := "hello from auth context project"
 	cachedProjectID := uuid.NewString()
+	userEmail := localFallbackEmail
 
 	require.NoError(t, ti.service.cache.Set(ctx, sessionCacheKey(sessionID), SessionMetadata{
 		SessionID:     sessionID,
 		ServiceName:   "claude-code",
-		UserEmail:     localFallbackEmail,
+		UserEmail:     "other-project@example.com",
 		UserID:        "",
-		ExternalOrgID: authCtx.ActiveOrganizationID,
+		ExternalOrgID: "other-project-claude-org",
+		DeviceID:      "other-project-device",
 		GramOrgID:     authCtx.ActiveOrganizationID,
 		ProjectID:     cachedProjectID,
 	}, time.Hour))
 
+	// The attribution the hook persists under carries none of the other
+	// project's account identity.
+	resolved, err := ti.service.resolveClaudeSessionMetadata(ctx, sessionID, userEmail)
+	require.NoError(t, err)
+	assert.Equal(t, authCtx.ProjectID.String(), resolved.ProjectID)
+	assert.Equal(t, userEmail, resolved.UserEmail)
+	assert.Empty(t, resolved.ExternalOrgID, "another project's provider org never leaks into this session")
+	assert.Empty(t, resolved.DeviceID, "another project's device never leaks into this session")
+
 	result, err := ti.service.Claude(ctx, &gen.ClaudePayload{
 		HookEventName: "UserPromptSubmit",
 		SessionID:     &sessionID,
+		UserEmail:     &userEmail,
 		Prompt:        &prompt,
 	})
 	require.NoError(t, err)
@@ -769,7 +783,7 @@ func TestClaude_RecordHook_BuffersAuthContextCacheMissWithoutPayloadEmail(t *tes
 	require.NotNil(t, result)
 
 	var buffered []gen.ClaudePayload
-	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(testProjectID(t, ctx), sessionID), 0, -1, &buffered))
 	require.Len(t, buffered, 1)
 	assert.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }
@@ -962,7 +976,7 @@ func TestClaude_ContinuesWhenPluginAuthFails(t *testing.T) {
 	// the session metadata. Asserting on the buffer (not just NoError)
 	// is what catches a regression to the early-return shape.
 	var buffered []gen.ClaudePayload
-	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey(sessionID), 0, -1, &buffered))
+	require.NoError(t, ti.service.cache.ListRange(ctx, hookPendingCacheKey("", sessionID), 0, -1, &buffered))
 	require.Len(t, buffered, 1, "hook should be buffered when plugin auth fails")
 	require.Equal(t, "UserPromptSubmit", buffered[0].HookEventName)
 }

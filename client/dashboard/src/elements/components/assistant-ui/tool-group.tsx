@@ -9,7 +9,6 @@ import {
   trailingAnnotationLine,
 } from "@/elements/lib/toolCallAnnotation";
 import { ToolUIGroup } from "@/elements/components/ui/tool-ui";
-import { DEFAULT_TOOL_COMPONENTS } from "@/elements/components/assistant-ui/default-tool-components";
 import { DocsCitations } from "@/elements/components/assistant-ui/docs-citations";
 import {
   excerptFromReadDoc,
@@ -43,17 +42,6 @@ export const ToolGroup: FC<PropsWithChildren<{ indices: number[] }>> = ({
       if (part?.type === "tool-call") return part.toolName;
     }
     return undefined;
-  });
-
-  // Joined rather than returned as an array: useAuiState compares snapshots by
-  // identity, and a fresh array every render would never settle.
-  const toolNameKey = useAuiState(({ message }) => {
-    const names: string[] = [];
-    for (const i of indices) {
-      const part = message.parts[i];
-      if (part?.type === "tool-call") names.push(part.toolName);
-    }
-    return names.join("\u0000");
   });
 
   const anyMessagePartsAreRunning = useAuiState(({ message }) => {
@@ -183,20 +171,14 @@ export const ToolGroup: FC<PropsWithChildren<{ indices: number[] }>> = ({
 
   const status = isRunning ? ("running" as const) : ("complete" as const);
 
-  // A tool with a card of its own renders that card instead of the mechanics
-  // of a run, so collapsing the group would only hide the answer. Hoist
-  // whenever every call in the run has one — a lone widget, or the repeat
-  // searches a model fires before it answers — but keep the annotation
-  // visible, since AssistantText has suppressed its prose render.
-  const toolNames = toolNameKey ? toolNameKey.split("\u0000") : [];
-  const everyToolHasComponent =
-    toolNames.length > 0 &&
-    toolNames.every(
-      (name) =>
-        (config.tools?.components?.[name] ?? DEFAULT_TOOL_COMPONENTS[name]) !==
-        undefined,
-    );
-  if (everyToolHasComponent) {
+  // If there's a custom component for the single tool, render children
+  // directly — but keep the annotation visible, since AssistantText has
+  // suppressed its prose render.
+  if (
+    toolCount === 1 &&
+    firstToolName &&
+    config.tools?.components?.[firstToolName]
+  ) {
     return (
       <>
         {annotation && (

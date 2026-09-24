@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { PageEyebrow } from "@/components/page-eyebrow";
 import { ProductTierBadge } from "@/components/product-tier-badge";
 import { productTierColors } from "@/components/product-tier-utils";
 import { Card, Cards, CardSkeleton } from "@/components/ui/Card";
@@ -6,7 +7,6 @@ import { Heading } from "@/components/ui/Heading";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { ProductTier, useProductTier } from "@/hooks/useProductTier";
@@ -31,12 +31,14 @@ import {
 } from "@/components/billing/billing-banners";
 import { InferenceCapsSection } from "@/components/billing/inference-caps-section";
 import { PaygPlanSection } from "@/components/billing/payg-plan-section";
-import { PaygUsageSection } from "@/components/billing/payg-usage-section";
-import { StartPaygCheckoutCTA } from "@/components/billing/start-payg-checkout-cta";
 import { PaygPriceList } from "@/components/billing/payg-price-list";
 import { TopUpCTA, UsageProgress } from "@/components/billing/usage-controls";
-import { TumAdminSection } from "@/components/billing/tum-admin-section";
-import { TumUsageSection } from "@/components/billing/tum-section";
+import { MeterUsageSection } from "@/components/billing/meter-usage-section";
+import { SpendBreakdownSection } from "@/components/billing/spend-breakdown-section";
+import { usePaygCheckoutAccess } from "@/components/billing/payg-checkout-access";
+import { paygPlanState } from "@/components/billing/payg-plan-state";
+import { useStripeSubscription } from "@/components/billing/use-stripe-subscription";
+import { isNotFoundError } from "@/lib/route-errors";
 
 export default function Billing(): JSX.Element {
   return (
@@ -53,6 +55,7 @@ export default function Billing(): JSX.Element {
       </Page.Banner>
       <Page.Body>
         <RequireScope scope={["org:read", "org:admin"]} level="page">
+          <PageEyebrow className="mt-3 -mb-4" />
           <BillingInner />
         </RequireScope>
       </Page.Body>
@@ -62,40 +65,66 @@ export default function Billing(): JSX.Element {
 
 function BillingInner() {
   const productTier = useProductTier();
-  const isPlatformAdmin = useIsPlatformAdmin();
+  const { eligible: canStartCheckout, trialLifecycle } = usePaygCheckoutAccess(
+    productTier === "payg" ? "unsubscribed-payg" : "active-trial",
+  );
+  const activeTrial = trialLifecycle === "active";
+  const subscription = useStripeSubscription({
+    enabled: productTier === "payg" && !activeTrial,
+  });
 
-  // Enterprise contracts bill on tokens under management, so enterprise orgs
-  // see the TUM view instead of the self-serve usage meters. Trials run on the
-  // enterprise tier, so the pay-as-you-go CTA has to be repeated here — the
-  // early return is exactly the path an org in an active trial takes.
-  if (productTier === "enterprise") {
+  let paymentRequired = activeTrial && canStartCheckout;
+  if (productTier === "payg" && !activeTrial) {
+    // Confirmed absence outranks stale data. An outage alone is not evidence
+    // that payment is required, but it must not hide a known payment failure.
+    if (isNotFoundError(subscription.error)) {
+      paymentRequired = canStartCheckout;
+    } else if (subscription.data) {
+      paymentRequired =
+        subscription.data.paymentFailed === true ||
+        paygPlanState(subscription.data).kind === "inactive";
+    }
+  }
+
+  const paymentGroup = (activeTrial || productTier === "payg") && (
+    <div
+      key="payment"
+      className={cn(
+        "grid min-w-0 grid-cols-1 gap-x-8",
+        activeTrial && canStartCheckout && "@3xl/main:grid-cols-2",
+      )}
+    >
+      <PaygPlanSection />
+      <PaygPriceList />
+    </div>
+  );
+  const usage = <BillingUsage key="usage" productTier={productTier} />;
+
+  return (
+    <>
+      {paymentRequired ? [paymentGroup, usage] : [usage, paymentGroup]}
+      {/* Enterprise contracts handle notifications through their contract. */}
+      {productTier === "payg" && <BillingEmailSection />}
+    </>
+  );
+}
+
+function BillingUsage({ productTier }: { productTier: ProductTier }) {
+  if (productTier === "enterprise" || productTier === "payg") {
     return (
       <>
-        <StartPaygCheckoutCTA label="Add payment method" />
-        <TumUsageSection />
-        {/* Renders only during an active trial — the section owns that rule. */}
+        <SpendBreakdownSection />
+        <MeterUsageSection />
+        {/* Enterprise inference caps render only during an active trial. */}
         <InferenceCapsSection />
-        <PaygPriceList />
-        {isPlatformAdmin && <TumAdminSection />}
       </>
     );
   }
 
   return (
     <>
-      <StartPaygCheckoutCTA label="Add payment method" />
-      {/* Pay as you go bills through Stripe, so it gets the cycle usage and
-          invoice estimate. Every other self-serve tier still meters against
-          Polar period usage, which says nothing about a Stripe invoice. */}
-      {productTier === "payg" ? <PaygUsageSection /> : <UsageSection />}
-      {/* Renders only for pay as you go — the section owns that rule. */}
-      <PaygPlanSection />
-      {/* Renders only for pay as you go — the section owns that rule. */}
-      <InferenceCapsSection />
-      {/* Only pay-as-you-go organizations get product billing notifications;
-          enterprise contracts are billed through their contract terms. */}
-      {productTier === "payg" && <BillingEmailSection />}
-      {/* The product tiers / self serve billing section is DEPRECATED, and thus only shown to users already on a paid, non-enterprise tier */}
+      {/* Legacy self-serve tiers still meter against Polar period usage. */}
+      <UsageSection />
       {(productTier === "base_PAID" || productTier === "__deprecated__pro") && (
         <UsageTiers />
       )}
@@ -148,7 +177,7 @@ const UsageSection = () => {
 
   return (
     <Page.Section>
-      <Page.Section.Title>Usage</Page.Section.Title>
+      <Page.Section.Title area="">Usage</Page.Section.Title>
       <Page.Section.Description>
         A summary of your organization's usage this period. Please visit the
         billing portal to see complete details or manage your account.

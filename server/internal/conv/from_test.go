@@ -1,6 +1,7 @@
 package conv_test
 
 import (
+	"errors"
 	"math"
 	"testing"
 	"time"
@@ -243,4 +244,91 @@ func TestClampedUint64ToInt(t *testing.T) {
 	out, clamped = conv.ClampedUint64ToInt(math.MaxUint64)
 	require.True(t, clamped)
 	require.Equal(t, math.MaxInt, out)
+}
+
+func TestParseOptionalTimeWindow_NoBounds(t *testing.T) {
+	t.Parallel()
+
+	from, to, err := conv.ParseOptionalTimeWindow(nil, nil)
+
+	require.NoError(t, err)
+	require.Nil(t, from)
+	require.Nil(t, to)
+}
+
+// The dashboard clears a range by sending the parameter empty rather than by
+// dropping it, so a blank string has to widen back to "no bound" instead of
+// parsing as the zero time and filtering every row out.
+func TestParseOptionalTimeWindow_BlankIsNoBound(t *testing.T) {
+	t.Parallel()
+
+	blank := "   "
+	from, to, err := conv.ParseOptionalTimeWindow(&blank, &blank)
+
+	require.NoError(t, err)
+	require.Nil(t, from)
+	require.Nil(t, to)
+}
+
+func TestParseOptionalTimeWindow_NormalizesToUTC(t *testing.T) {
+	t.Parallel()
+
+	start := "2026-03-01T12:00:00+02:00"
+	end := "2026-03-08T12:00:00Z"
+	from, to, err := conv.ParseOptionalTimeWindow(&start, &end)
+
+	require.NoError(t, err)
+	require.NotNil(t, from)
+	require.NotNil(t, to)
+	require.Equal(t, "2026-03-01T10:00:00Z", from.Format(time.RFC3339))
+	require.Equal(t, time.UTC, from.Location())
+	require.Equal(t, "2026-03-08T12:00:00Z", to.Format(time.RFC3339))
+}
+
+func TestParseOptionalTimeWindow_OneBoundOnly(t *testing.T) {
+	t.Parallel()
+
+	start := "2026-03-01T00:00:00Z"
+
+	from, to, err := conv.ParseOptionalTimeWindow(&start, nil)
+	require.NoError(t, err)
+	require.NotNil(t, from)
+	require.Nil(t, to)
+
+	from, to, err = conv.ParseOptionalTimeWindow(nil, &start)
+	require.NoError(t, err)
+	require.Nil(t, from)
+	require.NotNil(t, to)
+}
+
+// An inverted or empty window is a caller error rather than an empty result:
+// silently returning nothing would read as "this identity did nothing then".
+func TestParseOptionalTimeWindow_RejectsInvertedAndEmpty(t *testing.T) {
+	t.Parallel()
+
+	early := "2026-03-01T00:00:00Z"
+	late := "2026-03-08T00:00:00Z"
+
+	_, _, err := conv.ParseOptionalTimeWindow(&late, &early)
+	require.EqualError(t, err, "from must be before to")
+
+	_, _, err = conv.ParseOptionalTimeWindow(&early, &early)
+	require.EqualError(t, err, "from must be before to", "an empty window is rejected too")
+}
+
+func TestParseOptionalTimeWindow_RejectsUnparseable(t *testing.T) {
+	t.Parallel()
+
+	bad := "not-a-timestamp"
+	valid := "2026-03-08T00:00:00Z"
+
+	// The message is what a 400 carries, so it names the offending parameter
+	// rather than describing the window as a whole: a caller that sent one bad
+	// bound should not have to guess which one to fix.
+	_, _, err := conv.ParseOptionalTimeWindow(&bad, nil)
+	require.EqualError(t, err, "invalid from")
+	require.ErrorContains(t, errors.Unwrap(err), "parse from", "the parse detail stays available for logs")
+
+	_, _, err = conv.ParseOptionalTimeWindow(&valid, &bad)
+	require.EqualError(t, err, "invalid to")
 }

@@ -10,9 +10,17 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AccessMember = {
   /**
+   * Department name as reported by the identity provider.
+   */
+  department?: string | undefined;
+  /**
    * Email address.
    */
   email: string;
+  /**
+   * Names of the directory groups the member belongs to.
+   */
+  groups?: Array<string> | undefined;
   /**
    * User ID.
    */
@@ -43,7 +51,9 @@ export type AccessMember = {
 export const AccessMember$inboundSchema: z.ZodMiniType<AccessMember, unknown> =
   z.pipe(
     z.object({
+      department: z.optional(z.string()),
       email: z.string(),
+      groups: z.optional(z.array(z.string())),
       id: z.string(),
       joined_at: z.pipe(
         z.iso.datetime({ offset: true }),

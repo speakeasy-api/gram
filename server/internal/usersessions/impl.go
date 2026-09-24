@@ -1,6 +1,6 @@
 // Package usersessions implements the management API services that surface
 // user_session_issuer / user_session_client / user_session_consent /
-// user_session resources. The four Goa services are authored under
+// user_session resources. The six Goa services are authored under
 // server/design/usersession{issuers,clients,consents}/ and
 // server/design/usersessions/; a single Go package owns their shared
 // implementation, dependencies, and lifecycle.
@@ -17,11 +17,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
+	organizationissuerssrv "github.com/speakeasy-api/gram/server/gen/http/organization_user_session_issuers/server"
 	clientssrv "github.com/speakeasy-api/gram/server/gen/http/user_session_clients/server"
 	consentssrv "github.com/speakeasy-api/gram/server/gen/http/user_session_consents/server"
 	issuerssrv "github.com/speakeasy-api/gram/server/gen/http/user_session_issuers/server"
 	cimdclientssrv "github.com/speakeasy-api/gram/server/gen/http/user_session_issuers_cimd_clients/server"
 	sessionssrv "github.com/speakeasy-api/gram/server/gen/http/user_sessions/server"
+	organizationissuersgen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/user_session_clients"
 	consentsgen "github.com/speakeasy-api/gram/server/gen/user_session_consents"
 	issuersgen "github.com/speakeasy-api/gram/server/gen/user_session_issuers"
@@ -34,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -85,25 +88,27 @@ type Service struct {
 }
 
 var (
-	_ issuersgen.Service  = (*Service)(nil)
-	_ issuersgen.Auther   = (*Service)(nil)
-	_ clientsgen.Service  = (*Service)(nil)
-	_ clientsgen.Auther   = (*Service)(nil)
-	_ consentsgen.Service = (*Service)(nil)
-	_ consentsgen.Auther  = (*Service)(nil)
-	_ sessionsgen.Service = (*Service)(nil)
-	_ sessionsgen.Auther  = (*Service)(nil)
+	_ issuersgen.Service             = (*Service)(nil)
+	_ issuersgen.Auther              = (*Service)(nil)
+	_ organizationissuersgen.Service = (*Service)(nil)
+	_ organizationissuersgen.Auther  = (*Service)(nil)
+	_ clientsgen.Service             = (*Service)(nil)
+	_ clientsgen.Auther              = (*Service)(nil)
+	_ consentsgen.Service            = (*Service)(nil)
+	_ consentsgen.Auther             = (*Service)(nil)
+	_ sessionsgen.Service            = (*Service)(nil)
+	_ sessionsgen.Auther             = (*Service)(nil)
 )
 
 // NewService constructs a Service ready to be Attached against each of the
-// four user_session* Goa services. chatSessionsManager is used by the
+// six user_session* Goa services. chatSessionsManager is used by the
 // userSessions and userSessionClients revoke handlers to push revoked jtis
 // into the revocation cache; it is held as a TokenRevoker so tests can
 // substitute a failing revoker.
 // signer + serverURL drive mintUserSession; pass an empty serverURL to
 // disable that handler (it will 503 on call — used in tests that don't
 // need the surface).
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, enc *encryption.Client, signer *Signer, serverURL string, verifyStore ratelimit.Store) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, enc *encryption.Client, signer *Signer, serverURL string, verifyStore ratelimit.Store, assertionSigners ...remotesessions.TokenEndpointAssertionSigner) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
@@ -117,7 +122,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		signer:       signer,
 		serverURL:    serverURL,
 		cimdResolver: cimd.NewResolver(guardianPolicy, meterProvider, logger),
-		revoker:      remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy),
+		revoker:      remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, assertionSigners...),
 		verifyLimiter: ratelimit.New(verifyStore, "cimd-url-verify",
 			ratelimit.PerMinute(verifyRatePerMin).WithBurst(verifyRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
@@ -125,7 +130,8 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 }
 
 // Attach wires every Goa service this package backs onto the shared mux:
-// userSessionIssuers, userSessionIssuersCimdClients, userSessionClients,
+// userSessionIssuers, organizationUserSessionIssuers,
+// userSessionIssuersCimdClients, userSessionClients,
 // userSessionConsents, userSessions.
 func Attach(mux goahttp.Muxer, service *Service) {
 	mw := []func(goa.Endpoint) goa.Endpoint{
@@ -138,6 +144,12 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		issuerEndpoints.Use(m)
 	}
 	issuerssrv.Mount(mux, issuerssrv.New(issuerEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+
+	organizationIssuerEndpoints := organizationissuersgen.NewEndpoints(service)
+	for _, m := range mw {
+		organizationIssuerEndpoints.Use(m)
+	}
+	organizationissuerssrv.Mount(mux, organizationissuerssrv.New(organizationIssuerEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 
 	cimdClientEndpoints := cimdclientsgen.NewEndpoints(service)
 	for _, m := range mw {

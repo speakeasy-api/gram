@@ -1,4 +1,9 @@
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
+import {
+  deleteSourceCascade,
+  fetchLinkedMcpServers,
+} from "@/pages/mcp/x/tabs/settings/sections/sourceDelete";
+import { invalidateWrapperDeleteAuthViews } from "@/pages/mcp/x/tabs/settings/sections/sourceInvalidation";
 import { formatTunneledMcpDisplay } from "@/lib/sources";
 import {
   createDefaultMcpEndpoint,
@@ -21,6 +26,8 @@ import { toast } from "sonner";
 
 export type CreateTunneledMcpSourceVariables = {
   name: string;
+  resourceIdentifier?: string;
+  userSessionIssuerId?: string;
 };
 
 export type CreateTunneledMcpSourceData = {
@@ -39,9 +46,9 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
   const { orgSlug } = useSlugs();
 
   return useMutation({
-    mutationFn: async ({ name }) => {
+    mutationFn: async ({ name, resourceIdentifier, userSessionIssuerId }) => {
       const result = await client.tunneledMcp.createServer({
-        createTunneledMcpServerForm: { name },
+        createTunneledMcpServerForm: { name, resourceIdentifier },
       });
       const tunneledMcpServer = result.server;
 
@@ -51,6 +58,7 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
           createMcpServerForm: {
             name: formatTunneledMcpDisplay(tunneledMcpServer),
             tunneledMcpServerId: tunneledMcpServer.id,
+            userSessionIssuerId,
             visibility: "disabled",
           },
         });
@@ -98,45 +106,6 @@ export function useCreateTunneledMcpSource(): UseMutationResult<
   });
 }
 
-export type LinkMcpServerToTunneledVariables = {
-  tunneledMcpServer: TunneledMcpServer;
-};
-
-export function useLinkMcpServerToTunneled(): UseMutationResult<
-  void,
-  Error,
-  LinkMcpServerToTunneledVariables
-> {
-  const client = useSdkClient();
-  const queryClient = useQueryClient();
-  const { orgSlug } = useSlugs();
-
-  return useMutation({
-    mutationFn: async ({ tunneledMcpServer }) => {
-      const mcpServer = await client.mcpServers.create({
-        createMcpServerForm: {
-          name: formatTunneledMcpDisplay(tunneledMcpServer),
-          tunneledMcpServerId: tunneledMcpServer.id,
-          visibility: "disabled",
-        },
-      });
-
-      if (orgSlug) {
-        await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
-      } else {
-        toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
-      }
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
-      ]);
-    },
-  });
-}
-
 export type RotateTunneledMcpServerKeyVariables = {
   tunneledMcpServerId: string;
 };
@@ -155,6 +124,9 @@ export function useRotateTunneledMcpServerKey(): UseMutationResult<
   const queryClient = useQueryClient();
 
   return useMutation({
+    // The result carries the plaintext key. Drop it from the mutation cache the
+    // moment nothing observes it; the section clears its own copy on close.
+    gcTime: 0,
     mutationFn: async ({ tunneledMcpServerId }) => {
       const result = await client.tunneledMcp.rotateServerKey({
         rotateTunneledMcpServerKeyForm: {
@@ -182,7 +154,6 @@ export function useRotateTunneledMcpServerKey(): UseMutationResult<
 
 export type DeleteTunneledMcpSourceVariables = {
   tunneledMcpServerId: string;
-  mcpServerIds: string[];
 };
 
 export function useDeleteTunneledMcpSource(): UseMutationResult<
@@ -194,33 +165,43 @@ export function useDeleteTunneledMcpSource(): UseMutationResult<
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ tunneledMcpServerId, mcpServerIds }) => {
-      // Linked-server deletes are independent; run them concurrently and
-      // surface any failure before touching the source itself.
-      const results = await Promise.allSettled(
-        mcpServerIds.map((id) => client.mcpServers.delete({ id })),
-      );
-      const failed = results.find(
-        (result): result is PromiseRejectedResult =>
-          result.status === "rejected",
-      );
-      if (failed) {
-        throw failed.reason instanceof Error
-          ? failed.reason
-          : new Error(String(failed.reason));
-      }
-
-      await client.tunneledMcp.deleteServer({ id: tunneledMcpServerId });
+    mutationFn: async ({ tunneledMcpServerId }) => {
+      await deleteSourceCascade({
+        listLinked: () =>
+          fetchLinkedMcpServers(client, queryClient, { tunneledMcpServerId }),
+        deleteMcpServer: (id) => client.mcpServers.delete({ id }),
+        deleteSource: () =>
+          client.tunneledMcp.deleteServer({ id: tunneledMcpServerId }),
+        sourceLabel: "tunneled MCP source",
+      });
     },
     onSuccess: async () => {
+      // Mark stale only (refetchType "none"): the deleted source's own queries
+      // are still mounted on the detail page until the caller navigates away,
+      // and force-refetching them here would block mutateAsync on requests for
+      // a resource that no longer exists, leaving the confirm dialog stuck on
+      // "Deleting". Consumers refetch on their next mount after navigation.
       await Promise.all([
-        invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllTunneledMcpServers(queryClient, { refetchType: "none" }),
         invalidateAllListTunneledMcpServerConnections(queryClient, {
-          refetchType: "all",
+          refetchType: "none",
         }),
+        invalidateAllMcpServers(queryClient, { refetchType: "none" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "none" }),
+        invalidateWrapperDeleteAuthViews(queryClient, { refetchType: "none" }),
+      ]);
+    },
+    onError: async () => {
+      // A partial run left some wrappers gone and the source in place. Refetch
+      // so the open dialog lists what remains before the user retries, and so
+      // the still-mounted Authentication section drops the issuer and client
+      // bindings the deleted wrappers took with them.
+      await Promise.all([
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+        invalidateAllGetTunneledMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllTunneledMcpServers(queryClient, { refetchType: "all" }),
+        invalidateWrapperDeleteAuthViews(queryClient, { refetchType: "all" }),
       ]);
     },
   });

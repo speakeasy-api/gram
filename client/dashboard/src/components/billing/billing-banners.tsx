@@ -56,6 +56,12 @@ const BILLING_BANNER_QUERY = {
   throwOnError: false,
 } as const;
 
+const SUBSCRIPTION_BANNER_QUERY = {
+  ...BILLING_BANNER_QUERY,
+  retryOnMount: true,
+  refetchOnMount: true,
+} as const;
+
 /**
  * Tells an organization its last payment failed, and hands an admin the card
  * form that fixes it.
@@ -78,7 +84,7 @@ export function PaygPaymentFailedBanner(): JSX.Element | null {
 }
 
 function PaymentFailedBannerBody(): JSX.Element | null {
-  const { data, error } = useStripeSubscription(BILLING_BANNER_QUERY);
+  const { data, error } = useStripeSubscription(SUBSCRIPTION_BANNER_QUERY);
 
   // A 404 is an answer, not an outage: the pay-as-you-go tier predates Stripe,
   // so an organization can be on it with no Stripe subscription behind it. That
@@ -151,7 +157,7 @@ export function PaygCapReachedBanners(): JSX.Element | null {
 // keep the resulting subscription trialing until the paid period begins. The
 // session alone therefore cannot decide whether raising a cap is available.
 function PaygCapReachedBannersBody(): JSX.Element | null {
-  const { data, error } = useStripeSubscription(BILLING_BANNER_QUERY);
+  const { data, error } = useStripeSubscription(SUBSCRIPTION_BANNER_QUERY);
   const state: CapChangeState =
     isNotFoundError(error) || data === undefined
       ? "unknown"

@@ -42,9 +42,13 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 			action        *string
 			subjectType   *string
 			subjectID     *string
+			subjectIds    []string
 			actingSurface *string
+			from          *string
+			to            *string
 			apikeyToken   *string
 			sessionToken  *string
+			err           error
 		)
 		qp := r.URL.Query()
 		cursorRaw := qp.Get("cursor")
@@ -71,9 +75,27 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if subjectIDRaw != "" {
 			subjectID = &subjectIDRaw
 		}
+		subjectIds = qp["subject_ids"]
+		if len(subjectIds) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("subject_ids", subjectIds, len(subjectIds), 200, false))
+		}
 		actingSurfaceRaw := qp.Get("acting_surface")
 		if actingSurfaceRaw != "" {
 			actingSurface = &actingSurfaceRaw
+		}
+		fromRaw := qp.Get("from")
+		if fromRaw != "" {
+			from = &fromRaw
+		}
+		if from != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+		}
+		toRaw := qp.Get("to")
+		if toRaw != "" {
+			to = &toRaw
+		}
+		if to != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
@@ -83,7 +105,10 @@ func DecodeListRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.De
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewListPayload(cursor, projectSlug, actorID, action, subjectType, subjectID, actingSurface, apikeyToken, sessionToken)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListPayload(cursor, projectSlug, actorID, action, subjectType, subjectID, subjectIds, actingSurface, from, to, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

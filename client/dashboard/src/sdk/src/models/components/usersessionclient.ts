@@ -5,8 +5,23 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * What the client must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces, so it reads what the client will actually be held to rather than what it declared. 'misconfigured' means the registration contradicts itself and the client cannot authenticate at all.
+ */
+export const CredentialKind = {
+  Public: "public",
+  Secret: "secret",
+  Key: "key",
+  Misconfigured: "misconfigured",
+} as const;
+/**
+ * What the client must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces, so it reads what the client will actually be held to rather than what it declared. 'misconfigured' means the registration contradicts itself and the client cannot authenticate at all.
+ */
+export type CredentialKind = ClosedEnum<typeof CredentialKind>;
 
 /**
  * An MCP client registered against a user-session issuer. client_secret_hash is never returned.
@@ -47,6 +62,10 @@ export type UserSessionClient = {
   clientSecretExpiresAt?: Date | undefined;
   createdAt: Date;
   /**
+   * What the client must present to authenticate: 'public' (nothing), 'secret' (a client secret), 'key' (an assertion signed by its published key), or 'misconfigured'. Derived by the same rule the token endpoint enforces, so it reads what the client will actually be held to rather than what it declared. 'misconfigured' means the registration contradicts itself and the client cannot authenticate at all.
+   */
+  credentialKind: CredentialKind;
+  /**
    * The user_session_client id.
    */
   id: string;
@@ -54,12 +73,21 @@ export type UserSessionClient = {
    * Validated on every /authorize.
    */
   redirectUris: Array<string>;
+  /**
+   * The raw RFC 7591 token_endpoint_auth_method the client declared, for debugging against the spec. Null for a client registered before the value was recorded, which is not the same as declaring 'none' -- credential_kind resolves both cases and is what should be displayed.
+   */
+  tokenEndpointAuthMethod?: string | undefined;
   updatedAt: Date;
   /**
    * The owning user_session_issuer id.
    */
   userSessionIssuerId: string;
 };
+
+/** @internal */
+export const CredentialKind$inboundSchema: z.ZodMiniEnum<
+  typeof CredentialKind
+> = z.enum(CredentialKind);
 
 /** @internal */
 export const UserSessionClient$inboundSchema: z.ZodMiniType<
@@ -89,8 +117,10 @@ export const UserSessionClient$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    credential_kind: CredentialKind$inboundSchema,
     id: z.string(),
     redirect_uris: z.array(z.string()),
+    token_endpoint_auth_method: z.optional(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
@@ -109,7 +139,9 @@ export const UserSessionClient$inboundSchema: z.ZodMiniType<
       "client_name": "clientName",
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",
+      "credential_kind": "credentialKind",
       "redirect_uris": "redirectUris",
+      "token_endpoint_auth_method": "tokenEndpointAuthMethod",
       "updated_at": "updatedAt",
       "user_session_issuer_id": "userSessionIssuerId",
     });

@@ -15,12 +15,15 @@ import (
 	"github.com/workos/workos-go/v6/pkg/events"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	workosrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/workos/repo"
@@ -269,6 +272,88 @@ func TestProcessWorkOSOrganizationEvents_OrganizationCreateUsesWorkOSIDWhenNameY
 	require.NoError(t, err)
 	require.Equal(t, orgName, row.Name)
 	require.Equal(t, "org-01hzonechar", row.Slug)
+}
+
+func requireOrganizationDefaultFeatures(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, enabled bool) {
+	t.Helper()
+
+	q := featurerepo.New(conn)
+	for _, feature := range productfeatures.OrganizationDefaultFeatures {
+		got, err := q.IsFeatureEnabled(ctx, featurerepo.IsFeatureEnabledParams{
+			OrganizationID: organizationID,
+			FeatureName:    string(feature),
+		})
+		require.NoError(t, err)
+		require.Equalf(t, enabled, got, "feature %s", feature)
+	}
+}
+
+func TestProcessWorkOSOrganizationEvents_OrganizationCreateSeedsLoggingDefaults(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_create_seeds_defaults")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZSEEDDEFAULTS"
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZSEEDDEFAULTS",
+				Event:     "organization.created",
+				CreatedAt: time.Now(),
+				Data:      newOrgEventPayload(t, workosOrgID),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSEEDDEFAULTS", res.LastEventID)
+
+	row, err := orgrepo.New(conn).GetOrganizationByWorkosID(ctx, conv.ToPGText(workosOrgID))
+	require.NoError(t, err)
+	requireOrganizationDefaultFeatures(t, ctx, conn, row.ID, true)
+}
+
+func TestProcessWorkOSOrganizationEvents_ExistingOrgUpdateDoesNotSeedLoggingDefaults(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn := newOrgEventsTestConn(t, "workos_org_events_org_update_skips_defaults")
+	logger := testenv.NewLogger(t)
+
+	const workosOrgID = "org_01HZSKIPDEFAULTS"
+	const externalID = "sb_skip_defaults"
+
+	err := orgrepo.New(conn).CreateOrganizationMetadata(ctx, orgrepo.CreateOrganizationMetadataParams{
+		ID:   externalID,
+		Name: "Already Exists",
+		Slug: "already-exists",
+	})
+	require.NoError(t, err)
+	requireOrganizationDefaultFeatures(t, ctx, conn, externalID, false)
+
+	stub := newWorkOSClientWithEvents([][]events.Event{
+		{
+			{
+				ID:        "event_01HZSKIPDEFAULTS",
+				Event:     "organization.updated",
+				CreatedAt: time.Now(),
+				Data: []byte(`{"id":"` + workosOrgID + `","object":"organization","name":"Already Exists","external_id":"` + externalID +
+					`","updated_at":"2026-05-06T12:00:00Z"}`),
+			},
+		},
+	})
+
+	activity := activities.NewProcessWorkOSOrganizationEvents(logger, conn, stub, cache.NoopCache, nil)
+	res, err := activity.Do(ctx, activities.ProcessWorkOSOrganizationEventsParams{WorkOSOrganizationID: workosOrgID})
+	require.NoError(t, err)
+	require.Equal(t, "event_01HZSKIPDEFAULTS", res.LastEventID)
+
+	requireOrganizationDefaultFeatures(t, ctx, conn, externalID, false)
 }
 
 func TestProcessWorkOSOrganizationEvents_OrganizationExternalIDMissingLocallyCreates(t *testing.T) {
@@ -1122,6 +1207,8 @@ func TestProcessWorkOSOrganizationEvents_MembershipFilterIncludesMembershipTypes
 		"organization.created",
 		"organization.updated",
 		"organization.deleted",
+		"organization_domain.verified",
+		"organization_domain.deleted",
 		"organization_role.created",
 		"organization_role.deleted",
 		"organization_role.updated",
@@ -1245,6 +1332,14 @@ func TestProcessWorkOSOrganizationEvents_MembershipDeleteSoftDeletesAndClearsAss
 	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
 	seedOrganizationRole(t, ctx, conn, organizationID, "member")
+	_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID, UserID: conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: organizationID, OwnerUserID: userID, Name: "Membership loss agent",
+	})
+	require.NoError(t, err)
 
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{
@@ -1281,6 +1376,10 @@ func TestProcessWorkOSOrganizationEvents_MembershipDeleteSoftDeletesAndClearsAss
 	require.Len(t, assignments, 1)
 	require.True(t, assignments[0].DeletedAt.Valid)
 	require.Equal(t, "event_01HZDEL2", assignments[0].WorkosLastEventID.String)
+	latched, err := agentrepo.New(conn).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: organizationID, ID: agent.ID})
+	require.NoError(t, err)
+	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
+	require.Equal(t, "organization_membership_lost", latched.OwnerReassignmentReason.String)
 }
 
 func TestProcessWorkOSOrganizationEvents_MembershipRejoinReusesTombstone(t *testing.T) {
@@ -1299,6 +1398,14 @@ func TestProcessWorkOSOrganizationEvents_MembershipRejoinReusesTombstone(t *test
 
 	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
+	_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID, UserID: conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: organizationID, OwnerUserID: userID, Name: "Rejoined owner agent",
+	})
+	require.NoError(t, err)
 
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{
@@ -1321,6 +1428,10 @@ func TestProcessWorkOSOrganizationEvents_MembershipRejoinReusesTombstone(t *test
 	require.False(t, relationship.Deleted)
 	require.Equal(t, secondMembershipID, relationship.WorkosMembershipID.String)
 	require.Equal(t, "event_01HZREJOIN3", relationship.WorkosLastEventID.String)
+	latched, err := agentrepo.New(conn).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: organizationID, ID: agent.ID})
+	require.NoError(t, err)
+	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
+	require.Equal(t, "organization_membership_lost", latched.OwnerReassignmentReason.String)
 }
 
 func TestProcessWorkOSOrganizationEvents_MembershipUnknownOrganizationSkips(t *testing.T) {
@@ -2039,9 +2150,12 @@ func TestProcessWorkOSOrganizationEvents_MembershipInactiveStatusDeprovisions(t 
 	require.Len(t, assignments, 1)
 	require.True(t, assignments[0].DeletedAt.Valid)
 
+	// One invalidation per membership change: the add and the deactivation.
 	deletedKeys := capturingCache.Deleted()
-	require.Len(t, deletedKeys, 1)
-	require.Contains(t, deletedKeys[0], sessions.UserInfoCacheKey(userID))
+	require.Len(t, deletedKeys, 2)
+	for _, key := range deletedKeys {
+		require.Contains(t, key, sessions.UserInfoCacheKey(userID))
+	}
 }
 
 func TestProcessWorkOSOrganizationEvents_MembershipReactivationRestoresAccess(t *testing.T) {
@@ -2060,6 +2174,14 @@ func TestProcessWorkOSOrganizationEvents_MembershipReactivationRestoresAccess(t 
 	seedWorkOSOrganization(t, ctx, conn, organizationID, workosOrgID)
 	seedWorkOSUser(t, ctx, conn, userID, workosUserID)
 	seedOrganizationRole(t, ctx, conn, organizationID, "member")
+	_, err := orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID, UserID: conv.ToPGText(userID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: organizationID, OwnerUserID: userID, Name: "Reactivated owner agent",
+	})
+	require.NoError(t, err)
 
 	stub := newWorkOSClientWithEvents([][]events.Event{
 		{
@@ -2081,6 +2203,10 @@ func TestProcessWorkOSOrganizationEvents_MembershipReactivationRestoresAccess(t 
 	require.NoError(t, err)
 	require.False(t, relationship.Deleted)
 	require.Equal(t, "event_01HZREACT3", relationship.WorkosLastEventID.String)
+	latched, err := agentrepo.New(conn).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: organizationID, ID: agent.ID})
+	require.NoError(t, err)
+	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
+	require.Equal(t, "owner_inactive", latched.OwnerReassignmentReason.String)
 
 	// Deactivation tombstones the original assignment and reactivation
 	// creates a fresh row (same pattern as a membership rejoin), so exactly

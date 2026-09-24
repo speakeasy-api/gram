@@ -2,7 +2,7 @@
 
 #MISE description="Generate SDK from OpenAPI spec"
 
-#USAGE flag "-c --check" help="Check if the Gram-Internal OpenAPI output is up-to-date"
+#USAGE flag "-c --check" help="Check if the Gram-Internal and Gram-Admin OpenAPI outputs are up-to-date"
 
 set -e
 
@@ -18,30 +18,44 @@ generate() {
   # prompts to purge node_modules and aborts without a TTY; since the SDK was
   # inlined, gen.yaml sets compileCommand to `true` and no package manager is
   # invoked at all.
-  CI=true speakeasy run --skip-versioning --skip-upload-spec --minimal
+  CI=true speakeasy run "$@" --skip-versioning --skip-upload-spec --minimal
 }
 
 check_inputs() {
   workflow=".speakeasy/workflow.yaml"
-  source_key=".sources.Gram-Internal"
-  schema=$(yq "${source_key}.inputs[0].location" "$workflow")
-  output=$(yq "${source_key}.output" "$workflow")
-  overlays=()
-  while IFS= read -r line; do
-    overlays+=("$line")
-  done < <(yq -r "${source_key}.overlays[].location" "$workflow")
+  tmpdir=$(mktemp -d)
+  sources=(Gram-Internal Gram-Admin)
+  outputs=()
 
-  args=(--schema "$schema")
-  for overlay in "${overlays[@]}"; do
-    args+=(--overlay "$overlay")
+  for source in "${sources[@]}"; do
+    output=$(yq ".sources[\"${source}\"].output" "$workflow")
+    outputs+=("$output")
+    cp "$output" "$tmpdir/$source.yaml"
   done
-  result=$(speakeasy overlay apply "${args[@]}")
 
-  if ! diff -q <(echo "$result") "$output" >/dev/null 2>&1; then
-    echo "Gram-Internal OpenAPI spec is out of date. Run 'mise gen:sdk' to regenerate." >&2
-    exit 1
-  fi
-  echo "Gram-Internal OpenAPI spec is up to date."
+  restore_inputs() {
+    for i in "${!sources[@]}"; do
+      cp "$tmpdir/${sources[$i]}.yaml" "${outputs[$i]}"
+    done
+    rm -rf "$tmpdir"
+  }
+  trap restore_inputs EXIT
+
+  status=0
+  for i in "${!sources[@]}"; do
+    source=${sources[$i]}
+    output=${outputs[$i]}
+    generate --source "$source" >/dev/null 2>&1
+
+    if ! diff -q "$tmpdir/$source.yaml" "$output" >/dev/null 2>&1; then
+      echo "${source} OpenAPI spec is out of date. Run 'mise gen:sdk' to regenerate." >&2
+      status=1
+    else
+      echo "${source} OpenAPI spec is up to date."
+    fi
+  done
+
+  return "$status"
 }
 
 if [[ "${usage_check:-}" == "true" ]]; then

@@ -1,7 +1,7 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { Column, RowData } from "@tanstack/react-table";
-import { SearchIcon } from "lucide-react";
-import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
+import { FilterIcon, SearchIcon, XIcon } from "lucide-react";
+import { useRef, useState, type JSX, type ReactNode } from "react";
 
 import type {
   DataTableFeatures,
@@ -16,13 +16,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { useOnUnmount } from "@/hooks/useOnUnmount";
 import {
   FILTER_GROUPS,
-  filterSummary,
+  statusSelection,
   optionsFor,
-  type FilterGroupKey,
+  type FilterControlKey,
   type FilterSelection,
 } from "@/lib/organizationFilters";
+import { CREATED_PRESETS, createdPresetMetadata } from "@/lib/createdRange";
 import { cn } from "@/lib/utils";
 import type { OrganizationsSearch } from "@/routes/organizations.index";
 
@@ -57,6 +59,11 @@ export function Toolbar({
   // reaches it debounced.
   const committed = search.q ?? "";
   const [draft, setDraft] = useState(committed);
+  const draftRef = useRef(draft);
+  const committedRef = useRef(committed);
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  committedRef.current = committed;
+  useOnUnmount(() => clearTimeout(searchTimer.current));
   const [lastCommitted, setLastCommitted] = useState(committed);
 
   // The back button, and a link an operator pasted, both move `q` under the
@@ -69,24 +76,34 @@ export function Toolbar({
     // back here as a change. Repainting on that one would eat a space the
     // operator just typed. `lastCommitted` still moves either way, or this
     // block runs on every render.
-    if (draft.trim() !== committed) setDraft(committed);
+    if (draft.trim() !== committed) {
+      draftRef.current = committed;
+      setDraft(committed);
+    }
   }
 
   const [lastCleared, setLastCleared] = useState(searchCleared);
   if (searchCleared !== lastCleared) {
     setLastCleared(searchCleared);
-    // Dropping the draft drops the commit it had pending with it: the effect
-    // below is keyed on the draft, so its cleanup clears the timer.
-    if (draft !== "") setDraft("");
+    // Invalidate any event-owned debounce that has not reached the URL yet.
+    clearTimeout(searchTimer.current);
+    if (draft !== "") {
+      draftRef.current = "";
+      setDraft("");
+    }
   }
 
-  useEffect(() => {
-    const next = draft.trim();
-    // A term that settles back on the committed one is not a change, so a typo
-    // and a backspace leave the URL alone.
-    if (next === committed) return;
+  const changeSearch = (value: string): void => {
+    draftRef.current = value;
+    setDraft(value);
 
-    const timer = setTimeout(() => {
+    clearTimeout(searchTimer.current);
+    const next = value.trim();
+    if (next === committedRef.current) return;
+
+    searchTimer.current = setTimeout(() => {
+      // Later input, a clear action, or Router navigation supersedes this event.
+      if (draftRef.current !== value || committedRef.current === next) return;
       void navigate({
         search: (prev: OrganizationsSearch) => ({
           ...prev,
@@ -97,73 +114,132 @@ export function Toolbar({
         replace: true,
       });
     }, SEARCH_DEBOUNCE_MS);
+  };
 
-    return () => clearTimeout(timer);
-  }, [draft, committed, navigate]);
-
-  // Which group the sheet is showing, and null when it is closed.
-  const [openGroup, setOpenGroup] = useState<FilterGroupKey | null>(null);
-  const triggers = useRef<Partial<Record<FilterGroupKey, HTMLButtonElement>>>(
-    {},
-  );
-  // The trigger the sheet has to give the keyboard back to. A ref rather than
-  // `openGroup`, because the sheet asks for it as it unmounts: by then the
-  // state that opened it has already been cleared.
-  const openedFrom = useRef<FilterGroupKey | null>(null);
+  const [openGroup, setOpenGroup] = useState<FilterControlKey | null>(null);
+  const filterTrigger = useRef<HTMLButtonElement>(null);
 
   const filters: FilterSelection = {
     type: search.type ?? [],
     trial: search.trial ?? [],
-    disabled: search.disabled ?? [],
+    disabled: statusSelection(search),
+    createdFrom: search.createdFrom,
+    createdTo: search.createdTo,
+    createdPreset: search.createdPreset,
+    minMembers: search.minMembers,
+    maxMembers: search.maxMembers,
   };
 
+  const relativePreset = createdPresetMetadata(filters);
   const applyFilters = useApplyFilters();
 
-  const openFilters = (group: FilterGroupKey): void => {
-    openedFrom.current = group;
-    setOpenGroup(group);
+  const clearFilter = (next: FilterSelection): void => {
+    applyFilters(next);
+    // The chip disappears; return the keyboard to the stable panel trigger.
+    filterTrigger.current?.focus();
   };
 
   return (
-    <div className="mb-2 flex items-center gap-2">
-      <div className="relative w-80">
+    <div className="mb-2 flex flex-wrap items-center gap-2">
+      <div className="relative w-80 shrink-0">
         <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2" />
         <Input
           aria-label="Search organizations"
           placeholder="Search by name, slug or id..."
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(event) => changeSearch(event.target.value)}
           className="w-full py-1.5 pr-2 pl-8"
         />
       </div>
 
-      {/* One trigger per group, all opening the same sheet. The group is the
-          unit an operator thinks in, and a single Filters button would make
-          them find the group again inside the sheet. */}
-      {FILTER_GROUPS.map((group) => {
-        const chosen = filters[group.key];
-        return (
-          <Button
-            key={group.key}
-            ref={(node) => {
-              if (node) triggers.current[group.key] = node;
-            }}
-            variant={chosen.length > 0 ? "secondary" : "ghost"}
-            size="xs"
-            // The count is the whole visible signal, and a count does not say
-            // what it counts. The name a screen reader announces says it.
-            aria-label={`${group.label} filter: ${filterSummary(
-              group,
-              chosen,
-              optionsFor(group, chosen),
-            )}`}
-            onClick={() => openFilters(group.key)}
-          >
-            {group.label}
-            {chosen.length > 0 && <Badge>{chosen.length}</Badge>}
-          </Button>
-        );
-      })}
+      <Button
+        ref={filterTrigger}
+        variant="outline"
+        size="default"
+        aria-haspopup="dialog"
+        aria-expanded={openGroup !== null}
+        onClick={() => setOpenGroup("type")}
+      >
+        <FilterIcon aria-hidden="true" />
+        Filters
+      </Button>
+      {FILTER_GROUPS.flatMap((group) =>
+        filters[group.key].map((value) => {
+          const label =
+            optionsFor(group, filters[group.key]).find(
+              (option) => option.value === value,
+            )?.label ?? value;
+          return (
+            <AppliedFilterChip
+              key={`${group.key}:${value}`}
+              clearLabel={`Clear ${group.label} ${label}`}
+              onClear={() =>
+                clearFilter({
+                  ...filters,
+                  [group.key]: filters[group.key].filter(
+                    (selected) => selected !== value,
+                  ),
+                })
+              }
+            >
+              {group.key === "disabled"
+                ? `Status: ${label}`
+                : `${group.label}: ${label}`}
+            </AppliedFilterChip>
+          );
+        }),
+      )}
+      {(["minMembers", "maxMembers"] as const).map(
+        (key) =>
+          filters[key] !== undefined && (
+            <AppliedFilterChip
+              key={key}
+              clearLabel={`Clear ${key === "minMembers" ? "minimum" : "maximum"} members`}
+              onClear={() => clearFilter({ ...filters, [key]: undefined })}
+            >
+              Members: {key === "minMembers" ? "≥" : "≤"} {filters[key]}
+            </AppliedFilterChip>
+          ),
+      )}
+      {relativePreset ? (
+        <AppliedFilterChip
+          clearLabel="Clear created date"
+          onClear={() =>
+            clearFilter({
+              ...filters,
+              createdFrom: undefined,
+              createdTo: undefined,
+              createdPreset: undefined,
+            })
+          }
+        >
+          Created:{" "}
+          {
+            CREATED_PRESETS.find((preset) => preset.value === relativePreset)
+              ?.label
+          }
+        </AppliedFilterChip>
+      ) : (
+        (["createdFrom", "createdTo"] as const).map(
+          (key) =>
+            filters[key] && (
+              <AppliedFilterChip
+                key={key}
+                clearLabel={`Clear created ${key === "createdFrom" ? "from" : "to"}`}
+                onClear={() =>
+                  clearFilter({
+                    ...filters,
+                    [key]: undefined,
+                    createdPreset: undefined,
+                  })
+                }
+              >
+                Created: {key === "createdFrom" ? "From ≥" : "To ≤"}{" "}
+                {filters[key]} UTC
+              </AppliedFilterChip>
+            ),
+        )
+      )}
 
       <FilterSheet
         value={filters}
@@ -172,10 +248,7 @@ export function Toolbar({
           if (!open) setOpenGroup(null);
         }}
         onApply={applyFilters}
-        onReturnFocus={() => {
-          const group = openedFrom.current;
-          if (group) triggers.current[group]?.focus();
-        }}
+        onReturnFocus={() => filterTrigger.current?.focus()}
       />
 
       {/* Last in the row and the only filled control in it, so it reads as the
@@ -183,6 +256,30 @@ export function Toolbar({
       <span className="min-w-0 flex-1" />
       <CreateOrganization reporter={reporter} />
     </div>
+  );
+}
+
+function AppliedFilterChip({
+  children,
+  clearLabel,
+  onClear,
+}: {
+  children: ReactNode;
+  clearLabel: string;
+  onClear: () => void;
+}): JSX.Element {
+  return (
+    <Badge variant="secondary" className="gap-1 pr-0">
+      <span>{children}</span>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        aria-label={clearLabel}
+        onClick={onClear}
+      >
+        <XIcon aria-hidden="true" />
+      </Button>
+    </Badge>
   );
 }
 

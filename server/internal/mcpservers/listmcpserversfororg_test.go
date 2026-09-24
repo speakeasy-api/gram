@@ -146,10 +146,11 @@ func TestListMcpServersForOrg_WithoutProjectID(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Remove project from auth context — simulates the RBAC page which has no
-	// project slug in the URL.
-	authCtx.ProjectID = nil
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	// Copy before removing project scope: background icon discovery still uses
+	// the original auth context. This simulates the org-wide RBAC page.
+	orgAuthCtx := *authCtx
+	orgAuthCtx.ProjectID = nil
+	ctx = contextvalues.SetAuthContext(ctx, &orgAuthCtx)
 
 	result, err := ti.service.ListMcpServersForOrg(ctx, &gen.ListMcpServersForOrgPayload{
 		SessionToken: nil,
@@ -191,9 +192,11 @@ func TestListMcpServersForOrg_CrossProject(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	authCtx.ProjectID = &p2.ID
-	authCtx.ProjectSlug = &p2.Slug
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	// Each request needs its own auth context while icon discovery runs.
+	projectAuthCtx := *authCtx
+	projectAuthCtx.ProjectID = &p2.ID
+	projectAuthCtx.ProjectSlug = &p2.Slug
+	ctx = contextvalues.SetAuthContext(ctx, &projectAuthCtx)
 
 	remoteB := seedRemoteMcpServer(t, ctx, ti.conn, p2.ID).String()
 	serverB, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
@@ -210,9 +213,10 @@ func TestListMcpServersForOrg_CrossProject(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Clear project scope to simulate the org-wide query.
-	authCtx.ProjectID = nil
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	// Clear project scope on another copy to simulate the org-wide query.
+	orgAuthCtx := projectAuthCtx
+	orgAuthCtx.ProjectID = nil
+	ctx = contextvalues.SetAuthContext(ctx, &orgAuthCtx)
 
 	result, err := ti.service.ListMcpServersForOrg(ctx, &gen.ListMcpServersForOrgPayload{
 		SessionToken: nil,

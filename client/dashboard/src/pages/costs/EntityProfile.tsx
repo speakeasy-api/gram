@@ -1,4 +1,5 @@
 import { formatCost } from "@/lib/money";
+import { ViewUserProfileLink } from "@/components/identity-link";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/Badge";
 import {
@@ -26,6 +27,10 @@ import {
 } from "react";
 import { ChevronLeft, Download, Home, Info, RotateCcw } from "lucide-react";
 import { CostMeasureLabel } from "@/components/estimated-cost";
+import {
+  SeriesFocusContext,
+  useSeriesFocusState,
+} from "@/components/chart/seriesFocus";
 import { BreakdownBar } from "./BreakdownBar";
 import { breakdownCaption, breakdownTitle } from "./breakdownCopy";
 import { CostTable } from "./CostTable";
@@ -38,6 +43,7 @@ import {
   friendlyName,
   isAttributionDim,
   LABELS,
+  llmTokens,
   type Measures,
   pluralLabel,
 } from "./taxonomy";
@@ -77,7 +83,7 @@ function buildCostCsv(
       cacheMetric
         ? (r.measures.cacheCreationInputTokens ?? 0)
         : (r.measures.totalToolCalls ?? 0),
-      r.measures.totalTokens ?? 0,
+      llmTokens(r.measures),
     ];
   });
   return toCsv(header, body);
@@ -189,6 +195,11 @@ function findVerticalScrollParent(el: HTMLElement | null): HTMLElement | null {
   }
   return root;
 }
+
+// How far above the breakdown section a drill lands, so the section's heading
+// isn't flush against the top of the scrollport. Doubles as the tolerance for
+// "is the reader looking at the breakdown?" — see the scroll effects below.
+const BREAKDOWN_LEAD_IN = 12;
 
 // ── EntityProfile ───────────────────────────────────────────────────────────
 
@@ -322,6 +333,10 @@ export function EntityProfile({
 }: EntityProfileProps): JSX.Element {
   const groupLabel = LABELS[groupBy] ?? "Group";
 
+  // The hover/color link between the breakdown chart and the breakdown table.
+  // They are siblings, so this has to be owned here and provided to both.
+  const seriesFocus = useSeriesFocusState();
+
   const title = entity
     ? friendlyName(entity.dim, entity.value)
     : (collection?.label ?? projectName ?? "All costs");
@@ -364,15 +379,62 @@ export function EntityProfile({
   }, []);
 
   // Drill navigation keeps the EntityProfile mounted and only swaps props, so
-  // the browser never resets scroll on its own. Jump back to the top of the
-  // scrollport whenever the drill path changes — otherwise a mid-table click
-  // lands the new profile still scrolled down, and it looks like nothing moved.
-  // useLayoutEffect so the reset lands before paint (no flash of mid-page).
+  // the browser never resets scroll on its own, and a mid-table click would
+  // otherwise land the new profile still scrolled down — looking like nothing
+  // moved. Reset scroll on every drill, but not always to the very top: a
+  // drill launched from the breakdown (a table row or a bar segment) keeps
+  // the breakdown in view, so the chart and table you just clicked stay where
+  // your eyes already are. Only a drill from higher up the page — the hero,
+  // the widgets, a breadcrumb — goes back to the top.
+  // useLayoutEffect so the move lands before paint (no flash of mid-page).
   const pathKey = path.map((c) => `${c.dim}:${c.value}`).join("/");
+  const breakdownRef = useRef<HTMLDivElement>(null);
+
+  // Where the breakdown section starts, in the scrollport's coordinates.
+  const breakdownTop = (root: HTMLElement): number => {
+    const section = breakdownRef.current;
+    if (!section) return 0;
+    return (
+      section.getBoundingClientRect().top -
+      root.getBoundingClientRect().top +
+      root.scrollTop
+    );
+  };
+
+  // Whether the reader was looking at the breakdown when they clicked. It has
+  // to be answered from the scroll position BEFORE the drill re-rendered the
+  // page — by then the old position is gone and the section has moved — so a
+  // scroll listener keeps the answer current and the drill effect only reads
+  // it.
+  const wasInBreakdownRef = useRef(false);
   useLayoutEffect(() => {
     const root = findVerticalScrollParent(pinSentinelRef.current);
-    if (root) root.scrollTop = 0;
-    else window.scrollTo(0, 0);
+    if (!root) return;
+    const record = (): void => {
+      // The same lead-in the drill scrolls to, as tolerance: landing 12px
+      // above the section still counts as being in it, so a second drill in a
+      // row doesn't read as "they scrolled away" and jump to the top.
+      wasInBreakdownRef.current =
+        root.scrollTop >= breakdownTop(root) - BREAKDOWN_LEAD_IN;
+    };
+    record();
+    root.addEventListener("scroll", record, { passive: true });
+    return () => root.removeEventListener("scroll", record);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- breakdownTop only reads refs
+  }, []);
+
+  useLayoutEffect(() => {
+    const root = findVerticalScrollParent(pinSentinelRef.current);
+    if (!root) {
+      window.scrollTo(0, 0);
+      return;
+    }
+    root.scrollTop = wasInBreakdownRef.current
+      ? Math.max(breakdownTop(root) - BREAKDOWN_LEAD_IN, 0)
+      : 0;
+    wasInBreakdownRef.current =
+      root.scrollTop >= breakdownTop(root) - BREAKDOWN_LEAD_IN;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- breakdownTop only reads refs
   }, [pathKey]);
 
   // The efficiency lens quotes the slice's work units where the cost lenses
@@ -595,6 +657,11 @@ export function EntityProfile({
                   >
                     <Badge.Text>{typeLabel}</Badge.Text>
                   </Badge>
+                  {/* Spend is one subsystem's view of a person; the profile is
+                      where it sits beside their access, risk and devices. */}
+                  {emailSuffix && (
+                    <ViewUserProfileLink identifier={{ email: emailSuffix }} />
+                  )}
                 </div>
               </div>
             </div>
@@ -656,7 +723,10 @@ export function EntityProfile({
             segment in the control bar below — with the caption saying what
             the cut is doing in the user's own numbers. Axis track + search
             sit here, immediately above the chart/table they affect. */}
-        <div className="border-border flex flex-col gap-3 border-t pt-6">
+        <div
+          ref={breakdownRef}
+          className="border-border flex flex-col gap-3 border-t pt-6"
+        >
           <div className="flex flex-col gap-0.5">
             <h2 className="flex items-center gap-1.5 text-sm font-semibold">
               {breakdownTitle(axisValue, groupBy, efficiency)}
@@ -689,11 +759,18 @@ export function EntityProfile({
             onSearchChange={onSearchChange}
             searchPlaceholder={searchPlaceholder}
           />
-          {chart}
-          {/* Export sits immediately above the table so it reads as exporting
-              these rows — not the whole page's spend. */}
-          <div className="flex items-center justify-end">{exportCsvButton}</div>
-          {tableOverride ?? dimensionTable}
+          {/* Chart and table are two views of the same series, so they share
+              hover focus and the chart's colors: the table dots each row in
+              its stack's color and fades the rest while a bar is hovered. */}
+          <SeriesFocusContext.Provider value={seriesFocus}>
+            {chart}
+            {/* Export sits immediately above the table so it reads as exporting
+                these rows — not the whole page's spend. */}
+            <div className="flex items-center justify-end">
+              {exportCsvButton}
+            </div>
+            {tableOverride ?? dimensionTable}
+          </SeriesFocusContext.Provider>
         </div>
       </div>
     </div>

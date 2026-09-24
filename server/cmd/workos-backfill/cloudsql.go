@@ -168,8 +168,7 @@ func gcloudOutput(ctx context.Context, args ...string) (string, error) {
 	if err == nil {
 		return string(out), nil
 	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 		return "", fmt.Errorf("gcloud %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(exitErr.Stderr)))
 	}
 	return "", fmt.Errorf("gcloud %s: %w", strings.Join(args, " "), err)

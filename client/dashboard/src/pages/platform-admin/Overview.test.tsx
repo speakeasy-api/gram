@@ -1,5 +1,18 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
+
+vi.mock("@/components/page-layout", () => {
+  const Wrapper = ({ children }: { children?: ReactNode }) => <>{children}</>;
+  const Header = Object.assign(Wrapper, { Breadcrumbs: () => null });
+  const Section = Object.assign(Wrapper, {
+    Title: Wrapper,
+    Description: Wrapper,
+    Body: Wrapper,
+  });
+  const Page = Object.assign(Wrapper, { Header, Body: Wrapper, Section });
+  return { Page };
+});
 
 vi.mock("@/contexts/Auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/contexts/Auth")>();
@@ -23,7 +36,23 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
   };
 });
 
-import { OrgOverrideSection } from "./Overview";
+import PlatformAdminOverview, { OrgOverrideSection } from "./Overview";
+
+afterEach(cleanup);
+
+describe("platform admin overview", () => {
+  it("keeps organization and support controls without Dashboard activity", () => {
+    render(<PlatformAdminOverview />);
+
+    expect(screen.getByText("current")).toBeTruthy();
+    expect(screen.getByText("org-current")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Go to org" })).toBeTruthy();
+    expect(
+      screen.getByRole("switch", { name: "Toggle platform admin" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Activity")).toBeNull();
+  });
+});
 
 describe("organization support override", () => {
   it("posts the target slug to the trusted support-session endpoint", () => {

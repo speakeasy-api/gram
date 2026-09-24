@@ -19,6 +19,9 @@ const (
 	assistantReaperWorkflowID = "v1:assistant-reaper"
 	assistantReaperScheduleID = "v1:assistant-reaper-schedule"
 	assistantReaperInterval   = 60 * time.Second
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	assistantReaperCatchupWindow = assistantReaperInterval - time.Second
 )
 
 // AssistantReaperWorkflow reclaims runtime rows and events abandoned by
@@ -53,8 +56,9 @@ func AssistantReaperWorkflow(ctx workflow.Context) error {
 }
 
 func AddAssistantReaperSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
-	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
-		ID: assistantReaperScheduleID,
+	_, err := createScheduleWithCatchup(ctx, temporalEnv.Client().ScheduleClient(), client.ScheduleOptions{
+		CatchupWindow: assistantReaperCatchupWindow,
+		ID:            assistantReaperScheduleID,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{{Every: assistantReaperInterval}},
 		},

@@ -13,7 +13,6 @@ const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   subscription: vi.fn(),
   periodUsage: vi.fn(),
-  paygBillingSummary: vi.fn(),
   inferenceCaps: vi.fn(),
   usageTiers: vi.fn(),
 }));
@@ -32,7 +31,10 @@ vi.mock("@/hooks/useRBAC", () => ({
 
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => false,
-  useSession: () => mocks.session(),
+  useSession: () => ({
+    rawGramAccountType: mocks.productTier(),
+    ...mocks.session(),
+  }),
 }));
 
 vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({ usage: {} }) }));
@@ -79,8 +81,8 @@ vi.mock("@gram/client/react-query/getStripeSubscription.js", () => ({
   invalidateAllGetStripeSubscription: vi.fn(),
 }));
 
-// The usage meters and the TUM view own their own data; this test is only
-// about which sections the page reaches for a given tier.
+// Each billing section owns its data; this test covers which sections the
+// page reaches for a given tier.
 vi.mock("@gram/client/react-query/getCreditUsage.js", () => ({
   useGetCreditUsage: () => ({ data: undefined }),
   invalidateAllGetCreditUsage: vi.fn(),
@@ -106,9 +108,8 @@ vi.mock("@gram/client/react-query/setSpendCap.js", () => ({
 vi.mock("@gram/client/react-query/getPeriodUsage.js", () => ({
   useGetPeriodUsage: () => mocks.periodUsage() as { data: undefined },
 }));
-vi.mock("@gram/client/react-query/getPaygBillingSummary.js", () => ({
-  useGetPaygBillingSummary: () =>
-    mocks.paygBillingSummary() as { data: undefined; isError: boolean },
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
 }));
 vi.mock("@gram/client/react-query/getUsageTiers.js", () => ({
   useGetUsageTiers: (...args: unknown[]) => mocks.usageTiers(...args),
@@ -128,11 +129,11 @@ vi.mock("@gram/client/react-query/setBillingEmail.js", () => ({
     isError: false,
   }),
 }));
-vi.mock("@/components/billing/tum-section", () => ({
-  TumUsageSection: () => <div>tum usage</div>,
+vi.mock("@/components/billing/meter-usage-section", () => ({
+  MeterUsageSection: () => <div>meter usage</div>,
 }));
-vi.mock("@/components/billing/tum-admin-section", () => ({
-  TumAdminSection: () => <div>tum admin</div>,
+vi.mock("@/components/billing/spend-breakdown-section", () => ({
+  SpendBreakdownSection: () => <div>spend by product</div>,
 }));
 
 // Banner behavior is covered in billing-banners.test.tsx. This page test owns
@@ -180,12 +181,11 @@ const billingEmailField = () =>
 const inferenceCapsSection = () =>
   screen.queryByRole("heading", { name: /inference caps/i });
 
-const planSection = () => screen.queryByRole("heading", { name: /^plan$/i });
+const paymentSection = () =>
+  screen.queryByRole("heading", { name: /^payment$/i });
 
-// Both usage sections are titled "Usage"; their descriptions are what say which
-// billing model the figures below them come from.
-const paygUsageSection = () =>
-  screen.queryByText(/current pay-as-you-go billing cycle/i);
+const meterUsageSection = () => screen.queryByText("meter usage");
+const spendBreakdownSection = () => screen.queryByText("spend by product");
 
 const polarUsageSection = () =>
   screen.queryByText(/summary of your organization's usage this period/i);
@@ -203,7 +203,7 @@ function renderBilling() {
   });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={["/example/billing"]}>
         <Billing />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -234,10 +234,6 @@ describe("Billing", () => {
       refetch: vi.fn(),
     });
     mocks.periodUsage.mockReturnValue({ data: undefined });
-    mocks.paygBillingSummary.mockReturnValue({
-      data: undefined,
-      isError: false,
-    });
     const legacyTierLimits = {
       basePrice: 0,
       includedToolCalls: 0,
@@ -261,6 +257,8 @@ describe("Billing", () => {
             "Platform-initiated inference billed at provider cost",
           ],
           tumPricePerMillionUsd: "0.35",
+          riskScanPricePerMillionUsd: "0.99",
+          mcpEgressPricePerGibUsd: "20",
         },
       },
       isLoading: false,
@@ -283,21 +281,46 @@ describe("Billing", () => {
   it("offers pay as you go to a trialing admin on the self-serve view", () => {
     renderBilling();
 
+    expect(paymentSection()).not.toBeNull();
     expect(cta()).not.toBeNull();
+    // The rates for the plan the CTA starts sit on this branch too.
+    expect(screen.getByText("Pay as you go pricing")).toBeTruthy();
   });
 
-  // Trials run on the enterprise tier, which short-circuits into the TUM view
-  // before the self-serve sections — the CTA has to survive that early return.
-  it("offers pay as you go on the enterprise TUM view", () => {
+  // Trials on the enterprise tier must retain the checkout CTA.
+  it("offers pay as you go on the enterprise billing view", () => {
     mocks.productTier.mockReturnValue("enterprise");
 
     renderBilling();
 
-    expect(screen.getByText("tum usage")).toBeTruthy();
+    expect(screen.getByText("meter usage")).toBeTruthy();
+    expect(spendBreakdownSection()).not.toBeNull();
+    expect(
+      spendBreakdownSection()!.compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(cta()).not.toBeNull();
     expect(screen.getByText("Pay as you go pricing")).toBeTruthy();
     expect(screen.getByText("$0.35 per million tokens")).toBeTruthy();
-    expect(mocks.usageTiers).toHaveBeenCalledWith({ throwOnError: false });
+    expect(
+      screen
+        .getByText("Organization")
+        .compareDocumentPosition(paymentSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      paymentSection()!.compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("heading", { name: "Pay as you go pricing" })
+        .compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // The pricing section states rates; the plan's product features are not
+    // one of them.
+    expect(screen.queryByText("Enterprise feature set")).toBeNull();
   });
 
   it("shows no checkout CTA to a member", () => {
@@ -306,8 +329,13 @@ describe("Billing", () => {
 
     renderBilling();
 
-    expect(screen.getByText("tum usage")).toBeTruthy();
+    expect(screen.getByText("meter usage")).toBeTruthy();
     expect(cta()).toBeNull();
+    expect(
+      meterUsageSection()!.compareDocumentPosition(
+        screen.getByRole("heading", { name: "Pay as you go pricing" }),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   // Billing notifications are a pay-as-you-go concern: enterprise orgs are
@@ -332,8 +360,7 @@ describe("Billing", () => {
   );
 
   // The inference caps are a pay-as-you-go control. A trialing enterprise org
-  // is on its way onto PAYG, so it gets them locked rather than hidden — and
-  // the TUM early return is the path that org takes.
+  // is on its way onto PAYG, so it gets them locked rather than hidden.
   it.each<ProductTier>(["payg", "enterprise"])(
     "places the inference caps on the %s view",
     (tier) => {
@@ -345,28 +372,82 @@ describe("Billing", () => {
     },
   );
 
-  // The plan section is where a converted organization manages its card,
+  // The payment section is where a converted organization manages its card,
   // invoices, and cancellation, so it belongs to the pay-as-you-go view only.
-  it("places the pay as you go plan on the payg view", () => {
+  it("places the subscription controls on the payg view", () => {
     mocks.productTier.mockReturnValue("payg");
     mocks.session.mockReturnValue({ trial: null });
 
     renderBilling();
 
-    expect(planSection()).not.toBeNull();
+    expect(paymentSection()).not.toBeNull();
     expect(portalButton()).not.toBeNull();
+    expect(
+      screen
+        .getByText("Organization")
+        .compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      meterUsageSection()!.compareDocumentPosition(paymentSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
-  // The account type can read as PAYG while a product trial is still running.
-  // Checkout is what creates the subscription, so the CTA owns that view — a
-  // plan section beside it would be reporting on something that doesn't exist.
-  it("keeps a trialing payg org on the checkout CTA alone", () => {
+  it("prioritizes missing-subscription recovery over stale healthy data", () => {
     mocks.productTier.mockReturnValue("payg");
+    mocks.session.mockReturnValue({ trial: null });
+    mocks.subscription.mockReturnValue({
+      data: { status: "active", paymentFailed: false },
+      error: Object.assign(new Error("subscription not found"), {
+        statusCode: 404,
+      }),
+      isError: true,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
 
     renderBilling();
 
     expect(cta()).not.toBeNull();
-    expect(planSection()).toBeNull();
+    expect(portalButton()).toBeNull();
+    expect(
+      paymentSection()!.compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("retains payment failure priority during a subscription refresh outage", () => {
+    mocks.productTier.mockReturnValue("payg");
+    mocks.session.mockReturnValue({ trial: null });
+    mocks.subscription.mockReturnValue({
+      data: { status: "past_due", paymentFailed: true },
+      error: new Error("Stripe unavailable"),
+      isError: true,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+
+    renderBilling();
+
+    expect(portalButton()).not.toBeNull();
+    expect(
+      paymentSection()!.compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  // The account type can read as PAYG while a product trial is still running.
+  // Checkout is what creates the subscription, so the payment section holds
+  // the CTA — subscription controls beside it would be reporting on something
+  // that doesn't exist.
+  it("keeps a trialing payg org's payment section on the checkout CTA", () => {
+    mocks.productTier.mockReturnValue("payg");
+
+    renderBilling();
+
+    expect(paymentSection()).not.toBeNull();
+    expect(cta()).not.toBeNull();
     expect(portalButton()).toBeNull();
   });
 
@@ -375,23 +456,25 @@ describe("Billing", () => {
     "base_PAID",
     "__deprecated__pro",
     "enterprise",
-  ])("shows no pay as you go plan on the %s view", (tier) => {
+  ])("shows no payment section on the converted %s view", (tier) => {
     mocks.productTier.mockReturnValue(tier);
+    mocks.session.mockReturnValue({ trial: null });
 
     renderBilling();
 
-    expect(planSection()).toBeNull();
+    expect(paymentSection()).toBeNull();
   });
 
-  // A pre-card trial converts through the checkout CTA, not the plan section:
-  // there is no subscription to manage until checkout creates one.
-  it("keeps the trialing view on the checkout CTA", () => {
+  // A pre-card trial converts through the checkout CTA, not the subscription
+  // controls: there is no subscription to manage until checkout creates one.
+  it("keeps the trialing payment section on the checkout CTA", () => {
     mocks.productTier.mockReturnValue("enterprise");
 
     renderBilling();
 
+    expect(paymentSection()).not.toBeNull();
     expect(cta()).not.toBeNull();
-    expect(planSection()).toBeNull();
+    expect(portalButton()).toBeNull();
   });
 
   it("shows no inference caps on the pre-checkout view", () => {
@@ -410,23 +493,9 @@ describe("Billing", () => {
 
     renderBilling();
 
-    expect(screen.getByText("tum usage")).toBeTruthy();
+    expect(screen.getByText("meter usage")).toBeTruthy();
     expect(inferenceCapsSection()).toBeNull();
     expect(mocks.inferenceCaps).not.toHaveBeenCalled();
-  });
-
-  // Pay as you go bills through Stripe. The Polar usage meters describe a
-  // period it isn't billed on, so the tier swaps the whole section — two
-  // disagreeing totals on one billing page is worse than one.
-  it("puts the pay as you go cycle usage on the payg view", () => {
-    mocks.productTier.mockReturnValue("payg");
-    mocks.session.mockReturnValue({ trial: null });
-
-    renderBilling();
-
-    expect(paygUsageSection()).not.toBeNull();
-    expect(polarUsageSection()).toBeNull();
-    expect(mocks.periodUsage).not.toHaveBeenCalled();
   });
 
   it.each<ProductTier>(["base", "base_PAID", "__deprecated__pro"])(
@@ -437,24 +506,25 @@ describe("Billing", () => {
       renderBilling();
 
       expect(polarUsageSection()).not.toBeNull();
-      expect(paygUsageSection()).toBeNull();
       expect(mocks.periodUsage).toHaveBeenCalled();
-      expect(mocks.paygBillingSummary).not.toHaveBeenCalled();
+      expect(meterUsageSection()).toBeNull();
+      expect(spendBreakdownSection()).toBeNull();
       expect(mocks.inferenceCaps).not.toHaveBeenCalled();
     },
   );
 
-  // Enterprise contracts bill on tokens under management through the TUM view,
-  // which owns its own figures — neither usage section belongs there.
-  it("keeps the enterprise view on the TUM figures", () => {
+  it("keeps the enterprise view on meter usage without Polar usage", () => {
     mocks.productTier.mockReturnValue("enterprise");
 
     renderBilling();
 
-    expect(screen.getByText("tum usage")).toBeTruthy();
-    expect(paygUsageSection()).toBeNull();
     expect(polarUsageSection()).toBeNull();
-    expect(mocks.paygBillingSummary).not.toHaveBeenCalled();
+    expect(meterUsageSection()).not.toBeNull();
+    expect(spendBreakdownSection()).not.toBeNull();
+    expect(
+      spendBreakdownSection()!.compareDocumentPosition(meterUsageSection()!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("shows no checkout CTA once the trial has ended", () => {

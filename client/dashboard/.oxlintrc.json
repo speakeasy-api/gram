@@ -38,6 +38,22 @@
     "typescript/switch-exhaustiveness-check": "error",
     "typescript/strict-void-return": "error",
 
+    // Oxlint 1.79 split react/react-compiler into individual rules. The
+    // dashboard does not run React Compiler, so keep these checks opt-in until
+    // it does.
+    "react/error-boundaries": "off",
+    "react/globals": "off",
+    "react/immutability": "off",
+    "react/incompatible-library": "off",
+    "react/preserve-manual-memoization": "off",
+    "react/purity": "off",
+    "react/refs": "off",
+    "react/set-state-in-effect": "off",
+    "react/set-state-in-render": "off",
+    "react/static-components": "off",
+    "react/use-memo": "off",
+    "react/void-use-memo": "off",
+
     "react/exhaustive-deps": "error",
     "react/rules-of-hooks": "error",
     "react/only-export-components": ["error", { "allowConstantExport": true }],

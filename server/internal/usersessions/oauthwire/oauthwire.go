@@ -1,6 +1,7 @@
 // Package oauthwire holds the pieces of the issuer-gated OAuth surface that
-// both the usersessions management API and its cimd subpackages need: the
-// wire-error shape and the redirect-URI scheme rules.
+// both the usersessions management API and its cimd subpackages need:
+// standardized wire identifiers, the wire-error shape, and redirect-URI
+// scheme rules.
 //
 // It exists to be a leaf. The cimd resolver has to construct OAuth errors
 // and validate redirect URIs, and the management API has to read the CIMD
@@ -14,6 +15,78 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+)
+
+// OAuth identifiers as they appear in requests and authorization-server
+// metadata.
+const (
+	// AuthMethodClientSecretBasic presents the client secret as HTTP Basic
+	// credentials (RFC 6749 §2.3.1).
+	AuthMethodClientSecretBasic = "client_secret_basic"
+
+	// AuthMethodClientSecretPost presents the client secret in the request
+	// body (RFC 6749 §2.3.1).
+	AuthMethodClientSecretPost = "client_secret_post"
+
+	// AuthMethodNone is a public client: no credential, with PKCE or
+	// refresh-token possession as the integrity proof.
+	AuthMethodNone = "none"
+
+	// AuthMethodPrivateKeyJWT authenticates with an RFC 7523 §2.2 assertion
+	// signed by a key the client publishes (RFC 7591 §2, OIDC Core §9). The
+	// only method here that proves possession of something never sent to
+	// the server.
+	AuthMethodPrivateKeyJWT = "private_key_jwt"
+
+	// ClientAssertionTypeJWTBearer is RFC 7523 §2.2's client_assertion_type
+	// for JWT client authentication.
+	ClientAssertionTypeJWTBearer = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" //nolint:gosec // standardized public assertion type identifier, not a credential
+
+	// CodeChallengeMethodS256 is the SHA-256 PKCE transformation method
+	// (RFC 7636 §4.2).
+	CodeChallengeMethodS256 = "S256"
+
+	// GrantProfileIDJAG identifies support for identity assertion JWT
+	// authorization grants in authorization-server metadata.
+	GrantProfileIDJAG = "urn:ietf:params:oauth:grant-profile:id-jag"
+
+	// GrantTypeAuthorizationCode exchanges an authorization code at the token
+	// endpoint (RFC 6749 §4.1.3).
+	GrantTypeAuthorizationCode = "authorization_code"
+
+	// GrantTypeClientCredentials mints a token for the client itself at the
+	// token endpoint (RFC 6749 §4.4.2).
+	GrantTypeClientCredentials = "client_credentials"
+
+	// GrantTypeJWTBearer is RFC 7523's JWT authorization grant identifier.
+	GrantTypeJWTBearer = "urn:ietf:params:oauth:grant-type:jwt-bearer" //nolint:gosec // standardized public grant identifier, not a credential
+
+	// GrantTypeRefreshToken exchanges a refresh token at the token endpoint
+	// (RFC 6749 §6).
+	GrantTypeRefreshToken = "refresh_token"
+
+	// ResponseTypeCode requests an authorization code from the authorization
+	// endpoint (RFC 6749 §4.1.1).
+	ResponseTypeCode = "code"
+)
+
+// Client authentication parameters as they appear in a token or revocation
+// request body.
+const (
+	// ParamClientID identifies the client (RFC 6749 §2.3.1).
+	ParamClientID = "client_id"
+
+	// ParamClientSecret carries the client secret in the request body (RFC
+	// 6749 §2.3.1).
+	ParamClientSecret = "client_secret"
+
+	// ParamClientAssertion carries a client authentication assertion (RFC
+	// 7521 §4.2).
+	ParamClientAssertion = "client_assertion"
+
+	// ParamClientAssertionType names the format of ParamClientAssertion (RFC
+	// 7521 §4.2).
+	ParamClientAssertionType = "client_assertion_type"
 )
 
 // Error carries an OAuth wire error: the shared shape used across the
@@ -77,4 +150,54 @@ func ValidateRedirectURI(raw string) error {
 		}
 		return nil
 	}
+}
+
+// ResourceIndicatorsFrom extracts every RFC 8707 `resource` parameter from a
+// query string or form body, in submission order. RFC 8707 §2 permits repeating
+// the parameter to request a token usable at several resources, so reading only
+// the first value would leave the rest unvalidated.
+//
+// The returned slice distinguishes the three cases that matter: empty when the
+// parameter was absent, which is permitted; a single element for the ordinary
+// request; and one element per submission when repeated. An explicitly empty
+// `resource=` arrives as a one-element slice holding the empty string, which is
+// a malformed value rather than an omission — the RFC requires an absolute URI —
+// and is rejected as such by ValidateResourceIndicators.
+func ResourceIndicatorsFrom(values url.Values) []string {
+	return values["resource"]
+}
+
+// ValidateResourceIndicators checks every submitted RFC 8707 `resource` against
+// canonical, the resource identifier for the address the request arrived on. No
+// resources at all is accepted: RFC 8707 §2 leaves demanding the parameter to
+// the authorization server's discretion, and clients predating MCP 2026-07-28 do
+// not send one.
+//
+// Every value must match. This surface mints a token audienced to exactly one
+// endpoint, so it cannot honour a request naming any other resource, and
+// accepting a matching value alongside a mismatched one would confirm a binding
+// that was never made.
+//
+// Comparison is byte equality. MCP 2026-07-28 asks implementations to accept
+// uppercase scheme and host components for robustness; this surface
+// deliberately declines, holding `resource` to the simple string comparison
+// (RFC 3986 §6.2.1) that RFC 9207 §2.4 mandates for `iss`. The two identifiers
+// are minted from one base URL and published in the same metadata documents,
+// so a client echoing the value it read back matches on the first attempt.
+//
+// canonical is address-specific — one MCP server is reachable under several
+// identifiers (custom domain or platform origin, each under two route bases).
+// Callers must derive it from the request being validated, never from a stored
+// or global URL.
+func ValidateResourceIndicators(resources []string, canonical string) error {
+	for _, resource := range resources {
+		if resource != canonical {
+			// The submitted value is deliberately not echoed: on the authorize
+			// leg this description is carried in a redirect the client renders.
+			// The expected value is already public in the protected-resource
+			// metadata.
+			return &Error{Code: "invalid_target", Description: fmt.Sprintf("resource does not identify this MCP server (expected %q)", canonical)}
+		}
+	}
+	return nil
 }

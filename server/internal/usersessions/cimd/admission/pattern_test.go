@@ -261,12 +261,17 @@ func TestCatalogAdmits_CodexPerServerNamespace(t *testing.T) {
 	require.False(t, catalogAdmits("https://chatgpt.com/oauth/codex/a/b/client.json"))
 }
 
-// TestCatalog_CodexStableDocumentAttribution pins which rule covers the
-// DisplayOnly stable Codex document: the one-segment connector wildcard,
-// not the Codex per-server pattern, which requires a segment between
-// "codex" and "client.json". A catalog edit that shifts this coverage
-// should fail here rather than move the invariant silently.
-func TestCatalog_CodexStableDocumentAttribution(t *testing.T) {
+// TestCatalog_CodexStableDocumentOverlap pins which wildcard also covers the
+// stable Codex document: the one-segment connector wildcard, not the Codex
+// per-server pattern, which requires a segment between "codex" and
+// "client.json".
+//
+// That overlap is why the catalog carries a literal entry for the document.
+// CatalogPreset resolves the literal ahead of the wildcard, which is what
+// attributes a caller presenting it to Codex rather than to ChatGPT. A
+// catalog edit that shifts the coverage should fail here rather than move
+// the invariant silently.
+func TestCatalog_CodexStableDocumentOverlap(t *testing.T) {
 	t.Parallel()
 
 	const stableDocument = "https://chatgpt.com/oauth/codex/client.json"

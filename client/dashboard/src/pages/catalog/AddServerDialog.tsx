@@ -1,3 +1,4 @@
+import { catalogLogoClassName } from "./logo";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
@@ -268,6 +269,24 @@ export function AddServerDialog({
         succeededCount: 0,
         failedCount: servers.length,
         error: detailsError,
+      });
+      return;
+    }
+
+    // Dead-end guard: when the issuer lookup failed, canInstall never becomes
+    // true and the install never starts. Interactive users see the reason in
+    // the configure step, but headless/auto-start callers would wait forever.
+    if (
+      releaseState.phase === "configure" &&
+      releaseState.installBlockedReason
+    ) {
+      finishedRef.current = true;
+      onInstallFinished({
+        projectSlug,
+        status: "failed",
+        succeededCount: 0,
+        failedCount: servers.length,
+        error: releaseState.installBlockedReason,
       });
       return;
     }
@@ -549,7 +568,10 @@ function SelectRemotesPhaseContent({
               <img
                 src={currentConfig.server.iconUrl}
                 alt=""
-                className="h-6 w-6"
+                className={cn(
+                  "h-6 w-6",
+                  catalogLogoClassName(currentConfig.server.registrySpecifier),
+                )}
               />
             ) : (
               <ServerIcon className="text-muted-foreground h-5 w-5" />
@@ -717,7 +739,11 @@ function ConfigurePhaseContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only trigger on install readiness changes, not on every releaseState update
   }, [nothingToConfigure, releaseState.canInstall]);
 
-  if (nothingToConfigure && releaseState.serverConfigs.length > 0) {
+  if (
+    nothingToConfigure &&
+    releaseState.serverConfigs.length > 0 &&
+    !releaseState.installBlockedReason
+  ) {
     return (
       <div className="flex items-center justify-center gap-2 py-4">
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -745,6 +771,9 @@ function ConfigurePhaseContent({
           />
         )}
         {!bulk && <HeaderValueSections releaseState={releaseState} />}
+        {releaseState.installBlockedReason && (
+          <InstallBlockedWarning reason={releaseState.installBlockedReason} />
+        )}
       </Stack>
       <Dialog.Footer>
         <div className="flex gap-2">
@@ -851,7 +880,14 @@ function BatchServerConfig({
             <div className="flex items-center gap-3">
               <div className="bg-primary/10 flex h-6 w-6 shrink-0 items-center justify-center">
                 {config.server.iconUrl ? (
-                  <img src={config.server.iconUrl} alt="" className="h-4 w-4" />
+                  <img
+                    src={config.server.iconUrl}
+                    alt=""
+                    className={cn(
+                      "h-4 w-4",
+                      catalogLogoClassName(config.server.registrySpecifier),
+                    )}
+                  />
                 ) : (
                   <ServerIcon className="text-muted-foreground h-3 w-3" />
                 )}
@@ -876,6 +912,17 @@ function BatchServerConfig({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function InstallBlockedWarning({ reason }: { reason: string }) {
+  return (
+    <div className="border-destructive/30 bg-destructive/5 flex items-start gap-2 border p-2">
+      <AlertCircle className="text-destructive mt-0.5 h-4 w-4 shrink-0" />
+      <Text small className="text-destructive/80">
+        {reason}
+      </Text>
     </div>
   );
 }
@@ -1255,7 +1302,7 @@ function NextSteps({
     <div>
       <Text className="mb-2 font-medium">Next steps</Text>
       <div className="grid grid-cols-2 gap-2">
-        <routes.sources.Link className="no-underline hover:no-underline">
+        <routes.mcp.Link className="no-underline hover:no-underline">
           <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 border p-3 transition-all [&_*]:no-underline">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-blue-500/10 dark:bg-blue-500/20">
               <Plus className="h-4 w-4 text-blue-600 dark:text-blue-400" />
@@ -1267,7 +1314,7 @@ function NextSteps({
             </div>
             <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
-        </routes.sources.Link>
+        </routes.mcp.Link>
         {status.mcpEndpointUrl && (
           <a
             href={`${status.mcpEndpointUrl}/install`}

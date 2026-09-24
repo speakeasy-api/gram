@@ -43,12 +43,11 @@ type upsertPackage struct {
 }
 
 type upsertExternalMCP struct {
-	registryID                          uuid.NullUUID
-	organizationMcpCollectionRegistryID uuid.NullUUID
-	name                                string
-	slug                                string
-	registryServerSpecifier             string
-	selectedRemotes                     []string
+	registryID              uuid.NullUUID
+	name                    string
+	slug                    string
+	registryServerSpecifier string
+	selectedRemotes         []string
 }
 
 type deploymentFields struct {
@@ -307,13 +306,12 @@ func amendDeployment(
 
 	for _, e := range externalMCPsToUpsert {
 		_, err := depRepo.UpsertDeploymentExternalMCP(ctx, repo.UpsertDeploymentExternalMCPParams{
-			DeploymentID:                        id,
-			RegistryID:                          e.registryID,
-			OrganizationMcpCollectionRegistryID: e.organizationMcpCollectionRegistryID,
-			Name:                                e.name,
-			Slug:                                e.slug,
-			RegistryServerSpecifier:             e.registryServerSpecifier,
-			SelectedRemotes:                     e.selectedRemotes,
+			DeploymentID:            id,
+			RegistryID:              e.registryID,
+			Name:                    e.name,
+			Slug:                    e.slug,
+			RegistryServerSpecifier: e.registryServerSpecifier,
+			SelectedRemotes:         e.selectedRemotes,
 		})
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, err, "error adding deployment external mcp").LogError(ctx, logger)

@@ -618,8 +618,8 @@ func validateYAMLTree(node *yaml.Node) error {
 				return err
 			}
 		}
-		for i := len(current.Content) - 1; i >= 0; i-- {
-			stack = append(stack, treeEntry{node: current.Content[i], depth: entry.depth + 1})
+		for _, v := range slices.Backward(current.Content) {
+			stack = append(stack, treeEntry{node: v, depth: entry.depth + 1})
 		}
 	}
 	return nil

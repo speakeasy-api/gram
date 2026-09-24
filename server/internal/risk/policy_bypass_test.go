@@ -22,6 +22,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	shadowadmission "github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -114,6 +115,53 @@ func TestCreateApproveAndRevokePolicyBypassRequest_AddsAndRemovesServerURLGrant(
 	require.Equal(t, beforeRevokeAuditCount+1, afterRevokeAuditCount)
 }
 
+func TestApproveAndRevokePolicyBypassRequestWaitForShadowAdmissionLock(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Locked bypass approval")})
+	require.NoError(t, err)
+	token := riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, "https://mcp.example.com/locked")
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{RequestToken: token})
+	require.NoError(t, err)
+
+	lockTx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, shadowadmission.LockProject(ctx, lockTx, *authCtx.ProjectID))
+	type result struct {
+		request *gen.RiskPolicyBypassRequest
+		err     error
+	}
+	completed := make(chan result, 1)
+	go func() {
+		approved, approveErr := ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{ID: request.ID})
+		completed <- result{request: approved, err: approveErr}
+	}()
+	require.Never(t, func() bool { return len(completed) > 0 }, 100*time.Millisecond, 10*time.Millisecond)
+	require.NoError(t, lockTx.Rollback(ctx))
+	require.Eventually(t, func() bool { return len(completed) > 0 }, 10*time.Second, 10*time.Millisecond)
+	got := <-completed
+	require.NoError(t, got.err)
+	require.Equal(t, "approved", got.request.Status)
+
+	lockTx = testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, shadowadmission.LockProject(ctx, lockTx, *authCtx.ProjectID))
+	completed = make(chan result, 1)
+	go func() {
+		revoked, revokeErr := ti.service.RevokeRiskPolicyBypassRequest(ctx, &gen.RevokeRiskPolicyBypassRequestPayload{ID: request.ID})
+		completed <- result{request: revoked, err: revokeErr}
+	}()
+	require.Never(t, func() bool { return len(completed) > 0 }, 100*time.Millisecond, 10*time.Millisecond)
+	require.NoError(t, lockTx.Rollback(ctx))
+	require.Eventually(t, func() bool { return len(completed) > 0 }, 10*time.Second, 10*time.Millisecond)
+	got = <-completed
+	require.NoError(t, got.err)
+	require.Equal(t, "revoked", got.request.Status)
+}
+
 func TestCreateApprovePolicyBypassRequest_AddsServerIdentityGrant(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -196,6 +244,35 @@ func TestApprovePolicyBypassRequest_CanGrantAllUsers(t *testing.T) {
 	assert.Equal(t, "revoked", revoked.Status)
 	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, otherUserID, policy.ID, fullURL))
+}
+
+func TestApprovePolicyBypassRequest_RejectsSystemPrincipal(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Policy Bypass System Principal"),
+	})
+	require.NoError(t, err)
+
+	fullURL := "https://mcp.example.com/system-principal"
+	request, err := ti.service.CreateRiskPolicyBypassRequest(ctx, &gen.CreateRiskPolicyBypassRequestPayload{
+		RequestToken: riskPolicyBypassRequestToken(t, ti, authCtx, policy.ID, fullURL),
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.ApproveRiskPolicyBypassRequest(ctx, &gen.ApproveRiskPolicyBypassRequestPayload{
+		ID:                   request.ID,
+		GrantedPrincipalUrns: []string{urn.NewSystemPrincipal("issuer-metadata-refresh").String()},
+	})
+	require.Error(t, err, "a system principal never receives a bypass grant")
+	assert.False(t, userHasRiskPolicyBypassGrant(t, ti, authCtx.ActiveOrganizationID, authCtx.UserID, policy.ID, fullURL))
 }
 
 func TestPolicyBypassEvaluator_AudienceSemantics(t *testing.T) {
@@ -295,7 +372,7 @@ func TestPolicyBypassEvaluator_LegacyCombinedGrantMatchesCanonicalURLTarget(t *t
 	require.NotNil(t, authCtx)
 
 	policyID := "policy_legacy_combined_target"
-	serverURL := "https://mcp.example.com/legacy"
+	serverURL := "HTTPS://MCP.EXAMPLE.COM:443/legacy?stale=1"
 	selector := authz.NewSelector(authz.ScopeRiskPolicyBypass, policyID)
 	selector[authz.SelectorKeyServerURL] = serverURL
 	selector[authz.SelectorKeyServerIdentity] = "legacy-alias"
@@ -310,7 +387,7 @@ func TestPolicyBypassEvaluator_LegacyCombinedGrantMatchesCanonicalURLTarget(t *t
 	}))
 
 	target := risk.ShadowMCPPolicyBypassTarget(shadowmcp.AccessEvidence{
-		FullURL:        serverURL,
+		FullURL:        "https://user:pass@mcp.example.com/legacy?current=1",
 		URLHost:        "",
 		ServerIdentity: "",
 	}, "list_events")
@@ -955,11 +1032,36 @@ type fakeApprovalIntake struct {
 	gotServerURL      string
 	gotRequesterID    string
 	gotNote           string
+
+	// URL-edit review fixtures and recordings: what the fake reports as the
+	// project's standing decisions, and what the update path handed back.
+	reviewConflicts     []shadowmcp.StandingDecisionConflict
+	reviewStandingURLs  []string
+	gotReviewPolicyID   uuid.UUID
+	gotReviewAllowed    []string
+	gotReviewBlocked    []string
+	supersededConflicts []shadowmcp.StandingDecisionConflict
+	gotSupersedeActor   urn.Principal
 }
 
 // The fake never backfills: these tests exercise the intake seam's admission
 // half, and a no-op mirrors an org whose project has no recorded decisions.
 func (f *fakeApprovalIntake) ReconcileStandingDecisionsForPolicy(_ context.Context, _ pgx.Tx, _ string, _ uuid.UUID, _ uuid.UUID) error {
+	return nil
+}
+
+// The zero-value fake reports no standing decisions, mirroring an org whose
+// project has never recorded one — URL-list edits proceed without conflicts.
+func (f *fakeApprovalIntake) ReviewShadowMCPPolicyURLEdit(_ context.Context, _ pgx.Tx, _ string, _ uuid.UUID, policyID uuid.UUID, _ string, desiredAllowedURLs []string, desiredBlockedURLs []string) (shadowmcp.StandingDecisionReview, error) {
+	f.gotReviewPolicyID = policyID
+	f.gotReviewAllowed = desiredAllowedURLs
+	f.gotReviewBlocked = desiredBlockedURLs
+	return shadowmcp.StandingDecisionReview{Conflicts: f.reviewConflicts, StandingURLs: f.reviewStandingURLs}, nil
+}
+
+func (f *fakeApprovalIntake) SupersedeShadowMCPDecisions(_ context.Context, _ pgx.Tx, _ string, _ uuid.UUID, conflicts []shadowmcp.StandingDecisionConflict, actor urn.Principal, _ *string) error {
+	f.supersededConflicts = conflicts
+	f.gotSupersedeActor = actor
 	return nil
 }
 

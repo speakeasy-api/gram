@@ -1,18 +1,35 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import type { Gram } from "@gram/client";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
+import { autoConfigureRemoteMcpAuth as autoConfigureRemoteMcpAuthImplementation } from "./autoConfigureAuth";
 import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
 
-import { autoConfigureRemoteMcpAuth } from "./autoConfigureAuth";
-
-vi.mock("@/lib/proxyRegisterUpstreamClient", () => ({
+vi.mock("@/lib/proxyRegisterUpstreamClient", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/proxyRegisterUpstreamClient")
+  >()),
   proxyRegisterUpstreamClient: vi.fn(),
 }));
 
 const proxyRegisterMock = vi.mocked(proxyRegisterUpstreamClient);
+
+type AutoConfigureInput = Parameters<
+  typeof autoConfigureRemoteMcpAuthImplementation
+>[0];
+
+function autoConfigureRemoteMcpAuth(
+  input: Omit<AutoConfigureInput, "isPlatformAdmin" | "projectSlug"> &
+    Partial<Pick<AutoConfigureInput, "isPlatformAdmin" | "projectSlug">>,
+) {
+  return autoConfigureRemoteMcpAuthImplementation({
+    isPlatformAdmin: false,
+    projectSlug: "test-project",
+    ...input,
+  });
+}
 
 // Which issuer an upstream URL maps to — the project's own, one inherited from
 // the organization, or one from the platform catalog — is decided server-side by
@@ -28,7 +45,34 @@ describe("autoConfigureRemoteMcpAuth", () => {
       clientId: "client-from-dcr",
       clientSecret: "secret-from-dcr",
       tokenEndpointAuthMethod: "client_secret_post",
+      clientIdIssuedAt: null,
+      clientSecretExpiresAt: null,
     });
+  });
+
+  it("does not mutate an organization-owned user session issuer", async () => {
+    const client = mockClient();
+
+    const result = await autoConfigureRemoteMcpAuth({
+      client: client as unknown as Gram,
+      authedFetch: vi.fn(),
+      remoteMcpServer: remoteMcpServer(),
+      mcpServer: mcpServer(),
+      organizationOwnedUserSessionIssuer: true,
+    });
+
+    expect(result).toEqual({
+      status: "skipped",
+      message:
+        "Organization user session issuers are configured by organization administrators.",
+      warn: false,
+    });
+    expect(
+      client.remoteMcp.discoverProtectedResourceMetadata,
+    ).not.toHaveBeenCalled();
+    expect(client.remoteSessionIssuers.create).not.toHaveBeenCalled();
+    expect(client.remoteSessionClients.create).not.toHaveBeenCalled();
+    expect(client.mcpServers.update).not.toHaveBeenCalled();
   });
 
   it("creates an issuer from the discovered draft when none exists and attaches a client under the server's own USI", async () => {
@@ -75,6 +119,10 @@ describe("autoConfigureRemoteMcpAuth", () => {
           clientId: "client-from-dcr",
           clientSecret: "secret-from-dcr",
           tokenEndpointAuthMethod: "client_secret_post",
+          // Lifecycle stamps from the registration, so the server can
+          // re-register the client in place once the issuer expires it.
+          clientIdIssuedAt: undefined,
+          clientSecretExpiresAt: undefined,
         }),
       },
       undefined,
@@ -128,6 +176,28 @@ describe("autoConfigureRemoteMcpAuth", () => {
     );
   });
 
+  it("discovers a missing DCR endpoint for an otherwise configured issuer", async () => {
+    const client = mockClient({
+      existingIssuer: remoteSessionIssuer({ registrationEndpoint: "" }),
+    });
+
+    const result = await autoConfigureRemoteMcpAuth({
+      client: client as unknown as Gram,
+      authedFetch: vi.fn(),
+      remoteMcpServer: remoteMcpServer(),
+      mcpServer: mcpServer(),
+    });
+
+    expect(result.status).toBe("configured");
+    expect(client.remoteSessionIssuers.fetchMetadata).toHaveBeenCalledOnce();
+    expect(proxyRegisterMock).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        registrationEndpoint: "https://idp.example.com/register",
+      }),
+    );
+  });
+
   it("attaches the client to an issuer the project does not own, such as a platform-catalog one", async () => {
     // A platform-catalog issuer comes back with no project and no organization.
     // The tenant still hangs its own client off it.
@@ -169,6 +239,8 @@ describe("autoConfigureRemoteMcpAuth", () => {
       registrationEndpoint: "https://idp.example.com/register",
       scope: "resource.read resource.write",
       tokenEndpointAuthMethod: "client_secret_post",
+      tunneledMcpServerId: undefined,
+      projectSlug: "test-project",
     });
     expect(client.remoteSessionClients.create).toHaveBeenCalledWith(
       {
@@ -201,11 +273,67 @@ describe("autoConfigureRemoteMcpAuth", () => {
     ).not.toHaveBeenCalled();
   });
 
-  // Guard ordering, and the reason it is load-bearing: a lookup miss creates the
-  // issuer, and one created for an upstream that cannot do dynamic client
-  // registration could never receive a client. The DCR check has to come first
-  // so nothing is written for such a server.
-  it("skips without looking up an issuer when discovery does not advertise DCR", async () => {
+  it("skips tunneled DCR with a permission-oriented result for non-platform admins", async () => {
+    const client = mockClient({
+      existingIssuer: remoteSessionIssuer({
+        tunneledMcpServerId: "tunnel-1",
+      }),
+    });
+
+    const result = await autoConfigureRemoteMcpAuth({
+      client: client as unknown as Gram,
+      authedFetch: vi.fn(),
+      remoteMcpServer: remoteMcpServer(),
+      mcpServer: mcpServer(),
+    });
+
+    expect(result).toEqual({
+      status: "skipped",
+      message:
+        "Automatic authentication setup cannot use tunneled dynamic client registration without platform admin access. Configure Manual credentials or CIMD from the Authentication tab.",
+      warn: true,
+    });
+    expect(proxyRegisterMock).not.toHaveBeenCalled();
+    expect(client.remoteSessionClients.create).not.toHaveBeenCalled();
+  });
+
+  it("uses a saved registration endpoint through the target project's tunnel for platform admins", async () => {
+    const client = mockClient({
+      existingIssuer: remoteSessionIssuer({
+        registrationEndpoint: "http://idp.internal/register",
+        tunneledMcpServerId: "tunnel-1",
+        tokenEndpointAuthMethodsSupported: ["client_secret_post"],
+      }),
+    });
+    client.remoteSessionIssuers.fetchMetadata.mockRejectedValue(
+      new Error("private metadata is unreachable from direct egress"),
+    );
+
+    const result = await autoConfigureRemoteMcpAuth({
+      client: client as unknown as Gram,
+      authedFetch: vi.fn(),
+      remoteMcpServer: remoteMcpServer(),
+      mcpServer: mcpServer(),
+      isPlatformAdmin: true,
+      projectSlug: "fallback-project",
+      options: { headers: { "gram-project": "other-project" } },
+    });
+
+    expect(result.status).toBe("configured");
+    expect(client.remoteSessionIssuers.fetchMetadata).not.toHaveBeenCalled();
+    expect(proxyRegisterMock).toHaveBeenCalledWith(expect.any(Function), {
+      registrationEndpoint: "http://idp.internal/register",
+      scope: "resource.read resource.write",
+      tokenEndpointAuthMethod: "client_secret_post",
+      tunneledMcpServerId: "tunnel-1",
+      projectSlug: "other-project",
+    });
+  });
+
+  // Issuer lookup must happen before the DCR guard because an operator may have
+  // saved a registration endpoint that discovery does not advertise. A miss
+  // still skips before creating anything.
+  it("skips without creating an issuer when neither discovery nor a saved issuer provides DCR", async () => {
     const client = mockClient({
       issuerDraft: {
         issuer: "https://idp.example.com",
@@ -232,7 +360,7 @@ describe("autoConfigureRemoteMcpAuth", () => {
         "OAuth metadata was found, but automatic authentication setup requires dynamic client registration.",
       warn: true,
     });
-    expect(client.remoteSessionIssuers.get).not.toHaveBeenCalled();
+    expect(client.remoteSessionIssuers.get).toHaveBeenCalledOnce();
     expect(client.remoteSessionIssuers.create).not.toHaveBeenCalled();
     expect(proxyRegisterMock).not.toHaveBeenCalled();
     expect(client.remoteSessionClients.create).not.toHaveBeenCalled();
@@ -476,12 +604,14 @@ function remoteSessionIssuer(
     tokenEndpoint: overrides.tokenEndpoint ?? "https://idp.example.com/token",
     registrationEndpoint:
       overrides.registrationEndpoint ?? "https://idp.example.com/register",
-    scopesSupported: [],
-    grantTypesSupported: [],
-    responseTypesSupported: [],
-    tokenEndpointAuthMethodsSupported: [],
+    scopesSupported: overrides.scopesSupported ?? [],
+    grantTypesSupported: overrides.grantTypesSupported ?? [],
+    responseTypesSupported: overrides.responseTypesSupported ?? [],
+    tokenEndpointAuthMethodsSupported:
+      overrides.tokenEndpointAuthMethodsSupported ?? [],
     clientIdMetadataDocumentSupported:
       overrides.clientIdMetadataDocumentSupported ?? false,
+    tunneledMcpServerId: overrides.tunneledMcpServerId,
     oidc: false,
     passthrough: false,
     createdAt: new Date(0),
@@ -507,6 +637,7 @@ function mcpServer(overrides: Partial<McpServer> = {}): McpServer {
     name: "Remote server",
     slug: "remote-server",
     remoteMcpServerId: "remote-mcp-server-1",
+    networkAccessMode: "public_only",
     visibility: "disabled",
     userSessionIssuerId: "server-usi",
     createdAt: new Date(0),

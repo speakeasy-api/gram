@@ -73,6 +73,7 @@ export function ResourceListPage({
   isRefreshing,
   hideToolbar,
   // body
+  belowHeader,
   isLoading = false,
   isEmpty = false,
   empty,
@@ -103,6 +104,12 @@ export function ResourceListPage({
     isRefreshing?: boolean;
     /** Force-hide the toolbar even if controls are provided (e.g. while empty). */
     hideToolbar?: boolean;
+    /**
+     * Rendered directly under the page header, above the toolbar — the slot a
+     * tab strip belongs in, so switching views does not move the controls
+     * beneath it.
+     */
+    belowHeader?: ReactNode;
     isLoading?: boolean;
     isEmpty?: boolean;
     empty?: EmptyConfig;
@@ -135,6 +142,8 @@ export function ResourceListPage({
         area={area}
         primaryAction={primaryAction}
       />
+
+      {belowHeader}
 
       {metrics != null && metrics.length > 0 && (
         <StatRow

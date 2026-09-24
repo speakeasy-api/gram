@@ -197,6 +197,44 @@ func (q *Queries) CallerOwnsDashboardChat(ctx context.Context, arg CallerOwnsDas
 	return ok, err
 }
 
+const cancelPendingAssistantThreadEvents = `-- name: CancelPendingAssistantThreadEvents :execrows
+UPDATE assistant_thread_events
+SET
+  status = $1,
+  processed_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE project_id = $2
+  AND assistant_thread_id = $3
+  AND status = $4
+  AND deleted IS FALSE
+`
+
+type CancelPendingAssistantThreadEventsParams struct {
+	CancelledStatus string
+	ProjectID       uuid.UUID
+	ThreadID        uuid.UUID
+	PendingStatus   string
+}
+
+// Drops every turn queued on a thread that no runner has claimed yet. Used by
+// the stop button: a turn still waiting on a cold runtime has no in-flight
+// generation to cancel, so unless it is taken out of the queue here it starts
+// generating moments after the user asked it not to. Claimed ('processing')
+// events are deliberately untouched — those are already dispatched, and the
+// runner's own interrupt is what stops them.
+func (q *Queries) CancelPendingAssistantThreadEvents(ctx context.Context, arg CancelPendingAssistantThreadEventsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelPendingAssistantThreadEvents,
+		arg.CancelledStatus,
+		arg.ProjectID,
+		arg.ThreadID,
+		arg.PendingStatus,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const claimAssistantMCPOAuthClientRegistration = `-- name: ClaimAssistantMCPOAuthClientRegistration :execrows
 INSERT INTO assistant_mcp_oauth_clients AS clients (
   project_id,
@@ -222,6 +260,7 @@ DO UPDATE SET
   client_id = NULL,
   client_secret_encrypted = NULL,
   client_secret_expires_at = NULL,
+  client_id_metadata_uri = NULL,
   redirect_uri = EXCLUDED.redirect_uri,
   registration_owner = EXCLUDED.registration_owner,
   registration_started_at = EXCLUDED.registration_started_at,
@@ -385,6 +424,7 @@ SET
   client_id = $1,
   client_secret_encrypted = $2,
   client_secret_expires_at = $3,
+  client_id_metadata_uri = NULL,
   registration_owner = NULL,
   registration_started_at = NULL,
   updated_at = clock_timestamp()
@@ -948,6 +988,47 @@ func (q *Queries) GetAssistant(ctx context.Context, arg GetAssistantParams) (Get
 	return i, err
 }
 
+const getAssistantForClientMetadataDocument = `-- name: GetAssistantForClientMetadataDocument :one
+SELECT
+  a.id,
+  a.project_id,
+  a.name,
+  p.slug AS project_slug,
+  om.slug AS organization_slug
+FROM assistants a
+JOIN projects p ON p.id = a.project_id AND p.deleted IS FALSE
+JOIN organization_metadata om ON om.id = a.organization_id
+WHERE a.id = $1
+  AND a.deleted IS FALSE
+`
+
+type GetAssistantForClientMetadataDocumentRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	Name             string
+	ProjectSlug      string
+	OrganizationSlug string
+}
+
+// Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
+// endpoint is unauthenticated and addresses assistants by their globally
+// unique primary key. The served document exposes the assistant's display
+// name, dashboard URI, and redirect_uri — the same identity sent upstream as
+// client_id. A deleted assistant or missing org/project yields no row, so
+// the handler 404s.
+func (q *Queries) GetAssistantForClientMetadataDocument(ctx context.Context, assistantID uuid.UUID) (GetAssistantForClientMetadataDocumentRow, error) {
+	row := q.db.QueryRow(ctx, getAssistantForClientMetadataDocument, assistantID)
+	var i GetAssistantForClientMetadataDocumentRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.ProjectSlug,
+		&i.OrganizationSlug,
+	)
+	return i, err
+}
+
 const getAssistantForDispatch = `-- name: GetAssistantForDispatch :one
 SELECT id, project_id, organization_id, created_by_user_id, name, model, instructions, warm_ttl_seconds, max_concurrency, status, created_at, updated_at, deleted_at
 FROM assistants
@@ -1045,12 +1126,21 @@ const getAssistantMCPOAuthClient = `-- name: GetAssistantMCPOAuthClient :one
 SELECT
   client_id,
   client_secret_encrypted,
+  client_id_metadata_uri,
   (
     client_id IS NOT NULL
-    AND client_secret_encrypted IS NOT NULL
     AND redirect_uri = $1
     AND (client_secret_expires_at IS NULL OR client_secret_expires_at > $2)
+    AND (
+      client_secret_encrypted IS NOT NULL
+      OR client_id_metadata_uri IS NOT NULL
+    )
   ) AS usable,
+  (
+    client_id IS NOT NULL
+    AND client_secret_expires_at IS NOT NULL
+    AND client_secret_expires_at <= $2
+  ) AS invalidated,
   (
     (
       client_id IS NULL
@@ -1090,7 +1180,9 @@ type GetAssistantMCPOAuthClientParams struct {
 type GetAssistantMCPOAuthClientRow struct {
 	ClientID              pgtype.Text
 	ClientSecretEncrypted pgtype.Text
+	ClientIDMetadataUri   pgtype.Text
 	Usable                pgtype.Bool
+	Invalidated           pgtype.Bool
 	Claimable             pgtype.Bool
 }
 
@@ -1107,7 +1199,9 @@ func (q *Queries) GetAssistantMCPOAuthClient(ctx context.Context, arg GetAssista
 	err := row.Scan(
 		&i.ClientID,
 		&i.ClientSecretEncrypted,
+		&i.ClientIDMetadataUri,
 		&i.Usable,
+		&i.Invalidated,
 		&i.Claimable,
 	)
 	return i, err
@@ -1292,25 +1386,6 @@ func (q *Queries) GetAssistantThreadIDByCorrelation(ctx context.Context, arg Get
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const getAssistantThreadSourceKind = `-- name: GetAssistantThreadSourceKind :one
-SELECT source_kind
-FROM assistant_threads
-WHERE id = $1
-  AND project_id = $2
-`
-
-type GetAssistantThreadSourceKindParams struct {
-	ThreadID  uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) GetAssistantThreadSourceKind(ctx context.Context, arg GetAssistantThreadSourceKindParams) (string, error) {
-	row := q.db.QueryRow(ctx, getAssistantThreadSourceKind, arg.ThreadID, arg.ProjectID)
-	var source_kind string
-	err := row.Scan(&source_kind)
-	return source_kind, err
 }
 
 const getLatestAssistantRuntimeByThreadID = `-- name: GetLatestAssistantRuntimeByThreadID :one
@@ -2433,7 +2508,7 @@ SELECT
   at.environment_id,
   e.slug AS environment_slug
 FROM assistant_toolsets at
-JOIN toolsets t ON t.id = at.toolset_id
+JOIN toolsets t ON t.id = at.toolset_id AND t.deleted IS FALSE
 LEFT JOIN environments e ON e.id = at.environment_id
 WHERE at.assistant_id = ANY($1::UUID[])
   AND at.project_id = $2
@@ -3313,6 +3388,8 @@ FROM mcp_servers ms
 WHERE ms.project_id = $1
   AND ms.slug = ANY($2::TEXT[])
   AND ms.deleted IS FALSE
+ORDER BY ms.id
+FOR NO KEY UPDATE OF ms
 `
 
 type ResolveMcpServersForWriteParams struct {
@@ -3409,6 +3486,8 @@ FROM toolsets
 WHERE project_id = $1
   AND slug = ANY($2::TEXT[])
   AND deleted IS FALSE
+ORDER BY id
+FOR NO KEY UPDATE
 `
 
 type ResolveToolsetsForWriteParams struct {
@@ -3421,6 +3500,8 @@ type ResolveToolsetsForWriteRow struct {
 	Slug string
 }
 
+// Serialize MCP-enable writes and deletion without blocking FK KEY SHARE
+// locks when an MCP server concurrently switches to this toolset backend.
 func (q *Queries) ResolveToolsetsForWrite(ctx context.Context, arg ResolveToolsetsForWriteParams) ([]ResolveToolsetsForWriteRow, error) {
 	rows, err := q.db.Query(ctx, resolveToolsetsForWrite, arg.ProjectID, arg.Slugs)
 	if err != nil {
@@ -3900,6 +3981,91 @@ func (q *Queries) UpsertAssistantChat(ctx context.Context, arg UpsertAssistantCh
 		arg.Title,
 	)
 	return err
+}
+
+const upsertAssistantMCPOAuthClientCIMD = `-- name: UpsertAssistantMCPOAuthClientCIMD :one
+INSERT INTO assistant_mcp_oauth_clients AS clients (
+  project_id,
+  assistant_id,
+  oauth_server_issuer,
+  redirect_uri,
+  client_id,
+  client_id_metadata_uri
+) SELECT
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6
+FROM assistants owner
+WHERE owner.id = $2
+  AND owner.project_id = $1
+  AND owner.deleted IS FALSE
+ON CONFLICT (project_id, assistant_id, oauth_server_issuer) WHERE deleted IS FALSE
+DO UPDATE SET
+  redirect_uri = EXCLUDED.redirect_uri,
+  client_id = EXCLUDED.client_id,
+  client_id_metadata_uri = EXCLUDED.client_id_metadata_uri,
+  client_secret_encrypted = NULL,
+  client_secret_expires_at = NULL,
+  registration_owner = NULL,
+  registration_started_at = NULL,
+  updated_at = clock_timestamp()
+WHERE
+  clients.client_id_metadata_uri IS NOT NULL
+  OR (
+    clients.client_id IS NULL
+    AND clients.registration_started_at < clock_timestamp() - $7::interval
+  )
+  OR (
+    clients.client_id IS NOT NULL
+    AND clients.client_secret_expires_at IS NOT NULL
+    AND clients.client_secret_expires_at <= $8
+  )
+  OR (
+    clients.client_id IS NOT NULL
+    AND clients.redirect_uri <> EXCLUDED.redirect_uri
+  )
+RETURNING client_id, client_secret_encrypted, client_id_metadata_uri
+`
+
+type UpsertAssistantMCPOAuthClientCIMDParams struct {
+	ProjectID           uuid.UUID
+	AssistantID         uuid.UUID
+	OauthServerIssuer   string
+	RedirectUri         string
+	ClientID            pgtype.Text
+	ClientIDMetadataUri pgtype.Text
+	ClaimLease          pgtype.Interval
+	UsableAfter         pgtype.Timestamptz
+}
+
+type UpsertAssistantMCPOAuthClientCIMDRow struct {
+	ClientID              pgtype.Text
+	ClientSecretEncrypted pgtype.Text
+	ClientIDMetadataUri   pgtype.Text
+}
+
+// Records a public CIMD client whose client_id is the document URL. Does not
+// replace a live confidential DCR registration or an in-progress claim: that
+// reuse path stays on the secret-bearing row until it expires, is
+// invalidated, or was registered for another redirect. Intentionally
+// project-scoped.
+func (q *Queries) UpsertAssistantMCPOAuthClientCIMD(ctx context.Context, arg UpsertAssistantMCPOAuthClientCIMDParams) (UpsertAssistantMCPOAuthClientCIMDRow, error) {
+	row := q.db.QueryRow(ctx, upsertAssistantMCPOAuthClientCIMD,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.OauthServerIssuer,
+		arg.RedirectUri,
+		arg.ClientID,
+		arg.ClientIDMetadataUri,
+		arg.ClaimLease,
+		arg.UsableAfter,
+	)
+	var i UpsertAssistantMCPOAuthClientCIMDRow
+	err := row.Scan(&i.ClientID, &i.ClientSecretEncrypted, &i.ClientIDMetadataUri)
+	return i, err
 }
 
 const upsertAssistantThread = `-- name: UpsertAssistantThread :one

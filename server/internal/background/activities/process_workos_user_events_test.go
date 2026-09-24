@@ -12,6 +12,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/events"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -176,7 +177,7 @@ func TestProcessWorkOSUserEvents_LinksDirectoryUsersOnlyInActiveOrganizations(t 
 		WorkosLastEventID:  conv.ToPGText("event_membership_scope_directory_link_unrelated"),
 	})
 	require.NoError(t, err)
-	err = organizations.MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
+	_, err = organizations.MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
 		OrganizationID:     unrelatedOrganizationID,
 		UserID:             conv.ToPGText("unrelated_directory_link_user"),
 		WorkosUserID:       conv.ToPGText(workosUserID),
@@ -564,7 +565,7 @@ func TestProcessWorkOSUserEvents_LinksPendingRelationshipOverTombstone(t *testin
 		WorkosLastEventID:  conv.ToPGText("event_relationship_tombstone_1"),
 	})
 	require.NoError(t, err)
-	err = orgrepo.New(conn).MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
+	_, err = orgrepo.New(conn).MarkWorkOSMembershipDeleted(ctx, orgrepo.MarkWorkOSMembershipDeletedParams{
 		OrganizationID:     organizationID,
 		UserID:             conv.ToPGText(gramUserID),
 		WorkosUserID:       conv.ToPGText(workosUserID),
@@ -731,8 +732,18 @@ func TestProcessWorkOSUserEvents_SoftDeletesUser(t *testing.T) {
 	logger := testenv.NewLogger(t)
 
 	const workosUserID = "user_delete"
+	const organizationID = "gram_org_user_delete"
 	gramID := users.UserIDFromWorkOSID(workosUserID)
 	_, err := usersrepo.New(conn).UpsertSyncedUser(ctx, syncedUserParams(gramID, workosUserID, "delete@example.com", "Delete Me"))
+	require.NoError(t, err)
+	seedWorkOSOrganization(t, ctx, conn, organizationID, "org_user_delete")
+	_, err = orgrepo.New(conn).UpsertOrganizationUserRelationship(ctx, orgrepo.UpsertOrganizationUserRelationshipParams{
+		OrganizationID: organizationID, UserID: conv.ToPGText(gramID),
+	})
+	require.NoError(t, err)
+	agent, err := agentrepo.New(conn).CreateAgent(ctx, agentrepo.CreateAgentParams{
+		OrganizationID: organizationID, OwnerUserID: gramID, Name: "Deleted owner agent",
+	})
 	require.NoError(t, err)
 
 	workosClient := workos.NewStubClient()
@@ -748,6 +759,14 @@ func TestProcessWorkOSUserEvents_SoftDeletesUser(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, row.DeletedAt.Valid)
 	require.True(t, row.WorkosDeletedAt.Valid)
+	latched, err := agentrepo.New(conn).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: organizationID, ID: agent.ID})
+	require.NoError(t, err)
+	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
+	require.Equal(t, "owner_deleted", latched.OwnerReassignmentReason.String)
+	var auditCount int
+	err = conn.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE subject_id = $1 AND action = 'agent:owner_loss'`, agent.ID).Scan(&auditCount) //nolint:glint // notestingrawsql: verifies user deletion audit
+	require.NoError(t, err)
+	require.Equal(t, 1, auditCount)
 }
 
 func TestProcessWorkOSUserEvents_AdvancesAndResumesCursor(t *testing.T) {

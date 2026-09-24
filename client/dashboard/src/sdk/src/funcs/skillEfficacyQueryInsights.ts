@@ -123,7 +123,9 @@ async function $do(
   const query = encodeFormQuery({
     "cursor": payload?.cursor,
     "from": payload?.from,
+    "include_regression_signal": payload?.include_regression_signal,
     "include_scored_sessions": payload?.include_scored_sessions,
+    "include_session_cost": payload?.include_session_cost,
     "include_versions": payload?.include_versions,
     "limit": payload?.limit,
     "skill_ids": payload?.skill_ids,

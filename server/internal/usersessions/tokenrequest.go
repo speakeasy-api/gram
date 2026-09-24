@@ -22,6 +22,13 @@ type AuthCodeTokenRequest struct {
 	Code         string
 	RedirectURI  string
 	CodeVerifier string
+
+	// Resources holds every RFC 8707 `resource` indicator submitted, naming the
+	// MCP server the token is being requested for. Empty when the parameter was
+	// absent, which stays acceptable; every value is validated against the
+	// addressed endpoint's canonical URI by
+	// oauthwire.ValidateResourceIndicators in the /token handler.
+	Resources []string
 }
 
 // AuthCodeTokenRequestFromForm decodes from url.Values (typically
@@ -31,6 +38,7 @@ func AuthCodeTokenRequestFromForm(form url.Values) *AuthCodeTokenRequest {
 		Code:         form.Get("code"),
 		RedirectURI:  form.Get("redirect_uri"),
 		CodeVerifier: form.Get("code_verifier"),
+		Resources:    oauthwire.ResourceIndicatorsFrom(form),
 	}
 }
 
@@ -61,6 +69,14 @@ func (r *AuthCodeTokenRequest) Validate() error {
 // state; the /token response likewise doesn't echo scope.
 type RefreshTokenRequest struct {
 	RefreshToken string
+
+	// Resources holds every RFC 8707 `resource` indicator submitted, naming the
+	// MCP server the rotated token is being requested for. MCP 2026-07-28 has
+	// clients send the parameter on every token request, refreshes included.
+	// Empty when it was absent, which stays acceptable; every value is validated
+	// against the addressed endpoint's canonical URI by
+	// oauthwire.ValidateResourceIndicators in the /token handler.
+	Resources []string
 }
 
 // RefreshTokenRequestFromForm decodes from url.Values (typically
@@ -68,6 +84,7 @@ type RefreshTokenRequest struct {
 func RefreshTokenRequestFromForm(form url.Values) *RefreshTokenRequest {
 	return &RefreshTokenRequest{
 		RefreshToken: form.Get("refresh_token"),
+		Resources:    oauthwire.ResourceIndicatorsFrom(form),
 	}
 }
 
@@ -81,6 +98,38 @@ func (r *RefreshTokenRequest) SetDefaults() {}
 func (r *RefreshTokenRequest) Validate() error {
 	if r.RefreshToken == "" {
 		return &oauthwire.Error{Code: "invalid_request", Description: "refresh_token is required"}
+	}
+	return nil
+}
+
+// JWTBearerTokenRequest is the RFC 7523 JWT authorization grant request used
+// by enterprise-managed authorization clients to present an ID-JAG.
+type JWTBearerTokenRequest struct {
+	Assertion string
+
+	// Resources holds every RFC 8707 `resource` indicator submitted with the
+	// assertion grant. Empty is permitted; submitted values are validated
+	// against the addressed endpoint by the token handler.
+	Resources []string
+}
+
+// JWTBearerTokenRequestFromForm decodes from url.Values (typically
+// r.PostForm).
+func JWTBearerTokenRequestFromForm(form url.Values) *JWTBearerTokenRequest {
+	return &JWTBearerTokenRequest{
+		Assertion: form.Get("assertion"),
+		Resources: oauthwire.ResourceIndicatorsFrom(form),
+	}
+}
+
+// SetDefaults is a no-op because assertion is required.
+func (r *JWTBearerTokenRequest) SetDefaults() {}
+
+// Validate checks the request shape. Assertion contents are authenticated by
+// the ID-JAG validator in the token handler.
+func (r *JWTBearerTokenRequest) Validate() error {
+	if r.Assertion == "" {
+		return &oauthwire.Error{Code: "invalid_request", Description: "assertion is required"}
 	}
 	return nil
 }

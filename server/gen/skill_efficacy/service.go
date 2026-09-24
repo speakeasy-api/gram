@@ -72,6 +72,11 @@ type QueryInsightsPayload struct {
 	// Include a newest-first page of scored sessions. Intended for one skill
 	// detail view.
 	IncludeScoredSessions *bool
+	// Calculate attributed session cost. Disable for surfaces that do not display
+	// it.
+	IncludeSessionCost *bool
+	// Calculate the current-versus-predecessor efficacy regression signal.
+	IncludeRegressionSignal *bool
 	// Cursor for the next page of scored sessions.
 	Cursor *string
 	// The number of scored sessions to return per page.

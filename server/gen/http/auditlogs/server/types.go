@@ -780,7 +780,7 @@ func NewListFacetsGatewayErrorResponseBody(res *goa.ServiceError) *ListFacetsGat
 }
 
 // NewListPayload builds a auditlogs service list endpoint payload.
-func NewListPayload(cursor *string, projectSlug *string, actorID *string, action *string, subjectType *string, subjectID *string, actingSurface *string, apikeyToken *string, sessionToken *string) *auditlogs.ListPayload {
+func NewListPayload(cursor *string, projectSlug *string, actorID *string, action *string, subjectType *string, subjectID *string, subjectIds []string, actingSurface *string, from *string, to *string, apikeyToken *string, sessionToken *string) *auditlogs.ListPayload {
 	v := &auditlogs.ListPayload{}
 	v.Cursor = cursor
 	v.ProjectSlug = projectSlug
@@ -788,7 +788,10 @@ func NewListPayload(cursor *string, projectSlug *string, actorID *string, action
 	v.Action = action
 	v.SubjectType = subjectType
 	v.SubjectID = subjectID
+	v.SubjectIds = subjectIds
 	v.ActingSurface = actingSurface
+	v.From = from
+	v.To = to
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 

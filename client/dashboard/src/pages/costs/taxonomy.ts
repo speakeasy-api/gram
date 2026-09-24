@@ -11,6 +11,16 @@ export { unsetLabel };
 // controller and the EntityProfile view. Kept in a non-component module so the
 // view file can satisfy the react-refresh "only export components" rule.
 
+// llmTokens is the displayed token count: input + output. The total_tokens
+// measure is the TUM billing population (adds cache writes) and stays a
+// billing-page concept — showing it here disagreed with the employee pages.
+export function llmTokens(measures: {
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+}): number {
+  return (measures.totalInputTokens ?? 0) + (measures.totalOutputTokens ?? 0);
+}
+
 // Individual chat sessions aren't a taxonomy dimension (a chat id isn't a
 // filterable attribute), so they ride as a sentinel breakdown axis: selecting
 // it swaps the table to a per-session list (telemetry.listSessions) without
@@ -470,6 +480,13 @@ export function datasetDefaultGroupBy(
 // and the assistant can't ground on a name it can't resolve. The friendly
 // title-cased form belongs to the hero, which pairs it with the address anyway
 // (see prettyName in EntityProfile).
+// "" is the "(unset)" bucket — a real slice (everyone missing this attribute),
+// so it stays drillable. Only "Other" — the synthetic top-N overflow rollup of
+// many distinct values — can't map back to a single filter, so it's inert.
+export function isDrillableValue(groupValue: string): boolean {
+  return groupValue !== "Other";
+}
+
 export function displayName(dim: Dimension, value: string): string {
   if (value === "") return unsetLabel(dim);
   if (dim === Dimension.Provider) return providerLabel(value);

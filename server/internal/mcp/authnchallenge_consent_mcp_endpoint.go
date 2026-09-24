@@ -28,11 +28,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -108,6 +111,13 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	if !s.consentToolFilteringEnabled(ctx, logger, endpoint.OrganizationID) {
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
+	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
+	if err != nil {
+		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
+	}
+	if !eligible {
+		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
+	}
 	// Mixed credentials are a confusion smell: the consent transport never
 	// authenticates with Gram bearer tokens.
 	if r.Header.Get("Authorization") != "" {
@@ -131,9 +141,15 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogWarn(ctx, logger)
 	}
+	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "invalid consent browser binding")
+	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
-	if err := endpoint.ValidateRef(challengeState.Endpoint); err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "authn challenge state does not match this MCP server").LogWarn(ctx, logger)
+	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
+		}
+		return oauthAuthorityError(err).LogWarn(ctx, logger)
 	}
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(csrfToken), []byte(challengeState.CSRFToken)) != 1 {
 		return oops.E(oops.CodeUnauthorized, nil, "invalid consent csrf token").LogWarn(ctx, logger)
@@ -215,13 +231,13 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 		return writeConsentJSONRPCResult(w, req.ID, map[string]any{
 			"protocolVersion": consentProtocolVersion(req.Params),
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
-			"serverInfo":      map[string]any{"name": "gram", "version": "1.0.0"},
-		})
+			"serverInfo":      serverInfoHostedToolset,
+		}, nil)
 	case "notifications/initialized":
 		w.WriteHeader(http.StatusAccepted)
 		return nil
 	case "ping":
-		return writeConsentJSONRPCResult(w, req.ID, map[string]any{})
+		return writeConsentJSONRPCResult(w, req.ID, map[string]any{}, nil)
 	case "tools/list":
 		toolset, terr := toolsets_repo.New(s.db).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{
 			ID:        endpoint.ToolsetID.UUID,
@@ -230,7 +246,14 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 		if terr != nil {
 			return oops.E(oops.CodeUnexpected, terr, "load toolset for consent authorization").LogError(ctx, logger)
 		}
-		private := !endpoint.IsPublic || !toolset.McpIsPublic
+		// Wrapper-governed endpoints (toolset-backed mcp_servers) take
+		// publicness from wrapper visibility alone (AIS-633); the legacy
+		// toolset-resolved endpoint keeps consulting the toolset flag so a
+		// mid-flow flip still closes the inventory.
+		private := !endpoint.IsPublic
+		if !endpoint.McpServerID.Valid {
+			private = !endpoint.IsPublic || !toolset.McpIsPublic
+		}
 		if private && challengeState.Subject.Kind == urn.SessionSubjectKindAnonymous {
 			return oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
 		}
@@ -249,8 +272,9 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 			if authzCtx, cerr = s.authz.PrepareContext(authzCtx); cerr != nil {
 				return oops.E(oops.CodeUnexpected, cerr, "load access grants for consent inventory").LogError(ctx, logger)
 			}
-			if cerr = s.authz.Require(authzCtx, authz.MCPCheck(authz.ScopeMCPConnect, endpoint.ToolsetID.UUID.String(), endpoint.ProjectID.String())); cerr != nil {
-				return fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(cerr, s.requestAccessURL(authzCtx, endpoint.ToolsetID.UUID.String(), toolset.Name)))
+			connectResourceID := endpoint.connectResourceID()
+			if cerr = s.authz.Require(authzCtx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), endpoint.ProjectID.String())); cerr != nil {
+				return fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(cerr, s.requestAccessURL(authzCtx, connectResourceID.String(), toolset.Name)))
 			}
 		}
 		tools, roleHidden, terr := s.enumerateToolsetConsentInventory(authzCtx, endpoint)
@@ -269,7 +293,7 @@ func (s *Service) serveConsentToolsetMCP(w http.ResponseWriter, r *http.Request,
 		if len(roleHidden) > 0 {
 			result["_meta"] = map[string]any{"gram.dev/roleHiddenTools": consentRoleHiddenMeta(roleHidden)}
 		}
-		return writeConsentJSONRPCResult(w, req.ID, result)
+		return writeConsentJSONRPCResult(w, req.ID, result, cacheHintsCallerVarying)
 	default:
 		return writeConsentJSONRPCError(w, req.ID, proxy.RejectCodeMethodNotFound, "method is not available on the consent transport")
 	}
@@ -310,15 +334,20 @@ func (s *Service) serveConsentProxiedMCP(
 	if serverRow.Visibility == mcpservers.VisibilityPrivate && subject.Kind == urn.SessionSubjectKindAnonymous {
 		return oops.E(oops.CodeUnauthorized, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
 	}
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.UpstreamResource)
+	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	if err != nil {
 		if errors.Is(err, remotesessions.ErrNoValidToken) {
 			return oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools").LogWarn(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 	}
-	upstreamToken, err := singleUpstreamToken(tokens)
-	if err != nil {
+	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, tunneledBackendIssuer(serverRow))
+	var routeErr *upstreamRoutingError
+	switch {
+	case errors.As(err, &routeErr):
+		// routeUpstreamToken already logged the structured detail.
+		return oops.E(oops.CodeFailedPrecondition, err, "this MCP server's upstream credentials are not configured unambiguously")
+	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream token for consent transport").LogError(ctx, logger)
 	}
 
@@ -353,12 +382,12 @@ func (s *Service) serveConsentProxiedMCP(
 		if herr != nil {
 			return oops.E(oops.CodeUnexpected, herr, "load remote mcp server headers for consent transport").LogError(ctx, logger)
 		}
-		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.ProjectID.String(), upstreamToken, "", nil)
+		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.OrganizationID, endpoint.ProjectID.String(), upstreamToken, "", nil)
 	} else {
 		// One state-derived affinity key pins the whole consent session
 		// (initialize, list pages, DELETE) to a single gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("consent", challengeState.ID)
-		p, err = s.tunnelManager.buildProxy(ctx, affinity, logger, endpoint.ProjectID, serverRow, upstreamToken, "", nil)
+		p, err = s.tunnelManager.buildProxy(ctx, affinity, logger, endpoint.ProjectID, endpoint.OrganizationID, serverRow, upstreamToken, "", nil)
 		if err != nil {
 			return err
 		}
@@ -475,6 +504,26 @@ func (i *consentInventoryCaptureInterceptor) InterceptToolsListResponse(ctx cont
 		return fmt.Errorf("capture consent tool inventory page: %w", err)
 	}
 	*i.draft = updated
+
+	var sanitized []*mcp.Tool
+	for idx, tool := range list.Result.Tools {
+		if tool == nil || tool.OutputSchema == nil {
+			continue
+		}
+		if sanitized == nil {
+			sanitized = append([]*mcp.Tool(nil), list.Result.Tools...)
+		}
+		clone := *tool
+		clone.OutputSchema = nil
+		sanitized[idx] = &clone
+	}
+	if sanitized != nil {
+		// The browser SDK eagerly compiles output schemas with eval, which the
+		// consent page's CSP intentionally forbids.
+		if err := list.SetTools(sanitized); err != nil {
+			return fmt.Errorf("strip output schemas from consent tool inventory: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -531,19 +580,17 @@ func decodeConsentJSONRPCRequest(w http.ResponseWriter, r *http.Request) (*conse
 	return &req, nil
 }
 
-// consentProtocolVersion echoes the client's requested protocol version so
-// the SDK accepts the handshake; a missing value falls back to the current
-// spec revision.
+// consentProtocolVersion negotiates the local toolset server's revision with
+// the consent island. Remote and tunneled backends bypass this function so the
+// island and upstream server negotiate directly.
 func consentProtocolVersion(params json.RawMessage) string {
 	var decoded struct {
 		ProtocolVersion string `json:"protocolVersion"`
 	}
 	if len(params) > 0 {
-		if err := json.Unmarshal(params, &decoded); err == nil && decoded.ProtocolVersion != "" {
-			return decoded.ProtocolVersion
-		}
+		_ = json.Unmarshal(params, &decoded)
 	}
-	return "2025-06-18"
+	return mcpversions.Negotiate(decoded.ProtocolVersion, mcpversions.SupportedConsentToolset())
 }
 
 // consentRequestCursor extracts params.cursor from a locally served
@@ -642,7 +689,16 @@ func consentAnnotationsFromSDK(annotations *mcp.ToolAnnotations) []string {
 	return values
 }
 
-func writeConsentJSONRPCResult(w http.ResponseWriter, id json.RawMessage, result any) error {
+func writeConsentJSONRPCResult(w http.ResponseWriter, id json.RawMessage, value any, hints *cacheHints) error {
+	resultBytes, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal consent jsonrpc result: %w", err)
+	}
+	result, err := spliceResultProtocolFields(resultBytes, serverInfoHostedToolset, hints)
+	if err != nil {
+		return fmt.Errorf("add consent jsonrpc result fields: %w", err)
+	}
+
 	return writeConsentJSONRPCEnvelope(w, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      consentJSONRPCID(id),

@@ -1,6 +1,7 @@
 import { useExternalMcpOAuthConfigStatus } from "@/components/sources/sources-hooks";
 import type { Toolset } from "@/lib/toolTypes";
 import { useRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { useState } from "react";
 import { PageSection } from "./MCPDetails";
@@ -35,7 +36,7 @@ export function ToolsetAuthenticationSection({
     <>
       <PageSection
         heading="Authentication"
-        description="Configure the upstream identity provider and user session settings for clients connecting to this server."
+        description="Who may connect to this server and how they sign in. Changes take effect on new connections."
       >
         <AuthenticationSectionBody
           target={target}
@@ -62,6 +63,29 @@ export function ToolsetAuthenticationSection({
   );
 }
 
+export function ExternalOAuthMetadataRecommendation({
+  onReview,
+}: {
+  onReview: () => void;
+}): JSX.Element {
+  return (
+    <Alert variant="info" className="mb-4">
+      <AlertTitle>Provider-hosted metadata is recommended</AlertTitle>
+      <AlertDescription className="flex items-center justify-between gap-4">
+        <span>
+          Gram continues to host protected-resource metadata. Review switching
+          authorization-server discovery to your provider without replacing
+          registrations or tokens. Some clients may request authentication
+          again.
+        </span>
+        <Button variant="secondary" onClick={onReview}>
+          Review update
+        </Button>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 /**
  * Convert path for external-OAuth toolsets: opens the attach sheet seeded
  * with the external server's issuer URL. On success the sheet links the new
@@ -76,7 +100,9 @@ export function ConvertToUserSessionsButton({
   const [sheetOpen, setSheetOpen] = useState(false);
   const target = useToolsetAuthTarget(toolset);
   // No issuer wired yet, so every issuer this project can see is selectable.
-  const { data: issuersResult } = useRemoteSessionIssuers();
+  // Pinned to the maximum page size so a large platform catalog does not push
+  // this project's own issuers out of the picker. See AuthenticationSection.
+  const { data: issuersResult } = useRemoteSessionIssuers({ limit: 100 });
   const selectableIssuers = issuersResult?.result.items ?? [];
 
   return (

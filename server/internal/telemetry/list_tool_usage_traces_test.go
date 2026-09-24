@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -858,4 +860,117 @@ func normalizeToolUsageTraces(traces []*gen.ToolUsageTraceSummary) map[string]no
 		}
 	}
 	return result
+}
+
+// Exercise separate insert blocks so both the MV and query-time merge must
+// preserve the populated name, regardless of which span arrives first.
+func TestListToolUsageTraces_PreservesNameAcrossUnnamedSpans(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	now := time.Now().UTC()
+	for _, names := range [][]string{{"", "charge", ""}, {"charge", "", ""}, {"", "", ""}} {
+		traceID := strings.ReplaceAll(uuid.New().String(), "-", "")
+		for _, name := range names {
+			insertHostedToolEventRow(t, ctx, ti, traceID, now, "payments", name, "")
+			testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+		}
+		// Replay the same spans as a single insert block under a fresh trace ID
+		// to exercise aggregation inside the materialized view as well.
+		err := ti.chConn.Exec(ctx, `
+            INSERT INTO telemetry_logs
+                (trace_id, gram_project_id, time_unix_nano, observed_time_unix_nano, gram_urn, attributes, resource_attributes)
+            SELECT ?, gram_project_id, time_unix_nano, observed_time_unix_nano, gram_urn, attributes, resource_attributes
+            FROM telemetry_logs
+            WHERE gram_project_id = ? AND trace_id = ?
+            SETTINGS async_insert = 0`, strings.ReplaceAll(uuid.New().String(), "-", ""), ti.projectID, traceID)
+		require.NoError(t, err)
+	}
+	payload := &gen.ListToolUsageTracesPayload{
+		From:  now.Add(-time.Hour).Format(time.RFC3339),
+		To:    now.Add(time.Hour).Format(time.RFC3339),
+		Limit: 10,
+	}
+	summary, err := ti.service.ListToolUsageTraces(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, summary.Traces, 6)
+	names := make([]string, 0, 6)
+	for _, trace := range summary.Traces {
+		names = append(names, trace.ToolName)
+		require.Equal(t, uint64(3), trace.LogCount)
+	}
+	require.ElementsMatch(t, []string{"charge", "charge", "charge", "charge", "", ""}, names)
+	query := ":"
+	payload.Query = &query
+	raw, err := ti.service.ListToolUsageTraces(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, raw.Traces, 6)
+	require.Equal(t, normalizeToolUsageTraces(summary.Traces), normalizeToolUsageTraces(raw.Traces))
+}
+
+func TestListToolUsageTraces_CarriesClientOnBothQueryPaths(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-20 * time.Minute),
+		toolsetSlug: "payments", toolName: "charge", userEmail: "alice@example.com",
+		statusCode: 200, clientName: "Claude Code", clientVersion: "2.4.1",
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-19 * time.Minute),
+		toolsetSlug: "payments", toolName: "refund", userEmail: "bob@example.com",
+		statusCode: 200,
+	})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	limit := 100
+	// ":" appears in every seeded gram_urn, so it forces the raw path without
+	// narrowing the result set — both rows reach both paths and the same
+	// assertions run against each.
+	rawPathQuery := ":"
+
+	// A free-text query drops the listing off trace_summaries onto a raw
+	// telemetry_logs scan. The two paths derive the client separately, so they
+	// are asserted to agree rather than assumed to.
+	for _, tc := range []struct {
+		name  string
+		query *string
+	}{
+		{name: "summary path", query: nil},
+		{name: "raw log path", query: &rawPathQuery},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			res, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{
+				From: from, To: to, Query: tc.query, Limit: limit,
+			})
+			require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+
+			byTool := map[string]*gen.ToolUsageTraceSummary{}
+			for _, trace := range res.Traces {
+				byTool[trace.ToolName] = trace
+			}
+
+			charge := byTool["charge"]
+			require.NotNil(t, charge)
+			require.Equal(t, "claude code", charge.ClientKey)
+			require.Equal(t, "Claude Code", charge.ClientLabel)
+			require.NotNil(t, charge.ClientVersion)
+			require.Equal(t, "2.4.1", *charge.ClientVersion)
+
+			// The unattributed case is derived separately on each path too: a
+			// version leaking through on one of them would otherwise go unseen.
+			refund := byTool["refund"]
+			require.NotNil(t, refund)
+			require.Equal(t, "unattributed", refund.ClientKey)
+			require.Nil(t, refund.ClientVersion)
+		})
+	}
 }

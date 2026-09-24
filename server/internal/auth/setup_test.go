@@ -17,6 +17,7 @@ import (
 	"github.com/workos/workos-go/v6/pkg/usermanagement"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
@@ -194,7 +195,7 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 
 	authzProvisioner := authz.NewProvisioner(conn)
 	cacheSuffix := testenv.NewCacheSuffix(t, cache.Suffix("auth"))
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, workosClient, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cacheSuffix)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, workosClient, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, nil, cacheSuffix)
 	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cacheSuffix, idpClient, billingClient, resolver)
 
 	authConfigs := auth.AuthConfigurations{
@@ -205,9 +206,9 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 	}
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 	trialNotifier := &fakeTrialNotifier{}
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nil, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
 	result.trialNotifier = trialNotifier
@@ -261,7 +262,7 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 
 	authzProvisioner := authz.NewProvisioner(conn)
 	cacheSuffix := testenv.NewCacheSuffix(t, cache.Suffix("auth"))
-	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, cacheSuffix)
+	resolver := identity.NewResolver(logger, tracerProvider, cache.NewRedisCacheAdapter(redisClient), mockServer.URL, "test-client-id", idpClient, nil, orgRepo.New(conn), userRepo.New(conn), pylon, posthog, nil, cacheSuffix)
 	sessionManager := sessions.NewManager(logger, testenv.NewTracerProvider(t), conn, redisClient, cacheSuffix, idpClient, billingClient, resolver)
 
 	authConfigs := auth.AuthConfigurations{
@@ -272,9 +273,9 @@ func newTestAuthServiceWithAuthz(t *testing.T, userInfo *MockUserInfo) (context.
 	}
 
 	nonceStore := cache.NewRedisCacheAdapter(redisClient)
-	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 	trialNotifier := &fakeTrialNotifier{}
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nil, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
 	result.trialNotifier = trialNotifier

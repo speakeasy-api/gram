@@ -549,6 +549,9 @@ func EncodeListMcpEndpointsRequest(encoder func(*http.Request) goahttp.Encoder) 
 		if p.McpServerID != nil {
 			values.Add("mcp_server_id", *p.McpServerID)
 		}
+		if p.MetaMcpServerID != nil {
+			values.Add("meta_mcp_server_id", *p.MetaMcpServerID)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -1469,14 +1472,15 @@ func DecodeDeleteMcpEndpointResponse(decoder func(*http.Response) goahttp.Decode
 // *types.McpEndpoint from a value of type *McpEndpointResponseBody.
 func unmarshalMcpEndpointResponseBodyToTypesMcpEndpoint(v *McpEndpointResponseBody) *types.McpEndpoint {
 	res := &types.McpEndpoint{
-		ID:             *v.ID,
-		ProjectID:      *v.ProjectID,
-		CustomDomainID: v.CustomDomainID,
-		McpServerID:    *v.McpServerID,
-		Slug:           types.McpEndpointSlug(*v.Slug),
-		IsDomainRoot:   *v.IsDomainRoot,
-		CreatedAt:      *v.CreatedAt,
-		UpdatedAt:      *v.UpdatedAt,
+		ID:              *v.ID,
+		ProjectID:       *v.ProjectID,
+		CustomDomainID:  v.CustomDomainID,
+		McpServerID:     v.McpServerID,
+		MetaMcpServerID: v.MetaMcpServerID,
+		Slug:            types.McpEndpointSlug(*v.Slug),
+		IsDomainRoot:    *v.IsDomainRoot,
+		CreatedAt:       *v.CreatedAt,
+		UpdatedAt:       *v.UpdatedAt,
 	}
 
 	return res

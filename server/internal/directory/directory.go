@@ -60,12 +60,17 @@ func (s *Service) GetUserProfile(ctx context.Context, organizationID, userID str
 	}
 
 	return &UserProfile{
-		ID:            row.ID,
-		UserID:        conv.FromPGTextOrEmpty[string](row.UserID),
-		ExternalID:    row.ExternalID,
-		Email:         conv.FromPGTextOrEmpty[string](row.Email),
-		RawAttributes: attributes,
-		Groups:        groups,
+		ID:             row.ID,
+		UserID:         conv.FromPGTextOrEmpty[string](row.UserID),
+		ExternalID:     row.ExternalID,
+		Email:          conv.FromPGTextOrEmpty[string](row.Email),
+		DepartmentName: stringAttribute(attributes, "department_name"),
+		JobTitle:       stringAttribute(attributes, "job_title"),
+		EmployeeType:   stringAttribute(attributes, "employee_type"),
+		DivisionName:   stringAttribute(attributes, "division_name"),
+		CostCenterName: stringAttribute(attributes, "cost_center_name"),
+		RawAttributes:  attributes,
+		Groups:         groups,
 	}, nil
 }
 
@@ -156,6 +161,20 @@ func (s *Service) ListActiveGroups(ctx context.Context, organizationID string) (
 		})
 	}
 	return groups, nil
+}
+
+// ListActiveGroupMemberEmails returns the normalized (lowercased) emails of
+// the active members of one active directory group. A missing group or a
+// group with no members both yield an empty slice.
+func (s *Service) ListActiveGroupMemberEmails(ctx context.Context, organizationID string, groupID uuid.UUID) ([]string, error) {
+	emails, err := repo.New(s.db).ListActiveDirectoryGroupMemberEmails(ctx, repo.ListActiveDirectoryGroupMemberEmailsParams{
+		DirectoryGroupID: groupID,
+		OrganizationID:   organizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list active directory group member emails: %w", err)
+	}
+	return normalizeEmails(emails), nil
 }
 
 // ListActiveAttributeValues returns active, non-null directory attribute

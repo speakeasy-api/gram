@@ -119,11 +119,43 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, "invalid_request", "redirect_uri is not registered for this client")
 	}
 
-	// The origin this request was addressed at. It is the mint origin by
-	// definition — the challenge below snapshots it — and it is what the AS
-	// metadata document advertises as the issuer, so both the error redirect
-	// below and every response built later in the flow agree on it.
+	// Shadow AI blocking, refused inline for the same reason an admission
+	// denial is: it is policy about the client itself, so forwarding it to
+	// the client's redirect_uri would hand a blocked tool a normal-looking
+	// error page instead of telling the person what happened. It runs after
+	// resolution because only a resolved client_id is a credential the server
+	// verified.
+	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, req.ClientID); err != nil {
+		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
+			return writeAuthorizeError(ctx, w, logger, http.StatusUnauthorized, "invalid_client", blockedErr.Description())
+		}
+		if errors.Is(err, ErrAIToolBlockCheckUnavailable) {
+			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "cannot determine whether this client is permitted right now")
+		}
+		return oops.E(oops.CodeUnexpected, err, "check ai tool gateway block").LogError(ctx, logger)
+	}
+
+	// The origin of the endpoint's resource. It is the mint origin by
+	// definition — the challenge below snapshots it — and the issuer derives
+	// from it, so both the error redirect below and every response built later
+	// in the flow agree on it. On the authentication host it is the platform
+	// origin.
 	baseURL := s.BaseURLForRequest(r)
+
+	// The RFC 9207 `iss` on every authorization response, equal to the AS
+	// metadata issuer. It names the authentication host when the endpoint's
+	// issuer opts in, and the endpoint's canonical URI otherwise.
+	issuer, err := s.issuerURL(endpoint, baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build authorization response issuer").LogError(ctx, logger)
+	}
+	// The RFC 9728 protected-resource `resource`, which always stays on the
+	// MCP host. It is what the RFC 8707 check below compares against: a value
+	// the client was already handed.
+	resource, err := endpoint.RootURL(baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build resource identifier").LogError(ctx, logger)
+	}
 
 	// At this point the redirect_uri is trusted (matched against the
 	// registered set on the client row), so RFC 6749 §4.1.2.1 requires that
@@ -132,11 +164,14 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// observe the failure. The two-phase Validate split exists to make this
 	// switch unambiguous.
 	if err := req.ValidatePostRedirect(); err != nil {
-		issuer, issErr := endpoint.RootURL(baseURL)
-		if issErr != nil {
-			return oops.E(oops.CodeUnexpected, issErr, "build authorization response issuer").LogError(ctx, logger)
-		}
-		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, err)
+		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "", err)
+	}
+	// RFC 8707 §2: a resource naming some other server means the client
+	// believes it is getting a token for an endpoint this one will never mint
+	// for. Rejecting makes that misconfiguration visible at the point it
+	// happens instead of at first use.
+	if err := oauthwire.ValidateResourceIndicators(req.Resources, resource); err != nil {
+		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "resource_mismatch", err)
 	}
 
 	challengeID := uuid.NewString()
@@ -166,20 +201,33 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		subject = &sub
 	}
 
-	challengeState := AuthnChallengeState{
-		ID:                  challengeID,
-		FlowID:              flowID,
-		UserSessionIssuerID: endpoint.UserSessionIssuerID,
-		Endpoint:            endpoint.EndpointRef(baseURL),
-		ClientID:            req.ClientID,
-		RedirectURI:         req.RedirectURI,
-		State:               req.State,
-		CodeChallenge:       req.CodeChallenge,
-		CodeChallengeMethod: req.CodeChallengeMethod,
-		CSRFToken:           csrfToken,
-		Subject:             subject,
-		CreatedAt:           time.Now(),
-		FirstParty:          false,
+	endpointRef, err := endpoint.EndpointRef(ctx, s.db, baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
+	}
+	agentTarget, _ := agentAuthorizationTarget(endpoint)
+	challengeState := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
+		Browser:                  nil,
+		Federation:               nil,
+		ID:                       challengeID,
+		FlowID:                   flowID,
+		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
+		AuthorizerUserID:         "",
+		AuthorizerImpersonated:   nil,
+		AgentAuthorizationTarget: agentTarget,
+		Endpoint:                 endpointRef,
+		ClientID:                 req.ClientID,
+		RedirectURI:              req.RedirectURI,
+		State:                    req.State,
+		CodeChallenge:            req.CodeChallenge,
+		CodeChallengeMethod:      req.CodeChallengeMethod,
+		CSRFToken:                csrfToken,
+		Subject:                  subject,
+		CreatedAt:                time.Now(),
+		FirstParty:               false,
+
+		// Auto-connect has not run for a challenge this new.
+		AutoConnectDone: false,
 	}
 
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
@@ -192,6 +240,18 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	logger.InfoContext(ctx, "oauth flow started")
 
 	if forceIDP {
+		federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
+		if err != nil {
+			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+			failureCode, cause := federatedFailure(err)
+			return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
+		}
+		if federatedURL != nil {
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Referrer-Policy", "no-referrer")
+			http.Redirect(w, r, federatedURL.String(), http.StatusFound)
+			return nil
+		}
 		callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
@@ -215,7 +275,9 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return nil
 	}
 
-	consentURL, err := endpoint.ConsentURL(baseURL, challengeID)
+	// Consent is an authorization server page, so it is served where the
+	// issuer lives.
+	consentURL, err := endpoint.ConsentURL(s.authorizationServerBaseURL(endpoint, baseURL), challengeID)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
@@ -229,8 +291,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 // invalid_request if err is something else (shouldn't happen — Validate
 // returns *oauthwire.Error).
 func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, status int, err error) error {
-	var oauthErr *oauthwire.Error
-	if errors.As(err, &oauthErr) {
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 		return writeAuthorizeError(ctx, w, logger, status, oauthErr.Code, oauthErr.Description)
 	}
 	return writeAuthorizeError(ctx, w, logger, status, "invalid_request", err.Error())
@@ -242,18 +303,25 @@ func writeAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, logger
 // invoke this AFTER the supplied redirect_uri has been validated against the
 // registered set on the OAuth client row — passing through an untrusted URI
 // here would turn the AS into an open redirector.
-func redirectAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuer, redirectURI, originalState string, err error) error {
+// failureReason labels the rejection with the same vocabulary the token
+// endpoint logs (for example "resource_mismatch"), so one query finds a given
+// class of rejection on both legs. Empty when the error code alone identifies
+// the cause.
+func redirectAuthorizeOAuthError(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuer, redirectURI, originalState, failureReason string, err error) error {
 	code := "invalid_request"
 	description := err.Error()
-	var oauthErr *oauthwire.Error
-	if errors.As(err, &oauthErr) {
+	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 		code = oauthErr.Code
 		description = oauthErr.Description
 	}
-	logger.InfoContext(ctx, "authorize request rejected (post-redirect)",
+	args := []any{
 		attr.SlogOAuthError(code),
 		attr.SlogOAuthErrorDescription(description),
-	)
+	}
+	if failureReason != "" {
+		args = append(args, attr.SlogOAuthFailureReason(failureReason))
+	}
+	logger.InfoContext(ctx, "authorize request rejected (post-redirect)", args...)
 	redirect, err := buildClientRedirect(clientRedirectParams{
 		RedirectURI:      redirectURI,
 		Issuer:           issuer,

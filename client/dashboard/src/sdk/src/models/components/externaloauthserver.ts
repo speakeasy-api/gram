@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ExternalOAuthServer = {
   /**
+   * The exact HTTPS issuer clients use for provider-hosted RFC 8414 discovery. Exactly one of authorization_server_issuer and metadata is present; changing modes may require clients to register or authenticate again.
+   */
+  authorizationServerIssuer?: string | undefined;
+  /**
    * When the external OAuth server was created.
    */
   createdAt: Date;
@@ -18,9 +22,9 @@ export type ExternalOAuthServer = {
    */
   id: string;
   /**
-   * The metadata for the external OAuth server
+   * The validated RFC 8414 metadata Gram hosts in compatibility mode. Exactly one of metadata and authorization_server_issuer is present.
    */
-  metadata: any;
+  metadata?: any | undefined;
   /**
    * The project ID this external OAuth server belongs to
    */
@@ -41,12 +45,13 @@ export const ExternalOAuthServer$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    authorization_server_issuer: z.optional(z.string()),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
     id: z.string(),
-    metadata: z.any(),
+    metadata: z.optional(z.any()),
     project_id: z.string(),
     slug: z.string(),
     updated_at: z.pipe(
@@ -56,6 +61,7 @@ export const ExternalOAuthServer$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "authorization_server_issuer": "authorizationServerIssuer",
       "created_at": "createdAt",
       "project_id": "projectId",
       "updated_at": "updatedAt",

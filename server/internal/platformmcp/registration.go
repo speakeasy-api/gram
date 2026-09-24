@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -38,7 +39,6 @@ const (
 	registrationStatusPending    = "pending"
 	registrationStatusRegistered = "registered"
 	receiptLifetime              = 24 * time.Hour
-	platformMCPIssuerLifetime    = 14 * 24 * time.Hour
 	maxMCPEndpointSlugLength     = 128
 )
 
@@ -73,6 +73,7 @@ type OperationReceipt struct {
 	RegistrationID uuid.NullUUID
 	Status         string
 	ResultCode     string
+	ResultPayload  []byte
 	InputHash      string
 	ExpiresAt      time.Time
 	Replayed       bool
@@ -500,7 +501,7 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	if s == nil || s.db == nil {
 		return OperationReceipt{}, ErrUnavailable
 	}
-	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil || receipt.ID == uuid.Nil || !receipt.RegistrationID.Valid || !validRegistrationRemoteURL(configuration.remoteURL) {
+	if err := validateCatalogRegistrationRequest(principal, project, request); err != nil || receipt.ID == uuid.Nil || !receipt.RegistrationID.Valid || !validRegistrationRemoteURL(configuration.remoteURL) || (request.SourceKind == directRemoteSourceKind && !validDirectRemoteRegistrationURL(configuration.remoteURL)) {
 		return OperationReceipt{}, ErrRegistrationInvalid
 	}
 	connectionID, generation, err := principalConnection(principal)
@@ -707,10 +708,6 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp remote source id: %w", err)
 	}
-	serverID, err := uuid.NewV7()
-	if err != nil {
-		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp server id: %w", err)
-	}
 	suffix, err := newRegistrationComponentSuffix()
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, err
@@ -720,7 +717,6 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("load platform mcp component organization: %w", err)
 	}
 	remoteSlug := "platform-mcp-remote-" + suffix
-	serverSlug := "platform-mcp-" + suffix
 	displayName := configuration.displayName
 	if displayName == "" {
 		displayName = "MCP Catalogue server"
@@ -764,16 +760,22 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	}
 	issuer, err := usersessionsrepo.New(tx).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 		ProjectID:          project.ID,
+		OrganizationID:     conv.ToPGText(registration.OrganizationID),
 		Slug:               "platform-mcp-issuer-" + suffix,
 		AuthnChallengeMode: "interactive",
 		SessionDuration: pgtype.Interval{
-			Microseconds: platformMCPIssuerLifetime.Microseconds(),
+			Microseconds: 14 * 24 * time.Hour.Microseconds(),
 			Valid:        true,
 		},
 	})
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp session issuer: %w", err)
 	}
+	serverID, err := uuid.NewV7()
+	if err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp server id: %w", err)
+	}
+	serverSlug := "platform-mcp-" + suffix
 	server, err := mcpserversrepo.New(tx).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  serverID,
 		ProjectID:           project.ID,
@@ -786,9 +788,11 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("create platform mcp server: %w", err)
 	}
+	// The slug embeds the 64-bit random registration suffix, so it cannot land
+	// on an existing toolsets.mcp_slug; no LockSlugScope/availability probe.
 	endpoint, err := mcpendpointsrepo.New(tx).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   project.ID,
-		McpServerID: server.ID,
+		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
 		Slug:        platformMCPEndpointSlug(organization.Slug, suffix),
 	})
 	if err != nil {
@@ -927,6 +931,7 @@ func operationReceiptFromRow(row platformrepo.PlatformMcpOperationReceipt, repla
 		RegistrationID:       row.RegistrationID,
 		Status:               row.Status,
 		ResultCode:           row.ResultCode.String,
+		ResultPayload:        slices.Clone(row.ResultPayload),
 		InputHash:            row.InputHash,
 		ExpiresAt:            row.ExpiresAt.Time,
 		Replayed:             replayed,

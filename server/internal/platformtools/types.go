@@ -49,8 +49,7 @@ const (
 
 // Skill tool names are externally specified by the skills RFC.
 const (
-	ToolNameSkillsLoad            = "skills_load"
-	ToolNamePlatformSkillFeedback = "platform_skill_feedback"
+	ToolNameSkillsLoad = "skills_load"
 )
 
 type Dependencies struct {

@@ -13,10 +13,23 @@ export const AUDIT_ACTIONS = [
   "access_role:create",
   "access_role:delete",
   "access_role:update",
+  "agent:create",
+  "agent:delete",
+  "agent:owner_loss",
+  "agent:policy_grant_create",
+  "agent:policy_grant_delete",
+  "agent:policy_grant_update",
+  "agent:reassign",
+  "agent:rename",
+  "agent:resume",
+  "agent:revoke",
+  "agent:suspend",
+  "agent:transfer",
   "ai_integration:delete",
   "ai_integration:retry_schedule",
   "ai_integration:update_schedule",
   "ai_integration:upsert",
+  "ai_tool_decision:set",
   "api_key:create",
   "api_key:revoke",
   "asset:create",
@@ -36,12 +49,19 @@ export const AUDIT_ACTIONS = [
   "chat_session:access",
   "chat_session:handoff_export",
   "chat_session:move",
+  "chat_session:recall",
   "custom_domains:create",
   "custom_domains:delete",
   "custom_domains:update",
+  "data_export_route:create",
+  "data_export_route:delete",
+  "data_export_route:update",
   "deployments:create",
   "deployments:evolve",
   "deployments:redeploy",
+  "device_agent_ai_scan_target:create",
+  "device_agent_ai_scan_target:delete",
+  "device_agent_ai_scan_target:update",
   "device_integration:delete",
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
@@ -55,6 +75,24 @@ export const AUDIT_ACTIONS = [
   "gcp_kms_key:create",
   "gcp_kms_key:delete",
   "gcp_kms_key:update",
+  "identity-provider-connection:create",
+  "identity-provider-connection:record-agent",
+  "identity-provider-connection:revoke",
+  "identity-provider-connection:submit-client-id",
+  "identity-provider-connection:sync-applications",
+  "identity-provider-connection:verify",
+  "json_web_key:activate",
+  "json_web_key:delete",
+  "json_web_key:publish",
+  "json_web_key:retire",
+  "json_web_key:revoke",
+  "json_web_key_set:create",
+  "json_web_key_set:delete",
+  "json_web_key_set:update",
+  "killswitch:activate",
+  "killswitch:change",
+  "killswitch:deactivate",
+  "killswitch:expire",
   "litellm_instance:create",
   "litellm_instance:revoke",
   "litellm_instance:rotate_key",
@@ -70,39 +108,57 @@ export const AUDIT_ACTIONS = [
   "mcp_approval_request:deny",
   "mcp_approval_request:evidence_changed",
   "mcp_approval_request:research_start",
-  "mcp_collection:attach_server",
-  "mcp_collection:create",
-  "mcp_collection:delete",
-  "mcp_collection:detach_server",
-  "mcp_collection:update",
+  "mcp_approval_request:supersede",
   "mcp_metadata:update",
+  "meta-mcp:add_member",
+  "meta-mcp:create",
+  "meta-mcp:delete",
+  "meta-mcp:remove_member",
+  "meta-mcp:update",
+  "meta-mcp:update_member",
   "model_provider_key:delete",
   "model_provider_key:upsert",
+  "network_ingress:create",
+  "network_ingress:delete",
+  "network_ingress:rotate_credentials",
+  "network_ingress:update",
   "openrouter-key:disable",
   "openrouter-key:enable",
   "openrouter-key:set_spend_cap",
   "organization:device_agent_configuration_updated",
   "organization:enterprise_trial_armed",
+  "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
+  "organization:enterprise_trial_end_changed",
   "organization:enterprise_trial_extended",
   "organization:enterprise_trial_rearmed",
+  "organization:enterprise_trial_started",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
   "organization:payg_activated",
   "organization:payg_deactivated",
+  "organization:product_feature_disabled",
+  "organization:product_feature_enabled",
+  "organization:setup_task_updated",
   "organization:webhooks_disabled",
   "organization:webhooks_enabled",
   "organization_invitation:create",
   "organization_invitation:revoke",
   "organization_invitation:update_role",
-  "otel_forwarding:delete",
-  "otel_forwarding:upsert",
+  "otel_destination:create",
+  "otel_destination:delete",
+  "okta-resource-connection:confirm",
+  "okta-resource-connection:reset",
+  "otel_destination:update",
+  "platform-mcp-diagnostics:attribution_read",
+  "platform-mcp-diagnostics:user_status_read",
   "platform-mcp-registration:create",
   "platform-mcp-registration:handoff_issue",
   "platform-mcp-registration:handoff_redeem",
   "plugin:assignments_set",
   "plugin:create",
   "plugin:delete",
+  "plugin:marketplace_settings_update",
   "plugin:publish",
   "plugin:server_add",
   "plugin:server_remove",
@@ -111,15 +167,20 @@ export const AUDIT_ACTIONS = [
   "project:create",
   "project:delete",
   "project:update",
+  "query:create",
+  "query:delete",
+  "query:update",
   "remote-mcp-server-header:create",
   "remote-mcp-server-header:delete",
   "remote-mcp-server-header:update",
   "remote-mcp:create",
   "remote-mcp:delete",
   "remote-mcp:update",
+  "remote-session-client:attach-json-web-key-set",
   "remote-session-client:attach-user-session-issuer",
   "remote-session-client:create",
   "remote-session-client:delete",
+  "remote-session-client:detach-json-web-key-set",
   "remote-session-client:detach-mcp-server",
   "remote-session-client:detach-user-session-issuer",
   "remote-session-client:revoke-sessions",
@@ -128,7 +189,9 @@ export const AUDIT_ACTIONS = [
   "remote-session-issuer:delete",
   "remote-session-issuer:migrate",
   "remote-session-issuer:update",
+  "remote-session:attach",
   "remote-session:delete",
+  "remote-session:detach",
   "remote-session:refresh",
   "risk_exclusion:create",
   "risk_exclusion:delete",
@@ -147,6 +210,8 @@ export const AUDIT_ACTIONS = [
   "risk_result:dismiss",
   "risk_result:restore",
   "risk_result:unmask",
+  "session_quarantine:open",
+  "session_quarantine:release",
   "skill:add_version",
   "skill:archive",
   "skill:create",
@@ -173,6 +238,7 @@ export const AUDIT_ACTIONS = [
   "toolset:detach_external_oauth",
   "toolset:detach_oauth_proxy",
   "toolset:update",
+  "toolset:update_external_oauth_issuer",
   "toolset:update_oauth_proxy",
   "trigger-instance:create",
   "trigger-instance:delete",
@@ -192,6 +258,7 @@ export const AUDIT_ACTIONS = [
   "user-session-issuer-cimd-client:remove",
   "user-session-issuer:create",
   "user-session-issuer:delete",
+  "user-session-issuer:migrate",
   "user-session-issuer:update",
   "user-session:revoke",
   "variation:delete_global",
@@ -231,6 +298,31 @@ export function staticActionPhrase(action: AuditAction): string {
     case "access_role:delete":
       return "deleted access role";
 
+    case "agent:create":
+      return "created agent";
+    case "agent:delete":
+      return "deleted agent";
+    case "agent:policy_grant_create":
+      return "added direct policy grant to agent";
+    case "agent:policy_grant_delete":
+      return "removed direct policy grant from agent";
+    case "agent:policy_grant_update":
+      return "updated direct policy grant for agent";
+    case "agent:owner_loss":
+      return "recorded owner loss for agent";
+    case "agent:reassign":
+      return "reassigned agent";
+    case "agent:rename":
+      return "renamed agent";
+    case "agent:resume":
+      return "resumed agent";
+    case "agent:revoke":
+      return "revoked agent";
+    case "agent:suspend":
+      return "suspended agent";
+    case "agent:transfer":
+      return "transferred agent";
+
     case "ai_integration:upsert":
       return "configured AI integration";
     case "ai_integration:delete":
@@ -239,6 +331,9 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated AI integration schedule";
     case "ai_integration:retry_schedule":
       return "retried AI integration sync";
+
+    case "ai_tool_decision:set":
+      return "decided AI tool access for";
 
     case "api_key:create":
       return "created API key";
@@ -274,6 +369,38 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated GCP KMS key";
     case "gcp_kms_key:delete":
       return "removed GCP KMS key";
+    case "identity-provider-connection:create":
+      return "connected identity provider";
+    case "identity-provider-connection:submit-client-id":
+      return "submitted client ID for identity provider";
+    case "identity-provider-connection:verify":
+      return "verified identity provider connection to";
+    case "identity-provider-connection:record-agent":
+      return "recorded agent for identity provider";
+    case "identity-provider-connection:revoke":
+      return "revoked identity provider connection to";
+    case "identity-provider-connection:sync-applications":
+      return "requested an applications sync for identity provider";
+    case "okta-resource-connection:confirm":
+      return "confirmed the Cross App Access connection for";
+    case "okta-resource-connection:reset":
+      return "reset the Cross App Access connection for";
+    case "json_web_key_set:create":
+      return "created JSON Web Key Set";
+    case "json_web_key_set:update":
+      return "updated JSON Web Key Set";
+    case "json_web_key_set:delete":
+      return "deleted JSON Web Key Set";
+    case "json_web_key:publish":
+      return "published JSON Web Key";
+    case "json_web_key:activate":
+      return "activated JSON Web Key";
+    case "json_web_key:retire":
+      return "retired JSON Web Key";
+    case "json_web_key:revoke":
+      return "revoked JSON Web Key";
+    case "json_web_key:delete":
+      return "withdrew JSON Web Key";
 
     case "billing_metadata:create_stripe_checkout":
       return "started Stripe checkout for";
@@ -293,6 +420,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "exported chat session handoff";
     case "chat_session:move":
       return "moved chat session";
+    case "chat_session:recall":
+      return "recalled chat session";
 
     case "custom_domains:create":
       return "added custom domain";
@@ -301,6 +430,22 @@ export function staticActionPhrase(action: AuditAction): string {
     case "custom_domains:delete":
       return "removed custom domain";
 
+    case "data_export_route:create":
+      return "created data export route";
+    case "data_export_route:update":
+      return "updated data export route";
+    case "data_export_route:delete":
+      return "deleted data export route";
+
+    case "network_ingress:create":
+      return "created private network ingress";
+    case "network_ingress:update":
+      return "updated private network ingress";
+    case "network_ingress:rotate_credentials":
+      return "rotated private network ingress credentials";
+    case "network_ingress:delete":
+      return "deleted private network ingress";
+
     case "deployments:create":
       return "created deployment";
     case "deployments:evolve":
@@ -308,6 +453,12 @@ export function staticActionPhrase(action: AuditAction): string {
     case "deployments:redeploy":
       return "redeployed deployment";
 
+    case "device_agent_ai_scan_target:create":
+      return "added AI scan target";
+    case "device_agent_ai_scan_target:update":
+      return "updated AI scan target";
+    case "device_agent_ai_scan_target:delete":
+      return "removed AI scan target";
     case "device_integration:upsert":
       return "configured device integration";
     case "device_integration:delete":
@@ -324,6 +475,15 @@ export function staticActionPhrase(action: AuditAction): string {
     case "environment:delete":
       return "deleted environment";
 
+    case "killswitch:activate":
+      return "activated killswitch";
+    case "killswitch:change":
+      return "changed killswitch";
+    case "killswitch:deactivate":
+      return "deactivated killswitch";
+    case "killswitch:expire":
+      return "recorded killswitch expiry";
+
     case "litellm_instance:create":
       return "created LiteLLM instance";
     case "litellm_instance:rotate_key":
@@ -337,6 +497,19 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated MCP endpoint";
     case "mcp-endpoint:delete":
       return "deleted MCP endpoint";
+
+    case "meta-mcp:create":
+      return "created meta MCP server";
+    case "meta-mcp:update":
+      return "updated meta MCP server";
+    case "meta-mcp:delete":
+      return "deleted meta MCP server";
+    case "meta-mcp:add_member":
+      return "added meta MCP member";
+    case "meta-mcp:update_member":
+      return "updated meta MCP member";
+    case "meta-mcp:remove_member":
+      return "removed meta MCP member";
 
     case "mcp-server:create":
       return "created MCP server";
@@ -357,17 +530,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "detected changed evidence for approved MCP server";
     case "mcp_approval_request:research_start":
       return "started research on";
-
-    case "mcp_collection:create":
-      return "created collection";
-    case "mcp_collection:update":
-      return "updated collection";
-    case "mcp_collection:delete":
-      return "deleted collection";
-    case "mcp_collection:attach_server":
-      return "added a server to collection";
-    case "mcp_collection:detach_server":
-      return "removed a server from collection";
+    case "mcp_approval_request:supersede":
+      return "superseded the access decision for";
 
     case "mcp_metadata:update":
       return "updated MCP metadata for";
@@ -398,14 +562,26 @@ export function staticActionPhrase(action: AuditAction): string {
       return "started enterprise trial";
     case "organization:enterprise_trial_demoted":
       return "ended enterprise trial";
+    case "organization:enterprise_trial_end_changed":
+      return "changed enterprise trial end date";
     case "organization:enterprise_trial_extended":
       return "extended enterprise trial";
     case "organization:enterprise_trial_rearmed":
       return "restarted enterprise trial";
+    case "organization:enterprise_trial_started":
+      return "started a new enterprise trial";
+    case "organization:enterprise_trial_converted":
+      return "converted enterprise trial for";
     case "organization:payg_activated":
       return "activated pay-as-you-go billing for";
     case "organization:payg_deactivated":
       return "deactivated pay-as-you-go billing for";
+    case "organization:product_feature_enabled":
+      return "enabled a product feature for";
+    case "organization:product_feature_disabled":
+      return "disabled a product feature for";
+    case "organization:setup_task_updated":
+      return "updated setup task for";
 
     case "organization_invitation:create":
       return "invited";
@@ -414,10 +590,17 @@ export function staticActionPhrase(action: AuditAction): string {
     case "organization_invitation:update_role":
       return "changed invite role for";
 
-    case "otel_forwarding:upsert":
-      return "updated OpenTelemetry forwarding configuration";
-    case "otel_forwarding:delete":
-      return "removed OpenTelemetry forwarding configuration";
+    case "otel_destination:create":
+      return "created OpenTelemetry destination";
+    case "otel_destination:update":
+      return "updated OpenTelemetry destination";
+    case "otel_destination:delete":
+      return "deleted OpenTelemetry destination";
+
+    case "platform-mcp-diagnostics:attribution_read":
+      return "read usage attribution for";
+    case "platform-mcp-diagnostics:user_status_read":
+      return "read a user's status on";
 
     case "platform-mcp-registration:create":
       return "registered platform MCP server";
@@ -442,6 +625,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated plugin access";
     case "plugin:publish":
       return "published plugins";
+    case "plugin:marketplace_settings_update":
+      return "updated marketplace settings for";
 
     case "project:create":
       return "created project";
@@ -449,6 +634,13 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated project";
     case "project:delete":
       return "deleted project";
+
+    case "query:create":
+      return "created saved query";
+    case "query:update":
+      return "updated saved query";
+    case "query:delete":
+      return "deleted saved query";
 
     case "remote-mcp:create":
       return "added remote MCP server";
@@ -463,6 +655,10 @@ export function staticActionPhrase(action: AuditAction): string {
     case "remote-mcp-server-header:delete":
       return "removed a header from remote MCP server";
 
+    case "remote-session:attach":
+      return "attached a binding to";
+    case "remote-session:detach":
+      return "detached a binding from";
     case "remote-session:refresh":
       return "refreshed remote session";
     case "remote-session:delete":
@@ -477,6 +673,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "attached a user session issuer to";
     case "remote-session-client:detach-user-session-issuer":
       return "detached a user session issuer from";
+    case "remote-session-client:attach-json-web-key-set":
+      return "attached a JSON Web Key Set to";
+    case "remote-session-client:detach-json-web-key-set":
+      return "detached a JSON Web Key Set from";
     case "remote-session-client:detach-mcp-server":
       return "detached an MCP server from";
     case "remote-session-client:revoke-sessions":
@@ -526,6 +726,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "restored risk finding";
     case "risk_result:unmask":
       return "unmasked risk finding";
+
+    case "session_quarantine:open":
+      return "quarantined agent session";
+    case "session_quarantine:release":
+      return "released quarantined agent session";
 
     case "skill:create":
       return "created skill";
@@ -578,6 +783,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "connected an external OAuth server to";
     case "toolset:detach_external_oauth":
       return "disconnected an external OAuth server from";
+    case "toolset:update_external_oauth_issuer":
+      return "updated the external OAuth issuer for";
     case "toolset:attach_oauth_proxy":
       return "attached an OAuth proxy to";
     case "toolset:update_oauth_proxy":
@@ -629,6 +836,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated user session issuer";
     case "user-session-issuer:delete":
       return "deleted user session issuer";
+    case "user-session-issuer:migrate":
+      return "migrated user session issuer";
     case "user-session-issuer-cimd-client:add":
       return "added a CIMD client to";
     case "user-session-issuer-cimd-client:remove":

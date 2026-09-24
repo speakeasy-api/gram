@@ -4,9 +4,9 @@
 -- The base is the org's *published* marketplaces (plugin_github_connections rows
 -- with a marketplace_token), scoped so the device agent isn't flooded with every
 -- project: the org's default project always appears (marketplace + its
--- always-required observability plugin, synthesized in the view layer) as the
--- org-wide baseline, while a non-default project appears only when the caller has
--- a matching assignment there. Plugins whose assignment principal_urn matches the
+-- observability plugin when the project has not disabled it, synthesized in the
+-- view layer) as the org-wide baseline, while a non-default project appears only
+-- when the caller has a matching assignment there. Plugins whose assignment principal_urn matches the
 -- caller's resolved principal set (email, user:<id>, user:all, role:<...>, or the
 -- org wildcard) are LEFT JOINed on top; the default project still yields one row
 -- with null plugin columns when the caller has no assignment there.
@@ -33,6 +33,10 @@ SELECT
   -- install the plugin that actually exists in the published repo.
   pgc.published_hooks_config,
   pms.marketplace_name AS marketplace_name_override,
+  -- NULL (no settings row, or the column unset) means enabled: observability
+  -- has always shipped with a published marketplace unless a project turns it
+  -- off. The view layer skips synthesizing the plugin when this is false.
+  COALESCE(pms.observability_enabled, TRUE) AS observability_enabled,
   -- The org's default project (oldest by created_at, then id, over ALL
   -- non-deleted projects, not just published ones) keeps the bare org-derived
   -- marketplace name; others
@@ -74,8 +78,8 @@ WHERE pr.organization_id = @organization_id
   AND pgc.marketplace_token IS NOT NULL
   AND (
     -- The org's default project (oldest by created_at, then id) is the org-wide baseline:
-    -- always surface its marketplace + observability, even when the caller has no
-    -- assignment there. Pinned to @organization_id (uncorrelated) so Postgres
+    -- always surface its marketplace + observability (when enabled), even when
+    -- the caller has no assignment there. Pinned to @organization_id (uncorrelated) so Postgres
     -- evaluates it once; the same subquery backs the is_default_project column.
     pr.id = (
       SELECT p2.id
@@ -129,6 +133,34 @@ SET last_seen_at = clock_timestamp()
 WHERE device_agent_device_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
    OR device_agent_device_syncs.email IS DISTINCT FROM EXCLUDED.email
    OR (EXCLUDED.hostname IS NOT NULL AND device_agent_device_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname);
+
+-- name: UpsertDeviceAgentEnvironmentSync :exec
+-- Best-effort record that an agent polled from a box that is not somebody's
+-- laptop — a cloud sandbox, a container, a shared server. Sibling of
+-- UpsertDeviceAgentSync, and deliberately a different table: coverage matches
+-- an MDM device's assigned-user email against THAT one, so a cloud session
+-- polling under a real person's address would otherwise mark their laptop
+-- covered whether or not the laptop runs the agent.
+--
+-- Only called when the agent declared a non-laptop environment. A laptop, and
+-- every agent predating the header, still writes the sibling.
+--
+-- The guard mirrors the device sibling's rather than the plain heartbeat
+-- throttle, because hostname is mutable and a ~60s poll cadence keeps
+-- last_seen_at almost always fresh — a changed hostname could otherwise go
+-- unrecorded for a whole session.
+INSERT INTO device_agent_environment_syncs (organization_id, email, environment, hostname)
+VALUES (@organization_id, @email, @environment, sqlc.narg('hostname'))
+-- Infers device_agent_environment_syncs_org_lower_email_env_key, the unique
+-- expression index that is this table's dedup key. Matching the readers'
+-- LOWER() comparison is what stops one identity from holding two rows.
+ON CONFLICT (organization_id, LOWER(email), environment) DO UPDATE
+SET last_seen_at = clock_timestamp()
+  , updated_at   = clock_timestamp()
+    -- An agent that stopped reporting a hostname must not blank a known one.
+  , hostname     = COALESCE(EXCLUDED.hostname, device_agent_environment_syncs.hostname)
+WHERE device_agent_environment_syncs.last_seen_at < clock_timestamp() - interval '1 minute'
+   OR (EXCLUDED.hostname IS NOT NULL AND device_agent_environment_syncs.hostname IS DISTINCT FROM EXCLUDED.hostname);
 
 -- name: ListDeviceAgentSyncs :many
 -- Lists every distinct email seen polling the device agent for an org, most
@@ -275,3 +307,120 @@ INSERT INTO chat_session_links (
   @actor_email, @device_serial, @device_hostname
 )
 ON CONFLICT (project_id, parent_chat_id, child_chat_id) WHERE child_chat_id IS NOT NULL DO NOTHING;
+
+-- An organization's Shadow AI scan targets: its own additions and its
+-- overrides of the Speakeasy defaults compiled into the server. The served
+-- list is built in code by overlaying these rows on the defaults.
+
+-- name: ListAIScanTargets :many
+SELECT *
+FROM ai_scan_targets
+WHERE organization_id = @organization_id
+ORDER BY id;
+
+-- name: GetAIScanTargetForUpdate :one
+SELECT *
+FROM ai_scan_targets
+WHERE organization_id = @organization_id
+  AND id = @id
+FOR UPDATE;
+
+-- The definition and the organization's status are written by different
+-- endpoints, so neither upsert touches the other's columns: adding a target
+-- must not silently clear a standing block, and blocking one must not wipe
+-- the signatures agents scan for.
+
+-- name: UpsertAIScanTarget :one
+INSERT INTO ai_scan_targets (
+  organization_id,
+  id,
+  display_name,
+  category,
+  bundle_ids,
+  binaries,
+  config_dirs,
+  process_names,
+  version_plist_key,
+  cimd_vendor_keys,
+  oauth_client_ids,
+  client_info_names
+)
+VALUES (
+  @organization_id,
+  @id,
+  sqlc.narg('display_name'),
+  sqlc.narg('category'),
+  @bundle_ids::text[],
+  @binaries::text[],
+  @config_dirs::text[],
+  @process_names::text[],
+  sqlc.narg('version_plist_key'),
+  @cimd_vendor_keys::text[],
+  @oauth_client_ids::text[],
+  @client_info_names::text[]
+)
+ON CONFLICT (organization_id, id) DO UPDATE
+SET display_name = EXCLUDED.display_name
+  , category = EXCLUDED.category
+  , bundle_ids = EXCLUDED.bundle_ids
+  , binaries = EXCLUDED.binaries
+  , config_dirs = EXCLUDED.config_dirs
+  , process_names = EXCLUDED.process_names
+  , version_plist_key = EXCLUDED.version_plist_key
+  , cimd_vendor_keys = EXCLUDED.cimd_vendor_keys
+  , oauth_client_ids = EXCLUDED.oauth_client_ids
+  , client_info_names = EXCLUDED.client_info_names
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: SetAIScanTargetStatus :one
+INSERT INTO ai_scan_targets (organization_id, id, status, rationale)
+VALUES (@organization_id, @id, @status, sqlc.narg('rationale'))
+ON CONFLICT (organization_id, id) DO UPDATE
+SET status = EXCLUDED.status
+  , rationale = EXCLUDED.rationale
+  , updated_at = clock_timestamp()
+RETURNING *;
+
+-- name: DeleteAIScanTarget :one
+DELETE FROM ai_scan_targets
+WHERE organization_id = @organization_id
+  AND id = @id
+RETURNING *;
+
+-- The gateway hot path asks only "does this organization block anything?".
+-- Nearly every organization answers with an empty set, and that answer costs
+-- one indexed lookup rather than loading the whole scan-target catalog.
+--
+-- Status is the only predicate, and that is the point. There is no second
+-- column for the gateway to disagree with mid-write: a target is in the
+-- organization's inventory or it is not, and its decision is this one value.
+--
+-- The matchers are deliberately not filtered here. A built-in stores its
+-- decision only: its definition columns, gateway matchers included, are empty
+-- by design because the matchers are compiled in. Requiring a non-empty
+-- matcher column would silently drop every blocked built-in, which is most of
+-- the catalog. No filter is needed for the other case either, but note that
+-- the guarantee is not this statement's: UpsertAIScanTarget never touches
+-- status. It is a transaction-level invariant kept by the upsert service,
+-- which follows the definition write with a status reset (SetAIScanTargetStatus)
+-- whenever the target it just wrote can no longer be recognized at the
+-- gateway, before committing. Callers of the repository queries directly do
+-- not get it for free. Held that way, a committed row with status = 'blocked'
+-- always names a target the gateway can still recognize.
+
+-- name: ListBlockedAITargetIDs :many
+SELECT id
+FROM ai_scan_targets
+WHERE organization_id = @organization_id
+  AND status = 'blocked'
+ORDER BY id;
+
+-- Serializes an organization's scan target writes, definition and status
+-- alike. Transaction-scoped, and taken before the reads that validate a write
+-- so a concurrent edit cannot invalidate them between check and commit.
+-- FOR UPDATE cannot stand in for it: a target with no row yet has nothing to
+-- lock, so two writers would both read absence and both act on it.
+
+-- name: AcquireAIScanTargetsLock :exec
+SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || @organization_id::text, 0));

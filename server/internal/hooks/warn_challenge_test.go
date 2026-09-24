@@ -22,7 +22,7 @@ type stubResultScanner struct {
 	recordedChallenge bool
 }
 
-func (s *stubResultScanner) ScanForEnforcement(_ context.Context, _ string, _ uuid.UUID, _ string, _ string, _ string, _ string) (*risk.ScanResult, error) {
+func (s *stubResultScanner) ScanForEnforcement(_ context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 	return s.result, nil
 }
 
@@ -265,6 +265,26 @@ func TestIngest_Opencode_Block_Denies(t *testing.T) {
 	assert.Equal(t, "deny", result.Decision)
 }
 
+// Pi gates prompts and tool calls through its extension, so a policy block
+// must reach it as a deny the same way it reaches every other adapter.
+func TestIngest_Pi_Block_Denies(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+	ti.service.riskScanner = &stubResultScanner{result: &risk.ScanResult{
+		Action:      "block",
+		PolicyID:    uuid.NewString(),
+		PolicyName:  "secret policy",
+		Description: "leaked credential",
+	}}
+
+	result, err := ti.service.Ingest(ctx, canonicalToolRequest("pi", "canonical-pi-block"))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "deny", result.Decision)
+	require.NotNil(t, result.Message)
+	assert.Contains(t, *result.Message, "secret policy")
+}
+
 // A block at prompt submit still hard-blocks with the reason.
 func TestClaude_UserPromptSubmit_Block_Blocks(t *testing.T) {
 	t.Parallel()
@@ -296,7 +316,7 @@ func TestIngest_CanonicalWarnChallengesEveryAdapterAndEvent(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestHooksService(t)
-	adapters := []string{"claude", "cursor", "codex", "opencode"}
+	adapters := []string{"claude", "cursor", "codex", "opencode", "copilot", "pi"}
 	eventKinds := []string{"prompt", "tool", "mcp", "permission"}
 
 	for _, adapter := range adapters {

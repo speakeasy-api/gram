@@ -961,6 +961,8 @@ func marshalTypesUserSessionClientToUserSessionClientResponseBody(v *types.UserS
 		ClientIDMetadataCacheExpiresAt: v.ClientIDMetadataCacheExpiresAt,
 		ClientIDMetadataEtag:           v.ClientIDMetadataEtag,
 		ClientName:                     v.ClientName,
+		CredentialKind:                 v.CredentialKind,
+		TokenEndpointAuthMethod:        v.TokenEndpointAuthMethod,
 		ClientIDIssuedAt:               v.ClientIDIssuedAt,
 		ClientSecretExpiresAt:          v.ClientSecretExpiresAt,
 		CreatedAt:                      v.CreatedAt,

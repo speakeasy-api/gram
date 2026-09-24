@@ -577,6 +577,7 @@ func (q *Queries) CountSkillEfficacyVersionLifetimeSpend(ctx context.Context, ar
 
 const countSkillFeedbackOutcomes = `-- name: CountSkillFeedbackOutcomes :one
 SELECT
+  clock_timestamp()::timestamptz AS window_end,
   COUNT(*)::bigint AS total,
   COUNT(*) FILTER (WHERE outcome = 'helped')::bigint AS helped,
   COUNT(*) FILTER (WHERE outcome = 'partially_helped')::bigint AS partially_helped,
@@ -594,6 +595,7 @@ type CountSkillFeedbackOutcomesParams struct {
 }
 
 type CountSkillFeedbackOutcomesRow struct {
+	WindowEnd       pgtype.Timestamptz
 	Total           int64
 	Helped          int64
 	PartiallyHelped int64
@@ -606,6 +608,7 @@ func (q *Queries) CountSkillFeedbackOutcomes(ctx context.Context, arg CountSkill
 	row := q.db.QueryRow(ctx, countSkillFeedbackOutcomes, arg.ProjectID, arg.SkillID)
 	var i CountSkillFeedbackOutcomesRow
 	err := row.Scan(
+		&i.WindowEnd,
 		&i.Total,
 		&i.Helped,
 		&i.PartiallyHelped,
@@ -639,6 +642,12 @@ WHERE project_id = $1
     COALESCE(cardinality($5::text[]), 0) = 0
     OR tags && $5::text[]
   )
+  -- Mirrors the ListSkills restriction so an empty page still counts the same
+  -- set: NULL means unrestricted, an empty array means none.
+  AND (
+    $6::uuid[] IS NULL
+    OR id = ANY($6::uuid[])
+  )
 `
 
 type CountSkillsParams struct {
@@ -647,6 +656,7 @@ type CountSkillsParams struct {
 	SourceKinds     []string
 	Classifications []string
 	Tags            []string
+	SkillIds        []uuid.UUID
 }
 
 // CountSkills handles empty cursor pages. Keep its filters in sync with ListSkills
@@ -658,6 +668,7 @@ func (q *Queries) CountSkills(ctx context.Context, arg CountSkillsParams) (int64
 		arg.SourceKinds,
 		arg.Classifications,
 		arg.Tags,
+		arg.SkillIds,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -1162,6 +1173,7 @@ func (q *Queries) CreateSkillEditSuggestionWatermark(ctx context.Context, arg Cr
 
 const createSkillFeedback = `-- name: CreateSkillFeedback :one
 INSERT INTO skill_feedback (
+  id,
   project_id,
   skill_id,
   skill_version_id,
@@ -1173,21 +1185,25 @@ INSERT INTO skill_feedback (
   user_id,
   user_email
 ) VALUES (
-  $1,
-  $2::uuid,
+  COALESCE($1::uuid, generate_uuidv7()),
+  $2,
   $3::uuid,
-  $4,
+  $4::uuid,
   $5,
   $6,
-  $7::text,
+  $7,
   $8::text,
   $9::text,
-  $10::text
+  $10::text,
+  $11::text
 )
+ON CONFLICT (project_id, id) DO UPDATE
+SET id = EXCLUDED.id
 RETURNING id, project_id, skill_id, skill_version_id, skill_name, source, outcome, note, session_id, user_id, user_email, reviewed_at, created_at
 `
 
 type CreateSkillFeedbackParams struct {
+	ID             uuid.NullUUID
 	ProjectID      uuid.UUID
 	SkillID        uuid.NullUUID
 	SkillVersionID uuid.NullUUID
@@ -1202,6 +1218,7 @@ type CreateSkillFeedbackParams struct {
 
 func (q *Queries) CreateSkillFeedback(ctx context.Context, arg CreateSkillFeedbackParams) (SkillFeedback, error) {
 	row := q.db.QueryRow(ctx, createSkillFeedback,
+		arg.ID,
 		arg.ProjectID,
 		arg.SkillID,
 		arg.SkillVersionID,
@@ -4898,6 +4915,14 @@ SELECT
         COALESCE(cardinality($5::text[]), 0) = 0
         OR counted.tags && $5::text[]
       )
+      -- Restricts the page to an explicit id set (today: the skills one user is
+      -- authorized to reach, resolved by the access service so the RBAC rule
+      -- stays in one place). Callers that want no restriction pass NULL; an
+      -- EMPTY set is a real answer meaning "none", never "all".
+      AND (
+        $6::uuid[] IS NULL
+        OR counted.id = ANY($6::uuid[])
+      )
   )::bigint AS total_count
 FROM skills s
 LEFT JOIN LATERAL (
@@ -4933,29 +4958,33 @@ WHERE s.project_id = $1
     OR s.tags && $5::text[]
   )
   AND (
+    $6::uuid[] IS NULL
+    OR s.id = ANY($6::uuid[])
+  )
+  AND (
     (
-      COALESCE(NULLIF($6::text, ''), 'name') = 'name'
+      COALESCE(NULLIF($7::text, ''), 'name') = 'name'
       AND (
-        $7::text IS NULL
-        OR s.name > $7::text
+        $8::text IS NULL
+        OR s.name > $8::text
       )
     )
     OR (
-      COALESCE(NULLIF($6::text, ''), 'name') = 'updated'
+      COALESCE(NULLIF($7::text, ''), 'name') = 'updated'
       AND (
-        $8::timestamptz IS NULL
+        $9::timestamptz IS NULL
         OR (s.updated_at, s.id) < (
-          $8::timestamptz,
-          $9::uuid
+          $9::timestamptz,
+          $10::uuid
         )
       )
     )
   )
 ORDER BY
-  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'name' THEN s.name END ASC,
-  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
-  CASE WHEN COALESCE(NULLIF($6::text, ''), 'name') = 'updated' THEN s.id END DESC
-LIMIT $10
+  CASE WHEN COALESCE(NULLIF($7::text, ''), 'name') = 'name' THEN s.name END ASC,
+  CASE WHEN COALESCE(NULLIF($7::text, ''), 'name') = 'updated' THEN s.updated_at END DESC,
+  CASE WHEN COALESCE(NULLIF($7::text, ''), 'name') = 'updated' THEN s.id END DESC
+LIMIT $11
 `
 
 type ListSkillsParams struct {
@@ -4964,6 +4993,7 @@ type ListSkillsParams struct {
 	SourceKinds     []string
 	Classifications []string
 	Tags            []string
+	SkillIds        []uuid.UUID
 	SortOrder       string
 	CursorName      pgtype.Text
 	CursorUpdatedAt pgtype.Timestamptz
@@ -4987,6 +5017,7 @@ func (q *Queries) ListSkills(ctx context.Context, arg ListSkillsParams) ([]ListS
 		arg.SourceKinds,
 		arg.Classifications,
 		arg.Tags,
+		arg.SkillIds,
 		arg.SortOrder,
 		arg.CursorName,
 		arg.CursorUpdatedAt,

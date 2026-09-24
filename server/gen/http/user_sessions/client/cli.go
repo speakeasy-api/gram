@@ -149,7 +149,7 @@ func BuildMintUserSessionPayload(userSessionsMintUserSessionBody string, userSes
 	{
 		err = json.Unmarshal([]byte(userSessionsMintUserSessionBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -165,8 +165,9 @@ func BuildMintUserSessionPayload(userSessionsMintUserSessionBody string, userSes
 		}
 	}
 	v := &usersessions.MintUserSessionPayload{
-		ToolsetID:   body.ToolsetID,
-		McpServerID: body.McpServerID,
+		ToolsetID:       body.ToolsetID,
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
 	}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

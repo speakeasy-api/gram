@@ -141,6 +141,7 @@ mise run install
 echo -e "\n⏳ Setting up API keys and secrets"
 interactive_only mise run zero:github
 interactive_only mise run zero:openrouter
+mise run zero:devidp
 interactive_only mise run zero:idp
 interactive_only mise run zero:melange
 interactive_only mise run zero:fly
@@ -203,8 +204,6 @@ echo -e "\n⏳ Running migrations"
 mise run zero:migrations
 mise db:migrate
 mise clickhouse:migrate
-
-mise run zero:devidp
 
 echo -e "\n✅ All set up!"
 

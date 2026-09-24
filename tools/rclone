@@ -1,0 +1,37 @@
+#!/usr/bin/env -S mise tool-stub
+
+version = "1.75.0"
+tool = "rclone"
+bin = "rclone"
+
+[lock]
+
+[lock.platforms]
+
+[lock.platforms.linux-arm64]
+url = "https://github.com/rclone/rclone/releases/download/v1.75.0/rclone-v1.75.0-linux-arm64.zip"
+checksum = "sha256:d0ad88ba4c8e285b7c9efa591e0ab643280a91741e13c27f3a9c0957ccfa5203"
+
+[lock.platforms.linux-arm64-musl]
+url = "https://github.com/rclone/rclone/releases/download/v1.75.0/rclone-v1.75.0-linux-arm64.zip"
+checksum = "sha256:d0ad88ba4c8e285b7c9efa591e0ab643280a91741e13c27f3a9c0957ccfa5203"
+
+[lock.platforms.linux-x64]
+url = "https://github.com/rclone/rclone/releases/download/v1.75.0/rclone-v1.75.0-linux-amd64.zip"
+checksum = "sha256:aa2804e08f48250e71009c727124b6341cd0288465804a9a09d14663cabafbaa"
+
+[lock.platforms.linux-x64-musl]
+url = "https://github.com/rclone/rclone/releases/download/v1.75.0/rclone-v1.75.0-linux-amd64.zip"
+checksum = "sha256:aa2804e08f48250e71009c727124b6341cd0288465804a9a09d14663cabafbaa"
+
+[lock.platforms.macos-arm64]
+url = "https://github.com/rclone/rclone/releases/download/v1.75.0/rclone-v1.75.0-osx-arm64.zip"
+checksum = "sha256:35e8f2a666ce789b29111db0dd843ddabc0d59c6b609d07bcaae5d1a07cba6f8"
+
+[lock.platforms.macos-x64]
+url = "https://github.com/rclone/rclone/releases/download/v1.75.0/rclone-v1.75.0-osx-amd64.zip"
+checksum = "sha256:19edbb8e5e73096eb66e92a42abbc5c34bfa8981ea3986a53872c7eef85a22f4"
+
+[lock.platforms.windows-x64]
+url = "https://github.com/rclone/rclone/releases/download/v1.75.0/rclone-v1.75.0-windows-amd64.zip"
+checksum = "sha256:203581f0a7baeae873f2347483a798c79e2eaf5c384a4e9d866aa374f1c89ac0"

@@ -39,16 +39,12 @@ type GetServerDetailsResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Description of what the server does
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -1022,16 +1018,12 @@ type ExternalMCPServerEntryResponseBody struct {
 	Version *string `form:"version,omitempty" json:"version,omitempty" xml:"version,omitempty"`
 	// Description of what the server does
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// ID of the attached toolset when this server is listed from a Collection
-	// (toolset-backed attachment)
+	// ID of the attached toolset backing this server
 	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-	// ID of the attached MCP server when this server is listed from a Collection
-	// (mcp_server-backed attachment)
+	// ID of the attached MCP server backing this server
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// ID of the external MCP registry this server came from
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// ID of the internal collection registry this server came from
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// Display name for the server
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// URL to the server's icon
@@ -1689,16 +1681,15 @@ func NewListCatalogGatewayError(body *ListCatalogGatewayErrorResponseBody) *goa.
 // "getServerDetails" endpoint result from a HTTP "OK" response.
 func NewGetServerDetailsExternalMCPServerOK(body *GetServerDetailsResponseBody) *types.ExternalMCPServer {
 	v := &types.ExternalMCPServer{
-		RegistrySpecifier:                   *body.RegistrySpecifier,
-		Version:                             *body.Version,
-		Description:                         *body.Description,
-		ToolsetID:                           body.ToolsetID,
-		McpServerID:                         body.McpServerID,
-		RegistryID:                          body.RegistryID,
-		OrganizationMcpCollectionRegistryID: body.OrganizationMcpCollectionRegistryID,
-		Title:                               body.Title,
-		IconURL:                             body.IconURL,
-		Meta:                                body.Meta,
+		RegistrySpecifier: *body.RegistrySpecifier,
+		Version:           *body.Version,
+		Description:       *body.Description,
+		ToolsetID:         body.ToolsetID,
+		McpServerID:       body.McpServerID,
+		RegistryID:        body.RegistryID,
+		Title:             body.Title,
+		IconURL:           body.IconURL,
+		Meta:              body.Meta,
 	}
 	if body.Tools != nil {
 		v.Tools = make([]*types.ExternalMCPTool, len(body.Tools))
@@ -2092,9 +2083,6 @@ func ValidateGetServerDetailsResponseBody(body *GetServerDetailsResponseBody) (e
 	}
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
-	}
-	if body.OrganizationMcpCollectionRegistryID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_mcp_collection_registry_id", *body.OrganizationMcpCollectionRegistryID, goa.FormatUUID))
 	}
 	if body.IconURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))
@@ -3372,9 +3360,6 @@ func ValidateExternalMCPServerEntryResponseBody(body *ExternalMCPServerEntryResp
 	}
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
-	}
-	if body.OrganizationMcpCollectionRegistryID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_mcp_collection_registry_id", *body.OrganizationMcpCollectionRegistryID, goa.FormatUUID))
 	}
 	if body.IconURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.icon_url", *body.IconURL, goa.FormatURI))

@@ -1,3 +1,9 @@
+import {
+  auditActorPrincipal,
+  auditSubjectPrincipal,
+  useAuditPrincipals,
+} from "@/components/auditlogs/audit-principals";
+import { AuditPrincipalLink } from "@/components/auditlogs/principals";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { MemberFacepile } from "@/components/member-facepile";
@@ -286,7 +292,6 @@ function OrgHomeInner() {
   return (
     <>
       <OrgWelcomeBanner />
-
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-8 pt-8 pb-24">
         {/* `items-start` so each column is only as tall as its content — the
             default stretch left the Projects card padded with dead space
@@ -407,7 +412,7 @@ function OrgHomeInner() {
             </Card.Dashboard>
           </main>
 
-          <aside className="flex flex-col gap-8 xl:sticky xl:top-4 xl:self-start">
+          <aside className="flex flex-col gap-8 xl:sticky xl:top-[calc(var(--page-sticky-top,0px)+1rem)] xl:self-start">
             <RecentChallengesCompact />
             <RecentActivityCompact logs={auditLogs} />
           </aside>
@@ -957,7 +962,8 @@ function TimestampDetail({ date }: { date: Date }) {
 
 function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
   const orgRoutes = useOrgRoutes();
-  const preview = logs.slice(0, AUDIT_PREVIEW_LIMIT);
+  const preview = useMemo(() => logs.slice(0, AUDIT_PREVIEW_LIMIT), [logs]);
+  const identities = useAuditPrincipals(preview);
 
   return (
     <Card.Dashboard
@@ -977,48 +983,66 @@ function RecentActivityCompact({ logs }: { logs: AuditLog[] }) {
         </Text>
       ) : (
         <ol className="divide-border max-h-72 divide-y overflow-y-auto">
-          {preview.map((log) => (
-            <li
-              key={log.id}
-              className="flex items-start gap-3 px-6 py-3 text-xs"
-            >
-              <ActionIconTile action={log.action} />
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <Text small className="truncate leading-snug">
-                  <span className="text-foreground font-medium">
-                    {getActorLabel(log)}
-                  </span>{" "}
-                  <span className="text-muted-foreground">
-                    {renderVerb(log)}
-                  </span>
-                  {log.subjectDisplayName && (
-                    <>
-                      {" "}
-                      <span
-                        className="text-foreground font-medium"
-                        title={log.subjectDisplayName}
-                      >
-                        {formatSubjectLabel(
-                          log.subjectDisplayName,
-                          log.subjectType,
-                        )}
-                      </span>
-                    </>
-                  )}
-                </Text>
-                <Text
-                  muted
-                  small
-                  className="text-muted-foreground/80 text-[11px]"
-                >
-                  {log.projectSlug ? `${log.projectSlug} · ` : ""}
-                  {dateTimeFormatters.humanize(log.createdAt, {
-                    includeTime: false,
-                  })}
-                </Text>
-              </div>
-            </li>
-          ))}
+          {preview.map((log) => {
+            const subjectPrincipal = auditSubjectPrincipal(log);
+            return (
+              <li
+                key={log.id}
+                className="flex items-start gap-3 px-6 py-3 text-xs"
+              >
+                <ActionIconTile action={log.action} />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <Text small className="truncate leading-snug">
+                    <AuditPrincipalLink
+                      principal={auditActorPrincipal(log)}
+                      identities={identities}
+                      fallback={getActorLabel(log)}
+                      className="text-foreground font-medium"
+                    />{" "}
+                    <span className="text-muted-foreground">
+                      {renderVerb(log)}
+                    </span>
+                    {(log.subjectDisplayName || subjectPrincipal) && (
+                      <>
+                        {" "}
+                        <span
+                          className="text-foreground font-medium"
+                          title={
+                            subjectPrincipal?.urn ?? log.subjectDisplayName
+                          }
+                        >
+                          {subjectPrincipal ? (
+                            <AuditPrincipalLink
+                              principal={subjectPrincipal}
+                              identities={identities}
+                              fallback={
+                                log.subjectDisplayName || subjectPrincipal.urn
+                              }
+                            />
+                          ) : (
+                            formatSubjectLabel(
+                              log.subjectDisplayName ?? "",
+                              log.subjectType,
+                            )
+                          )}
+                        </span>
+                      </>
+                    )}
+                  </Text>
+                  <Text
+                    muted
+                    small
+                    className="text-muted-foreground/80 text-[11px]"
+                  >
+                    {log.projectSlug ? `${log.projectSlug} · ` : ""}
+                    {dateTimeFormatters.humanize(log.createdAt, {
+                      includeTime: false,
+                    })}
+                  </Text>
+                </div>
+              </li>
+            );
+          })}
         </ol>
       )}
     </Card.Dashboard>

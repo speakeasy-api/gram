@@ -12,6 +12,7 @@ import (
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
+	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -23,6 +24,11 @@ const (
 	minSyncIntervalSeconds                = 60
 	maxSyncIntervalSeconds                = 24 * 60 * 60
 )
+
+// aiScanConfigurationKey carries the scan target catalog to agents. It is
+// injected on the plugin poll and never stored in an organization's document,
+// so an org admin cannot steer what the scanner probes for.
+const aiScanConfigurationKey = "ai_scan"
 
 var forbiddenDeviceAgentConfigurationKeys = map[string]struct{}{
 	"email":     {},
@@ -37,12 +43,13 @@ var forbiddenDeviceAgentConfigurationKeys = map[string]struct{}{
 // while any other stored key is preserved so a server that predates a setting
 // cannot delete it on behalf of a client that never saw it.
 var knownDeviceAgentConfigurationKeys = map[string]struct{}{
-	"platforms":             {},
-	"update_channel":        {},
-	"auto_update":           {},
-	"pinned_target":         {},
-	"blocked_versions":      {},
-	"sync_interval_seconds": {},
+	"platforms":                {},
+	"update_channel":           {},
+	"auto_update":              {},
+	"pinned_target":            {},
+	"blocked_versions":         {},
+	"sync_interval_seconds":    {},
+	"ai_scan_interval_seconds": {},
 }
 
 // platformAdminOnlyDeviceAgentConfigurationKeys are Speakeasy-internal
@@ -82,7 +89,7 @@ func mergeStoredDeviceAgentConfiguration(incoming map[string]any, stored []byte,
 
 	merged := make(map[string]any, len(storedConfig)+len(incoming))
 	for key, value := range storedConfig {
-		if _, replaced := replaceable[key]; replaced {
+		if _, replaced := replaceable[key]; replaced || key == aiScanConfigurationKey {
 			continue
 		}
 		merged[key] = value
@@ -92,6 +99,9 @@ func mergeStoredDeviceAgentConfiguration(incoming map[string]any, stored []byte,
 }
 
 func validateDeviceAgentConfiguration(config map[string]any) ([]byte, error) {
+	if _, ok := config[aiScanConfigurationKey]; ok {
+		return nil, oops.E(oops.CodeInvalid, nil, "%s is served by Speakeasy and cannot be configured per organization", aiScanConfigurationKey)
+	}
 	for key := range config {
 		if _, forbidden := forbiddenDeviceAgentConfigurationKeys[key]; forbidden {
 			return nil, oops.E(oops.CodeInvalid, nil, "%s is device-local and cannot be configured remotely", key)
@@ -131,16 +141,19 @@ func validateDeviceAgentConfiguration(config map[string]any) ([]byte, error) {
 		}
 	}
 
-	if value, ok := config["sync_interval_seconds"]; ok {
-		seconds, valid := integerValue(value)
-		if !valid || seconds < minSyncIntervalSeconds || seconds > maxSyncIntervalSeconds {
-			return nil, oops.E(
-				oops.CodeInvalid,
-				nil,
-				"sync_interval_seconds must be a whole number between %d and %d",
-				minSyncIntervalSeconds,
-				maxSyncIntervalSeconds,
-			)
+	for _, key := range []string{"sync_interval_seconds", "ai_scan_interval_seconds"} {
+		if value, ok := config[key]; ok {
+			seconds, valid := integerValue(value)
+			if !valid || seconds < minSyncIntervalSeconds || seconds > maxSyncIntervalSeconds {
+				return nil, oops.E(
+					oops.CodeInvalid,
+					nil,
+					"%s must be a whole number between %d and %d",
+					key,
+					minSyncIntervalSeconds,
+					maxSyncIntervalSeconds,
+				)
+			}
 		}
 	}
 
@@ -218,12 +231,21 @@ func buildDeviceAgentConfigurationView(row repo.DeviceAgentConfiguration) (*gen.
 		return nil, fmt.Errorf("decode stored device agent configuration: %w", err)
 	}
 
+	// Only the served catalog may occupy ai_scan. A row written before the key
+	// was reserved can still carry one; drop it and hash the document that is
+	// actually served so the etag stays honest.
+	delete(config, aiScanConfigurationKey)
+	served, err := json.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("encode device agent configuration: %w", err)
+	}
+
 	updatedAt := row.UpdatedAt.Time.UTC().Format(time.RFC3339)
 	return &gen.DeviceAgentConfiguration{
 		SchemaVersion: int(row.SchemaVersion),
 		Config:        config,
 		IsConfigured:  true,
-		Etag:          deviceAgentConfigurationETag(row.SchemaVersion, row.Config),
+		Etag:          deviceAgentConfigurationETag(row.SchemaVersion, served),
 		UpdatedAt:     &updatedAt,
 	}, nil
 }
@@ -254,6 +276,20 @@ func deviceAgentConfigurationETag(schemaVersion int32, config []byte) string {
 	_, _ = fmt.Fprintf(hash, "schema=%d\n", schemaVersion)
 	_, _ = hash.Write(config)
 	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// attachAIScanEnvelope adds the served catalog under the ai_scan key and folds
+// its etag into the document etag. is_configured is left alone: agents read
+// ai_scan independently of it.
+func attachAIScanEnvelope(configuration *gen.DeviceAgentConfiguration, snapshot *aitargets.Snapshot) {
+	config := make(map[string]any, len(configuration.Config)+1)
+	maps.Copy(config, configuration.Config)
+	config[aiScanConfigurationKey] = snapshot.EnvelopeValue()
+	configuration.Config = config
+
+	hash := sha256.New()
+	_, _ = fmt.Fprintf(hash, "configuration=%s\nai_scan=%s\n", configuration.Etag, snapshot.ETag)
+	configuration.Etag = hex.EncodeToString(hash.Sum(nil))
 }
 
 func attachDeviceAgentConfiguration(result *gen.GetPluginsResult, configuration *gen.DeviceAgentConfiguration) {

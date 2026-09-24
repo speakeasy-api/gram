@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -128,8 +129,8 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 func buildTitleContext(messages []repo.ChatMessage) string {
 	var b strings.Builder
 	count := 0
-	for i := len(messages) - 1; i >= 0; i-- { // Start from the last message and work backwards to make sure we capture the most recent messages
-		msg := messages[i]
+	for _, msg := range slices.Backward(messages) { // Start from the last message and work backwards to make sure we capture the most recent messages
+
 		content := chat.StripLeadingEnvelopes(msg.Content)
 		if (msg.Role != "user" && msg.Role != "assistant") || content == "" {
 			continue

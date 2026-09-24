@@ -1,3 +1,6 @@
+import { useOrganization } from "@/contexts/Auth";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import {
   DetailSidebarInfoLabel,
   DetailSidebarNav,
@@ -11,12 +14,11 @@ import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { SetupGuideCard } from "@/components/setup-guide/SetupGuideCard";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Text } from "@/components/ui/Text";
+import { getMcpServerArgs } from "@/lib/sources";
 import {
-  getMcpServerArgs,
-  remoteMcpRouteParam,
-  tunneledMcpRouteParam,
-  unproxiedMcpRouteParam,
-} from "@/lib/sources";
+  mcpServerInstallPageLinks,
+  usePrivateMcpServerUrls,
+} from "@/hooks/usePrivateMcpServerUrls";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import { useRBAC } from "@/hooks/useRBAC";
 import { MCPServerStatusDropdown } from "@/pages/mcp/x/MCPServerDetails";
@@ -31,6 +33,7 @@ import { useRoutes } from "@/routes";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { useGetUnproxiedMcpServer } from "@gram/client/react-query/getUnproxiedMcpServer.js";
+import { McpServerNetworkAccessMode } from "@gram/client/models/components/mcpserver.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
@@ -46,11 +49,47 @@ import {
 import * as React from "react";
 import { useLocation, useParams } from "react-router";
 
+function SidebarUrl({
+  label,
+  url,
+  copyTooltip,
+}: {
+  label: string;
+  url: string;
+  copyTooltip: string;
+}): React.JSX.Element {
+  return (
+    <div className="flex flex-col gap-1">
+      <DetailSidebarInfoLabel>{label}</DetailSidebarInfoLabel>
+      <div className="flex items-start gap-1">
+        <Text
+          variant="small"
+          muted
+          className="line-clamp-2 font-mono text-xs break-all"
+        >
+          {url.replace(/^https?:\/\//, "")}
+        </Text>
+        <CopyButton
+          text={url}
+          size="xs"
+          tooltip={copyTooltip}
+          className="mt-[-2px] shrink-0"
+        />
+      </div>
+    </div>
+  );
+}
+
 export function McpServerXSidebarNav(): React.JSX.Element | null {
   const routes = useRoutes();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
-  const { hasScope } = useRBAC();
+  const { hasScope, hasAnyScope } = useRBAC();
+  const organization = useOrganization();
+  const pluginScope = usePluginQueryScope();
+  const canWritePlugins = usePluginWriteAccess();
+  const canReadPlugins =
+    canWritePlugins || hasAnyScope(["org:read", "org:admin"], organization.id);
 
   const idOrSlug = mcpServerSlug ?? "";
   const { data: mcpServer } = useGetMcpServer(
@@ -68,6 +107,29 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     endpoints,
     isLoadingEndpoints,
   );
+  const {
+    privateMcpUrls,
+    privateInstallPageUrls,
+    canReadPrivateUrls,
+    isLoading: isLoadingPrivateUrls,
+    isError: privateUrlsError,
+  } = usePrivateMcpServerUrls(mcpServer, endpoints);
+  const publicRoutesEnabled =
+    mcpServer?.networkAccessMode !== McpServerNetworkAccessMode.PrivateOnly;
+  const privateRoutesEnabled =
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
+  const effectiveInstallPageLinks = mcpServerInstallPageLinks(
+    mcpServer?.networkAccessMode,
+    installPageUrl,
+    privateInstallPageUrls,
+  );
+  const privateUrlAssessable =
+    canReadPrivateUrls && !isLoadingPrivateUrls && !privateUrlsError;
+  const serverUrlReady =
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly
+      ? privateMcpUrls.length > 0
+      : !!mcpUrl;
 
   const remoteMcpServerId = mcpServer?.remoteMcpServerId ?? "";
   const { data: remoteMcpServer } = useGetRemoteMcpServer(
@@ -95,8 +157,12 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   // Mirrors PluginStatusBanner's isTrulyPublished: server membership in a
   // plugin alone isn't "included" if the marketplace repo was never
   // published, since a teammate can't actually install it yet.
-  const { data: pluginsData } = usePlugins();
-  const { data: publishStatus } = usePublishStatus();
+  const { data: pluginsData } = usePlugins(pluginScope, undefined, {
+    enabled: canReadPlugins,
+  });
+  const { data: publishStatus } = usePublishStatus(pluginScope, undefined, {
+    enabled: canReadPlugins,
+  });
   const memberPlugins = (pluginsData?.plugins ?? []).filter((plugin) =>
     plugin.servers?.some((s) => s.mcpServerId === mcpServer?.id),
   );
@@ -114,7 +180,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const isUnproxied = !!mcpServer?.unproxiedMcpServerId;
   const isSourceBacked = isRemoteBacked || isTunneledBacked || isUnproxied;
   const canViewTeamAccess =
-    !!mcpServer && hasScope("org:read") && hasScope("mcp:read", mcpServer.id);
+    !!mcpServer &&
+    hasScope("org:read", organization.id) &&
+    hasScope("mcp:read", mcpServer.id);
 
   let authenticationDescription =
     "Attach a remote identity provider so users can access the upstream service.";
@@ -129,26 +197,15 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
       "Speakeasy authentication is configured; upstream identity providers are optional.";
   }
 
+  // Source detail pages are gone; the description still explains the backend,
+  // but there is no separate page to send anyone to.
   let sourceDescription = "Connect an MCP server as this server's source.";
-  let sourceHref = routes.sources.href();
   if (mcpServer?.remoteMcpServerId) {
     sourceDescription = "Backed by a remote MCP server.";
-    sourceHref = routes.sources.source.href(
-      "remotemcp",
-      remoteMcpRouteParam({ id: mcpServer.remoteMcpServerId }),
-    );
   } else if (mcpServer?.tunneledMcpServerId) {
     sourceDescription = "Backed by a tunneled MCP server.";
-    sourceHref = routes.sources.source.href(
-      "tunneledmcp",
-      tunneledMcpRouteParam({ id: mcpServer.tunneledMcpServerId }),
-    );
   } else if (mcpServer?.unproxiedMcpServerId) {
     sourceDescription = "Backed by an unproxied MCP server.";
-    sourceHref = routes.sources.source.href(
-      "unproxiedmcp",
-      unproxiedMcpRouteParam({ id: mcpServer.unproxiedMcpServerId }),
-    );
   }
 
   const readinessChecks: ReadinessCheck[] = mcpServer
@@ -158,10 +215,21 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           label: "Server URL",
           description: isUnproxied
             ? "Not applicable — unproxied servers have no Speakeasy-hosted endpoint."
-            : mcpUrl
-              ? "Endpoint is live and ready to connect to."
-              : "Add an endpoint so this server has a URL to connect to.",
-          ready: isUnproxied || !!mcpUrl,
+            : mcpServer.networkAccessMode ===
+                  McpServerNetworkAccessMode.PrivateOnly &&
+                !privateUrlAssessable
+              ? !canReadPrivateUrls
+                ? "Private URL visibility requires organization admin access."
+                : isLoadingPrivateUrls
+                  ? "Checking private URL availability."
+                  : "Private URL availability could not be checked."
+              : serverUrlReady
+                ? "Endpoint is live and ready to connect to."
+                : mcpServer.networkAccessMode ===
+                    McpServerNetworkAccessMode.PrivateOnly
+                  ? "Bring private ingress online so this server has a URL to connect to."
+                  : "Add an endpoint so this server has a URL to connect to.",
+          ready: isUnproxied || serverUrlReady,
           href: isUnproxied
             ? undefined
             : `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_SERVER_URL_SECTION_ID}`,
@@ -181,19 +249,22 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           label: "Source",
           description: sourceDescription,
           ready: isSourceBacked,
-          href: sourceHref,
         },
-        {
-          key: "plugin",
-          label: "Included in Plugin",
-          description: isTrulyIncluded
-            ? `Published to ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}.`
-            : isPluginMember
-              ? "Marketplace needs publishing before this plugin is installable."
-              : "Add this server to a plugin so your team can install it.",
-          ready: isTrulyIncluded,
-          href: routes.plugins.href(),
-        },
+        ...(canReadPlugins
+          ? [
+              {
+                key: "plugin",
+                label: "Included in Plugin",
+                description: isTrulyIncluded
+                  ? `Published to ${memberPlugins.length} plugin${memberPlugins.length > 1 ? "s" : ""}.`
+                  : isPluginMember
+                    ? "Marketplace needs publishing before this plugin is installable."
+                    : "Add this server to a plugin so your team can install it.",
+                ready: isTrulyIncluded,
+                href: routes.plugins.href(),
+              },
+            ]
+          : []),
       ]
     : [];
 
@@ -282,69 +353,76 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         <MCPServerStatusDropdown server={mcpServer} />
       </div>
 
-      {mcpUrl && (
+      {publicRoutesEnabled && mcpUrl && (
+        <SidebarUrl
+          label={privateRoutesEnabled ? "Public URL" : "URL"}
+          url={mcpUrl}
+          copyTooltip="Copy public URL"
+        />
+      )}
+
+      {privateRoutesEnabled &&
+        privateMcpUrls.map((url, index) => (
+          <SidebarUrl
+            key={url}
+            label={index === 0 ? "Private URL" : "Private URL (additional)"}
+            url={url}
+            copyTooltip="Copy private URL"
+          />
+        ))}
+
+      {privateRoutesEnabled && privateMcpUrls.length === 0 && (
         <div className="flex flex-col gap-1">
-          <DetailSidebarInfoLabel>URL</DetailSidebarInfoLabel>
-          <div className="flex items-start gap-1">
-            <Text
-              variant="small"
-              muted
-              className="line-clamp-2 font-mono text-xs break-all"
-            >
-              {mcpUrl.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={mcpUrl}
-              size="xs"
-              tooltip="Copy URL"
-              className="mt-[-2px] shrink-0"
-            />
-          </div>
+          <DetailSidebarInfoLabel>Private URL</DetailSidebarInfoLabel>
+          <Text variant="small" muted>
+            {isLoadingPrivateUrls
+              ? "Loading private URL…"
+              : !canReadPrivateUrls
+                ? "Available to organization admins while private ingress is online."
+                : privateUrlsError
+                  ? "Private URL could not be loaded."
+                  : "Bring private ingress online to use the private URL."}
+          </Text>
         </div>
       )}
 
       {upstreamUrl && (
-        <div className="flex flex-col gap-1">
-          <DetailSidebarInfoLabel>Upstream URL</DetailSidebarInfoLabel>
-          <div className="flex items-start gap-1">
-            <Text
-              variant="small"
-              muted
-              className="line-clamp-2 font-mono text-xs break-all"
-            >
-              {upstreamUrl.replace(/^https?:\/\//, "")}
-            </Text>
-            <CopyButton
-              text={upstreamUrl}
-              size="xs"
-              tooltip="Copy upstream URL"
-              className="mt-[-2px] shrink-0"
-            />
-          </div>
-        </div>
+        <SidebarUrl
+          label="Upstream URL"
+          url={upstreamUrl}
+          copyTooltip="Copy upstream URL"
+        />
       )}
 
-      <div className="border-border flex items-stretch border-t pt-3">
-        {installPageUrl ? (
-          <a
-            href={installPageUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground flex flex-1 items-center justify-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
-          >
-            Installation page
-            <ExternalLink className="h-3 w-3" />
-          </a>
+      {/* Content-sized halves with one gutter either side of the rule: at
+          flex-1 the rule sat at the container's midpoint, which the longer
+          label crowded while the shorter one left slack. */}
+      <div className="border-border flex items-stretch justify-center gap-3 border-t pt-3">
+        {effectiveInstallPageLinks.length > 0 ? (
+          <div className="flex flex-col items-center gap-1">
+            {effectiveInstallPageLinks.map(({ url, label }) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
+              >
+                {label}
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            ))}
+          </div>
         ) : (
-          <span className="text-muted-foreground/50 flex flex-1 cursor-not-allowed items-center justify-center gap-1 text-xs font-semibold">
-            Installation page
+          <span className="text-muted-foreground/50 flex cursor-not-allowed items-center gap-1 text-xs font-semibold">
+            Install page
             <ExternalLink className="h-3 w-3" />
           </span>
         )}
         <div className="bg-border w-px self-stretch" />
         {isUnproxied ? (
-          <span className="text-muted-foreground/50 flex flex-1 cursor-not-allowed items-center justify-center gap-1 text-xs font-semibold">
-            Test in Playground
+          <span className="text-muted-foreground/50 flex cursor-not-allowed items-center gap-1 text-xs font-semibold">
+            Playground
             <ArrowRight className="h-3 w-3" />
           </span>
         ) : (
@@ -354,10 +432,10 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
                 ? { mcpServer: mcpServer.id }
                 : undefined
             }
-            className="flex flex-1 items-center justify-center hover:no-underline"
+            className="flex items-center hover:no-underline"
           >
             <span className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors">
-              Test in Playground
+              Playground
               <ArrowRight className="h-3 w-3" />
             </span>
           </routes.playground.Link>

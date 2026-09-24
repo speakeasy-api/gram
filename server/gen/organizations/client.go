@@ -29,10 +29,12 @@ type Client struct {
 	VerifyOnboardingHooksSetupEndpoint         goa.Endpoint
 	SendEnterpriseAdminOnboardingEmailEndpoint goa.Endpoint
 	GenerateWorkOSAdminPortalLinkEndpoint      goa.Endpoint
+	ListSetupTasksEndpoint                     goa.Endpoint
+	UpdateSetupTaskEndpoint                    goa.Endpoint
 }
 
 // NewClient initializes a "organizations" service client given the endpoints.
-func NewClient(get, sendInvite, revokeInvite, updateInviteRole, listInvites, listUsers, removeUser, enableWebhooks, disableWebhooks, createPortalSession, getOnboardingStatus, verifyOnboardingHooksSetup, sendEnterpriseAdminOnboardingEmail, generateWorkOSAdminPortalLink goa.Endpoint) *Client {
+func NewClient(get, sendInvite, revokeInvite, updateInviteRole, listInvites, listUsers, removeUser, enableWebhooks, disableWebhooks, createPortalSession, getOnboardingStatus, verifyOnboardingHooksSetup, sendEnterpriseAdminOnboardingEmail, generateWorkOSAdminPortalLink, listSetupTasks, updateSetupTask goa.Endpoint) *Client {
 	return &Client{
 		GetEndpoint:                                get,
 		SendInviteEndpoint:                         sendInvite,
@@ -48,6 +50,8 @@ func NewClient(get, sendInvite, revokeInvite, updateInviteRole, listInvites, lis
 		VerifyOnboardingHooksSetupEndpoint:         verifyOnboardingHooksSetup,
 		SendEnterpriseAdminOnboardingEmailEndpoint: sendEnterpriseAdminOnboardingEmail,
 		GenerateWorkOSAdminPortalLinkEndpoint:      generateWorkOSAdminPortalLink,
+		ListSetupTasksEndpoint:                     listSetupTasks,
+		UpdateSetupTaskEndpoint:                    updateSetupTask,
 	}
 }
 
@@ -350,4 +354,50 @@ func (c *Client) GenerateWorkOSAdminPortalLink(ctx context.Context, p *GenerateW
 		return
 	}
 	return ires.(*GenerateWorkOSAdminPortalLinkResult), nil
+}
+
+// ListSetupTasks calls the "listSetupTasks" endpoint of the "organizations"
+// service.
+// ListSetupTasks may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListSetupTasks(ctx context.Context, p *ListSetupTasksPayload) (res *ListSetupTasksResult, err error) {
+	var ires any
+	ires, err = c.ListSetupTasksEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListSetupTasksResult), nil
+}
+
+// UpdateSetupTask calls the "updateSetupTask" endpoint of the "organizations"
+// service.
+// UpdateSetupTask may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateSetupTask(ctx context.Context, p *UpdateSetupTaskPayload) (res *SetupTask, err error) {
+	var ires any
+	ires, err = c.UpdateSetupTaskEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SetupTask), nil
 }

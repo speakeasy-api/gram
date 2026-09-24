@@ -13,6 +13,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -72,6 +74,61 @@ func TestToolsetsService_GetToolset_Success(t *testing.T) {
 	afterCount, err := audittest.AuditLogCount(ctx, ti.conn)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount, afterCount)
+}
+
+func TestToolsetsService_GetToolset_ExternalOAuthResponseSources(t *testing.T) {
+	t.Parallel()
+
+	t.Run("issuer only", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestToolsetsService(t)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		issuer := "https://auth.example.com/Tenant/CaseSensitive"
+		external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{
+			Slug: "issuer-response", AuthorizationServerIssuer: &issuer,
+		})
+
+		result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: types.Slug(external.Toolset.Slug)})
+		require.NoError(t, err)
+		require.NotNil(t, result.ExternalOauthServer)
+		require.Nil(t, result.ExternalOauthServer.Metadata)
+		require.Equal(t, issuer, *result.ExternalOauthServer.AuthorizationServerIssuer)
+	})
+
+	t.Run("metadata-based configuration", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestToolsetsService(t)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{Slug: "metadata-response"})
+
+		result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: types.Slug(external.Toolset.Slug)})
+		require.NoError(t, err)
+		require.NotNil(t, result.ExternalOauthServer)
+		require.NotNil(t, result.ExternalOauthServer.Metadata)
+		require.Nil(t, result.ExternalOauthServer.AuthorizationServerIssuer)
+	})
+
+	t.Run("missing row does not produce phantom object", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestToolsetsService(t)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		external := oauthtest.CreateExternalOAuthToolset(t, ctx, ti.conn, authCtx, oauthtest.ExternalOAuthToolsetOpts{Slug: "missing-response"})
+		_, err := oauthRepo.New(ti.conn).DeleteExternalOAuthServerMetadata(ctx, oauthRepo.DeleteExternalOAuthServerMetadataParams{
+			ProjectID: external.ServerMetadata.ProjectID,
+			ID:        external.ServerMetadata.ID,
+		})
+		require.NoError(t, err)
+
+		result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{Slug: types.Slug(external.Toolset.Slug)})
+		require.NoError(t, err)
+		require.Nil(t, result.ExternalOauthServer)
+	})
 }
 
 func TestToolsetsService_GetToolset_IncludesOrigin(t *testing.T) {

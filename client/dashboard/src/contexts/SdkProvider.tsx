@@ -1,7 +1,7 @@
 import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
 import { isProjectOverviewQueryKey } from "@/components/project/projectOverviewQuery";
 import {
-  capturePreservedStorage,
+  capturePreservedStorageIfSafe,
   clearStorageForLogout,
   type PreservedStorage,
 } from "@/lib/logout-storage";
@@ -9,8 +9,6 @@ import { getApiBaseURL } from "@/lib/utils";
 import { datadogRum } from "@datadog/browser-rum";
 import { Gram } from "@gram/client";
 import { HTTPClient } from "@gram/client/lib/http.js";
-import { buildLatestDeploymentQuery } from "@gram/client/react-query/latestDeployment.core.js";
-import { buildListToolsetsQuery } from "@gram/client/react-query/listToolsets.core.js";
 import { GramProvider } from "@gram/client/react-query/_context.js";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
@@ -44,7 +42,10 @@ export const SdkProvider = ({
     // hook below runs, so anything meant to outlive the session has to be read
     // off localStorage before the request is sent. Keyed by request so
     // overlapping logouts — a double-clicked menu item — each restore their own
-    // snapshot rather than racing over one slot.
+    // snapshot rather than racing over one slot. capturePreservedStorageIfSafe
+    // returns the last safe snapshot while impersonating (it does not write
+    // a new backup). The backup is written by a prior safe capture so
+    // impersonation exit can time out and still restore after Clear-Site-Data.
     const preservedAcrossLogout = new WeakMap<Request, PreservedStorage>();
 
     const httpClient = new HTTPClient({
@@ -70,7 +71,7 @@ export const SdkProvider = ({
 
     httpClient.addHook("beforeRequest", (request) => {
       if (new URL(request.url).pathname === LOGOUT_PATH) {
-        preservedAcrossLogout.set(request, capturePreservedStorage());
+        preservedAcrossLogout.set(request, capturePreservedStorageIfSafe());
       }
     });
 
@@ -100,16 +101,6 @@ export const SdkProvider = ({
       serverURL: getApiBaseURL(),
       httpClient,
     });
-
-    // Prefetch key queries immediately so they run in parallel with auth.info
-    // instead of waiting for auth to resolve before components mount and fire them.
-    // Only prefetch when the user is actually on a project route — the
-    // "default" fallback used for org-scoped pages shouldn't trigger work the
-    // user will never see.
-    if (pathProjectSlug) {
-      void queryClient.prefetchQuery(buildLatestDeploymentQuery(gram));
-      void queryClient.prefetchQuery(buildListToolsetsQuery(gram));
-    }
 
     return gram;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- telemetry is stable context value; including it would recreate the SDK client unnecessarily

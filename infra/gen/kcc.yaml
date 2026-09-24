@@ -56,6 +56,50 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-meter-reading
+    name: gram-metering-v1-meter-reading
+    spec:
+      definition: |
+        edition = "2024";
+        message MeterReading {
+          enum Kind {
+            KIND_UNSPECIFIED = 0;
+            KIND_USAGE = 1;
+            KIND_ADJUSTMENT = 2;
+          }
+          string id = 1;
+          string organization_id = 2;
+          string project_id = 3;
+          string meter_id = 4;
+          string operation_id = 5;
+          string unit = 6;
+          int64 value = 7;
+          string occurred_at = 8;
+          map<string, string> attributes = 9;
+          string corrects_reading_id = 10;
+          uint32 meter_version = 11;
+          Kind kind = 12;
+          string produced_at = 13;
+          string measurement_method = 14;
+          string adjustment_reason = 15;
+          string source = 16;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-networkingress-v1-reconcile-requested
+    name: gram-networkingress-v1-reconcile-requested
+    spec:
+      definition: |
+        edition = "2024";
+        message ReconcileRequested {
+          string ingress_id = 1;
+          string temporal_task_queue = 2;
+          string organization_id = 3;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record
     spec:
@@ -122,6 +166,171 @@ pubsub:
             SEVERITY_NUMBER_FATAL2 = 22;
             SEVERITY_NUMBER_FATAL3 = 23;
             SEVERITY_NUMBER_FATAL4 = 24;
+          }
+          message AnyValue {
+            reserved 8;
+            oneof value {
+              string string_value = 1;
+              bool bool_value = 2;
+              int64 int_value = 3;
+              double double_value = 4;
+              ArrayValue array_value = 5;
+              KeyValueList kvlist_value = 6;
+              bytes bytes_value = 7;
+            }
+          }
+          message ArrayValue {
+            repeated AnyValue values = 1;
+          }
+          message KeyValueList {
+            repeated KeyValue values = 1;
+          }
+          message KeyValue {
+            reserved 3;
+            string key = 1;
+            AnyValue value = 2;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-metric
+    name: gram-otel-v1-inbound-metric
+    spec:
+      definition: |
+        edition = "2024";
+        message InboundMetric {
+          reserved 4, 6, 8;
+          string name = 1;
+          string description = 2;
+          string unit = 3;
+          oneof data {
+            Gauge gauge = 5;
+            Sum sum = 7;
+            Histogram histogram = 9;
+            ExponentialHistogram exponential_histogram = 10;
+            Summary summary = 11;
+          }
+          repeated KeyValue metadata = 12;
+          Resource resource = 1000;
+          string resource_schema_url = 1001;
+          InstrumentationScope scope = 1002;
+          string scope_schema_url = 1003;
+          Provenance provenance = 1004;
+          message Provenance {
+            string source = 1;
+            string organization_id = 2;
+            string project_id = 3;
+          }
+          message Resource {
+            reserved 3;
+            repeated KeyValue attributes = 1;
+            uint32 dropped_attributes_count = 2;
+          }
+          message InstrumentationScope {
+            string name = 1;
+            string version = 2;
+            repeated KeyValue attributes = 3;
+            uint32 dropped_attributes_count = 4;
+          }
+          message Gauge {
+            repeated NumberDataPoint data_points = 1;
+          }
+          message Sum {
+            repeated NumberDataPoint data_points = 1;
+            AggregationTemporality aggregation_temporality = 2;
+            bool is_monotonic = 3;
+          }
+          message Histogram {
+            repeated HistogramDataPoint data_points = 1;
+            AggregationTemporality aggregation_temporality = 2;
+          }
+          message ExponentialHistogram {
+            repeated ExponentialHistogramDataPoint data_points = 1;
+            AggregationTemporality aggregation_temporality = 2;
+          }
+          message Summary {
+            repeated SummaryDataPoint data_points = 1;
+          }
+          enum AggregationTemporality {
+            AGGREGATION_TEMPORALITY_UNSPECIFIED = 0;
+            AGGREGATION_TEMPORALITY_DELTA = 1;
+            AGGREGATION_TEMPORALITY_CUMULATIVE = 2;
+          }
+          enum DataPointFlags {
+            DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED = 0;
+            DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK = 1;
+          }
+          message NumberDataPoint {
+            reserved 1;
+            repeated KeyValue attributes = 7;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            oneof value {
+              double as_double = 4;
+              sfixed64 as_int = 6;
+            }
+            repeated Exemplar exemplars = 5;
+            uint32 flags = 8;
+          }
+          message HistogramDataPoint {
+            reserved 1;
+            repeated KeyValue attributes = 9;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            fixed64 count = 4;
+            double sum = 5;
+            repeated fixed64 bucket_counts = 6;
+            repeated double explicit_bounds = 7;
+            repeated Exemplar exemplars = 8;
+            uint32 flags = 10;
+            double min = 11;
+            double max = 12;
+          }
+          message ExponentialHistogramDataPoint {
+            repeated KeyValue attributes = 1;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            fixed64 count = 4;
+            double sum = 5;
+            sint32 scale = 6;
+            fixed64 zero_count = 7;
+            Buckets positive = 8;
+            Buckets negative = 9;
+            uint32 flags = 10;
+            repeated Exemplar exemplars = 11;
+            double min = 12;
+            double max = 13;
+            double zero_threshold = 14;
+            message Buckets {
+              sint32 offset = 1;
+              repeated uint64 bucket_counts = 2;
+            }
+          }
+          message SummaryDataPoint {
+            reserved 1;
+            repeated KeyValue attributes = 7;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            fixed64 count = 4;
+            double sum = 5;
+            repeated ValueAtQuantile quantile_values = 6;
+            uint32 flags = 8;
+            message ValueAtQuantile {
+              double quantile = 1;
+              double value = 2;
+            }
+          }
+          message Exemplar {
+            reserved 1;
+            repeated KeyValue filtered_attributes = 7;
+            fixed64 time_unix_nano = 2;
+            oneof value {
+              double as_double = 3;
+              sfixed64 as_int = 6;
+            }
+            bytes span_id = 4;
+            bytes trace_id = 5;
           }
           message AnyValue {
             reserved 8;
@@ -351,6 +560,171 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-metric
+    name: gram-otel-v1-metric
+    spec:
+      definition: |
+        edition = "2024";
+        message Metric {
+          reserved 4, 6, 8;
+          string name = 1;
+          string description = 2;
+          string unit = 3;
+          oneof data {
+            Gauge gauge = 5;
+            Sum sum = 7;
+            Histogram histogram = 9;
+            ExponentialHistogram exponential_histogram = 10;
+            Summary summary = 11;
+          }
+          repeated KeyValue metadata = 12;
+          Resource resource = 1000;
+          string resource_schema_url = 1001;
+          InstrumentationScope scope = 1002;
+          string scope_schema_url = 1003;
+          Provenance provenance = 1004;
+          message Provenance {
+            string source = 1;
+            string organization_id = 2;
+            string project_id = 3;
+          }
+          message Resource {
+            reserved 3;
+            repeated KeyValue attributes = 1;
+            uint32 dropped_attributes_count = 2;
+          }
+          message InstrumentationScope {
+            string name = 1;
+            string version = 2;
+            repeated KeyValue attributes = 3;
+            uint32 dropped_attributes_count = 4;
+          }
+          message Gauge {
+            repeated NumberDataPoint data_points = 1;
+          }
+          message Sum {
+            repeated NumberDataPoint data_points = 1;
+            AggregationTemporality aggregation_temporality = 2;
+            bool is_monotonic = 3;
+          }
+          message Histogram {
+            repeated HistogramDataPoint data_points = 1;
+            AggregationTemporality aggregation_temporality = 2;
+          }
+          message ExponentialHistogram {
+            repeated ExponentialHistogramDataPoint data_points = 1;
+            AggregationTemporality aggregation_temporality = 2;
+          }
+          message Summary {
+            repeated SummaryDataPoint data_points = 1;
+          }
+          enum AggregationTemporality {
+            AGGREGATION_TEMPORALITY_UNSPECIFIED = 0;
+            AGGREGATION_TEMPORALITY_DELTA = 1;
+            AGGREGATION_TEMPORALITY_CUMULATIVE = 2;
+          }
+          enum DataPointFlags {
+            DATA_POINT_FLAGS_DO_NOT_USE_UNSPECIFIED = 0;
+            DATA_POINT_FLAGS_NO_RECORDED_VALUE_MASK = 1;
+          }
+          message NumberDataPoint {
+            reserved 1;
+            repeated KeyValue attributes = 7;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            oneof value {
+              double as_double = 4;
+              sfixed64 as_int = 6;
+            }
+            repeated Exemplar exemplars = 5;
+            uint32 flags = 8;
+          }
+          message HistogramDataPoint {
+            reserved 1;
+            repeated KeyValue attributes = 9;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            fixed64 count = 4;
+            double sum = 5;
+            repeated fixed64 bucket_counts = 6;
+            repeated double explicit_bounds = 7;
+            repeated Exemplar exemplars = 8;
+            uint32 flags = 10;
+            double min = 11;
+            double max = 12;
+          }
+          message ExponentialHistogramDataPoint {
+            repeated KeyValue attributes = 1;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            fixed64 count = 4;
+            double sum = 5;
+            sint32 scale = 6;
+            fixed64 zero_count = 7;
+            Buckets positive = 8;
+            Buckets negative = 9;
+            uint32 flags = 10;
+            repeated Exemplar exemplars = 11;
+            double min = 12;
+            double max = 13;
+            double zero_threshold = 14;
+            message Buckets {
+              sint32 offset = 1;
+              repeated uint64 bucket_counts = 2;
+            }
+          }
+          message SummaryDataPoint {
+            reserved 1;
+            repeated KeyValue attributes = 7;
+            fixed64 start_time_unix_nano = 2;
+            fixed64 time_unix_nano = 3;
+            fixed64 count = 4;
+            double sum = 5;
+            repeated ValueAtQuantile quantile_values = 6;
+            uint32 flags = 8;
+            message ValueAtQuantile {
+              double quantile = 1;
+              double value = 2;
+            }
+          }
+          message Exemplar {
+            reserved 1;
+            repeated KeyValue filtered_attributes = 7;
+            fixed64 time_unix_nano = 2;
+            oneof value {
+              double as_double = 3;
+              sfixed64 as_int = 6;
+            }
+            bytes span_id = 4;
+            bytes trace_id = 5;
+          }
+          message AnyValue {
+            reserved 8;
+            oneof value {
+              string string_value = 1;
+              bool bool_value = 2;
+              int64 int_value = 3;
+              double double_value = 4;
+              ArrayValue array_value = 5;
+              KeyValueList kvlist_value = 6;
+              bytes bytes_value = 7;
+            }
+          }
+          message ArrayValue {
+            repeated AnyValue values = 1;
+          }
+          message KeyValueList {
+            repeated KeyValue values = 1;
+          }
+          message KeyValue {
+            reserved 3;
+            string key = 1;
+            AnyValue value = 2;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span
     name: gram-otel-v1-span
     spec:
@@ -490,6 +864,18 @@ pubsub:
           repeated ToolCall tool_calls = 10;
           repeated string custom_rule_ids = 11;
           string content_part_id = 12;
+          string chat_id = 13;
+          string parent_chat_message_id = 14;
+          string origin_risk_policy_id = 15;
+          int64 origin_risk_policy_version = 16;
+          string message_link_reason = 17;
+          string execution_path = 18;
+          string tool_call_id = 19;
+          string tool_name = 20;
+          string hook_source = 21;
+          string user_id = 22;
+          string policy_link_reason = 23;
+          string external_conversation_id = 24;
           message ToolCall {
             string name = 1;
             string arguments = 2;
@@ -504,6 +890,38 @@ pubsub:
       definition: |
         edition = "2024";
         message Finding {
+          enum EnforcementOutcome {
+            ENFORCEMENT_OUTCOME_UNSPECIFIED = 0;
+            ENFORCEMENT_OUTCOME_LOGGED = 1;
+            ENFORCEMENT_OUTCOME_DENIED = 2;
+            ENFORCEMENT_OUTCOME_WITHHELD = 3;
+            ENFORCEMENT_OUTCOME_WARNED_PENDING = 4;
+            ENFORCEMENT_OUTCOME_WARNED_ACKNOWLEDGED = 5;
+            ENFORCEMENT_OUTCOME_WARNED_ABANDONED = 6;
+            ENFORCEMENT_OUTCOME_QUARANTINED = 7;
+          }
+          message Attribution {
+            string chat_id = 1;
+            string user_id = 2;
+            string external_user_id = 3;
+            string assistant_id = 4;
+            string message_created_at = 5;
+            string chat_source = 6;
+            string team = 7;
+            string user_email = 8;
+          }
+          message Execution {
+            string execution_id = 1;
+            string mcp_server_id = 2;
+            string meta_mcp_server_id = 3;
+            string toolset_id = 4;
+            string tool_name = 5;
+            string phase = 6;
+            string mediation_surface = 7;
+            string method = 8;
+            string principal_kind = 9;
+            bool identity_stamped = 10;
+          }
           string id = 1;
           string request_id = 2;
           string chat_message_id = 3;
@@ -530,6 +948,11 @@ pubsub:
           string excluded_at = 24;
           string excluded_reason = 25;
           string excluded_detail = 26;
+          string event_kind = 27;
+          bool shadow = 28;
+          Attribution attribution = 29;
+          Execution execution = 30;
+          EnforcementOutcome enforcement_outcome = 31;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -550,6 +973,139 @@ pubsub:
           string reply_urn = 8;
           string content = 9;
           string content_part_id = 10;
+          string chat_id = 11;
+          string parent_chat_message_id = 12;
+          string origin_risk_policy_id = 13;
+          int64 origin_risk_policy_version = 14;
+          string message_link_reason = 15;
+          string execution_path = 16;
+          string tool_call_id = 17;
+          string tool_name = 18;
+          string hook_source = 19;
+          string user_id = 20;
+          string message_type = 21;
+          string policy_link_reason = 22;
+          string external_conversation_id = 23;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-gitleaks-enforcement
+    name: gram-risk-v1-gitleaks-enforcement
+    spec:
+      definition: |
+        edition = "2024";
+        message GitleaksEnforcement {
+          reserved 8;
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          string content = 9;
+          string content_part_id = 10;
+          string chat_id = 11;
+          string parent_chat_message_id = 12;
+          string origin_risk_policy_id = 13;
+          int64 origin_risk_policy_version = 14;
+          string message_link_reason = 15;
+          string execution_path = 16;
+          string tool_call_id = 17;
+          string tool_name = 18;
+          string hook_source = 19;
+          string user_id = 20;
+          string message_type = 21;
+          string policy_link_reason = 22;
+          string external_conversation_id = 23;
+          bool content_truncated = 24;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-analysis
+    name: gram-risk-v1-llm-analysis
+    spec:
+      definition: |
+        edition = "2024";
+        message LLMAnalysis {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          string content = 8;
+          string user_id = 9;
+          string message_type = 10;
+          string body = 11;
+          string tool_name = 12;
+          repeated ToolCall tool_calls = 13;
+          string content_part_id = 14;
+          string chat_id = 15;
+          string parent_chat_message_id = 16;
+          string origin_risk_policy_id = 17;
+          int64 origin_risk_policy_version = 18;
+          string message_link_reason = 19;
+          string execution_path = 20;
+          string tool_call_id = 21;
+          string hook_source = 22;
+          string policy_link_reason = 23;
+          string external_conversation_id = 24;
+          string organization_slug = 25;
+          repeated string sources = 26;
+          bool content_truncated = 27;
+          bool shadow = 28;
+          message ToolCall {
+            string id = 1;
+            string name = 2;
+            string arguments = 3;
+          }
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-enforcement
+    name: gram-risk-v1-llm-enforcement
+    spec:
+      definition: |
+        edition = "2024";
+        message LLMEnforcement {
+          reserved 8;
+          reserved reply_urn;
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          string content = 9;
+          string content_part_id = 10;
+          string chat_id = 11;
+          string parent_chat_message_id = 12;
+          string origin_risk_policy_id = 13;
+          int64 origin_risk_policy_version = 14;
+          string message_link_reason = 15;
+          string execution_path = 16;
+          string tool_call_id = 17;
+          string tool_name = 18;
+          string hook_source = 19;
+          string user_id = 20;
+          string message_type = 21;
+          string policy_link_reason = 22;
+          string external_conversation_id = 23;
+          bool content_truncated = 24;
+          string body = 25;
+          repeated ToolCall tool_calls = 26;
+          string organization_slug = 27;
+          message ToolCall {
+            string id = 1;
+            string name = 2;
+            string arguments = 3;
+          }
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -572,6 +1128,59 @@ pubsub:
           repeated string entities = 10;
           double score_threshold = 11;
           string content_part_id = 12;
+          string chat_id = 13;
+          string parent_chat_message_id = 14;
+          string origin_risk_policy_id = 15;
+          int64 origin_risk_policy_version = 16;
+          string message_link_reason = 17;
+          string execution_path = 18;
+          string tool_call_id = 19;
+          string tool_name = 20;
+          string hook_source = 21;
+          string user_id = 22;
+          string message_type = 23;
+          bytes meter_reading = 24;
+          string policy_link_reason = 25;
+          string finding_surface = 26;
+          string external_conversation_id = 27;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-presidio-enforcement
+    name: gram-risk-v1-presidio-enforcement
+    spec:
+      definition: |
+        edition = "2024";
+        message PresidioEnforcement {
+          string request_id = 1;
+          string chat_message_id = 2;
+          string project_id = 3;
+          string organization_id = 4;
+          string risk_policy_id = 5;
+          int64 risk_policy_version = 6;
+          string created_at = 7;
+          reserved 8;
+          reserved reply_urn;
+          string content = 9;
+          string content_part_id = 10;
+          repeated string entities = 11;
+          double score_threshold = 12;
+          string chat_id = 13;
+          string parent_chat_message_id = 14;
+          string origin_risk_policy_id = 15;
+          int64 origin_risk_policy_version = 16;
+          string message_link_reason = 17;
+          string execution_path = 18;
+          string tool_call_id = 19;
+          string tool_name = 20;
+          string hook_source = 21;
+          string user_id = 22;
+          string message_type = 23;
+          bytes meter_reading = 24;
+          string policy_link_reason = 25;
+          string external_conversation_id = 26;
+          bool content_truncated = 27;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -597,6 +1206,18 @@ pubsub:
           string tool_name = 13;
           repeated ToolCall tool_calls = 14;
           string content_part_id = 15;
+          string chat_id = 24;
+          string parent_chat_message_id = 25;
+          string origin_risk_policy_id = 18;
+          int64 origin_risk_policy_version = 19;
+          string message_link_reason = 20;
+          string execution_path = 21;
+          string tool_call_id = 22;
+          string hook_source = 23;
+          string policy_link_reason = 26;
+          string external_conversation_id = 27;
+          string prior_user_request = 16;
+          string recent_untrusted_content = 17;
           message ToolCall {
             string name = 1;
             string arguments = 2;
@@ -627,6 +1248,16 @@ pubsub:
           string tool_name = 14;
           repeated ToolCall tool_calls = 15;
           string content_part_id = 16;
+          string chat_id = 17;
+          string parent_chat_message_id = 18;
+          string origin_risk_policy_id = 19;
+          int64 origin_risk_policy_version = 20;
+          string message_link_reason = 21;
+          string execution_path = 22;
+          string tool_call_id = 23;
+          string hook_source = 24;
+          string policy_link_reason = 25;
+          string external_conversation_id = 26;
           message ToolCall {
             string name = 1;
             string arguments = 2;
@@ -695,6 +1326,92 @@ pubsub:
         name: gram-authz-v1-challenge
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-meter-reading-ch-writer
+      topic_proto_message: gram-metering-v1-meter-reading
+    name: gram-metering-v1-meter-reading-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-metering-v1-meter-reading-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 345600s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-metering-v1-meter-reading
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-meter-reading-stripe-exporter
+      topic_proto_message: gram-metering-v1-meter-reading
+    name: gram-metering-v1-meter-reading-stripe-exporter
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 345600s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-metering-v1-meter-reading
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-networkingress-v1-reconciler
+      topic_proto_message: gram-networkingress-v1-reconcile-requested
+    name: gram-networkingress-v1-reconciler
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-networkingress-v1-reconciler-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-networkingress-v1-reconcile-requested
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-agent-event-log-ch-writer
+      topic_proto_message: gram-otel-v1-log-record
+    name: gram-otel-v1-agent-event-log-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-agent-event-log-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-agent-event-span-ch-writer
+      topic_proto_message: gram-otel-v1-span
+    name: gram-otel-v1-agent-event-span-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-agent-event-span-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-span
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record-transformer
       topic_proto_message: gram-otel-v1-inbound-log-record
     name: gram-otel-v1-inbound-log-record-transformer
@@ -711,6 +1428,24 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-otel-v1-inbound-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-metric-transformer
+      topic_proto_message: gram-otel-v1-inbound-metric
+    name: gram-otel-v1-inbound-metric-transformer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-inbound-metric-transformer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-inbound-metric
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-span-transformer
@@ -731,6 +1466,24 @@ pubsub:
         name: gram-otel-v1-inbound-span
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-log-event-ch-writer
+      topic_proto_message: gram-otel-v1-log-record
+    name: gram-otel-v1-log-event-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-log-event-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-relay
       topic_proto_message: gram-otel-v1-log-record
     name: gram-otel-v1-log-relay
@@ -747,6 +1500,42 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-otel-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-metric-relay
+      topic_proto_message: gram-otel-v1-metric
+    name: gram-otel-v1-metric-relay
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-metric-relay-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-metric
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-span-event-ch-writer
+      topic_proto_message: gram-otel-v1-span
+    name: gram-otel-v1-span-event-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-otel-v1-span-event-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-otel-v1-span
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span-relay
@@ -831,6 +1620,24 @@ pubsub:
         name: gram-risk-v1-finding
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-finding-otel-relay
+      topic_proto_message: gram-risk-v1-finding
+    name: gram-risk-v1-finding-otel-relay
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-risk-v1-finding-otel-relay-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-finding
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-gitleaks-analyzer
       topic_proto_message: gram-risk-v1-gitleaks-analysis
     name: gram-risk-v1-gitleaks-analyzer
@@ -845,6 +1652,56 @@ pubsub:
         name: gram-risk-v1-gitleaks-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-gitleaks-enforcer
+      topic_proto_message: gram-risk-v1-gitleaks-enforcement
+    name: gram-risk-v1-gitleaks-enforcer
+    spec:
+      ackDeadlineSeconds: 10
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-risk-v1-gitleaks-enforcer-dlq
+        maxDeliveryAttempts: 5
+      messageRetentionDuration: 600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-gitleaks-enforcement
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-analyzer
+      topic_proto_message: gram-risk-v1-llm-analysis
+    name: gram-risk-v1-llm-analyzer
+    spec:
+      ackDeadlineSeconds: 60
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-llm-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-enforcer
+      topic_proto_message: gram-risk-v1-llm-enforcement
+    name: gram-risk-v1-llm-enforcer
+    spec:
+      ackDeadlineSeconds: 30
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-risk-v1-llm-enforcer-dlq
+        maxDeliveryAttempts: 5
+      messageRetentionDuration: 600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-llm-enforcement
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-analyzer
       topic_proto_message: gram-risk-v1-presidio-analysis
     name: gram-risk-v1-presidio-analyzer
@@ -857,6 +1714,24 @@ pubsub:
         minimumBackoff: 10s
       topicRef:
         name: gram-risk-v1-presidio-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-presidio-enforcer
+      topic_proto_message: gram-risk-v1-presidio-enforcement
+    name: gram-risk-v1-presidio-enforcer
+    spec:
+      ackDeadlineSeconds: 10
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-risk-v1-presidio-enforcer-dlq
+        maxDeliveryAttempts: 5
+      messageRetentionDuration: 600s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-risk-v1-presidio-enforcement
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-prompt-injection-analyzer
@@ -901,6 +1776,24 @@ pubsub:
         name: gram-telemetry-v1-log-record
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-tool-call-log-relay
+      topic_proto_message: gram-telemetry-v1-log-record
+    name: gram-telemetry-v1-tool-call-log-relay
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-telemetry-v1-tool-call-log-relay-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-telemetry-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-svix-relay
       topic_proto_message: gram-webhooks-v1-event
     name: gram-webhooks-v1-svix-relay
@@ -933,7 +1826,56 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-authz-v1-challenge-ch-writer
     name: gram-authz-v1-challenge-ch-writer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-meter-reading
+    name: gram-metering-v1-meter-reading
+    spec:
+      messageRetentionDuration: 345600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-metering-v1-meter-reading
+  - labels:
+      dlq_for: gram-metering-v1-meter-reading-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-metering-v1-meter-reading-ch-writer
+    name: gram-metering-v1-meter-reading-ch-writer-dlq
+    spec:
+      messageRetentionDuration: 345600s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-networkingress-v1-reconcile-requested
+    name: gram-networkingress-v1-reconcile-requested
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-networkingress-v1-reconcile-requested
+  - labels:
+      dlq_for: gram-networkingress-v1-reconciler
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-networkingress-v1-reconciler
+    name: gram-networkingress-v1-reconciler-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      dlq_for: gram-otel-v1-agent-event-log-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-agent-event-log-ch-writer
+    name: gram-otel-v1-agent-event-log-ch-writer-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      dlq_for: gram-otel-v1-agent-event-span-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-agent-event-span-ch-writer
+    name: gram-otel-v1-agent-event-span-ch-writer-dlq
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record
@@ -948,7 +1890,25 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-log-record-transformer
     name: gram-otel-v1-inbound-log-record-transformer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-metric
+    name: gram-otel-v1-inbound-metric
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-otel-v1-inbound-metric
+  - labels:
+      dlq_for: gram-otel-v1-inbound-metric-transformer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-inbound-metric-transformer
+    name: gram-otel-v1-inbound-metric-transformer-dlq
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-span
@@ -963,7 +1923,15 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-inbound-span-transformer
     name: gram-otel-v1-inbound-span-transformer-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      dlq_for: gram-otel-v1-log-event-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-log-event-ch-writer
+    name: gram-otel-v1-log-event-ch-writer-dlq
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-record
@@ -979,7 +1947,25 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-log-relay
     name: gram-otel-v1-log-relay-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-metric
+    name: gram-otel-v1-metric
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-otel-v1-metric
+  - labels:
+      dlq_for: gram-otel-v1-metric-relay
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-metric-relay
+    name: gram-otel-v1-metric-relay-dlq
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span
@@ -991,11 +1977,19 @@ pubsub:
         schemaRef:
           name: gram-otel-v1-span
   - labels:
+      dlq_for: gram-otel-v1-span-event-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-otel-v1-span-event-ch-writer
+    name: gram-otel-v1-span-event-ch-writer-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
       dlq_for: gram-otel-v1-span-relay
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-otel-v1-span-relay
     name: gram-otel-v1-span-relay-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-message
@@ -1011,13 +2005,15 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-processor
     name: gram-ping-v2-processor-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 3600s
   - labels:
       dlq_for: gram-ping-v2-py-processor
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-ping-v2-py-processor
     name: gram-ping-v2-py-processor-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 3600s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
@@ -1039,6 +2035,13 @@ pubsub:
         schemaRef:
           name: gram-risk-v1-finding
   - labels:
+      dlq_for: gram-risk-v1-finding-otel-relay
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-finding-otel-relay
+    name: gram-risk-v1-finding-otel-relay-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-gitleaks-analysis
     name: gram-risk-v1-gitleaks-analysis
@@ -1050,6 +2053,50 @@ pubsub:
           name: gram-risk-v1-gitleaks-analysis
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-gitleaks-enforcement
+    name: gram-risk-v1-gitleaks-enforcement
+    spec:
+      messageRetentionDuration: 600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-gitleaks-enforcement
+  - labels:
+      dlq_for: gram-risk-v1-gitleaks-enforcer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-gitleaks-enforcer
+    name: gram-risk-v1-gitleaks-enforcer-dlq
+    spec:
+      messageRetentionDuration: 600s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-analysis
+    name: gram-risk-v1-llm-analysis
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-llm-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-enforcement
+    name: gram-risk-v1-llm-enforcement
+    spec:
+      messageRetentionDuration: 600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-llm-enforcement
+  - labels:
+      dlq_for: gram-risk-v1-llm-enforcer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-llm-enforcer
+    name: gram-risk-v1-llm-enforcer-dlq
+    spec:
+      messageRetentionDuration: 600s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-presidio-analysis
     name: gram-risk-v1-presidio-analysis
     spec:
@@ -1058,6 +2105,23 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-risk-v1-presidio-analysis
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-presidio-enforcement
+    name: gram-risk-v1-presidio-enforcement
+    spec:
+      messageRetentionDuration: 600s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-risk-v1-presidio-enforcement
+  - labels:
+      dlq_for: gram-risk-v1-presidio-enforcer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-risk-v1-presidio-enforcer
+    name: gram-risk-v1-presidio-enforcer-dlq
+    spec:
+      messageRetentionDuration: 600s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-prompt-injection-analysis
@@ -1089,6 +2153,13 @@ pubsub:
         schemaRef:
           name: gram-telemetry-v1-log-record
   - labels:
+      dlq_for: gram-telemetry-v1-tool-call-log-relay
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-tool-call-log-relay
+    name: gram-telemetry-v1-tool-call-log-relay-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-event
     name: gram-webhooks-v1-event
@@ -1103,4 +2174,5 @@ pubsub:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-svix-relay
     name: gram-webhooks-v1-svix-relay-dlq
-    spec: {}
+    spec:
+      messageRetentionDuration: 604800s

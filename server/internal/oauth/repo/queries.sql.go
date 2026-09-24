@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createExternalOAuthServerMetadata = `-- name: CreateExternalOAuthServerMetadata :one
@@ -16,29 +17,83 @@ const createExternalOAuthServerMetadata = `-- name: CreateExternalOAuthServerMet
 INSERT INTO external_oauth_server_metadata (
     project_id,
     slug,
-    metadata
+    metadata,
+    authorization_server_issuer
 ) VALUES (
     $1,
     $2,
-    $3
-) RETURNING id, project_id, slug, metadata, created_at, updated_at, deleted_at, deleted
+    $3,
+    $4
+) RETURNING id, project_id, slug, metadata, authorization_server_issuer, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateExternalOAuthServerMetadataParams struct {
-	ProjectID uuid.UUID
-	Slug      string
-	Metadata  []byte
+	ProjectID                 uuid.UUID
+	Slug                      string
+	Metadata                  []byte
+	AuthorizationServerIssuer pgtype.Text
 }
 
 // External OAuth Server Metadata Queries
 func (q *Queries) CreateExternalOAuthServerMetadata(ctx context.Context, arg CreateExternalOAuthServerMetadataParams) (ExternalOauthServerMetadatum, error) {
-	row := q.db.QueryRow(ctx, createExternalOAuthServerMetadata, arg.ProjectID, arg.Slug, arg.Metadata)
+	row := q.db.QueryRow(ctx, createExternalOAuthServerMetadata,
+		arg.ProjectID,
+		arg.Slug,
+		arg.Metadata,
+		arg.AuthorizationServerIssuer,
+	)
 	var i ExternalOauthServerMetadatum
 	err := row.Scan(
 		&i.ID,
 		&i.ProjectID,
 		&i.Slug,
 		&i.Metadata,
+		&i.AuthorizationServerIssuer,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const createGeneratedExternalOAuthServerMetadata = `-- name: CreateGeneratedExternalOAuthServerMetadata :one
+INSERT INTO external_oauth_server_metadata (
+    project_id,
+    slug,
+    metadata,
+    authorization_server_issuer
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+ON CONFLICT (project_id, slug) WHERE deleted IS FALSE DO NOTHING
+RETURNING id, project_id, slug, metadata, authorization_server_issuer, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateGeneratedExternalOAuthServerMetadataParams struct {
+	ProjectID                 uuid.UUID
+	Slug                      string
+	Metadata                  []byte
+	AuthorizationServerIssuer pgtype.Text
+}
+
+func (q *Queries) CreateGeneratedExternalOAuthServerMetadata(ctx context.Context, arg CreateGeneratedExternalOAuthServerMetadataParams) (ExternalOauthServerMetadatum, error) {
+	row := q.db.QueryRow(ctx, createGeneratedExternalOAuthServerMetadata,
+		arg.ProjectID,
+		arg.Slug,
+		arg.Metadata,
+		arg.AuthorizationServerIssuer,
+	)
+	var i ExternalOauthServerMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Slug,
+		&i.Metadata,
+		&i.AuthorizationServerIssuer,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -73,7 +128,7 @@ func (q *Queries) DeleteExternalOAuthServerMetadata(ctx context.Context, arg Del
 }
 
 const getExternalOAuthServerMetadata = `-- name: GetExternalOAuthServerMetadata :one
-SELECT id, project_id, slug, metadata, created_at, updated_at, deleted_at, deleted FROM external_oauth_server_metadata
+SELECT id, project_id, slug, metadata, authorization_server_issuer, created_at, updated_at, deleted_at, deleted FROM external_oauth_server_metadata
 WHERE project_id = $1 AND id = $2 AND deleted IS FALSE
 `
 
@@ -90,6 +145,47 @@ func (q *Queries) GetExternalOAuthServerMetadata(ctx context.Context, arg GetExt
 		&i.ProjectID,
 		&i.Slug,
 		&i.Metadata,
+		&i.AuthorizationServerIssuer,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateExternalOAuthServerSource = `-- name: UpdateExternalOAuthServerSource :one
+UPDATE external_oauth_server_metadata
+SET metadata = $1,
+    authorization_server_issuer = $2,
+    updated_at = clock_timestamp()
+WHERE project_id = $3
+  AND id = $4
+  AND deleted IS FALSE
+RETURNING id, project_id, slug, metadata, authorization_server_issuer, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateExternalOAuthServerSourceParams struct {
+	Metadata                  []byte
+	AuthorizationServerIssuer pgtype.Text
+	ProjectID                 uuid.UUID
+	ID                        uuid.UUID
+}
+
+func (q *Queries) UpdateExternalOAuthServerSource(ctx context.Context, arg UpdateExternalOAuthServerSourceParams) (ExternalOauthServerMetadatum, error) {
+	row := q.db.QueryRow(ctx, updateExternalOAuthServerSource,
+		arg.Metadata,
+		arg.AuthorizationServerIssuer,
+		arg.ProjectID,
+		arg.ID,
+	)
+	var i ExternalOauthServerMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Slug,
+		&i.Metadata,
+		&i.AuthorizationServerIssuer,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

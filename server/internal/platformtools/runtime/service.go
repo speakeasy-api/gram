@@ -33,7 +33,6 @@ import (
 	platformskills "github.com/speakeasy-api/gram/server/internal/platformtools/skills"
 	platformtriggers "github.com/speakeasy-api/gram/server/internal/platformtools/triggers"
 	platformusers "github.com/speakeasy-api/gram/server/internal/platformtools/users"
-	feedbackrecorder "github.com/speakeasy-api/gram/server/internal/skills/feedback"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
 
@@ -137,10 +136,9 @@ func MemoryExternalTools(svc *memory.MemoryService) []platformtools.ExternalTool
 }
 
 // AssistantSkillTools returns the always-on attached-skill tools.
-func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool, recorder *feedbackrecorder.Recorder, opts ...platformskills.LoadOption) []platformtools.ExternalTool {
+func AssistantSkillTools(logger *slog.Logger, db *pgxpool.Pool, opts ...platformskills.LoadOption) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformskills.NewLoadTool(logger, db, opts...), RequiredFeature: ""},
-		{Executor: platformskills.NewAssistantFeedbackTool(db, recorder), RequiredFeature: ""},
 	}
 }
 
@@ -194,15 +192,15 @@ func ManagedAssistantUsersTools(orgSvc platformusers.OrganizationsService) []pla
 // content never reaches the model context. The exclusion and false-positive
 // tools mutate project state; the risk service gates them on org admin and
 // audits the invoking user as the actor.
-func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService) []platformtools.ExternalTool {
+func ManagedAssistantRiskTools(riskSvc platformrisk.RiskService, redactionKey string) []platformtools.ExternalTool {
 	return []platformtools.ExternalTool{
 		{Executor: platformrisk.NewListRiskPoliciesTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewListRiskResultsForAgentTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewListRiskResultsByChatTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewGetRiskPolicyStatusTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewGetRiskRuleBreakdownTool(riskSvc), RequiredFeature: ""},
-		{Executor: platformrisk.NewListRiskExclusionsTool(riskSvc), RequiredFeature: ""},
-		{Executor: platformrisk.NewCreateRiskExclusionTool(riskSvc), RequiredFeature: ""},
+		{Executor: platformrisk.NewListRiskExclusionsTool(riskSvc, redactionKey), RequiredFeature: ""},
+		{Executor: platformrisk.NewCreateRiskExclusionTool(riskSvc, redactionKey), RequiredFeature: ""},
 		{Executor: platformrisk.NewMarkRiskResultsFalsePositiveTool(riskSvc), RequiredFeature: ""},
 		{Executor: platformrisk.NewUnmarkRiskResultsFalsePositiveTool(riskSvc), RequiredFeature: ""},
 	}

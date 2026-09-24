@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
@@ -56,6 +55,14 @@ type Verdict struct {
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
+	// STokens counts the exact prepared content-bearing values sent to the judge.
+	STokens int64
+	// Completed reports that a real judge returned a valid verdict.
+	Completed bool
+	// Model identifies the judge model when applicable.
+	Model string
+	// Provider identifies the judge provider when applicable.
+	Provider string
 }
 
 // FailClosedVerdict builds the canonical verdict used when a degraded judge
@@ -73,14 +80,16 @@ func FailClosedVerdict(err error) Verdict {
 		PromptTokens:     0,
 		CompletionTokens: 0,
 		TotalTokens:      0,
+		STokens:          0,
+		Completed:        false,
+		Model:            "",
+		Provider:         "",
 	}
 }
 
 // Config is the per-policy judge model configuration parsed from a
 // prompt_based policy's model_config JSONB column.
 type Config struct {
-	// Model is the OpenRouter model id; empty selects the default judge model.
-	Model string
 	// Temperature overrides the default judge temperature when non-nil.
 	Temperature *float64
 	// FailOpen decides the verdict when the judge call fails: true => allow
@@ -89,23 +98,21 @@ type Config struct {
 }
 
 // ParseConfig decodes a prompt_based policy's model_config JSONB into a
-// Config. Missing or unparseable config defaults to fail-open with the
-// default model and temperature.
+// Config. Missing or unparseable config defaults to fail-open with the default
+// temperature. A `model` key persisted before the judge model was fixed is
+// ignored rather than migrated away: it is inert, and dropping it on the next
+// policy write is enough.
 func ParseConfig(raw []byte) Config {
-	cfg := Config{Model: "", Temperature: nil, FailOpen: true}
+	cfg := Config{Temperature: nil, FailOpen: true}
 	if len(raw) == 0 {
 		return cfg
 	}
 	var parsed struct {
-		Model       *string  `json:"model"`
 		Temperature *float64 `json:"temperature"`
 		FailOpen    *bool    `json:"fail_open"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return cfg
-	}
-	if parsed.Model != nil {
-		cfg.Model = strings.TrimSpace(*parsed.Model)
 	}
 	cfg.Temperature = parsed.Temperature
 	if parsed.FailOpen != nil {

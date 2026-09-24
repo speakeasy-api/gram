@@ -93,13 +93,6 @@ export interface InsightsSuggestion {
  */
 export const CHAT_LANDING_SUGGESTIONS: InsightsSuggestion[] = [
   {
-    title: "What can I do with the assistant?",
-    label: "Session tool browser",
-    icon: "wrench",
-    prompt:
-      "What tools do you have available in this session? Search your tools and show me what you can do.",
-  },
-  {
     title: "Any secrets or PII in chats?",
     label: "Sensitive-data scan",
     icon: "shield",
@@ -365,29 +358,6 @@ export const INSIGHTS_SUGGESTIONS = {
       icon: "gauge",
       prompt:
         "Which tools have the slowest latency? Help me figure out what to test.",
-    },
-  ],
-
-  elements: [
-    {
-      title: "How many chat sessions?",
-      label: "Embedded chat sessions",
-      icon: "chat",
-      prompt:
-        "How many chat sessions have come through embedded clients recently, and how is that trending?",
-    },
-    {
-      title: "What do users ask?",
-      label: "What users ask",
-      icon: "search",
-      prompt: "What are end users asking most often in chat sessions?",
-    },
-    {
-      title: "Which chats failed?",
-      label: "Chats that errored",
-      icon: "alert",
-      prompt:
-        "Find recent chat sessions that ended in errors and summarize what went wrong.",
     },
   ],
 
@@ -935,7 +905,7 @@ export const INSIGHTS_SUGGESTIONS = {
       label: "what's each source catching",
       icon: "trend",
       prompt:
-        "What is each detection source catching? Group findings by source (gitleaks, PII, prompt_injection, shadow_mcp, destructive_tool) over the last 7 days, and report counts with the top rule per source family.",
+        "What is each detection source catching? Group findings by source (gitleaks, PII, prompt_injection, shadow_mcp, destructive_tool, llm_analyzer) over the last 7 days, and report counts with the top rule per source family.",
     },
     {
       title: "What detectors exist?",

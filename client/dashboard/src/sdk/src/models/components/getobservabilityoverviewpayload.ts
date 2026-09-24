@@ -46,6 +46,10 @@ export type GetObservabilityOverviewPayload = {
    */
   mcpServerId?: string | undefined;
   /**
+   * Optional gateway (meta MCP server) ID filter; scopes to traffic dispatched through that gateway
+   */
+  metaMcpServerId?: string | undefined;
+  /**
    * Optional Remote MCP server ID filter
    */
   remoteMcpServerId?: string | undefined;
@@ -74,6 +78,7 @@ export type GetObservabilityOverviewPayload$Outbound = {
   hook_source?: string | undefined;
   include_time_series: boolean;
   mcp_server_id?: string | undefined;
+  meta_mcp_server_id?: string | undefined;
   remote_mcp_server_id?: string | undefined;
   to: string;
   toolset_slug?: string | undefined;
@@ -95,6 +100,7 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodMiniType<
     hookSource: z.optional(z.string()),
     includeTimeSeries: z._default(z.boolean(), true),
     mcpServerId: z.optional(z.string()),
+    metaMcpServerId: z.optional(z.string()),
     remoteMcpServerId: z.optional(z.string()),
     to: z.pipe(z.date(), z.transform(v => v.toISOString())),
     toolsetSlug: z.optional(z.string()),
@@ -110,6 +116,7 @@ export const GetObservabilityOverviewPayload$outboundSchema: z.ZodMiniType<
       hookSource: "hook_source",
       includeTimeSeries: "include_time_series",
       mcpServerId: "mcp_server_id",
+      metaMcpServerId: "meta_mcp_server_id",
       remoteMcpServerId: "remote_mcp_server_id",
       toolsetSlug: "toolset_slug",
       userId: "user_id",

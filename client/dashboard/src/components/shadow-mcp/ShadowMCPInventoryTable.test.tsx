@@ -9,6 +9,8 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
+
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { MouseEvent, ReactElement, ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -23,6 +25,7 @@ import {
   reviewSortRank,
 } from "./shadowMCPInventoryReview";
 import { ShadowMCPInventoryTable } from "./ShadowMCPInventoryTable";
+import { testAccessSummary } from "./shadowMCPInventoryTestFixtures";
 
 const mocks = vi.hoisted(() => ({
   useShadowMCPInventory: vi.fn(),
@@ -348,6 +351,8 @@ function inventoryServer(
       : "",
     userCount: 0,
     ...rest,
+    accessSummary:
+      rest.accessSummary ?? testAccessSummary(rest.access ?? "none"),
   };
 }
 
@@ -370,7 +375,6 @@ function blockingPolicy(
 
 function renderInventoryTable(
   projectID = "project-id-1",
-  policyState: "blocking" | "flagging" | "none" | "unavailable" = "blocking",
   shadowMCPPolicies = [blockingPolicy()],
   roles: Role[] = [],
   members: AccessMember[] = [],
@@ -381,14 +385,17 @@ function renderInventoryTable(
   return render(
     <MemoryRouter>
       <QueryClientProvider client={queryClient}>
-        <ShadowMCPInventoryTable
-          members={members}
-          onOpenServer={onOpenServer}
-          policyState={policyState}
-          projectID={projectID}
-          roles={roles}
-          shadowMCPPolicies={shadowMCPPolicies}
-        />
+        {/* The status cell explains itself through a tooltip, the way App
+            mounts one around the whole tree. */}
+        <TooltipProvider>
+          <ShadowMCPInventoryTable
+            members={members}
+            onOpenServer={onOpenServer}
+            projectID={projectID}
+            roles={roles}
+            shadowMCPPolicies={shadowMCPPolicies}
+          />
+        </TooltipProvider>
       </QueryClientProvider>
     </MemoryRouter>,
   );
@@ -452,6 +459,9 @@ describe("ShadowMCPInventoryTable", () => {
           userCount: 3,
         }),
         inventoryServer({
+          // The server computes the verdict now: a URL a deny-by-default
+          // policy blocks arrives as blocked, not as none-plus-page-state.
+          access: "blocked",
           canonicalServerUrl: "https://unused.example.com/mcp",
           lastCalled: undefined,
           lastSeen: new Date("2026-01-03T11:30:00Z"),
@@ -466,9 +476,7 @@ describe("ShadowMCPInventoryTable", () => {
     });
     expect(screen.getByText("https://github.example.com/mcp")).toBeTruthy();
     expect(screen.getByText("Allowed")).toBeTruthy();
-    expect(screen.getByText("Allowed by URL rule")).toBeTruthy();
     expect(screen.getByText("Blocked")).toBeTruthy();
-    expect(screen.getByText("Blocked by policy")).toBeTruthy();
     expect(screen.getByText("42 calls")).toBeTruthy();
     expect(screen.getByText("3 users")).toBeTruthy();
     expect(screen.getByText("Never")).toBeTruthy();
@@ -593,16 +601,17 @@ describe("ShadowMCPInventoryTable", () => {
     render(
       <MemoryRouter>
         <QueryClientProvider client={queryClient}>
-          <ShadowMCPInventoryTable
-            members={[]}
-            onOpenServer={(server) => {
-              onOpenServer(server);
-            }}
-            policyState="blocking"
-            projectID="project-id-1"
-            roles={[]}
-            shadowMCPPolicies={[blockingPolicy()]}
-          />
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              members={[]}
+              onOpenServer={(server) => {
+                onOpenServer(server);
+              }}
+              projectID="project-id-1"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -677,7 +686,6 @@ describe("ShadowMCPInventoryTable", () => {
 
     renderInventoryTable(
       "project-id-1",
-      "blocking",
       [blockingPolicy()],
       [],
       [],
@@ -720,7 +728,6 @@ describe("ShadowMCPInventoryTable", () => {
 
     renderInventoryTable(
       "project-id-1",
-      "blocking",
       [blockingPolicy()],
       [],
       [],
@@ -1062,13 +1069,14 @@ describe("ShadowMCPInventoryTable", () => {
     const { rerender } = render(
       <MemoryRouter>
         <QueryClientProvider client={queryClient}>
-          <ShadowMCPInventoryTable
-            members={[]}
-            policyState="blocking"
-            projectID="project-id-1"
-            roles={[]}
-            shadowMCPPolicies={[blockingPolicy()]}
-          />
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              members={[]}
+              projectID="project-id-1"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -1080,13 +1088,14 @@ describe("ShadowMCPInventoryTable", () => {
     rerender(
       <MemoryRouter>
         <QueryClientProvider client={queryClient}>
-          <ShadowMCPInventoryTable
-            members={[]}
-            policyState="blocking"
-            projectID="project-id-2"
-            roles={[]}
-            shadowMCPPolicies={[blockingPolicy()]}
-          />
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              members={[]}
+              projectID="project-id-2"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -1111,14 +1120,15 @@ describe("ShadowMCPInventoryTable", () => {
     const { rerender } = render(
       <MemoryRouter>
         <QueryClientProvider client={queryClient}>
-          <ShadowMCPInventoryTable
-            enabled
-            members={[]}
-            policyState="blocking"
-            projectID="project-id-1"
-            roles={[]}
-            shadowMCPPolicies={[blockingPolicy()]}
-          />
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              enabled
+              members={[]}
+              projectID="project-id-1"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -1130,14 +1140,15 @@ describe("ShadowMCPInventoryTable", () => {
     rerender(
       <MemoryRouter>
         <QueryClientProvider client={queryClient}>
-          <ShadowMCPInventoryTable
-            enabled={false}
-            members={[]}
-            policyState="blocking"
-            projectID="project-id-1"
-            roles={[]}
-            shadowMCPPolicies={[blockingPolicy()]}
-          />
+          <TooltipProvider>
+            <ShadowMCPInventoryTable
+              enabled={false}
+              members={[]}
+              projectID="project-id-1"
+              roles={[]}
+              shadowMCPPolicies={[blockingPolicy()]}
+            />
+          </TooltipProvider>
         </QueryClientProvider>
       </MemoryRouter>,
     );
@@ -1190,6 +1201,52 @@ describe("ShadowMCPInventoryTable", () => {
     );
   });
 
+  it("renders the summary's own verdict when it disagrees with the legacy field", async () => {
+    // The rows must render from accessSummary, not the deprecated access
+    // string: a scoped approval reads Restricted with its flavor wording.
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          access: "allowed",
+          accessSummary: {
+            state: "restricted",
+            allowedFor: "selected",
+            blockedFor: "none",
+            blockingDefault: "deny",
+            decision: "approved",
+            decisionCoverage: "full",
+          },
+          canonicalServerUrl: "https://scoped.example.com/mcp",
+          serverName: "Scoped MCP",
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("Scoped MCP")).toBeTruthy();
+    });
+    // The badge is the verdict. "Restricted" covers several different
+    // postures, so the mechanism behind it has to stay reachable from the
+    // row — and by keyboard, not hover alone, which is why the assertion
+    // opens the tooltip by focusing its trigger.
+    expect(screen.getByText("Restricted")).toBeTruthy();
+    expect(screen.queryByText(/Allowed for selected users/)).toBeNull();
+
+    const trigger = screen
+      .getByText("Restricted")
+      .closest('[data-slot="tooltip-trigger"]');
+    expect(trigger).toBeTruthy();
+    fireEvent.focus(trigger as Element);
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/Allowed for selected users/).length,
+      ).toBeGreaterThan(0);
+    });
+  });
+
   it("renders observed status when blocking is inactive", async () => {
     mockShadowMCPInventory({
       servers: [
@@ -1201,13 +1258,37 @@ describe("ShadowMCPInventoryTable", () => {
       ],
     });
 
-    renderInventoryTable("project-id-1", "flagging");
+    renderInventoryTable("project-id-1", []);
 
     await waitFor(() => {
       expect(screen.getByText("Observed MCP")).toBeTruthy();
     });
     expect(screen.getByText("Observed")).toBeTruthy();
-    expect(screen.getByText("Not blocking")).toBeTruthy();
+  });
+});
+
+describe("superseded review rendering", () => {
+  it("shows the Superseded badge on a row whose decision was displaced", async () => {
+    mockShadowMCPInventory({
+      servers: [
+        inventoryServer({
+          canonicalServerUrl: "https://superseded.example.com/mcp",
+          serverName: "Superseded MCP",
+          approvalRequest: {
+            id: "r-superseded",
+            requesterCount: 0,
+            status: "superseded",
+          },
+        }),
+      ],
+    });
+
+    renderInventoryTable();
+
+    await waitFor(() => {
+      expect(screen.getByText("Superseded MCP")).toBeTruthy();
+    });
+    expect(screen.getByText("Superseded")).toBeTruthy();
   });
 });
 
@@ -1236,6 +1317,17 @@ describe("matchesReviewFilter", () => {
     expect(matchesReviewFilter(requested, "none")).toBe(false);
   });
 
+  it("matches superseded as its own review state, never as 'none' or a decided one", () => {
+    const superseded = inventoryServer({
+      canonicalServerUrl: url,
+      approvalRequest: { id: "r1", requesterCount: 0, status: "superseded" },
+    });
+    expect(matchesReviewFilter(superseded, "superseded")).toBe(true);
+    expect(matchesReviewFilter(superseded, "approved")).toBe(false);
+    expect(matchesReviewFilter(superseded, "denied")).toBe(false);
+    expect(matchesReviewFilter(superseded, "none")).toBe(false);
+  });
+
   it("treats an unreviewed dossier and no review as the same 'none' state", () => {
     const noReview = inventoryServer({ canonicalServerUrl: url });
     const unreviewed = inventoryServer({
@@ -1255,7 +1347,12 @@ describe("reviewSortRank", () => {
 
   it("sorts pending decisions first, decided next, unreviewed last", () => {
     const rank = (
-      status?: "requested" | "approved" | "denied" | "unreviewed",
+      status?:
+        | "requested"
+        | "approved"
+        | "denied"
+        | "superseded"
+        | "unreviewed",
     ) =>
       reviewSortRank(
         inventoryServer({
@@ -1269,6 +1366,10 @@ describe("reviewSortRank", () => {
     expect(rank("requested")).toBe(0);
     expect(rank("approved")).toBe(1);
     expect(rank("denied")).toBe(1);
+    // Superseded is settled review history — an admin deliberately displaced
+    // the decision — so it ranks with the decided states, not the pending
+    // one.
+    expect(rank("superseded")).toBe(1);
     // An unreviewed dossier is a storage detail, not a state: it ranks with
     // "no review".
     expect(rank("unreviewed")).toBe(2);

@@ -254,7 +254,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("listShadowMCPInventory", func() {
-		Description("List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state.")
+		Description("List project-scoped Shadow MCP server inventory composed from observed URLs, telemetry usage, and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.")
 		Security(security.Session)
 
 		Payload(func() {
@@ -288,7 +288,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("getShadowMCPInventoryServer", func() {
-		Description("Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state.")
+		Description("Get one project-scoped Shadow MCP server inventory URL with usage and policy-bypass state. Requires an authenticated session authorized for org:admin on the active organization.")
 		Security(security.Session)
 
 		Payload(func() {
@@ -385,6 +385,12 @@ var _ = Service("access", func() {
 				MinLength(1)
 				MaxLength(200)
 			})
+			Attribute("from", String, "Inclusive start of the window to attribute calls from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window to attribute calls from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("limit", Int, func() {
 				Default(50)
 				Minimum(1)
@@ -400,6 +406,8 @@ var _ = Service("access", func() {
 			GET("/rpc/access.listShadowMCPInventoryServersForUser")
 			Param("project_id")
 			Param("user_keys")
+			Param("from")
+			Param("to")
 			Param("limit")
 			security.SessionHeader()
 			Response(StatusOK)
@@ -430,6 +438,208 @@ var _ = Service("access", func() {
 		Meta("openapi:operationId", "resolveShadowMCPInventoryRequest")
 		Meta("openapi:extension:x-speakeasy-name-override", "resolveShadowMCPInventoryRequest")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveShadowMCPInventoryRequest", "type": "mutation"}`)
+	})
+
+	Method("listAIDetections", func() {
+		Description("List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("category", String, "Filter to detection targets of one category.", func() {
+				Enum("harness", "assistant", "local_model")
+			})
+			Attribute("directory_group_id", String, "Filter to detections attributed to active members of this SCIM directory group. A group with no active members yields an empty list.", func() {
+				Format(FormatUUID)
+			})
+			security.SessionPayload()
+		})
+
+		Result(ListAIDetectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAIDetections")
+			Param("category")
+			Param("directory_group_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAIDetections")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAIDetections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AIDetections"}`)
+	})
+
+	Method("listEmployeeAIDetections", func() {
+		Description("List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.")
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Attribute("user_email", String, "Canonical enrolled-employee email to list detections for.", func() {
+				Format(FormatEmail)
+				MaxLength(320)
+			})
+			Required("user_email")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListAIDetectionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listEmployeeAIDetections")
+			Param("user_email")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listEmployeeAIDetections")
+		Meta("openapi:extension:x-speakeasy-name-override", "listEmployeeAIDetections")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "EmployeeAIDetections"}`)
+	})
+
+	Method("listAIDetectionUsers", func() {
+		Description("List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("target_id", String, "Id of the detection target to expand. Accepted exactly as agents report it, under the same length bound the scan-report ingest stores it with, so every id in the inventory can be expanded.", func() {
+				MinLength(1)
+				MaxLength(64)
+			})
+			Required("target_id")
+			security.SessionPayload()
+		})
+
+		Result(ListAIDetectionUsersResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAIDetectionUsers")
+			Param("target_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAIDetectionUsers")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAIDetectionUsers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AIDetectionUsers"}`)
+	})
+
+	Method("setAIToolDecision", func() {
+		Description("Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("target_id", String, "Id of the detection target to decide on, as agents report it.", func() {
+				Pattern(`^[a-z0-9][a-z0-9-]{0,63}$`)
+			})
+			Attribute("decision", String, "The decision to record. unreviewed clears an earlier one.", func() {
+				Enum("unreviewed", "approved", "blocked")
+			})
+			Attribute("rationale", String, "Why the decision was made. Shown beside it and carried into the audit trail.", func() {
+				MaxLength(1024)
+			})
+			Required("target_id", "decision")
+			security.SessionPayload()
+		})
+
+		Result(SetAIToolDecisionResult)
+
+		HTTP(func() {
+			POST("/rpc/access.setAIToolDecision")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setAIToolDecision")
+		Meta("openapi:extension:x-speakeasy-name-override", "setAIToolDecision")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetAIToolDecision", "type": "mutation"}`)
+	})
+
+	Method("listResourceAudience", func() {
+		Description("List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("resource_kind", String, "The kind of resource to describe.", func() {
+				Enum("mcp")
+			})
+			Attribute("resource_id", String, "The resource to describe.")
+			Required("resource_kind", "resource_id")
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ResourceAudienceResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listResourceAudience")
+			Param("resource_kind")
+			Param("resource_id")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listResourceAudience")
+		Meta("openapi:extension:x-speakeasy-name-override", "listResourceAudience")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResourceAudience"}`)
+	})
+
+	Method("setResourceAudience", func() {
+		Description("Replace the rules that name one resource. Organization-wide rules are left untouched.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(SetResourceAudienceForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ResourceAudienceResult)
+
+		HTTP(func() {
+			POST("/rpc/access.setResourceAudience")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setResourceAudience")
+		Meta("openapi:extension:x-speakeasy-name-override", "setResourceAudience")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetResourceAudience", "type": "mutation"}`)
+	})
+
+	Method("listAudienceOptions", func() {
+		Description("List the principals that can be given access: everyone, roles, people, and agents.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListAudienceOptionsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAudienceOptions")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAudienceOptions")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAudienceOptions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AudienceOptions"}`)
 	})
 
 	Method("requestAccess", func() {
@@ -476,6 +686,12 @@ var _ = Service("access", func() {
 			Attribute("project_id", String, "Filter to a specific project.")
 			Attribute("resolved", Boolean, "Filter by resolution state. True = only resolved, false = only unresolved.")
 			Attribute("ids", ArrayOf(String), "Fetch specific challenges by ID. When set, other filters and pagination are ignored.")
+			Attribute("from", String, "Inclusive start of the window to list challenges from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive end of the window to list challenges from. Omit for the whole history.", func() {
+				Format(FormatDateTime)
+			})
 			Attribute("limit", Int, func() {
 				Description("Maximum number of results to return.")
 				Default(50)
@@ -501,6 +717,8 @@ var _ = Service("access", func() {
 			Param("project_id")
 			Param("resolved")
 			Param("ids")
+			Param("from")
+			Param("to")
 			Param("limit")
 			Param("offset")
 			security.ByKeyHeader()
@@ -566,7 +784,7 @@ var _ = Service("access", func() {
 	})
 
 	Method("resolveChallenge", func() {
-		Description("Record resolutions for one or more denied authz challenges. The caller is responsible for assigning the role first.")
+		Description("Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.")
 		Security(security.ByKey, func() {
 			Scope("producer")
 		})
@@ -592,6 +810,32 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ResolveChallenge"}`)
 	})
 
+	Method("listIdentityAccess", func() {
+		Description("List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("user_id", String, func() {
+				Description("The Gram user ID to look up accessible resources for.")
+			})
+			Required("user_id")
+			security.SessionPayload()
+		})
+
+		Result(ListIdentityAccessResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listIdentityAccess")
+			Param("user_id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listIdentityAccess")
+		Meta("openapi:extension:x-speakeasy-name-override", "listIdentityAccess")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "IdentityAccess"}`)
+	})
+
 })
 
 var SelectorModel = Type("Selector", func() {
@@ -600,7 +844,7 @@ var SelectorModel = Type("Selector", func() {
 
 	Attribute("resource_kind", String, func() {
 		Description("The kind of resource this selector targets.")
-		Enum("project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "*")
+		Enum("project", "mcp", "org", "environment", "skill", "risk_policy", "chat", "agent", "*")
 	})
 	Attribute("resource_id", String, func() {
 		Description("The resource identifier, or '*' for all resources of this kind.")
@@ -626,7 +870,7 @@ var RoleGrantModel = Type("RoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "org:device_agent_sync", "org:hooks_ingest")
 	})
 
 	Attribute("selectors", ArrayOf(SelectorModel), func() {
@@ -640,13 +884,13 @@ var ListRoleGrantModel = Type("ListRoleGrant", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope slug this grant applies to.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "org:device_agent_sync", "org:hooks_ingest")
 	})
 
 	Attribute("sub_scopes", ArrayOf(String), func() {
 		Description("The inherited scopes the primary scope grants.")
 		Elem(func() {
-			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
+			Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "org:device_agent_sync", "org:hooks_ingest")
 		})
 	})
 
@@ -666,6 +910,7 @@ var RoleModel = Type("Role", func() {
 	Attribute("is_system", Boolean, "Whether this is a built-in system role that cannot be deleted.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants assigned to this role.")
 	Attribute("member_count", Int, "Number of members assigned to this role.")
+	Attribute("agent_ids", ArrayOf(String), "IDs of the agent principals assigned to this role.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -680,24 +925,25 @@ var ListRolesResult = Type("ListRolesResult", func() {
 })
 
 var ScopeModel = Type("ScopeDefinition", func() {
-	Required("slug", "description", "resource_type", "visibility")
+	Required("slug", "description", "resource_type", "visibility", "agent_eligible")
 
 	Attribute("slug", String, func() {
 		Description("Unique scope identifier.")
-		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write")
+		Enum("org:read", "org:blocked_read", "org:admin", "org:blocked_admin", "project:read", "project:blocked_read", "project:write", "project:blocked_write", "mcp:read", "mcp:blocked_read", "mcp:write", "mcp:blocked_write", "mcp:connect", "mcp:blocked_connect", "environment:read", "environment:blocked_read", "environment:write", "environment:blocked_write", "skill:read", "skill:blocked_read", "skill:write", "skill:blocked_write", "plugin:write", "plugin:blocked_write", "risk_policy:evaluate", "risk_policy:bypass", "risk_policy:block", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "org:device_agent_sync", "org:hooks_ingest")
 	})
 	Attribute("description", String, "What this scope protects.")
 	Attribute("resource_type", String, func() {
 		Description("The type of resource this scope applies to.")
-		Enum("org", "project", "mcp", "environment", "skill", "risk_policy", "chat")
+		Enum("org", "project", "mcp", "environment", "skill", "risk_policy", "chat", "agent")
 	})
 	Attribute("visibility", String, func() {
 		Description("Whether this scope is a first-class permission or an internal storage/evaluation scope.")
 		Enum("user_visible", "internal")
 	})
+	Attribute("agent_eligible", Boolean, "Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.")
 	Attribute("exclusion_scope", String, func() {
 		Description("The scope used to store exception rules for this scope.")
-		Enum("org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "environment:blocked_read", "environment:blocked_write", "skill:blocked_read", "skill:blocked_write", "risk_policy:bypass")
+		Enum("org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "environment:blocked_read", "environment:blocked_write", "skill:blocked_read", "skill:blocked_write", "plugin:blocked_write", "risk_policy:bypass")
 	})
 })
 
@@ -713,6 +959,9 @@ var CreateRoleForm = Type("CreateRoleForm", func() {
 	Attribute("description", String, "Optional description of what this role can do.")
 	Attribute("grants", ArrayOf(RoleGrantModel), "Scope grants to assign.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role on creation.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "Optional agent IDs to assign to this role on creation. Scopes an agent cannot hold at runtime are simply not granted to it.")
 })
 
 var UpdateRoleForm = Type("UpdateRoleForm", func() {
@@ -724,6 +973,90 @@ var UpdateRoleForm = Type("UpdateRoleForm", func() {
 	Attribute("add_grants", ArrayOf(RoleGrantModel), "Scope grants to add.")
 	Attribute("remove_grants", ArrayOf(RoleGrantModel), "Scope grants to remove.")
 	Attribute("member_ids", ArrayOf(String), "Optional member IDs to additionally assign to this role. Existing assignments are preserved.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "The complete set of agent IDs assigned to this role. Unlike member_ids this replaces the role's agent membership, because agents have no other surface to be removed from a role on. Omit to leave agent membership untouched.")
+})
+
+// One principal's standing on a single resource. `level` is the access it has,
+// or one of the "blocked_" levels when a rule takes access away; `applies_to`
+// says whether the rule names this resource or covers every resource of its
+// kind.
+var ResourceAudienceEntryModel = Type("ResourceAudienceEntry", func() {
+	Required("principal_urn", "kind", "display_name", "level", "applies_to")
+
+	Attribute("principal_urn", String, "Canonical principal URN this rule belongs to.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "agent", "directory_group", "directory_attribute", "unknown")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
+	Attribute("member_count", Int64, "How many people the principal reaches, when known.")
+	Attribute("level", String, "Access this principal has on the resource, or the access a rule takes away.", func() {
+		Enum("use", "view", "manage", "blocked", "blocked_view", "blocked_manage")
+	})
+	Attribute("applies_to", String, "Whether the rule names this resource or every resource of its kind.", func() {
+		Enum("resource", "all_resources")
+	})
+	Attribute("tools", ArrayOf(String), "Tool names the rule is narrowed to, when it is not the whole resource.")
+	Attribute("member_ids", ArrayOf(String), "User ids of the organization members this rule currently reaches.")
+	Attribute("agent_ids", ArrayOf(String, func() {
+		Format(FormatUUID)
+	}), "Ids of the agents this rule currently reaches, whether it names them or a role they hold.")
+	Attribute("dispositions", ArrayOf(String), "Tool annotations the rule is narrowed to, when it is not the whole resource.", func() {
+		Elem(func() {
+			Enum("read_only", "destructive", "idempotent", "open_world")
+		})
+	})
+})
+
+var ResourceAudienceResult = Type("ResourceAudienceResult", func() {
+	Required("entries", "version")
+	Attribute("entries", ArrayOf(ResourceAudienceEntryModel), "Rules deciding access to this resource, widest first.")
+	Attribute("version", String, "Fingerprint of the rules naming this resource. Send it back when saving so a change made elsewhere is a conflict rather than a silent overwrite.")
+})
+
+var SetResourceAudienceEntryModel = Type("SetResourceAudienceEntry", func() {
+	Required("principal_urn", "level")
+
+	Attribute("principal_urn", String, "Principal to grant or block. Use '*' for everyone in the organization.")
+	Attribute("level", String, "Access to give the principal on this resource. The \"blocked_\" levels take access away, one scope each and nothing else: \"blocked\" removes connect, \"blocked_view\" removes view, \"blocked_manage\" removes manage. Taking a principal off a resource entirely means writing all three.", func() {
+		Enum("use", "view", "manage", "blocked", "blocked_view", "blocked_manage")
+	})
+	Attribute("tools", ArrayOf(String), "Narrow the access to these tool names. Omit for the whole resource.")
+	Attribute("dispositions", ArrayOf(String), "Narrow the access to tools carrying these annotations. Omit for the whole resource.", func() {
+		Elem(func() {
+			Enum("read_only", "destructive", "idempotent", "open_world")
+		})
+	})
+})
+
+var SetResourceAudienceForm = Type("SetResourceAudienceForm", func() {
+	Required("resource_kind", "resource_id", "entries", "expected_version")
+
+	Attribute("resource_kind", String, "The kind of resource being changed.", func() {
+		Enum("mcp")
+	})
+	Attribute("resource_id", String, "The resource being changed.")
+	Attribute("entries", ArrayOf(SetResourceAudienceEntryModel), "The complete set of rules that name this resource. Rules covering every resource are not affected.")
+	Attribute("expected_version", String, "The version this edit was based on, from the last read. The save is refused if the rules changed since.")
+})
+
+var AudienceOptionModel = Type("AudienceOption", func() {
+	Required("principal_urn", "kind", "display_name")
+
+	Attribute("principal_urn", String, "Canonical principal URN to grant access to.")
+	Attribute("kind", String, "What the principal identifies.", func() {
+		Enum("everyone", "role", "user", "agent")
+	})
+	Attribute("display_name", String, "Human-readable name for the principal.")
+	Attribute("description", String, "Secondary line: email, member count, or attribute key.")
+	Attribute("member_count", Int64, "How many people the principal reaches, when known.")
+})
+
+var ListAudienceOptionsResult = Type("ListAudienceOptionsResult", func() {
+	Required("options")
+	Attribute("options", ArrayOf(AudienceOptionModel), "Principals that can be given access.")
 })
 
 var MemberModel = Type("AccessMember", func() {
@@ -739,6 +1072,11 @@ var MemberModel = Type("AccessMember", func() {
 		Description("When the member joined the organization.")
 		Format(FormatDateTime)
 	})
+	// Directory profile, from the org's synced identity provider. Every field
+	// is absent when no directory is connected, when the member has no profile
+	// in it, or when the provider does not report that attribute.
+	Attribute("department", String, "Department name as reported by the identity provider.")
+	Attribute("groups", ArrayOf(String), "Names of the directory groups the member belongs to.")
 })
 
 var ListMembersResult = Type("ListMembersResult", func() {
@@ -790,7 +1128,12 @@ var ShadowMCPInventoryApprovalRequestModel = Type("ShadowMCPInventoryApprovalReq
 		Format(FormatUUID)
 	})
 	Attribute("status", String, func() {
-		Enum("unreviewed", "requested", "approved", "denied")
+		Description("superseded means the latest decision was explicitly displaced by a policy URL-list edit: the history is preserved but no enforcement derives from it until someone re-decides.")
+		Enum("unreviewed", "requested", "approved", "denied", "superseded")
+	})
+	Attribute("standing_decision", String, func() {
+		Description("The latest recorded decision still standing for this server, independent of the request's lifecycle status — a reopened request's prior decision keeps enforcing until re-decided, and clients checking an edit against standing intent must read this rather than status. Absent when nothing was ever decided or the decision was superseded.")
+		Enum("approved", "denied")
 	})
 	Attribute("requester_count", Int, "How many distinct people have asked for this server.")
 	Attribute("evidence_changed_at", String, "When the daily recheck first found the permission-relevant evidence differing from what the latest approval rested on. Absent when nothing has drifted; cleared only by a new decision.", func() { Format(FormatDateTime) })
@@ -817,10 +1160,14 @@ var ShadowMCPInventoryServerModel = Type("ShadowMCPInventoryServer", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("observed_use_count", Int)
-	Attribute("user_count", Int)
-	Attribute("top_users", ArrayOf(String))
+	Attribute("user_count", Int, "Distinct users who reached this server.")
+	Attribute("top_users", ArrayOf(String), "The users who reached this server most.")
 	Attribute("access", String, func() {
+		Description("Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.")
 		Enum("none", "allowed", "blocked", "restricted")
+	})
+	Attribute("access_summary", ShadowMCPAccessSummaryModel, func() {
+		Description("The server-computed enforcement verdict. Optional for one release only so a client deployed ahead of a rolled-back server degrades to the legacy access field instead of failing to parse; the server always sends it. Becomes required when access is removed.")
 	})
 	Attribute("request_count", Int)
 	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
@@ -860,11 +1207,136 @@ var ListShadowMCPInventoryUsersResult = Type("ListShadowMCPInventoryUsersResult"
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
+var AIDetectionModel = Type("AIDetection", func() {
+	Description("One AI detection target aggregated across an organization's device-agent scan reports.")
+	// access is optional for one release rather than required. The endpoint
+	// predates it, so a dashboard from this revision can meet a server that
+	// does not send it yet, during a deploy or after a rollback, and a required
+	// member would fail SDK validation on every row and blank the page. The
+	// server always sends it; only the client's tolerance is relaxed. Make it
+	// required in the release after this one ships, as access_summary was.
+	Required("target_id", "display_name", "category", "user_count", "device_count", "signals", "versions", "first_seen", "last_seen")
+
+	Attribute("target_id", String, "Id of the detected AI tool as reported by agents (e.g. claude-code, ollama).")
+	Attribute("display_name", String, "Human-readable name from the server's detection target catalog. Ids the catalog does not know — agent binaries can ship newer target lists — fall back to the raw id.")
+	Attribute("category", String, "Detection target category: harness (an AI coding tool), assistant (a general-purpose AI assistant or agent), or local_model (an open model run locally). From the catalog for ids it knows, otherwise as recorded at detection time.", func() {
+		Enum("harness", "assistant", "local_model")
+	})
+	Attribute("user_count", Int64, "Distinct enrolled users this tool was detected for.")
+	Attribute("device_count", Int64, "Distinct devices, by hardware serial, this tool was detected on. Devices that report no serial are not counted.")
+	Attribute("signals", ArrayOf(String), "Detection signals observed for this target across all reports: installed and/or running.", func() {
+		Elem(func() {
+			Enum("installed", "running")
+		})
+	})
+	Attribute("versions", ArrayOf(String), "Unique non-empty detected versions for this target.")
+	Attribute("first_seen", String, func() {
+		Description("When this tool was first detected anywhere in the organization.")
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen", String, func() {
+		Description("When this tool was most recently detected.")
+		Format(FormatDateTime)
+	})
+	Attribute("access", AIToolAccessSummaryModel)
+})
+
+var AIToolAccessSummaryModel = Type("AIToolAccessSummary", func() {
+	Description("The enforcement verdict for one detected AI tool, computed server-side so a client renders wording without re-deriving it. state shares its vocabulary with the shadow MCP inventory's access summary, so one column describes both halves of the Shadow AI section.")
+
+	Required("state", "decision", "enforceable")
+
+	Attribute("state", String, func() {
+		Description("The effective decision as a table renders it: allowed and blocked mean an organization decision is recorded and in force, unreviewed means nothing is enforced — either because nobody has decided or because the tool is not enforceable, in which case a stored decision is projected as unreviewed. Read enforceable to tell the two apart.")
+		Enum("allowed", "blocked", "unreviewed")
+	})
+	Attribute("decision", String, func() {
+		Description("The effective organization decision behind state, which is not always the stored one. Absent rows read as unreviewed, so every tool has a value, and a tool that is not enforceable reads as unreviewed however it was decided — the stored decision is left untouched and takes effect again if the tool gains a verifiable gateway matcher.")
+		Enum("unreviewed", "approved", "blocked")
+	})
+	Attribute("enforceable", Boolean, "Whether a block on this tool would actually reach the gateway. False when the tool is linked only by a self-reported client name, or by nothing at all: the decision is recorded honestly and enforces nothing. Surfaced so an admin is never told a tool is blocked when it is not.")
+	Attribute("rationale", String, "Why the decision was made, when an admin gave a reason. Who recorded it and when are in the audit log rather than here, so there is one record of that and not two.")
+})
+
+var SetAIToolDecisionResult = Type("SetAIToolDecisionResult", func() {
+	Required("target_id", "access")
+	Attribute("target_id", String, "The detection target the decision was recorded for.")
+	Attribute("access", AIToolAccessSummaryModel)
+})
+
+var ListAIDetectionsResult = Type("ListAIDetectionsResult", func() {
+	Required("detections")
+	Attribute("detections", ArrayOf(AIDetectionModel), "Detected AI tools aggregated per target, most recently seen first.")
+})
+
+var AIDetectionUserModel = Type("AIDetectionUser", func() {
+	Description("One enrolled user a detection target was found for, with that user's share of the organization's scan reports: the evidence AIDetection carries for the whole organization, narrowed to one person.")
+	Required("user_email", "device_count", "signals", "versions", "first_seen", "last_seen")
+
+	Attribute("user_email", String, "Canonical email of the enrolled user the detections are attributed to. Linked alias emails are folded into it.")
+	Attribute("device_count", Int64, "Distinct devices, by hardware serial, this tool was detected on for this user. Devices that report no serial are not counted.")
+	Attribute("signals", ArrayOf(String), "Detection signals observed for this user: installed and/or running.", func() {
+		Elem(func() {
+			Enum("installed", "running")
+		})
+	})
+	Attribute("versions", ArrayOf(String), "Unique non-empty detected versions for this user.")
+	Attribute("first_seen", String, func() {
+		Description("When this tool was first detected for this user.")
+		Format(FormatDateTime)
+	})
+	Attribute("last_seen", String, func() {
+		Description("When this tool was most recently detected for this user.")
+		Format(FormatDateTime)
+	})
+})
+
+var ListAIDetectionUsersResult = Type("ListAIDetectionUsersResult", func() {
+	Required("detection", "users")
+	Attribute("detection", AIDetectionModel, "The target as the inventory lists it, so a page reached by link needs no second read for its name, category and access decision.")
+	Attribute("users", ArrayOf(AIDetectionUserModel), "Users the target was detected for, most recently seen first.")
+})
+
+var ShadowMCPAccessSummaryModel = Type("ShadowMCPAccessSummary", func() {
+	Description("The enforcement verdict for a shadow MCP server, computed server-side from policies, grants, and the recorded decision. state is the canonical compression of who may call the server; the remaining fields name the mechanisms so a client renders wording without re-deriving enforcement.")
+
+	Required("state", "allowed_for", "blocked_for", "blocking_default", "decision_coverage")
+
+	Attribute("state", String, func() {
+		Description("The shape of the user-to-access function: allowed and blocked are uniform, restricted varies by user, unenforced means no blocking policy applies.")
+		Enum("allowed", "restricted", "blocked", "unenforced")
+	})
+	Attribute("allowed_for", String, func() {
+		Description("Reach of explicit allow grants: everyone when every deny-by-default policy's audience is covered (an all-users grant, or grants naming the policy's whole audience), selected when grants free only part of an audience, none without grants. A role grant whose membership happens to span the organization still reads selected — reach compares principal sets, not expanded memberships.")
+		Enum("everyone", "selected", "none")
+	})
+	Attribute("blocked_for", String, func() {
+		Description("Reach of explicit block mechanisms: an everyone-audience block rule, a targeted rule or targeted deny-by-default policy, or none.")
+		Enum("everyone", "some", "none")
+	})
+	Attribute("blocking_default", String, func() {
+		Description("What happens to a user no rule names: deny under an everyone-audience deny-by-default policy, allow when blocking exists without one, none when no blocking policy is enabled.")
+		Enum("deny", "allow", "none")
+	})
+	Attribute("decision", String, func() {
+		Description("The recorded review decision, when one exists.")
+		Enum("approved", "denied")
+	})
+	Attribute("decision_coverage", String, func() {
+		Description("How much of the recorded decision enforcement delivers. full: the decision's own writes are intact — an approval's grants survive unoverridden (a scoped blast radius is the decision as recorded, not a shortfall), or a denial lands as a project-wide block. partial: something carries the decision but not all of it, such as a denial only a targeted policy enforces, or an approval whose grants were later removed or overridden. none: nothing carries it — no blocking policy exists, the target is a local command (stdio decisions are recorded without writing enforcement), or no decision is recorded at all.")
+		Enum("full", "partial", "none")
+	})
+})
+
 var ShadowMCPInventoryURLStateModel = Type("ShadowMCPInventoryURLState", func() {
 	Required("access", "request_count", "allowed_policy_ids", "blocked_policy_ids")
 
 	Attribute("access", String, func() {
+		Description("Deprecated: read access_summary.state. Kept one release so older clients keep rendering, then removed together with making access_summary required. Note the values themselves are corrected in this release: URLs whose bypass grants cover only part of a policy's audience now read restricted where they previously read allowed.")
 		Enum("none", "allowed", "blocked", "restricted")
+	})
+	Attribute("access_summary", ShadowMCPAccessSummaryModel, func() {
+		Description("The server-computed enforcement verdict. Optional for one release only so a client deployed ahead of a rolled-back server degrades to the legacy access field instead of failing to parse; the server always sends it. Becomes required when access is removed.")
 	})
 	Attribute("request_count", Int)
 	Attribute("latest_request", ShadowMCPInventoryRequestSummaryModel)
@@ -926,7 +1398,7 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 	Attribute("principal_urn", String, "Principal URN e.g. user:<uuid> or api_key:<id>.")
 	Attribute("principal_type", String, func() {
 		Description("Kind of principal.")
-		Enum("user", "api_key", "assistant")
+		Enum("user", "api_key", "assistant", "agent", "workload")
 	})
 	Attribute("user_email", String, "Email when available.")
 	Attribute("photo_url", String, "User avatar URL when available.")
@@ -942,6 +1414,7 @@ var AuthzChallengeModel = Type("AuthzChallenge", func() {
 	Attribute("scope", String, "Scope that was checked.")
 	Attribute("resource_kind", String, "Resource kind of the check.")
 	Attribute("resource_id", String, "Resource ID of the check.")
+	Attribute("selector", MapOf(String, String), "Complete selector captured for the check. Omitted for legacy or malformed challenge data.")
 	Attribute("role_slugs", ArrayOf(String), "Roles the principal had loaded.")
 	Attribute("evaluated_grant_count", Int, "Total grants evaluated.")
 	Attribute("matched_grant_count", Int, "Number of grants that matched.")
@@ -986,7 +1459,7 @@ var ChallengeBucketModel = Type("ChallengeBucket", func() {
 	Attribute("principal_urn", String, "Principal URN e.g. user:<uuid> or api_key:<id>.")
 	Attribute("principal_type", String, func() {
 		Description("Kind of principal.")
-		Enum("user", "api_key", "assistant")
+		Enum("user", "api_key", "assistant", "agent", "workload")
 	})
 	Attribute("user_email", String, "Email when available.")
 	Attribute("photo_url", String, "User avatar URL when available.")
@@ -1030,7 +1503,9 @@ var ListChallengeBucketsResult = Type("ListChallengeBucketsResult", func() {
 var ResolveChallengeForm = Type("ResolveChallengeForm", func() {
 	Required("challenge_ids", "principal_urn", "scope", "resolution_type")
 
-	Attribute("challenge_ids", ArrayOf(String), "IDs of the challenges in ClickHouse to resolve.")
+	Attribute("challenge_ids", ArrayOf(String), "IDs of the challenges in ClickHouse to resolve.", func() {
+		MinLength(1)
+	})
 	Attribute("principal_urn", String, "Principal that was denied.")
 	Attribute("scope", String, "Scope that was denied.")
 	Attribute("resource_kind", String, "Resource kind from the challenge.")
@@ -1039,7 +1514,8 @@ var ResolveChallengeForm = Type("ResolveChallengeForm", func() {
 		Description("How the challenge is being resolved.")
 		Enum("role_assigned", "dismissed")
 	})
-	Attribute("role_slug", String, "Role slug to assign (required when resolution_type=role_assigned).")
+	Attribute("role_slug", String, "Custom role slug to add to the denied user before resolving (required when resolution_type=role_assigned).")
+	Attribute("role_assignment_confirmed", Boolean, "Confirms the administrator reviewed and accepts every permission granted by the complete role. Must be true when resolution_type=role_assigned.")
 })
 
 var ChallengeResolutionModel = Type("ChallengeResolution", func() {
@@ -1074,7 +1550,7 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 
 	Attribute("scope", String, func() {
 		Description("The scope being requested.")
-		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write")
+		Enum("org:read", "org:admin", "project:read", "project:write", "mcp:read", "mcp:write", "mcp:connect", "environment:read", "environment:write", "skill:read", "skill:write", "plugin:write", "risk_policy:evaluate", "risk_policy:bypass", "chat:read", "chat:write", "agent:read", "agent:write", "agent:authorize", "agent:transfer", "org:device_agent_sync", "org:hooks_ingest")
 	})
 	Attribute("resource_id", String, "Optional resource ID the scope applies to.")
 	Attribute("resource_name", String, "Optional human-readable name for the resource (e.g. project name, MCP server name).")
@@ -1087,4 +1563,44 @@ var RequestAccessForm = Type("RequestAccessForm", func() {
 var RequestAccessResult = Type("RequestAccessResult", func() {
 	Required("sent_to_count")
 	Attribute("sent_to_count", Int, "Number of administrators who were notified.")
+})
+
+var AccessibleMCPServerModel = Type("AccessibleMCPServer", func() {
+	Description("An MCP server an identity is authorized to reach.")
+	Required("id", "name", "slug", "project_id", "project_slug")
+
+	Attribute("id", String, func() {
+		Description("Unique server identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Display name of the server.")
+	Attribute("slug", String, "URL-safe server slug.")
+	Attribute("project_id", String, func() {
+		Description("Project the server belongs to.")
+		Format(FormatUUID)
+	})
+	Attribute("project_slug", String, "Slug of the project the server belongs to.")
+})
+
+var AccessibleSkillModel = Type("AccessibleSkill", func() {
+	Description("A skill an identity is authorized to reach.")
+	Required("id", "name", "project_id", "project_slug")
+
+	Attribute("id", String, func() {
+		Description("Unique skill identifier.")
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Internal name of the skill.")
+	Attribute("display_name", String, "Human-readable display name, when set.")
+	Attribute("project_id", String, func() {
+		Description("Project the skill belongs to.")
+		Format(FormatUUID)
+	})
+	Attribute("project_slug", String, "Slug of the project the skill belongs to.")
+})
+
+var ListIdentityAccessResult = Type("ListIdentityAccessResult", func() {
+	Required("servers", "skills")
+	Attribute("servers", ArrayOf(AccessibleMCPServerModel), "MCP servers accessible to this identity.")
+	Attribute("skills", ArrayOf(AccessibleSkillModel), "Skills accessible to this identity.")
 })

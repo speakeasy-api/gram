@@ -8,9 +8,21 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	aiintegrations "github.com/speakeasy-api/gram/server/gen/ai_integrations"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// UpsertAnthropicInferenceConfigRequestBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// request body.
+type UpsertAnthropicInferenceConfigRequestBody struct {
+	// New Anthropic signing secret. Omit to preserve the saved secret.
+	SigningSecret *string `form:"signing_secret,omitempty" json:"signing_secret,omitempty" xml:"signing_secret,omitempty"`
+	// Enable inspection. Requires a saved signing secret.
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
 
 // UpsertConfigRequestBody is the type of the "aiIntegrations" service
 // "upsertConfig" endpoint HTTP request body.
@@ -61,6 +73,29 @@ type RetryScheduleRequestBody struct {
 	// Schedule identifier (e.g. cursor, anthropic_compliance,
 	// anthropic_analytics_usage).
 	Schedule *string `form:"schedule,omitempty" json:"schedule,omitempty" xml:"schedule,omitempty"`
+}
+
+// GetAnthropicInferenceConfigResponseBody is the type of the "aiIntegrations"
+// service "getAnthropicInferenceConfig" endpoint HTTP response body.
+type GetAnthropicInferenceConfigResponseBody struct {
+	// Integration identifier. Omitted before setup.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Webhook path on the API server. Omitted before setup.
+	WebhookPath      *string `form:"webhook_path,omitempty" json:"webhook_path,omitempty" xml:"webhook_path,omitempty"`
+	HasSigningSecret bool    `form:"has_signing_secret" json:"has_signing_secret" xml:"has_signing_secret"`
+	Enabled          bool    `form:"enabled" json:"enabled" xml:"enabled"`
+}
+
+// UpsertAnthropicInferenceConfigResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body.
+type UpsertAnthropicInferenceConfigResponseBody struct {
+	// Integration identifier. Omitted before setup.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Webhook path on the API server. Omitted before setup.
+	WebhookPath      *string `form:"webhook_path,omitempty" json:"webhook_path,omitempty" xml:"webhook_path,omitempty"`
+	HasSigningSecret bool    `form:"has_signing_secret" json:"has_signing_secret" xml:"has_signing_secret"`
+	Enabled          bool    `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // GetConfigResponseBody is the type of the "aiIntegrations" service
@@ -236,6 +271,576 @@ type RetryScheduleResponseBody struct {
 	// ISO 8601 timestamp when the scheduler auto-paused the schedule after
 	// repeated provider rejections. Omitted unless auto-paused.
 	AutoPausedAt *string `form:"auto_paused_at,omitempty" json:"auto_paused_at,omitempty" xml:"auto_paused_at,omitempty"`
+}
+
+// GetAnthropicInferenceConfigUnauthorizedResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unauthorized" error.
+type GetAnthropicInferenceConfigUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAnthropicInferenceConfigForbiddenResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "forbidden" error.
+type GetAnthropicInferenceConfigForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAnthropicInferenceConfigBadRequestResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "bad_request" error.
+type GetAnthropicInferenceConfigBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAnthropicInferenceConfigNotFoundResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "not_found" error.
+type GetAnthropicInferenceConfigNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAnthropicInferenceConfigConflictResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "conflict" error.
+type GetAnthropicInferenceConfigConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAnthropicInferenceConfigUnsupportedMediaResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetAnthropicInferenceConfigUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAnthropicInferenceConfigInvalidResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "invalid" error.
+type GetAnthropicInferenceConfigInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAnthropicInferenceConfigInvariantViolationResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetAnthropicInferenceConfigInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAnthropicInferenceConfigUnexpectedResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unexpected" error.
+type GetAnthropicInferenceConfigUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetAnthropicInferenceConfigGatewayErrorResponseBody is the type of the
+// "aiIntegrations" service "getAnthropicInferenceConfig" endpoint HTTP
+// response body for the "gateway_error" error.
+type GetAnthropicInferenceConfigGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertAnthropicInferenceConfigUnauthorizedResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unauthorized" error.
+type UpsertAnthropicInferenceConfigUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertAnthropicInferenceConfigForbiddenResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "forbidden" error.
+type UpsertAnthropicInferenceConfigForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertAnthropicInferenceConfigBadRequestResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "bad_request" error.
+type UpsertAnthropicInferenceConfigBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertAnthropicInferenceConfigNotFoundResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "not_found" error.
+type UpsertAnthropicInferenceConfigNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertAnthropicInferenceConfigConflictResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "conflict" error.
+type UpsertAnthropicInferenceConfigConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertAnthropicInferenceConfigUnsupportedMediaResponseBody is the type of
+// the "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unsupported_media" error.
+type UpsertAnthropicInferenceConfigUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertAnthropicInferenceConfigInvalidResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "invalid" error.
+type UpsertAnthropicInferenceConfigInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertAnthropicInferenceConfigInvariantViolationResponseBody is the type of
+// the "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "invariant_violation" error.
+type UpsertAnthropicInferenceConfigInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertAnthropicInferenceConfigUnexpectedResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unexpected" error.
+type UpsertAnthropicInferenceConfigUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpsertAnthropicInferenceConfigGatewayErrorResponseBody is the type of the
+// "aiIntegrations" service "upsertAnthropicInferenceConfig" endpoint HTTP
+// response body for the "gateway_error" error.
+type UpsertAnthropicInferenceConfigGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteAnthropicInferenceConfigUnauthorizedResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unauthorized" error.
+type DeleteAnthropicInferenceConfigUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteAnthropicInferenceConfigForbiddenResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "forbidden" error.
+type DeleteAnthropicInferenceConfigForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteAnthropicInferenceConfigBadRequestResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "bad_request" error.
+type DeleteAnthropicInferenceConfigBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteAnthropicInferenceConfigNotFoundResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "not_found" error.
+type DeleteAnthropicInferenceConfigNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteAnthropicInferenceConfigConflictResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "conflict" error.
+type DeleteAnthropicInferenceConfigConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteAnthropicInferenceConfigUnsupportedMediaResponseBody is the type of
+// the "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unsupported_media" error.
+type DeleteAnthropicInferenceConfigUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteAnthropicInferenceConfigInvalidResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "invalid" error.
+type DeleteAnthropicInferenceConfigInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteAnthropicInferenceConfigInvariantViolationResponseBody is the type of
+// the "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "invariant_violation" error.
+type DeleteAnthropicInferenceConfigInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteAnthropicInferenceConfigUnexpectedResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "unexpected" error.
+type DeleteAnthropicInferenceConfigUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteAnthropicInferenceConfigGatewayErrorResponseBody is the type of the
+// "aiIntegrations" service "deleteAnthropicInferenceConfig" endpoint HTTP
+// response body for the "gateway_error" error.
+type DeleteAnthropicInferenceConfigGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
 // GetConfigUnauthorizedResponseBody is the type of the "aiIntegrations"
@@ -1395,6 +2000,32 @@ type AIIntegrationScheduleStateResponseBody struct {
 	AutoPausedAt *string `form:"auto_paused_at,omitempty" json:"auto_paused_at,omitempty" xml:"auto_paused_at,omitempty"`
 }
 
+// NewGetAnthropicInferenceConfigResponseBody builds the HTTP response body
+// from the result of the "getAnthropicInferenceConfig" endpoint of the
+// "aiIntegrations" service.
+func NewGetAnthropicInferenceConfigResponseBody(res *aiintegrations.AnthropicInferenceConfig) *GetAnthropicInferenceConfigResponseBody {
+	body := &GetAnthropicInferenceConfigResponseBody{
+		ID:               res.ID,
+		WebhookPath:      res.WebhookPath,
+		HasSigningSecret: res.HasSigningSecret,
+		Enabled:          res.Enabled,
+	}
+	return body
+}
+
+// NewUpsertAnthropicInferenceConfigResponseBody builds the HTTP response body
+// from the result of the "upsertAnthropicInferenceConfig" endpoint of the
+// "aiIntegrations" service.
+func NewUpsertAnthropicInferenceConfigResponseBody(res *aiintegrations.AnthropicInferenceConfig) *UpsertAnthropicInferenceConfigResponseBody {
+	body := &UpsertAnthropicInferenceConfigResponseBody{
+		ID:               res.ID,
+		WebhookPath:      res.WebhookPath,
+		HasSigningSecret: res.HasSigningSecret,
+		Enabled:          res.Enabled,
+	}
+	return body
+}
+
 // NewGetConfigResponseBody builds the HTTP response body from the result of
 // the "getConfig" endpoint of the "aiIntegrations" service.
 func NewGetConfigResponseBody(res *aiintegrations.AIIntegrationConfig) *GetConfigResponseBody {
@@ -1497,6 +2128,456 @@ func NewRetryScheduleResponseBody(res *aiintegrations.AIIntegrationScheduleState
 		NextPollAfter:       res.NextPollAfter,
 		ConsecutiveFailures: res.ConsecutiveFailures,
 		AutoPausedAt:        res.AutoPausedAt,
+	}
+	return body
+}
+
+// NewGetAnthropicInferenceConfigUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getAnthropicInferenceConfig" endpoint
+// of the "aiIntegrations" service.
+func NewGetAnthropicInferenceConfigUnauthorizedResponseBody(res *goa.ServiceError) *GetAnthropicInferenceConfigUnauthorizedResponseBody {
+	body := &GetAnthropicInferenceConfigUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAnthropicInferenceConfigForbiddenResponseBody builds the HTTP response
+// body from the result of the "getAnthropicInferenceConfig" endpoint of the
+// "aiIntegrations" service.
+func NewGetAnthropicInferenceConfigForbiddenResponseBody(res *goa.ServiceError) *GetAnthropicInferenceConfigForbiddenResponseBody {
+	body := &GetAnthropicInferenceConfigForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAnthropicInferenceConfigBadRequestResponseBody builds the HTTP
+// response body from the result of the "getAnthropicInferenceConfig" endpoint
+// of the "aiIntegrations" service.
+func NewGetAnthropicInferenceConfigBadRequestResponseBody(res *goa.ServiceError) *GetAnthropicInferenceConfigBadRequestResponseBody {
+	body := &GetAnthropicInferenceConfigBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAnthropicInferenceConfigNotFoundResponseBody builds the HTTP response
+// body from the result of the "getAnthropicInferenceConfig" endpoint of the
+// "aiIntegrations" service.
+func NewGetAnthropicInferenceConfigNotFoundResponseBody(res *goa.ServiceError) *GetAnthropicInferenceConfigNotFoundResponseBody {
+	body := &GetAnthropicInferenceConfigNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAnthropicInferenceConfigConflictResponseBody builds the HTTP response
+// body from the result of the "getAnthropicInferenceConfig" endpoint of the
+// "aiIntegrations" service.
+func NewGetAnthropicInferenceConfigConflictResponseBody(res *goa.ServiceError) *GetAnthropicInferenceConfigConflictResponseBody {
+	body := &GetAnthropicInferenceConfigConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAnthropicInferenceConfigUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getAnthropicInferenceConfig" endpoint
+// of the "aiIntegrations" service.
+func NewGetAnthropicInferenceConfigUnsupportedMediaResponseBody(res *goa.ServiceError) *GetAnthropicInferenceConfigUnsupportedMediaResponseBody {
+	body := &GetAnthropicInferenceConfigUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAnthropicInferenceConfigInvalidResponseBody builds the HTTP response
+// body from the result of the "getAnthropicInferenceConfig" endpoint of the
+// "aiIntegrations" service.
+func NewGetAnthropicInferenceConfigInvalidResponseBody(res *goa.ServiceError) *GetAnthropicInferenceConfigInvalidResponseBody {
+	body := &GetAnthropicInferenceConfigInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAnthropicInferenceConfigInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getAnthropicInferenceConfig" endpoint
+// of the "aiIntegrations" service.
+func NewGetAnthropicInferenceConfigInvariantViolationResponseBody(res *goa.ServiceError) *GetAnthropicInferenceConfigInvariantViolationResponseBody {
+	body := &GetAnthropicInferenceConfigInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAnthropicInferenceConfigUnexpectedResponseBody builds the HTTP
+// response body from the result of the "getAnthropicInferenceConfig" endpoint
+// of the "aiIntegrations" service.
+func NewGetAnthropicInferenceConfigUnexpectedResponseBody(res *goa.ServiceError) *GetAnthropicInferenceConfigUnexpectedResponseBody {
+	body := &GetAnthropicInferenceConfigUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetAnthropicInferenceConfigGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getAnthropicInferenceConfig" endpoint
+// of the "aiIntegrations" service.
+func NewGetAnthropicInferenceConfigGatewayErrorResponseBody(res *goa.ServiceError) *GetAnthropicInferenceConfigGatewayErrorResponseBody {
+	body := &GetAnthropicInferenceConfigGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertAnthropicInferenceConfigUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "upsertAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewUpsertAnthropicInferenceConfigUnauthorizedResponseBody(res *goa.ServiceError) *UpsertAnthropicInferenceConfigUnauthorizedResponseBody {
+	body := &UpsertAnthropicInferenceConfigUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertAnthropicInferenceConfigForbiddenResponseBody builds the HTTP
+// response body from the result of the "upsertAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewUpsertAnthropicInferenceConfigForbiddenResponseBody(res *goa.ServiceError) *UpsertAnthropicInferenceConfigForbiddenResponseBody {
+	body := &UpsertAnthropicInferenceConfigForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertAnthropicInferenceConfigBadRequestResponseBody builds the HTTP
+// response body from the result of the "upsertAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewUpsertAnthropicInferenceConfigBadRequestResponseBody(res *goa.ServiceError) *UpsertAnthropicInferenceConfigBadRequestResponseBody {
+	body := &UpsertAnthropicInferenceConfigBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertAnthropicInferenceConfigNotFoundResponseBody builds the HTTP
+// response body from the result of the "upsertAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewUpsertAnthropicInferenceConfigNotFoundResponseBody(res *goa.ServiceError) *UpsertAnthropicInferenceConfigNotFoundResponseBody {
+	body := &UpsertAnthropicInferenceConfigNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertAnthropicInferenceConfigConflictResponseBody builds the HTTP
+// response body from the result of the "upsertAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewUpsertAnthropicInferenceConfigConflictResponseBody(res *goa.ServiceError) *UpsertAnthropicInferenceConfigConflictResponseBody {
+	body := &UpsertAnthropicInferenceConfigConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertAnthropicInferenceConfigUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "upsertAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewUpsertAnthropicInferenceConfigUnsupportedMediaResponseBody(res *goa.ServiceError) *UpsertAnthropicInferenceConfigUnsupportedMediaResponseBody {
+	body := &UpsertAnthropicInferenceConfigUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertAnthropicInferenceConfigInvalidResponseBody builds the HTTP
+// response body from the result of the "upsertAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewUpsertAnthropicInferenceConfigInvalidResponseBody(res *goa.ServiceError) *UpsertAnthropicInferenceConfigInvalidResponseBody {
+	body := &UpsertAnthropicInferenceConfigInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertAnthropicInferenceConfigInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "upsertAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewUpsertAnthropicInferenceConfigInvariantViolationResponseBody(res *goa.ServiceError) *UpsertAnthropicInferenceConfigInvariantViolationResponseBody {
+	body := &UpsertAnthropicInferenceConfigInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertAnthropicInferenceConfigUnexpectedResponseBody builds the HTTP
+// response body from the result of the "upsertAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewUpsertAnthropicInferenceConfigUnexpectedResponseBody(res *goa.ServiceError) *UpsertAnthropicInferenceConfigUnexpectedResponseBody {
+	body := &UpsertAnthropicInferenceConfigUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpsertAnthropicInferenceConfigGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "upsertAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewUpsertAnthropicInferenceConfigGatewayErrorResponseBody(res *goa.ServiceError) *UpsertAnthropicInferenceConfigGatewayErrorResponseBody {
+	body := &UpsertAnthropicInferenceConfigGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteAnthropicInferenceConfigUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "deleteAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewDeleteAnthropicInferenceConfigUnauthorizedResponseBody(res *goa.ServiceError) *DeleteAnthropicInferenceConfigUnauthorizedResponseBody {
+	body := &DeleteAnthropicInferenceConfigUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteAnthropicInferenceConfigForbiddenResponseBody builds the HTTP
+// response body from the result of the "deleteAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewDeleteAnthropicInferenceConfigForbiddenResponseBody(res *goa.ServiceError) *DeleteAnthropicInferenceConfigForbiddenResponseBody {
+	body := &DeleteAnthropicInferenceConfigForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteAnthropicInferenceConfigBadRequestResponseBody builds the HTTP
+// response body from the result of the "deleteAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewDeleteAnthropicInferenceConfigBadRequestResponseBody(res *goa.ServiceError) *DeleteAnthropicInferenceConfigBadRequestResponseBody {
+	body := &DeleteAnthropicInferenceConfigBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteAnthropicInferenceConfigNotFoundResponseBody builds the HTTP
+// response body from the result of the "deleteAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewDeleteAnthropicInferenceConfigNotFoundResponseBody(res *goa.ServiceError) *DeleteAnthropicInferenceConfigNotFoundResponseBody {
+	body := &DeleteAnthropicInferenceConfigNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteAnthropicInferenceConfigConflictResponseBody builds the HTTP
+// response body from the result of the "deleteAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewDeleteAnthropicInferenceConfigConflictResponseBody(res *goa.ServiceError) *DeleteAnthropicInferenceConfigConflictResponseBody {
+	body := &DeleteAnthropicInferenceConfigConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteAnthropicInferenceConfigUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the "deleteAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewDeleteAnthropicInferenceConfigUnsupportedMediaResponseBody(res *goa.ServiceError) *DeleteAnthropicInferenceConfigUnsupportedMediaResponseBody {
+	body := &DeleteAnthropicInferenceConfigUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteAnthropicInferenceConfigInvalidResponseBody builds the HTTP
+// response body from the result of the "deleteAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewDeleteAnthropicInferenceConfigInvalidResponseBody(res *goa.ServiceError) *DeleteAnthropicInferenceConfigInvalidResponseBody {
+	body := &DeleteAnthropicInferenceConfigInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteAnthropicInferenceConfigInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "deleteAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewDeleteAnthropicInferenceConfigInvariantViolationResponseBody(res *goa.ServiceError) *DeleteAnthropicInferenceConfigInvariantViolationResponseBody {
+	body := &DeleteAnthropicInferenceConfigInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteAnthropicInferenceConfigUnexpectedResponseBody builds the HTTP
+// response body from the result of the "deleteAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewDeleteAnthropicInferenceConfigUnexpectedResponseBody(res *goa.ServiceError) *DeleteAnthropicInferenceConfigUnexpectedResponseBody {
+	body := &DeleteAnthropicInferenceConfigUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteAnthropicInferenceConfigGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "deleteAnthropicInferenceConfig"
+// endpoint of the "aiIntegrations" service.
+func NewDeleteAnthropicInferenceConfigGatewayErrorResponseBody(res *goa.ServiceError) *DeleteAnthropicInferenceConfigGatewayErrorResponseBody {
+	body := &DeleteAnthropicInferenceConfigGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
 	}
 	return body
 }
@@ -2359,6 +3440,39 @@ func NewRetryScheduleGatewayErrorResponseBody(res *goa.ServiceError) *RetrySched
 	return body
 }
 
+// NewGetAnthropicInferenceConfigPayload builds a aiIntegrations service
+// getAnthropicInferenceConfig endpoint payload.
+func NewGetAnthropicInferenceConfigPayload(apikeyToken *string, sessionToken *string) *aiintegrations.GetAnthropicInferenceConfigPayload {
+	v := &aiintegrations.GetAnthropicInferenceConfigPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewUpsertAnthropicInferenceConfigPayload builds a aiIntegrations service
+// upsertAnthropicInferenceConfig endpoint payload.
+func NewUpsertAnthropicInferenceConfigPayload(body *UpsertAnthropicInferenceConfigRequestBody, apikeyToken *string, sessionToken *string) *aiintegrations.UpsertAnthropicInferenceConfigPayload {
+	v := &aiintegrations.UpsertAnthropicInferenceConfigPayload{
+		SigningSecret: body.SigningSecret,
+		Enabled:       body.Enabled,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewDeleteAnthropicInferenceConfigPayload builds a aiIntegrations service
+// deleteAnthropicInferenceConfig endpoint payload.
+func NewDeleteAnthropicInferenceConfigPayload(apikeyToken *string, sessionToken *string) *aiintegrations.DeleteAnthropicInferenceConfigPayload {
+	v := &aiintegrations.DeleteAnthropicInferenceConfigPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewGetConfigPayload builds a aiIntegrations service getConfig endpoint
 // payload.
 func NewGetConfigPayload(provider string, apikeyToken *string, sessionToken *string) *aiintegrations.GetConfigPayload {
@@ -2434,6 +3548,17 @@ func NewRetrySchedulePayload(body *RetryScheduleRequestBody, apikeyToken *string
 	v.SessionToken = sessionToken
 
 	return v
+}
+
+// ValidateUpsertAnthropicInferenceConfigRequestBody runs the validations
+// defined on UpsertAnthropicInferenceConfigRequestBody
+func ValidateUpsertAnthropicInferenceConfigRequestBody(body *UpsertAnthropicInferenceConfigRequestBody) (err error) {
+	if body.SigningSecret != nil {
+		if utf8.RuneCountInString(*body.SigningSecret) > 4096 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.signing_secret", *body.SigningSecret, utf8.RuneCountInString(*body.SigningSecret), 4096, false))
+		}
+	}
+	return
 }
 
 // ValidateUpsertConfigRequestBody runs the validations defined on

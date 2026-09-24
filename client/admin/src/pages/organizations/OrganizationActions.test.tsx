@@ -1,3 +1,4 @@
+import { useRef, useState, type JSX } from "react";
 import {
   act,
   cleanup,
@@ -9,10 +10,10 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   GramAdminError,
-  MAX_TRIAL_EXTENSION_DAYS,
   MAX_TRIAL_REARM_DAYS,
-  MIN_TRIAL_EXTENSION_DAYS,
+  MAX_TRIAL_START_DAYS,
   MIN_TRIAL_REARM_DAYS,
+  MIN_TRIAL_START_DAYS,
   TRIAL_STATES,
   type AdminOrganization,
   type TrialState,
@@ -42,22 +43,25 @@ const mocks = vi.hoisted(() => ({
     vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
   enableOrganization:
     vi.fn<(body: { id: string }) => Promise<AdminOrganization>>(),
-  extendTrial:
-    vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
+  changeTrialEndDate:
+    vi.fn<(body: { id: string; endsAt: Date }) => Promise<AdminOrganization>>(),
   rearmTrial:
+    vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
+  startTrial:
     vi.fn<(body: { id: string; days: number }) => Promise<AdminOrganization>>(),
 }));
 
 // The writes only. errorMessage stays real, because what the operator is told
 // about a failure is the subject of several of these tests.
-vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gramAdminApi")>();
+vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gramAdminClient")>();
   return {
     ...actual,
     disableOrganization: mocks.disableOrganization,
     enableOrganization: mocks.enableOrganization,
-    extendTrial: mocks.extendTrial,
+    changeTrialEndDate: mocks.changeTrialEndDate,
     rearmTrial: mocks.rearmTrial,
+    startTrial: mocks.startTrial,
   };
 });
 
@@ -83,7 +87,7 @@ const DISABLED_ORG: AdminOrganization = {
 };
 
 // Demoted and back on the free tier: the record that offers Re-arm trial and
-// no longer offers Extend trial. It carries no end date, so its dialog is the
+// no longer offers Change end date. It carries no end date, so its dialog is the
 // day count rather than the calendar.
 const DEMOTED_ORG: AdminOrganization = {
   ...ORG,
@@ -99,14 +103,38 @@ const REARMED_ORG: AdminOrganization = {
   trial_ends_at: "2026-08-28T00:00:00Z",
 };
 
+// Never trialled: the record that offers Start trial. No end date to extend.
+const NONE_ORG: AdminOrganization = {
+  ...ORG,
+  account_type: "free",
+  trial_state: "none",
+  trial_ends_at: undefined,
+};
+
+// Expired and not yet demoted: Restart trial, even though an old end
+// date is on the wire. The calendar must ignore that date and count from
+// today, or the grant would restart from a deadline that has already passed.
+const EXPIRED_ORG: AdminOrganization = {
+  ...ORG,
+  trial_state: "expired",
+};
+
+const STARTED_ORG: AdminOrganization = {
+  ...NONE_ORG,
+  account_type: "enterprise",
+  whitelisted: true,
+  trial_state: "running",
+  trial_ends_at: "2026-01-30T00:00:00Z",
+};
+
 // The record's trial ends on the 6th of May, which is deliberately not today.
 // An extension anchored on today rather than on the record's own end date is
 // the bug the server's own comment warns about, and it agrees with the right
 // answer only where the two dates are the same day.
 //
 // The days the operator can reach from that anchor, as the calendar names them.
-const EARLIEST = "2026-05-07";
-const DEFAULT_END = "2026-05-20";
+const EARLIEST = "2026-05-02";
+const DEFAULT_END = "2026-05-06";
 const LATEST = "2027-05-06";
 const PAST_LATEST = "2027-05-07";
 
@@ -159,14 +187,15 @@ async function renderFooter(org: AdminOrganization = ORG): Promise<void> {
 // broken by that caller.
 async function renderMenuWith(
   actions: "all" | "lifecycle" | "trial",
+  org: AdminOrganization = ORG,
 ): Promise<void> {
   await renderWithApp(
     <WriteReportProvider value={REPORTER}>
-      <OrganizationActions org={ORG} layout="menu" actions={actions} />
+      <OrganizationActions org={org} layout="menu" actions={actions} />
     </WriteReportProvider>,
   );
   fireEvent.pointerDown(
-    screen.getByRole("button", { name: `Actions for ${ORG.name}` }),
+    screen.getByRole("button", { name: `Actions for ${org.name}` }),
     { button: 0, ctrlKey: false, pointerType: "mouse" },
   );
 }
@@ -250,7 +279,7 @@ function pageTo(iso: string): void {
 
 async function submitExtend(): Promise<void> {
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
   });
 }
 
@@ -277,9 +306,6 @@ function rendered(day: string): string {
 }
 
 // What the announcement says for a count of days, which is not `${n} days`.
-function dayCountText(days: number): string {
-  return `${days} ${days === 1 ? "day" : "days"}`;
-}
 
 // react-day-picker refuses a month press by marking the button rather than by
 // removing it, and marks it as either `disabled` or `aria-disabled` depending on
@@ -295,7 +321,7 @@ function navBlocked(name: string): boolean {
 // The dialog opens from a menu item, and the menu takes a moment to unmount
 // itself around the state change that opens it.
 async function openExtendDialog(): Promise<void> {
-  fireEvent.click(screen.getByRole("menuitem", { name: "Extend trial" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Change end date" }));
   await screen.findByRole("dialog");
 }
 
@@ -304,11 +330,9 @@ async function openRearmDialog(): Promise<void> {
   await screen.findByRole("dialog");
 }
 
-async function submitDays(value: string): Promise<void> {
-  fireEvent.change(dayInput(), { target: { value } });
-  await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Extend" }));
-  });
+async function openStartDialog(item = "Start trial"): Promise<void> {
+  fireEvent.click(screen.getByRole("menuitem", { name: item }));
+  await screen.findByRole("dialog");
 }
 
 async function submitRearmDays(value: string): Promise<void> {
@@ -316,6 +340,17 @@ async function submitRearmDays(value: string): Promise<void> {
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Re-arm" }));
   });
+}
+
+async function submitStart(label = "Start trial"): Promise<void> {
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: label }));
+  });
+}
+
+async function pickAndSubmitStart(iso: string): Promise<void> {
+  await pickDay(iso);
+  await submitStart();
 }
 
 // A write held open, so a test can read the page while the request is in
@@ -329,6 +364,8 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-05-01T12:00:00Z"));
   announce.mockReset();
   showFailure.mockReset();
   mocks.disableOrganization.mockReset();
@@ -338,13 +375,15 @@ beforeEach(() => {
   });
   mocks.enableOrganization.mockReset();
   mocks.enableOrganization.mockResolvedValue(ORG);
-  mocks.extendTrial.mockReset();
-  mocks.extendTrial.mockResolvedValue({
+  mocks.changeTrialEndDate.mockReset();
+  mocks.changeTrialEndDate.mockResolvedValue({
     ...ORG,
     trial_ends_at: "2026-05-20T00:00:00Z",
   });
   mocks.rearmTrial.mockReset();
   mocks.rearmTrial.mockResolvedValue(REARMED_ORG);
+  mocks.startTrial.mockReset();
+  mocks.startTrial.mockResolvedValue(STARTED_ORG);
 });
 
 afterEach(cleanup);
@@ -356,7 +395,7 @@ describe("the row menu", () => {
     // Exactly one of the two. Both at once would be a menu offering to undo
     // something that has not happened, and the operator has no way to tell
     // which one the record is in.
-    expect(menuItems()).toEqual(["Disable", "Extend trial"]);
+    expect(menuItems()).toEqual(["Disable", "Change end date"]);
   });
 
   it("offers Re-enable, and not Disable, for a disabled organization", async () => {
@@ -368,7 +407,7 @@ describe("the row menu", () => {
   });
 
   it.each([...TRIAL_STATES, undefined])(
-    "offers Extend trial for the %s trial only where the server would take it",
+    "offers Change end date for the %s trial only where the server would take it",
     async (state) => {
       await renderMenu({ ...ORG, trial_state: state });
 
@@ -377,14 +416,14 @@ describe("the row menu", () => {
       // with no trial has no end date to add days to, so offering the action
       // there is offering a request that cannot succeed. A seventh state fails
       // here as well as in the build.
-      expect(menuItems().includes("Extend trial")).toBe(
+      expect(menuItems().includes("Change end date")).toBe(
         EXTENDABLE.includes(state),
       );
     },
   );
 
   it.each([...TRIAL_STATES, undefined])(
-    "keeps Extend trial off a disabled organization on the %s trial",
+    "keeps Change end date off a disabled organization on the %s trial",
     async (state) => {
       await renderMenu({ ...DISABLED_ORG, trial_state: state });
 
@@ -392,7 +431,7 @@ describe("the row menu", () => {
       // reads disabled_at, and the trial goes on running while every member is
       // locked out. Offering it anyway is offering to buy more of a trial
       // nobody can use.
-      expect(menuItems().includes("Extend trial")).toBe(false);
+      expect(menuItems().includes("Change end date")).toBe(false);
     },
   );
 
@@ -409,15 +448,19 @@ describe("the row menu", () => {
   );
 
   it.each([...TRIAL_STATES, undefined])(
-    "never offers both trial actions at once, on the %s trial",
+    "never offers two trial actions at once, on the %s trial",
     async (state) => {
       await renderMenu({ ...ORG, trial_state: state });
 
-      // The two menus read together rather than one at a time. Two separate
+      // The three menus read together rather than one at a time. Two separate
       // tests would each pass while one record offered both, and a seventh
       // state added to TRIAL_STATES is walked here as well as in the build.
       const offered = menuItems().filter(
-        (item) => item === "Extend trial" || item === "Re-arm trial",
+        (item) =>
+          item === "Change end date" ||
+          item === "Re-arm trial" ||
+          item === "Start trial" ||
+          item === "Restart trial",
       );
       expect(offered.length).toBeLessThanOrEqual(1);
     },
@@ -431,6 +474,30 @@ describe("the row menu", () => {
       // The server would take it: nothing in the re-arm handler reads
       // disabled_at, so the restored trial would run behind the lockout.
       expect(menuItems().includes("Re-arm trial")).toBe(false);
+    },
+  );
+
+  it.each([...TRIAL_STATES, undefined])(
+    "offers Start trial for the %s trial only where the server would take it",
+    async (state) => {
+      await renderMenu({ ...ORG, trial_state: state });
+
+      // Never trialled, or expired without converting or being demoted. A
+      // running trial is extend's job, a demoted one is re-arm's, and a
+      // converted one has become a contract. Expired is a restart of the
+      // same write, named for the field it sits on.
+      expect(menuItems().includes("Start trial")).toBe(state === "none");
+      expect(menuItems().includes("Restart trial")).toBe(state === "expired");
+    },
+  );
+
+  it.each([...TRIAL_STATES, undefined])(
+    "keeps Start trial off a disabled organization on the %s trial",
+    async (state) => {
+      await renderMenu({ ...DISABLED_ORG, trial_state: state });
+
+      expect(menuItems().includes("Start trial")).toBe(false);
+      expect(menuItems().includes("Restart trial")).toBe(false);
     },
   );
 
@@ -491,19 +558,23 @@ describe("the row menu", () => {
   });
 });
 
-// The record draws two bars at once, so each has to be able to ask for its own
-// half. Both layouts are gated, not just the one the record happens to use.
+// The Overview separates lifecycle actions into Danger zone and trial actions
+// into the Enterprise trial panel, so each instance needs its own action scope.
+// Both layouts honor that scope, not just the buttons used by the Overview.
 describe("the actions prop", () => {
   it.each([
-    ["all", ["Disable", "Extend trial"]],
-    ["lifecycle", ["Disable"]],
-    ["trial", ["Extend trial"]],
-  ] as ["all" | "lifecycle" | "trial", string[]][])(
-    "draws %s as buttons",
-    async (actions, expected) => {
+    ["all", "live running", ORG, ["Disable", "Change end date"]],
+    ["lifecycle", "live running", ORG, ["Disable"]],
+    ["trial", "live running", ORG, ["Change end date"]],
+    ["lifecycle", "demoted", DEMOTED_ORG, ["Disable"]],
+    ["trial", "demoted", DEMOTED_ORG, ["Re-arm trial"]],
+    ["trial", "disabled running", DISABLED_ORG, []],
+  ] as ["all" | "lifecycle" | "trial", string, AdminOrganization, string[]][])(
+    "draws %s as buttons for a %s organization",
+    async (actions, _state, org, expected) => {
       await renderWithApp(
         <WriteReportProvider value={REPORTER}>
-          <OrganizationActions org={ORG} layout="buttons" actions={actions} />
+          <OrganizationActions org={org} layout="buttons" actions={actions} />
         </WriteReportProvider>,
       );
 
@@ -514,13 +585,16 @@ describe("the actions prop", () => {
   );
 
   it.each([
-    ["all", ["Disable", "Extend trial"]],
-    ["lifecycle", ["Disable"]],
-    ["trial", ["Extend trial"]],
-  ] as ["all" | "lifecycle" | "trial", string[]][])(
-    "draws %s in the menu too",
-    async (actions, expected) => {
-      await renderMenuWith(actions);
+    ["all", "live running", ORG, ["Disable", "Change end date"]],
+    ["lifecycle", "live running", ORG, ["Disable"]],
+    ["trial", "live running", ORG, ["Change end date"]],
+    ["lifecycle", "demoted", DEMOTED_ORG, ["Disable"]],
+    ["trial", "demoted", DEMOTED_ORG, ["Re-arm trial"]],
+    ["trial", "disabled running", DISABLED_ORG, []],
+  ] as ["all" | "lifecycle" | "trial", string, AdminOrganization, string[]][])(
+    "draws %s in the menu for a %s organization",
+    async (actions, _state, org, expected) => {
+      await renderMenuWith(actions, org);
 
       expect(menuItems()).toEqual(expected);
     },
@@ -536,13 +610,79 @@ describe("the actions prop", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: `Extend trial for ${ORG.name}` }),
+      screen.getByRole("button", { name: `Change end date for ${ORG.name}` }),
     );
     await screen.findByRole("dialog");
 
     await pickAndSubmit("2026-06-05");
 
-    expect(mocks.extendTrial).toHaveBeenCalledWith({ id: ORG.id, days: 30 });
+    expect(mocks.changeTrialEndDate).toHaveBeenCalledWith({
+      id: ORG.id,
+      endsAt: new Date("2026-06-05T00:00:00.000Z"),
+    });
+  });
+
+  it("draws Start trial on a trial-only bar, and not on a lifecycle bar", async () => {
+    await renderWithApp(
+      <WriteReportProvider value={REPORTER}>
+        <OrganizationActions
+          org={NONE_ORG}
+          layout="buttons"
+          actions="lifecycle"
+        />
+        <OrganizationActions org={NONE_ORG} layout="buttons" actions="trial" />
+      </WriteReportProvider>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: `Start trial for ${NONE_ORG.name}` }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: `Disable ${NONE_ORG.name}` }),
+    ).toBeTruthy();
+    // One Start trial, from the trial bar. A lifecycle bar that also drew it
+    // would put the same write on the record twice.
+    expect(
+      screen.getAllByRole("button", {
+        name: `Start trial for ${NONE_ORG.name}`,
+      }),
+    ).toHaveLength(1);
+  });
+
+  it("draws the trial field as the start control when asked", async () => {
+    await renderWithApp(
+      <WriteReportProvider value={REPORTER}>
+        <OrganizationActions
+          org={NONE_ORG}
+          layout="buttons"
+          actions="trial"
+          fieldTrigger
+        />
+      </WriteReportProvider>,
+    );
+
+    const control = screen.getByRole("button", {
+      name: `Start trial for ${NONE_ORG.name}`,
+    });
+    expect(control.textContent).toBe("No trial");
+  });
+
+  it("names the field Restart trial when the trial has expired", async () => {
+    await renderWithApp(
+      <WriteReportProvider value={REPORTER}>
+        <OrganizationActions
+          org={EXPIRED_ORG}
+          layout="buttons"
+          actions="trial"
+          fieldTrigger
+        />
+      </WriteReportProvider>,
+    );
+
+    const control = screen.getByRole("button", {
+      name: `Restart trial for ${EXPIRED_ORG.name}`,
+    });
+    expect(control.textContent).toBe("Restart trial");
   });
 });
 
@@ -581,7 +721,7 @@ describe("the button styling prop", () => {
   });
 });
 
-describe("the extend trial dialog", () => {
+describe("the change end date dialog", () => {
   // Every test here runs in a zone that is not UTC, because the fault this
   // dialog is most likely to carry is invisible in UTC: the record's trial ends
   // at midnight UTC, which is the day before locally, so a conversion that
@@ -603,14 +743,14 @@ describe("the extend trial dialog", () => {
     await openExtendDialog();
 
     const text = dialog().textContent ?? "";
-    expect(text).toContain(`Extend the trial for ${ORG.name}?`);
+    expect(text).toContain(`Change end date for ${ORG.name}?`);
     expect(text).toContain("The trial ends on");
     // Extend moves a date and nothing else, so it must not carry the sentence
     // that describes what re-arm restores.
     expect(text).not.toContain("model provider keys");
   });
 
-  it("opens on the trial length the rest of the system assumes", async () => {
+  it("opens on the current end date", async () => {
     await renderMenu();
     await openExtendDialog();
 
@@ -634,12 +774,14 @@ describe("the extend trial dialog", () => {
 
     await pickAndSubmit(EARLIEST);
 
-    // One day, not two. An anchor read in the reader's zone would put the
-    // trial's last day on the 5th and make the 7th two days away.
-    expect(mocks.extendTrial).toHaveBeenCalledWith({ id: ORG.id, days: 1 });
+    // The selected calendar date is sent as UTC midnight, regardless of local zone.
+    expect(mocks.changeTrialEndDate).toHaveBeenCalledWith({
+      id: ORG.id,
+      endsAt: new Date(`${EARLIEST}T00:00:00.000Z`),
+    });
   });
 
-  it("names and counts the same day in a zone ahead of UTC", async () => {
+  it("names and submits the same date in a zone ahead of UTC", async () => {
     // The other side of UTC, which the zone above cannot stand in for. West of
     // UTC a local midnight is a later instant than the day it stands for and
     // east of it an earlier one, so two faults that America/Los_Angeles hides
@@ -654,35 +796,34 @@ describe("the extend trial dialog", () => {
 
     expect(endDateTrigger().textContent).toBe(rendered("2026-06-05"));
     expect(dialog().textContent).toContain(
-      `end on ${rendered("2026-06-05")}, 30 days later`,
+      `end on ${rendered("2026-06-05")} (UTC)`,
     );
 
     await submitExtend();
 
-    expect(mocks.extendTrial).toHaveBeenCalledWith({ id: ORG.id, days: 30 });
+    expect(mocks.changeTrialEndDate).toHaveBeenCalledWith({
+      id: ORG.id,
+      endsAt: new Date("2026-06-05T00:00:00.000Z"),
+    });
   });
 
-  // Three dates rather than one, and none of them today: the conversion the
-  // server's own comment warns about anchors on today instead of on the trial's
-  // current end, and a single date near today would let that through.
-  it.each([
-    [EARLIEST, MIN_TRIAL_EXTENSION_DAYS],
-    ["2026-06-05", 30],
-    [LATEST, MAX_TRIAL_EXTENSION_DAYS],
-  ] as [string, number][])(
-    "sends the day count that reaches %s",
-    async (day, days) => {
+  it.each([EARLIEST, "2026-06-05", LATEST])(
+    "sets the absolute end date to %s",
+    async (day) => {
       await renderMenu();
       await openExtendDialog();
 
       await pickAndSubmit(day);
 
-      expect(mocks.extendTrial).toHaveBeenCalledWith({ id: ORG.id, days });
+      expect(mocks.changeTrialEndDate).toHaveBeenCalledWith({
+        id: ORG.id,
+        endsAt: new Date(`${day}T00:00:00.000Z`),
+      });
       await waitFor(() => {
         expect(screen.queryByRole("dialog")).toBeNull();
       });
       expect(announce).toHaveBeenCalledWith(
-        `${ORG.name} trial extended by ${dayCountText(days)}.`,
+        `${ORG.name} trial end date changed to ${rendered(day)}.`,
       );
     },
   );
@@ -693,28 +834,34 @@ describe("the extend trial dialog", () => {
 
     await pickDay("2026-06-05");
 
-    // The operator picks a date and the request sends a count. Both are the
-    // record's future, and the dialog is the only place they are shown to
-    // agree.
+    // The confirmation shows the same absolute UTC date that will be sent.
     expect(dialog().textContent).toContain(
-      `The trial will end on ${rendered("2026-06-05")}, 30 days later`,
+      `The trial will end on ${rendered("2026-06-05")} (UTC)`,
     );
   });
 
-  it("offers no day the server would refuse to extend to", async () => {
+  it("refreshes the earliest date when opened after UTC midnight", async () => {
+    await renderMenu();
+    await openExtendDialog();
+    vi.setSystemTime(new Date("2026-05-02T00:01:00Z"));
+    await openCalendar();
+    expect(dayButton("2026-05-02").disabled).toBe(true);
+    expect(dayButton("2026-05-03").disabled).toBe(false);
+  });
+
+  it("allows tomorrow but not today", async () => {
     await renderMenu();
     await openExtendDialog();
     await openCalendar();
 
-    // The trial's own last day is one day short of the minimum extension, so
-    // it is the first day off the bottom of the range.
-    expect(dayCell("2026-05-06")?.getAttribute("data-disabled")).toBe("true");
+    // Today is not a future calendar date.
+    expect(dayCell("2026-05-01")?.getAttribute("data-disabled")).toBe("true");
     expect(dayButton(EARLIEST).hasAttribute("disabled")).toBe(false);
     // And the calendar cannot be paged back to a month made entirely of them.
     expect(navBlocked("Go to the Previous Month")).toBe(true);
   });
 
-  it("offers no day past the year the server would extend by", async () => {
+  it("allows dates beyond the old one-year extension limit", async () => {
     await renderMenu();
     await openExtendDialog();
     await openCalendar();
@@ -727,8 +874,10 @@ describe("the extend trial dialog", () => {
     }
 
     expect(dayButton(LATEST).hasAttribute("disabled")).toBe(false);
-    expect(dayCell(PAST_LATEST)?.getAttribute("data-disabled")).toBe("true");
-    expect(navBlocked("Go to the Next Month")).toBe(true);
+    expect(dayCell(PAST_LATEST)?.getAttribute("data-disabled")).not.toBe(
+      "true",
+    );
+    expect(navBlocked("Go to the Next Month")).toBe(false);
   });
 
   it("refuses an empty calendar rather than sending it as NaN", async () => {
@@ -740,10 +889,10 @@ describe("the extend trial dialog", () => {
     await pickDay(DEFAULT_END);
     await submitExtend();
 
-    expect(mocks.extendTrial).not.toHaveBeenCalled();
+    expect(mocks.changeTrialEndDate).not.toHaveBeenCalled();
     expect(endDateTrigger().textContent).toBe("Pick a date");
     expect((await screen.findByRole("alert")).textContent).toContain(
-      `between ${rendered(EARLIEST)} and ${rendered(LATEST)}`,
+      "Pick a future date (UTC).",
     );
     expect(endDateTrigger().getAttribute("aria-invalid")).toBe("true");
     expect(screen.getByRole("dialog")).toBeTruthy();
@@ -765,9 +914,9 @@ describe("the extend trial dialog", () => {
     expect(announce).toHaveBeenCalledTimes(2);
     expect(announce).toHaveBeenNthCalledWith(
       2,
-      `Could not extend the trial for ${ORG.name}: Pick a date between ${rendered(EARLIEST)} and ${rendered(LATEST)}.`,
+      `Could not change the trial end date for ${ORG.name}: Pick a future date (UTC).`,
     );
-    expect(mocks.extendTrial).not.toHaveBeenCalled();
+    expect(mocks.changeTrialEndDate).not.toHaveBeenCalled();
   });
 
   it("points the date at the message under it", async () => {
@@ -793,14 +942,14 @@ describe("the extend trial dialog", () => {
     await submitExtend();
     expect(await screen.findByRole("alert")).toBeTruthy();
 
-    mocks.extendTrial.mockReturnValue(held.promise);
+    mocks.changeTrialEndDate.mockReturnValue(held.promise);
     await pickAndSubmit("2026-06-05");
 
     // While the corrected request is still in flight, which is the only moment
     // it is visible: success unmounts the dialog. The field would otherwise
     // sit there marked invalid, under a bounds message, while its own request
     // runs.
-    await screen.findByRole("button", { name: "Extending..." });
+    await screen.findByRole("button", { name: "Saving..." });
     expect(endDateTrigger().getAttribute("aria-invalid")).toBe("false");
     expect(screen.queryByRole("alert")).toBeNull();
 
@@ -810,7 +959,7 @@ describe("the extend trial dialog", () => {
   });
 
   it("shows the bounds alone when a refusal follows a server failure", async () => {
-    mocks.extendTrial.mockRejectedValue(
+    mocks.changeTrialEndDate.mockRejectedValue(
       new GramAdminError(
         409,
         { name: "conflict", message: "organization has no running trial" },
@@ -830,13 +979,11 @@ describe("the extend trial dialog", () => {
     // saying which one the next press answers.
     const alerts = screen.getAllByRole("alert");
     expect(alerts).toHaveLength(1);
-    expect(alerts[0]?.textContent).toContain(
-      `between ${rendered(EARLIEST)} and ${rendered(LATEST)}`,
-    );
+    expect(alerts[0]?.textContent).toContain("Pick a future date (UTC).");
   });
 
   it("keeps the dialog open and names the conflict the server answered", async () => {
-    mocks.extendTrial.mockRejectedValue(
+    mocks.changeTrialEndDate.mockRejectedValue(
       new GramAdminError(
         409,
         {
@@ -858,12 +1005,12 @@ describe("the extend trial dialog", () => {
       "organization has no running enterprise trial to extend",
     );
     expect(announce).toHaveBeenCalledWith(
-      `Could not extend the trial for ${ORG.name}: organization has no running enterprise trial to extend`,
+      `Could not change the trial end date for ${ORG.name}: organization has no running enterprise trial to extend`,
     );
   });
 
   it("opens the next attempt without the last one's failure", async () => {
-    mocks.extendTrial.mockRejectedValue(
+    mocks.changeTrialEndDate.mockRejectedValue(
       new GramAdminError(404, null, "gram admin 404 Not Found"),
     );
     await renderMenu();
@@ -890,13 +1037,13 @@ describe("the extend trial dialog", () => {
 
   it("holds the operator out of the dialog while the write is in flight", async () => {
     const held = deferred<AdminOrganization>();
-    mocks.extendTrial.mockReturnValue(held.promise);
+    mocks.changeTrialEndDate.mockReturnValue(held.promise);
     await renderMenu();
     await openExtendDialog();
 
     await submitExtend();
 
-    const submit = await screen.findByRole("button", { name: "Extending..." });
+    const submit = await screen.findByRole("button", { name: "Saving..." });
     expect(submit.hasAttribute("disabled")).toBe(true);
     expect(endDateTrigger().hasAttribute("disabled")).toBe(true);
 
@@ -906,17 +1053,17 @@ describe("the extend trial dialog", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog")).toBeNull();
     });
-    expect(mocks.extendTrial).toHaveBeenCalledTimes(1);
+    expect(mocks.changeTrialEndDate).toHaveBeenCalledTimes(1);
   });
 
-  it("says one day rather than 1 days", async () => {
+  it("announces the selected end date", async () => {
     await renderMenu();
     await openExtendDialog();
 
     await pickAndSubmit(EARLIEST);
 
     expect(announce).toHaveBeenCalledWith(
-      `${ORG.name} trial extended by 1 day.`,
+      `${ORG.name} trial end date changed to ${rendered(EARLIEST)}.`,
     );
   });
 });
@@ -925,119 +1072,11 @@ describe("the extend trial dialog", () => {
 // live trial and no date to pick against. The day count is what that record
 // gets: an anchor guessed from today would extend the trial from a date the
 // server is not holding.
-describe("the extend trial dialog, with no end date to anchor on", () => {
-  it("starts on the trial length the rest of the system assumes", async () => {
-    await renderMenu(ORG_NO_END);
-    await openExtendDialog();
-
-    expect(dayInput().value).toBe(DEFAULT_DAYS);
-    expect(screen.queryByLabelText("Ends on")).toBeNull();
-  });
-
-  it("extends by the day count the operator typed", async () => {
-    await renderMenu(ORG_NO_END);
-    await openExtendDialog();
-
-    await submitDays("30");
-
-    expect(mocks.extendTrial).toHaveBeenCalledWith({ id: ORG.id, days: 30 });
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog")).toBeNull();
-    });
-    expect(announce).toHaveBeenCalledWith(
-      `${ORG.name} trial extended by 30 days.`,
-    );
-  });
-
-  // Both edges and both sides of each. The server takes 1 to 365 inclusive, so
-  // a bound written as an exclusive comparison passes a one-sided test. This is
-  // the surface the guard is reachable from: on the calendar the same bounds
-  // are what the operator is offered, and the guard behind them is a backstop.
-  it.each([
-    [String(MIN_TRIAL_EXTENSION_DAYS - 1), false],
-    [String(MIN_TRIAL_EXTENSION_DAYS), true],
-    [String(MAX_TRIAL_EXTENSION_DAYS), true],
-    [String(MAX_TRIAL_EXTENSION_DAYS + 1), false],
-    ["-7", false],
-    ["1.5", false],
-    ["", false],
-  ] as [string, boolean][])(
-    "sends %s to the server only where the server would take it",
-    async (value, sent) => {
-      await renderMenu(ORG_NO_END);
-      await openExtendDialog();
-
-      await submitDays(value);
-
-      expect(mocks.extendTrial).toHaveBeenCalledTimes(sent ? 1 : 0);
-      if (!sent) {
-        // Refused, and said so. A request the server is certain to reject is
-        // worse than no request, and a dialog that swallows the press is
-        // worse than either.
-        expect((await screen.findByRole("alert")).textContent).toContain(
-          `between ${MIN_TRIAL_EXTENSION_DAYS} and ${MAX_TRIAL_EXTENSION_DAYS}`,
-        );
-        expect(dayInput().getAttribute("aria-invalid")).toBe("true");
-        expect(screen.getByRole("dialog")).toBeTruthy();
-      }
-    },
-  );
-
-  it("says so again when the same value is refused twice", async () => {
-    await renderMenu(ORG_NO_END);
-    await openExtendDialog();
-
-    await submitDays("0");
-    await submitDays("0");
-
-    expect(announce).toHaveBeenCalledTimes(2);
-    expect(announce).toHaveBeenNthCalledWith(
-      2,
-      `Could not extend the trial for ${ORG.name}: Enter a whole number of days between ${MIN_TRIAL_EXTENSION_DAYS} and ${MAX_TRIAL_EXTENSION_DAYS}.`,
-    );
-    expect(mocks.extendTrial).not.toHaveBeenCalled();
-  });
-
-  it("points the day count at the message under it", async () => {
-    await renderMenu(ORG_NO_END);
-    await openExtendDialog();
-
-    await submitDays("0");
-
-    const alert = await screen.findByRole("alert");
-    expect(alert.id).toBeTruthy();
-    expect(dayInput().getAttribute("aria-describedby")).toBe(alert.id);
-  });
-
-  it("stops calling a corrected value out of bounds", async () => {
-    const held = deferred<AdminOrganization>();
-    await renderMenu(ORG_NO_END);
-    await openExtendDialog();
-    await submitDays("0");
-    expect(await screen.findByRole("alert")).toBeTruthy();
-
-    mocks.extendTrial.mockReturnValue(held.promise);
-    await submitDays("30");
-
-    await screen.findByRole("button", { name: "Extending..." });
-    expect(dayInput().getAttribute("aria-invalid")).toBe("false");
-    expect(screen.queryByRole("alert")).toBeNull();
-
-    await act(async () => {
-      held.resolve({ ...ORG, trial_ends_at: "2026-05-20T00:00:00Z" });
-    });
-  });
-
-  it("says one day rather than 1 days", async () => {
-    await renderMenu(ORG_NO_END);
-    await openExtendDialog();
-
-    await submitDays("1");
-
-    expect(announce).toHaveBeenCalledWith(
-      `${ORG.name} trial extended by 1 day.`,
-    );
-  });
+it("does not offer changing an end date when the record has no end date", async () => {
+  await renderMenu(ORG_NO_END);
+  expect(
+    screen.queryByRole("menuitem", { name: "Change end date" }),
+  ).toBeNull();
 });
 
 describe("the re-arm trial dialog", () => {
@@ -1062,7 +1101,8 @@ describe("the re-arm trial dialog", () => {
     const text = dialog().textContent ?? "";
     expect(text).toContain(`Re-arm the trial for ${DEMOTED_ORG.name}?`);
     expect(text).toContain("account type");
-    expect(text).toContain("model provider keys");
+    expect(text).toContain("removes the trial disable cause");
+    expect(text).toContain("admin, billing, or unknown causes remain disabled");
     expect(text).toContain("book-a-demo gate");
     expect(text).toContain("counted from now");
   });
@@ -1226,6 +1266,189 @@ describe("the re-arm trial dialog", () => {
 
     expect(screen.queryByRole("alert")).toBeNull();
     expect(dayInput().value).toBe(DEFAULT_DAYS);
+  });
+});
+
+describe("the start trial dialog", () => {
+  // Frozen on a UTC morning that is still the previous local day west of
+  // Greenwich, so an anchor read in the reader's zone is a day short and no
+  // assertion on a UTC runner can tell.
+  const START_NOW = "2026-01-16T03:00:00Z";
+  const START_EARLIEST = "2026-01-17";
+  const START_DEFAULT = "2026-01-30";
+  const START_LATEST = "2027-01-16";
+
+  beforeEach(() => {
+    vi.stubEnv("TZ", "America/Los_Angeles");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(START_NOW));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  it("names the record and says what the write does besides moving a date", async () => {
+    await renderMenu(NONE_ORG);
+    await openStartDialog();
+
+    const text = dialog().textContent ?? "";
+    expect(text).toContain(`Start a trial for ${NONE_ORG.name}?`);
+    expect(text).toContain("enterprise");
+    expect(text).toContain("model provider keys");
+    expect(text).toContain("book-a-demo gate");
+    expect(text).toContain("counted from today");
+    // Start is not re-arm: it does not talk about putting an old trial back.
+    expect(text).not.toContain("counted from now rather than from the date");
+  });
+
+  it("opens on the trial length the rest of the system assumes", async () => {
+    await renderMenu(NONE_ORG);
+    await openStartDialog();
+
+    expect(endDateTrigger().textContent).toBe(rendered(START_DEFAULT));
+    await openCalendar();
+    expect(dayCell(START_DEFAULT)?.getAttribute("data-selected")).toBe("true");
+  });
+
+  it("reads today as the UTC day, not the reader's", async () => {
+    expect(new Date(START_NOW).getDate()).toBe(15);
+
+    await renderMenu(NONE_ORG);
+    await openStartDialog();
+
+    await pickAndSubmitStart(START_EARLIEST);
+
+    // One day, not two. An anchor read in the reader's zone would put today
+    // on the 15th and make the 17th two days away.
+    expect(mocks.startTrial).toHaveBeenCalledWith({
+      id: NONE_ORG.id,
+      days: MIN_TRIAL_START_DAYS,
+    });
+  });
+
+  it("counts from the UTC day of submit when the dialog sat overnight", async () => {
+    await renderMenu(NONE_ORG);
+    await openStartDialog();
+    // Already the 30th. Pressing it again would clear the date and fall
+    // back to the day-count field, which is not what this case is about.
+    expect(endDateTrigger().textContent).toBe(rendered(START_DEFAULT));
+
+    // The clock moves; the dialog does not re-render. Submit must still
+    // count from the new UTC day, not from the morning the dialog opened.
+    vi.setSystemTime(new Date("2026-01-17T00:00:01Z"));
+    await submitStart();
+
+    expect(mocks.startTrial).toHaveBeenCalledWith({
+      id: NONE_ORG.id,
+      days: 13,
+    });
+  });
+
+  it("counts from today even when an expired trial still carries an old end", async () => {
+    await renderMenu(EXPIRED_ORG);
+    await openStartDialog("Restart trial");
+
+    // The expired record's last day is in May. Anchoring there would offer
+    // May dates and send a count the server would add to now, not to May.
+    expect(endDateTrigger().textContent).toBe(rendered(START_DEFAULT));
+    expect(dialog().textContent).not.toContain(rendered("2026-05-06"));
+    expect(dialog().textContent).toContain(
+      `Restart the trial for ${EXPIRED_ORG.name}?`,
+    );
+
+    await submitStart("Restart trial");
+
+    expect(mocks.startTrial).toHaveBeenCalledWith({
+      id: EXPIRED_ORG.id,
+      days: 14,
+    });
+    expect(announce).toHaveBeenCalledWith(
+      `${EXPIRED_ORG.name} trial restarted for 14 days.`,
+    );
+  });
+
+  it.each([
+    [START_EARLIEST, MIN_TRIAL_START_DAYS],
+    ["2026-02-15", 30],
+    [START_LATEST, MAX_TRIAL_START_DAYS],
+  ] as [string, number][])(
+    "sends the day count that reaches %s",
+    async (day, days) => {
+      await renderMenu(NONE_ORG);
+      await openStartDialog();
+
+      await pickAndSubmitStart(day);
+
+      expect(mocks.startTrial).toHaveBeenCalledWith({
+        id: NONE_ORG.id,
+        days,
+      });
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).toBeNull();
+      });
+      expect(announce).toHaveBeenCalledWith(
+        `${NONE_ORG.name} trial started for ${dayCountText(days)}.`,
+      );
+    },
+  );
+
+  it("says one day rather than 1 days", async () => {
+    await renderMenu(NONE_ORG);
+    await openStartDialog();
+
+    await pickAndSubmitStart(START_EARLIEST);
+
+    expect(announce).toHaveBeenCalledWith(
+      `${NONE_ORG.name} trial started for 1 day.`,
+    );
+  });
+
+  it("keeps the dialog open and names the conflict the server answered", async () => {
+    mocks.startTrial.mockRejectedValue(
+      new GramAdminError(
+        409,
+        {
+          name: "conflict",
+          message: "organization has no startable enterprise trial",
+        },
+        "gram admin 409 Conflict",
+      ),
+    );
+    await renderMenu(NONE_ORG);
+    await openStartDialog();
+
+    await submitStart();
+
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "organization has no startable enterprise trial",
+    );
+    expect(announce).toHaveBeenCalledWith(
+      `Could not start the trial for ${NONE_ORG.name}: organization has no startable enterprise trial`,
+    );
+  });
+
+  it("holds the operator out of the dialog while the write is in flight", async () => {
+    const held = deferred<AdminOrganization>();
+    mocks.startTrial.mockReturnValue(held.promise);
+    await renderMenu(NONE_ORG);
+    await openStartDialog();
+
+    await submitStart();
+
+    const submit = await screen.findByRole("button", { name: "Starting..." });
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    expect(endDateTrigger().hasAttribute("disabled")).toBe(true);
+
+    await act(async () => {
+      held.resolve(STARTED_ORG);
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(mocks.startTrial).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -1496,6 +1719,101 @@ describe("a rejected write", () => {
 // every one of these paths ends with the keyboard on document.body, at the top
 // of the page, after an action the operator took on one row of a long table.
 describe("the keyboard when a dialog closes", () => {
+  function ActionsWithStableFallback({
+    initialOrg,
+    exposeSetOrg,
+  }: {
+    initialOrg: AdminOrganization;
+    exposeSetOrg: (setOrg: (org: AdminOrganization) => void) => void;
+  }): JSX.Element {
+    const [org, setOrg] = useState(initialOrg);
+    const fallback = useRef<HTMLHeadingElement>(null);
+    exposeSetOrg(setOrg);
+
+    return (
+      <>
+        <h5 ref={fallback} tabIndex={-1}>
+          Details
+        </h5>
+        <WriteReportProvider value={REPORTER}>
+          <OrganizationActions
+            org={org}
+            layout="buttons"
+            focusFallbackRef={fallback}
+          />
+        </WriteReportProvider>
+      </>
+    );
+  }
+
+  it.each(["disable", "re-enable", "re-arm", "start"] as const)(
+    "uses the caller fallback after a successful %s replaces its opener",
+    async (action) => {
+      const cases = {
+        disable: {
+          initialOrg: ORG,
+          nextOrg: DISABLED_ORG,
+          write: mocks.disableOrganization,
+          opener: `Disable ${ORG.name}`,
+        },
+        "re-enable": {
+          initialOrg: DISABLED_ORG,
+          nextOrg: REARMED_ORG,
+          write: mocks.enableOrganization,
+          opener: `Re-enable ${ORG.name}`,
+        },
+        "re-arm": {
+          initialOrg: DEMOTED_ORG,
+          nextOrg: REARMED_ORG,
+          write: mocks.rearmTrial,
+          opener: `Re-arm trial for ${ORG.name}`,
+        },
+        start: {
+          initialOrg: NONE_ORG,
+          nextOrg: STARTED_ORG,
+          write: mocks.startTrial,
+          opener: `Start trial for ${NONE_ORG.name}`,
+        },
+      } as const;
+      const current = cases[action];
+      let setOrg = (_org: AdminOrganization): void => {};
+      current.write.mockImplementation(async () => {
+        setOrg(current.nextOrg);
+        return current.nextOrg;
+      });
+
+      await renderWithApp(
+        <ActionsWithStableFallback
+          initialOrg={current.initialOrg}
+          exposeSetOrg={(next) => {
+            setOrg = next;
+          }}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: current.opener }));
+
+      if (action === "re-arm") {
+        await screen.findByRole("dialog");
+        await submitRearmDays("30");
+      } else if (action === "start") {
+        await screen.findByRole("dialog");
+        await submitStart();
+      } else if (action === "disable") {
+        await screen.findByRole("dialog");
+        await act(async () => {
+          fireEvent.click(screen.getByRole("button", { name: "Disable" }));
+        });
+      }
+
+      await waitFor(() => {
+        expect(document.activeElement).toBe(
+          screen.getByRole("heading", { name: "Details" }),
+        );
+      });
+      expect(document.activeElement).not.toBe(document.body);
+    },
+  );
+
   it("goes back to the row menu trigger when the write succeeds", async () => {
     const trigger = await renderMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Disable" }));
@@ -1612,11 +1930,11 @@ describe("a write in flight", () => {
 
   it("cannot be dismissed out of the extend dialog", async () => {
     const held = deferred<AdminOrganization>();
-    mocks.extendTrial.mockReturnValue(held.promise);
+    mocks.changeTrialEndDate.mockReturnValue(held.promise);
     await renderMenu();
     await openExtendDialog();
     await submitExtend();
-    await screen.findByRole("button", { name: "Extending..." });
+    await screen.findByRole("button", { name: "Saving..." });
 
     await act(async () => {
       fireEvent.keyDown(document, { key: "Escape" });
@@ -1660,11 +1978,11 @@ describe("a write in flight", () => {
 
   it("marks both peek footer controls busy rather than disabling them", async () => {
     const held = deferred<AdminOrganization>();
-    mocks.extendTrial.mockReturnValue(held.promise);
+    mocks.changeTrialEndDate.mockReturnValue(held.promise);
     await renderFooter();
     const disable = screen.getByRole("button", { name: `Disable ${ORG.name}` });
     const extend = screen.getByRole("button", {
-      name: `Extend trial for ${ORG.name}`,
+      name: `Change end date for ${ORG.name}`,
     });
 
     fireEvent.click(extend);
@@ -1701,7 +2019,7 @@ describe("the peek panel footer", () => {
       screen.getByRole("button", { name: `Disable ${ORG.name}` }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: `Extend trial for ${ORG.name}` }),
+      screen.getByRole("button", { name: `Change end date for ${ORG.name}` }),
     ).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: `Re-enable ${ORG.name}` }),
@@ -1719,7 +2037,7 @@ describe("the peek panel footer", () => {
     ).toBeNull();
   });
 
-  it("offers Re-arm trial, and not Extend trial, for a demoted trial", async () => {
+  it("offers Re-arm trial, and not Change end date, for a demoted trial", async () => {
     await renderFooter(DEMOTED_ORG);
 
     expect(
@@ -1729,7 +2047,7 @@ describe("the peek panel footer", () => {
     ).toBeTruthy();
     expect(
       screen.queryByRole("button", {
-        name: `Extend trial for ${DEMOTED_ORG.name}`,
+        name: `Change end date for ${DEMOTED_ORG.name}`,
       }),
     ).toBeNull();
   });
@@ -1739,6 +2057,49 @@ describe("the peek panel footer", () => {
 
     expect(
       screen.queryByRole("button", { name: `Re-arm trial for ${ORG.name}` }),
+    ).toBeNull();
+  });
+
+  it("offers Start trial, and not Change end date, for an organization that never trialled", async () => {
+    await renderFooter(NONE_ORG);
+
+    expect(
+      screen.getByRole("button", {
+        name: `Start trial for ${NONE_ORG.name}`,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: `Change end date for ${NONE_ORG.name}`,
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: `Re-arm trial for ${NONE_ORG.name}`,
+      }),
+    ).toBeNull();
+  });
+
+  it("offers Restart trial for an expired trial that has not been demoted", async () => {
+    await renderFooter(EXPIRED_ORG);
+
+    expect(
+      screen.getByRole("button", {
+        name: `Restart trial for ${EXPIRED_ORG.name}`,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: `Start trial for ${EXPIRED_ORG.name}`,
+      }),
+    ).toBeNull();
+  });
+
+  it("hides Start trial for a trial the server would refuse", async () => {
+    await renderFooter();
+
+    expect(
+      screen.queryByRole("button", { name: `Start trial for ${ORG.name}` }),
     ).toBeNull();
   });
 
@@ -1769,11 +2130,11 @@ describe("the peek panel footer", () => {
     });
   });
 
-  it("hides Extend trial for a trial the server would refuse", async () => {
+  it("hides Change end date for a trial the server would refuse", async () => {
     await renderFooter({ ...ORG, trial_state: "converted" });
 
     expect(
-      screen.queryByRole("button", { name: `Extend trial for ${ORG.name}` }),
+      screen.queryByRole("button", { name: `Change end date for ${ORG.name}` }),
     ).toBeNull();
   });
 
@@ -1837,3 +2198,9 @@ describe("the peek panel footer", () => {
     });
   });
 });
+
+afterEach(() => vi.useRealTimers());
+
+function dayCountText(days: number): string {
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}

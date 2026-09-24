@@ -97,18 +97,12 @@ func TestEvaluate_NeverReturnsAdmitCustom(t *testing.T) {
 	}
 }
 
-// TestEvaluate_ReportingDecidesExactlyAsPresets is the property the rollout
-// rests on. Reporting exists to predict what presets will do, so any
-// divergence would make the measurement worthless — an operator would see a
-// clean reporting signal and then break clients on the switch.
-//
-// The unset default resolves to reporting, so this also covers "whatever
-// presets does, an unconfigured issuer evaluates identically".
+// TestEvaluate_ReportingDecidesExactlyAsPresets: reporting exists to predict
+// what presets will do, so any divergence would make its recorded signal
+// worthless. Nothing resolves to reporting any more, but rows written while
+// it was the default still do, and they must keep behaving as they did.
 func TestEvaluate_ReportingDecidesExactlyAsPresets(t *testing.T) {
 	t.Parallel()
-
-	unsetMode, _ := ResolveMode("", false)
-	require.Equal(t, ModeReporting, unsetMode)
 
 	inputs := []string{
 		claudeCodeURL,
@@ -168,4 +162,63 @@ func TestEvaluate_ZeroValueModeFailsClosed(t *testing.T) {
 	decision := Evaluate(zero, claudeCodeURL)
 	require.Equal(t, OutcomeDeny, decision.Outcome)
 	require.Equal(t, DenialUnknownMode, decision.Denial)
+}
+
+// TestEvaluateShadow_DecidesExactlyAsPresets is the property the open-mode
+// measurement rests on. The shadow exists to say what presets WOULD have
+// decided, so a divergence would report catalog gaps that are not there, or
+// hide ones that are.
+func TestEvaluateShadow_DecidesExactlyAsPresets(t *testing.T) {
+	t.Parallel()
+
+	inputs := []string{
+		claudeCodeURL,
+		chatGPTConnectorURL,
+		customURL,
+		unknownURL,
+		strings.Repeat("x", MaxClientIDLength+1),
+		"",
+	}
+	for _, clientID := range inputs {
+		require.Equalf(t, Evaluate(ModePresets, clientID), EvaluateShadow(clientID),
+			"the shadow and presets must agree on %q", clientID)
+	}
+}
+
+// TestEvaluate_OpenAdmitsWhateverTheShadowSays is the hazard this design
+// exists to avoid. A caller may run ModeOpen as a fixed policy and map
+// OutcomeCheckCustom onto a final denial because it has no custom-URL table
+// of its own; if Evaluate ever fell through to the catalog arm under open,
+// that caller would start refusing every client outside the catalog.
+//
+// The shadow is a separate call for exactly this reason, so the two must be
+// pinned apart rather than left to inspection.
+func TestEvaluate_OpenAdmitsWhateverTheShadowSays(t *testing.T) {
+	t.Parallel()
+
+	inputs := []string{
+		claudeCodeURL,
+		chatGPTConnectorURL,
+		customURL,
+		unknownURL,
+		strings.Repeat("x", MaxClientIDLength+1),
+		"",
+	}
+	for _, clientID := range inputs {
+		require.Equalf(t, admitDecision(AdmitOpen), Evaluate(ModeOpen, clientID),
+			"open must admit %q whatever the shadow decides about it", clientID)
+	}
+}
+
+// TestEvaluateShadow_SurvivesTheOpenDefault: the reason the default can be
+// open at all is that moving to it costs no measurement. What the resolution
+// itself yields is pinned in mode_test.go; this covers the half that would
+// otherwise go quiet.
+func TestEvaluateShadow_SurvivesTheOpenDefault(t *testing.T) {
+	t.Parallel()
+
+	mode, _ := ResolveMode("", false)
+	require.Equal(t, ModeOpen, mode)
+	require.Equal(t, OutcomeCheckCustom, EvaluateShadow(unknownURL).Outcome,
+		"an unconfigured issuer must still ask what presets would decide")
 }

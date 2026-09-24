@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"slices"
 	"strings"
 	"time"
 
@@ -17,12 +16,16 @@ import (
 )
 
 type batchMessage struct {
-	ID           uuid.UUID
-	ContentPart  bool
-	Type         message.Type
-	Content      string
-	RawToolCalls []byte
-	ToolCalls    []recordedToolCall
+	ID                     uuid.UUID
+	ChatID                 uuid.UUID
+	ParentChatMessageID    uuid.UUID
+	ContentPart            bool
+	Type                   message.Type
+	Content                string
+	RawToolCalls           []byte
+	ToolCalls              []recordedToolCall
+	PriorUserRequest       string
+	RecentUntrustedContent string
 	// UserID is the scanned chat's owner (empty for unattributed sessions),
 	// carried onto judge completions for scanning-volume attribution and into
 	// Shadow MCP bypass checks. GetMessageContentBatch must return the same
@@ -76,7 +79,10 @@ func newBatchMessages(ctx context.Context, logger *slog.Logger, rows []repo.GetM
 		if !ok {
 			continue
 		}
+		msg.ChatID = row.ChatID
 		msg.UserID = row.ChatUserID
+		msg.PriorUserRequest = row.PriorUserRequest
+		msg.RecentUntrustedContent = row.RecentUntrustedContent
 		if row.CreatedAt.Valid {
 			msg.CreatedAt = row.CreatedAt.Time
 		}
@@ -93,16 +99,22 @@ func newContentPartBatchMessages(rows []repo.GetContentPartBatchRow, contents []
 		if !message.IsTypeValid(messageType) {
 			continue
 		}
+		// Content parts carry no chat position, so they scan without trajectory
+		// context.
 		msg := batchMessage{
-			ID:           row.ID,
-			ContentPart:  true,
-			Type:         messageType,
-			Content:      contents[i],
-			RawToolCalls: nil,
-			ToolCalls:    []recordedToolCall{},
-			UserID:       row.ChatUserID,
-			CreatedAt:    time.Time{},
-			Source:       row.Source.String,
+			ID:                     row.ID,
+			ChatID:                 row.ChatID,
+			ParentChatMessageID:    row.ParentChatMessageID.UUID,
+			ContentPart:            true,
+			Type:                   messageType,
+			Content:                contents[i],
+			RawToolCalls:           nil,
+			ToolCalls:              []recordedToolCall{},
+			PriorUserRequest:       "",
+			RecentUntrustedContent: "",
+			UserID:                 row.ChatUserID,
+			CreatedAt:              time.Time{},
+			Source:                 row.Source.String,
 		}
 		if row.CreatedAt.Valid {
 			msg.CreatedAt = row.CreatedAt.Time
@@ -124,20 +136,31 @@ func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, rol
 	}
 
 	msg := batchMessage{
-		ID:           id,
-		ContentPart:  false,
-		Type:         messageType,
-		Content:      content,
-		RawToolCalls: toolCalls,
-		ToolCalls:    []recordedToolCall{},
-		UserID:       "",
-		CreatedAt:    time.Time{},
-		Source:       "",
+		ID:                     id,
+		ChatID:                 uuid.Nil,
+		ParentChatMessageID:    uuid.Nil,
+		ContentPart:            false,
+		Type:                   messageType,
+		Content:                content,
+		RawToolCalls:           toolCalls,
+		ToolCalls:              []recordedToolCall{},
+		PriorUserRequest:       "",
+		RecentUntrustedContent: "",
+		UserID:                 "",
+		CreatedAt:              time.Time{},
+		Source:                 "",
 	}
 	if messageType == message.ToolRequest && len(toolCalls) > 0 {
 		msg.ToolCalls = parseRecordedToolCalls(ctx, logger, toolCalls)
 	}
 	return msg, true
+}
+
+func batchJudgeTrajectory(msg batchMessage) judgemessage.Trajectory {
+	return judgemessage.Trajectory{
+		PriorUserRequest:       msg.PriorUserRequest,
+		RecentUntrustedContent: msg.RecentUntrustedContent,
+	}
 }
 
 func (m batchMessage) chatMessageID() uuid.NullUUID {
@@ -164,19 +187,6 @@ func parseRecordedToolCalls(ctx context.Context, logger *slog.Logger, raw []byte
 		return []recordedToolCall{fallback}
 	}
 	return calls
-}
-
-func filterBatchMessagesByMessageTypes(messages []batchMessage, messageTypes []string) []batchMessage {
-	if len(messageTypes) == 0 {
-		return messages
-	}
-	filtered := make([]batchMessage, 0, len(messages))
-	for _, msg := range messages {
-		if slices.Contains(messageTypes, msg.Type) {
-			filtered = append(filtered, msg)
-		}
-	}
-	return filtered
 }
 
 func messageTypeForRole(role string, toolCalls []byte) (message.Type, bool) {

@@ -1,7 +1,7 @@
 name: Pull Request
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches:
       - main
@@ -37,6 +37,7 @@ jobs:
       tsframework: ${{ steps.gates.outputs.tsframework }}
       migrations: ${{ steps.gates.outputs.migrations }}
       plog: ${{ steps.gates.outputs.plog }}
+      glint: ${{ steps.gates.outputs.glint }}
       infra: ${{ steps.gates.outputs.infra }}
       pystreams: ${{ steps.gates.outputs.pystreams }}
       sdk: ${{ steps.gates.outputs.sdk }}
@@ -44,12 +45,13 @@ jobs:
       webhooks-catalog: ${{ steps.gates.outputs.webhooks-catalog }}
       otel-collector: ${{ steps.gates.outputs.otel-collector }}
       tunnel: ${{ steps.gates.outputs.tunnel }}
+      preview-ui: ${{ steps.filter.outputs.preview-ui }}
       preview-retag-components: ${{ steps.preview-retag.outputs.components }}
       preview-tag: ${{ steps.preview-retag.outputs.tag }}
     steps:
       - name: Checkout source code
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
-      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         name: Check for changed packages
         id: filter
         with:
@@ -144,6 +146,13 @@ jobs:
             echo "Plog jobs will run."
           else
             echo "Plog jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.glint }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
+            echo "glint=true" >> $GITHUB_OUTPUT
+            echo "glint jobs will run."
+          else
+            echo "glint jobs will be skipped."
           fi
 
           if [[ "${{ steps.filter.outputs.infra }}" == "true" || "${{ github.ref }}" == "refs/heads/main" || "${{ github.event_name }}" == "merge_group" || "$HAS_FULL_CI_LABEL" == "true" ]]; then
@@ -252,8 +261,9 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           # The retag action only needs yq; skip the rest of the toolset and
           # keep this job's cache separate from the full-install caches.
@@ -292,8 +302,9 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -454,22 +465,31 @@ jobs:
           docker run --rm ${{ steps.build.outputs.image-tag }} --help
 
   assistant-runtime-image:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    # TEMPORARY: on GitHub-hosted runners (and so on upstream checkout/buildx/
+    # build-push actions) because Blacksmith runners cannot reach the Ubuntu apt
+    # mirrors, which breaks the musl toolchain install below. Move back to
+    # blacksmith-4vcpu-ubuntu-2404 (and the useblacksmith/* actions) once their
+    # egress is fixed, or once the musl toolchain no longer comes from apt.
+    runs-on: ubuntu-24.04
     needs: [changes]
     if: needs.changes.outputs.server == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]')
     env:
       RUNNER_TARGET: x86_64-unknown-linux-musl
       RUNNER_BINARY_DIR: /tmp/runner-binary
+      # This job runs GitHub-hosted, so keep its cache keys out of the
+      # Blacksmith-backed CI namespace (see .mise-tasks/github/pre-cache.mts).
+      CACHE_NAMESPACE: github-v1
     steps:
       - name: Checkout
-        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
-          cache_key_prefix: mise-blacksmith-v1
+          cache_key_prefix: mise-github-v1
           env: false
 
       - name: Prepare GitHub Actions environment
@@ -528,13 +548,7 @@ jobs:
           echo "hash=$hash" >> "$GITHUB_OUTPUT"
 
       - name: Setup Docker builder
-        # Skip on fork PRs: untrusted code must not commit to the shared sticky
-        # disk. The build step below then falls back to the default builder and
-        # simply runs uncached.
-        if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
-        uses: useblacksmith/setup-docker-builder@a5256a73e30f09e37e3eceb8ca36043d17621d24 # v2.1.0
-        with:
-          cache-key: gram/assistant-runtime-image
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
       - name: Log in to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -585,10 +599,7 @@ jobs:
             type=sha,format=long
 
       - name: Build and push assistant runtime image to GCR
-        # Blacksmith fork of docker/build-push-action, paired with the
-        # setup-docker-builder step above: buildkit runs on a sticky-disk
-        # cache so the bun/lightpanda/apt layers persist across runs.
-        uses: useblacksmith/build-push-action@9b0579bbec7a6cad2f171596c57e7ac1e7658850 # v2.3.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           # build-contexts and build-args travel together: the arg switches the
@@ -611,8 +622,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -660,7 +672,7 @@ jobs:
             --force
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
       - name: Log in to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -749,8 +761,9 @@ jobs:
     if: needs.changes.outputs.migrations == 'true' && github.event_name == 'pull_request'
     services:
       clickhouse:
-        image: clickhouse/clickhouse-server:25.8.3
+        image: clickhouse/clickhouse-server:26.2.19.43@sha256:c2f2605585899d5103a0447daadbc0005f362200d5f0fcca7f40db3ca0dd36dd
         env:
+          CLICKHOUSE_DB: gram
           CLICKHOUSE_USER: gram
           CLICKHOUSE_PASSWORD: gram
           CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -767,16 +780,25 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
+      - name: Bootstrap local ClickHouse principals
+        env:
+          CLICKHOUSE_CONTAINER: ${{ job.services.clickhouse.id }}
+        run: |
+          docker exec -i "$CLICKHOUSE_CONTAINER" \
+            clickhouse-client --user gram --password gram --multiquery \
+            < local/clickhouse/initdb/01-marts-definer.sql
+
       - name: Run ClickHouse migrations with golang-migrate
         env:
-          CH_URL: clickhouse://127.0.0.1:9000/default?username=gram&password=gram&secure=false&x-multi-statement=true
+          CH_URL: clickhouse://127.0.0.1:9000?database=gram&username=gram&password=gram&secure=false&x-multi-statement=true
         run: mise run clickhouse:migrate --engine golang-migrate --url ${CH_URL}
 
   lint-migrations:
@@ -800,8 +822,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -862,21 +885,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Atlas
-        uses: ariga/setup-atlas@2f3c785c89a15e1c0d07bcae3900fb5feb969eea # v0
-        with:
-          cloud-token: ${{ secrets.ATLAS_TOKEN }}
-
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
           env: false
 
+      # Mise supplies atlas; the SHA-pinned actions download a separate atlas-action wrapper.
       - name: Lint PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -885,19 +905,25 @@ jobs:
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Lint ClickHouse migrations
-        uses: ariga/atlas-action/migrate/lint@ba65b510ea74c2886c9c52ce7aa54fd7f5fc6293 # v1.15.6
+        uses: ariga/atlas-action/migrate/lint@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
         with:
-          dir: file://server/clickhouse/migrations
+          working-directory: server
+          dir: file://clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
+          config: file://atlas.hcl
+          env: clickhouse
           git-base: origin/main
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
 
       - name: Check migration state is clean
         shell: bash
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: |
           failed=0
 
@@ -918,7 +944,7 @@ jobs:
           ch_status="$(git status --porcelain -- server/clickhouse server/internal/telemetry/repo)"
           if [ -n "$ch_status" ]; then
             failed=1
-            echo "::error::ClickHouse migrations are out of sync with server/clickhouse/schema.sql"
+            echo "::error::ClickHouse migrations are out of sync with server/clickhouse/schema.sql or mart.sql"
             echo "Regenerating ClickHouse migrations produced uncommitted changes."
             echo "This covers the Atlas dir (server/clickhouse/migrations), the golang-migrate dir"
             echo "(server/clickhouse/local/golang_migrate), and the generated materialized columns Go file:"
@@ -971,10 +997,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Atlas
-        uses: ariga/setup-atlas@2f3c785c89a15e1c0d07bcae3900fb5feb969eea # v0
+      - name: Setup Mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
-          cloud-token: ${{ secrets.ATLAS_TOKEN }}
+          minimum_release_age: 1d
+          install: true
+          install_args: aqua:ariga/atlas
+          cache: true
+          cache_key_prefix: mise-atlas-blacksmith-v1
+          env: false
 
       - name: Generate tag
         id: tag
@@ -988,7 +1019,9 @@ jobs:
           fi
 
       - name: Push PostgreSQL migrations
-        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
+        uses: ariga/atlas-action/migrate/push@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         with:
           dir: file://server/migrations
           dir-name: gram
@@ -996,11 +1029,15 @@ jobs:
           tag: ${{ steps.tag.outputs.tag }}
 
       - name: Push ClickHouse migrations
-        uses: ariga/atlas-action/migrate/push@a6a4733a3fcccd0690570184deb2f7f50b13e656 # v1.16.1
+        uses: ariga/atlas-action/migrate/push@1caacd9d054d7b8521b7d90d7c7946cde16a67eb # v1.16.5
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         with:
-          dir: file://server/clickhouse/migrations
+          working-directory: server
+          dir: file://clickhouse/migrations
           dir-name: gram-clickhouse
-          dev-url: docker://clickhouse/clickhouse-server/25.8.3/dev
+          config: file://atlas.hcl
+          env: clickhouse
           tag: ${{ steps.tag.outputs.tag }}
 
   webhooks-catalog-breaking-changes:
@@ -1016,8 +1053,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -1079,8 +1117,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -1149,17 +1188,18 @@ jobs:
       - name: Run "go mod tidy"
         run: mise run go:tidy
 
-      - name: Setup Atlas
-        uses: ariga/setup-atlas@2f3c785c89a15e1c0d07bcae3900fb5feb969eea # v0
-        with:
-          cloud-token: ${{ secrets.ATLAS_TOKEN }}
-
       - name: Run migrations
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: mise run db:migrate
       - name: Diff database with schema
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: mise run db:diff out-of-sync
 
       - name: Check for dirty files
+        env:
+          ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
         run: |
           mise run db:migrate --dry
           mise run git:porcelain
@@ -1178,8 +1218,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -1247,8 +1288,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -1303,8 +1345,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -1360,8 +1403,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -1393,6 +1437,48 @@ jobs:
       - name: Check for dirty files
         run: mise run git:porcelain
 
+  glint-test:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.glint == 'true'
+    env:
+      GOMAXPROCS: 4
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        run: mise run github
+
+      - name: Cache Go
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+
+      - name: Test
+        run: mise run test:glint
+
+      - name: Run "go mod tidy"
+        run: mise run go:tidy
+
+      - name: Check for dirty files
+        run: mise run git:porcelain
+
   plog-build-lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
@@ -1404,8 +1490,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -1471,8 +1558,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -1496,24 +1584,11 @@ jobs:
         run: mise run install:go
 
       - name: Test
-        # --rerun-fails=1 gives a failing test one more attempt before the
-        # shard is marked failed, so a flaky test does not block the PR.
-        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} --rerun-fails=1
-
-      # A retried test leaves the check green, so without this a flake is
-      # invisible unless someone reads the raw log.
-      - name: Report retried tests
-        if: always()
-        working-directory: server
-        run: |
-          [ -s rerun-report.txt ] || exit 0
-          {
-            echo "### Retried tests (shard ${{ matrix.shard }})"
-            echo
-            echo '```'
-            cat rerun-report.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+        # Each package can launch Postgres, Redis, and ClickHouse concurrently.
+        # Bound package concurrency so eight race-enabled binaries plus their
+        # containers do not compete for this runner's eight CPUs during startup.
+        # Keep within-package parallelism and race detection; do not retry failures.
+        run: mise run test:server --shard=${{ matrix.shard }}/${{ strategy.job-total }} -p=2 -race -tags=inv.debug ./...
 
   # Standalone gate for the demo seed: TestDemoSeedSafety proves the seed
   # cannot touch other tenants' data, cleans up stray demo-org rows, and stays
@@ -1532,8 +1607,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -1557,7 +1633,7 @@ jobs:
         run: mise run install:go
 
       - name: Test
-        run: mise run test:server -count=1 -tags=demoseed_safety ./internal/demoseed/...
+        run: mise run test:server -race -count=1 -tags=demoseed_safety ./internal/demoseed/...
 
   docker-build-client:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1574,8 +1650,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -1758,8 +1835,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -1802,6 +1880,10 @@ jobs:
         run: aube run build:consent
         working-directory: client/dashboard
 
+      - name: Rebuild committed consent page assets
+        run: aube run build:consent-page
+        working-directory: client/dashboard
+
       - name: Check for dirty files
         run: mise run git:porcelain
 
@@ -1820,8 +1902,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -1867,8 +1950,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -1889,6 +1973,18 @@ jobs:
 
       - name: Install dependencies
         run: aube install --frozen-lockfile
+
+      - name: Test generated artifact conflict resolution
+        run: mise run test:gen-resolve
+
+      - name: Test SDK overlays
+        run: mise run test:sdk-overlays
+
+      - name: Test SDK generation check
+        run: mise run test:gen-sdk
+
+      - name: Check transformed SDK specs
+        run: mise run gen:sdk --check
 
       - name: Regenerate SDK
         run: mise run gen:sdk
@@ -1913,8 +2009,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -2016,8 +2113,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -2095,7 +2193,7 @@ jobs:
 
       - name: Set up Docker Buildx
         if: github.event.pull_request.user.login != 'dependabot[bot]'
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
       - name: Log in to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -2132,23 +2230,54 @@ jobs:
             docker tag "${{ steps.apko.outputs.image }}-amd64" "$TAG"
           done
 
-      - name: "[DEV] Push images"
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
-        run: |
-          set -x
-          fly auth docker
-          docker push --all-tags "${{ steps.flyCreateDev.outputs.flyAppRegistry }}"
+      - parallel:
+          - name: "[DEV] Push images"
+            if: github.event.pull_request.user.login != 'dependabot[bot]'
+            env:
+              DOCKER_CONFIG: ${{ runner.temp }}/docker-dev
+              FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+              CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
+              FLY_APP_REGISTRY: ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
+            run: |
+              set -euo pipefail
+              mkdir -p "$DOCKER_CONFIG"
+              fly auth docker
 
-      - name: "[PROD] Push images"
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
-        run: |
-          set -x
-          fly auth docker
-          docker push --all-tags "${{ steps.flyCreateProd.outputs.flyAppRegistry }}"
+              matched=false
+              while IFS= read -r tag; do
+                [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
+                docker push "$tag"
+                matched=true
+              done <<< "$CURRENT_TAGS"
+
+              if [[ "$matched" != true ]]; then
+                echo "::error::No current image tags matched $FLY_APP_REGISTRY"
+                exit 1
+              fi
+
+          - name: "[PROD] Push images"
+            if: github.event.pull_request.user.login != 'dependabot[bot]'
+            env:
+              DOCKER_CONFIG: ${{ runner.temp }}/docker-prod
+              FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+              CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
+              FLY_APP_REGISTRY: ${{ steps.flyCreateProd.outputs.flyAppRegistry }}
+            run: |
+              set -euo pipefail
+              mkdir -p "$DOCKER_CONFIG"
+              fly auth docker
+
+              matched=false
+              while IFS= read -r tag; do
+                [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
+                docker push "$tag"
+                matched=true
+              done <<< "$CURRENT_TAGS"
+
+              if [[ "$matched" != true ]]; then
+                echo "::error::No current image tags matched $FLY_APP_REGISTRY"
+                exit 1
+              fi
 
       - name: Prune aube store
         if: success()
@@ -2163,8 +2292,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           cache_key_prefix: mise-blacksmith-v1
@@ -2224,8 +2354,9 @@ jobs:
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
 
       - name: Setup Mise
-        uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
         with:
+          minimum_release_age: 1d
           install: true
           cache: true
           # This job only needs npx; avoid restoring the full ~606 MiB toolchain
@@ -2278,6 +2409,7 @@ jobs:
       - cli-build-lint
       - hooks-build-test
       - plog-build-lint
+      - glint-test
       - infra-build-lint
       - pystreams-build-lint
       - functions-build-host
@@ -2336,6 +2468,102 @@ jobs:
           openapi-file: ${{ env.SVIX_OPENAPI_FILE }}
           svix-api-key: ${{ secrets.SVIX_SYNC_KEY_US_PROD }}
           replace-all: true
+
+  preview-label:
+    name: Manage the preview label
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs:
+      [
+        changes,
+        docker-build-server,
+        docker-build-client,
+        docker-build-pystreams,
+        preview-image-tags,
+        upload-dashboard-assets,
+      ]
+    permissions:
+      pull-requests: write
+    # The `preview` label triggers gram-infra's gram-app-previews
+    # ApplicationSet, whose wait-for-images PreSync hook polls GCR for the
+    # pr-<number>-<sha8> tags of every component. Labelling before those tags
+    # exist leaves the hook polling for images that never arrive, and ArgoCD's
+    # selfHeal recreates it forever (this is what #2749 cleaned up), so the
+    # label is only added once this run has produced a complete tag set, and
+    # removed again the moment a head commit fails to produce one.
+    #
+    # A component's tag comes either from its docker build job or, when that
+    # job is skipped, from preview-image-tags aliasing main's image. Those two
+    # sources are keyed off the same `changes` gates, so readiness is checked
+    # as "gate closed, or the build succeeded" rather than as "not failed".
+    # `skipped` on its own is not enough: docker-build-server also needs
+    # server-build-lint, so a lint failure skips it under the default
+    # success() condition while its gate is open — leaving no server tag for
+    # preview-retag to have aliased either.
+    if: >-
+      !cancelled() &&
+      github.event_name == 'pull_request' &&
+      !github.event.pull_request.draft &&
+      !github.event.pull_request.head.repo.fork &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      needs.changes.outputs.preview-ui == 'true'
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      REPO: ${{ github.repository }}
+      OPTED_OUT: ${{ contains(github.event.pull_request.labels.*.name, 'preview:off') }}
+      IMAGES_READY: >-
+        ${{ (needs.changes.outputs.server != 'true' ||
+             needs.docker-build-server.result == 'success') &&
+            ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
+             needs.docker-build-client.result == 'success') &&
+            (needs.changes.outputs.pystreams != 'true' ||
+             needs.docker-build-pystreams.result == 'success') &&
+            ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
+             needs.upload-dashboard-assets.result == 'success') &&
+            contains(fromJSON('["success","skipped"]'), needs.preview-image-tags.result) }}
+    steps:
+      - name: Add or remove the preview label
+        run: |
+          set -euo pipefail
+
+          has_label() {
+            gh pr view "$PR_NUMBER" --repo "$REPO" --json labels \
+              --jq 'any(.labels[]; .name == "preview")'
+          }
+
+          # preview:off both stops this job labelling and withdraws a preview
+          # that an earlier commit put up. It takes effect on the next run
+          # rather than on the label itself: triggering on `labeled` would
+          # start a full CI run every time any label is touched.
+          if [[ "$OPTED_OUT" == "true" ]]; then
+            if [[ "$(has_label)" == "true" ]]; then
+              echo "PR carries preview:off; removing the preview label."
+              gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label preview
+            else
+              echo "PR carries preview:off; nothing to do."
+            fi
+            exit 0
+          fi
+
+          if [[ "$IMAGES_READY" == "true" ]]; then
+            if [[ "$(has_label)" == "true" ]]; then
+              echo "Preview label already present."
+            else
+              echo "Every preview image tag exists for this commit; labelling."
+              gh pr edit "$PR_NUMBER" --repo "$REPO" --add-label preview
+            fi
+            exit 0
+          fi
+
+          # An image job failed, so this commit has no complete tag set. Drop
+          # the label rather than let the preview chase a tag that will never
+          # land; the next green commit puts it back.
+          if [[ "$(has_label)" == "true" ]]; then
+            echo "Preview images are incomplete for this commit; removing the label."
+            gh pr edit "$PR_NUMBER" --repo "$REPO" --remove-label preview
+          else
+            echo "Preview images are incomplete and the label is not set; nothing to do."
+          fi
 
   dispatch-release:
     runs-on: blacksmith-4vcpu-ubuntu-2404

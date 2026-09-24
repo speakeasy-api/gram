@@ -48,6 +48,7 @@ export function buildMcpEndpointsQuery(
   return {
     queryKey: queryKeyMcpEndpoints({
       mcpServerId: request?.mcpServerId,
+      metaMcpServerId: request?.metaMcpServerId,
       gramSession: request?.gramSession,
       gramKey: request?.gramKey,
       gramProject: request?.gramProject,
@@ -79,6 +80,7 @@ export function buildMcpEndpointsQuery(
 export function queryKeyMcpEndpoints(
   parameters: {
     mcpServerId?: string | undefined;
+    metaMcpServerId?: string | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

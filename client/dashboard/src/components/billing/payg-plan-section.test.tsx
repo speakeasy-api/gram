@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { StripeSubscription } from "@gram/client/models/components/stripesubscription.js";
 import type { ProductTier } from "@/hooks/useProductTier";
@@ -17,10 +18,12 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   refetch: vi.fn(),
   hasAnyScope: vi.fn(),
+  flagResult: vi.fn(),
   portalMutate: vi.fn(),
   cancelMutate: vi.fn(),
   resumeMutate: vi.fn(),
   invalidate: vi.fn(),
+  checkoutMutate: vi.fn(),
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
@@ -42,6 +45,19 @@ vi.mock("@/contexts/Auth", () => ({
 
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: vi.fn() }),
+}));
+
+// The no-payment state embeds the checkout CTA, which reads the rollout flag
+// and owns the checkout mutation.
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => mocks.flagResult() as FeatureFlagResult,
+}));
+
+vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
+  useCreateStripeCheckoutMutation: () => ({
+    mutate: mocks.checkoutMutate,
+    isPending: false,
+  }),
 }));
 
 vi.mock("@gram/client/react-query/getStripeSubscription.js", () => ({
@@ -90,6 +106,7 @@ vi.mock("@/components/page-layout", () => {
 });
 
 import { PaygPlanSection } from "./payg-plan-section";
+import { resetPaygCheckoutLocks } from "./payg-checkout-lock";
 
 // Midday UTC so the formatted day can't slide either side of the date line in
 // whichever time zone the tests happen to run in.
@@ -150,7 +167,10 @@ function render(ui: ReactNode) {
   );
 }
 
-const heading = () => screen.queryByRole("heading", { name: /^plan$/i });
+const heading = () => screen.queryByRole("heading", { name: /^payment$/i });
+
+const checkoutCta = () =>
+  screen.queryByRole("button", { name: /add payment method/i });
 
 const portalButton = () =>
   screen.queryByRole("button", { name: /manage billing/i });
@@ -166,9 +186,15 @@ const DAY = 24 * 60 * 60 * 1000;
 describe("PaygPlanSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPaygCheckoutLocks();
     mocks.productTier.mockReturnValue("payg");
     mocks.hasAnyScope.mockReturnValue(true);
-    mocks.session.mockReturnValue({ trial: null });
+    mocks.flagResult.mockReturnValue({ status: "enabled" });
+    mocks.session.mockReturnValue({
+      trial: null,
+      activeOrganizationId: "org-1",
+      rawGramAccountType: "payg",
+    });
     queryState({ data: subscription() });
   });
 
@@ -398,39 +424,53 @@ describe("PaygPlanSection", () => {
     expect(cancelTrigger()).toBeNull();
   });
 
-  // The pay-as-you-go tier predates Stripe, so an organization can hold it
-  // without a Stripe subscription behind it. That 404 is a stable answer, and
-  // dressing it up as an outage would leave the admin retrying forever.
   describe("when the organization has no Stripe subscription", () => {
     beforeEach(() => {
       queryState({ isError: true, error: notFound() });
     });
 
-    it("says so instead of reporting an outage", () => {
+    it("gives an eligible admin actionable setup without management controls", () => {
       render(<PaygPlanSection />);
 
-      expect(screen.getByText(/no stripe subscription/i)).toBeTruthy();
-      expect(
-        screen.getByText(/no payment method or invoice history/i),
-      ).toBeTruthy();
-      expect(screen.queryByText(/couldn't load your subscription/i)).toBeNull();
+      expect(screen.getByText(/finish setting up billing/i)).toBeTruthy();
+      expect(portalButton()).toBeNull();
+      expect(checkoutCta()).not.toBeNull();
+      expect(cancelTrigger()).toBeNull();
+      expect(resumeButton()).toBeNull();
     });
 
-    it("offers nothing to retry", () => {
-      render(<PaygPlanSection />);
+    it("lets an admin restart checkout after abandoning a trial conversion", () => {
+      mocks.session.mockReturnValue({
+        activeOrganizationId: "org-1",
+        rawGramAccountType: "payg",
+        whitelisted: true,
+        // Converted trials are omitted from the session, even before their end.
+        trial: null,
+      });
 
-      expect(screen.queryByRole("button", { name: /^retry$/i })).toBeNull();
+      render(<PaygPlanSection />);
+      fireEvent.click(checkoutCta()!);
+
+      expect(mocks.checkoutMutate).toHaveBeenCalledTimes(1);
       expect(mocks.refetch).not.toHaveBeenCalled();
     });
 
-    // There is no Stripe customer to open a portal for, and no lifecycle to
-    // cancel or resume.
-    it("offers no billing controls", () => {
+    it("shows a member the inactive state without setup instructions", () => {
+      mocks.hasAnyScope.mockReturnValue(false);
       render(<PaygPlanSection />);
 
-      expect(portalButton()).toBeNull();
-      expect(cancelTrigger()).toBeNull();
-      expect(resumeButton()).toBeNull();
+      expect(screen.getByText(/no active billing subscription/i)).toBeTruthy();
+      expect(screen.queryByText(/finish setting up billing/i)).toBeNull();
+      expect(checkoutCta()).toBeNull();
+    });
+
+    it("shows the inactive state when self-serve billing is disabled", () => {
+      mocks.flagResult.mockReturnValue({ status: "disabled" });
+      render(<PaygPlanSection />);
+
+      expect(screen.getByText(/no active billing subscription/i)).toBeTruthy();
+      expect(screen.queryByText(/finish setting up billing/i)).toBeNull();
+      expect(checkoutCta()).toBeNull();
     });
 
     // The answer is definitive, so it outranks whatever the cache still holds.
@@ -443,7 +483,7 @@ describe("PaygPlanSection", () => {
 
       render(<PaygPlanSection />);
 
-      expect(screen.getByText(/no stripe subscription/i)).toBeTruthy();
+      expect(checkoutCta()).not.toBeNull();
       expect(screen.queryByText("Pay as you go")).toBeNull();
       expect(cancelTrigger()).toBeNull();
     });
@@ -496,11 +536,12 @@ describe("PaygPlanSection", () => {
 
   // The account type can already read as PAYG while a product trial is still
   // running, but checkout hasn't created a Stripe subscription yet — asking
-  // for one answers 404, and rendering that as "billing isn't managed through
-  // Stripe" would contradict the checkout button sitting right above it.
+  // for one answers 404. The section renders the no-payment state instead:
+  // the checkout CTA that attaches a payment method.
   describe("during an active product trial", () => {
     beforeEach(() => {
       mocks.session.mockReturnValue({
+        activeOrganizationId: "org-1",
         trial: {
           startedAt: new Date(Date.now() - 2 * DAY),
           endsAt: new Date(Date.now() + 12 * DAY),
@@ -508,14 +549,40 @@ describe("PaygPlanSection", () => {
       });
     });
 
-    it("leaves the view to the checkout CTA", () => {
+    it("offers the checkout CTA and asks Stripe for nothing", () => {
+      render(<PaygPlanSection />);
+
+      expect(heading()).not.toBeNull();
+      expect(checkoutCta()).not.toBeNull();
+      expect(mocks.query).not.toHaveBeenCalled();
+    });
+
+    // The description reflects the payment state: an invitation to attach a
+    // payment method, not a report on one.
+    it("describes attaching a payment method", () => {
+      render(<PaygPlanSection />);
+
+      expect(
+        screen.getByText(/add a payment method to start pay as you go/i),
+      ).toBeTruthy();
+      expect(
+        screen.queryByText(/subscription, payment method, and invoices/i),
+      ).toBeNull();
+    });
+
+    // Every tier a trial runs on gets the section shut off with the rollout
+    // flag — it is the only payment surface on the page, so the flag is part
+    // of its render rule.
+    it("renders nothing while the rollout flag is not enabled", () => {
+      mocks.flagResult.mockReturnValue({ status: "disabled" });
+
       const { container } = render(<PaygPlanSection />);
 
       expect(container.innerHTML).toBe("");
       expect(mocks.query).not.toHaveBeenCalled();
     });
 
-    it("never renders the no-subscription copy beside it", () => {
+    it("never renders the no-subscription copy beside the CTA", () => {
       queryState({ isError: true, error: notFound() });
 
       render(<PaygPlanSection />);
@@ -526,10 +593,22 @@ describe("PaygPlanSection", () => {
       ).toBeNull();
     });
 
-    // Once the trial is over the section takes over from the CTA, on the same
-    // clock the CTA and the inference-cap read.
+    // The CTA is admin-only, so a member would get a section describing an
+    // action they cannot take. They get nothing instead.
+    it("renders nothing for a member", () => {
+      mocks.hasAnyScope.mockReturnValue(false);
+
+      const { container } = render(<PaygPlanSection />);
+
+      expect(container.innerHTML).toBe("");
+      expect(mocks.query).not.toHaveBeenCalled();
+    });
+
+    // Once the trial is over the subscription view takes over from the CTA,
+    // on the same clock the CTA and the inference-cap read.
     it("takes over once the trial has ended", () => {
       mocks.session.mockReturnValue({
+        activeOrganizationId: "org-1",
         trial: {
           startedAt: new Date(Date.now() - 20 * DAY),
           endsAt: new Date(Date.now() - 6 * DAY),
@@ -539,12 +618,14 @@ describe("PaygPlanSection", () => {
       render(<PaygPlanSection />);
 
       expect(heading()).not.toBeNull();
+      expect(checkoutCta()).toBeNull();
       expect(screen.getByText("Pay as you go")).toBeTruthy();
     });
   });
 
-  // Every other tier has no self-serve subscription to report on: the trial
-  // tiers get the checkout CTA, and enterprise bills through its contract.
+  // With no active trial (the beforeEach default), every other tier has no
+  // payment relationship to report: enterprise bills through its contract,
+  // and the legacy tiers bill through Polar.
   it.each<ProductTier>([
     "base",
     "base_PAID",

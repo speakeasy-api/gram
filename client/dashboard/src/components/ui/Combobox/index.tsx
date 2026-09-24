@@ -24,6 +24,8 @@ export type DropdownItem = {
   icon?: ReactNode;
   keywords?: string[];
   onClick?: () => void;
+  disabled?: boolean;
+  description?: string;
 };
 
 export function Combobox<T extends DropdownItem>({
@@ -34,6 +36,7 @@ export function Combobox<T extends DropdownItem>({
   onOpenChange,
   variant = "secondary",
   className,
+  id,
   label,
   disabledMessage,
   tooltip,
@@ -47,6 +50,7 @@ export function Combobox<T extends DropdownItem>({
   onOpenChange?: (open: boolean) => void;
   children: ReactNode;
   className?: string;
+  id?: string;
   variant?: Parameters<typeof Button>[0]["variant"];
   label?: string;
   disabledMessage?: string;
@@ -65,6 +69,7 @@ export function Combobox<T extends DropdownItem>({
   let trigger = (
     <PopoverTrigger asChild>
       <Button
+        id={id}
         variant={variant}
         role="combobox"
         aria-expanded={open}
@@ -111,6 +116,7 @@ export function Combobox<T extends DropdownItem>({
                   key={item.value}
                   value={item.value}
                   keywords={[item.label, ...(item.keywords ?? [])]}
+                  disabled={item.disabled}
                   className="cursor-pointer truncate"
                   onSelect={(v) => {
                     onSelectionChange(items.find((item) => item.value === v)!);
@@ -118,7 +124,14 @@ export function Combobox<T extends DropdownItem>({
                   }}
                 >
                   {item.icon}
-                  {item.label}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate">{item.label}</div>
+                    {item.description ? (
+                      <div className="text-muted-foreground truncate text-xs">
+                        {item.description}
+                      </div>
+                    ) : null}
+                  </div>
                   <Check
                     className={cn(
                       "ml-auto",

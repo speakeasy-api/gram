@@ -910,15 +910,27 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 	// A chat-session token minted via an API key restores that key's APIKeyID
 	// (chatsessions.Manager.Authorize), so APIKeyID alone does not prove the
 	// caller authenticated *as* the key — treating it as first-party would let
-	// an end user's chat-session token read every project chat. Only direct
-	// Gram-Key auth carries the key's scopes (auth.KeyBasedAuth); a chat-session
-	// token has none, so gate the exemption on the scopes being present.
+	// an end user's chat-session token read every project chat. Direct legacy
+	// Gram-Key auth carries scopes, while direct principal auth is
+	// identified by its private mode. API-key-minted chat tokens may retain legacy
+	// mode but have no scopes, so they still go through owner matching.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-	isDirectAPIKeyCall := authCtx.APIKeyID != "" && len(authCtx.APIKeyScopes) > 0
+	apiKeyMode, hasAPIKeyAuthorization := contextvalues.APIKeyAuthorization(ctx)
+	isDirectLegacyAPIKey := hasAPIKeyAuthorization && apiKeyMode == contextvalues.APIKeyAuthorizationModeLegacy && len(authCtx.APIKeyScopes) > 0
+	isDirectPrincipalAPIKey := hasAPIKeyAuthorization && apiKeyMode == contextvalues.APIKeyAuthorizationModePrincipal
+	isDirectAPIKeyCall := authCtx.APIKeyID != "" && (isDirectLegacyAPIKey || isDirectPrincipalAPIKey)
+	isAPIKeyChatSession := authCtx.APIKeyID != "" && !isDirectAPIKeyCall
 	if authCtx.SessionID == nil && !isDirectAPIKeyCall {
 		if !isAssistantCall {
 			if chat.ExternalUserID.String != "" && chat.ExternalUserID.String != authCtx.ExternalUserID {
 				return oops.C(oops.CodeUnauthorized)
+			}
+			if isAPIKeyChatSession {
+				externalOwnerMatches := chat.ExternalUserID.Valid && chat.ExternalUserID.String != "" && chat.ExternalUserID.String == authCtx.ExternalUserID
+				userOwnerMatches := chat.UserID.Valid && chat.UserID.String != "" && chat.UserID.String == authCtx.UserID
+				if !externalOwnerMatches && !userOwnerMatches {
+					return oops.C(oops.CodeUnauthorized)
+				}
 			}
 		}
 	}
@@ -1299,17 +1311,17 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 	var source *string
 	var originatingClient *string
 	if isInitialLatest {
-		for i := len(latestPageRows) - 1; i >= 0; i-- {
-			if latestPageRows[i].Source.Valid && latestPageRows[i].Source.String != "" {
-				v := latestPageRows[i].Source.String
+		for _, latestPageRow := range slices.Backward(latestPageRows) {
+			if latestPageRow.Source.Valid && latestPageRow.Source.String != "" {
+				v := latestPageRow.Source.String
 				source = &v
 				break
 			}
 		}
 		if source != nil && *source == "litellm" {
-			for i := len(latestPageRows) - 1; i >= 0; i-- {
-				client := latestPageRows[i].UserAgent.String
-				if latestPageRows[i].Source.String == "litellm" && (client == "claude-code" || client == "codex" || client == "opencode") {
+			for _, latestPageRow := range slices.Backward(latestPageRows) {
+				client := latestPageRow.UserAgent.String
+				if latestPageRow.Source.String == "litellm" && (client == "claude-code" || client == "codex" || client == "opencode") {
 					originatingClient = &client
 					break
 				}
@@ -1832,10 +1844,11 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 
 	// Build OpenAI-compatible response
 	openAIResp := openrouter.OpenAIChatResponse{
-		ID:      response.MessageID,
-		Object:  "chat.completion",
-		Created: time.Now().Unix(),
-		Model:   response.Model,
+		ID:       response.MessageID,
+		Object:   "chat.completion",
+		Created:  time.Now().Unix(),
+		Model:    response.Model,
+		Provider: response.Provider,
 		Choices: []openrouter.ResponseChoice{
 			{
 				Message:      *response.Message,
@@ -2765,6 +2778,7 @@ type chatMessageRow struct {
 	chatID         uuid.UUID
 	userID         string
 	externalUserID string
+	userEmail      string
 	messageID      string
 	toolCallID     string
 
@@ -2815,14 +2829,14 @@ const (
 	searchMatchLimit = 200
 
 	// maxConcurrentChatAssetWork bounds parallelism for the per-batch marshal
-	// and asset-upload phases in storeMessages, capping goroutines, memory,
+	// and asset-upload phases in prepareMessages, capping goroutines, memory,
 	// and outbound connections for arbitrarily large batches.
 	maxConcurrentChatAssetWork = 32
 )
 
-func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, assetStorage assets.BlobStore, rows []chatMessageRow) error {
+func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage assets.BlobStore, rows []chatMessageRow) ([]MessageWrite, error) {
 	if len(rows) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// uploadResult holds the result of uploading a single message to asset storage.
@@ -2941,9 +2955,10 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 	}
 
 	// Build database params from upload results.
-	dbrows := make([]repo.CreateChatMessageParams, len(rows))
+	dbrows := make([]MessageWrite, len(rows))
 	for i, row := range rows {
 		res := results[i]
+		assistantID, workloadSource := messageReadingAttribution(ctx, billing.ModelUsageSource(row.metadata.Source))
 
 		// Log storage errors but continue - we'll still store the message with plain text.
 		var storageError pgtype.Text
@@ -2962,41 +2977,47 @@ func storeMessages(ctx context.Context, logger *slog.Logger, tx repo.DBTX, asset
 			contentRaw = res.jsonData
 		}
 
-		dbrows[i] = repo.CreateChatMessageParams{
-			Replayed:         false,
-			CreatedAt:        conv.PtrToPGTimestamptz(nil),
-			ChatID:           row.chatID,
-			ProjectID:        row.projectID,
-			Role:             row.role,
-			Content:          openrouter.GetText(row.content),
-			ContentRaw:       contentRaw,
-			ContentAssetUrl:  conv.ToPGText(res.assetURL),
-			StorageError:     storageError,
-			Model:            conv.ToPGText(row.model),
-			MessageID:        conv.ToPGText(row.messageID),
-			ToolCallID:       conv.ToPGText(row.toolCallID),
-			UserID:           conv.ToPGText(row.userID),
-			ExternalUserID:   conv.ToPGText(row.externalUserID),
-			FinishReason:     conv.PtrToPGText(row.finishReason),
-			ToolCalls:        row.toolCalls,
-			PromptTokens:     row.promptTokens,
-			CompletionTokens: row.completionTokens,
-			TotalTokens:      row.totalTokens,
-			Origin:           conv.ToPGText(row.metadata.Origin),
-			UserAgent:        conv.ToPGText(row.metadata.UserAgent),
-			IpAddress:        conv.ToPGText(row.metadata.IPAddress),
-			Source:           conv.ToPGText(row.metadata.Source),
-			ContentHash:      nil,
-			Generation:       row.generation,
+		dbrows[i] = MessageWrite{
+			Params: repo.CreateChatMessageParams{
+				ID:               uuid.Nil,
+				Replayed:         false,
+				CreatedAt:        conv.PtrToPGTimestamptz(nil),
+				ChatID:           row.chatID,
+				ProjectID:        row.projectID,
+				Role:             row.role,
+				Content:          openrouter.GetText(row.content),
+				ContentRaw:       contentRaw,
+				ContentAssetUrl:  conv.ToPGText(res.assetURL),
+				StorageError:     storageError,
+				Model:            conv.ToPGText(row.model),
+				MessageID:        conv.ToPGText(row.messageID),
+				ToolCallID:       conv.ToPGText(row.toolCallID),
+				UserID:           conv.ToPGText(row.userID),
+				ExternalUserID:   conv.ToPGText(row.externalUserID),
+				FinishReason:     conv.PtrToPGText(row.finishReason),
+				ToolCalls:        row.toolCalls,
+				PromptTokens:     row.promptTokens,
+				CompletionTokens: row.completionTokens,
+				TotalTokens:      row.totalTokens,
+				Origin:           conv.ToPGText(row.metadata.Origin),
+				UserAgent:        conv.ToPGText(row.metadata.UserAgent),
+				IpAddress:        conv.ToPGText(row.metadata.IPAddress),
+				Source:           conv.ToPGText(row.metadata.Source),
+				ContentHash:      nil,
+				Generation:       row.generation,
+			},
+			BillingUserID:  row.userID,
+			AssistantID:    assistantID,
+			WorkloadSource: workloadSource,
+			UserEmail:      row.userEmail,
+			Provider:       "",
+			HookHostname:   "",
+			AccountType:    "",
+			BillingMode:    "",
 		}
 	}
 
-	// Batch insert all messages.
-	if _, err := insertChatMessages(ctx, tx, dbrows); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to insert chat messages").LogError(ctx, logger)
-	}
-
-	return nil
+	return dbrows, nil
 }
 
 // enrichChatsWithMetrics fetches token and cost metrics from ClickHouse and adds them to chat overviews.

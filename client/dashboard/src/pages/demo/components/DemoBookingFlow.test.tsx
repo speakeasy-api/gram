@@ -1,6 +1,6 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
-import { CAL_DEMO_LINK } from "./demo-booking";
+import { BOOKING_CALENDAR_LINK } from "./booking-calendar/booking-calendar";
 
 type MockSession = {
   user: { email: string; displayName?: string };
@@ -49,12 +49,6 @@ vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ capture: captureMock }),
 }));
 
-// The panel does its own gating (flag, org:admin, walled-off organization);
-// here only its placement relative to the calendar matters.
-vi.mock("@/components/billing/lockout-payg-checkout-panel", () => ({
-  LockoutPaygCheckoutPanel: () => <div data-testid="payg-panel" />,
-}));
-
 import { DemoBookingFlow } from "./DemoBookingFlow";
 
 beforeEach(() => {
@@ -72,18 +66,7 @@ describe("DemoBookingFlow", () => {
   it("embeds the demo calendar directly with no intermediate form", () => {
     render(<DemoBookingFlow />);
     const embed = screen.getByTestId("cal-embed");
-    expect(embed.getAttribute("data-cal-link")).toBe(CAL_DEMO_LINK);
-  });
-
-  // Checkout is the shortcut past the gate, so it has to read before the
-  // calendar rather than under it.
-  it("places the checkout panel above the calendar", () => {
-    render(<DemoBookingFlow />);
-    const panel = screen.getByTestId("payg-panel");
-    const embed = screen.getByTestId("cal-embed");
-    expect(
-      panel.compareDocumentPosition(embed) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(embed.getAttribute("data-cal-link")).toBe(BOOKING_CALENDAR_LINK);
   });
 
   it("prefills name, email, and company from the session", () => {
@@ -132,7 +115,7 @@ describe("DemoBookingFlow", () => {
     sessionHolder.current = null;
     render(<DemoBookingFlow />);
     const embed = screen.getByTestId("cal-embed");
-    expect(embed.getAttribute("data-cal-link")).toBe(CAL_DEMO_LINK);
+    expect(embed.getAttribute("data-cal-link")).toBe(BOOKING_CALENDAR_LINK);
     expect(embed.getAttribute("data-cal-name")).toBe("");
     expect(embed.getAttribute("data-cal-email")).toBe("");
     expect(embed.getAttribute("data-cal-company")).toBe("");
@@ -173,11 +156,12 @@ describe("DemoBookingFlow", () => {
     expect(screen.queryByText(/Details prefilled/)).toBeNull();
   });
 
-  it("fires booked_demo on a Cal bookingSuccessful message", () => {
-    render(<DemoBookingFlow />);
+  it("attributes booked_demo to the caller's source", () => {
+    render(<DemoBookingFlow telemetrySource="inference_cap" />);
 
     window.dispatchEvent(
       new MessageEvent("message", {
+        origin: "https://app.cal.com",
         data: JSON.stringify({
           originator: "CAL",
           fullType: "CAL:bookingSuccessful",
@@ -191,8 +175,33 @@ describe("DemoBookingFlow", () => {
         first_name: "Jane",
         last_name: "Smith",
         email: "jane@acme.com",
+        source: "inference_cap",
       }),
     );
+  });
+
+  it("constrains the calendar to the viewport on short screens", () => {
+    render(<DemoBookingFlow />);
+
+    expect(screen.getByTestId("cal-embed").parentElement?.className).toContain(
+      "max-h-[calc(100dvh-220px)]",
+    );
+  });
+
+  it("ignores booking messages from another origin", () => {
+    render(<DemoBookingFlow />);
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        origin: "https://attacker.test",
+        data: JSON.stringify({
+          originator: "CAL",
+          fullType: "CAL:bookingSuccessful",
+        }),
+      }),
+    );
+
+    expect(captureMock).not.toHaveBeenCalled();
   });
 
   it("ignores non-Cal postMessages", () => {

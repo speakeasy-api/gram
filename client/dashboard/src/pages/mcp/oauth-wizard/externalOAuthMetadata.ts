@@ -71,6 +71,14 @@ export function validateIssuerUrl(value: string): string | null {
   return null;
 }
 
+export function validateProviderIssuerUrl(value: string): string | null {
+  const error = validateIssuerUrl(value);
+  if (error) return error;
+  return new URL(value.trim()).protocol === "https:"
+    ? null
+    : "Provider issuer must use HTTPS";
+}
+
 export function validateExternalMetadataJson(
   value: string,
   expectedIssuer?: string,

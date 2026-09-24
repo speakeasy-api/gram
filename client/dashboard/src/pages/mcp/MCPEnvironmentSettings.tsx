@@ -11,7 +11,7 @@ import {
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
-import { ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG } from "@/lib/externalMcpUserSessions";
+import { useMcpUrl } from "@/hooks/useToolsetUrl";
 import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components/mcpenvironmentconfiginput.js";
@@ -51,15 +51,15 @@ import {
 } from "./environmentVariableUtils";
 import {
   ConvertToUserSessionsButton,
+  ExternalOAuthMetadataRecommendation,
   ToolsetAuthenticationSection,
 } from "./ToolsetAuthenticationSection";
 import {
+  externalOauthMetadataUpdateIssuer,
   getOAuthParadigm,
   isUserSessionIssuerWired,
   type OAuthParadigm,
   toolsetAuthSurface,
-  type ToolsetConvertAction,
-  toolsetConvertAction,
 } from "./toolsetAuthSurface";
 import { useEnvironmentVariables } from "./useEnvironmentVariables";
 
@@ -940,18 +940,14 @@ type OAuthSectionProps = {
 };
 
 /**
- * Dispatches between the user-sessions surface and the legacy OAuth section
+ * Dispatches between the user-sessions surface and the External OAuth section
  * by the toolset's auth state (see toolsetAuthSurface). A wired issuer or a
- * clean slate gets the shared section; legacy OAuth keeps the old UI plus a
- * convert path.
+ * clean slate gets the shared section; External OAuth keeps its configuration
+ * UI plus a convert path.
  */
 function OAuthSection({ toolset }: OAuthSectionProps) {
-  const telemetry = useTelemetry();
   const oauthParadigm = getOAuthParadigm(toolset);
   const surface = toolsetAuthSurface({
-    flagEnabled:
-      telemetry.isFeatureEnabled(ONBOARD_EXTERNAL_MCP_TO_USER_SESSIONS_FLAG) ??
-      false,
     userSessionIssuerWired: isUserSessionIssuerWired(toolset),
     oauthParadigm,
   });
@@ -959,25 +955,32 @@ function OAuthSection({ toolset }: OAuthSectionProps) {
   if (surface === "manage" || surface === "attach") {
     return <ToolsetAuthenticationSection toolset={toolset} />;
   }
-  return (
-    <LegacyOAuthSection
-      toolset={toolset}
-      convertAction={
-        surface === "legacy" ? toolsetConvertAction(oauthParadigm) : null
-      }
-    />
-  );
+  return <ExternalOAuthSection toolset={toolset} />;
 }
 
-function LegacyOAuthSection({
-  toolset,
-  convertAction,
-}: OAuthSectionProps & {
-  /** Migration entry point to render; null when the flag is off. */
-  convertAction: ToolsetConvertAction | null;
-}) {
+function ExternalOAuthSection({ toolset }: OAuthSectionProps) {
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
+  const { url: mcpUrl } = useMcpUrl(toolset);
+  const metadataUpdateIssuer = externalOauthMetadataUpdateIssuer(
+    toolset,
+    mcpUrl,
+  );
+  const storedMetadata = toolset.externalOauthServer?.metadata as
+    | Record<string, unknown>
+    | undefined;
+  const providerIssuer =
+    toolset.externalOauthServer?.authorizationServerIssuer ?? undefined;
+  const storedIssuer =
+    typeof storedMetadata?.issuer === "string" ? storedMetadata.issuer : "";
+  const existingConfig =
+    providerIssuer || storedMetadata
+      ? {
+          issuer: providerIssuer ?? metadataUpdateIssuer ?? storedIssuer,
+          metadata: storedMetadata,
+          providerHosted: providerIssuer != null,
+        }
+      : undefined;
 
   const loginSecured = !!toolset.userSessionIssuerSlug;
   const isOAuthConnected = !!toolset?.externalOauthServer;
@@ -1002,12 +1005,11 @@ function LegacyOAuthSection({
     ? "Enable the MCP server to configure OAuth"
     : "This MCP server does not require the OAuth authorization code flow";
 
-  // Flag holders with a wired issuer never reach this component (the
-  // dispatcher sends them to the manage surface), but non-holders can land
-  // here wired, so the legacy display still handles it.
+  // The dispatcher sends wired issuers to the manage surface. Keep this
+  // defensive check aligned in case the External OAuth section is reused directly.
   const userSessionIssuerWired = !!toolset.userSessionIssuerSlug;
   // Once wired, the external OAuth config is inert — hide Configure so
-  // operators aren't steered back into the legacy paradigm.
+  // operators aren't steered back into the External OAuth flow.
   const hideConfigureButton = userSessionIssuerWired;
 
   return (
@@ -1025,13 +1027,11 @@ function LegacyOAuthSection({
               <Badge.Text>Login Secured</Badge.Text>
             </Badge>
           )}
-          {convertAction === "attach-sheet" && (
-            <ConvertToUserSessionsButton toolset={toolset} />
-          )}
+          <ConvertToUserSessionsButton toolset={toolset} />
           {!hideConfigureButton && (
             <Tooltip>
               <TooltipTrigger asChild>
-                {!isOAuthEligible ? (
+                {!isOAuthConnected && !isOAuthEligible ? (
                   <span className="inline-block">
                     <Button disabled>
                       <Button.Text>Configure</Button.Text>
@@ -1045,7 +1045,7 @@ function LegacyOAuthSection({
                   </Button>
                 )}
               </TooltipTrigger>
-              {!isOAuthEligible && (
+              {!isOAuthConnected && !isOAuthEligible && (
                 <TooltipContent>{disabledTooltipText}</TooltipContent>
               )}
             </Tooltip>
@@ -1053,6 +1053,11 @@ function LegacyOAuthSection({
         </div>
       }
     >
+      {metadataUpdateIssuer && storedMetadata && (
+        <ExternalOAuthMetadataRecommendation
+          onReview={() => setIsOAuthModalOpen(true)}
+        />
+      )}
       <OAuthStatusDisplay
         isOAuthConnected={isOAuthConnected}
         isOAuthEligible={!!isOAuthEligible}
@@ -1068,6 +1073,10 @@ function LegacyOAuthSection({
       <OAuthDetailsModal
         isOpen={isOAuthDetailsModalOpen}
         onClose={() => setIsOAuthDetailsModalOpen(false)}
+        onManageMetadata={() => {
+          setIsOAuthDetailsModalOpen(false);
+          setIsOAuthModalOpen(true);
+        }}
         toolset={toolset}
       />
       <ConnectOAuthModal
@@ -1075,6 +1084,7 @@ function LegacyOAuthSection({
         onClose={() => setIsOAuthModalOpen(false)}
         toolsetSlug={toolset.slug}
         toolset={toolset}
+        existingConfig={existingConfig}
       />
     </PageSection>
   );

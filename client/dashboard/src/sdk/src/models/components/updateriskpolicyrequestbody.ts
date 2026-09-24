@@ -17,15 +17,16 @@ import {
 } from "./riskpolicymodelconfig.js";
 
 /**
- * Policy action: flag, warn (challenge), or block.
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
  */
 export const UpdateRiskPolicyRequestBodyAction = {
   Flag: "flag",
   Warn: "warn",
   Block: "block",
+  Quarantine: "quarantine",
 } as const;
 /**
- * Policy action: flag, warn (challenge), or block.
+ * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
  */
 export type UpdateRiskPolicyRequestBodyAction = ClosedEnum<
   typeof UpdateRiskPolicyRequestBodyAction
@@ -61,7 +62,7 @@ export type UpdateRiskPolicyRequestBodyShadowMcpDisposition = ClosedEnum<
 
 export type UpdateRiskPolicyRequestBody = {
   /**
-   * Policy action: flag, warn (challenge), or block.
+   * Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).
    */
   action?: UpdateRiskPolicyRequestBodyAction | undefined;
   /**
@@ -100,10 +101,6 @@ export type UpdateRiskPolicyRequestBody = {
    * The policy ID.
    */
   id: string;
-  /**
-   * Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.
-   */
-  messageTypes?: Array<string> | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name.
@@ -126,14 +123,6 @@ export type UpdateRiskPolicyRequestBody = {
    */
   promptInjectionRules?: Array<string> | undefined;
   /**
-   * CEL exemption predicate. Omit to preserve the current value; send empty to clear.
-   */
-  scopeExempt?: string | undefined;
-  /**
-   * CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.
-   */
-  scopeInclude?: string | undefined;
-  /**
    * CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to preserve the current value.
    */
   score?: number | undefined;
@@ -155,6 +144,10 @@ export type UpdateRiskPolicyRequestBody = {
    * Detection sources to enable.
    */
   sources?: Array<string> | undefined;
+  /**
+   * Confirms that this edit may displace standing MCP approval decisions its URL lists contradict, transitioning them to superseded (audit-logged, decision history preserved). Without it, a contradicting edit is rejected with a conflict naming the affected servers.
+   */
+  supersedeDecisions?: boolean | undefined;
   /**
    * Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.
    */
@@ -189,20 +182,18 @@ export type UpdateRiskPolicyRequestBody$Outbound = {
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
   id: string;
-  message_types?: Array<string> | undefined;
   model_config?: RiskPolicyModelConfig$Outbound | undefined;
   name: string;
   presidio_entities?: Array<string> | undefined;
   presidio_score_threshold?: number | undefined;
   prompt?: string | undefined;
   prompt_injection_rules?: Array<string> | undefined;
-  scope_exempt?: string | undefined;
-  scope_include?: string | undefined;
   score?: number | undefined;
   shadow_mcp_allowed_urls?: Array<string> | undefined;
   shadow_mcp_blocked_urls?: Array<string> | undefined;
   shadow_mcp_disposition?: string | undefined;
   sources?: Array<string> | undefined;
+  supersede_decisions?: boolean | undefined;
   user_message?: string | undefined;
 };
 
@@ -224,15 +215,12 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
     id: z.string(),
-    messageTypes: z.optional(z.array(z.string())),
     modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.string(),
     presidioEntities: z.optional(z.array(z.string())),
     presidioScoreThreshold: z.optional(z.number()),
     prompt: z.optional(z.string()),
     promptInjectionRules: z.optional(z.array(z.string())),
-    scopeExempt: z.optional(z.string()),
-    scopeInclude: z.optional(z.string()),
     score: z.optional(z.number()),
     shadowMcpAllowedUrls: z.optional(z.array(z.string())),
     shadowMcpBlockedUrls: z.optional(z.array(z.string())),
@@ -240,6 +228,7 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       UpdateRiskPolicyRequestBodyShadowMcpDisposition$outboundSchema,
     ),
     sources: z.optional(z.array(z.string())),
+    supersedeDecisions: z.optional(z.boolean()),
     userMessage: z.optional(z.string()),
   }),
   z.transform((v) => {
@@ -251,16 +240,14 @@ export const UpdateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       customRuleIds: "custom_rule_ids",
       detectionScopes: "detection_scopes",
       disabledRules: "disabled_rules",
-      messageTypes: "message_types",
       modelConfig: "model_config",
       presidioEntities: "presidio_entities",
       presidioScoreThreshold: "presidio_score_threshold",
       promptInjectionRules: "prompt_injection_rules",
-      scopeExempt: "scope_exempt",
-      scopeInclude: "scope_include",
       shadowMcpAllowedUrls: "shadow_mcp_allowed_urls",
       shadowMcpBlockedUrls: "shadow_mcp_blocked_urls",
       shadowMcpDisposition: "shadow_mcp_disposition",
+      supersedeDecisions: "supersede_decisions",
       userMessage: "user_message",
     });
   }),

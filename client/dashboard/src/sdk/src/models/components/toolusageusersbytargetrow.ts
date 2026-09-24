@@ -30,6 +30,7 @@ export type ToolUsageUsersByTargetRowTargetKind = ClosedEnum<
 export const ToolUsageUsersByTargetRowTargetType = {
   HostedMcpServer: "hosted_mcp_server",
   TunneledMcpServer: "tunneled_mcp_server",
+  MetaMcpServer: "meta_mcp_server",
   ShadowMcpServer: "shadow_mcp_server",
   LocalTool: "local_tool",
   Skill: "skill",
@@ -48,6 +49,7 @@ export const ToolUsageUsersByTargetRowUserKind = {
   Email: "email",
   ExternalUserId: "external_user_id",
   UserId: "user_id",
+  AgentId: "agent_id",
   Unknown: "unknown",
 } as const;
 /**

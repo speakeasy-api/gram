@@ -3411,8 +3411,9 @@ func marshalTypesRemoteSessionIssuerDuplicateMatchToRemoteSessionIssuerDuplicate
 // of type *adminremotesessions.GlobalRemoteSessionIssuer.
 func marshalAdminremotesessionsGlobalRemoteSessionIssuerToGlobalRemoteSessionIssuerResponseBody(v *adminremotesessions.GlobalRemoteSessionIssuer) *GlobalRemoteSessionIssuerResponseBody {
 	res := &GlobalRemoteSessionIssuerResponseBody{
-		GlobalClientCount: v.GlobalClientCount,
-		TenantClientCount: v.TenantClientCount,
+		GlobalClientCount:             v.GlobalClientCount,
+		TenantClientCount:             v.TenantClientCount,
+		TrustedUserSessionIssuerCount: v.TrustedUserSessionIssuerCount,
 	}
 	if v.Issuer != nil {
 		res.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v.Issuer)
@@ -3439,14 +3440,22 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 		RevocationEndpoint:                v.RevocationEndpoint,
 		RegistrationEndpoint:              v.RegistrationEndpoint,
 		JwksURI:                           v.JwksURI,
+		JwksFetchedAt:                     v.JwksFetchedAt,
+		JwksCacheExpiresAt:                v.JwksCacheExpiresAt,
 		ServiceDocumentation:              v.ServiceDocumentation,
 		OpPolicyURI:                       v.OpPolicyURI,
 		OpTosURI:                          v.OpTosURI,
 		Oidc:                              v.Oidc,
 		Passthrough:                       v.Passthrough,
 		ClientIDMetadataDocumentSupported: v.ClientIDMetadataDocumentSupported,
-		CreatedAt:                         v.CreatedAt,
-		UpdatedAt:                         v.UpdatedAt,
+		TunneledMcpServerID:               v.TunneledMcpServerID,
+		UserinfoEndpoint:                  v.UserinfoEndpoint,
+		IntrospectionEndpoint:             v.IntrospectionEndpoint,
+		BackchannelLogoutSupported:        v.BackchannelLogoutSupported,
+		AuthorizationResponseIssParameterSupported: v.AuthorizationResponseIssParameterSupported,
+		ResourceIndicatorSupported:                 v.ResourceIndicatorSupported,
+		CreatedAt:                                  v.CreatedAt,
+		UpdatedAt:                                  v.UpdatedAt,
 	}
 	if v.ScopesSupported != nil {
 		res.ScopesSupported = make([]string, len(v.ScopesSupported))
@@ -3478,6 +3487,30 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 			res.CodeChallengeMethodsSupported[i] = val
 		}
 	}
+	if v.IntrospectionEndpointAuthMethodsSupported != nil {
+		res.IntrospectionEndpointAuthMethodsSupported = make([]string, len(v.IntrospectionEndpointAuthMethodsSupported))
+		for i, val := range v.IntrospectionEndpointAuthMethodsSupported {
+			res.IntrospectionEndpointAuthMethodsSupported[i] = val
+		}
+	}
+	if v.IDTokenSigningAlgValuesSupported != nil {
+		res.IDTokenSigningAlgValuesSupported = make([]string, len(v.IDTokenSigningAlgValuesSupported))
+		for i, val := range v.IDTokenSigningAlgValuesSupported {
+			res.IDTokenSigningAlgValuesSupported[i] = val
+		}
+	}
+	if v.ClaimsSupported != nil {
+		res.ClaimsSupported = make([]string, len(v.ClaimsSupported))
+		for i, val := range v.ClaimsSupported {
+			res.ClaimsSupported[i] = val
+		}
+	}
+	if v.ScopeOverride != nil {
+		res.ScopeOverride = make([]string, len(v.ScopeOverride))
+		for i, val := range v.ScopeOverride {
+			res.ScopeOverride[i] = val
+		}
+	}
 
 	return res
 }
@@ -3487,18 +3520,21 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 // *types.RemoteSessionClient.
 func marshalTypesRemoteSessionClientToRemoteSessionClientResponseBody(v *types.RemoteSessionClient) *RemoteSessionClientResponseBody {
 	res := &RemoteSessionClientResponseBody{
-		ID:                      v.ID,
-		ProjectID:               v.ProjectID,
-		OrganizationID:          v.OrganizationID,
-		RemoteSessionIssuerID:   v.RemoteSessionIssuerID,
-		ClientID:                v.ClientID,
-		ClientIDMetadataURI:     v.ClientIDMetadataURI,
-		ClientIDIssuedAt:        v.ClientIDIssuedAt,
-		ClientSecretExpiresAt:   v.ClientSecretExpiresAt,
-		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
-		Audience:                v.Audience,
-		CreatedAt:               v.CreatedAt,
-		UpdatedAt:               v.UpdatedAt,
+		ID:                              v.ID,
+		ProjectID:                       v.ProjectID,
+		OrganizationID:                  v.OrganizationID,
+		RemoteSessionIssuerID:           v.RemoteSessionIssuerID,
+		ClientID:                        v.ClientID,
+		ClientIDMetadataURI:             v.ClientIDMetadataURI,
+		ClientIDIssuedAt:                v.ClientIDIssuedAt,
+		ClientSecretExpiresAt:           v.ClientSecretExpiresAt,
+		UpstreamRejectedAt:              v.UpstreamRejectedAt,
+		TokenEndpointAuthMethod:         v.TokenEndpointAuthMethod,
+		TokenEndpointAuthAudienceFormat: v.TokenEndpointAuthAudienceFormat,
+		JSONWebKeySetID:                 v.JSONWebKeySetID,
+		Audience:                        v.Audience,
+		CreatedAt:                       v.CreatedAt,
+		UpdatedAt:                       v.UpdatedAt,
 	}
 	if v.UserSessionIssuerIds != nil {
 		res.UserSessionIssuerIds = make([]string, len(v.UserSessionIssuerIds))
@@ -3531,20 +3567,53 @@ func marshalAdminremotesessionsIssuerConvergenceCandidateToIssuerConvergenceCand
 		res.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v.Issuer)
 	}
 	if v.EndpointMismatches != nil {
-		res.EndpointMismatches = make([]string, len(v.EndpointMismatches))
+		res.EndpointMismatches = make([]*IssuerFieldMismatchResponseBody, len(v.EndpointMismatches))
 		for i, val := range v.EndpointMismatches {
-			res.EndpointMismatches[i] = val
+			if val == nil {
+				res.EndpointMismatches[i] = nil
+				continue
+			}
+			res.EndpointMismatches[i] = marshalTypesIssuerFieldMismatchToIssuerFieldMismatchResponseBody(val)
 		}
 	} else {
-		res.EndpointMismatches = []string{}
+		res.EndpointMismatches = []*IssuerFieldMismatchResponseBody{}
 	}
 	if v.Warnings != nil {
-		res.Warnings = make([]string, len(v.Warnings))
+		res.Warnings = make([]*IssuerFieldMismatchResponseBody, len(v.Warnings))
 		for i, val := range v.Warnings {
-			res.Warnings[i] = val
+			if val == nil {
+				res.Warnings[i] = nil
+				continue
+			}
+			res.Warnings[i] = marshalTypesIssuerFieldMismatchToIssuerFieldMismatchResponseBody(val)
 		}
 	} else {
-		res.Warnings = []string{}
+		res.Warnings = []*IssuerFieldMismatchResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTypesIssuerFieldMismatchToIssuerFieldMismatchResponseBody builds a
+// value of type *IssuerFieldMismatchResponseBody from a value of type
+// *types.IssuerFieldMismatch.
+func marshalTypesIssuerFieldMismatchToIssuerFieldMismatchResponseBody(v *types.IssuerFieldMismatch) *IssuerFieldMismatchResponseBody {
+	res := &IssuerFieldMismatchResponseBody{
+		Field:       v.Field,
+		SourceValue: v.SourceValue,
+		TargetValue: v.TargetValue,
+	}
+	if v.SourceValues != nil {
+		res.SourceValues = make([]string, len(v.SourceValues))
+		for i, val := range v.SourceValues {
+			res.SourceValues[i] = val
+		}
+	}
+	if v.TargetValues != nil {
+		res.TargetValues = make([]string, len(v.TargetValues))
+		for i, val := range v.TargetValues {
+			res.TargetValues[i] = val
+		}
 	}
 
 	return res

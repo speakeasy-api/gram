@@ -160,7 +160,7 @@ func TestReviewedRemoteSessionProviderVerticalSlice(t *testing.T) {
 	overflow, err := adapter.ProbeReadiness(ctx, providerProbeRequest(principal, project.ID, registration))
 	require.NoError(t, err)
 	require.Equal(t, platformmcp.ReadinessUnsupported, overflow.State)
-	require.Equal(t, "response_too_large", overflow.EvidenceCode)
+	require.Equal(t, "initialize_response_too_large", overflow.EvidenceCode)
 	upstream.mode.Store(upstreamModeNormal)
 
 	_, err = remotesessionsrepo.New(conn).RevokeRemoteSession(ctx, remotesessionsrepo.RevokeRemoteSessionParams{ID: remoteSession.ID, ProjectID: project.ID})
@@ -280,7 +280,7 @@ func newChallengeManager(t *testing.T, conn *pgxpool.Pool, policy *guardian.Poli
 	require.NoError(t, err)
 	baseURL, err := url.Parse("https://gram.test")
 	require.NoError(t, err)
-	return remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), policy, cache.NewRedisCacheAdapter(redisClient), baseURL)
+	return remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, testenv.NewEncryptionClient(t), policy, nil, cache.NewRedisCacheAdapter(redisClient), baseURL)
 }
 
 func seedPlatformRegistration(t *testing.T, ctx context.Context, conn *pgxpool.Pool) (platformmcp.Principal, platformmcp.ResolvedProject) {
@@ -333,7 +333,7 @@ func seedRegistrationEligibleCohort(t *testing.T, ctx context.Context, conn *pgx
 	require.NoError(t, err)
 	_, err = mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   projectID,
-		McpServerID: server.ID,
+		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
 		Slug:        "cohort-endpoint-" + uuid.NewString()[:8],
 	})
 	require.NoError(t, err)

@@ -20,17 +20,38 @@ import (
 const (
 	pluginGeneratorRolloutScheduleID = "v1:plugin-generator-rollout-schedule"
 	pluginGeneratorRolloutWorkflowID = pluginGeneratorRolloutScheduleID + "/scheduled"
-	// The schedule cadence determines how long a generator or plugin-config
-	// change takes to propagate, since nothing else triggers the rollout. The
-	// fingerprint check keeps unchanged projects from doing any GitHub/key work,
-	// so each tick is cheap apart from the per-project scan (resolve + in-memory
-	// generate + fingerprint compare). SKIP overlap (below) gives us the
-	// "trigger every interval unless one is already running" behaviour without a
-	// separate triggering workflow: a run that outlasts the interval just defers
-	// the next tick.
-	pluginGeneratorRolloutInterval         = 10 * time.Second
+	// This sweep is the safety net, not the primary trigger: plugin and plugin
+	// membership changes signal a per-project publish directly (see
+	// plugin_publish.go), so the cadence here only bounds how long a change with
+	// NO database write takes to propagate — a hooks generator-version bump or a
+	// hooks-rollout pin advance in PostHog, neither of which any callsite can
+	// signal. At 10s this workflow dominated the Temporal action bill for work
+	// that was a no-op on almost every tick.
+	//
+	// The fingerprint check keeps unchanged projects from doing any GitHub/key
+	// work, so each tick is cheap apart from the per-project scan (resolve +
+	// in-memory generate + fingerprint compare). SKIP overlap (below) gives us
+	// the "trigger every interval unless one is already running" behaviour
+	// without a separate triggering workflow: a run that outlasts the interval
+	// just defers the next tick.
+	pluginGeneratorRolloutInterval = 1 * time.Hour
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	pluginGeneratorRolloutCatchupWindow = pluginGeneratorRolloutInterval - time.Second
+
 	pluginGeneratorRolloutDefaultBatchSize = int32(100)
 	pluginGeneratorRolloutConcurrency      = 5
+
+	// pluginGeneratorRolloutRepairChangeID versions the orphaned-key repair
+	// activity that now runs at the start of a fresh sweep. In-flight
+	// executions started before this change have ListPluginPublishCandidates
+	// as their first recorded command; GetVersion returns DefaultVersion on
+	// those replays so they keep that sequence.
+	pluginGeneratorRolloutRepairChangeID = "plugin-rollout-repair-orphaned-creators"
+
+	// pluginGeneratorRolloutRepairVersion is the current command sequence:
+	// repair once on a fresh sweep, then list candidates.
+	pluginGeneratorRolloutRepairVersion = 1
 )
 
 type PluginGeneratorRolloutInput struct {
@@ -55,7 +76,11 @@ type PluginGeneratorRolloutResult struct {
 	// unchanged-fingerprint skips and go unnoticed. logSummary always
 	// reports a non-zero count here.
 	Conflicted int
-	Failed     int
+	// Rejected counts candidates whose organization has no member left to
+	// attribute the publish to (see ErrTypePluginActorNotMember). Nothing a
+	// retry can fix, so this is a warning, not a failure.
+	Rejected int
+	Failed   int
 }
 
 func ExecutePluginGeneratorRolloutWorkflow(ctx context.Context, env *tenv.Environment, input PluginGeneratorRolloutInput) (client.WorkflowRun, error) {
@@ -93,6 +118,7 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 		Published:  input.Carried.Published,
 		Skipped:    input.Carried.Skipped,
 		Conflicted: input.Carried.Conflicted,
+		Rejected:   input.Carried.Rejected,
 		Failed:     input.Carried.Failed,
 	}
 
@@ -103,14 +129,21 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 	// never becomes Published on its own (see ErrGitHubRepoConflict), so silence
 	// here would mean it's stuck forever with no signal.
 	logSummary := func() {
-		if result.Published > 0 || result.Failed > 0 || result.Conflicted > 0 {
+		if result.Published > 0 || result.Failed > 0 || result.Conflicted > 0 || result.Rejected > 0 {
 			workflow.GetLogger(ctx).Info("plugin generator rollout complete",
 				"scanned", result.Scanned,
 				"published", result.Published,
 				"skipped", result.Skipped,
 				"conflicted", result.Conflicted,
+				"rejected", result.Rejected,
 				"failed", result.Failed,
 			)
+		}
+	}
+
+	if workflow.GetVersion(ctx, pluginGeneratorRolloutRepairChangeID, workflow.DefaultVersion, pluginGeneratorRolloutRepairVersion) == pluginGeneratorRolloutRepairVersion && input.AfterProjectID == nil {
+		if err := workflow.ExecuteActivity(ctx, a.RepairOrphanedAPIKeyCreators).Get(ctx, nil); err != nil {
+			return nil, fmt.Errorf("repair orphaned api key creators: %w", err)
 		}
 	}
 
@@ -144,12 +177,19 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 
 			futures := make([]workflow.Future, 0, end-start)
 			for _, candidate := range candidates.Candidates[start:end] {
+				if !plugins.UsableAPIKeyCreatorID(candidate.CreatedByUserID) {
+					result.Skipped++
+					workflow.GetLogger(ctx).Warn("plugin project publish skipped: no real actor",
+						"project_id", candidate.ProjectID.String(),
+						"created_by_user_id", candidate.CreatedByUserID,
+					)
+					continue
+				}
 				futures = append(futures, workflow.ExecuteActivity(ctx, a.PublishPluginProject, plugins.PublishProjectInput{
-					ProjectID:              candidate.ProjectID,
-					CreatedByUserID:        candidate.CreatedByUserID,
-					CommitMessage:          commitMessage,
-					ForcePlatformMCPRepair: false,
-					SkipIfUnchanged:        true,
+					ProjectID:       candidate.ProjectID,
+					CreatedByUserID: candidate.CreatedByUserID,
+					CommitMessage:   commitMessage,
+					SkipIfUnchanged: true,
 				}))
 			}
 
@@ -160,6 +200,11 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 					if errors.As(err, &appErr) && appErr.Type() == bgactivities.ErrTypeGitHubRepoConflict {
 						result.Conflicted++
 						workflow.GetLogger(ctx).Warn("plugin project publish blocked: github repo conflict", "error", err)
+						continue
+					}
+					if errors.As(err, &appErr) && appErr.Type() == bgactivities.ErrTypePluginActorNotMember {
+						result.Rejected++
+						workflow.GetLogger(ctx).Warn("plugin project publish skipped: no organization member to publish as", "error", err)
 						continue
 					}
 					result.Failed++
@@ -190,16 +235,17 @@ func AddPluginGeneratorRolloutSchedule(ctx context.Context, temporalEnv *tenv.En
 	action := &client.ScheduleWorkflowAction{
 		ID:                 pluginGeneratorRolloutWorkflowID,
 		Workflow:           PluginGeneratorRolloutWorkflow,
-		Args:               []any{PluginGeneratorRolloutInput{BatchSize: 0, CommitMessage: "", AfterProjectID: nil, Carried: PluginGeneratorRolloutResult{Scanned: 0, Published: 0, Skipped: 0, Conflicted: 0, Failed: 0}}},
+		Args:               []any{PluginGeneratorRolloutInput{BatchSize: 0, CommitMessage: "", AfterProjectID: nil, Carried: PluginGeneratorRolloutResult{Scanned: 0, Published: 0, Skipped: 0, Conflicted: 0, Rejected: 0, Failed: 0}}},
 		TaskQueue:          string(temporalEnv.Queue()),
 		WorkflowRunTimeout: 6 * time.Hour,
 	}
 
 	_, err := sc.Create(ctx, client.ScheduleOptions{
-		ID:      pluginGeneratorRolloutScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec:    spec,
-		Action:  action,
+		CatchupWindow: pluginGeneratorRolloutCatchupWindow,
+		ID:            pluginGeneratorRolloutScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Spec:          spec,
+		Action:        action,
 	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
@@ -207,6 +253,7 @@ func AddPluginGeneratorRolloutSchedule(ctx context.Context, temporalEnv *tenv.En
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, pluginGeneratorRolloutCatchupWindow)
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,

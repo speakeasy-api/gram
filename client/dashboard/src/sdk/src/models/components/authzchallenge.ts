@@ -32,6 +32,8 @@ export const AuthzChallengePrincipalType = {
   User: "user",
   ApiKey: "api_key",
   Assistant: "assistant",
+  Agent: "agent",
+  Workload: "workload",
 } as const;
 /**
  * Kind of principal.
@@ -134,6 +136,10 @@ export type AuthzChallenge = {
    */
   scope: string;
   /**
+   * Complete selector captured for the check. Omitted for legacy or malformed challenge data.
+   */
+  selector?: { [k: string]: string } | undefined;
+  /**
    * When the authz decision was made.
    */
   timestamp: Date;
@@ -195,6 +201,7 @@ export const AuthzChallenge$inboundSchema: z.ZodMiniType<
     resource_kind: z.optional(z.string()),
     role_slugs: z.array(z.string()),
     scope: z.string(),
+    selector: z.optional(z.record(z.string(), z.string())),
     timestamp: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

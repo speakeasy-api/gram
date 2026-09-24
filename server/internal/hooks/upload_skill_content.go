@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -19,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
 	"github.com/speakeasy-api/gram/server/internal/message"
+	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -30,6 +33,12 @@ const (
 	hookSkillContentSchemaV1       = "hook.skill-content.v1"
 	maxSkillUploadRequestBodyBytes = 512 * 1024
 )
+
+func skillScanOperationID(skillVersionID uuid.UUID, policyGenerations []string) string {
+	policyGenerations = slices.Clone(policyGenerations)
+	slices.Sort(policyGenerations)
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("skill_upload:"+skillVersionID.String()+":policies:"+strings.Join(policyGenerations, ","))).String()
+}
 
 func (s *Service) UploadSkillContent(ctx context.Context, payload *gen.UploadSkillContentPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -100,7 +109,7 @@ func (s *Service) UploadSkillContent(ctx context.Context, payload *gen.UploadSki
 // scanCapturedSkillVersion judges a captured skill version for prompt
 // injection and records the outcome. Capture has already committed by the time
 // this runs, so every failure here is logged and swallowed rather than failing
-// the upload. See ScanStrict for why a judge failure records nothing.
+// the upload. See ScanStrictWithVerdict for why a judge failure records nothing.
 //
 // ponytail: synchronous judge call on the upload path; move off-request if
 // upload latency shows up in traces.
@@ -119,12 +128,57 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 	if !needed {
 		return
 	}
+	policies, err := repo.ListEnabledRiskPoliciesByProject(ctx, *authCtx.ProjectID)
+	var policyGenerations []string
+	if err != nil {
+		s.logger.WarnContext(ctx, "load skill prompt injection policy generation", attr.SlogError(err))
+		policyGenerations = []string{"policy_generation_unavailable"}
+	} else {
+		policyGenerations = make([]string, 0, len(policies))
+		for _, policy := range policies {
+			if slices.Contains(policy.Sources, promptinjection.Source) {
+				policyGenerations = append(policyGenerations, fmt.Sprintf("%s:%d", policy.ID, policy.Version))
+			}
+		}
+	}
 
 	msg := judgemessage.New(message.PromptAttachment, "", content)
-	findings, err := s.piScanner.ScanStrict(ctx, content, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, msg)
+	occurredAt := time.Now().UTC()
+	result, verdict, err := s.piScanner.ScanStrictWithVerdict(ctx, content, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), authCtx.UserID, msg)
 	if err != nil {
 		s.logger.WarnContext(ctx, "skill prompt injection scan failed; leaving version unscanned", attr.SlogError(err))
 		return
+	}
+	if result.Completed {
+		provenance := metering.RiskProvenance{
+			OrganizationID:         authCtx.ActiveOrganizationID,
+			ProjectID:              *authCtx.ProjectID,
+			RiskPolicyID:           uuid.Nil,
+			RiskPolicyVersion:      0,
+			PolicyLinkReason:       "skill_upload_no_policy",
+			ChatID:                 uuid.Nil,
+			ExternalConversationID: "",
+			ChatMessageID:          uuid.Nil,
+			ContentPartID:          uuid.Nil,
+			MessageLinkReason:      "skill_content_not_chat_message",
+			OperationID:            skillScanOperationID(skillVersionID, policyGenerations),
+			ExecutionPath:          "skill_upload",
+			RequestID:              "",
+			MessageType:            message.PromptAttachment,
+			HookSource:             "",
+			UserID:                 authCtx.UserID,
+			ToolCallID:             "",
+			ToolName:               "",
+			Model:                  verdict.Model,
+			Provider:               verdict.Provider,
+		}
+		go func() {
+			recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			if err := s.riskRecorder.Record(recordCtx, metering.RiskPromptInjection(), provenance, result.STokens, occurredAt); err != nil {
+				s.logger.ErrorContext(recordCtx, "record skill upload scan usage", attr.SlogError(err))
+			}
+		}()
 	}
 
 	params := riskRepo.RecordSkillPromptInjectionScanParams{
@@ -137,8 +191,8 @@ func (s *Service) scanCapturedSkillVersion(ctx context.Context, authCtx *context
 		Match:          pgtype.Text{String: "", Valid: false},
 		Confidence:     pgtype.Float8{Float64: 0, Valid: false},
 	}
-	if len(findings) > 0 {
-		f := findings[0]
+	if len(result.Findings) > 0 {
+		f := result.Findings[0]
 		params.Source = promptinjection.Source
 		params.Found = true
 		params.RuleID = pgtype.Text{String: f.RuleID, Valid: true}

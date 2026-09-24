@@ -12,6 +12,27 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countLiveManagedExternalKeysByCredential = `-- name: CountLiveManagedExternalKeysByCredential :one
+SELECT count(*)
+FROM external_keys
+WHERE external_credential_id = $1::uuid
+  AND identity_provider_connection_id IS NOT NULL
+  AND deleted IS FALSE
+`
+
+// Live managed signing keys (identity provider connections) that a platform
+// credential backs; mutating the credential would break every one of them. Run
+// after LockExternalCredentialForUpdate: a managed key insert takes FOR KEY
+// SHARE on the credential, so it either shows up here or waits behind the lock.
+// Live managed signing keys (identity provider connections) that a platform
+// credential backs; mutating the credential would break every one of them.
+func (q *Queries) CountLiveManagedExternalKeysByCredential(ctx context.Context, externalCredentialID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveManagedExternalKeysByCredential, externalCredentialID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAwsIamCredential = `-- name: CreateAwsIamCredential :one
 INSERT INTO aws_iam_credentials (
   external_credential_id,
@@ -99,15 +120,17 @@ INSERT INTO gcp_iam_credentials (
   impersonate_service_account,
   wif_pool_id,
   wif_provider_id,
-  wif_project_number
+  wif_project_number,
+  skip_project_verification
 ) VALUES (
   $1,
   $2,
   $3,
   $4,
-  $5
+  $5,
+  $6
 )
-RETURNING external_credential_id, external_credentials_provider, impersonate_service_account, wif_pool_id, wif_provider_id, wif_project_number, created_at, updated_at
+RETURNING external_credential_id, external_credentials_provider, impersonate_service_account, wif_pool_id, wif_provider_id, wif_project_number, skip_project_verification, created_at, updated_at
 `
 
 type CreateGcpIamCredentialParams struct {
@@ -116,6 +139,7 @@ type CreateGcpIamCredentialParams struct {
 	WifPoolID                 pgtype.Text
 	WifProviderID             pgtype.Text
 	WifProjectNumber          pgtype.Text
+	SkipProjectVerification   bool
 }
 
 func (q *Queries) CreateGcpIamCredential(ctx context.Context, arg CreateGcpIamCredentialParams) (GcpIamCredential, error) {
@@ -125,6 +149,7 @@ func (q *Queries) CreateGcpIamCredential(ctx context.Context, arg CreateGcpIamCr
 		arg.WifPoolID,
 		arg.WifProviderID,
 		arg.WifProjectNumber,
+		arg.SkipProjectVerification,
 	)
 	var i GcpIamCredential
 	err := row.Scan(
@@ -134,6 +159,7 @@ func (q *Queries) CreateGcpIamCredential(ctx context.Context, arg CreateGcpIamCr
 		&i.WifPoolID,
 		&i.WifProviderID,
 		&i.WifProjectNumber,
+		&i.SkipProjectVerification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -196,7 +222,7 @@ func (q *Queries) GetAwsIamCredential(ctx context.Context, arg GetAwsIamCredenti
 }
 
 const getGcpIamCredential = `-- name: GetGcpIamCredential :one
-SELECT ec.id, ec.organization_id, ec.project_id, ec.provider, ec.name, ec.created_at, ec.updated_at, ec.deleted_at, ec.deleted, gcp.external_credential_id, gcp.external_credentials_provider, gcp.impersonate_service_account, gcp.wif_pool_id, gcp.wif_provider_id, gcp.wif_project_number, gcp.created_at, gcp.updated_at
+SELECT ec.id, ec.organization_id, ec.project_id, ec.provider, ec.name, ec.created_at, ec.updated_at, ec.deleted_at, ec.deleted, gcp.external_credential_id, gcp.external_credentials_provider, gcp.impersonate_service_account, gcp.wif_pool_id, gcp.wif_provider_id, gcp.wif_project_number, gcp.skip_project_verification, gcp.created_at, gcp.updated_at
 FROM external_credentials AS ec
 JOIN gcp_iam_credentials AS gcp ON gcp.external_credential_id = ec.id
 WHERE ec.id = $1
@@ -235,6 +261,7 @@ func (q *Queries) GetGcpIamCredential(ctx context.Context, arg GetGcpIamCredenti
 		&i.GcpIamCredential.WifPoolID,
 		&i.GcpIamCredential.WifProviderID,
 		&i.GcpIamCredential.WifProjectNumber,
+		&i.GcpIamCredential.SkipProjectVerification,
 		&i.GcpIamCredential.CreatedAt,
 		&i.GcpIamCredential.UpdatedAt,
 	)
@@ -477,9 +504,10 @@ SET impersonate_service_account = $1,
     wif_pool_id = $2,
     wif_provider_id = $3,
     wif_project_number = $4,
+    skip_project_verification = $5,
     updated_at = clock_timestamp()
-WHERE external_credential_id = $5
-RETURNING external_credential_id, external_credentials_provider, impersonate_service_account, wif_pool_id, wif_provider_id, wif_project_number, created_at, updated_at
+WHERE external_credential_id = $6
+RETURNING external_credential_id, external_credentials_provider, impersonate_service_account, wif_pool_id, wif_provider_id, wif_project_number, skip_project_verification, created_at, updated_at
 `
 
 type UpdateGcpIamCredentialParams struct {
@@ -487,6 +515,7 @@ type UpdateGcpIamCredentialParams struct {
 	WifPoolID                 pgtype.Text
 	WifProviderID             pgtype.Text
 	WifProjectNumber          pgtype.Text
+	SkipProjectVerification   bool
 	ExternalCredentialID      uuid.UUID
 }
 
@@ -499,6 +528,7 @@ func (q *Queries) UpdateGcpIamCredential(ctx context.Context, arg UpdateGcpIamCr
 		arg.WifPoolID,
 		arg.WifProviderID,
 		arg.WifProjectNumber,
+		arg.SkipProjectVerification,
 		arg.ExternalCredentialID,
 	)
 	var i GcpIamCredential
@@ -509,6 +539,7 @@ func (q *Queries) UpdateGcpIamCredential(ctx context.Context, arg UpdateGcpIamCr
 		&i.WifPoolID,
 		&i.WifProviderID,
 		&i.WifProjectNumber,
+		&i.SkipProjectVerification,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

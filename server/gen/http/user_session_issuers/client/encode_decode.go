@@ -551,6 +551,9 @@ func EncodeListUserSessionIssuersRequest(encoder func(*http.Request) goahttp.Enc
 		if p.Limit != nil {
 			values.Add("limit", fmt.Sprintf("%v", *p.Limit))
 		}
+		if p.McpResourceID != nil {
+			values.Add("mcp_resource_id", *p.McpResourceID)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -1240,10 +1243,13 @@ func unmarshalUserSessionIssuerResponseBodyToTypesUserSessionIssuer(v *UserSessi
 	res := &types.UserSessionIssuer{
 		ID:                            *v.ID,
 		ProjectID:                     *v.ProjectID,
+		OrganizationID:                *v.OrganizationID,
 		Slug:                          *v.Slug,
 		AuthnChallengeMode:            *v.AuthnChallengeMode,
 		SessionDurationHours:          *v.SessionDurationHours,
 		ClientIDMetadataAdmissionMode: *v.ClientIDMetadataAdmissionMode,
+		TrustedRemoteSessionIssuerID:  v.TrustedRemoteSessionIssuerID,
+		TrustedRemoteSessionClientID:  v.TrustedRemoteSessionClientID,
 		CreatedAt:                     *v.CreatedAt,
 		UpdatedAt:                     *v.UpdatedAt,
 	}

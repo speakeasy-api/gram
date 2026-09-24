@@ -16,7 +16,7 @@ var _ = Service("userSessionIssuersCimdClients", func() {
 	shared.DeclareErrorResponses()
 
 	Method("listPresets", func() {
-		Description("List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' — the default — admit every enabled entry here automatically, with no per-issuer configuration. The catalog is global and contains no tenant data.")
+		Description("List Gram's curated CIMD preset catalog. Issuers whose admission mode is 'presets' admit every enabled entry here automatically, with no per-issuer configuration. Presets mode is opt-in; an issuer without an explicit mode uses 'open' and evaluates this catalog only for its shadow measurement. The catalog is global and contains no tenant data.")
 
 		Payload(func() {
 			security.SessionPayload()
@@ -210,9 +210,10 @@ var UserSessionIssuerCimdClient = Type("UserSessionIssuerCimdClient", func() {
 	Attribute("id", String, "The user_session_issuer_cimd_client id.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("project_id", String, "The owning project id.", func() {
-		Format(FormatUUID)
-	})
+	// No FormatUUID: organization-owned entries have no project and serialize
+	// this as an empty string, which a UUID format check would reject.
+	Attribute("project_id", String, "The owning project id; empty for organization-owned entries.")
+	Attribute("organization_id", String, "The owning organization id.")
 	Attribute("user_session_issuer_id", String, "The user_session_issuer this URL is allowed on.", func() {
 		Format(FormatUUID)
 	})
@@ -224,7 +225,7 @@ var UserSessionIssuerCimdClient = Type("UserSessionIssuerCimdClient", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "user_session_issuer_id", "client_id_metadata_uri", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "user_session_issuer_id", "client_id_metadata_uri", "created_at", "updated_at")
 })
 
 var ListUserSessionIssuerCimdClientsResult = Type("ListUserSessionIssuerCimdClientsResult", func() {
@@ -247,6 +248,7 @@ var VerifyCimdURLResult = Type("VerifyCimdURLResult", func() {
 	Attribute("reason", String, "Stable machine label for the rule that rejected the document, e.g. client_id_mismatch. Set only for invalid_url and invalid_document.")
 	Attribute("detail", String, "Human-readable explanation, safe to display to the operator.")
 	Attribute("client_name", String, "The document's client_name, set only when verified. Lets an operator confirm the URL names the client they intended.")
+	Attribute("document", String, "The validated document rendered as JSON, set only when verified. Re-encoded from what Gram parsed rather than echoed from the wire, so it shows what the authorization server will act on.")
 
 	Required("verified", "outcome", "detail")
 })

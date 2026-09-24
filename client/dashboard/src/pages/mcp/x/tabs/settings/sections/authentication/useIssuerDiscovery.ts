@@ -25,6 +25,14 @@ export type UseIssuerDiscoveryInitial = {
   serviceDocumentation: string;
   opPolicyUri: string;
   opTosUri: string;
+  userinfoEndpoint: string;
+  introspectionEndpoint: string;
+  // Null when never captured, same as codeChallengeMethodsSupported.
+  introspectionEndpointAuthMethodsSupported: string[] | null;
+  idTokenSigningAlgValuesSupported: string[] | null;
+  claimsSupported: string[] | null;
+  backchannelLogoutSupported: boolean | null;
+  authorizationResponseIssParameterSupported: boolean | null;
 } | null;
 
 // Which tier's fetchMetadata endpoint the hook calls. All three return the same
@@ -105,6 +113,16 @@ function useIssuerDiscoveryImpl(
             serviceDocumentation: initial.serviceDocumentation,
             opPolicyUri: initial.opPolicyUri,
             opTosUri: initial.opTosUri,
+            userinfoEndpoint: initial.userinfoEndpoint,
+            introspectionEndpoint: initial.introspectionEndpoint,
+            introspectionEndpointAuthMethodsSupported:
+              initial.introspectionEndpointAuthMethodsSupported,
+            idTokenSigningAlgValuesSupported:
+              initial.idTokenSigningAlgValuesSupported,
+            claimsSupported: initial.claimsSupported,
+            backchannelLogoutSupported: initial.backchannelLogoutSupported,
+            authorizationResponseIssParameterSupported:
+              initial.authorizationResponseIssParameterSupported,
           }
         : null,
     );
@@ -153,6 +171,16 @@ function useIssuerDiscoveryImpl(
         serviceDocumentation: draft.serviceDocumentation ?? "",
         opPolicyUri: draft.opPolicyUri ?? "",
         opTosUri: draft.opTosUri ?? "",
+        userinfoEndpoint: draft.userinfoEndpoint ?? "",
+        introspectionEndpoint: draft.introspectionEndpoint ?? "",
+        introspectionEndpointAuthMethodsSupported:
+          draft.introspectionEndpointAuthMethodsSupported ?? [],
+        idTokenSigningAlgValuesSupported:
+          draft.idTokenSigningAlgValuesSupported ?? [],
+        claimsSupported: draft.claimsSupported ?? [],
+        backchannelLogoutSupported: draft.backchannelLogoutSupported,
+        authorizationResponseIssParameterSupported:
+          draft.authorizationResponseIssParameterSupported,
       };
     },
     onSuccess: (snapshot) => {

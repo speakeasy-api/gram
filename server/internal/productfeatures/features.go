@@ -51,7 +51,33 @@ const (
 	// selections is always on; this only governs whether new approvals can
 	// author one.
 	FeatureConsentToolFiltering Feature = "consent_tool_filtering"
+	// FeatureNetworkIngress is the durable staff-managed entitlement for private
+	// network ingress. It is never included in default bundles or demo seed data.
+	FeatureNetworkIngress Feature = "network_ingress"
 )
+
+// RequiresPlatformAdmin reports whether toggling f through productFeatures.set
+// requires a platform admin in addition to org:admin on the target
+// organization. The org-settable cases are the toggles organization admins
+// manage themselves through the dashboard's organization settings (Logs,
+// Skills content upload, consent tool filtering, Platform MCP access); every
+// other settable feature is a staff-managed entitlement, and features missing
+// a case fail closed so a new feature cannot silently become self-serve.
+func (f Feature) RequiresPlatformAdmin() bool {
+	switch f {
+	case FeatureLogs,
+		FeatureToolIOLogs,
+		FeatureSessionCapture,
+		FeatureHooksBrowserLogin,
+		FeatureHooksFailOpen,
+		FeatureSkillCaptureMetadataOnly,
+		FeatureConsentToolFiltering,
+		FeaturePlatformMCP:
+		return false
+	default:
+		return true
+	}
+}
 
 type FeatureCache struct {
 	OrganizationID string

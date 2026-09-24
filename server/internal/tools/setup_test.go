@@ -117,7 +117,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
-	toolsetsSvc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, nil, false)
+	toolsetsSvc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, nil, false)
 	templatesSvc := templates.NewService(logger, tracerProvider, conn, sessionManager, toolsetsSvc, authzEngine, auditLogger)
 
 	return ctx, &testInstance{
@@ -141,7 +141,7 @@ func zipManifest(t *testing.T, path string, runtime string) (rdr io.Reader, err 
 
 	manifest := testenv.ReadFixture(t, path)
 	zipWriter := zip.NewWriter(buf)
-	defer o11y.LogDefer(t.Context(), testenv.NewLogger(t), func() error {
+	defer o11y.LogDefer(t.Context(), testenv.NewLogger(t), "failed to close zip writer", func() error {
 		return zipWriter.Close()
 	})
 

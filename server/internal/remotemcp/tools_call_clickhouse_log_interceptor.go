@@ -154,6 +154,9 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	if i.identity.McpServerID != "" {
 		logAttrs[attr.McpServerIDKey] = i.identity.McpServerID
 	}
+	if i.identity.MetaMCPServerID != "" {
+		logAttrs[attr.MetaMcpServerIDKey] = i.identity.MetaMCPServerID
+	}
 	logAttrs.RecordDuration(durationSec)
 	logAttrs.RecordStatusCode(statusCode)
 	logAttrs.RecordRequestBody(requestBytes)
@@ -161,6 +164,7 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	logAttrs.RecordRequestBodyContent(call.Request.Params.Arguments)
 	logAttrs.RecordResponseBodyContent(outputContent)
 	logAttrs.RecordTraceContext(ctx)
+	logAttrs.RecordAuthenticatedActor(ctx)
 	ensureTraceContext(logAttrs)
 	if durationMissing {
 		logAttrs[DurationMissingKey] = true
@@ -170,6 +174,11 @@ func (i *ToolsCallClickHouseLogInterceptor) InterceptToolsCallResponse(ctx conte
 	}
 	if authCtx.ExternalUserID != "" {
 		logAttrs[attr.ExternalUserIDKey] = authCtx.ExternalUserID
+	}
+	// The gateway resolved the caller before dialing this member; without it
+	// proxied dispatches would be the one tool-call flavour with no client.
+	if client, ok := contextvalues.GetMCPClientInfo(ctx); ok {
+		logAttrs.RecordMCPClient(client.Name, client.Version)
 	}
 
 	params := tm.LogParams{

@@ -29,6 +29,35 @@ const (
 	ExcludedReasonAutomated = "automated"
 )
 
+// Values of risk_findings.event_kind: what kind of copy a row is. Read-time
+// dedup resolves an id to one row by ranking state-change copies above finding
+// copies (latestCopyOrderSQL), then latest inserted_at within a rank — so an
+// at-least-once redelivery of the original scanner row can never clobber a
+// later dismissal. The empty string is a legacy row written before the column
+// existed and ranks as a finding copy.
+const (
+	// EventKindFinding marks scanner output, dead-letter sentinels included.
+	EventKindFinding = "finding"
+	// EventKindSuppression marks an appended copy recording a manual dismissal
+	// or a retroactive exclusion apply.
+	EventKindSuppression = "suppression"
+	// EventKindUnsuppression marks an appended copy recording a dismissal undo
+	// or a retroactive exclusion reversal.
+	EventKindUnsuppression = "unsuppression"
+)
+
+// stateRankSQL ranks explicit state-change copies of an id above its finding
+// copies when resolving the id to one row. Used inside latestCopyOrderSQL and
+// the window-function variant in overview/signals/retro queries.
+const stateRankSQL = "(event_kind IN ('" + EventKindSuppression + "', '" + EventKindUnsuppression + "'))"
+
+// latestCopyOrderSQL is the shared per-id resolution order: state-change
+// copies first, then the most recently inserted. Every dedup site (LIMIT 1 BY
+// id and ROW_NUMBER() OVER alike) must use this order — a site sorting on
+// inserted_at alone would let a redelivered scanner copy clobber a later
+// suppression or unsuppression copy.
+const latestCopyOrderSQL = stateRankSQL + " DESC, inserted_at DESC"
+
 // RiskFindingRow is a single row destined for the risk_findings table. The raw
 // matched value is never carried here: only its length, a redacted display
 // string, and one-way fingerprints. See internal/risk/finding_ch.go for how it
@@ -114,6 +143,30 @@ type RiskFindingRow struct {
 	Field      string `ch:"field"`
 	Path       string `ch:"path"`
 	ToolCallID string `ch:"tool_call_id"`
+
+	// EventKind is one of the EventKind* constants: what kind of copy this row
+	// is. Read-time dedup ranks suppression/unsuppression copies above finding
+	// copies for the same id.
+	EventKind string `ch:"event_kind"`
+
+	// Shadow marks a finding the LLM analyzer produced under the shadow risk
+	// engine mode: recorded for per-message comparison with the legacy
+	// engines, never enforced, and filtered out (shadow = 0) by every
+	// user-facing read path. The flag is immutable across an id's copies.
+	Shadow bool `ch:"shadow"`
+	// Mediated execution metadata. These identifiers are carried by the
+	// finding producer and contain no request or response content.
+	ExecutionID        string `ch:"execution_id"`
+	MCPServerID        string `ch:"mcp_server_id"`
+	MetaMCPServerID    string `ch:"meta_mcp_server_id"`
+	ToolsetID          string `ch:"toolset_id"`
+	ToolName           string `ch:"tool_name"`
+	Phase              string `ch:"phase"`
+	MediationSurface   string `ch:"mediation_surface"`
+	MCPMethod          string `ch:"mcp_method"`
+	PrincipalKind      string `ch:"principal_kind"`
+	IdentityStamped    bool   `ch:"identity_stamped"`
+	EnforcementOutcome string `ch:"enforcement_outcome"`
 }
 
 // chNullable maps a nil pointer to an untyped nil interface so a Nullable
@@ -178,12 +231,27 @@ var riskFindingColumns = []string{
 	"field",
 	"path",
 	"tool_call_id",
+	"event_kind",
+	"shadow",
+	"execution_id",
+	"mcp_server_id",
+	"meta_mcp_server_id",
+	"toolset_id",
+	"tool_name",
+	"phase",
+	"mediation_surface",
+	"mcp_method",
+	"principal_kind",
+	"identity_stamped",
+	"enforcement_outcome",
 }
 
-// InsertRiskFindings writes findings using a server-side async insert
-// (async_insert=1, wait_for_async_insert=0). The call is fire-and-forget from
-// CH's perspective: it acks once the rows are queued in CH's async insert
-// buffer, not once they are committed to disk.
+// InsertRiskFindings writes findings using a server-side async insert with a
+// durable ack (async_insert=1, wait_for_async_insert=1): the call returns only
+// once the coalesced buffer the rows joined is flushed to a part. The Pub/Sub
+// writer nacks its batch when this errors, so the ack has to mean "committed"
+// — with wait_for_async_insert=0 an insert that later fails to flush would
+// have been acked and the findings silently lost.
 func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow) error {
 	if len(rows) == 0 {
 		return nil
@@ -191,7 +259,7 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
 		"async_insert":          1,
-		"wait_for_async_insert": 0,
+		"wait_for_async_insert": 1,
 	}))
 
 	builder := sq.Insert("risk_findings").Columns(riskFindingColumns...)
@@ -265,6 +333,21 @@ func (q *Queries) InsertRiskFindings(ctx context.Context, rows []RiskFindingRow)
 			row.Field,
 			row.Path,
 			row.ToolCallID,
+			row.EventKind,
+			// A bool binds as the literal 1 or 0 on this Exec path, matching
+			// the UInt8 column.
+			row.Shadow,
+			row.ExecutionID,
+			row.MCPServerID,
+			row.MetaMCPServerID,
+			row.ToolsetID,
+			row.ToolName,
+			row.Phase,
+			row.MediationSurface,
+			row.MCPMethod,
+			row.PrincipalKind,
+			row.IdentityStamped,
+			row.EnforcementOutcome,
 		)
 	}
 

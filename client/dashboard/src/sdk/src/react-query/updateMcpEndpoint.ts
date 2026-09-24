@@ -54,7 +54,7 @@ export type UpdateMcpEndpointMutationError =
  * updateMcpEndpoint mcpEndpoints
  *
  * @remarks
- * Update an MCP endpoint. This is a full-record replace: fields omitted from the request become null on the stored record. The id, mcp_server_id, and slug fields are required.
+ * Update an MCP endpoint. This is a full-record replace: fields omitted from the request become null on the stored record. The id and slug fields are required, along with exactly one of mcp_server_id or meta_mcp_server_id.
  */
 export function useUpdateMcpEndpointMutation(
   options?: MutationHookOptions<

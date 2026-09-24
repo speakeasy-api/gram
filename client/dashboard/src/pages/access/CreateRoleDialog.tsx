@@ -2,7 +2,6 @@ import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 
-import { Button as LocalButton } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Sheet,
@@ -13,6 +12,8 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/contexts/Auth";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -21,29 +22,24 @@ import {
   invalidateAllMembers,
   useMembers,
 } from "@gram/client/react-query/members.js";
+import { useAgents } from "@gram/client/react-query/agents.js";
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { Alert } from "@/components/ui/Alert";
+import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { useOrgRoutes } from "@/routes";
 import {
   ArrowLeft,
-  Ban,
+  Bot,
   Check,
-  ChevronDown,
   ChevronRight,
   Loader2,
-  Plus,
-  X,
+  Lock,
 } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/Tooltip";
 import { useMemo, useState } from "react";
 import {
   getSelectableMembers,
@@ -51,16 +47,19 @@ import {
   membersWithRole,
 } from "./changeRoleState";
 import { GrantRuleDrawerContent } from "./GrantRuleDrawerContent";
+import { PermissionScopeControl } from "./PermissionScopeControl";
+import { RolePermissionsSection } from "./RolePermissionsSection";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
-import type { ActivePanel, RoleGrant, ScopeRule } from "./types";
-import { isProjectSelectableResourceType } from "./types";
+import type { ActivePanel, ResourceType, RoleGrant, ScopeRule } from "./types";
+import {
+  isProjectSelectableResourceType,
+  isUnrestrictedResourceType,
+} from "./types";
 import {
   isSaveDisabled,
-  effectiveGrantCount,
   grantKeysString as grantKeysStringFn,
   computeRuleLabel,
-  computeRuleTooltip,
 } from "./roleDialogState";
 import {
   applyRemoveRule,
@@ -75,6 +74,16 @@ import {
 // module so they can be unit-tested without pulling in React/react-query.
 
 /** Determine the broadest allow level from a scope's rules. */
+// Everything a permission's allow rules cover, as one selector list. A rule
+// with null selectors is unrestricted, and an exception to it can name any
+// resource, so null wins over the others.
+function effectiveAllowSelectors(rules: ScopeRule[]): ScopeRule["selectors"] {
+  const allows = rules.filter((rule) => rule.effect === "allow");
+  if (allows.length === 0) return null;
+  if (allows.some((rule) => rule.selectors === null)) return null;
+  return allows.flatMap((rule) => rule.selectors ?? []);
+}
+
 function getAllowLevel(
   rules: ScopeRule[],
 ): "all" | "project" | "server" | "tool" | "annotation" | null {
@@ -112,11 +121,20 @@ function getDenyPanels(
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
+/**
+ * How the editor is presented. A sheet is right for a quick change from the
+ * roles list; a page is right for authoring, where a role's permissions and
+ * their rules are taller than a sheet can hold.
+ */
+type RoleEditorPresentation = "sheet" | "page";
+
 interface CreateRoleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingRole?: Role | null;
-  onRoleCreated?: (roleName: string) => void;
+  onRoleCreated?: (role: Role) => void;
+  confirmAssignmentFor?: string;
+  presentation?: RoleEditorPresentation;
 }
 
 export function CreateRoleDialog({
@@ -124,6 +142,8 @@ export function CreateRoleDialog({
   onOpenChange,
   editingRole,
   onRoleCreated,
+  confirmAssignmentFor,
+  presentation = "sheet",
 }: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
@@ -132,16 +152,18 @@ export function CreateRoleDialog({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [grants, setGrants] = useState<Record<string, RoleGrant>>({});
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(
     new Set(),
   );
   const [initialMembers, setInitialMembers] = useState<Set<string>>(new Set());
+  const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set());
+  const [initialAgents, setInitialAgents] = useState<Set<string>>(new Set());
+  const [showAgents, setShowAgents] = useState(false);
   const [initialName, setInitialName] = useState("");
   const [initialDescription, setInitialDescription] = useState("");
   const [initialGrantKeys, setInitialGrantKeys] = useState("");
   const [showMembers, setShowMembers] = useState(false);
-  const [showPermissions, setShowPermissions] = useState(true);
+  const [assignmentConfirmed, setAssignmentConfirmed] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   // ─── Rule editor state ────────────────────────────────────────
@@ -159,6 +181,19 @@ export function CreateRoleDialog({
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
+  const agentManagementEnabled =
+    useFeatureFlag(FEATURE_FLAGS.agentManagement).status === "enabled";
+  const { data: agentsData } = useAgents(undefined, undefined, {
+    enabled: agentManagementEnabled,
+  });
+  // Suspended and revoked agents keep the roles they hold but cannot be given
+  // new ones, so only active agents are offered. An agent already on the role
+  // stays listed so re-saving does not silently drop it.
+  const agents = [...(agentsData ?? [])]
+    .filter(
+      (agent) => agent.lifecycle === "active" || selectedAgents.has(agent.id),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
   const { data: scopesData } = useListScopes();
   const scopeDefinitions = scopesData?.scopes;
   const userVisibleScopeDefinitions = useMemo(
@@ -177,7 +212,7 @@ export function CreateRoleDialog({
   const scopeGroups = useMemo(() => {
     const groupOrder: {
       label: string;
-      resourceType: string;
+      resourceType: ResourceType;
       description: string;
     }[] = [
       {
@@ -210,6 +245,11 @@ export function CreateRoleDialog({
         resourceType: "chat",
         description: "Access to members' agent session transcripts.",
       },
+      {
+        label: "Agents",
+        resourceType: "agent",
+        description: "Agents available within the organization.",
+      },
     ];
     return groupOrder.map((g) => ({
       ...g,
@@ -224,9 +264,6 @@ export function CreateRoleDialog({
     setName(editingRole.name);
     setDescription(editingRole.description);
     const roleGrants = grantsFromRole(editingRole, scopesData.scopes);
-    // Keep all groups collapsed on open; auto-expanding granted groups makes
-    // the sheet scroll on load.
-    setExpandedGroups(new Set());
     setGrants(roleGrants);
     setInitialName(editingRole.name);
     setInitialDescription(editingRole.description);
@@ -234,6 +271,9 @@ export function CreateRoleDialog({
     const assignedIds = new Set(membersWithRole(members, editingRole.id));
     setSelectedMembers(assignedIds);
     setInitialMembers(new Set(assignedIds));
+    const assignedAgentIds = new Set(editingRole.agentIds ?? []);
+    setSelectedAgents(assignedAgentIds);
+    setInitialAgents(new Set(assignedAgentIds));
     setInitialized(true);
   }
   if (!editingRole && initialized) {
@@ -242,12 +282,12 @@ export function CreateRoleDialog({
 
   // ─── Mutations ────────────────────────────────────────────────
   const createRole = useCreateRoleMutation({
-    onSuccess: async () => {
+    onSuccess: async (role) => {
       await Promise.all([
         invalidateAllRoles(queryClient),
         invalidateAllMembers(queryClient),
       ]);
-      onRoleCreated?.(name);
+      onRoleCreated?.(role);
       handleClose();
     },
   });
@@ -263,28 +303,10 @@ export function CreateRoleDialog({
   });
 
   const isMutating = createRole.isPending || updateRole.isPending;
-  const visibleScopeSlugs = useMemo(
-    () =>
-      new Set<Scope>(
-        scopeGroups.flatMap((group) =>
-          group.scopes.map((s) => s.slug as Scope),
-        ),
-      ),
-    [scopeGroups],
-  );
-  const visibleGrants = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(grants).filter(([scope]) =>
-          visibleScopeSlugs.has(scope as Scope),
-        ),
-      ),
-    [grants, visibleScopeSlugs],
-  );
-  const grantCount = effectiveGrantCount(visibleGrants);
 
   const saveDisabled =
     !scopeDefinitions ||
+    (!!confirmAssignmentFor && !assignmentConfirmed) ||
     isSaveDisabled({
       isMutating,
       isEditing,
@@ -293,18 +315,27 @@ export function CreateRoleDialog({
       description,
       grants,
       selectedMembers,
+      selectedAgents,
       initial: {
         name: initialName,
         description: initialDescription,
         grantKeys: initialGrantKeys,
         members: initialMembers,
+        agents: initialAgents,
       },
     });
 
   // ─── Scope / grant operations ─────────────────────────────────
 
+  const updateGrants = (
+    update: (previous: Record<string, RoleGrant>) => Record<string, RoleGrant>,
+  ) => {
+    setAssignmentConfirmed(false);
+    setGrants(update);
+  };
+
   const toggleScope = (scope: Scope) => {
-    setGrants((prev) => {
+    updateGrants((prev) => {
       const next = { ...prev };
       if (next[scope]) {
         delete next[scope];
@@ -348,12 +379,23 @@ export function CreateRoleDialog({
     setDialogStep("rule-editor");
   };
 
+  // Escape, the X, and the backdrop mean "leave it as it was", so they close
+  // the editor without writing the draft back.
+  const discardRuleEditor = () => {
+    setDialogStep("form");
+    setTimeout(() => {
+      setEditingScopeSlug(null);
+      setEditingRuleIndex(-1);
+      setDraftRule(null);
+    }, 300);
+  };
+
   const saveAndCloseRuleEditor = () => {
     if (draftRule && editingScopeSlug) {
       const hasContent =
         draftRule.selectors === null || draftRule.selectors.length > 0;
       if (hasContent) {
-        setGrants((prev) => {
+        updateGrants((prev) => {
           const grant = prev[editingScopeSlug] ?? {
             scope: editingScopeSlug,
             rules: [],
@@ -399,8 +441,26 @@ export function CreateRoleDialog({
     }, 300);
   };
 
+  // "All servers" is the unrestricted rule, which the model stores as null
+  // selectors rather than as a list naming everything.
+  const resetRuleToAll = (scopeSlug: string) => {
+    updateGrants((prev) => {
+      const grant = prev[scopeSlug];
+      if (!grant) return prev;
+      return {
+        ...prev,
+        [scopeSlug]: {
+          ...grant,
+          rules: grant.rules.map((rule) =>
+            rule.effect === "allow" ? { ...rule, selectors: null } : rule,
+          ),
+        },
+      };
+    });
+  };
+
   const removeRule = (scopeSlug: string, ruleIndex: number) => {
-    setGrants((prev) => {
+    updateGrants((prev) => {
       const grant = prev[scopeSlug];
       if (!grant) return prev;
       const result = applyRemoveRule(grant, ruleIndex);
@@ -416,37 +476,6 @@ export function CreateRoleDialog({
 
   // ─── Group operations ─────────────────────────────────────────
 
-  const toggleGroup = (label: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      return next;
-    });
-  };
-
-  const toggleGroupCheckbox = (label: string) => {
-    const group = scopeGroups.find((g) => g.label === label);
-    if (!group) return;
-    setGrants((prev) => {
-      const allSelected = group.scopes.every((s) => prev[s.slug]);
-      const next = { ...prev };
-      for (const scope of group.scopes) {
-        if (allSelected) {
-          delete next[scope.slug];
-        } else if (!next[scope.slug]) {
-          next[scope.slug] = {
-            scope: scope.slug,
-            rules: [
-              { id: crypto.randomUUID(), effect: "allow", selectors: null },
-            ],
-          };
-        }
-      }
-      return next;
-    });
-  };
-
   // ─── Member operations ────────────────────────────────────────
 
   const toggleMember = (memberId: string) => {
@@ -454,6 +483,15 @@ export function CreateRoleDialog({
       const next = new Set(prev);
       if (next.has(memberId)) next.delete(memberId);
       else next.add(memberId);
+      return next;
+    });
+  };
+
+  const toggleAgent = (agentId: string) => {
+    setSelectedAgents((prev) => {
+      const next = new Set(prev);
+      if (next.has(agentId)) next.delete(agentId);
+      else next.add(agentId);
       return next;
     });
   };
@@ -502,6 +540,11 @@ export function CreateRoleDialog({
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
                 : undefined,
+            // Agent membership is declarative: an agent has no other surface
+            // to be taken off a role on. Preserve it when the rollout is unavailable.
+            ...(agentManagementEnabled
+              ? { agentIds: Array.from(selectedAgents) }
+              : {}),
           },
         },
       });
@@ -516,6 +559,9 @@ export function CreateRoleDialog({
               selectedMembers.size > 0
                 ? Array.from(selectedMembers)
                 : undefined,
+            ...(agentManagementEnabled && selectedAgents.size > 0
+              ? { agentIds: Array.from(selectedAgents) }
+              : {}),
           },
         },
       });
@@ -528,14 +574,16 @@ export function CreateRoleDialog({
     setName("");
     setDescription("");
     setGrants({});
-    setExpandedGroups(new Set());
     setSelectedMembers(new Set());
     setInitialMembers(new Set());
+    setSelectedAgents(new Set());
+    setInitialAgents(new Set());
+    setShowAgents(false);
     setInitialName("");
     setInitialDescription("");
     setInitialGrantKeys("");
     setShowMembers(false);
-    setShowPermissions(true);
+    setAssignmentConfirmed(false);
     setInitialized(false);
     setDialogStep("form");
     setEditingScopeSlug(null);
@@ -568,16 +616,23 @@ export function CreateRoleDialog({
 
   // ─── Render ───────────────────────────────────────────────────
 
+  const isPage = presentation === "page";
+  const Frame = isPage ? PageFrame : SheetFrame;
+  // Sheet chrome is Radix Dialog chrome: on a page there is no Dialog for it
+  // to live in, so the same slots render as plain elements.
+  const Header = isPage ? PageHeaderSlot : SheetHeader;
+  const Title = isPage ? PageTitleSlot : SheetTitle;
+  const Description = isPage ? PageDescriptionSlot : SheetDescription;
+  const Footer = isPage ? PageFooterSlot : SheetFooter;
+
   return (
-    <Sheet open={open} onOpenChange={handleClose}>
-      <SheetContent
-        side="right"
-        className={cn(
-          "flex w-full flex-col gap-1 overflow-hidden sm:max-w-2xl",
-        )}
-      >
-        <SheetHeader className="border-border border-b">
-          <SheetTitle>
+    <Frame open={open} onClose={handleClose}>
+      {/* The sheet's header doubles as the rule editor's title bar. On a page
+          the modal carries its own title, so rendering this header when the
+          step changes only pushed the form down behind the modal. */}
+      {!isPage && (
+        <Header className={cn(!isPage && "border-border border-b")}>
+          <Title>
             {dialogStep === "rule-editor" && editingScopeDef ? (
               <div className="flex items-center gap-2">
                 <button
@@ -597,303 +652,207 @@ export function CreateRoleDialog({
             ) : (
               "Create Role"
             )}
-          </SheetTitle>
+          </Title>
           {dialogStep === "rule-editor" && draftRule && (
-            <SheetDescription className="text-muted-foreground mr-5 ml-7 line-clamp-2 text-xs">
+            <Description className="text-muted-foreground mr-5 ml-7 line-clamp-2 text-xs">
               {draftRule.effect === "allow"
                 ? "Choose which resources this role can access. Start broad — you can add exceptions later to restrict specific items."
                 : "Exclude specific resources that the allow rule would otherwise permit."}
-            </SheetDescription>
+            </Description>
           )}
-        </SheetHeader>
+        </Header>
+      )}
 
-        <div className="relative flex-1 overflow-hidden">
+      <div className={cn("relative flex-1", !isPage && "overflow-hidden")}>
+        <div
+          className={cn(
+            "flex h-full",
+            !isPage && "transition-transform duration-300 ease-in-out",
+            !isPage && stepOffset,
+          )}
+        >
+          {/* ─── Panel 1: Role form ─── */}
           <div
             className={cn(
-              "flex h-full transition-transform duration-300 ease-in-out",
-              stepOffset,
+              "w-full shrink-0 space-y-4 overflow-y-auto",
+              // On a page the surrounding layout already sets the gutter;
+              // adding the sheet's would indent the form past the title.
+              isPage ? "pt-2" : "px-4 pt-3",
             )}
           >
-            {/* ─── Panel 1: Role form ─── */}
-            <div className="w-full shrink-0 space-y-4 overflow-y-auto px-4 pt-3">
-              {organization.scimEnabled && (
-                <Alert variant="info" dismissible={false} className="text-sm">
-                  Assign this role from{" "}
-                  <Link
-                    to={orgRoutes.identity.href()}
-                    className="whitespace-nowrap underline underline-offset-2"
-                  >
-                    Identity → SCIM → Configure
-                  </Link>
-                  .
-                </Alert>
-              )}
-              <InputField
-                label="Name"
-                placeholder="e.g., Project Manager"
-                required
-                autoFocus
-                disabled={editingRole?.isSystem}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-
-              <AnyField
-                label="Description"
-                render={(props) => (
-                  <textarea
-                    {...props}
-                    rows={2}
-                    disabled={editingRole?.isSystem}
-                    placeholder="Describe what this role can do..."
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none border bg-transparent px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                  />
-                )}
-              />
-
-              {/* ─── Permissions ─── */}
-              <div className="border-border border-t pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowPermissions(!showPermissions)}
-                  className="flex w-full items-center gap-1 text-left"
+            {organization.scimEnabled && (
+              <Alert variant="info" dismissible={false} className="text-sm">
+                Assign this role from{" "}
+                <Link
+                  to={orgRoutes.identity.href()}
+                  className="whitespace-nowrap underline underline-offset-2"
                 >
-                  <ChevronRight
-                    className={cn(
-                      "h-4 w-4 transition-transform",
-                      showPermissions && "rotate-90",
-                    )}
-                  />
-                  <Text variant="body" className="font-medium">
-                    Permissions
-                  </Text>
-                  <Text variant="body" className="text-muted-foreground ml-1">
-                    ({grantCount} selected)
-                  </Text>
-                </button>
+                  Identity → SCIM → Configure
+                </Link>
+                .
+              </Alert>
+            )}
+            <InputField
+              label="Name"
+              placeholder="e.g., Project Manager"
+              required
+              autoFocus
+              disabled={editingRole?.isSystem}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
 
-                {showPermissions && (
-                  <div className="mt-3 space-y-3">
-                    {scopeGroups.map((group) => {
-                      const selectedInGroup = group.scopes.filter(
-                        (s) => grants[s.slug],
-                      ).length;
-                      const isExpanded = expandedGroups.has(group.label);
-                      const allSelected =
-                        group.scopes.length > 0 &&
-                        group.scopes.every((s) => grants[s.slug]);
-                      const someSelected = selectedInGroup > 0 && !allSelected;
+            <AnyField
+              label="Description"
+              render={(props) => (
+                <textarea
+                  {...props}
+                  rows={2}
+                  disabled={editingRole?.isSystem}
+                  placeholder="Describe what this role can do..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="border-input placeholder:text-muted-foreground focus-visible:ring-ring flex w-full resize-none border bg-transparent px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              )}
+            />
 
-                      return (
-                        <div key={group.label} className="border-border border">
-                          {/* Group header */}
-                          <div
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => toggleGroup(group.label)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                toggleGroup(group.label);
-                              }
-                            }}
-                            className="hover:bg-muted/50 flex w-full cursor-pointer items-start justify-between gap-2 px-3 py-2"
-                          >
-                            <div className="flex items-start gap-2">
-                              <Checkbox
-                                checked={
-                                  allSelected
-                                    ? true
-                                    : someSelected
-                                      ? "indeterminate"
-                                      : false
-                                }
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleGroupCheckbox(group.label);
-                                }}
-                                className="mt-0.5 cursor-pointer"
-                              />
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <Text
-                                    variant="body"
-                                    className="text-sm font-medium"
-                                  >
-                                    {group.label}
-                                  </Text>
-                                  <Text
-                                    variant="body"
-                                    className="text-muted-foreground text-sm"
-                                  >
-                                    ({selectedInGroup}/{group.scopes.length})
-                                  </Text>
-                                </div>
-                                {!isExpanded && (
-                                  <Text muted small className="mt-0.5 text-xs">
-                                    {group.description}
-                                  </Text>
-                                )}
-                              </div>
-                            </div>
-                            <ChevronRight
-                              className={cn(
-                                "text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0 transition-transform",
-                                isExpanded && "rotate-90",
-                              )}
-                            />
-                          </div>
+            {isSystemRole && (
+              // Quieter than a banner: the fields it describes are right
+              // above it, and already visibly disabled.
+              <Text muted small>
+                Built-in role. Gram manages its name and description; its
+                permissions are yours to change.
+              </Text>
+            )}
 
-                          {/* Expanded scope rows */}
-                          {isExpanded && (
-                            <div className="border-border bg-muted/40 border-t">
-                              {group.scopes.map((scopeDef) => {
-                                const grant = grants[scopeDef.slug];
-                                const isChecked = !!grant;
-                                const isConfigurable =
-                                  scopeDef.resourceType !== "org" &&
-                                  scopeDef.resourceType !== "environment" &&
-                                  scopeDef.resourceType !== "chat";
-
-                                const row = (
-                                  <div key={scopeDef.slug}>
-                                    {/* Scope checkbox row */}
-                                    <div className="hover:bg-muted/50 flex items-start gap-3 px-3 py-2.5">
-                                      <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
-                                        <Checkbox
-                                          checked={isChecked}
-                                          onCheckedChange={() =>
-                                            toggleScope(scopeDef.slug)
-                                          }
-                                          className="bg-background mt-0.5"
-                                        />
-                                        <div className="min-w-0 flex-1">
-                                          <Text
-                                            variant="body"
-                                            className="font-mono text-sm font-medium"
-                                          >
-                                            {scopeDef.slug}
-                                          </Text>
-                                          <Text
-                                            variant="body"
-                                            className="text-muted-foreground text-xs"
-                                          >
-                                            {scopeDef.description}
-                                          </Text>
-                                        </div>
-                                      </label>
-
-                                      {/* Static label for org/environment */}
-                                      {isChecked && !isConfigurable && (
-                                        <span className="border-input text-muted-foreground inline-flex h-7 shrink-0 items-center border bg-transparent px-2 py-1 text-xs">
-                                          {scopeDef.resourceType ===
-                                          "environment"
-                                            ? "All in project"
-                                            : scopeDef.resourceType === "chat"
-                                              ? "All sessions"
-                                              : "All"}
-                                        </span>
-                                      )}
-                                    </div>
-
-                                    {/* Rule chips for configurable scopes */}
-                                    {isChecked && isConfigurable && (
-                                      <div className="mr-3 ml-8 flex flex-wrap items-center gap-1.5 pb-3">
-                                        {grant.rules.map((rule, ruleIdx) => (
-                                          <RuleChip
-                                            key={rule.id}
-                                            rule={rule}
-                                            label={computeRuleLabel(
-                                              rule.selectors,
-                                              scopeDef.resourceType,
-                                              projectList,
-                                            )}
-                                            tooltip={computeRuleTooltip(
-                                              rule.effect,
-                                              rule.selectors,
-                                              scopeDef.resourceType,
-                                              projectList,
-                                            )}
-                                            onClick={() =>
-                                              openRuleEditor(
-                                                scopeDef.slug,
-                                                ruleIdx,
-                                              )
-                                            }
-                                            onRemove={() =>
-                                              removeRule(scopeDef.slug, ruleIdx)
-                                            }
-                                          />
-                                        ))}
-                                        {!grant.rules.some(
-                                          (r) => r.effect === "deny",
-                                        ) &&
-                                          getDenyPanels(
-                                            getAllowLevel(grant.rules),
-                                            isProjectSelectableResourceType(
-                                              scopeDef.resourceType,
-                                            ),
-                                          ).length > 0 && (
-                                            <LocalButton
-                                              type="button"
-                                              variant="tertiary"
-                                              size="xs"
-                                              className="text-muted-foreground text-xs"
-                                              onClick={() =>
-                                                openRuleEditor(
-                                                  scopeDef.slug,
-                                                  -1,
-                                                )
-                                              }
-                                            >
-                                              <Plus className="h-3 w-3" />
-                                              Except…
-                                            </LocalButton>
-                                          )}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-
-                                return row;
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* ─── Assign Members (hidden when directory sync manages assignment) ─── */}
-              {!organization.scimEnabled && (
-                <div className="border-border border-t pt-4 pb-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowMembers(!showMembers)}
-                    className="flex w-full items-center gap-1 text-left"
-                  >
-                    <ChevronRight
-                      className={cn(
-                        "h-4 w-4 transition-transform",
-                        showMembers && "rotate-90",
+            {/* ─── Permissions ─── */}
+            <div className="border-border border-t pt-4">
+              <Text variant="body" className="mb-3 font-medium">
+                Permissions
+              </Text>
+            </div>
+            <RolePermissionsSection
+              groups={scopeGroups}
+              selectedScopes={new Set(Object.keys(grants))}
+              disabled={false}
+              markAgentIneligible={selectedAgents.size > 0}
+              onToggleScope={toggleScope}
+              renderScopeRule={(scopeDef) => {
+                const grant = grants[scopeDef.slug];
+                if (!grant) return null;
+                // Scopes with nothing to narrow — an organization is not a
+                // list you pick from — carry no control at all: an "All" chip
+                // that cannot be changed is noise.
+                if (isUnrestrictedResourceType(scopeDef.resourceType)) {
+                  return null;
+                }
+                // A permission can hold more than one allow rule — selectors
+                // at different levels do not merge — so each one gets its own
+                // sentence rather than the first one standing for all of them.
+                const allowRules = grant.rules
+                  .map((rule, index) => ({ rule, index }))
+                  .filter(({ rule }) => rule.effect === "allow");
+                const denyRules = grant.rules
+                  .map((rule, index) => ({ rule, index }))
+                  .filter(({ rule }) => rule.effect === "deny");
+                return allowRules.map(
+                  ({ rule: allowRule, index: allowIndex }, position) => (
+                    <PermissionScopeControl
+                      key={allowRule.id}
+                      allowRule={allowRule}
+                      // Exceptions belong to the permission, not to one of its
+                      // allow rules, so they are stated once.
+                      denyRules={position === 0 ? denyRules : []}
+                      resourceType={scopeDef.resourceType}
+                      allowLabel={computeRuleLabel(
+                        allowRule?.selectors ?? null,
+                        scopeDef.resourceType,
+                        projectList,
                       )}
+                      denyLabel={(rule) =>
+                        computeRuleLabel(
+                          rule.selectors,
+                          scopeDef.resourceType,
+                          projectList,
+                        )
+                      }
+                      canAddException={
+                        position === 0 &&
+                        denyRules.length === 0 &&
+                        getDenyPanels(
+                          getAllowLevel(grant.rules),
+                          isProjectSelectableResourceType(
+                            scopeDef.resourceType,
+                          ),
+                        ).length > 0
+                      }
+                      disabled={false}
+                      onChooseSpecific={() =>
+                        openRuleEditor(scopeDef.slug, allowIndex)
+                      }
+                      onResetToAll={() => resetRuleToAll(scopeDef.slug)}
+                      onAddException={() => openRuleEditor(scopeDef.slug, -1)}
+                      onEditException={(index) =>
+                        openRuleEditor(scopeDef.slug, index)
+                      }
+                      onRemoveException={(index) =>
+                        removeRule(scopeDef.slug, index)
+                      }
                     />
-                    <Text variant="body" className="font-medium">
-                      Assign Members
-                    </Text>
-                    <Text variant="body" className="text-muted-foreground ml-1">
-                      (optional, {selectedMembers.size} selected)
-                    </Text>
-                  </button>
+                  ),
+                );
+              }}
+            />
 
-                  {showMembers && (
-                    <div className="border-border divide-border mt-3 divide-y border">
-                      {/* Select-all header */}
-                      {(() => {
+            {/* ─── Assign Members (read-only when directory sync manages assignment) ─── */}
+            <div className="border-border border-t pt-4 pb-4">
+              <button
+                type="button"
+                onClick={() => setShowMembers(!showMembers)}
+                className="flex w-full items-center gap-1 text-left"
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-4 w-4 transition-transform",
+                    showMembers && "rotate-90",
+                  )}
+                />
+                <Text variant="body" className="font-medium">
+                  Assign Members
+                </Text>
+                <Text variant="body" className="text-muted-foreground ml-1">
+                  {organization.scimEnabled
+                    ? `(${selectedMembers.size} assigned by directory sync)`
+                    : `(optional, ${selectedMembers.size} selected)`}
+                </Text>
+              </button>
+
+              {showMembers && (
+                <div className="relative mt-3">
+                  {/* The rows stay visible — who holds the role is still worth
+                        reading — but a directory owns the answer, so nothing here
+                        is clickable. */}
+                  {organization.scimEnabled && (
+                    <div className="bg-background/60 absolute inset-0 z-10 flex items-center justify-center">
+                      <div className="border-border bg-background flex items-center gap-2 border px-3 py-1.5 shadow-sm">
+                        <Lock className="text-muted-foreground h-3.5 w-3.5" />
+                        <Text variant="body" className="text-xs">
+                          Managed by directory sync
+                        </Text>
+                      </div>
+                    </div>
+                  )}
+                  <div
+                    className={cn(
+                      "border-border divide-border divide-y border",
+                      organization.scimEnabled &&
+                        "pointer-events-none opacity-50 select-none",
+                    )}
+                  >
+                    {/* Select-all header */}
+                    {!organization.scimEnabled &&
+                      (() => {
                         const selectableMembers = getSelectableMembers(
                           members,
                           isEditing,
@@ -930,123 +889,231 @@ export function CreateRoleDialog({
                           </label>
                         );
                       })()}
-                      {members.map((member) => {
-                        const alreadyHasRole = isMemberLockedToRole(
-                          isEditing,
-                          editingRole?.id,
-                          member.roleIds,
-                        );
-                        return (
-                          <label
-                            key={member.id}
-                            className={cn(
-                              "hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5",
-                              alreadyHasRole && "cursor-default opacity-50",
+                    {members.map((member) => {
+                      const alreadyHasRole = isMemberLockedToRole(
+                        isEditing,
+                        editingRole?.id,
+                        member.roleIds,
+                      );
+                      // Under directory sync the rows are read-only for
+                      // everyone, not only the mouse: a focusable checkbox
+                      // would let the keyboard edit an assignment the next
+                      // sync overwrites.
+                      const locked = organization.scimEnabled || alreadyHasRole;
+                      return (
+                        <label
+                          key={member.id}
+                          className={cn(
+                            "hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5",
+                            alreadyHasRole && "cursor-default opacity-50",
+                          )}
+                        >
+                          <Checkbox
+                            checked={
+                              alreadyHasRole || selectedMembers.has(member.id)
+                            }
+                            disabled={locked}
+                            onCheckedChange={() => {
+                              void (!locked && toggleMember(member.id));
+                            }}
+                          />
+                          <Avatar className="h-7 w-7">
+                            {member.photoUrl && (
+                              <AvatarImage
+                                src={member.photoUrl}
+                                alt={member.name}
+                              />
                             )}
-                          >
-                            <Checkbox
-                              checked={
-                                alreadyHasRole || selectedMembers.has(member.id)
-                              }
-                              disabled={alreadyHasRole}
-                              onCheckedChange={() => {
-                                void (
-                                  !alreadyHasRole && toggleMember(member.id)
-                                );
-                              }}
-                            />
-                            <Avatar className="h-7 w-7">
-                              {member.photoUrl && (
-                                <AvatarImage
-                                  src={member.photoUrl}
-                                  alt={member.name}
-                                />
-                              )}
-                              <AvatarFallback className="text-xs">
-                                {member.name
-                                  .split(" ")
-                                  .map((n) => n[0])
-                                  .join("")
-                                  .toUpperCase()
-                                  .slice(0, 2)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0 flex-1 space-y-0.5">
-                              <Text
-                                variant="body"
-                                className="text-sm font-medium"
-                              >
-                                {member.name}
-                              </Text>
-                              <Text
-                                variant="body"
-                                className="text-muted-foreground text-xs"
-                              >
-                                {member.email}
-                              </Text>
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
+                            <AvatarFallback className="text-xs">
+                              {member.name
+                                .split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .toUpperCase()
+                                .slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <Text
+                              variant="body"
+                              className="text-sm font-medium"
+                            >
+                              {member.name}
+                            </Text>
+                            <Text
+                              variant="body"
+                              className="text-muted-foreground text-xs"
+                            >
+                              {member.email}
+                            </Text>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* ─── Panel 2: Rule editor (slides in from right) ─── */}
-            <div className="flex w-full shrink-0 flex-col overflow-hidden">
-              {editingScopeDef && draftRule && (
-                <>
-                  {/* Resource picker */}
-                  <GrantRuleDrawerContent
-                    resourceType={editingScopeDef.resourceType}
-                    scope={editingScopeSlug!}
-                    selectors={draftRule.selectors}
-                    onChangeSelectors={(sels) =>
-                      setDraftRule((prev) =>
-                        prev ? { ...prev, selectors: sels } : null,
-                      )
-                    }
-                    annotations={draftRule.annotations}
-                    onChangeAnnotations={(annotations) =>
-                      setDraftRule((prev) =>
-                        prev ? { ...prev, annotations } : null,
-                      )
-                    }
-                    isDeny={draftRule.effect === "deny"}
-                    allowedPanels={
-                      draftRule.effect === "deny"
-                        ? denyAllowedPanels
-                        : undefined
-                    }
-                    allowSelectors={
-                      draftRule.effect === "deny" && editingScopeSlug
-                        ? (grants[editingScopeSlug]?.rules.find(
-                            (r) => r.effect === "allow",
-                          )?.selectors ?? null)
-                        : undefined
-                    }
+            {/* ─── Assign Agents ─────────────────────────────────────
+                Not gated on SCIM: a directory syncs people, never agents,
+                so this is the only place an agent's roles are decided. */}
+            {agentManagementEnabled && (
+              <div className="border-border border-t pt-4 pb-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAgents(!showAgents)}
+                  className="flex w-full items-center gap-1 text-left"
+                >
+                  <ChevronRight
+                    className={cn(
+                      "h-4 w-4 transition-transform",
+                      showAgents && "rotate-90",
+                    )}
                   />
-                </>
-              )}
-            </div>
+                  <Text variant="body" className="font-medium">
+                    Assign Agents
+                  </Text>
+                  <Text variant="body" className="text-muted-foreground ml-1">
+                    (optional, {selectedAgents.size} selected)
+                  </Text>
+                </button>
+
+                {showAgents && (
+                  <div className="border-border divide-border mt-3 divide-y border">
+                    {agents.length === 0 ? (
+                      <div className="px-3 py-6 text-center">
+                        <Text muted small>
+                          No agents in this organization yet.
+                        </Text>
+                      </div>
+                    ) : (
+                      agents.map((agent) => (
+                        <label
+                          key={agent.id}
+                          className="hover:bg-muted/50 flex cursor-pointer items-center gap-3 px-3 py-2.5"
+                        >
+                          <Checkbox
+                            checked={selectedAgents.has(agent.id)}
+                            onCheckedChange={() => toggleAgent(agent.id)}
+                          />
+                          <Avatar className="h-7 w-7">
+                            <AvatarFallback className="text-xs">
+                              <Bot className="h-3.5 w-3.5" />
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <Text
+                              variant="body"
+                              className="text-sm font-medium"
+                            >
+                              {agent.name}
+                            </Text>
+                            <Text
+                              variant="body"
+                              className="text-muted-foreground text-xs"
+                            >
+                              {agent.lifecycle === "active"
+                                ? "Agent"
+                                : `Agent \u00b7 ${agent.lifecycle}`}
+                            </Text>
+                          </div>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
+
+          {/* ─── Panel 2: Rule editor ─── */}
+          {/* In a sheet it slides in as a second step. On a page there is no
+              second step to slide to, so the same content opens as a modal
+              over the row it belongs to. */}
+          <RuleEditorFrame
+            isPage={isPage}
+            open={dialogStep === "rule-editor"}
+            title={`${editingRuleIndex >= 0 ? "Edit" : "Create"} ${
+              draftRule?.effect === "allow" ? "allow" : "exception"
+            } rule`}
+            description={
+              draftRule?.effect === "allow"
+                ? "Choose which resources this role can access. Start broad — you can add exceptions later to restrict specific items."
+                : "Exclude specific resources that the allow rule would otherwise permit."
+            }
+            onDone={saveAndCloseRuleEditor}
+            onDismiss={discardRuleEditor}
+          >
+            {editingScopeDef && draftRule && (
+              <>
+                {/* Resource picker */}
+                <GrantRuleDrawerContent
+                  resourceType={editingScopeDef.resourceType}
+                  scope={editingScopeSlug!}
+                  selectors={draftRule.selectors}
+                  onChangeSelectors={(sels) =>
+                    setDraftRule((prev) =>
+                      prev ? { ...prev, selectors: sels } : null,
+                    )
+                  }
+                  annotations={draftRule.annotations}
+                  onChangeAnnotations={(annotations) =>
+                    setDraftRule((prev) =>
+                      prev ? { ...prev, annotations } : null,
+                    )
+                  }
+                  isDeny={draftRule.effect === "deny"}
+                  allowedPanels={
+                    draftRule.effect === "deny" ? denyAllowedPanels : undefined
+                  }
+                  // An exception can subtract from anything the permission
+                  // allows, so the picker is offered every allow rule's
+                  // coverage — and unrestricted coverage (null) wins outright.
+                  allowSelectors={
+                    draftRule.effect === "deny" && editingScopeSlug
+                      ? effectiveAllowSelectors(
+                          grants[editingScopeSlug]?.rules ?? [],
+                        )
+                      : undefined
+                  }
+                />
+              </>
+            )}
+          </RuleEditorFrame>
         </div>
+      </div>
 
-        {dialogStep === "rule-editor" && (
-          <SheetFooter className="border-border flex-row justify-end border-t">
-            <Button variant="primary" onClick={saveAndCloseRuleEditor}>
-              <Button.LeftIcon>
-                <Check className="h-4 w-4" />
-              </Button.LeftIcon>
-              <Button.Text>Done</Button.Text>
-            </Button>
-          </SheetFooter>
-        )}
+      {dialogStep === "rule-editor" && !isPage && (
+        <Footer className="border-border flex-row justify-end border-t">
+          <Button variant="primary" onClick={saveAndCloseRuleEditor}>
+            <Button.LeftIcon>
+              <Check className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Done</Button.Text>
+          </Button>
+        </Footer>
+      )}
 
-        {dialogStep === "form" && (
-          <SheetFooter className="border-border flex-row justify-end border-t">
+      {(dialogStep === "form" || isPage) && (
+        <Footer className="border-border flex-col border-t">
+          {confirmAssignmentFor && !isEditing && (
+            <label className="flex cursor-pointer items-start gap-3 self-stretch text-left">
+              <Checkbox
+                checked={assignmentConfirmed}
+                onCheckedChange={(checked) =>
+                  setAssignmentConfirmed(checked === true)
+                }
+                aria-label="Confirm role assignment"
+                className="mt-0.5"
+              />
+              <Text variant="body" className="text-sm">
+                Assign <strong>{confirmAssignmentFor}</strong> to this role
+                after creation. I reviewed all permissions configured above.
+              </Text>
+            </label>
+          )}
+          <div className="flex justify-end gap-2 self-stretch">
             <Button variant="secondary" onClick={handleClose}>
               Cancel
             </Button>
@@ -1066,95 +1133,150 @@ export function CreateRoleDialog({
                     : "Create Role"}
               </Button.Text>
             </Button>
-          </SheetFooter>
+          </div>
+        </Footer>
+      )}
+    </Frame>
+  );
+}
+
+/**
+ * Where the rule editor lives. The sheet slides it in as a second step; the
+ * page opens it as a modal, so the page keeps the role in view behind it.
+ */
+function RuleEditorFrame({
+  isPage,
+  open,
+  title,
+  description,
+  onDone,
+  onDismiss,
+  children,
+}: {
+  isPage: boolean;
+  open: boolean;
+  title: string;
+  description: string;
+  onDone: () => void;
+  /** Escape, the X, or the backdrop: leave the rule as it was. */
+  onDismiss: () => void;
+  children: React.ReactNode;
+}): JSX.Element {
+  if (!isPage) {
+    return (
+      <div className="flex w-full shrink-0 flex-col overflow-hidden">
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onDismiss();
+      }}
+    >
+      <Dialog.Content className="flex max-h-[80vh] flex-col sm:max-w-2xl">
+        <Dialog.Header>
+          <Dialog.Title>{title}</Dialog.Title>
+          <Dialog.Description>{description}</Dialog.Description>
+        </Dialog.Header>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto py-2">
+          {children}
+        </div>
+        <div className="flex justify-end pt-2">
+          <Button variant="primary" onClick={onDone}>
+            <Button.LeftIcon>
+              <Check className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>Done</Button.Text>
+          </Button>
+        </div>
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
+/** Sheet chrome: the editor opened over the roles list. */
+function SheetFrame({
+  open,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <Sheet open={open} onOpenChange={onClose}>
+      <SheetContent
+        side="right"
+        className={cn(
+          "flex w-full flex-col gap-1 overflow-hidden sm:max-w-2xl",
         )}
+      >
+        {children}
       </SheetContent>
     </Sheet>
   );
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────────────
-
-function RuleChip({
-  rule,
-  label,
-  tooltip,
-  onClick,
-  onRemove,
-  readOnly,
+function PageHeaderSlot({
+  className,
+  children,
 }: {
-  rule: ScopeRule;
-  label: string;
-  tooltip?: string;
-  onClick?: () => void;
-  onRemove?: () => void;
-  readOnly?: boolean;
-}) {
-  const isAllow = rule.effect === "allow";
-  const isDeny = !isAllow;
-  const chip = (
-    <span
-      className={cn(
-        "border-input bg-background inline-flex items-center gap-1 overflow-hidden border px-1 py-1 text-xs",
-        isDeny && "border-destructive/30",
-      )}
-    >
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={readOnly && !onClick}
-        className={cn(
-          "hover:bg-accent inline-flex items-center gap-1 px-2 py-1 transition-colors",
-          isDeny
-            ? "text-destructive hover:bg-destructive/5"
-            : "text-foreground",
-          readOnly && "",
-          !readOnly && onClick && "cursor-pointer",
-        )}
-      >
-        {isAllow ? (
-          <Check className="text-default-success h-3 w-3 shrink-0" />
-        ) : (
-          <Ban className="h-3 w-3 shrink-0 opacity-70" />
-        )}
-        <span className="max-w-[160px] truncate">{label}</span>
-        {!readOnly && onClick && (
-          <ChevronDown className="text-muted-foreground -mr-0.5 h-3 w-3 shrink-0" />
-        )}
-      </button>
-      {!readOnly && onRemove && (
-        <>
-          <div
-            className={cn(
-              "bg-border h-4 w-px shrink-0",
-              isDeny && "bg-destructive/20",
-            )}
-          />
-          <button
-            type="button"
-            onClick={onRemove}
-            className={cn(
-              "hover:bg-accent inline-flex items-center px-1.5 py-1 transition-colors",
-              isDeny
-                ? "text-destructive/60 hover:text-destructive hover:bg-destructive/5"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </>
-      )}
-    </span>
-  );
-
-  if (!tooltip) return chip;
-
+  className?: string;
+  children: React.ReactNode;
+}): JSX.Element {
   return (
-    <Tooltip delayDuration={300}>
-      <TooltipTrigger asChild>{chip}</TooltipTrigger>
-      <TooltipContent side="bottom" className="text-xs whitespace-nowrap">
-        {tooltip}
-      </TooltipContent>
-    </Tooltip>
+    <div className={cn("flex flex-col gap-1 pb-4", className)}>{children}</div>
   );
 }
+
+function PageTitleSlot({
+  children,
+}: {
+  children: React.ReactNode;
+}): JSX.Element {
+  return <h2 className="text-display-xs font-thin">{children}</h2>;
+}
+
+function PageDescriptionSlot({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <p className={cn("text-muted-foreground text-sm", className)}>{children}</p>
+  );
+}
+
+function PageFooterSlot({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <div className={cn("flex flex-row justify-end gap-2 pt-6", className)}>
+      {children}
+    </div>
+  );
+}
+
+/** Page chrome: the editor as its own route, with room to work. */
+function PageFrame({
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}): JSX.Element {
+  return <div className="flex w-full flex-col gap-1">{children}</div>;
+}
+
+// ─── Sub-components ─────────────────────────────────────────────────────────

@@ -21,6 +21,8 @@ type Service interface {
 	GetProject(context.Context, *GetProjectPayload) (res *GetProjectResult, err error)
 	// Create a new project.
 	CreateProject(context.Context, *CreateProjectPayload) (res *CreateProjectResult, err error)
+	// Update the display name of the current project.
+	UpdateProject(context.Context, *UpdateProjectPayload) (res *UpdateProjectResult, err error)
 	// List all projects for an organization.
 	ListProjects(context.Context, *ListProjectsPayload) (res *ListProjectsResult, err error)
 	// Uploads a logo for a project.
@@ -56,7 +58,7 @@ const ServiceName = "projects"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"getProject", "createProject", "listProjects", "setLogo", "listAllowedOrigins", "upsertAllowedOrigin", "deleteProject", "setOrganizationWhitelist"}
+var MethodNames = [9]string{"getProject", "createProject", "updateProject", "listProjects", "setLogo", "listAllowedOrigins", "upsertAllowedOrigin", "deleteProject", "setOrganizationWhitelist"}
 
 type AllowedOrigin struct {
 	// The ID of the allowed origin
@@ -195,6 +197,22 @@ type SetOrganizationWhitelistPayload struct {
 // method.
 type SetProjectLogoResult struct {
 	// The updated project with the new logo
+	Project *Project
+}
+
+// UpdateProjectPayload is the payload type of the projects service
+// updateProject method.
+type UpdateProjectPayload struct {
+	ProjectSlugInput *string
+	SessionToken     *string
+	// The display name of the project
+	Name string
+}
+
+// UpdateProjectResult is the result type of the projects service updateProject
+// method.
+type UpdateProjectResult struct {
+	// The updated project
 	Project *Project
 }
 

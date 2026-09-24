@@ -38,11 +38,8 @@ var _ = Service("risk", func() {
 			Attribute("detection_scopes", ArrayOf(shared.RiskDetectionScope), "Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Empty/omitted = all recommendations apply unchanged.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
-			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. When empty or omitted, the policy scans all supported types.")
-			Attribute("scope_include", String, "CEL scope predicate: the policy evaluates a message only when this boolean expression is true (in addition to message_types). Omit/empty means all messages are in scope.")
-			Attribute("scope_exempt", String, "CEL exemption predicate: the policy is skipped for a message when this boolean expression is true. Omit/empty means no inline exemption.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), or block.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).", func() {
 				shared.RiskPolicyActionEnum()
 				Default("flag")
 			})
@@ -190,11 +187,8 @@ var _ = Service("risk", func() {
 			Attribute("detection_scopes", ArrayOf(shared.RiskDetectionScope), "Per-category detection scopes. Each specified category replaces its centrally recommended scope; a scope with both predicates empty scans every message surface. Omit to preserve the current value; send empty to clear.")
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
-			Attribute("message_types", ArrayOf(String), "Message types this policy applies to. Omit to preserve the current selection; send an empty array to apply to all types.")
-			Attribute("scope_include", String, "CEL scope predicate (in addition to message_types). Omit to preserve the current value; send empty to clear.")
-			Attribute("scope_exempt", String, "CEL exemption predicate. Omit to preserve the current value; send empty to clear.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), or block.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session).", func() {
 				shared.RiskPolicyActionEnum()
 			})
 			Attribute("audience_type", String, "Policy audience type: everyone or targeted. Omit to preserve the current audience type.", func() {
@@ -209,6 +203,9 @@ var _ = Service("risk", func() {
 			})
 			Attribute("shadow_mcp_blocked_urls", ArrayOf(String), "For allow_all policies: complete desired canonical URL block set. Omit to preserve; send empty to clear.", func() {
 				Meta("struct:tag:json", "shadow_mcp_blocked_urls")
+			})
+			Attribute("supersede_decisions", Boolean, "Confirms that this edit may displace standing MCP approval decisions its URL lists contradict, transitioning them to superseded (audit-logged, decision history preserved). Without it, a contradicting edit is rejected with a conflict naming the affected servers.", func() {
+				Meta("struct:tag:json", "supersede_decisions")
 			})
 			Attribute("auto_name", Boolean, "Whether the policy name should be auto-generated.")
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
@@ -264,6 +261,61 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 	})
 
+	Method("listSessionQuarantines", func() {
+		Description("List active session quarantines for the current project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(ListSessionQuarantinesResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listSessionQuarantines")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listSessionQuarantines")
+		Meta("openapi:extension:x-speakeasy-group", "risk.sessionQuarantines")
+		Meta("openapi:extension:x-speakeasy-name-override", "listSessionQuarantines")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListSessionQuarantines"}`)
+	})
+
+	Method("releaseSessionQuarantine", func() {
+		Description("Release an active session quarantine.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The session quarantine ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(SessionQuarantine)
+
+		HTTP(func() {
+			POST("/rpc/risk.releaseSessionQuarantine")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Body(SessionQuarantineReleaseRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "releaseSessionQuarantine")
+		Meta("openapi:extension:x-speakeasy-group", "risk.sessionQuarantines")
+		Meta("openapi:extension:x-speakeasy-name-override", "releaseSessionQuarantine")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskReleaseSessionQuarantine", "type": "mutation"}`)
+	})
+
 	Method("listRiskResults", func() {
 		Description("List risk analysis results for the current project.")
 
@@ -275,6 +327,9 @@ var _ = Service("risk", func() {
 				Format(FormatUUID)
 			})
 			Attribute("chat_id", String, "Optional chat ID to filter by.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("mcp_server_id", String, "Optional concrete MCP server ID to match exactly.", func() {
 				Format(FormatUUID)
 			})
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
@@ -308,6 +363,7 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("policy_id")
 			Param("chat_id")
+			Param("mcp_server_id")
 			Param("category")
 			Param("rule_id")
 			Param("user_id")
@@ -341,6 +397,9 @@ var _ = Service("risk", func() {
 			Attribute("chat_id", String, "Optional chat ID to filter by.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("mcp_server_id", String, "Optional concrete MCP server ID to match exactly.", func() {
+				Format(FormatUUID)
+			})
 			Attribute("category", String, "Optional rule category key to filter by (e.g. secrets, pii, financial).")
 			Attribute("rule_id", String, "Optional rule identifier substring to filter by (case-insensitive, e.g. 'secret' matches all 'secret.*' rules).")
 			Attribute("user_id", String, "Optional user identifier substring to filter by (case-insensitive, matched against the chat's external user id).")
@@ -371,6 +430,7 @@ var _ = Service("risk", func() {
 			security.ProjectHeader()
 			Param("policy_id")
 			Param("chat_id")
+			Param("mcp_server_id")
 			Param("category")
 			Param("rule_id")
 			Param("user_id")
@@ -738,6 +798,31 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-group", "risk.signals")
 		Meta("openapi:extension:x-speakeasy-name-override", "get")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSignals"}`)
+	})
+
+	Method("getRiskAnalysisStatus", func() {
+		Description("Get the run state of the project's risk analysis coordinator, which produces the findings behind the Watchdog page. Analysis is signal-driven, not scheduled: the coordinator wakes within about 30 seconds of new chat traffic and never runs on a timer, so a quiet project can legitimately go a long time between runs. The state is never when no run is visible (the project has never been analyzed, or its last run is older than Temporal's retention window), idle when the latest run has closed and the coordinator is waiting for the next chat write, and running when a run is in flight.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RiskAnalysisStatusResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.getAnalysisStatus")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskAnalysisStatus")
+		Meta("openapi:extension:x-speakeasy-group", "risk.signals")
+		Meta("openapi:extension:x-speakeasy-name-override", "analysisStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskAnalysisStatus"}`)
 	})
 
 	Method("getRiskPolicyStatus", func() {
@@ -1509,7 +1594,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("evaluatePromptGuardrail", func() {
-		Description("Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation; message-type scoping and CEL scope predicates are both applied.")
+		Description("Replay a prompt_based guardrail against a single chat session and return the LLM judge's per-message verdict. The guardrail (prompt + judge config + message-type scope + CEL scope) is passed inline so the policy-eval workbench can evaluate an unsaved draft before a policy exists. This path is read-only: it never writes risk_results, publishes to the outbox, or enforces. It exists purely to tune a guardrail against real transcripts. Judges only the chat's latest generation and at most the first 200 in-scope messages in transcript order; message-type scoping and CEL scope predicates are both applied.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -1680,11 +1765,13 @@ var PromptGuardrailEvalResult = Type("PromptGuardrailEvalResult", func() {
 	})
 	Attribute("flagged", Boolean, "True when the guardrail flagged at least one in-scope message.")
 	Attribute("judged_count", Int, "Number of in-scope messages the judge evaluated.")
+	Attribute("in_scope_message_count", Int, "Total number of messages matching the guardrail scope before the replay limit.")
+	Attribute("message_limit_hit", Boolean, "True when the replay judged only the first 200 in-scope messages.")
 	Attribute("total_cost_usd", Float64, "Total OpenRouter cost across in-scope judge calls, in USD.")
 	Attribute("total_latency_ms", Int64, "Aggregate judge latency overhead across in-scope messages, computed as the sum of per-message judge latencies.")
 	Attribute("verdicts", ArrayOf(PromptGuardrailMessageVerdict), "Per-message verdicts for in-scope messages, ordered by seq.")
 
-	Required("chat_id", "flagged", "judged_count", "total_cost_usd", "total_latency_ms", "verdicts")
+	Required("chat_id", "flagged", "judged_count", "in_scope_message_count", "message_limit_hit", "total_cost_usd", "total_latency_ms", "verdicts")
 })
 
 var SuggestCustomDetectionRuleResult = Type("SuggestCustomDetectionRuleResult", func() {
@@ -1952,6 +2039,7 @@ var RiskBlock = Type("RiskBlock", func() {
 	Attribute("reason", String, "Human-readable reason the tool call was blocked.")
 	Attribute("policy_name", String, "Name of the risk policy that blocked the call.")
 	Attribute("tool_name", String, "Name of the tool that was blocked, when known.")
+	Attribute("provider", String, "Agent surface that reported the blocked call (adapter slug, e.g. \"openclaw\"), when known.")
 	Attribute("created_at", String, "When the block occurred.", func() {
 		Format(FormatDateTime)
 	})
@@ -1970,6 +2058,15 @@ var RiskIDRequestBody = Type("RiskIDRequestBody", func() {
 	Required("id")
 })
 
+var SessionQuarantineReleaseRequestBody = Type("SessionQuarantineReleaseRequestBody", func() {
+	Meta("openapi:typename", "SessionQuarantineReleaseRequestBody")
+
+	Attribute("id", String, "The session quarantine ID.", func() {
+		Format(FormatUUID)
+	})
+	Required("id")
+})
+
 var RiskPolicyBypassApprovalRequestBody = Type("RiskPolicyBypassApprovalRequestBody", func() {
 	Meta("openapi:typename", "RiskPolicyBypassApprovalRequestBody")
 
@@ -1983,6 +2080,36 @@ var RiskPolicyBypassApprovalRequestBody = Type("RiskPolicyBypassApprovalRequestB
 var ListRiskPolicyBypassRequestsResult = Type("ListRiskPolicyBypassRequestsResult", func() {
 	Attribute("requests", ArrayOf(RiskPolicyBypassRequest), "Current risk policy bypass request records.")
 	Required("requests")
+})
+
+var SessionQuarantine = Type("SessionQuarantine", func() {
+	Attribute("id", String, "The session quarantine ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("organization_id", String, "The organization ID.")
+	Attribute("project_id", String, "The project ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("session_id", String, "The hook conversation ID that is quarantined.")
+	Attribute("risk_policy_id", String, "The risk policy that opened the quarantine, when still available.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("risk_policy_name", String, "The risk policy name captured when the quarantine opened.")
+	Attribute("user_id", String, "The user whose hook event opened the quarantine.")
+	Attribute("reason", String, "The deny reason captured when the quarantine opened.")
+	Attribute("created_at", String, "When the quarantine opened.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("released_at", String, "When the quarantine was released.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("released_by", String, "The user who released the quarantine.")
+	Required("id", "organization_id", "project_id", "session_id", "risk_policy_name", "user_id", "reason", "created_at")
+})
+
+var ListSessionQuarantinesResult = Type("ListSessionQuarantinesResult", func() {
+	Attribute("quarantines", ArrayOf(SessionQuarantine), "Active session quarantines.")
+	Required("quarantines")
 })
 
 var RiskSignalTopUser = Type("RiskSignalTopUser", func() {
@@ -2029,6 +2156,24 @@ var RiskExposureSlice = Type("RiskExposureSlice", func() {
 	Attribute("share", Float64, "Fraction of the window's findings in this category (0-1).")
 
 	Required("category", "findings", "share")
+})
+
+var RiskAnalysisStatusResult = Type("RiskAnalysisStatusResult", func() {
+	Attribute("state", String, "Coarse run state of the project's risk analysis coordinator. never: no run is visible, either because the project has never been analyzed or because its last run is older than Temporal's retention window. idle: the latest run has closed and the coordinator is waiting for the next chat write to wake it. running: a run is in flight right now.", func() {
+		Enum("never", "idle", "running")
+	})
+	Attribute("running_since", String, "When the in-flight run started. Set only when state is running.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_run_started_at", String, "When the most recent closed run started. Set only when state is idle.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_run_at", String, "When the most recent closed run finished; the moment the Watchdog findings were last brought up to date. Set only when state is idle.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_run_outcome", String, "How the most recent closed run ended: completed, failed, canceled, terminated, continued_as_new, timed_out, or unknown. continued_as_new is the normal outcome for a long-lived coordinator that rolled its history over, so treat it like completed. Set only when state is idle.")
+
+	Required("state")
 })
 
 var RiskSignalsResult = Type("RiskSignalsResult", func() {

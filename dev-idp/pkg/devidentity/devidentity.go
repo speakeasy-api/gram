@@ -9,7 +9,11 @@
 // and leave a freshly seeded developer staring at an empty org.
 package devidentity
 
-import "github.com/google/uuid"
+import (
+	"strings"
+
+	"github.com/google/uuid"
+)
 
 const (
 	// DefaultOrgName is the display name of the dev-idp's default org.
@@ -32,4 +36,16 @@ var userIDNamespace = uuid.MustParse("a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d")
 // DeterministicUserID returns a stable UUID v5 derived from the given email.
 func DeterministicUserID(email string) uuid.UUID {
 	return uuid.NewSHA1(userIDNamespace, []byte(email))
+}
+
+// WorkOSUserIDPrefix is the prefix the dev-idp puts on the WorkOS-style user
+// ids it presents as the OIDC subject. Real WorkOS returns "user_01J5C09...".
+const WorkOSUserIDPrefix = "user_devidp_"
+
+// WorkOSUserID formats an internal user UUID the way the dev-idp presents it
+// as the login subject. The local seed writes it into users.workos_id so the
+// row a developer's first login finds is already linked, rather than a bare
+// UUID that no login will ever match.
+func WorkOSUserID(id uuid.UUID) string {
+	return WorkOSUserIDPrefix + strings.ReplaceAll(id.String(), "-", "")
 }

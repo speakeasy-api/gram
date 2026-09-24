@@ -11,6 +11,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/usage/server"
@@ -54,6 +55,7 @@ type Service struct {
 	billingRepo     billing.Repository
 	orgRepo         *orgRepo.Queries
 	telemetryRepo   *telemetryrepo.Queries
+	meterReadConn   clickhouse.Conn
 	auditLogger     *audit.Logger
 	posthogClient   *posthog.Posthog
 	openRouter      openrouter.Provisioner
@@ -64,6 +66,7 @@ type Service struct {
 	featureFlags    feature.Provider
 	productFeatures productFeatureCacheUpdater
 	trial           trialemails.Notifier
+	now             func() time.Time
 }
 
 type productFeatureCacheUpdater interface {
@@ -74,11 +77,16 @@ var _ gen.Service = (*Service)(nil)
 
 const polarWebhookKeyBillingLockWaitTimeout = 5 * time.Second
 
+type checkoutTrialProvisioner interface {
+	PrepareEnterpriseTrialConversionKeyWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, int64) (openrouter.EnterpriseTrialConversionKeyChange, error)
+	ReconcileAPIKeyDisabled(context.Context, string, openrouter.KeyType) error
+}
+
 type openRouterBillingDBProvisioner interface {
 	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier, meterReadConn clickhouse.Conn) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	if trialNotifier == nil {
@@ -97,6 +105,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		billingRepo:     billingRepo,
 		orgRepo:         orgRepo.New(db),
 		telemetryRepo:   telemetryRepo,
+		meterReadConn:   meterReadConn,
 		auditLogger:     auditLogger,
 		posthogClient:   posthogClient,
 		openRouter:      openRouter,
@@ -107,6 +116,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		featureFlags:    featureFlags,
 		productFeatures: productFeatures,
 		trial:           trialNotifier,
+		now:             time.Now,
 	}
 	service.stripeHandler = service.serviceStripeWebhookHandler
 	return service
@@ -114,7 +124,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 
 // NewBillingOperations builds the narrow usage service used by trusted server
 // surfaces that authorize independently and pass canonical organization IDs.
-func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient stripeclient.Client, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger) *Service {
+func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient stripeclient.Client, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, meterReadConn clickhouse.Conn) *Service {
 	return &Service{
 		tracer:          nil,
 		logger:          logger.With(attr.SlogComponent("usage-billing")),
@@ -127,6 +137,7 @@ func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient st
 		billingRepo:     nil,
 		orgRepo:         orgRepo.New(db),
 		telemetryRepo:   telemetryRepo,
+		meterReadConn:   meterReadConn,
 		auditLogger:     auditLogger,
 		posthogClient:   nil,
 		openRouter:      nil,
@@ -137,6 +148,7 @@ func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient st
 		featureFlags:    nil,
 		productFeatures: nil,
 		trial:           nil,
+		now:             time.Now,
 	}
 }
 
@@ -181,9 +193,6 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to read request body").LogError(ctx, s.logger)
 	}
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Body.Close()
-	})
 
 	webhookPayload, err := s.billingRepo.ValidateAndParseWebhookEvent(ctx, body, r.Header)
 	if err != nil {

@@ -24,15 +24,22 @@ function route(title: string, url: string): AppRoute {
 }
 
 const routes = {
+  mcpSessions: route("MCP Sessions", "mcp-sessions"),
+  remoteIdentityProviders: route(
+    "Remote Identity Providers",
+    "remote-identity-providers",
+  ),
+  agents: route("Agent Identity", "agent-management"),
   agentSessions: route("Agent Sessions", "agent-sessions"),
   assistants: route("Assistants", "assistants"),
   catalog: route("Catalog", "catalog"),
   chat: route("Project Assistant", "chat"),
   skills: route("Skills", "skills"),
   costs: route("Costs", "costs"),
+  explore: route("Explore", "explore"),
   deployments: route("Deployments", "deployments"),
   detectionRules: route("Detection Rules", "detection-rules"),
-  employees: route("Employees", "employees"),
+  identities: route("Identities", "identities"),
   environments: route("Environments", "environments"),
   home: route("Home", ""),
   insights: route("Insights", "insights"),
@@ -46,6 +53,7 @@ const routes = {
   riskOverview: route("Risk Overview", "risk"),
   watchdog: route("Watchdog", "watchdog"),
   settings: route("Project settings", "settings"),
+  shadowAI: route("Shadow AI", "shadow-ai"),
   shadowMCP: route("Shadow MCP", "shadow-mcp"),
   sources: route("Sources", "sources"),
 };
@@ -78,19 +86,87 @@ beforeEach(() => {
   testState.projectId = "project_a";
   testState.orgMemoryEnabled = false;
   testState.featureFlags = {
+    [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
+    [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
     [FEATURE_FLAGS.assistants]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag("loading"),
+    [FEATURE_FLAGS.explore]: unavailableFeatureFlag("loading"),
   };
 });
 
 describe("useProjectNavRoutes", () => {
-  it("uses Shadow MCP as the sidebar destination while leaving Approval Requests out of nav", () => {
+  it.each(["loading", "disabled", "missing", "error"] as const)(
+    "hides agent management when its rollout is %s",
+    (status) => {
+      testState.featureFlags[FEATURE_FLAGS.agentManagement] = { status };
+      const { result } = renderHook(() => useProjectNavRoutes());
+      expect(
+        result.current.some((entry) => entry.route === routes.agents),
+      ).toBe(false);
+    },
+  );
+
+  it("includes sessions and remote providers in project navigation", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    expect(result.current.map((entry) => entry.route)).toEqual(
+      expect.arrayContaining([
+        routes.mcpSessions,
+        routes.remoteIdentityProviders,
+      ]),
+    );
+  });
+
+  it("includes Agent Identity for owners without requiring role grants", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const agents = result.current.find(
+      (entry) => entry.route === routes.agents,
+    );
+
+    expect(agents?.scope).toEqual([]);
+  });
+
+  it("uses the selected project's read grant for MCP Sessions", () => {
+    const { result, rerender } = renderHook(() => useProjectNavRoutes());
+    const sessions = () =>
+      result.current.find((entry) => entry.route === routes.mcpSessions);
+    expect(sessions()?.scope).toEqual(["project:read"]);
+    expect(sessions()?.resourceId).toBe("project_a");
+    testState.projectId = "project_b";
+    rerender();
+    expect(sessions()?.resourceId).toBe("project_b");
+  });
+
+  it("lists Identity before MCP Gateway, Security and Policy, and Observability", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const navRoutes = result.current.map((entry) => entry.route);
+    expect(navRoutes.slice(2, 6)).toEqual([
+      routes.identities,
+      routes.agents,
+      routes.mcpSessions,
+      routes.remoteIdentityProviders,
+    ]);
+    expect(navRoutes.indexOf(routes.playground)).toBeLessThan(
+      navRoutes.indexOf(routes.riskOverview),
+    );
+    expect(navRoutes.indexOf(routes.shadowAI)).toBeLessThan(
+      navRoutes.indexOf(routes.costs),
+    );
+  });
+
+  it("uses Shadow AI as the nav destination, with Shadow MCP folded into it", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+
+    const titles = result.current.map((entry) => entry.route.title);
+    expect(titles).toContain("Shadow AI");
+    expect(titles).not.toContain("Shadow MCP");
+  });
+
+  it("leaves Approval Requests out of nav", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
 
     const navTitles = result.current.map((entry) => entry.route.title);
 
-    expect(navTitles).toContain("Shadow MCP");
     expect(navTitles).not.toContain("Approval Requests");
   });
 
@@ -124,9 +200,12 @@ describe("useProjectNavRoutes", () => {
     "preserves opt-in and opt-out navigation while flags are %s",
     (status) => {
       testState.featureFlags = {
+        [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
+        [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
         [FEATURE_FLAGS.assistants]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.riskWatchdog]: unavailableFeatureFlag(status),
+        [FEATURE_FLAGS.explore]: unavailableFeatureFlag(status),
       };
 
       const { result } = renderHook(() => useProjectNavRoutes());
@@ -134,6 +213,7 @@ describe("useProjectNavRoutes", () => {
 
       expect(navRoutes).not.toContain(routes.assistants);
       expect(navRoutes).not.toContain(routes.watchdog);
+      expect(navRoutes).not.toContain(routes.explore);
       expect(navRoutes).toContain(routes.deployments);
       // Without Watchdog, the legacy risk pages stay in the nav.
       expect(navRoutes).toContain(routes.riskOverview);
@@ -141,11 +221,28 @@ describe("useProjectNavRoutes", () => {
     },
   );
 
+  it("keeps Explore out of the nav until its flag is released to the organization", () => {
+    const { result: hidden } = renderHook(() => useProjectNavRoutes());
+    expect(hidden.current.map((entry) => entry.route)).not.toContain(
+      routes.explore,
+    );
+
+    testState.featureFlags = {
+      ...testState.featureFlags,
+      [FEATURE_FLAGS.explore]: { status: "enabled" },
+    };
+    const { result: shown } = renderHook(() => useProjectNavRoutes());
+    expect(shown.current.map((entry) => entry.route)).toContain(routes.explore);
+  });
+
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
+      [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
+      [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
       [FEATURE_FLAGS.assistants]: { status: "enabled" },
       [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
       [FEATURE_FLAGS.riskWatchdog]: { status: "enabled" },
+      [FEATURE_FLAGS.explore]: { status: "enabled" },
     };
 
     const { result } = renderHook(() => useProjectNavRoutes());
@@ -153,9 +250,11 @@ describe("useProjectNavRoutes", () => {
 
     expect(navRoutes).toContain(routes.assistants);
     expect(navRoutes).toContain(routes.watchdog);
+    expect(navRoutes).toContain(routes.explore);
     expect(navRoutes).not.toContain(routes.deployments);
-    // Watchdog supersedes the legacy risk pages in the nav.
+    // Watchdog supersedes the legacy overview in the nav; Risk Events shows
+    // in both modes.
     expect(navRoutes).not.toContain(routes.riskOverview);
-    expect(navRoutes).not.toContain(routes.riskEvents);
+    expect(navRoutes).toContain(routes.riskEvents);
   });
 });

@@ -3,24 +3,27 @@ import type { PublishStatusResult } from "@gram/client/models/components/publish
 import { Badge } from "@/components/ui/Badge";
 
 // The connected-state marketplace card, shared verbatim across the plugins
-// list, plugin detail page, and the onboarding setup wizard
-// (create-marketplace-step.tsx) so the three surfaces never drift.
+// list and plugin detail page so the two surfaces never drift.
 export function MarketplaceCard({
   publishStatus,
   onManageCollaborators,
   onRename,
   onSync,
   isSyncing = false,
-  description = "This repo is your team's plugin marketplace. The observability plugins are already inside, and any plugins you build in Speakeasy later will be published here too.",
+  observabilityEnabled = true,
 }: {
   publishStatus: PublishStatusResult;
-  onManageCollaborators: () => void;
+  onManageCollaborators?: () => void;
   onRename?: () => void;
   /** Republishes the marketplace to pick up unpublished plugin edits. */
   onSync?: () => void;
   isSyncing?: boolean;
-  description?: string;
+  /** Drives the copy: a disabled project's marketplace has no observability plugins in it. */
+  observabilityEnabled?: boolean;
 }): JSX.Element {
+  const description = observabilityEnabled
+    ? "This repo is your team's plugin marketplace. The observability plugins are already inside, and any plugins you build in Speakeasy later will be published here too."
+    : "This repo is your team's plugin marketplace. Any plugins you build in Speakeasy are published here; the observability plugins are disabled for this project.";
   // upToDate is undefined/null when freshness can't be determined (a
   // connection that predates fingerprinting) — only the explicit `false`
   // case is a known, real drift worth warning about.
@@ -72,7 +75,8 @@ export function MarketplaceCard({
           </strong>{" "}
           to the marketplace repository so that the repository is discoverable
           inside of Claude, Codex and other platforms when adding the plugin
-          repository.
+          repository. Collaborators are added as repository admins, which Cursor
+          requires to serve this marketplace to your team.
         </p>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <span className="text-muted-foreground inline-flex items-center gap-1.5 text-sm">
@@ -130,7 +134,8 @@ export function MarketplaceCard({
             <button
               type="button"
               onClick={onManageCollaborators}
-              className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors"
+              disabled={!onManageCollaborators}
+              className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
             >
               <Users className="h-4 w-4" />
               Manage collaborators
@@ -167,17 +172,21 @@ export function UninitializedMarketplaceCard({
   defaultName,
   onSetup,
   onAddCollaborators,
-  description = "This repo will be your team's plugin marketplace. The observability plugins will already be inside, and any plugins you build in Speakeasy later will be published here too.",
+  observabilityEnabled = true,
 }: {
   publishStatus: Pick<
     PublishStatusResult,
     "repoOwner" | "repoName" | "repoUrl"
   >;
   defaultName?: string;
-  onSetup: () => void;
-  onAddCollaborators: () => void;
-  description?: string;
+  onSetup?: () => void;
+  onAddCollaborators?: () => void;
+  /** Drives the copy: a disabled project's marketplace has no observability plugins in it. */
+  observabilityEnabled?: boolean;
 }): JSX.Element {
+  const description = observabilityEnabled
+    ? "This repo will be your team's plugin marketplace. The observability plugins will already be inside, and any plugins you build in Speakeasy later will be published here too."
+    : "This repo will be your team's plugin marketplace. Any plugins you build in Speakeasy will be published here; the observability plugins are disabled for this project.";
   const hasRepo = !!publishStatus.repoUrl;
 
   return (
@@ -223,7 +232,8 @@ export function UninitializedMarketplaceCard({
           </strong>{" "}
           to the marketplace repository so that the repository is discoverable
           inside of Claude, Codex and other platforms when adding the plugin
-          repository.
+          repository. Collaborators are added as repository admins, which Cursor
+          requires to serve this marketplace to your team.
         </p>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <span className="text-muted-foreground inline-flex items-start gap-2 text-sm">
@@ -248,7 +258,8 @@ export function UninitializedMarketplaceCard({
               <button
                 type="button"
                 onClick={onAddCollaborators}
-                className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors"
+                disabled={!onAddCollaborators}
+                className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
               >
                 <Users className="h-4 w-4" />
                 Add collaborators
@@ -257,7 +268,8 @@ export function UninitializedMarketplaceCard({
               <button
                 type="button"
                 onClick={onSetup}
-                className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors"
+                disabled={!onSetup}
+                className="border-border bg-background hover:bg-muted/50 inline-flex items-center gap-2 border px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50"
               >
                 <Settings className="h-4 w-4" />
                 Publish now

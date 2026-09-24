@@ -1,3 +1,4 @@
+import { IdentityLink } from "@/components/identity-link";
 import { Link, useNavigate } from "react-router";
 import { useOrganization } from "@/contexts/Auth";
 import {
@@ -8,7 +9,7 @@ import {
 import { RankedBarList } from "@/components/chart/RankedBarList";
 import { Page } from "@/components/page-layout";
 import { Avatar, AvatarFallback } from "@/components/ui/Avatar";
-import { getIdentityTint } from "@/components/gradient-colors";
+import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
@@ -45,11 +46,12 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { safeBase64Encode } from "@/components/observe/observeFilterUtils";
-import { PlatformMcpPromotion } from "@/components/platform-mcp-cta";
+import { llmTokens } from "@/pages/costs/taxonomy";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
 import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 
 export function ProjectDashboard(): JSX.Element {
+  const isDark = useIsDarkTheme();
   const { orgSlug, projectSlug } = useSlugs();
   const project = useProject();
   const projectId = project.id;
@@ -168,7 +170,7 @@ export function ProjectDashboard(): JSX.Element {
             from,
             to,
             groupBy: GroupBy.Email,
-            sortBy: "total_tokens",
+            sortBy: "llm_tokens",
             topN: 100,
             filters: projectFilter,
           },
@@ -199,13 +201,16 @@ export function ProjectDashboard(): JSX.Element {
 
   const topUsersByTokens = useMemo(() => {
     return [...rankableUserRows]
-      .sort((a, b) => b.measures.totalTokens - a.measures.totalTokens)
+      .sort((a, b) => llmTokens(b.measures) - llmTokens(a.measures))
       .slice(0, 5)
-      .filter((r) => r.measures.totalTokens > 0)
+      .filter((r) => llmTokens(r.measures) > 0)
       .map((r) => ({
         key: r.groupValue,
         label: memberByEmail.get(r.groupValue)?.name ?? r.groupValue,
-        value: r.measures.totalTokens,
+        value: llmTokens(r.measures),
+        // Group keys are emails, which is exactly what the email: URN form
+        // exists for.
+        identifier: r.groupValue ? { email: r.groupValue } : null,
       }));
   }, [rankableUserRows, memberByEmail]);
 
@@ -264,7 +269,7 @@ export function ProjectDashboard(): JSX.Element {
               from,
               to,
               groupBy: GroupBy.HookSource,
-              sortBy: "total_tokens",
+              sortBy: "llm_tokens",
               topN: 10,
               filters: projectFilter,
             },
@@ -277,19 +282,23 @@ export function ProjectDashboard(): JSX.Element {
   );
 
   const mostUsedAgents = useMemo(() => {
-    return (usageByAgentData?.table ?? [])
-      .filter(
-        (r) =>
-          r.groupValue !== "" &&
-          r.groupValue !== "Other" &&
-          r.measures.totalTokens > 0,
-      )
-      .slice(0, 5)
-      .map((r) => ({
-        key: r.groupValue,
-        label: formatPlatform(r.groupValue),
-        value: r.measures.totalTokens,
-      }));
+    return (
+      (usageByAgentData?.table ?? [])
+        .filter(
+          (r) =>
+            r.groupValue !== "" &&
+            r.groupValue !== "Other" &&
+            llmTokens(r.measures) > 0,
+        )
+        // Server already ranks by llm_tokens; kept as a formality.
+        .sort((a, b) => llmTokens(b.measures) - llmTokens(a.measures))
+        .slice(0, 5)
+        .map((r) => ({
+          key: r.groupValue,
+          label: formatPlatform(r.groupValue),
+          value: llmTokens(r.measures),
+        }))
+    );
   }, [usageByAgentData]);
 
   // MCP-hosting fallback: external end-users (customer-supplied IDs) and their
@@ -564,13 +573,6 @@ export function ProjectDashboard(): JSX.Element {
                 )}
               </StatTileGroup>
 
-              {isProjectEmpty && (
-                <PlatformMcpPromotion
-                  surface="project_overview_zero_data"
-                  projectSlug={projectSlug}
-                />
-              )}
-
               {/* Row 1: Top Activity */}
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <Card.Dashboard
@@ -597,8 +599,11 @@ export function ProjectDashboard(): JSX.Element {
                         }
                       />
                       <ViewAllLink
-                        to={withRange(routes.employees.href(), {
-                          sort: "tokenCount:desc",
+                        to={withRange(routes.identities.href(), {
+                          // Column key on the identities table, which reads
+                          // this param; "tokenCount" was the old employees
+                          // list's key and matched nothing here.
+                          sort: "tokens:desc",
                         })}
                       />
                     </CardActions>
@@ -710,14 +715,25 @@ export function ProjectDashboard(): JSX.Element {
                               <Avatar className="size-8 shrink-0">
                                 <AvatarFallback
                                   className="text-xs font-medium"
-                                  style={getIdentityTint(user.initialsSource)}
+                                  style={getIdentityTint(
+                                    user.initialsSource,
+                                    isDark,
+                                  )}
                                 >
                                   {emailInitials(user.initialsSource)}
                                 </AvatarFallback>
                               </Avatar>
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm font-medium">
-                                  {user.name}
+                                  <IdentityLink
+                                    identifier={
+                                      user.userId
+                                        ? { email: user.userId }
+                                        : null
+                                    }
+                                  >
+                                    {user.name}
+                                  </IdentityLink>
                                 </p>
                                 <p className="text-muted-foreground text-xs">
                                   {user.sessions.toLocaleString()}{" "}

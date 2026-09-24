@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"log/slog"
+	"net/http"
 
 	"github.com/google/uuid"
 
@@ -49,10 +50,12 @@ func (m *tunnelManager) buildProxy(
 	clientAffinityKey string,
 	logger *slog.Logger,
 	projectID uuid.UUID,
+	organizationID string,
 	mcpServer *mcpserversrepo.McpServer,
 	upstreamAuth string,
 	wwwAuthenticate string,
 	selection *toolfilter.SessionSelection,
+	options ...remotemcp.BuildOption,
 ) (*proxy.Proxy, error) {
 	if m == nil || m.proxyManager == nil {
 		return nil, oops.E(oops.CodeUnexpected, nil, "remote MCP proxy manager is unavailable").LogError(ctx, logger)
@@ -90,20 +93,37 @@ func (m *tunnelManager) buildProxy(
 			RemoteMCPServerID:   "",
 			TunneledMCPServerID: tunnelID,
 			McpServerID:         mcpServer.ID.String(),
+			MetaMCPServerID:     "",
 		},
 		gatewayURL,
 		tunnelrouting.Headers(tunnelID, m.forwardToken, clientAffinityKey),
 		mcpServer.Visibility,
+		organizationID,
 		projectID.String(),
 		upstreamAuth,
 		wwwAuthenticate,
 		selection,
+		options...,
 	)
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
+	p.UpstreamResponseInterceptor = func(_ context.Context, resp *http.Response) error {
+		if rejection := tunnelrouting.GatewayFailureRejection(resp); rejection != nil {
+			return rejection
+		}
+		return nil
+	}
 	// Redirects won't work across a tunnel boundary; disable.
 	p.DisableRedirects = true
-	if len(m.gatewayCIDRs) > 0 {
-		p.GuardianClientOptions = []guardian.ClientOption{guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...)}
-	}
+	p.GuardianClientOptions = m.guardianClientOptions()
 	return p, nil
+}
+
+// guardianClientOptions builds the shared client options for dialing tunnel
+// gateways.
+func (m *tunnelManager) guardianClientOptions() []guardian.ClientOption {
+	opts := []guardian.ClientOption{guardian.WithDialTimeout(tunnelrouting.GatewayDialTimeout)}
+	if len(m.gatewayCIDRs) > 0 {
+		opts = append(opts, guardian.WithAllowedCIDRBlocks(m.gatewayCIDRs...))
+	}
+	return opts
 }

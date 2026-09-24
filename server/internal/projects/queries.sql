@@ -10,6 +10,14 @@ INSERT INTO projects (
 )
 RETURNING *;
 
+-- name: UpdateProject :one
+UPDATE projects
+SET name = @name,
+    updated_at = clock_timestamp()
+WHERE id = @project_id
+  AND deleted IS FALSE
+RETURNING *;
+
 -- name: ListProjectsByOrganization :many
 SELECT *
 FROM projects
@@ -24,6 +32,15 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 ORDER BY id ASC
 LIMIT @limit_value;
+
+-- name: ListProjectsByOrganizationPage :many
+SELECT *
+FROM projects
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND id > @after_id
+ORDER BY id ASC
+LIMIT LEAST(GREATEST(@limit_value::integer, 1), 100);
 
 -- GetFirstProject returns any non-deleted project. Used by the hooks
 -- local-dev session-cache fallback to pick a target project without
@@ -48,12 +65,27 @@ FROM projects
 WHERE id = @id
   AND deleted IS FALSE;
 
+-- name: GetProjectByIDForUpdate :one
+SELECT *
+FROM projects
+WHERE id = @id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetProjectByIDAndOrganizationID :one
 SELECT *
 FROM projects
 WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: GetProjectByIDAndOrganizationIDForUpdate :one
+SELECT *
+FROM projects
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+FOR UPDATE;
 
 -- name: GetProjectWithOrganizationMetadata :one
 SELECT 

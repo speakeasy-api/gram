@@ -1,7 +1,3 @@
-import {
-  inferenceCapBillingNote,
-  inferenceCapInvoiceNote,
-} from "@/components/billing/inference-caps";
 import type { InferenceSpendCap } from "@gram/client/models/components/inferencespendcap.js";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -25,17 +21,6 @@ function footnote(): string | null {
   return screen.queryByText(/this month's cap/i)?.textContent ?? null;
 }
 
-/**
- * The last line the meter drew, whatever it says.
- *
- * The billing note doesn't mention a cap's month at all on a key with no cap,
- * so it can't be found the way the threshold copy can.
- */
-function lastLine(container: HTMLElement): string | null {
-  const paragraphs = container.querySelectorAll("p");
-  return paragraphs[paragraphs.length - 1]?.textContent ?? null;
-}
-
 describe("InferenceCapMeter", () => {
   describe("without a monthly cap", () => {
     it("reports the spend and draws no bar", () => {
@@ -47,9 +32,8 @@ describe("InferenceCapMeter", () => {
       expect(screen.queryByRole("progressbar")).toBeNull();
     });
 
-    // A caller that asks for no billing note gets none, and the cap-reset copy
-    // is never drawn here even for one that does: it says there is a cap
-    // directly under the line saying there isn't one.
+    // Nothing else is drawn under the figure: cap-reset copy would say there is
+    // a cap directly under the line saying there isn't one.
     it.each<["chat" | "internal"]>([["chat"], ["internal"]])(
       "adds no note under the %s key's figure",
       (keyType) => {
@@ -61,9 +45,8 @@ describe("InferenceCapMeter", () => {
         expect(
           screen.queryByText(/resets on the first of the month/),
         ).toBeNull();
-        // The heading and the figure, and no empty paragraph opening a gap
-        // under them.
-        expect(container.querySelectorAll("p")).toHaveLength(2);
+        // The figure alone, and no empty paragraph opening a gap under it.
+        expect(container.querySelectorAll("p")).toHaveLength(1);
       },
     );
   });
@@ -104,61 +87,6 @@ describe("InferenceCapMeter", () => {
 
       expect(footnote()).toBe("You've used at least half of this month's cap.");
     });
-  });
-
-  // The meter under the invoice estimate explains that each independently
-  // capped inference category contributes to the cycle's billable spend.
-  describe("the billing note", () => {
-    // The threshold note comes first because it is the part that has changed;
-    // the billing note is the standing fact about where the spend lands.
-    it("appends the invoiced cap's note to the band's note", () => {
-      const { container } = render(
-        <InferenceCapMeter
-          cap={cap({ keyType: "chat", creditsUsed: 50 })}
-          billingNote
-        />,
-      );
-
-      expect(lastLine(container)).toBe(
-        `You've used at least half of this month's cap. ${inferenceCapBillingNote("chat")}`,
-      );
-    });
-
-    it.each<[string, number]>([
-      ["with a cap set", 200],
-      ["with no cap set", 0],
-    ])(
-      "includes platform-initiated inference in PAYG billing, %s",
-      (_label, monthlyCredits) => {
-        const { container } = render(
-          <InferenceCapMeter
-            cap={cap({ keyType: "internal", creditsUsed: 20, monthlyCredits })}
-            billingNote
-          />,
-        );
-
-        const note = lastLine(container);
-        expect(note).toMatch(/included in the inference spend/i);
-        expect(note).toMatch(/invoice/i);
-        expect(note).not.toMatch(/estimate above/i);
-      },
-    );
-
-    // Not a substring match: the cap-reset copy can't creep back in beside the
-    // invoice sentence on a key that has no month to reset.
-    it.each<["chat" | "internal"]>([["chat"], ["internal"]])(
-      "renders exactly the uncapped %s key's invoice sentence",
-      (keyType) => {
-        const { container } = render(
-          <InferenceCapMeter
-            cap={cap({ keyType, monthlyCredits: 0 })}
-            billingNote
-          />,
-        );
-
-        expect(lastLine(container)).toBe(inferenceCapInvoiceNote(keyType));
-      },
-    );
   });
 
   // At the cap, the note says what would start this inference again. For a key

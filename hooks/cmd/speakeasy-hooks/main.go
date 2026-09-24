@@ -6,6 +6,7 @@
 // Invocation contract (baked into generated provider configs):
 //
 //	speakeasy-hooks agenthooks run --provider=claude-code   # hook event on stdin
+//	speakeasy-hooks pi serve [--config=<path>]               # Pi extension NDJSON stdio
 //	speakeasy-hooks login [--force] [--config=<path>]        # interactive sign-in
 //
 // The server URL, project slug, and org id come from the GRAM_HOOKS_* env vars
@@ -40,6 +41,12 @@ func main() {
 			os.Exit(runLogin(relay.LoadConfig(flagCfg), rest))
 		case "install":
 			os.Exit(runInstall(os.Args[2:]))
+		case "pi":
+			// Pi drives hooks from a long-lived TypeScript extension rather
+			// than a process per event, so its events arrive as NDJSON frames
+			// on stdin for the lifetime of one Pi session.
+			flagCfg, rest := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[2:])
+			os.Exit(relay.RunPiCommand(context.Background(), relay.LoadConfig(flagCfg), rest))
 		case "drain":
 			// Replays the offline payload spool (see relay/drain.go). Takes
 			// no arguments — spool entries carry their own deployment
@@ -47,17 +54,6 @@ func main() {
 			// successful send, and by the device agent when its downtime
 			// detector sees the control plane recover.
 			os.Exit(relay.RunDrain(context.Background(), os.Stdout))
-		case "skill-feedback":
-			// Serves the speakeasy-skill-feedback MCP server over stdio.
-			// Generated plugin .mcp.json entries invoke this through the
-			// bootstrap script with --config pointing at the plugin's
-			// speakeasy.json.
-			flagCfg, _ := relay.SplitInlineFlags(relay.Config{ServerURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: ""}, os.Args[2:])
-			if err := relay.RunSkillFeedbackMCP(context.Background(), relay.LoadConfig(flagCfg)); err != nil {
-				fmt.Fprintf(os.Stderr, "speakeasy-hooks skill-feedback: %v\n", err)
-				os.Exit(1)
-			}
-			os.Exit(0)
 		}
 	}
 
@@ -75,7 +71,7 @@ func main() {
 // backs local end-to-end testing; production distribution is wired separately.
 func runInstall(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
-	provider := fs.String("provider", "", "provider slug: claude-code, cursor, codex, opencode")
+	provider := fs.String("provider", "", "provider slug: claude-code, cursor, codex, opencode, openclaw, pi")
 	dir := fs.String("dir", "", "output directory for the plugin package")
 	serverURL := fs.String("server-url", relay.DefaultServerURL, "Gram server URL to bake into the plugin")
 	siteURL := fs.String("site-url", "", "dashboard origin for browser sign-in when it differs from the server URL (local dev)")

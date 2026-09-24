@@ -19,10 +19,12 @@ type GetToolUsageSummary struct {
 type getToolUsageSummaryInput struct {
 	From               string   `json:"from,omitempty" jsonschema:"Start time in ISO 8601 format. Defaults to 7 days ago."`
 	To                 string   `json:"to,omitempty" jsonschema:"End time in ISO 8601 format. Defaults to now."`
-	TargetTypes        []string `json:"target_types,omitempty" jsonschema:"Target types to include: hosted_mcp_server, tunneled_mcp_server, shadow_mcp_server, local_tool, skill. Use tunneled_mcp_server for tunneled MCP servers."`
+	TargetTypes        []string `json:"target_types,omitempty" jsonschema:"Target types to include: hosted_mcp_server, tunneled_mcp_server, meta_mcp_server, shadow_mcp_server, local_tool, skill. Use tunneled_mcp_server for tunneled MCP servers and meta_mcp_server for calls observed against a gateway endpoint."`
 	HostedToolsetSlugs []string `json:"hosted_toolset_slugs,omitempty" jsonschema:"Hosted MCP toolset slugs to include."`
 	ShadowServerNames  []string `json:"shadow_server_names,omitempty" jsonschema:"Shadow MCP server names to include."`
+	MetaMcpServerIDs   []string `json:"meta_mcp_server_ids,omitempty" jsonschema:"Gateway (meta MCP server) ids to include: calls dispatched through the gateway plus calls observed against it."`
 	HookSources        []string `json:"hook_sources,omitempty" jsonschema:"Hook plugin sources to include. Direct MCP calls have no hook source."`
+	ClientKeys         []string `json:"client_keys,omitempty" jsonschema:"MCP clients to include, lowercased as the client named itself at the initialize handshake. Use \"unattributed\" for calls whose caller reported no client name."`
 }
 
 func NewGetToolUsageSummaryTool(telemetrySvc TelemetryService) *GetToolUsageSummary {
@@ -34,7 +36,7 @@ func (s *GetToolUsageSummary) Descriptor() core.ToolDescriptor {
 		SourceSlug:  "logs",
 		HandlerName: "get_tool_usage_summary",
 		Name:        "platform_get_tool_usage_summary",
-		Description: "Summarize target-aware tool usage for hosted MCP, tunneled MCP, shadow MCP, local tools, and skills in the current project. Use target_types=[\"tunneled_mcp_server\"] for questions like which tunneled MCPs the team uses.",
+		Description: "Summarize target-aware tool usage for hosted MCP, tunneled MCP, gateways, shadow MCP, local tools, and skills in the current project. Use target_types=[\"tunneled_mcp_server\"] for questions like which tunneled MCPs the team uses.",
 		InputSchema: core.BuildInputSchema[getToolUsageSummaryInput](
 			core.WithPropertyFormat("from", "date-time"),
 			core.WithPropertyFormat("to", "date-time"),
@@ -58,7 +60,9 @@ func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
 		ShadowServerNames:  nil,
+		MetaMcpServerIDs:   nil,
 		HookSources:        nil,
+		ClientKeys:         nil,
 	}
 	if err := core.DecodeInput(payload, &input); err != nil {
 		return err
@@ -79,9 +83,16 @@ func (s *GetToolUsageSummary) Call(ctx context.Context, _ toolconfig.ToolCallEnv
 		TargetTypes:        targetTypes,
 		HostedToolsetSlugs: input.HostedToolsetSlugs,
 		ShadowServerNames:  input.ShadowServerNames,
+		MetaMcpServerIds:   input.MetaMcpServerIDs,
 		UserFilters:        nil,
 		AccountType:        nil,
 		HookSources:        input.HookSources,
+		ClientKeys:         input.ClientKeys,
+		// The MCP tool exposes no status, search or attribute filter, so the
+		// summary it returns covers the whole window it was asked for.
+		Statuses: nil,
+		Query:    nil,
+		Filters:  nil,
 	})
 	if err != nil {
 		if errors.Is(err, telemetryerrs.ErrLogsDisabled) {

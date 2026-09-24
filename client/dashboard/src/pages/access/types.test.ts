@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { toRoleSlug } from "./types";
+import {
+  isUnrestrictedResourceType,
+  toRoleSlug,
+  unrestrictedResourceLabel,
+} from "./types";
 
 describe("toRoleSlug", () => {
   it("adds org- prefix to plain name", () => {
@@ -35,26 +39,9 @@ describe("toRoleSlug", () => {
   });
 });
 
-describe("system role slug resolution", () => {
-  // Mirrors the GrantDrawer logic: system roles use toLowerCase(),
-  // custom roles use toRoleSlug().
-  function resolveSlug(name: string, isSystem: boolean): string {
-    return isSystem ? name.toLowerCase() : toRoleSlug(name);
-  }
-
-  it("system Admin → admin (no org- prefix)", () => {
-    expect(resolveSlug("Admin", true)).toBe("admin");
-  });
-
-  it("system Member → member (no org- prefix)", () => {
-    expect(resolveSlug("Member", true)).toBe("member");
-  });
-
-  it("custom Editor → org-editor", () => {
-    expect(resolveSlug("Editor", false)).toBe("org-editor");
-  });
-
-  it("custom role with spaces → org-prefixed slug", () => {
-    expect(resolveSlug("API Developer", false)).toBe("org-api-developer");
+describe("unrestricted resource types", () => {
+  it("treats agents as unrestricted", () => {
+    expect(isUnrestrictedResourceType("agent")).toBe(true);
+    expect(unrestrictedResourceLabel("agent")).toBe("All agents");
   });
 });

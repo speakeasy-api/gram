@@ -37,6 +37,10 @@ type Client struct {
 	// setRootMcpEndpoint endpoint.
 	SetRootMcpEndpointDoer goahttp.Doer
 
+	// ListRootMcpServers Doer is the HTTP client used to make requests to the
+	// listRootMcpServers endpoint.
+	ListRootMcpServersDoer goahttp.Doer
+
 	// CheckHealth Doer is the HTTP client used to make requests to the checkHealth
 	// endpoint.
 	CheckHealthDoer goahttp.Doer
@@ -74,6 +78,7 @@ func NewClient(
 		CreateDomainDoer:       doer,
 		UpdateDomainDoer:       doer,
 		SetRootMcpEndpointDoer: doer,
+		ListRootMcpServersDoer: doer,
 		CheckHealthDoer:        doer,
 		DeleteDomainDoer:       doer,
 		ListMcpEndpointsDoer:   doer,
@@ -200,6 +205,30 @@ func (c *Client) SetRootMcpEndpoint() goa.Endpoint {
 		resp, err := c.SetRootMcpEndpointDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("domains", "setRootMcpEndpoint", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRootMcpServers returns an endpoint that makes HTTP requests to the
+// domains service listRootMcpServers server.
+func (c *Client) ListRootMcpServers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRootMcpServersRequest(c.encoder)
+		decodeResponse = DecodeListRootMcpServersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRootMcpServersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRootMcpServersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("domains", "listRootMcpServers", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -1,8 +1,10 @@
 package tunnelrouting
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -58,6 +60,24 @@ func TestRetryerNoLiveSessionUnpublishesAndFailsOver(t *testing.T) {
 	require.Equal(t, []string{"127.0.0.1:1002"}, candidates)
 }
 
+func TestRetryerNoLiveSessionUnpublishFailureStillFailsOver(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	routeTable := route.NewRouteTable()
+	require.NoError(t, routeTable.Publish(ctx, "tunnel-1", "127.0.0.1:1001", time.Minute))
+	require.NoError(t, routeTable.Publish(ctx, "tunnel-1", "127.0.0.1:1002", time.Minute))
+	routes := &unpublishErrorStore{Store: routeTable, err: errors.New("route store unavailable"), calls: 0}
+
+	resp := tunnelErrorResponse(wire.TunnelErrorNoLiveSession)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+	retry, err := Retryer(routes, "tunnel-1", "127.0.0.1:1001", "auth:stable", "forward-token")(ctx, resp)
+	require.NoError(t, err)
+	require.NotNil(t, retry)
+	require.Equal(t, "http://127.0.0.1:1002", retry.RemoteURL)
+	require.Equal(t, 1, routes.calls)
+}
+
 func TestRetryerSubstreamFailedRetriesSameRouteWithoutUnpublish(t *testing.T) {
 	t.Parallel()
 
@@ -75,6 +95,65 @@ func TestRetryerSubstreamFailedRetriesSameRouteWithoutUnpublish(t *testing.T) {
 	candidates, err := routes.Candidates(ctx, "tunnel-1")
 	require.NoError(t, err)
 	require.Equal(t, []string{"127.0.0.1:1001"}, candidates)
+}
+
+func TestGatewayFailureRejectionMapsBusyPostToGenericAvailabilityError(t *testing.T) {
+	t.Parallel()
+
+	resp := tunnelErrorResponseForMethod(wire.TunnelErrorTunnelBusy, http.MethodPost)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+
+	rejection := GatewayFailureRejection(resp)
+	require.NotNil(t, rejection)
+	require.Equal(t, proxy.RejectCodeServerError, rejection.Code)
+	require.Equal(t, "The MCP server is temporarily unavailable. Please retry.", rejection.Message)
+	require.Equal(t, map[string]any{
+		"code":      "service_unavailable",
+		"retryable": true,
+	}, rejection.Data)
+}
+
+func TestGatewayFailureRejectionLeavesBusyGetAsHTTPResponse(t *testing.T) {
+	t.Parallel()
+
+	resp := tunnelErrorResponseForMethod(wire.TunnelErrorTunnelBusy, http.MethodGet)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+
+	require.Nil(t, GatewayFailureRejection(resp))
+}
+
+func TestGatewayFailureRejectionMapsSubstreamFailedPostToNonRetryableError(t *testing.T) {
+	t.Parallel()
+
+	resp := tunnelErrorResponseForMethod(wire.TunnelErrorSubstreamFailed, http.MethodPost)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+
+	rejection := GatewayFailureRejection(resp)
+	require.NotNil(t, rejection)
+	require.Equal(t, proxy.RejectCodeServerError, rejection.Code)
+	require.Equal(t, "The connection to the MCP server was interrupted before it responded. The request may have already run.", rejection.Message)
+	require.Equal(t, map[string]any{
+		"code":      "upstream_disconnected",
+		"retryable": false,
+	}, rejection.Data)
+}
+
+func TestGatewayFailureRejectionLeavesSubstreamFailedGetAsHTTPResponse(t *testing.T) {
+	t.Parallel()
+
+	resp := tunnelErrorResponseForMethod(wire.TunnelErrorSubstreamFailed, http.MethodGet)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+
+	require.Nil(t, GatewayFailureRejection(resp))
+}
+
+func TestGatewayFailureRejectionIgnoresOtherTunnelErrors(t *testing.T) {
+	t.Parallel()
+
+	resp := tunnelErrorResponseForMethod(wire.TunnelErrorNoLiveSession, http.MethodPost)
+	defer func() { require.NoError(t, resp.Body.Close()) }()
+
+	require.Nil(t, GatewayFailureRejection(resp))
 }
 
 // TestRetryerTunnelBusyFailsOverWithoutUnpublish: tunnel-busy means the
@@ -242,4 +321,15 @@ func headerValue(t *testing.T, headers []proxy.ConfiguredHeader, name string) st
 func expectedAffinity(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return "auth:" + hex.EncodeToString(sum[:])
+}
+
+type unpublishErrorStore struct {
+	route.Store
+	err   error
+	calls int
+}
+
+func (s *unpublishErrorStore) Unpublish(context.Context, string, string) error {
+	s.calls++
+	return s.err
 }

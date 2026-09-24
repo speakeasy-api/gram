@@ -190,7 +190,7 @@ func createIssuerGatedMcpServer(
 	endpoint, err := mcpendpoints_repo.New(conn).CreateMCPEndpoint(ctx, mcpendpoints_repo.CreateMCPEndpointParams{
 		ProjectID:      *authCtx.ProjectID,
 		CustomDomainID: opts.CustomDomainID,
-		McpServerID:    mcpServer.ID,
+		McpServerID:    uuid.NullUUID{UUID: mcpServer.ID, Valid: true},
 		Slug:           endpointSlug,
 	})
 	require.NoError(t, err)

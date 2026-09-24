@@ -30,6 +30,113 @@ func chListFinding(t *testing.T, projectID uuid.UUID, orgID string, chatID, msgI
 	return row
 }
 
+func TestListRiskResults_MCPServerFilterIncludesUnanchoredAndScopesAllPaths(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, false)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("MCP findings")})
+	require.NoError(t, err)
+	disabled, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Disabled MCP findings"), Enabled: new(false)})
+	require.NoError(t, err)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	chatID, messageID := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
+	serverID := uuid.NewString()
+	at := time.Now().UTC().Add(-time.Hour)
+	unanchored := chListFinding(t, projectID, orgID, chatID, messageID, policy.ID, at, at, "gitleaks", "secret.github_pat", "", "<redacted len=7 sha=aaaaaaaa>", "", "")
+	unanchored.ChatID = ""
+	unanchored.ChatMessageID = ""
+	unanchored.MCPServerID = serverID
+	unanchored.ExecutionID = uuid.NewString()
+	unanchored.ToolName = "create_issue"
+	unanchored.MediationSurface = "remote_mcp"
+	unanchored.MCPMethod = "tools/call"
+	unanchored.PrincipalKind = "api_key"
+	unanchored.IdentityStamped = true
+	unanchored.EnforcementOutcome = "logged"
+	anchored := unanchored
+	anchored.ID = uuid.New()
+	anchored.ChatID = chatID.String()
+	anchored.ChatMessageID = messageID.String()
+	otherServer := unanchored
+	otherServer.ID = uuid.New()
+	otherServer.MCPServerID = serverID + "-suffix"
+	foreignProject := unanchored
+	foreignProject.ID = uuid.New()
+	foreignProject.ProjectID = uuid.NewString()
+	foreignOrg := unanchored
+	foreignOrg.ID = uuid.New()
+	foreignOrg.OrganizationID = "org_" + uuid.NewString()
+	hiddenPolicy := unanchored
+	hiddenPolicy.ID = uuid.New()
+	hiddenPolicy.RiskPolicyID = disabled.ID
+	// A manual dismissal mirrored from Postgres appends a suppression copy
+	// that carries no execution metadata. It must still outrank the scanner
+	// copy under the server filter, or the dismissed finding resurfaces.
+	dismissedAnchored := anchored
+	dismissedAnchored.ID = uuid.New()
+	dismissedCopy := dismissedAnchored
+	dismissedCopy.MCPServerID = ""
+	dismissedCopy.ExecutionID = ""
+	dismissedCopy.ToolName = ""
+	dismissedCopy.MediationSurface = ""
+	dismissedCopy.MCPMethod = ""
+	dismissedCopy.PrincipalKind = ""
+	dismissedCopy.IdentityStamped = false
+	dismissedCopy.EnforcementOutcome = ""
+	dismissedAt := at.Add(time.Minute)
+	dismissedCopy.ExcludedAt = &dismissedAt
+	dismissedCopy.FalsePositiveAt = &dismissedAt
+	dismissedCopy.ExcludedReason = chrepo.ExcludedReasonManual
+	dismissedCopy.EventKind = chrepo.EventKindSuppression
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
+		unanchored, anchored, otherServer, foreignProject, foreignOrg, hiddenPolicy, dismissedAnchored,
+	}))
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{dismissedCopy}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	// An MCP filter must use ClickHouse even while the general rollout flag is
+	// off, because unanchored mediated findings have no Postgres mirror.
+	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{McpServerID: &serverID})
+	require.NoError(t, err)
+	require.Len(t, page.Results, 2)
+	require.Equal(t, int64(2), page.TotalCount)
+	ids := []string{page.Results[0].ID, page.Results[1].ID}
+	require.ElementsMatch(t, []string{unanchored.ID.String(), anchored.ID.String()}, ids)
+	for _, result := range page.Results {
+		require.Equal(t, serverID, *result.McpServerID)
+		require.Nil(t, result.Match)
+		require.Equal(t, "logged", *result.EnforcementOutcome)
+		if result.ID == unanchored.ID.String() {
+			require.Nil(t, result.ChatID)
+			require.Nil(t, result.ChatMessageID)
+			require.Equal(t, "create_issue", *result.ToolName)
+		}
+	}
+
+	byChat, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{McpServerID: &serverID, ChatID: new(chatID.String())})
+	require.NoError(t, err)
+	require.Len(t, byChat.Results, 1)
+	require.Equal(t, anchored.ID.String(), byChat.Results[0].ID)
+
+	byPolicy, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{McpServerID: &serverID, PolicyID: &disabled.ID})
+	require.NoError(t, err)
+	require.Len(t, byPolicy.Results, 1)
+	require.Equal(t, hiddenPolicy.ID.String(), byPolicy.Results[0].ID)
+
+	agentPage, err := ti.service.ListRiskResultsForAgent(ctx, &gen.ListRiskResultsForAgentPayload{McpServerID: &serverID, ChatID: new(chatID.String())})
+	require.NoError(t, err)
+	require.Len(t, agentPage.Results, 1)
+	require.Equal(t, anchored.ID.String(), agentPage.Results[0].ID)
+	require.Equal(t, serverID, *agentPage.Results[0].McpServerID)
+	require.Equal(t, unanchored.MatchRedacted, agentPage.Results[0].MatchRedacted)
+}
+
 // TestListRiskResults_ClickHousePageOrderingAndRedaction drives the flagged
 // ClickHouse listing end to end: event-time ordering, cursor pagination,
 // store-side redaction passthrough (no re-derivation from the nil match),
@@ -346,6 +453,60 @@ func TestListRiskResults_ClickHouseUniqueMatchPagination(t *testing.T) {
 // copy, let the stale live copy win the dedup, and retro-hidden findings
 // would keep showing on the list while overview and signals already hide
 // them.
+// TestListRiskResults_ClickHouseRedeliveryCannotUndoDismissal pins the
+// event-kind ranking end to end: after a manual dismissal appends its
+// suppression copy, a redelivered scanner copy of the same finding lands with
+// a fresher inserted_at but must not win the per-id dedup — the finding stays
+// off the live listing and on the Dismissed tab.
+func TestListRiskResults_ClickHouseRedeliveryCannotUndoDismissal(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ti.flags.SetFlag(feature.FlagRiskListFromClickHouse, authCtx.ActiveOrganizationID, true)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("List CH Redelivery")})
+	require.NoError(t, err)
+
+	base := time.Now().UTC().AddDate(0, 0, -7).Truncate(time.Hour)
+	createdAt := base.Add(4 * time.Hour)
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "alice@example.com")
+
+	finding := chListFinding(t, projectID, orgID, chatID, msgID, policy.ID, createdAt, base.Add(time.Hour), "gitleaks", "secret.github_pat", "alice@example.com", "<redacted len=7 sha=aaaaaaaa>", "fp-1", "")
+	finding.EventKind = chrepo.EventKindFinding
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+
+	// The manual dismissal appends its suppression copy.
+	suppressed := finding
+	dismissedAt := createdAt.Add(time.Minute)
+	suppressed.ExcludedAt = &dismissedAt
+	suppressed.FalsePositiveAt = &dismissedAt
+	suppressed.ExcludedReason = chrepo.ExcludedReasonManual
+	suppressed.EventKind = chrepo.EventKindSuppression
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{suppressed}))
+
+	// The redelivered scanner copy: same id, fresher inserted_at, no
+	// suppression stamps.
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{finding}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	page, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{})
+	require.NoError(t, err)
+	require.Empty(t, page.Results, "the suppression copy outranks the redelivered scanner copy")
+	require.Zero(t, page.TotalCount)
+
+	dismissed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
+	require.NoError(t, err)
+	require.Len(t, dismissed.Results, 1)
+	require.Equal(t, finding.ID.String(), dismissed.Results[0].ID)
+}
+
 func TestListRiskResults_ClickHouseRetroFlagCopies(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

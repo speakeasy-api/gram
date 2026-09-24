@@ -16,7 +16,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestCreateRemoteSessionClient_Manual(t *testing.T) {
@@ -58,6 +60,38 @@ func TestCreateRemoteSessionClient_Manual(t *testing.T) {
 	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
 	require.NoError(t, err)
 	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestCreateRemoteSessionClient_SerializedAgainstOrganizationIssuerDeletion(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	remoteIssuerID := createRemoteIssuer(t, ctx, ti, "rsc-org-issuer-lock", "")
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "usi-org-issuer-lock")
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, usersessionsrepo.New(tx).LockUserSessionIssuerForOwnerBinding(ctx, userIssuerID))
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+			RemoteSessionIssuerID: remoteIssuerID,
+			UserSessionIssuerIds:  []string{userIssuerID.String()},
+			ClientID:              "org-issuer-lock-client",
+			ClientSecret:          nil,
+			SessionToken:          nil,
+			ApikeyToken:           nil,
+			ProjectSlugInput:      nil,
+		})
+		done <- err
+	}()
+
+	require.Never(t, func() bool { return len(done) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
+		"client create completed while organization issuer deletion could hold the owner-binding lock")
+	require.NoError(t, tx.Rollback(ctx))
+	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
+		"client create did not complete after the owner-binding lock was released")
+	require.NoError(t, <-done)
 }
 
 func TestCreateRemoteSessionClient_PersistsOrganizationID(t *testing.T) {
@@ -128,20 +162,24 @@ func TestCreateRemoteSessionClient_Manual_WithAuthMethodPost(t *testing.T) {
 	clientID := "post-client-id"
 	clientSecret := "post-client-secret"
 	authMethod := "client_secret_post"
+	authAudienceFormat := "token_endpoint"
 
 	result, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
-		RemoteSessionIssuerID:   issuerID,
-		UserSessionIssuerIds:    []string{userIssuerID},
-		ClientID:                clientID,
-		ClientSecret:            &clientSecret,
-		TokenEndpointAuthMethod: &authMethod,
-		SessionToken:            nil,
-		ApikeyToken:             nil,
-		ProjectSlugInput:        nil,
+		RemoteSessionIssuerID:           issuerID,
+		UserSessionIssuerIds:            []string{userIssuerID},
+		ClientID:                        clientID,
+		ClientSecret:                    &clientSecret,
+		TokenEndpointAuthMethod:         &authMethod,
+		TokenEndpointAuthAudienceFormat: &authAudienceFormat,
+		SessionToken:                    nil,
+		ApikeyToken:                     nil,
+		ProjectSlugInput:                nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result.TokenEndpointAuthMethod)
 	require.Equal(t, "client_secret_post", *result.TokenEndpointAuthMethod)
+	require.NotNil(t, result.TokenEndpointAuthAudienceFormat)
+	require.Equal(t, "token_endpoint", *result.TokenEndpointAuthAudienceFormat)
 
 	// Round-trip via Get to confirm the column survives a read after the
 	// transaction closes.
@@ -154,6 +192,8 @@ func TestCreateRemoteSessionClient_Manual_WithAuthMethodPost(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, fetched.TokenEndpointAuthMethod)
 	require.Equal(t, "client_secret_post", *fetched.TokenEndpointAuthMethod)
+	require.NotNil(t, fetched.TokenEndpointAuthAudienceFormat)
+	require.Equal(t, "token_endpoint", *fetched.TokenEndpointAuthAudienceFormat)
 }
 
 func TestCreateRemoteSessionClient_Manual_AuthMethodOmittedStaysNil(t *testing.T) {
@@ -572,17 +612,21 @@ func TestUpdateRemoteSessionClient_SwitchAuthMethod(t *testing.T) {
 	require.Nil(t, created.TokenEndpointAuthMethod)
 
 	post := "client_secret_post"
+	issuerAudience := "issuer"
 	updated, err := ti.service.UpdateRemoteSessionClient(ctx, &clientsgen.UpdateRemoteSessionClientPayload{
-		ID:                      created.ID,
-		ClientSecret:            nil,
-		TokenEndpointAuthMethod: &post,
-		SessionToken:            nil,
-		ApikeyToken:             nil,
-		ProjectSlugInput:        nil,
+		ID:                              created.ID,
+		ClientSecret:                    nil,
+		TokenEndpointAuthMethod:         &post,
+		TokenEndpointAuthAudienceFormat: &issuerAudience,
+		SessionToken:                    nil,
+		ApikeyToken:                     nil,
+		ProjectSlugInput:                nil,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, updated.TokenEndpointAuthMethod)
 	require.Equal(t, "client_secret_post", *updated.TokenEndpointAuthMethod)
+	require.NotNil(t, updated.TokenEndpointAuthAudienceFormat)
+	require.Equal(t, "issuer", *updated.TokenEndpointAuthAudienceFormat)
 }
 
 func TestCreateRemoteSessionClient_PersistsScopeOverride(t *testing.T) {
@@ -928,6 +972,46 @@ func TestAttachUserSessionIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{userIssuerIDString}, reattached.UserSessionIssuerIds)
 	require.Equal(t, 1, countRemoteSessionClientUserSessionIssuerBindings(t, ctx, ti.conn, clientUUID, userIssuerID))
+}
+
+func TestAttachUserSessionIssuer_SerializedAgainstOrganizationIssuerDeletion(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	remoteIssuerID := createRemoteIssuer(t, ctx, ti, "attach-org-issuer-lock", "")
+	userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "attach-usi-org-issuer-lock")
+	created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+		RemoteSessionIssuerID: remoteIssuerID,
+		UserSessionIssuerIds:  []string{},
+		ClientID:              "attach-org-issuer-lock-client",
+		ClientSecret:          nil,
+		SessionToken:          nil,
+		ApikeyToken:           nil,
+		ProjectSlugInput:      nil,
+	})
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, usersessionsrepo.New(tx).LockUserSessionIssuerForOwnerBinding(ctx, userIssuerID))
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := ti.service.AttachUserSessionIssuer(ctx, &clientsgen.AttachUserSessionIssuerPayload{
+			ID:                  created.ID,
+			UserSessionIssuerID: userIssuerID.String(),
+			SessionToken:        nil,
+			ApikeyToken:         nil,
+			ProjectSlugInput:    nil,
+		})
+		done <- err
+	}()
+
+	require.Never(t, func() bool { return len(done) > 0 }, 500*time.Millisecond, 25*time.Millisecond,
+		"client attach completed while organization issuer deletion could hold the owner-binding lock")
+	require.NoError(t, tx.Rollback(ctx))
+	require.Eventually(t, func() bool { return len(done) > 0 }, 30*time.Second, 25*time.Millisecond,
+		"client attach did not complete after the owner-binding lock was released")
+	require.NoError(t, <-done)
 }
 
 func TestDetachUserSessionIssuer(t *testing.T) {

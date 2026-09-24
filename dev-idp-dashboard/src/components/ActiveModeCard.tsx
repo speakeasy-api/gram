@@ -7,13 +7,25 @@ import { useGramMode } from "@/hooks/use-gram-mode";
 import { MODE_LABELS, MODE_SUBTITLES } from "@/lib/mode-labels";
 
 export function ActiveModeCard() {
-  const { data, isLoading } = useGramMode();
+  const { data, isLoading, error } = useGramMode();
 
   if (isLoading) {
     return (
       <Card size="sm" className="!rounded-md">
         <CardContent>
           <div className="h-12 animate-pulse" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card size="sm" className="!rounded-md">
+        <CardContent>
+          <div role="alert" className="text-sm text-destructive">
+            Could not read dev-idp configuration: {error.message}
+          </div>
         </CardContent>
       </Card>
     );

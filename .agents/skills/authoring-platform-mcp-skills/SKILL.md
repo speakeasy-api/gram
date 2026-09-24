@@ -1,6 +1,6 @@
 ---
 name: authoring-platform-mcp-skills
-description: Use when adding, editing, reviewing, testing, or locating a reviewed skill distributed with the Speakeasy AICP Platform MCP plugin; triggers include "Platform MCP skill", "platform_mcp_skills", "add a catalog workflow", "bundle a skill with Platform MCP", and "where should this Platform skill live?".
+description: Use when adding, editing, reviewing, testing, or locating a reviewed skill distributed with the Platform MCP plugin; triggers include "Platform MCP skill", "platform_mcp_skills", "add a catalog workflow", "bundle a skill with Platform MCP", and "where should this Platform skill live?".
 ---
 
 # Authoring Platform MCP skills
@@ -22,8 +22,8 @@ Use product language in every distributed skill: **Speakeasy AI Control Plane**,
 | Authoring source shipped to users | `server/internal/plugins/platform_mcp_skills/<skill-name>/SKILL.md`                      |
 | Generator and validation          | `server/internal/plugins/generate.go` (`loadPlatformMCPSkills`, `emitPlatformMCPSkills`) |
 | Package tests                     | `server/internal/plugins/generate_test.go`                                               |
-| Claude package output             | `platform-mcp/skills/<skill-name>/SKILL.md`                                              |
-| Portable Agent Plugin output      | `agent-plugins/speakeasy-aicp-platform-mcp/skills/<skill-name>/SKILL.md`                 |
+| Claude package output             | `speakeasy/skills/<skill-name>/SKILL.md`                                                 |
+| Portable Agent Plugin output      | `agent-plugins/speakeasy/skills/<skill-name>/SKILL.md`                                   |
 | Contributor guidance only         | `.agents/skills/authoring-platform-mcp-skills/SKILL.md` (this file)                      |
 
 Do not put a user-facing Platform workflow under `.agents/skills/`: that directory teaches contributors and coding agents how to work on this repository. It is not copied into the customer Platform Plugin.
@@ -41,7 +41,7 @@ description: Inspect an explicit AICP project's Platform MCP state before propos
 ---
 ```
 
-4. Write for an agent using only the authenticated Platform MCP tools. Name real tools exactly; verify them in `server/internal/platformmcp/tool_*.go` and their registration in `server/internal/platformmcp/tools.go` rather than inventing APIs.
+4. Write for an agent using authenticated Platform MCP tools. An explicitly reviewed workflow may also use local discovery after informed consent for its actual effects (including health-check connections and stdio process launches before filtering), with a sanitized manual-inventory alternative. Never promise side-effect-free discovery, read credential files, transfer credentials or edit local configuration. The executing client must first successfully call `list_projects` through its own Speakeasy connection; dashboard install intent and another client's authentication are insufficient. All management mutations still require authenticated Platform MCP tools. Name real tools exactly; verify them in `server/internal/platformmcp/tool_*.go` and their registration in `server/internal/platformmcp/tools.go` rather than inventing APIs.
 5. Anchor the skill in a common dashboard outcome. Preserve the dashboard's explicit target selection, secure handoffs, confirmations, and evidence checks rather than inventing a shortcut with weaker controls.
 6. Keep authority explicit: package installation grants no access; live OAuth, entitlement, membership, `org:admin`, generation, and revocation checks remain authoritative.
 7. Separate reads, user choices, secure browser handoffs, confirmation, mutation, and post-mutation verification. Never treat copy/download/install intent as runtime evidence.
@@ -102,7 +102,7 @@ Use it as the pattern for authority boundaries and evidence, not as a template f
 
 - Editing generated package output instead of `platform_mcp_skills/`.
 - Putting the shipped workflow in `.agents/skills/`, which only reaches repository contributors.
-- Reusing ordinary `PluginInfo.Skills`; that path intentionally bundles the hooks-backed skill-feedback sidecar.
+- Reusing ordinary `PluginInfo.Skills`; Platform MCP skills require the reviewed generator path and package metadata.
 - Hardcoding one skill in Go, forcing every new skill to modify the generator.
 - Claiming install, OAuth intent, or a stale status proves authorization/readiness.
 - Asking the user to paste secrets into chat instead of using the secure server-returned handoff.

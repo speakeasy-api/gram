@@ -72,3 +72,86 @@ func TestStripLeadingEnvelopesOnlyStripsLeadingBlock(t *testing.T) {
 	input := "why does my agent emit <message-context>foo</message-context> in its output?"
 	require.Equal(t, input, chat.StripLeadingEnvelopes(input))
 }
+
+const openclawConversationInfo = "Conversation info (untrusted metadata):\n```json\n{\n  \"chat_id\": \"channel:42\",\n  \"sender\": {\n    \"name\": \"Example User\"\n  },\n  \"was_mentioned\": true\n}\n```"
+
+func TestStripLeadingEnvelopesRemovesOpenClawConversationInfo(t *testing.T) {
+	t.Parallel()
+
+	input := openclawConversationInfo + "\n\n@Bot what does this command do"
+	require.Equal(t, "@Bot what does this command do", chat.StripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesRemovesOpenClawTimestampAndHint(t *testing.T) {
+	t.Parallel()
+
+	input := "[Thu 2026-08-27 13:51 EDT] Delivery: to send a message, use the `message` tool.\n\n" + openclawConversationInfo + "\n\nping"
+	require.Equal(t, "ping", chat.StripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesRemovesOpenClawStackedBlocks(t *testing.T) {
+	t.Parallel()
+
+	input := openclawConversationInfo +
+		"\n\nReply target of current user message (untrusted, for context):\n```json\n{\"body\": \"earlier\"}\n```" +
+		"\n\nChat history since last reply (untrusted, for context):\n#1 2026-08-27 13:51:33 EDT alice: hi\n#2 2026-08-27 13:52:10 EDT ->#1 bob: yo" +
+		"\n\nRecent messages (untrusted, chronological, oldest first):\n#3 2026-08-27 13:53:00 EDT carol: hey" +
+		"\n\nsummarize the thread"
+	require.Equal(t, "summarize the thread", chat.StripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesLeavesOpenClawSentinelMidMessage(t *testing.T) {
+	t.Parallel()
+
+	input := "why does the prompt say (untrusted metadata): here"
+	require.Equal(t, input, chat.StripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesLeavesUnterminatedOpenClawFence(t *testing.T) {
+	t.Parallel()
+
+	input := "Conversation info (untrusted metadata):\n```json\n{\"chat_id\": \"x\"\n\nping"
+	require.Equal(t, input, chat.StripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesKeepsTextRightAfterOpenClawHistory(t *testing.T) {
+	t.Parallel()
+
+	input := "Chat history since last reply (untrusted, for context):\n#1 2026-08-27 13:51:33 EDT alice: hi\n#2 2026-08-27 13:52:10 EDT ->#1 bob: yo\ncan you continue"
+	require.Equal(t, "can you continue", chat.StripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesLeavesHumanTimestampWithoutEnvelope(t *testing.T) {
+	t.Parallel()
+
+	input := "[Mon 2024-05-01 09:30] could we move the sync?"
+	require.Equal(t, input, chat.StripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesKeepsColonLineAfterOpenClawHistory(t *testing.T) {
+	t.Parallel()
+
+	input := "Chat history since last reply (untrusted, for context):\n#1 2026-08-27 13:51:33 EDT alice: hi\nNote: can you continue"
+	require.Equal(t, "Note: can you continue", chat.StripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesKeepsTimestampPhraseAfterOpenClawHistory(t *testing.T) {
+	t.Parallel()
+
+	input := "Chat history since last reply (untrusted, for context):\n#1 2026-08-27 13:51:33 EDT alice: hi\n2026-08-27 standup: can you continue"
+	require.Equal(t, "2026-08-27 standup: can you continue", chat.StripLeadingEnvelopes(input))
+}
+
+func TestStripLeadingEnvelopesRemovesOpenClawStampOnPlainTurn(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "hello", chat.StripLeadingEnvelopes("[Thu 2026-08-27 13:51 EDT] hello"))
+	require.Equal(t, "hello", chat.StripLeadingEnvelopes("[Thu 2026-08-27 13:51:33 GMT+5:30] hello"))
+}
+
+func TestStripLeadingEnvelopesKeepsHashTaggedLineAfterOpenClawHistory(t *testing.T) {
+	t.Parallel()
+
+	input := "Chat history since last reply (untrusted, for context):\n#1 2026-08-27 13:51:33 EDT alice: hi\n#note can: continue"
+	require.Equal(t, "#note can: continue", chat.StripLeadingEnvelopes(input))
+}

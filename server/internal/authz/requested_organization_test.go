@@ -75,7 +75,7 @@ func TestRequireUserOrganizationScopeRejectsAPIKeys(t *testing.T) {
 	require.True(t, ok)
 	authCtx.APIKeyID = "api_key_requested_scope"
 	authCtx.SessionID = nil
-	ctx = contextvalues.SetAuthContext(ctx, authCtx)
+	ctx = contextvalues.WithLegacyAPIKeyAuthorization(ctx, authCtx)
 	engine := NewEngine(testenv.NewLogger(t), nil, challengeLoggingAlwaysEnabled, workos.NewStubClient())
 
 	err := engine.RequireUserOrganizationScope(ctx, "org_requested_scope_target", authCtx.UserID, ScopeOrgRead)

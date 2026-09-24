@@ -1,11 +1,5 @@
 import { XIcon } from "lucide-react";
-import {
-  useEffect,
-  useRef,
-  type JSX,
-  type ReactNode,
-  type RefObject,
-} from "react";
+import { useCallback, useRef, type JSX, type ReactNode, type Ref } from "react";
 
 import { CopyValue } from "@/components/CopyValue";
 import { Trial } from "@/components/Trial";
@@ -49,18 +43,31 @@ export function PeekPanel({
   // The caller's, where it has one. The list handles keys above both the table
   // and this panel, and it has to tell the panel apart from the controls the
   // panel contains.
-  ref?: RefObject<HTMLElement | null>;
+  ref?: Ref<HTMLElement>;
 }): JSX.Element {
   const own = useRef<HTMLElement>(null);
-  const root = ref ?? own;
+  const mountRoot = useCallback(
+    (node: HTMLElement | null) => {
+      own.current = node;
+      const forwardedCleanup =
+        typeof ref === "function" ? ref(node) : undefined;
+      if (ref && typeof ref !== "function") ref.current = node;
+      node?.focus();
 
-  useEffect(() => {
-    root.current?.focus();
-  }, [root]);
+      if (!node) return;
+      return () => {
+        own.current = null;
+        if (typeof forwardedCleanup === "function") forwardedCleanup();
+        else if (typeof ref === "function") ref(null);
+        else if (ref) ref.current = null;
+      };
+    },
+    [ref],
+  );
 
   return (
     <aside
-      ref={root}
+      ref={mountRoot}
       id={PEEK_PANEL_ID}
       // In the tab order, not just focusable. This node is the one place in the
       // subtree where the arrow keys walk the peek from record to record, and
@@ -121,7 +128,11 @@ export function PeekPanel({
           list watches for Escape and the arrow keys, and a menu would answer
           Escape before the panel it is drawn in. */}
       <div className="flex min-h-8 items-center gap-2 p-4">
-        <OrganizationActions org={org} layout="buttons" />
+        <OrganizationActions
+          org={org}
+          layout="buttons"
+          focusFallbackRef={own}
+        />
       </div>
     </aside>
   );

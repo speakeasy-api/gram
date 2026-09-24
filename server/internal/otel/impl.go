@@ -2,8 +2,10 @@ package otel
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
@@ -17,18 +19,34 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 )
 
 const maxOTLPExportBytes = 20 * constants.MiB
-const otelProvenanceSource = "speakeasy"
+
+// ProvenanceSource is the provenance source stamped on every record entering
+// the OTel pipeline through a Gram-operated ingest edge (/otel/v1/* and the
+// hooks OTLP tee).
+const ProvenanceSource = "speakeasy"
+
+// FeatureChecker reports whether a product feature is enabled for an
+// organization.
+type FeatureChecker func(ctx context.Context, organizationID string) (bool, error)
 
 type Service struct {
-	logger        *slog.Logger
-	tracer        trace.Tracer
-	auth          *auth.Auth
-	logPublisher  gcp.Publisher[*otelv1.InboundLogRecord]
-	spanPublisher gcp.Publisher[*otelv1.InboundSpan]
+	logger          *slog.Logger
+	tracer          trace.Tracer
+	auth            *auth.Auth
+	authz           *authz.Engine
+	chRepo          *chrepo.Queries
+	logsEnabled     FeatureChecker
+	logPublisher    gcp.Publisher[*otelv1.InboundLogRecord]
+	metricPublisher gcp.Publisher[*otelv1.InboundMetric]
+	spanPublisher   gcp.Publisher[*otelv1.InboundSpan]
+	hooksSink       HooksSink
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -38,17 +56,25 @@ func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	db *pgxpool.Pool,
+	chConn clickhouse.Conn,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	logsEnabled FeatureChecker,
 	spanPublisher gcp.Publisher[*otelv1.InboundSpan],
 	logPublisher gcp.Publisher[*otelv1.InboundLogRecord],
+	metricPublisher gcp.Publisher[*otelv1.InboundMetric],
 ) *Service {
 	return &Service{
-		logger:        logger,
-		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/otel"),
-		auth:          auth.New(logger, db, sessions, authzEngine),
-		logPublisher:  logPublisher,
-		spanPublisher: spanPublisher,
+		logger:          logger,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/otel"),
+		auth:            auth.New(logger, db, sessions, authzEngine),
+		authz:           authzEngine,
+		chRepo:          chrepo.New(chConn),
+		logsEnabled:     logsEnabled,
+		logPublisher:    logPublisher,
+		metricPublisher: metricPublisher,
+		spanPublisher:   spanPublisher,
+		hooksSink:       nil,
 	}
 }
 
@@ -63,5 +89,13 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
+	ctx, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		return ctx, fmt.Errorf("authorize otel request: %w", err)
+	}
+	// Agent-principal keys ingest through the hooks service, which enforces their grant.
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+	return ctx, nil
 }

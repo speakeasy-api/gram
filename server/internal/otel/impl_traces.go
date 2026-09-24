@@ -19,7 +19,7 @@ func (s *Service) Traces(ctx context.Context, payload *gen.TracesPayload, body i
 		body:            body,
 		decode: func(raw []byte, tenant otlpIngestTenant) ([]*otelv1.InboundSpan, error) {
 			provenance := (&otelv1.InboundSpan_Provenance_builder{
-				Source:         new(otelProvenanceSource),
+				Source:         new(ProvenanceSource),
 				OrganizationId: &tenant.organizationID,
 				ProjectId:      &tenant.projectID,
 			}).Build()

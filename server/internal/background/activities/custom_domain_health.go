@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -37,14 +38,15 @@ type CustomDomainInfrastructureChecker interface {
 }
 
 type CustomDomainHealth struct {
-	db             *pgxpool.Pool
-	logger         *slog.Logger
-	infrastructure CustomDomainInfrastructureChecker
-	resolver       dns.Resolver
-	probe          func(ctx context.Context, domain string) error
-	expectedTarget string
-	emails         *email.Service
-	siteURL        *url.URL
+	db               *pgxpool.Pool
+	logger           *slog.Logger
+	infrastructure   CustomDomainInfrastructureChecker
+	resolver         dns.Resolver
+	probe            func(ctx context.Context, domain string) error
+	expectedTarget   string
+	expectedARecords []netip.Addr
+	emails           *email.Service
+	siteURL          *url.URL
 }
 
 type ListCustomDomainsForHealthCheckArgs struct {
@@ -71,7 +73,7 @@ type NotifyCustomDomainUnhealthyArgs struct {
 	CheckedAt      time.Time
 }
 
-func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, emails *email.Service, siteURL *url.URL, guardianPolicy *guardian.Policy) *CustomDomainHealth {
+func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, expectedARecords []netip.Addr, emails *email.Service, siteURL *url.URL, guardianPolicy *guardian.Policy) *CustomDomainHealth {
 	probe := func(ctx context.Context, domain string) error {
 		return errors.New("custom domain https probe is not configured")
 	}
@@ -81,14 +83,15 @@ func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure
 		}
 	}
 	return &CustomDomainHealth{
-		db:             db,
-		logger:         logger,
-		infrastructure: infrastructure,
-		resolver:       dns.NewNetResolver(),
-		probe:          probe,
-		expectedTarget: expectedTarget,
-		emails:         emails,
-		siteURL:        siteURL,
+		db:               db,
+		logger:           logger,
+		infrastructure:   infrastructure,
+		resolver:         dns.NewNetResolver(),
+		probe:            probe,
+		expectedTarget:   expectedTarget,
+		expectedARecords: expectedARecords,
+		emails:           emails,
+		siteURL:          siteURL,
 	}
 }
 
@@ -122,8 +125,8 @@ func (c *CustomDomainHealth) List(ctx context.Context, args ListCustomDomainsFor
 func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHealthArgs) (NotifyCustomDomainUnhealthyArgs, error) {
 	var noNotification NotifyCustomDomainUnhealthyArgs
 
-	if c.expectedTarget == "" {
-		c.logger.WarnContext(ctx, "skipping custom domain health check: expected target CNAME not configured")
+	if c.expectedTarget == "" && len(c.expectedARecords) == 0 {
+		c.logger.WarnContext(ctx, "skipping custom domain health check: no expected CNAME target or A records configured")
 		return noNotification, nil
 	}
 
@@ -163,7 +166,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		Issue:                "",
 		CertificateExpiresAt: nil,
 	}
-	routingIssue, routingErr := checkCustomDomainRouting(ctx, c.resolver, domain.Domain, c.expectedTarget)
+	routingIssue, routingErr := checkCustomDomainRouting(ctx, c.resolver, domain.Domain, c.expectedTarget, c.expectedARecords)
 	if routingErr == nil && routingIssue == customdomains.HealthIssueDNSTargetMismatch {
 		// DNS shape says the domain points elsewhere, but proxied/CDN setups
 		// legitimately do that. If the domain still answers HTTPS, traffic is
@@ -331,10 +334,14 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 	notificationErrors := []error{resolutionErr}
 	for _, recipient := range recipients {
 		tmpl := email.CustomDomainUnhealthy{
-			Email:        recipient,
-			Domain:       args.Domain,
-			IssueMessage: customdomains.HealthIssueMessage(args.Issue, c.expectedTarget),
-			DomainLink:   domainLink,
+			Email:  recipient,
+			Domain: args.Domain,
+			IssueMessage: customdomains.HealthIssueMessage(args.Issue, customdomains.DNSRemediation{
+				Domain:           args.Domain,
+				ExpectedCNAME:    c.expectedTarget,
+				ExpectedARecords: customdomains.FormatARecords(c.expectedARecords),
+			}),
+			DomainLink: domainLink,
 		}
 		idempotencyKey := recipientEmailIdempotencyKey(recipient, "custom-domain-unhealthy", args.CustomDomainID.String(), strconv.FormatInt(args.CheckedAt.UnixMicro(), 10))
 		if err := c.emails.SendIdempotent(ctx, recipient, idempotencyKey, tmpl); err != nil {

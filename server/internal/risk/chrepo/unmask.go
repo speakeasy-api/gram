@@ -42,7 +42,8 @@ type RiskFindingUnmaskRow struct {
 // GetRiskFindingForUnmask returns the reveal-relevant state for one finding id,
 // or nil when no live row exists. The gates mirror the Postgres unmask ones
 // (GetRiskResultByID): no dead-letter sentinels, no excluded rows, no false
-// positives, tenant-scoped.
+// positives, tenant-scoped. Shadow engine-comparison rows are hidden from
+// every user-facing surface, so a shadow id reads as absent here too.
 //
 // The table is append-only with at-least-once delivery, so one id can have
 // several rows (redeliveries and exclusion / false-positive state mirrors).
@@ -75,8 +76,9 @@ func (q *Queries) GetRiskFindingForUnmask(ctx context.Context, p GetRiskFindingF
 		From("risk_findings").
 		Where("organization_id = ?", p.OrganizationID).
 		Where("project_id = ?", p.ProjectID).
+		Where(notShadowCond).
 		Where("id = ?", p.ID).
-		OrderBy("inserted_at DESC").
+		OrderBy(latestCopyOrderSQL).
 		Limit(1)
 
 	sb := sq.Select(

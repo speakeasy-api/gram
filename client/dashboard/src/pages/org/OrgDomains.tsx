@@ -1,56 +1,14 @@
-import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { SettingsPage } from "@/components/page-templates";
-import { Badge } from "@/components/ui/Badge";
-import { CopyButton } from "@/components/ui/CopyButton";
-import { Dialog } from "@/components/ui/Dialog";
-import { Input } from "@/components/ui/Input";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/Sheet";
-import { SimpleTooltip } from "@/components/ui/Tooltip";
-import { Text } from "@/components/ui/Text";
-import { useOrganization } from "@/contexts/Auth";
-import { useProductTier } from "@/hooks/useProductTier";
-import { useRBAC } from "@/hooks/useRBAC";
-import { useRootMcpEndpointMutation } from "@/hooks/useRootMcpEndpoint";
-import {
-  customDomainMcpEndpointUrl,
-  useCustomDomain,
-} from "@/hooks/useToolsetUrl";
-import { HumanizeDateTime } from "@/lib/dates";
-import { cn, getCustomDomainCNAME } from "@/lib/utils";
-import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
-import type { CustomDomainMcpEndpoint } from "@gram/client/models/components/customdomainmcpendpoint.js";
-import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
-import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
-import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
-import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
-import { invalidateAllListDomains } from "@gram/client/react-query/listDomains";
-import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
-import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
-import { Alert } from "@/components/ui/Alert";
-import { Button } from "@/components/ui/Button";
-import { Stack } from "@/components/ui/Stack";
-import { useQueryClient } from "@tanstack/react-query";
-import {
+  AlertTriangle,
   Check,
   CheckCircle2,
   ChevronRight,
   Copy,
   Globe,
-  AlertTriangle,
   Loader2,
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { RequireScope } from "@/components/require-scope";
-import { toast } from "sonner";
 import {
   Select,
   SelectContent,
@@ -60,6 +18,53 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
+import { SettingsPage, SettingsSection } from "@/components/page-templates";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/Sheet";
+import { cn, getCustomDomainCNAME } from "@/lib/utils";
+import {
+  customDomainMcpEndpointUrl,
+  useCustomDomain,
+} from "@/hooks/useToolsetUrl";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { CopyButton } from "@/components/ui/CopyButton";
+import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
+import type { CustomDomainMcpEndpoint } from "@gram/client/models/components/customdomainmcpendpoint.js";
+import { Dialog } from "@/components/ui/Dialog";
+import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { HumanizeDateTime } from "@/lib/dates";
+import { Input } from "@/components/ui/Input";
+import { PrivateNetworkSection } from "./PrivateNetworkSection";
+import { RequireScope } from "@/components/require-scope";
+import type { RootMcpServerOption } from "@gram/client/models/components/rootmcpserveroption.js";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Stack } from "@/components/ui/Stack";
+import { Text } from "@/components/ui/Text";
+import { invalidateAllGetDomain } from "@gram/client/react-query/getDomain";
+import { invalidateAllListDomains } from "@gram/client/react-query/listDomains";
+import { toast } from "sonner";
+import { useCheckDomainHealthMutation } from "@gram/client/react-query/checkDomainHealth";
+import { useCustomDomainMcpEndpoints } from "@gram/client/react-query/customDomainMcpEndpoints";
+import { useDeleteDomainMutation } from "@gram/client/react-query/deleteDomain";
+import { useOrganization } from "@/contexts/Auth";
+import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
+import { useProductTier } from "@/hooks/useProductTier";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRBAC } from "@/hooks/useRBAC";
+import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
+import { useRootMcpEndpointMutation } from "@/hooks/useRootMcpEndpoint";
+import { useRootMcpServers } from "@gram/client/react-query/rootMcpServers";
+import { useUpdateDomainMutation } from "@gram/client/react-query/updateDomain";
 
 export default function OrgDomains(): JSX.Element {
   return (
@@ -98,7 +103,7 @@ const healthIssueMessages: Record<string, string> = {
   dns_not_found:
     "We couldn't find DNS records for this domain. Set this record with your DNS provider:",
   dns_target_mismatch:
-    "This domain's DNS does not resolve to the expected CNAME target. If the domain sits behind a proxy or CDN, traffic may still work; otherwise set this DNS record:",
+    "This domain's DNS does not resolve to the expected target. If the domain sits behind a proxy or CDN, traffic may still work; otherwise set this DNS record:",
   resource_missing:
     "The routing configuration for this domain is missing. Run the check again to confirm the problem persists.",
   certificate_missing:
@@ -125,12 +130,19 @@ function customDomainHealthMessage(issue?: string): string {
 function CustomDomainHealthMessage({
   issue,
   domainName,
+  recordType,
+  aRecords,
+  cnameTarget,
 }: {
   issue?: string;
   domainName: string;
+  recordType?: string;
+  aRecords?: string[];
+  cnameTarget?: string;
 }) {
   const showsExpectedRecord =
     issue === "dns_not_found" || issue === "dns_target_mismatch";
+  const useARecord = recordType === "a" && (aRecords?.length ?? 0) > 0;
   return (
     <>
       {customDomainHealthMessage(issue)}
@@ -138,7 +150,9 @@ function CustomDomainHealthMessage({
         <>
           {" "}
           <code className="break-all">
-            {domainName} CNAME {getCustomDomainCNAME()}
+            {useARecord
+              ? `${domainName} A ${aRecords?.join(", ")}`
+              : `${domainName} CNAME ${cnameTarget || getCustomDomainCNAME()}`}
           </code>
         </>
       )}
@@ -282,80 +296,100 @@ const NO_ROOT_MCP_ENDPOINT = "__none__";
 
 function mcpServerLabel(endpoint: CustomDomainMcpEndpoint): string {
   return (
-    endpoint.mcpServerName ?? endpoint.mcpServerSlug ?? endpoint.mcpServerId
+    endpoint.mcpServerName ??
+    endpoint.mcpServerSlug ??
+    endpoint.mcpServerId ??
+    endpoint.metaMcpServerId ??
+    endpoint.id
   );
+}
+
+function rootServerLabel(option: RootMcpServerOption): string {
+  return option.name ?? option.slug ?? option.mcpServerId;
+}
+
+function groupRootServerOptions(options: RootMcpServerOption[]): {
+  projectId: string;
+  projectName: string;
+  servers: RootMcpServerOption[];
+}[] {
+  const groups = new Map<
+    string,
+    { projectName: string; servers: RootMcpServerOption[] }
+  >();
+
+  for (const option of options) {
+    const group = groups.get(option.projectId);
+    if (group) {
+      group.servers.push(option);
+    } else {
+      groups.set(option.projectId, {
+        projectName: option.projectName,
+        servers: [option],
+      });
+    }
+  }
+
+  return Array.from(groups.entries())
+    .map(([projectId, group]) => ({
+      projectId,
+      projectName: group.projectName,
+      servers: [...group.servers].sort((a, b) =>
+        rootServerLabel(a).localeCompare(rootServerLabel(b)),
+      ),
+    }))
+    .sort((a, b) => a.projectName.localeCompare(b.projectName));
 }
 
 function DefaultMcpServerControl({
   domain,
-  endpoints,
-  isLoading,
   canManage,
 }: {
   domain: CustomDomain;
-  endpoints: CustomDomainMcpEndpoint[];
-  isLoading: boolean;
   canManage: boolean;
 }) {
   const rootMutation = useRootMcpEndpointMutation();
-  const endpointGroups = useMemo(() => {
-    const groups = new Map<
-      string,
-      { projectName: string; endpoints: CustomDomainMcpEndpoint[] }
-    >();
-
-    for (const endpoint of endpoints) {
-      const group = groups.get(endpoint.projectId);
-      if (group) {
-        group.endpoints.push(endpoint);
-      } else {
-        groups.set(endpoint.projectId, {
-          projectName: endpoint.projectName,
-          endpoints: [endpoint],
-        });
-      }
-    }
-
-    return Array.from(groups.entries())
-      .map(([projectId, group]) => ({
-        projectId,
-        projectName: group.projectName,
-        endpoints: [...group.endpoints].sort((a, b) =>
-          mcpServerLabel(a).localeCompare(mcpServerLabel(b)),
-        ),
-      }))
-      .sort((a, b) => a.projectName.localeCompare(b.projectName));
-  }, [endpoints]);
-  const currentEndpoint = endpoints.find(
-    (endpoint) => endpoint.id === domain.rootMcpEndpointId,
+  const serversQuery = useRootMcpServers(undefined, undefined, {
+    refetchOnWindowFocus: false,
+  });
+  const servers = useMemo(
+    () => serversQuery.data?.mcpServers ?? [],
+    [serversQuery.data],
   );
-  const selectedValue = currentEndpoint?.id ?? NO_ROOT_MCP_ENDPOINT;
+  const serverGroups = useMemo(
+    () => groupRootServerOptions(servers),
+    [servers],
+  );
+  const currentServer = servers.find((option) => option.isDomainRoot);
+  const selectedValue = currentServer?.mcpServerId ?? NO_ROOT_MCP_ENDPOINT;
 
   let content: React.ReactNode;
-  if (isLoading) {
+  if (serversQuery.isLoading) {
     content = (
       <Text variant="body" className="text-muted-foreground text-sm">
         Loading MCP servers…
       </Text>
     );
-  } else if (endpoints.length === 0) {
+  } else if (servers.length === 0) {
     content = (
       <div className="border-border border border-dashed p-4">
         <Text variant="body" className="font-medium">
-          No MCP endpoints on this domain
+          No MCP servers in this organization
         </Text>
         <Text
           variant="body"
           className="text-muted-foreground mt-1 max-w-[65ch] text-sm"
         >
-          Attach an MCP endpoint to this custom domain before choosing a default
-          MCP server.
+          Create an MCP server first, then choose it here to serve the domain
+          root.
         </Text>
       </div>
     );
   } else {
-    const selectedLabel = currentEndpoint
-      ? `${mcpServerLabel(currentEndpoint)} · /mcp/${currentEndpoint.slug}`
+    const selectedLabel = currentServer
+      ? currentServer.attachedEndpointSlug
+        ? `${rootServerLabel(currentServer)} · /mcp/${currentServer.attachedEndpointSlug}`
+        : rootServerLabel(currentServer)
       : "No root mapping";
 
     content = (
@@ -363,12 +397,13 @@ function DefaultMcpServerControl({
         <Select
           value={selectedValue}
           disabled={!canManage || rootMutation.isPending}
-          onValueChange={(value) =>
-            rootMutation.setRootMcpEndpoint(
-              domain.id,
-              value === NO_ROOT_MCP_ENDPOINT ? undefined : value,
-            )
-          }
+          onValueChange={(value) => {
+            if (value === NO_ROOT_MCP_ENDPOINT) {
+              rootMutation.setRootMcpEndpoint(domain.id, undefined);
+            } else {
+              rootMutation.setRootMcpServer(domain.id, value);
+            }
+          }}
         >
           <SelectTrigger className="w-full max-w-xl">
             <SelectValue>{selectedLabel}</SelectValue>
@@ -380,27 +415,31 @@ function DefaultMcpServerControl({
             >
               No root mapping
             </SelectItem>
-            {endpointGroups.map((group) => (
+            {serverGroups.map((group) => (
               <SelectGroup key={group.projectId}>
                 <SelectLabel>{group.projectName}</SelectLabel>
-                {group.endpoints.map((endpoint) => (
+                {group.servers.map((option) => (
                   <SelectItem
-                    key={endpoint.id}
-                    value={endpoint.id}
-                    description={`/mcp/${endpoint.slug}`}
+                    key={option.mcpServerId}
+                    value={option.mcpServerId}
+                    description={
+                      option.attachedEndpointSlug
+                        ? `/mcp/${option.attachedEndpointSlug}`
+                        : "Not attached to this domain yet"
+                    }
                   >
-                    {mcpServerLabel(endpoint)}
+                    {rootServerLabel(option)}
                   </SelectItem>
                 ))}
               </SelectGroup>
             ))}
           </SelectContent>
         </Select>
-        {currentEndpoint ? (
+        {currentServer?.attachedEndpointSlug ? (
           <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
             <code>{`https://${domain.domain}/`}</code>
             <span aria-hidden="true">→</span>
-            <code>{`/mcp/${currentEndpoint.slug}`}</code>
+            <code>{`/mcp/${currentServer.attachedEndpointSlug}`}</code>
           </div>
         ) : (
           <Text variant="body" className="text-muted-foreground text-sm">
@@ -575,21 +614,40 @@ function ChatGPTAppVerificationControl({
 }
 
 function OrgDomainsInner() {
+  // Only call this a custom-domain-only view when rollout absence is known.
+  // Admins retain private-network setup and recovery even before rollout.
+  const { canManageIngress, status: rolloutStatus } =
+    useNetworkIngressRollout();
+  const showNetworkAccess = canManageIngress || rolloutStatus !== "disabled";
+  const title = showNetworkAccess ? "Network Access" : "Custom Domain";
   const organization = useOrganization();
   const productTier = useProductTier();
   const { hasScope } = useRBAC();
   const canManageDomains = hasScope("org:admin");
   const queryClient = useQueryClient();
   const [isAddDomainDialogOpen, setIsAddDomainDialogOpen] = useState(false);
-  const [isCnameCopied, setIsCnameCopied] = useState(false);
+  const [copiedRecordValue, setCopiedRecordValue] = useState<string | null>(
+    null,
+  );
+  const copyRecordResetTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [isTxtCopied, setIsTxtCopied] = useState(false);
+  const copyTxtResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isCustomDomainModalOpen, setIsCustomDomainUpgradeModalOpen] =
     useState(false);
   const [isDeleteDomainDialogOpen, setIsDeleteDomainDialogOpen] =
     useState(false);
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
-  const CNAME_VALUE = getCustomDomainCNAME();
+  // null = follow the suggestion; the user can override because apex
+  // detection is a heuristic (delegated subzones can take a CNAME).
+  const [recordTypeOverride, setRecordTypeOverride] = useState<
+    "cname" | "a" | null
+  >(null);
+  const [pendingRootServerId, setPendingRootServerId] = useState<string | null>(
+    null,
+  );
 
   // IP allowlist state for create dialog
   const [pendingIPs, setPendingIPs] = useState<string[]>([]);
@@ -612,9 +670,25 @@ function OrgDomainsInner() {
 
   const {
     domain,
+    dnsConfig,
     isLoading: domainIsLoading,
     refetch: domainRefetch,
   } = useCustomDomain();
+
+  const aRecords = dnsConfig?.aRecords ?? [];
+  const CNAME_VALUE = dnsConfig?.cnameTarget || getCustomDomainCNAME();
+
+  // Pre-registration the server has no domain to judge, so fall back to a
+  // label-count heuristic; after registration the server's publicsuffix-based
+  // suggestion wins. Both are defaults for a user-controllable toggle.
+  const suggestedRecordType: "cname" | "a" =
+    aRecords.length === 0
+      ? "cname"
+      : domain?.suggestedRecordType === "a" ||
+          (!domain && validDomain && subdomain.split(".").length === 2)
+        ? "a"
+        : "cname";
+  const recordType = recordTypeOverride ?? suggestedRecordType;
 
   useEffect(() => {
     if (domain?.domain && !domainInput) {
@@ -632,25 +706,59 @@ function OrgDomainsInner() {
     return "";
   };
 
-  const handleCopyCname = async () => {
-    await navigator.clipboard.writeText(CNAME_VALUE);
-    setIsCnameCopied(true);
-    setTimeout(() => setIsCnameCopied(false), 2000);
+  const handleCopyRecordValue = async (value: string) => {
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      return;
+    }
+    setCopiedRecordValue(value);
+    // A copy within the confirmation window supersedes the pending reset.
+    if (copyRecordResetTimer.current)
+      clearTimeout(copyRecordResetTimer.current);
+    copyRecordResetTimer.current = setTimeout(
+      () => setCopiedRecordValue(null),
+      2000,
+    );
   };
   const handleCopyTxt = async () => {
-    await navigator.clipboard.writeText(txtValue);
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(txtValue);
+    } catch {
+      return;
+    }
     setIsTxtCopied(true);
-    setTimeout(() => setIsTxtCopied(false), 2000);
+    if (copyTxtResetTimer.current) clearTimeout(copyTxtResetTimer.current);
+    copyTxtResetTimer.current = setTimeout(() => setIsTxtCopied(false), 2000);
   };
 
+  const rootMutation = useRootMcpEndpointMutation();
+  const rootServersQuery = useRootMcpServers(undefined, undefined, {
+    refetchOnWindowFocus: false,
+  });
+  const rootServerOptions = useMemo(
+    () => rootServersQuery.data?.mcpServers ?? [],
+    [rootServersQuery.data],
+  );
+  const rootServerGroups = useMemo(
+    () => groupRootServerOptions(rootServerOptions),
+    [rootServerOptions],
+  );
+
   const registerDomainMutation = useRegisterDomainMutation({
-    onSuccess: () => {
+    onSuccess: (created) => {
       setIsAddDomainDialogOpen(false);
       setDomainInput("");
       setDomainError("");
       setPendingIPs([]);
       setPendingIPsValid(true);
       setIsAllowlistExpanded(false);
+      if (pendingRootServerId) {
+        rootMutation.setRootMcpServer(created.id, pendingRootServerId);
+        setPendingRootServerId(null);
+      }
       setTimeout(() => {
         void domainRefetch();
       }, 2000);
@@ -741,229 +849,279 @@ function OrgDomainsInner() {
     return () => clearInterval(interval);
   }, [domain?.isUpdating, domainRefetch]);
 
+  useEffect(() => {
+    document.title = `${title} | Speakeasy`;
+  }, [title]);
+
   return (
     <SettingsPage
-      title="Custom Domain"
-      description="Connect a custom domain to serve your MCP servers from your own branded URL instead of the default platform domain."
+      title={title}
+      description={
+        showNetworkAccess
+          ? "Configure the public and private network surfaces used to reach your organization's hosted MCP servers."
+          : "Connect a custom domain to serve your MCP servers from your own branded URL instead of the default platform domain."
+      }
     >
-      {domain?.domain ? (
-        <div className="border-border bg-card border p-4">
-          <Stack direction="horizontal" justify="space-between" align="start">
-            <Stack gap={1}>
-              <Stack direction="horizontal" align="center" gap={2}>
-                <Globe className="text-muted-foreground h-4 w-4" />
-                <Text variant="body" className="font-mono font-medium">
-                  {domain.domain}
+      <PrivateNetworkSection />
+      <SettingsSection>
+        <SettingsSection.Header>
+          <SettingsSection.Title>Custom domain</SettingsSection.Title>
+          <SettingsSection.Description>
+            Connect a custom domain to serve your MCP servers from your own
+            branded URL instead of the default platform domain.
+          </SettingsSection.Description>
+        </SettingsSection.Header>
+        {domain?.domain ? (
+          <div className="border-border bg-card border p-4">
+            <Stack direction="horizontal" justify="space-between" align="start">
+              <Stack gap={1}>
+                <Stack direction="horizontal" align="center" gap={2}>
+                  <Globe className="text-muted-foreground h-4 w-4" />
+                  <Text variant="body" className="font-mono font-medium">
+                    {domain.domain}
+                  </Text>
+                  {domain.isUpdating ? (
+                    <SimpleTooltip tooltip="Waiting for your DNS records to propagate and verify. This can take several hours with some providers; we re-check every few minutes (at most every 5 minutes apart) for up to 24 hours.">
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                    </SimpleTooltip>
+                  ) : showCustomDomainAutoDisabled(domain) ? (
+                    <SimpleTooltip tooltip="This domain was disabled after failing health checks for over a week">
+                      <X className="h-4 w-4 stroke-3 text-red-500" />
+                    </SimpleTooltip>
+                  ) : showCustomDomainUnhealthy(domain) ? (
+                    <SimpleTooltip tooltip="The latest health check found a problem">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    </SimpleTooltip>
+                  ) : domain.verified ? (
+                    <SimpleTooltip tooltip="Domain verified and active">
+                      <Check className="h-4 w-4 stroke-3 text-green-500" />
+                    </SimpleTooltip>
+                  ) : (
+                    <SimpleTooltip tooltip="Domain verification failed. Ensure your DNS records are set up correctly.">
+                      <X className="h-4 w-4 stroke-3 text-red-500" />
+                    </SimpleTooltip>
+                  )}
+                </Stack>
+                <Text
+                  variant="body"
+                  className="text-muted-foreground ml-6 text-sm"
+                >
+                  Linked <HumanizeDateTime date={domain.createdAt} />
                 </Text>
-                {domain.isUpdating ? (
-                  <SimpleTooltip tooltip="Your domain is being verified. This may take a few minutes.">
-                    <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                  </SimpleTooltip>
-                ) : showCustomDomainAutoDisabled(domain) ? (
-                  <SimpleTooltip tooltip="This domain was disabled after failing health checks for over a week">
-                    <X className="h-4 w-4 stroke-3 text-red-500" />
-                  </SimpleTooltip>
-                ) : showCustomDomainUnhealthy(domain) ? (
-                  <SimpleTooltip tooltip="The latest health check found a problem">
-                    <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  </SimpleTooltip>
-                ) : domain.verified ? (
-                  <SimpleTooltip tooltip="Domain verified and active">
-                    <Check className="h-4 w-4 stroke-3 text-green-500" />
-                  </SimpleTooltip>
-                ) : (
-                  <SimpleTooltip tooltip="Domain verification failed. Ensure your DNS records are set up correctly.">
-                    <X className="h-4 w-4 stroke-3 text-red-500" />
-                  </SimpleTooltip>
-                )}
-              </Stack>
-              <Text
-                variant="body"
-                className="text-muted-foreground ml-6 text-sm"
-              >
-                Linked <HumanizeDateTime date={domain.createdAt} />
-              </Text>
-              <div className="mt-1 ml-6 flex flex-wrap items-center gap-2">
-                <Text variant="body" className="text-muted-foreground text-sm">
-                  Allowed IPs:
-                </Text>
-                {domain.ipAllowlist.length === 0 ? (
+                <div className="mt-1 ml-6 flex flex-wrap items-center gap-2">
                   <Text
                     variant="body"
-                    className="text-muted-foreground text-sm italic"
+                    className="text-muted-foreground text-sm"
                   >
-                    All (no restriction)
+                    Allowed IPs:
                   </Text>
-                ) : (
-                  domain.ipAllowlist.map((ip) => (
-                    <Badge key={ip} variant="neutral" className="font-mono">
-                      {ip}
-                    </Badge>
-                  ))
-                )}
-              </div>
-            </Stack>
-            <RequireScope scope="org:admin" level="section">
-              <Stack direction="horizontal" gap={2}>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setEditIPs(domain.ipAllowlist);
-                    setEditIPsValid(true);
-                    setUpdateAllowlistError("");
-                    setIsEditAllowlistOpen(true);
-                  }}
-                >
-                  Edit allowlist
-                </Button>
-                {!domain.verified && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setIsAddDomainDialogOpen(true)}
-                    disabled={domain.isUpdating}
-                  >
-                    Reverify
-                  </Button>
-                )}
-                <Button
-                  aria-label="Delete custom domain"
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => setIsDeleteDomainDialogOpen(true)}
-                  className="hover:text-destructive"
-                  disabled={deleteDomainMutation.isPending}
-                >
-                  <Button.Icon>
-                    <Trash2 className="h-4 w-4" />
-                  </Button.Icon>
-                </Button>
+                  {domain.ipAllowlist.length === 0 ? (
+                    <Text
+                      variant="body"
+                      className="text-muted-foreground text-sm italic"
+                    >
+                      All (no restriction)
+                    </Text>
+                  ) : (
+                    domain.ipAllowlist.map((ip) => (
+                      <Badge key={ip} variant="neutral" className="font-mono">
+                        {ip}
+                      </Badge>
+                    ))
+                  )}
+                </div>
               </Stack>
-            </RequireScope>
-          </Stack>
-          {showCustomDomainAutoDisabled(domain) && (
-            <Alert variant="error" dismissible={false} className="mt-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <Text variant="body" className="font-medium">
-                    This custom domain was disabled
-                  </Text>
-                  <Text variant="body" className="text-sm">
-                    It failed health checks continuously for over a week, so its
-                    routing and TLS certificate were removed.{" "}
-                    <CustomDomainHealthMessage
-                      issue={domain.healthIssue}
-                      domainName={domain.domain}
-                    />
-                  </Text>
-                  {domain.unhealthySince && (
-                    <Text variant="body" className="text-sm opacity-80">
-                      Unhealthy since{" "}
-                      <HumanizeDateTime date={domain.unhealthySince} />
-                    </Text>
-                  )}
-                  <Text variant="body" className="text-sm">
-                    Fix the issue above, then reverify the domain to provision
-                    it again.
-                  </Text>
-                </div>
-                <RequireScope scope="org:admin" level="component">
+              <RequireScope scope="org:admin" level="section">
+                <Stack direction="horizontal" gap={2}>
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => setIsAddDomainDialogOpen(true)}
+                    onClick={() => {
+                      setEditIPs(domain.ipAllowlist);
+                      setEditIPsValid(true);
+                      setUpdateAllowlistError("");
+                      setIsEditAllowlistOpen(true);
+                    }}
                   >
-                    Reverify domain
+                    Edit allowlist
                   </Button>
-                </RequireScope>
-              </div>
-            </Alert>
-          )}
-          {showCustomDomainUnhealthy(domain) && (
-            <Alert variant="warning" dismissible={false} className="mt-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <Text variant="body" className="font-medium">
-                    This custom domain may not be working
-                  </Text>
-                  <Text variant="body" className="text-sm">
-                    <CustomDomainHealthMessage
-                      issue={domain.healthIssue}
-                      domainName={domain.domain}
-                    />
-                  </Text>
-                  {domain.healthCheckedAt && (
-                    <Text variant="body" className="text-sm opacity-80">
-                      Last checked{" "}
-                      <HumanizeDateTime date={domain.healthCheckedAt} />
-                    </Text>
+                  {!domain.verified && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={registerDomainMutation.isPending}
+                      onClick={() => {
+                        // While verification is pending, re-registering wakes
+                        // the polling workflow for an immediate DNS re-check —
+                        // no need to route through the setup dialog. Outside
+                        // that state (auto-disabled, timed out) the dialog is
+                        // the right entry point: it shows the records to fix.
+                        if (domain.isUpdating) {
+                          registerDomainMutation.mutate(
+                            {
+                              security: { sessionHeaderGramSession: "" },
+                              request: {
+                                createDomainRequestBody: {
+                                  domain: domain.domain,
+                                },
+                              },
+                            },
+                            {
+                              onSuccess: () => {
+                                toast.success("Checking DNS records now");
+                              },
+                            },
+                          );
+                        } else {
+                          setIsAddDomainDialogOpen(true);
+                        }
+                      }}
+                    >
+                      {domain.isUpdating ? "Check now" : "Reverify"}
+                    </Button>
                   )}
-                </div>
-                <RequireScope scope="org:admin" level="component">
                   <Button
-                    variant="secondary"
+                    aria-label="Delete custom domain"
+                    variant="tertiary"
                     size="sm"
-                    disabled={checkDomainHealthMutation.isPending}
-                    onClick={() =>
-                      checkDomainHealthMutation.mutate({
-                        security: { sessionHeaderGramSession: "" },
-                      })
-                    }
+                    onClick={() => setIsDeleteDomainDialogOpen(true)}
+                    className="hover:text-destructive"
+                    disabled={deleteDomainMutation.isPending}
                   >
-                    {checkDomainHealthMutation.isPending
-                      ? "Checking..."
-                      : "Check again"}
+                    <Button.Icon>
+                      <Trash2 className="h-4 w-4" />
+                    </Button.Icon>
                   </Button>
-                </RequireScope>
-              </div>
-            </Alert>
-          )}
-          <DefaultMcpServerControl
-            domain={domain}
-            endpoints={impactedEndpoints}
-            isLoading={domainEndpointsQuery.isLoading}
-            canManage={canManageDomains}
-          />
-          <ChatGPTAppVerificationControl
-            domain={domain}
-            canManage={canManageDomains}
-          />
-        </div>
-      ) : (
-        !domainIsLoading && (
-          <div className="border-border border border-dashed p-6">
-            <Stack gap={2} align="center" justify="center">
-              <Text variant="body" className="text-muted-foreground">
-                No custom domain configured
-              </Text>
-              <Text variant="body" className="text-muted-foreground text-sm">
-                You can connect one custom domain per organization for your MCP
-                servers.
-              </Text>
-              <RequireScope scope="org:admin" level="component">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="mt-2"
-                  onClick={() => {
-                    if (productTier.includes("base")) {
-                      setIsCustomDomainUpgradeModalOpen(true);
-                    } else {
-                      setIsAddDomainDialogOpen(true);
-                    }
-                  }}
-                >
-                  <Button.LeftIcon>
-                    <Globe className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Add Domain</Button.Text>
-                </Button>
+                </Stack>
               </RequireScope>
             </Stack>
+            {showCustomDomainAutoDisabled(domain) && (
+              <Alert variant="error" dismissible={false} className="mt-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <Text variant="body" className="font-medium">
+                      This custom domain was disabled
+                    </Text>
+                    <Text variant="body" className="text-sm">
+                      It failed health checks continuously for over a week, so
+                      its routing and TLS certificate were removed.{" "}
+                      <CustomDomainHealthMessage
+                        issue={domain.healthIssue}
+                        domainName={domain.domain}
+                        recordType={domain.suggestedRecordType}
+                        aRecords={aRecords}
+                        cnameTarget={CNAME_VALUE}
+                      />
+                    </Text>
+                    {domain.unhealthySince && (
+                      <Text variant="body" className="text-sm opacity-80">
+                        Unhealthy since{" "}
+                        <HumanizeDateTime date={domain.unhealthySince} />
+                      </Text>
+                    )}
+                    <Text variant="body" className="text-sm">
+                      Fix the issue above, then reverify the domain to provision
+                      it again.
+                    </Text>
+                  </div>
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setIsAddDomainDialogOpen(true)}
+                    >
+                      Reverify domain
+                    </Button>
+                  </RequireScope>
+                </div>
+              </Alert>
+            )}
+            {showCustomDomainUnhealthy(domain) && (
+              <Alert variant="warning" dismissible={false} className="mt-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <Text variant="body" className="font-medium">
+                      This custom domain may not be working
+                    </Text>
+                    <Text variant="body" className="text-sm">
+                      <CustomDomainHealthMessage
+                        issue={domain.healthIssue}
+                        domainName={domain.domain}
+                        recordType={domain.suggestedRecordType}
+                        aRecords={aRecords}
+                        cnameTarget={CNAME_VALUE}
+                      />
+                    </Text>
+                    {domain.healthCheckedAt && (
+                      <Text variant="body" className="text-sm opacity-80">
+                        Last checked{" "}
+                        <HumanizeDateTime date={domain.healthCheckedAt} />
+                      </Text>
+                    )}
+                  </div>
+                  <RequireScope scope="org:admin" level="component">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={checkDomainHealthMutation.isPending}
+                      onClick={() =>
+                        checkDomainHealthMutation.mutate({
+                          security: { sessionHeaderGramSession: "" },
+                        })
+                      }
+                    >
+                      {checkDomainHealthMutation.isPending
+                        ? "Checking..."
+                        : "Check again"}
+                    </Button>
+                  </RequireScope>
+                </div>
+              </Alert>
+            )}
+            <DefaultMcpServerControl
+              domain={domain}
+              canManage={canManageDomains}
+            />
+            <ChatGPTAppVerificationControl
+              domain={domain}
+              canManage={canManageDomains}
+            />
           </div>
-        )
-      )}
+        ) : (
+          !domainIsLoading && (
+            <div className="border-border border border-dashed p-6">
+              <Stack gap={2} align="center" justify="center">
+                <Text variant="body" className="text-muted-foreground">
+                  No custom domain configured
+                </Text>
+                <Text variant="body" className="text-muted-foreground text-sm">
+                  You can connect one custom domain per organization for your
+                  MCP servers.
+                </Text>
+                <RequireScope scope="org:admin" level="component">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="mt-2"
+                    onClick={() => {
+                      if (productTier.includes("base")) {
+                        setIsCustomDomainUpgradeModalOpen(true);
+                      } else {
+                        setIsAddDomainDialogOpen(true);
+                      }
+                    }}
+                  >
+                    <Button.LeftIcon>
+                      <Globe className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Add Domain</Button.Text>
+                  </Button>
+                </RequireScope>
+              </Stack>
+            </div>
+          )
+        )}
+      </SettingsSection>
 
       <Dialog
         open={isDeleteDomainDialogOpen}
@@ -1004,9 +1162,7 @@ function OrgDomainsInner() {
                         </span>{" "}
                         <Text variant="small" as="span" muted>
                           &middot; {endpoint.projectName} &middot;{" "}
-                          {endpoint.mcpServerName ??
-                            endpoint.mcpServerSlug ??
-                            endpoint.mcpServerId}
+                          {mcpServerLabel(endpoint)}
                         </Text>
                       </Text>
                     </li>
@@ -1047,6 +1203,8 @@ function OrgDomainsInner() {
             setPendingIPs([]);
             setPendingIPsValid(true);
             setIsAllowlistExpanded(false);
+            setPendingRootServerId(null);
+            setRecordTypeOverride(null);
           }
         }}
       >
@@ -1091,31 +1249,100 @@ function OrgDomainsInner() {
               >
                 Step 2
               </Text>
-              <Text variant="body" className="text-muted-foreground mb-2">
-                Create a CNAME record for{" "}
-                <span className="font-mono break-all">{subdomain}</span>{" "}
-                pointing to the following:
+              {aRecords.length > 0 && (
+                <div className="mb-2 flex gap-1">
+                  <Button
+                    variant={recordType === "cname" ? "secondary" : "tertiary"}
+                    size="sm"
+                    onClick={() => setRecordTypeOverride("cname")}
+                  >
+                    CNAME (subdomain)
+                  </Button>
+                  <Button
+                    variant={recordType === "a" ? "secondary" : "tertiary"}
+                    size="sm"
+                    onClick={() => setRecordTypeOverride("a")}
+                  >
+                    A record (apex domain)
+                  </Button>
+                </div>
+              )}
+              {recordType === "a" ? (
+                <>
+                  <Text variant="body" className="text-muted-foreground mb-2">
+                    Create an A record for{" "}
+                    <span className="font-mono break-all">{subdomain}</span>{" "}
+                    (the zone root, often written as{" "}
+                    <span className="font-mono">@</span>) pointing to:
+                  </Text>
+                  {aRecords.map((ip) => (
+                    <div
+                      key={ip}
+                      className="bg-muted mt-2 flex items-center space-x-2 p-3"
+                    >
+                      <code className="flex-1 break-all">{ip}</code>
+                      <Button
+                        aria-label={
+                          copiedRecordValue === ip
+                            ? "A record value copied"
+                            : "Copy A record value"
+                        }
+                        variant="tertiary"
+                        size="sm"
+                        onClick={() => void handleCopyRecordValue(ip)}
+                        className="shrink-0"
+                      >
+                        <Button.Icon>
+                          {copiedRecordValue === ip ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button.Icon>
+                      </Button>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <Text variant="body" className="text-muted-foreground mb-2">
+                    Create a CNAME record for{" "}
+                    <span className="font-mono break-all">{subdomain}</span>{" "}
+                    pointing to the following:
+                  </Text>
+                  <div className="bg-muted mt-2 flex items-center space-x-2 p-3">
+                    <code className="flex-1 break-all">{CNAME_VALUE}</code>
+                    <Button
+                      aria-label={
+                        copiedRecordValue === CNAME_VALUE
+                          ? "CNAME value copied"
+                          : "Copy CNAME value"
+                      }
+                      variant="tertiary"
+                      size="sm"
+                      onClick={() => void handleCopyRecordValue(CNAME_VALUE)}
+                      className="shrink-0"
+                    >
+                      <Button.Icon>
+                        {copiedRecordValue === CNAME_VALUE ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button.Icon>
+                    </Button>
+                  </div>
+                </>
+              )}
+              <Text
+                variant="body"
+                className="text-muted-foreground mt-2 text-sm"
+              >
+                DNS changes can take a while to propagate — with some providers
+                several hours. We re-check every few minutes (at most every 5
+                minutes apart) for up to 24 hours, and you can trigger a check
+                any time with “Check now”.
               </Text>
-              <div className="bg-muted mt-2 flex items-center space-x-2 p-3">
-                <code className="flex-1 break-all">{CNAME_VALUE}</code>
-                <Button
-                  aria-label={
-                    isCnameCopied ? "CNAME value copied" : "Copy CNAME value"
-                  }
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => void handleCopyCname()}
-                  className="shrink-0"
-                >
-                  <Button.Icon>
-                    {isCnameCopied ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button.Icon>
-                </Button>
-              </div>
             </div>
             <div>
               <Text
@@ -1150,6 +1377,61 @@ function OrgDomainsInner() {
                 </Button>
               </div>
             </div>
+            {!domain?.domain && rootServerOptions.length > 0 && (
+              <div>
+                <Text
+                  variant="body"
+                  className="mb-2 block text-lg font-extrabold"
+                >
+                  Step 4 (optional)
+                </Text>
+                <Text variant="body" className="text-muted-foreground mb-2">
+                  Serve an MCP server at the domain root. It's applied the
+                  moment the domain registers, so traffic routes as soon as DNS
+                  cuts over — no follow-up step.
+                </Text>
+                <Select
+                  value={pendingRootServerId ?? NO_ROOT_MCP_ENDPOINT}
+                  onValueChange={(value) =>
+                    setPendingRootServerId(
+                      value === NO_ROOT_MCP_ENDPOINT ? null : value,
+                    )
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue>
+                      {pendingRootServerId
+                        ? (rootServerOptions.find(
+                            (option) =>
+                              option.mcpServerId === pendingRootServerId,
+                          )?.name ?? pendingRootServerId)
+                        : "No root mapping"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem
+                      value={NO_ROOT_MCP_ENDPOINT}
+                      description="Do not route the custom-domain root to an MCP server."
+                    >
+                      No root mapping
+                    </SelectItem>
+                    {rootServerGroups.map((group) => (
+                      <SelectGroup key={group.projectId}>
+                        <SelectLabel>{group.projectName}</SelectLabel>
+                        {group.servers.map((option) => (
+                          <SelectItem
+                            key={option.mcpServerId}
+                            value={option.mcpServerId}
+                          >
+                            {rootServerLabel(option)}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <button
                 type="button"
@@ -1248,7 +1530,6 @@ function OrgDomainsInner() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
-
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
         onClose={() => setIsCustomDomainUpgradeModalOpen(false)}

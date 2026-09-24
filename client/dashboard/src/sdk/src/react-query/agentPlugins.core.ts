@@ -52,6 +52,7 @@ export function buildAgentPluginsQuery(
       gramUserEmail: request?.gramUserEmail,
       gramDeviceSerial: request?.gramDeviceSerial,
       gramDeviceHostname: request?.gramDeviceHostname,
+      gramDeviceEnvironment: request?.gramDeviceEnvironment,
     }),
     queryFn: async function agentPluginsQueryFn(
       ctx,
@@ -84,6 +85,7 @@ export function queryKeyAgentPlugins(
     gramUserEmail?: string | undefined;
     gramDeviceSerial?: string | undefined;
     gramDeviceHostname?: string | undefined;
+    gramDeviceEnvironment?: string | undefined;
   },
 ): QueryKey {
   return ["@gram/client", "agent", "getPlugins", parameters];

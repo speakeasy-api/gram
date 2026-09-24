@@ -85,7 +85,10 @@ export function buildAuditLogsQuery(
       action: request?.action,
       subjectType: request?.subjectType,
       subjectId: request?.subjectId,
+      subjectIds: request?.subjectIds,
       actingSurface: request?.actingSurface,
+      from: request?.from,
+      to: request?.to,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
@@ -130,7 +133,10 @@ export function buildAuditLogsInfiniteQuery(
       action: request?.action,
       subjectType: request?.subjectType,
       subjectId: request?.subjectId,
+      subjectIds: request?.subjectIds,
       actingSurface: request?.actingSurface,
+      from: request?.from,
+      to: request?.to,
       gramKey: request?.gramKey,
       gramSession: request?.gramSession,
     }),
@@ -174,7 +180,10 @@ export function queryKeyAuditLogs(
     action?: string | undefined;
     subjectType?: string | undefined;
     subjectId?: string | undefined;
+    subjectIds?: Array<string> | undefined;
     actingSurface?: string | undefined;
+    from?: Date | undefined;
+    to?: Date | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },
@@ -190,7 +199,10 @@ export function queryKeyAuditLogsInfinite(
     action?: string | undefined;
     subjectType?: string | undefined;
     subjectId?: string | undefined;
+    subjectIds?: Array<string> | undefined;
     actingSurface?: string | undefined;
+    from?: Date | undefined;
+    to?: Date | undefined;
     gramKey?: string | undefined;
     gramSession?: string | undefined;
   },

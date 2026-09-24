@@ -271,7 +271,7 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 	if err := queries.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return fmt.Errorf("lock local fixture client: %w", err)
 	}
-	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID}); err != nil {
+	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID, OrganizationID: request.OrganizationID}); err != nil {
 		return fmt.Errorf("validate local fixture user-session issuer: %w", err)
 	}
 	client, err := queries.GetLocalFixtureOrganizationRemoteSessionClient(ctx, remotesessionsrepo.GetLocalFixtureOrganizationRemoteSessionClientParams{OrganizationID: conv.ToPGText(request.OrganizationID), RemoteSessionIssuerID: issuerID})
@@ -282,17 +282,20 @@ func (c *ClientConfigurator) createOrReuseClient(ctx context.Context, request pl
 		}
 	case errors.Is(err, pgx.ErrNoRows):
 		client, err = queries.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
-			ProjectID:               uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			OrganizationID:          conv.ToPGText(request.OrganizationID),
-			RemoteSessionIssuerID:   issuerID,
-			ClientID:                clientID,
-			ClientSecretEncrypted:   pgtype.Text{String: "", Valid: false},
-			ClientIDIssuedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
-			ClientSecretExpiresAt:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
-			TokenEndpointAuthMethod: conv.ToPGText("none"),
-			Scope:                   []string{"tools:read"},
-			Audience:                pgtype.Text{String: "", Valid: false},
-			LegacyCallbackUrl:       false,
+			ProjectID:                       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			OrganizationID:                  conv.ToPGText(request.OrganizationID),
+			RemoteSessionIssuerID:           issuerID,
+			ClientID:                        clientID,
+			ClientSecretEncrypted:           pgtype.Text{String: "", Valid: false},
+			ClientIDIssuedAt:                conv.ToPGTimestamptz(time.Now().UTC()),
+			ClientSecretExpiresAt:           pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+			TokenEndpointAuthMethod:         conv.ToPGText("none"),
+			TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
+			Scope:                           []string{"tools:read"},
+			Audience:                        pgtype.Text{String: "", Valid: false},
+			LegacyCallbackUrl:               false,
+			JsonWebKeySetID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			IdentityProviderConnectionID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		})
 		if err != nil {
 			return fmt.Errorf("create local fixture client: %w", err)
@@ -322,7 +325,7 @@ func (c *ClientConfigurator) attachClient(ctx context.Context, request platformm
 	if err := queries.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
 		return fmt.Errorf("lock local fixture client attachment: %w", err)
 	}
-	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID}); err != nil {
+	if _, err := queries.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: request.UserSessionIssuerID, ProjectID: request.ProjectID, OrganizationID: request.OrganizationID}); err != nil {
 		return fmt.Errorf("validate local fixture user-session issuer: %w", err)
 	}
 	if err := requireNoCompetingFixtureBinding(ctx, queries, request, issuerID, clientID); err != nil {
@@ -341,7 +344,7 @@ func requireNoCompetingFixtureBinding(ctx context.Context, queries *remotesessio
 	bound, err := queries.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
 		ProjectID:             request.ProjectID,
 		UserSessionIssuerID:   request.UserSessionIssuerID,
-		OrganizationID:        conv.ToPGText(request.OrganizationID),
+		OrganizationID:        request.OrganizationID,
 		RemoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		Cursor:                uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		LimitValue:            2,

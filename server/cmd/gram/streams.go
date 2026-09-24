@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -12,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
+	"cloud.google.com/go/pubsub/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/urfave/cli/v2"
-	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
@@ -27,6 +28,8 @@ import (
 
 	"github.com/speakeasy-api/gram/infra/gen"
 	authzv1 "github.com/speakeasy-api/gram/infra/gen/gram/authz/v1"
+	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
+	networkingressv1 "github.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
@@ -44,18 +47,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
+	"github.com/speakeasy-api/gram/server/internal/metering"
+	meteringchrepo "github.com/speakeasy-api/gram/server/internal/metering/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/must"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
+	otelchrepo "github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/ping"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/risk/enforcereply"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy"
@@ -140,40 +150,6 @@ func newStreamsCommand() *cli.Command {
 			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
 			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
 		},
-		&cli.StringFlag{
-			Name:    "stripe-api-key",
-			Usage:   "The Stripe API key",
-			EnvVars: []string{"STRIPE_API_KEY"},
-		},
-		&cli.StringFlag{
-			Name:    "stripe-webhook-secret",
-			Usage:   "The Stripe webhook signing secret",
-			EnvVars: []string{"STRIPE_WEBHOOK_SECRET"},
-		},
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "stripe-price-id-tum",
-			Aliases: []string{"stripe.price_id_tum"},
-			Usage:   "The Stripe metered TUM price ID",
-			EnvVars: []string{"STRIPE_PRICE_ID_TUM"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "stripe-meter-id-tum",
-			Aliases: []string{"stripe.meter_id_tum"},
-			Usage:   "The Stripe TUM billing meter ID",
-			EnvVars: []string{"STRIPE_METER_ID_TUM"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "stripe-meter-event-name",
-			Aliases: []string{"stripe.meter_event_name"},
-			Usage:   "The Stripe TUM meter event name",
-			EnvVars: []string{"STRIPE_METER_EVENT_NAME"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    "stripe-portal-configuration-id",
-			Aliases: []string{"stripe.portal_configuration_id"},
-			Usage:   "The controlled Stripe customer portal configuration ID",
-			EnvVars: []string{"STRIPE_PORTAL_CONFIGURATION_ID"},
-		}),
 		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
@@ -260,6 +236,11 @@ func newStreamsCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:    "site-url",
+			Usage:   "The URL of the dashboard site, used to deep link from growth activity events",
+			EnvVars: []string{"GRAM_SITE_URL"},
+		},
 		&cli.PathFlag{
 			Name:     "config-file",
 			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
@@ -268,10 +249,13 @@ func newStreamsCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, stripeFlags()...)
+	flags = append(flags, networkIngressQueueFlags()...)
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskIngestFlags()...)
+	flags = append(flags, riskLLMFlags()...)
 	flags = append(flags, clickHouseFlags()...)
 
 	return &cli.Command{
@@ -378,6 +362,11 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
+			stripeMeterEvents, err := newStripeMeterEventClient(logger, guardianPolicy, c)
+			if err != nil {
+				return fmt.Errorf("failed to create Stripe meter event client: %w", err)
+			}
+			stripeCatalog := newStripeCatalog(c)
 
 			_, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
 			if err != nil {
@@ -408,12 +397,14 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
 			var (
-				findingsPub gcp.Publisher[*riskv1.Finding]
-				logPub      gcp.Publisher[*otelv1.LogRecord]
-				spanPub     gcp.Publisher[*otelv1.Span]
+				findingsPub  gcp.Publisher[*riskv1.Finding]
+				logPub       gcp.Publisher[*otelv1.LogRecord]
+				metricPub    gcp.Publisher[*otelv1.Metric]
+				spanPub      gcp.Publisher[*otelv1.Span]
+				riskMeterPub gcp.Publisher[*meteringv1.MeterReading]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, spanPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -428,6 +419,12 @@ func newStreamsCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
+			meterPublishSettings := pubsub.DefaultPublishSettings
+			meterPublishSettings.Timeout = 10 * time.Second
+			meterPublishSettings.FlowControlSettings.MaxOutstandingMessages = 10_000
+			meterPublishSettings.FlowControlSettings.MaxOutstandingBytes = 128 * 1024 * 1024
+			meterPublishSettings.FlowControlSettings.LimitExceededBehavior = pubsub.FlowControlSignalError
+
 			// Gitleaks shadow-mode subscriber: re-runs the in-process gitleaks
 			// scan over GitleaksAnalysis requests and publishes any matches into
 			// the shared Finding topic (nothing consumes them yet).
@@ -435,14 +432,52 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for risk findings: %w", err)
 			}
+			riskMeterPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &meteringv1.MeterReading{},
+				gcp.WithPubSubPublishSettings(&meterPublishSettings),
+			)
+			if err != nil {
+				return fmt.Errorf("create risk meter publisher: %w", err)
+			}
+			riskRecorder := metering.NewRiskRecorder(riskMeterPub)
 
-			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub)
+			gitleaksHandler := gitleaks.NewHandler(logger, findingsPub, riskRecorder)
+			replyWriter := enforcereply.NewWriter(redisClient)
+			gitleaksEnforceHandler, err := gitleaks.NewEnforceHandler(
+				logger,
+				meterProvider,
+				replyWriter,
+				func(tenantID string, message []byte) (string, error) {
+					sum, _, fingerprintErr := riskFingerprinter.TenantedHS256(tenantID, message)
+					return risk.EncodeFingerprint(sum), fingerprintErr
+				},
+				gitleaks.EnforceHandlerConfig{MaxRequestAge: gitleaks.DefaultMaxRequestAge},
+				riskRecorder,
+			)
+			if err != nil {
+				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
+			}
 			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
 			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
-			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
+			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
 			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate)
 			promptPolicyStubScanner := promptpolicy.NewScanner(logger, promptpolicy.NoopEvaluator)
-			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB))
+			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
+
+			// Fine-tuned risk model analyzer: both its lanes run here. Without a
+			// model URL the analyzer is disabled and its handlers ack untouched.
+			riskLLMConfig := llmAnalyzerConfigFromCLI(c)
+			var riskLLMCompleter llmanalyzer.Completer
+			if riskLLMConfig.Enabled() {
+				riskLLMClient, err := llmanalyzer.NewClient(logger, tracerProvider, meterProvider, guardianPolicy, riskLLMConfig)
+				if err != nil {
+					return fmt.Errorf("create risk llm client: %w", err)
+				}
+				riskLLMCompleter = riskLLMClient
+			} else {
+				logger.WarnContext(ctx, "LLM analyzer disabled: GRAM_RISK_LLM_URL empty")
+			}
+			llmAnalyzer := llmanalyzer.NewAnalyzer(logger, tracerProvider, riskLLMCompleter)
+			llmAnalyzerHandler := llmanalyzer.NewHandler(logger, meterProvider, llmAnalyzer, findingsPub, riskRecorder)
 
 			// Custom-rules shadow-mode subscriber: loads a project's selected CEL
 			// detection rules from the read replica (caching their compilation) and
@@ -451,7 +486,7 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create custom rules scanner: %w", err)
 			}
-			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub)
+			customRulesHandler := customruleanalyzer.NewHandler(logger, scanner, findingsPub, riskRecorder)
 
 			{
 				controlServer := control.Server{
@@ -500,7 +535,25 @@ func newStreamsCommand() *cli.Command {
 
 			svixRelayHandler := svixrelay.NewHandler(logger, meterProvider, db, svixClient)
 			paygKeyRefreshHandler := usage.NewPaygKeyRefreshHandler(logger, openRouterKeyRefresher)
+			trialConversionKeyReconcileHandler := usage.NewEnterpriseTrialConversionKeyReconcileHandler(logger, openRouterKeyRefresher)
 			billingNotificationHandler := billingnotifications.NewEventHandler(logger, &background.TemporalBillingEmailScheduler{TemporalEnv: temporalEnv})
+
+			var siteURL *url.URL
+			if raw := c.String("site-url"); raw != "" {
+				siteURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("parse site url: %w", err)
+				}
+				// url.Parse accepts a bare path or a custom scheme, and either
+				// would produce a link Slack rejects. A site URL that cannot
+				// address the dashboard is a misconfiguration worth failing on
+				// rather than discovering one dead button at a time.
+				if (siteURL.Scheme != "http" && siteURL.Scheme != "https") || siteURL.Host == "" {
+					return fmt.Errorf("site url must be an absolute http(s) URL, got %q", raw)
+				}
+			}
+			growthSignalHandler := growthsignals.NewEventHandler(logger, newGrowthSignalsEmitter(logger, posthogClient, replicaDB, siteURL))
+
 			webhookEventHandler := streams.HandlerFunc[*webhooksv1.Event](func(ctx context.Context, event *webhooksv1.Event, metadata gcp.MessageMetadata) error {
 				var handlerErrors []error
 				if err := svixRelayHandler.Handle(ctx, event, metadata); err != nil {
@@ -509,8 +562,14 @@ func newStreamsCommand() *cli.Command {
 				if err := paygKeyRefreshHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("schedule PAYG key refresh: %w", err))
 				}
+				if err := trialConversionKeyReconcileHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("schedule enterprise trial conversion key reconciliation: %w", err))
+				}
 				if err := billingNotificationHandler.Handle(ctx, event, metadata); err != nil {
 					handlerErrors = append(handlerErrors, fmt.Errorf("schedule billing notification: %w", err))
+				}
+				if err := growthSignalHandler.Handle(ctx, event, metadata); err != nil {
+					handlerErrors = append(handlerErrors, fmt.Errorf("report growth activity: %w", err))
 				}
 				return errors.Join(handlerErrors...)
 			})
@@ -518,6 +577,11 @@ func newStreamsCommand() *cli.Command {
 			logPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.LogRecord{})
 			if err != nil {
 				return fmt.Errorf("failed to create pubsub publisher for otel logs: %w", err)
+			}
+
+			metricPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.Metric{})
+			if err != nil {
+				return fmt.Errorf("failed to create pubsub publisher for otel metrics: %w", err)
 			}
 
 			spanPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &otelv1.Span{})
@@ -528,7 +592,15 @@ func newStreamsCommand() *cli.Command {
 			logRelayHandler := otelsvc.NewLogRelayHandler(
 				logger,
 				meterProvider,
-				replicaDB,
+				db,
+				encryptionClient,
+				guardianPolicy,
+			)
+
+			metricRelayHandler := otelsvc.NewMetricRelayHandler(
+				logger,
+				meterProvider,
+				db,
 				encryptionClient,
 				guardianPolicy,
 			)
@@ -536,7 +608,23 @@ func newStreamsCommand() *cli.Command {
 			spanRelayHandler := otelsvc.NewSpanRelayHandler(
 				logger,
 				meterProvider,
-				replicaDB,
+				db,
+				encryptionClient,
+				guardianPolicy,
+			)
+
+			riskFindingRelayHandler := otelsvc.NewRiskFindingRelayHandler(
+				logger,
+				meterProvider,
+				db,
+				encryptionClient,
+				guardianPolicy,
+			)
+
+			toolCallLogRelayHandler := otelsvc.NewToolCallLogRelayHandler(
+				logger,
+				meterProvider,
+				db,
 				encryptionClient,
 				guardianPolicy,
 			)
@@ -544,17 +632,26 @@ func newStreamsCommand() *cli.Command {
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
+				if queue := c.String(networkIngressQueueFlag); queue != "" {
+					client := &background.NetworkIngressClient{Client: temporalEnv.Client(), Queue: queue}
+					mustReceiveBatchWithResult(rg, &networkingressv1.ReconcileRequested{}, &networkingressv1.Reconciler{}, networkingress.NewReconcileHandler(logger, queue, client.SignalNetworkIngress), gcp.BatchReceiveSettings{MaxMessages: 100, MaxBytes: constants.MiB, MaxLatency: time.Second})
+				}
 
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
+				mustReceive(rg, &riskv1.GitleaksEnforcement{}, &riskv1.GitleaksEnforcer{}, gitleaksEnforceHandler)
+				mustReceive(rg, &riskv1.LLMEnforcement{}, &riskv1.LLMEnforcer{}, llmanalyzer.NewEnforceHandler(logger, tracerProvider, meterProvider, llmAnalyzer, replyWriter, llmanalyzer.WithRiskRecorder(riskRecorder)))
 				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
+				mustReceive(rg, &riskv1.LLMAnalysis{}, &riskv1.LLMAnalyzer{}, llmAnalyzerHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
 
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
 				mustReceive(rg, &webhooksv1.Event{}, &webhooksv1.SvixRelay{}, webhookEventHandler)
 
-				mustReceive(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, chConn))
+				mustReceiveBatchWithResult(rg, &authzv1.Challenge{}, &authzv1.ChallengeCHWriter{}, authz.NewChallengeCHWriter(logger, meterProvider, chConn), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
+				mustReceiveBatch(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingCHWriter{}, metering.NewMeterReadingCHWriter(logger, db, meteringchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
+				mustReceive(rg, &meteringv1.MeterReading{}, &meteringv1.MeterReadingStripeExporter{}, metering.NewMeterReadingStripeExporter(logger, meterProvider, replicaDB, stripeMeterEvents, stripeCatalog, c.Bool(stripeMeterEventExportFlagName)))
 
 				mustReceive(rg, &otelv1.InboundLogRecord{}, &otelv1.InboundLogRecordTransformer{}, otelsvc.NewLogTransformHandler(
 					logger,
@@ -562,6 +659,11 @@ func newStreamsCommand() *cli.Command {
 					logPub,
 					replicaDB,
 					cache.NewRedisCacheAdapter(redisClient),
+				))
+				mustReceive(rg, &otelv1.InboundMetric{}, &otelv1.InboundMetricTransformer{}, otelsvc.NewMetricTransformHandler(
+					logger,
+					meterProvider,
+					metricPub,
 				))
 				mustReceive(rg, &otelv1.InboundSpan{}, &otelv1.InboundSpanTransformer{}, otelsvc.NewSpanTransformHandler(
 					logger,
@@ -571,10 +673,24 @@ func newStreamsCommand() *cli.Command {
 					cache.NewRedisCacheAdapter(redisClient),
 				))
 				mustReceiveBatchWithResult(rg, &otelv1.LogRecord{}, &otelv1.LogRelay{}, logRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatchWithResult(rg, &otelv1.Metric{}, &otelv1.MetricRelay{}, metricRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 				mustReceiveBatchWithResult(rg, &otelv1.Span{}, &otelv1.SpanRelay{}, spanRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingOTELRelay{}, riskFindingRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
+				mustReceiveBatchWithResult(rg, &telemetryv1.LogRecord{}, &telemetryv1.ToolCallLogRelay{}, toolCallLogRelayHandler, gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+
+				// Event feed tee: mirror the normalized OTEL topics into the
+				// otel_logs / otel_traces ClickHouse tables.
+				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.LogEventCHWriter{}, otelsvc.NewLogEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.SpanEventCHWriter{}, otelsvc.NewSpanEventCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+
+				// Agent session tee: project the same normalized OTEL topics into
+				// agent_events, in agent vocabulary, for the semantic query layer.
+				// Its own subscriptions, so it fails independently of the event feed.
+				mustReceiveBatch(rg, &otelv1.LogRecord{}, &otelv1.AgentEventLogCHWriter{}, otelsvc.NewAgentEventLogCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
+				mustReceiveBatch(rg, &otelv1.Span{}, &otelv1.AgentEventSpanCHWriter{}, otelsvc.NewAgentEventSpanCHWriter(logger, meterProvider, otelchrepo.New(chConn)), gcp.BatchReceiveSettings{MaxMessages: 10000, MaxBytes: 10 * constants.MiB, MaxLatency: 5 * time.Second})
 
 				if enableCHRiskWrites {
-					mustReceiveBatch(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
+					mustReceiveBatchWithResult(rg, &riskv1.Finding{}, &riskv1.FindingCHWriter{}, risk.NewFindingCHWriter(logger, replicaDB, meterProvider, chrepo.New(chConn), riskFingerprinter), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: 1 * time.Second})
 				}
 			}
 

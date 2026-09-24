@@ -137,35 +137,35 @@ export function DeviceAgentConfigurationTab(): JSX.Element {
     throwOnError: false,
   });
 
+  let body: ReactNode;
   if (query.isLoading || !query.data) {
-    return (
-      <ConfigurationSection>
-        {query.error ? (
-          <Stack gap={4}>
-            <ErrorAlert
-              title="Unable to load device agent configuration"
-              error={query.error}
-              className="max-w-2xl"
-            />
-            <Button variant="secondary" onClick={() => void query.refetch()}>
-              Try again
-            </Button>
-          </Stack>
-        ) : (
-          <Skeleton className="h-[640px] w-full" />
-        )}
-      </ConfigurationSection>
+    body = query.error ? (
+      <Stack gap={4}>
+        <ErrorAlert
+          title="Unable to load device agent configuration"
+          error={query.error}
+          className="max-w-2xl"
+        />
+        <Button variant="secondary" onClick={() => void query.refetch()}>
+          Try again
+        </Button>
+      </Stack>
+    ) : (
+      <Skeleton className="h-[640px] w-full" />
     );
-  }
-
-  return (
-    <ConfigurationSection>
+  } else {
+    body = (
       <DeviceAgentConfigurationForm
         key={query.data.etag}
         configuration={query.data}
       />
-    </ConfigurationSection>
-  );
+    );
+  }
+
+  // Scan targets used to sit under this tab. They are their own tab now: the
+  // catalog an agent probes for is a different question from how the fleet is
+  // configured, and burying a list behind a form made it hard to find.
+  return <ConfigurationSection>{body}</ConfigurationSection>;
 }
 
 // The Device Agent page already renders the area eyebrow and display-serif

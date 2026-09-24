@@ -4,9 +4,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// Live sets outlast a test invocation; repeated runs must use distinct tunnels.
+func testTunnelID(t *testing.T) string {
+	t.Helper()
+	return t.Name() + "-" + uuid.NewString()
+}
 
 func newTestStore(t *testing.T, ttl time.Duration, liveCap int) *Store {
 	t.Helper()
@@ -51,7 +58,7 @@ func TestReserveCommitResolveRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	store := newTestStore(t, time.Hour, 10)
-	tunnelID := t.Name()
+	tunnelID := testTunnelID(t)
 	sid, err := MintSessionID()
 	require.NoError(t, err)
 
@@ -72,7 +79,7 @@ func TestResolveUnknownSessionIsNotFound(t *testing.T) {
 	t.Parallel()
 
 	store := newTestStore(t, time.Hour, 10)
-	tunnelID := t.Name()
+	tunnelID := testTunnelID(t)
 	sid, err := MintSessionID()
 	require.NoError(t, err)
 
@@ -87,7 +94,7 @@ func TestResolveIsNamespacedByTunnelAndServer(t *testing.T) {
 	t.Parallel()
 
 	store := newTestStore(t, time.Hour, 10)
-	tunnelID := t.Name()
+	tunnelID := testTunnelID(t)
 	sid, err := MintSessionID()
 	require.NoError(t, err)
 
@@ -104,7 +111,7 @@ func TestRollbackReleasesCapacitySlot(t *testing.T) {
 	t.Parallel()
 
 	store := newTestStore(t, time.Hour, 1)
-	tunnelID := t.Name()
+	tunnelID := testTunnelID(t)
 	first, err := MintSessionID()
 	require.NoError(t, err)
 	second, err := MintSessionID()
@@ -127,7 +134,7 @@ func TestReservePrunesExpiredSessions(t *testing.T) {
 	// TTL short enough to expire between calls without violating the
 	// no-time.Sleep rule: EventuallyWithT polls until the slot frees.
 	store := newTestStore(t, 100*time.Millisecond, 1)
-	tunnelID := t.Name()
+	tunnelID := testTunnelID(t)
 	first, err := MintSessionID()
 	require.NoError(t, err)
 	second, err := MintSessionID()
@@ -144,7 +151,7 @@ func TestDeleteRemovesMappingAndSlot(t *testing.T) {
 	t.Parallel()
 
 	store := newTestStore(t, time.Hour, 1)
-	tunnelID := t.Name()
+	tunnelID := testTunnelID(t)
 	sid, err := MintSessionID()
 	require.NoError(t, err)
 
@@ -164,7 +171,7 @@ func TestPurgeDropsAllTunnelSessions(t *testing.T) {
 	t.Parallel()
 
 	store := newTestStore(t, time.Hour, 10)
-	tunnelID := t.Name()
+	tunnelID := testTunnelID(t)
 	var sids []string
 	for range 3 {
 		sid, err := MintSessionID()
@@ -189,7 +196,7 @@ func TestResolveWithoutRefreshDoesNotExtendSession(t *testing.T) {
 	t.Parallel()
 
 	store := newTestStore(t, 200*time.Millisecond, 10)
-	tunnelID := t.Name()
+	tunnelID := testTunnelID(t)
 	sid, err := MintSessionID()
 	require.NoError(t, err)
 
@@ -208,7 +215,7 @@ func TestCommitRequiresLiveReservation(t *testing.T) {
 	t.Parallel()
 
 	store := newTestStore(t, time.Hour, 10)
-	tunnelID := t.Name()
+	tunnelID := testTunnelID(t)
 	sid, err := MintSessionID()
 	require.NoError(t, err)
 
@@ -232,7 +239,7 @@ func TestCommitRealignsLiveSetToMappingTTL(t *testing.T) {
 	t.Parallel()
 
 	store := newTestStore(t, 400*time.Millisecond, 10)
-	tunnelID := t.Name()
+	tunnelID := testTunnelID(t)
 	sid, err := MintSessionID()
 	require.NoError(t, err)
 
@@ -255,7 +262,7 @@ func TestPurgeIsAtomicAcrossMembers(t *testing.T) {
 	t.Parallel()
 
 	store := newTestStore(t, time.Hour, 10)
-	tunnelID := t.Name()
+	tunnelID := testTunnelID(t)
 	var sids []string
 	for range 4 {
 		sid, err := MintSessionID()

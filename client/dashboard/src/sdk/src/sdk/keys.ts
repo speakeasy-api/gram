@@ -5,6 +5,7 @@
 import { keysCreate } from "../funcs/keysCreate.js";
 import { keysList } from "../funcs/keysList.js";
 import { keysRevokeById } from "../funcs/keysRevokeById.js";
+import { keysRotate } from "../funcs/keysRotate.js";
 import { keysValidate } from "../funcs/keysValidate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { Key } from "../models/components/key.js";
@@ -22,6 +23,10 @@ import {
   RevokeAPIKeyRequest,
   RevokeAPIKeySecurity,
 } from "../models/operations/revokeapikey.js";
+import {
+  RotateAPIKeyRequest,
+  RotateAPIKeySecurity,
+} from "../models/operations/rotateapikey.js";
 import {
   ValidateAPIKeyRequest,
   ValidateAPIKeySecurity,
@@ -79,6 +84,25 @@ export class Keys extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(keysRevokeById(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * rotateKey keys
+   *
+   * @remarks
+   * Rotate an API key. Agent-key rotation replaces immutable delegation and directly revokes the old row.
+   */
+  async rotate(
+    request: RotateAPIKeyRequest,
+    security?: RotateAPIKeySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<Key> {
+    return unwrapAsync(keysRotate(
       this,
       request,
       security,

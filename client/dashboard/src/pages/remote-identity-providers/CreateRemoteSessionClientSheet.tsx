@@ -14,13 +14,15 @@ import {
   SheetTitle,
 } from "@/components/ui/Sheet";
 import { Text } from "@/components/ui/Text";
-import { useOrganization } from "@/contexts/Auth";
+import { useIsPlatformAdmin, useOrganization } from "@/contexts/Auth";
 import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
-import { proxyRegisterUpstreamClient } from "@/lib/proxyRegisterUpstreamClient";
+import {
+  proxyRegisterUpstreamClient,
+  registrationProvenance,
+} from "@/lib/proxyRegisterUpstreamClient";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { CreateRemoteSessionClientFormTokenEndpointAuthMethod } from "@gram/client/models/components/createremotesessionclientform.js";
-import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
 import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
 import { Alert } from "@/components/ui/Alert";
@@ -36,8 +38,10 @@ import {
 import {
   availableClientTypes,
   type ClientType,
+  dynamicClientRegistrationAvailability,
   narrowTokenEndpointAuthMethod,
   parseScopes,
+  TUNNELED_DCR_PERMISSION_MESSAGE,
 } from "../mcp/x/tabs/settings/sections/authentication/issuerFormUtils";
 import { issuerDocumentationLinks } from "./issuerDocumentationLinks";
 
@@ -100,14 +104,22 @@ export function CreateRemoteSessionClientSheet({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const organization = useOrganization();
+  const isPlatformAdmin = useIsPlatformAdmin();
   const { fetch: authedFetch } = useFetcher();
   const client = useSdkClient();
 
-  // DCR is offered as a client type only when the issuer advertises a
+  // DCR is offered when the issuer has a discovered or manually configured
   // registration_endpoint (RFC 7591); otherwise the operator pastes a client_id
   // and optional client_secret obtained out-of-band (Manual).
   const registrationEndpoint = issuer.registrationEndpoint?.trim() ?? "";
-  const dcrAvailable = registrationEndpoint.length > 0;
+  const {
+    available: dcrAvailable,
+    permissionRestricted: tunneledDcrRestricted,
+  } = dynamicClientRegistrationAvailability({
+    registrationEndpoint,
+    tunneled: !!issuer.tunneledMcpServerId,
+    isPlatformAdmin,
+  });
 
   // CIMD is offered only when the issuer advertises support for Client ID
   // Metadata Documents (parsed during issuer discovery); the platform then
@@ -128,12 +140,10 @@ export function CreateRemoteSessionClientSheet({
   // so the operator must name one; project-specific issuers inherit silently.
   const isOrganizational = !issuer.projectId;
 
-  const { data: projectsData } = useListProjects(
-    { organizationId: organization.id },
-    undefined,
-    { enabled: isOrganizational },
-  );
-  const projects = useMemo(() => projectsData?.projects ?? [], [projectsData]);
+  const projects = organization.projects;
+  const issuerProjectSlug = projects.find(
+    (project) => project.id === issuer.projectId,
+  )?.slug;
 
   // For an organization-level issuer the client is either created at the
   // organization level (no project, attachable by every project) or downscoped
@@ -188,6 +198,9 @@ export function CreateRemoteSessionClientSheet({
         clientId: string;
         clientSecret?: string;
         tokenEndpointAuthMethod?: CreateRemoteSessionClientFormTokenEndpointAuthMethod;
+        // Set for DCR so the server records when the issuer expires the
+        // client and can re-register it in place.
+        provenance?: ReturnType<typeof registrationProvenance>;
       };
       let unsupportedDcrAuthMethod: string | null = null;
       if (clientType === "dcr") {
@@ -196,6 +209,8 @@ export function CreateRemoteSessionClientSheet({
           // RFC 7591 §2: scope is a space-separated string at registration time.
           scope: parsedScopes.length > 0 ? parsedScopes.join(" ") : undefined,
           tokenEndpointAuthMethod: tokenEndpointAuthMethod || undefined,
+          tunneledMcpServerId: issuer.tunneledMcpServerId,
+          projectSlug: issuerProjectSlug,
         });
         const narrowedDcrMethod = narrowTokenEndpointAuthMethod(
           registered.tokenEndpointAuthMethod,
@@ -208,6 +223,7 @@ export function CreateRemoteSessionClientSheet({
           clientSecret: registered.clientSecret || undefined,
           tokenEndpointAuthMethod:
             narrowedDcrMethod ?? (tokenEndpointAuthMethod || undefined),
+          provenance: registrationProvenance(registered),
         };
       } else {
         credentials = {
@@ -226,6 +242,7 @@ export function CreateRemoteSessionClientSheet({
           tokenEndpointAuthMethod: credentials.tokenEndpointAuthMethod,
           scope: parsedScopes.length > 0 ? parsedScopes : undefined,
           audience: trimmedAudience || undefined,
+          ...credentials.provenance,
         },
       });
 
@@ -289,7 +306,15 @@ export function CreateRemoteSessionClientSheet({
   // Manual requires a client_id; DCR mints one during proxy registration.
   const credentialsReady =
     clientType === "manual" ? clientId.trim().length > 0 : true;
-  const submittable = projectChosen && credentialsReady;
+  const tunnelRouteReady =
+    clientType !== "dcr" ||
+    !issuer.tunneledMcpServerId ||
+    issuerProjectSlug !== undefined;
+  const submittable =
+    projectChosen &&
+    credentialsReady &&
+    tunnelRouteReady &&
+    clientTypes.includes(clientType);
 
   const handleSubmit = () => {
     if (!submittable || submitting) return;
@@ -376,6 +401,12 @@ export function CreateRemoteSessionClientSheet({
               onClientSecretChange={setClientSecret}
               onTokenEndpointAuthMethodChange={setTokenEndpointAuthMethod}
             />
+
+            {tunneledDcrRestricted && (
+              <Text muted small>
+                {TUNNELED_DCR_PERMISSION_MESSAGE}
+              </Text>
+            )}
 
             <OverridesFields
               scopeOverride={scopeOverride}

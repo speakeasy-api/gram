@@ -1,5 +1,10 @@
 import { useFetcher } from "@/contexts/Fetcher";
-import { useSdkClient, useSlugs } from "@/contexts/Sdk";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
+import {
+  useProjectSlugForRequests,
+  useSdkClient,
+  useSlugs,
+} from "@/contexts/Sdk";
 import {
   createDefaultMcpEndpoint,
   DEFAULT_ENDPOINT_FAILED_MESSAGE,
@@ -37,6 +42,10 @@ import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSe
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
+
+export const ISSUER_LOOKUP_FAILED_MESSAGE =
+  "Couldn't load your organization's user session issuers. Try again.";
 
 type InstallPhaseName =
   | "selectRemotes"
@@ -116,6 +125,14 @@ export interface ConfigurePhase extends WorkflowBase {
     value: string,
   ) => void;
   canInstall: boolean;
+  /**
+   * Why the install cannot start regardless of user input. Set when the
+   * user session issuer lookup failed: installing anyway would silently mint
+   * a project-specific issuer instead of honouring the organization's. The
+   * interactive dialog shows it; headless callers report it as a failure
+   * instead of waiting on canInstall forever.
+   */
+  installBlockedReason?: string;
   startInstall: () => Promise<void>;
   /** Go back to selectRemotes phase (only available if there were multi-remote servers) */
   goBack?: () => void;
@@ -140,10 +157,11 @@ export type RemoteMcpInstallWorkflow =
 interface UseRemoteMcpInstallWorkflowOptions {
   servers: PulseMCPServer[];
   projectSlug?: string;
+  serverNameSuffix?: string;
   /**
    * Install every endpoint of multi-remote servers instead of pausing on the
    * interactive selectRemotes phase. Required by headless/auto-start callers
-   * (collection installs, onboarding), which have no UI to select from.
+   * (onboarding), which have no UI to select from.
    */
   autoSelectRemotes?: boolean;
 }
@@ -153,10 +171,13 @@ export function headerValueKey(remoteUrl: string, headerName: string): string {
   return `${remoteUrl} ${headerName.toLowerCase()}`;
 }
 
-function buildServerConfig(server: PulseMCPServer): ServerConfig {
+function buildServerConfig(
+  server: PulseMCPServer,
+  serverNameSuffix = "",
+): ServerConfig {
   return {
     server,
-    name: server.title ?? server.registrySpecifier,
+    name: `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
     remotes: server.remotes ?? [],
     headerValues: {},
   };
@@ -180,7 +201,7 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
     remote,
     name:
       config.remotes.length > 1
-        ? `${config.name} ${getRemoteDisplayInfo(remote.url).name}`
+        ? `${config.name.replace(/_Governed$/, "")} ${getRemoteDisplayInfo(remote.url).name}_Governed`
         : config.name,
     headers: collectibleHeaders(remote).flatMap((header) => {
       const value =
@@ -326,11 +347,19 @@ export function useRemoteMcpInstallWorkflow({
   servers,
   projectSlug,
   autoSelectRemotes = false,
+  serverNameSuffix = "",
 }: UseRemoteMcpInstallWorkflowOptions): RemoteMcpInstallWorkflow {
   const client = useSdkClient();
   const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
   const { orgSlug } = useSlugs();
+  const currentProjectSlug = useProjectSlugForRequests();
+  const isPlatformAdmin = useIsPlatformAdmin();
+  const targetProjectSlug = projectSlug ?? currentProjectSlug;
+  const issuerQuery = useEffectiveUserSessionIssuers({
+    projectSlug: targetProjectSlug,
+  });
+  const defaultOrganizationIssuerId = issuerQuery.organizationIssuers[0]?.id;
 
   // Informational "already installed" signal: a remote MCP server with a
   // matching URL already exists in the target project. Unproxied servers
@@ -393,12 +422,12 @@ export function useRemoteMcpInstallWorkflow({
       if (remotes.length > 1 && !autoSelectRemotes) {
         multiRemote.push({
           server,
-          name: server.title ?? server.registrySpecifier,
+          name: `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
           remotes,
           selectedRemoteUrls: new Set(),
         });
       } else {
-        singleRemote.push(buildServerConfig(server));
+        singleRemote.push(buildServerConfig(server, serverNameSuffix));
       }
     }
 
@@ -407,7 +436,7 @@ export function useRemoteMcpInstallWorkflow({
     setCurrentServerIndex(0);
     lastProcessedIndexRef.current = -1;
     setPhase(multiRemote.length > 0 ? "selectRemotes" : "configure");
-  }, [servers, autoSelectRemotes]);
+  }, [autoSelectRemotes, serverNameSuffix, servers]);
 
   // Initialize server configs when servers change - partition into multi/single remote.
   useEffect(() => {
@@ -510,16 +539,26 @@ export function useRemoteMcpInstallWorkflow({
     }
   }, [canProceed, currentServerIndex, multiRemoteConfigs]);
 
+  // The issuer lookup decides whether the install can honour an organization
+  // issuer at all. A failed or truncated listing is not "no organization
+  // issuers": falling through to the project-specific default would silently
+  // diverge from the organization's policy, so block instead.
+  const installBlockedReason = issuerQuery.isError
+    ? ISSUER_LOOKUP_FAILED_MESSAGE
+    : undefined;
+
   // A config with no HTTP remote cannot be installed as a remote MCP server —
   // startInstall reports it as failed. At least one config must be
   // installable for the install to be worth starting at all.
   const canInstall = useMemo(() => {
     return (
       serverConfigs.length > 0 &&
+      !issuerQuery.isLoading &&
+      installBlockedReason === undefined &&
       serverConfigs.every((c) => c.name.trim() !== "") &&
       serverConfigs.some((c) => c.remotes.length > 0)
     );
-  }, [serverConfigs]);
+  }, [installBlockedReason, issuerQuery.isLoading, serverConfigs]);
 
   // goBack returns to selectRemotes phase - only available if there were multi-remote servers
   const goBack = useCallback(() => {
@@ -569,6 +608,10 @@ export function useRemoteMcpInstallWorkflow({
             createMcpServerForm: {
               name: target.name,
               remoteMcpServerId: remoteMcpServer.id,
+              userSessionIssuerId: defaultOrganizationIssuerId,
+              // Catalog installs are noninteractive, so prefer the first
+              // organization issuer and retain the project-specific fallback
+              // when the organization has none.
               // Private (user-session gated) rather than the sources flow's
               // "disabled": catalog installs promise a usable server, and the
               // pre-staged endpoint must actually serve. Public would expose
@@ -647,6 +690,12 @@ export function useRemoteMcpInstallWorkflow({
         authedFetch,
         remoteMcpServer,
         mcpServer,
+        isPlatformAdmin,
+        projectSlug: targetProjectSlug,
+        // Organization issuers are administered at the organization level;
+        // auto-config must not attach this project's upstream client to one.
+        organizationOwnedUserSessionIssuer:
+          defaultOrganizationIssuerId !== undefined,
         options: reqOpts,
       });
       const configuredMcpServer =
@@ -677,7 +726,14 @@ export function useRemoteMcpInstallWorkflow({
         iconPersistence,
       };
     },
-    [authedFetch, client, orgSlug],
+    [
+      authedFetch,
+      client,
+      defaultOrganizationIssuerId,
+      isPlatformAdmin,
+      orgSlug,
+      targetProjectSlug,
+    ],
   );
 
   const startInstall = useCallback(async () => {
@@ -823,6 +879,7 @@ export function useRemoteMcpInstallWorkflow({
         updateServerConfig,
         setHeaderValue,
         canInstall,
+        installBlockedReason,
         startInstall,
         goBack: hasMultiRemoteServers ? goBack : undefined,
         ...base,

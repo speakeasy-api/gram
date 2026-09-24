@@ -17,12 +17,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersessionsR "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
+	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
 )
 
 // SetUserSessionIssuer links a toolset to a user_session_issuer (or unlinks
 // when user_session_issuer_id is null). The USI must already exist in the
-// caller's project. The link lives on toolsets.user_session_issuer_id with
+// caller's project or organization. The link lives on toolsets.user_session_issuer_id with
 // ON DELETE SET NULL, so deleting the USI later silently unlinks the
 // toolset.
 func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUserSessionIssuerPayload) (*types.Toolset, error) {
@@ -55,18 +55,14 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	// Validate that the target USI lives in the caller's project before
-	// writing the FK so a request can't graft an unrelated tenant's USI
-	// onto this toolset via cross-project id.
+	// Validate that the target USI is attachable in the caller's project or
+	// organization before writing the FK.
 	if usiID.Valid {
-		if _, err := usersessionsR.New(dbtx).GetUserSessionIssuerByID(ctx, usersessionsR.GetUserSessionIssuerByIDParams{
-			ID:        usiID.UUID,
-			ProjectID: *authCtx.ProjectID,
-		}); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+		if _, err := usersessionbindings.ValidateAndLock(ctx, dbtx, usiID.UUID, *authCtx.ProjectID, authCtx.ActiveOrganizationID); err != nil {
+			if errors.Is(err, usersessionbindings.ErrNotFound) {
 				return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, s.logger)
 			}
-			return nil, oops.E(oops.CodeUnexpected, err, "load user session issuer").LogError(ctx, s.logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "validate user session issuer").LogError(ctx, s.logger)
 		}
 	}
 

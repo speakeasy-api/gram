@@ -1,5 +1,103 @@
 # admin
 
+## 0.5.1
+
+### Patch Changes
+
+- aa2f201: Records the flow that created an organization and shows it as "Created via" on the admin organization record, marking organizations created through the platform-admin prospect flow. Organizations with no recorded source read as "Not recorded".
+
+## 0.5.0
+
+### Minor Changes
+
+- 52ebc1b: Add an admin spend breakdown API and organization billing visualization for every account type, including organizations without a Stripe subscription. Reuse exact server-calculated storage, per-scanner risk, and MCP egress estimates at current PAYG list prices, with product selection, billing-cycle and custom date ranges, daily/weekly/monthly grouping, and cumulative views. These usage comparisons are not invoices or contracted charges.
+  
+  Display USD amounts rounded to two decimals while retaining exact arithmetic. Use consistent, theme-aware product colors across spend and usage graphs: blue for storage, purple for risk scanning, and amber for MCP.
+  
+  Preserve the last successful estimate while changing date ranges and if a new range fails to load. Distinguish nonzero amounts that round to zero with a sub-cent marker rather than displaying them as zero.
+  
+  Keep the customer spend endpoint restricted to PAYG organizations. Admin requests require the existing admin authentication and resolve the requested organization by ID or slug.
+- 8fa1872: Add a shared admin support matrix with CSV import, editable coverage, and integration recommendations that include remaining coverage gaps.
+
+### Patch Changes
+
+- 9059ae1: Allow staff to enable Tailscale private access for an organization from the admin feature controls without requiring a separate PostHog rollout flag.
+
+## 0.4.3
+
+### Patch Changes
+
+- 6f6ab02: Replace the admin trial extension action with Change end date. Operators can shorten or extend a running trial to any future UTC calendar date, with an audit record of the previous and new end dates. New and restarted trials still default to fourteen days.
+
+## Unreleased
+
+### Minor Changes
+
+- Add totals-only organization meter usage charts for storage, MCP bandwidth,
+  and risk scans, with daily, weekly, monthly, and cumulative views, billing
+  cycles, shareable date filters, and an authenticated admin usage endpoint.
+  Admin startup now requires primary and read-replica ClickHouse connections;
+  meter usage reads from the replica without a telemetry enablement flag.
+  Filter changes retain the previous report with an updating indicator and
+  matching labels; chart axes use integer ticks for small usage quantities.
+
+## 0.4.2
+
+### Patch Changes
+
+- f5fb216: Operators can start or restart an enterprise trial from the admin organization overview trial panel, including orgs that never trialled and expired trials that have not converted or been demoted.
+
+## 0.4.1
+
+### Patch Changes
+
+- fc61b11: Group standalone admin navigation into Account Management and Platform Management sections.
+
+## 0.4.0
+
+### Minor Changes
+
+- 496e62c: Add a Cmd+K command palette to the admin dashboard for jumping straight to an organization, to a record's own views, or to a top-level page.
+- e28870b: Expose standalone admin global issuer management and regenerate SDK metadata while preserving legacy internal SDK operation naming.
+- 7e1671c: Expose standalone admin image upload and public serving endpoints with a generated browser SDK.
+- 12d48b3: Make the global issuer catalog, configuration editor, and convergence views available in standalone admin navigation.
+- 8266e86: Give each organization matched in the admin command palette a nested "Open in Dashboard" row, so the dashboard handoff is reachable without first opening the record.
+
+### Patch Changes
+
+- 3f98bc4: Prepare issuer convergence controls with candidate preflights and migration feedback.
+- de99bbf: Prepare issuer form payload helpers that preserve discovery metadata and explicit clearing semantics.
+- b25b71c: Prepare issuer configuration rendering with safe documentation links and preserved stored metadata.
+- 55f744a: Prepare shared issuer queries and logo loading, evicting deleted issuer cache entries before refreshing lists.
+- 58470a1: Prepare shared metadata refresh and confirmed deletion actions with deletion-aware cache invalidation.
+
+## 0.3.2
+
+### Patch Changes
+
+- cb77818: Allow admin operators to assign an initial Stripe customer ID only when both billing identifiers are unset. Fetch customer details from Stripe for an explicit confirmation and revalidate the customer before saving, without overwriting existing billing data.
+- cb77818: Show copyable Stripe customer and current subscription IDs on admin organization overviews, including customers without an active subscription.
+
+## 0.3.1
+
+### Patch Changes
+
+- c71902b: Show completed trial status, tier, lifecycle date, and original end date on the organization overview.
+- 4adf330: Show live trial state, tier, UTC end date, and automatically updating time remaining on the organization overview.
+- e5e23be: Add an organization Activity view showing cursor-loaded audit history with event surfaces, actor and subject details, snapshots, and metadata.
+- 338bc97: Remove legacy free-trial timestamps from admin organization responses now that trial state and lifecycle dates come from factual trial records.
+- 56f835b: The admin organization detail endpoint now reports a trial's stored tier, conversion date, and demotion date. These factual fields come from the trials table and are absent for organizations that never trialled.
+
+## 0.3.0
+
+### Minor Changes
+
+- 2baff19: Allow platform administrators to configure per-key inference limits from the billing admin page.
+
+### Patch Changes
+
+- a232927: Admin organization billing now reports complete monthly inference spend history and shows a graph once two consecutive months are available.
+
 ## 0.2.4
 
 ### Patch Changes

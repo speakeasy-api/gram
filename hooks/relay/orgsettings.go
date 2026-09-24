@@ -2,6 +2,7 @@ package relay
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"time"
@@ -103,8 +104,8 @@ func writeOrgSettings(cfg Config, failOpen bool) {
 // failOpenAllowed reports whether an unobtainable verdict (server unreachable
 // or 5xx) may fail open: the GRAM_HOOKS_FAIL_OPEN escape hatch, the legacy
 // nonblocking flag still baked into plugins published before observability
-// mode was removed, or the org's last server-confirmed setting. Absent all
-// three, gating events fail closed.
+// mode was removed, the org's last server-confirmed setting, or a true cold
+// start. Absent all of those, gating events fail closed.
 func failOpenAllowed(cfg Config) bool {
 	if cfg.Nonblocking {
 		return true
@@ -112,6 +113,15 @@ func failOpenAllowed(cfg Config) bool {
 	if v := strings.TrimSpace(os.Getenv("GRAM_HOOKS_FAIL_OPEN")); v == "1" || strings.EqualFold(v, "true") {
 		return true
 	}
-	s, ok := readOrgSettings(cfg)
-	return ok && s.FailOpen
+	if s, ok := readOrgSettings(cfg); ok {
+		return s.FailOpen
+	}
+	// Cold start: no posture was ever cached for this machine — fail open
+	// rather than brick a first-day install during a control-plane outage. A
+	// present-but-stale or mismatched cache is not a cold start: a posture
+	// existed, so the fail-closed default stands.
+	if _, err := os.Stat(orgSettingsPath()); errors.Is(err, os.ErrNotExist) {
+		return true
+	}
+	return false
 }

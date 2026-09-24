@@ -31,11 +31,13 @@ func TestShutdownPubSubPublishersStopsAllPublishersBeforeClosingClient(t *testin
 	t.Parallel()
 
 	findingsErr := errors.New("stop findings publisher")
+	metricErr := errors.New("stop metric publisher")
 	spansErr := errors.New("stop spans publisher")
 	closeErr := errors.New("close pubsub client")
 	started := new(atomic.Int64)
 	release := make(chan struct{})
 	findingsPub := &blockingPublisherStopper{started: started, release: release, err: findingsErr}
+	metricPub := &blockingPublisherStopper{started: started, release: release, err: metricErr}
 	spanPub := &blockingPublisherStopper{started: started, release: release, err: spansErr}
 	var clientClosed atomic.Bool
 	done := make(chan error, 1)
@@ -44,11 +46,11 @@ func TestShutdownPubSubPublishersStopsAllPublishersBeforeClosingClient(t *testin
 		done <- shutdownPubSubPublishers(t.Context(), func(context.Context) error {
 			clientClosed.Store(true)
 			return closeErr
-		}, findingsPub, nil, spanPub)
+		}, findingsPub, nil, metricPub, spanPub)
 	}()
 
 	require.Eventually(t, func() bool {
-		return started.Load() == 2
+		return started.Load() == 3
 	}, time.Second, time.Millisecond)
 	require.False(t, clientClosed.Load())
 
@@ -56,6 +58,7 @@ func TestShutdownPubSubPublishersStopsAllPublishersBeforeClosingClient(t *testin
 	err := <-done
 
 	require.ErrorIs(t, err, findingsErr)
+	require.ErrorIs(t, err, metricErr)
 	require.ErrorIs(t, err, spansErr)
 	require.ErrorIs(t, err, closeErr)
 	require.True(t, clientClosed.Load())

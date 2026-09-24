@@ -18,6 +18,14 @@ import (
 
 // Client lists the plugins service endpoint HTTP clients.
 type Client struct {
+	// ListDistributionPlugins Doer is the HTTP client used to make requests to the
+	// listDistributionPlugins endpoint.
+	ListDistributionPluginsDoer goahttp.Doer
+
+	// GetDistributionPlugin Doer is the HTTP client used to make requests to the
+	// getDistributionPlugin endpoint.
+	GetDistributionPluginDoer goahttp.Doer
+
 	// ListPlugins Doer is the HTTP client used to make requests to the listPlugins
 	// endpoint.
 	ListPluginsDoer goahttp.Doer
@@ -62,10 +70,6 @@ type Client struct {
 	// downloadPluginPackage endpoint.
 	DownloadPluginPackageDoer goahttp.Doer
 
-	// DownloadPlatformMCPPlugin Doer is the HTTP client used to make requests to
-	// the downloadPlatformMCPPlugin endpoint.
-	DownloadPlatformMCPPluginDoer goahttp.Doer
-
 	// DownloadObservabilityPlugin Doer is the HTTP client used to make requests to
 	// the downloadObservabilityPlugin endpoint.
 	DownloadObservabilityPluginDoer goahttp.Doer
@@ -73,14 +77,6 @@ type Client struct {
 	// DownloadCodexInstallScript Doer is the HTTP client used to make requests to
 	// the downloadCodexInstallScript endpoint.
 	DownloadCodexInstallScriptDoer goahttp.Doer
-
-	// GetPlatformMCPPackageStatus Doer is the HTTP client used to make requests to
-	// the getPlatformMCPPackageStatus endpoint.
-	GetPlatformMCPPackageStatusDoer goahttp.Doer
-
-	// RepairPlatformMCPPackage Doer is the HTTP client used to make requests to
-	// the repairPlatformMCPPackage endpoint.
-	RepairPlatformMCPPackageDoer goahttp.Doer
 
 	// GetPublishStatus Doer is the HTTP client used to make requests to the
 	// getPublishStatus endpoint.
@@ -118,6 +114,8 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		ListDistributionPluginsDoer:     doer,
+		GetDistributionPluginDoer:       doer,
 		ListPluginsDoer:                 doer,
 		GetPluginDoer:                   doer,
 		CreatePluginDoer:                doer,
@@ -129,11 +127,8 @@ func NewClient(
 		SetPluginAssignmentsDoer:        doer,
 		ListAudiencesDoer:               doer,
 		DownloadPluginPackageDoer:       doer,
-		DownloadPlatformMCPPluginDoer:   doer,
 		DownloadObservabilityPluginDoer: doer,
 		DownloadCodexInstallScriptDoer:  doer,
-		GetPlatformMCPPackageStatusDoer: doer,
-		RepairPlatformMCPPackageDoer:    doer,
 		GetPublishStatusDoer:            doer,
 		PublishPluginsDoer:              doer,
 		GetMarketplaceSettingsDoer:      doer,
@@ -143,6 +138,54 @@ func NewClient(
 		host:                            host,
 		decoder:                         dec,
 		encoder:                         enc,
+	}
+}
+
+// ListDistributionPlugins returns an endpoint that makes HTTP requests to the
+// plugins service listDistributionPlugins server.
+func (c *Client) ListDistributionPlugins() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDistributionPluginsRequest(c.encoder)
+		decodeResponse = DecodeListDistributionPluginsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDistributionPluginsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDistributionPluginsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "listDistributionPlugins", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetDistributionPlugin returns an endpoint that makes HTTP requests to the
+// plugins service getDistributionPlugin server.
+func (c *Client) GetDistributionPlugin() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetDistributionPluginRequest(c.encoder)
+		decodeResponse = DecodeGetDistributionPluginResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetDistributionPluginRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDistributionPluginDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "getDistributionPlugin", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 
@@ -415,35 +458,6 @@ func (c *Client) DownloadPluginPackage() goa.Endpoint {
 	}
 }
 
-// DownloadPlatformMCPPlugin returns an endpoint that makes HTTP requests to
-// the plugins service downloadPlatformMCPPlugin server.
-func (c *Client) DownloadPlatformMCPPlugin() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeDownloadPlatformMCPPluginRequest(c.encoder)
-		decodeResponse = DecodeDownloadPlatformMCPPluginResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildDownloadPlatformMCPPluginRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.DownloadPlatformMCPPluginDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("plugins", "downloadPlatformMCPPlugin", err)
-		}
-		res, err := decodeResponse(resp)
-		if err != nil {
-			resp.Body.Close()
-			return nil, err
-		}
-		return &plugins.DownloadPlatformMCPPluginResponseData{Result: res.(*plugins.DownloadPlatformMCPPluginResult), Body: resp.Body}, nil
-	}
-}
-
 // DownloadObservabilityPlugin returns an endpoint that makes HTTP requests to
 // the plugins service downloadObservabilityPlugin server.
 func (c *Client) DownloadObservabilityPlugin() goa.Endpoint {
@@ -499,54 +513,6 @@ func (c *Client) DownloadCodexInstallScript() goa.Endpoint {
 			return nil, err
 		}
 		return &plugins.DownloadCodexInstallScriptResponseData{Result: res.(*plugins.DownloadCodexInstallScriptResult), Body: resp.Body}, nil
-	}
-}
-
-// GetPlatformMCPPackageStatus returns an endpoint that makes HTTP requests to
-// the plugins service getPlatformMCPPackageStatus server.
-func (c *Client) GetPlatformMCPPackageStatus() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeGetPlatformMCPPackageStatusRequest(c.encoder)
-		decodeResponse = DecodeGetPlatformMCPPackageStatusResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetPlatformMCPPackageStatusRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.GetPlatformMCPPackageStatusDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("plugins", "getPlatformMCPPackageStatus", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// RepairPlatformMCPPackage returns an endpoint that makes HTTP requests to the
-// plugins service repairPlatformMCPPackage server.
-func (c *Client) RepairPlatformMCPPackage() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeRepairPlatformMCPPackageRequest(c.encoder)
-		decodeResponse = DecodeRepairPlatformMCPPackageResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildRepairPlatformMCPPackageRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.RepairPlatformMCPPackageDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("plugins", "repairPlatformMCPPackage", err)
-		}
-		return decodeResponse(resp)
 	}
 }
 

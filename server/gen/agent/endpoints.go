@@ -20,8 +20,12 @@ type Endpoints struct {
 	ListSyncedUsers      goa.Endpoint
 	GetConfiguration     goa.Endpoint
 	UpdateConfiguration  goa.Endpoint
+	ListAiScanTargets    goa.Endpoint
+	UpsertAiScanTarget   goa.Endpoint
+	DeleteAiScanTarget   goa.Endpoint
 	GetSessionMeta       goa.Endpoint
 	ReportSessionMoved   goa.Endpoint
+	ReportAIScan         goa.Endpoint
 	CreateSessionHandoff goa.Endpoint
 }
 
@@ -34,8 +38,12 @@ func NewEndpoints(s Service) *Endpoints {
 		ListSyncedUsers:      NewListSyncedUsersEndpoint(s, a.APIKeyAuth),
 		GetConfiguration:     NewGetConfigurationEndpoint(s, a.APIKeyAuth),
 		UpdateConfiguration:  NewUpdateConfigurationEndpoint(s, a.APIKeyAuth),
+		ListAiScanTargets:    NewListAiScanTargetsEndpoint(s, a.APIKeyAuth),
+		UpsertAiScanTarget:   NewUpsertAiScanTargetEndpoint(s, a.APIKeyAuth),
+		DeleteAiScanTarget:   NewDeleteAiScanTargetEndpoint(s, a.APIKeyAuth),
 		GetSessionMeta:       NewGetSessionMetaEndpoint(s, a.APIKeyAuth),
 		ReportSessionMoved:   NewReportSessionMovedEndpoint(s, a.APIKeyAuth),
+		ReportAIScan:         NewReportAIScanEndpoint(s, a.APIKeyAuth),
 		CreateSessionHandoff: NewCreateSessionHandoffEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -46,8 +54,12 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListSyncedUsers = m(e.ListSyncedUsers)
 	e.GetConfiguration = m(e.GetConfiguration)
 	e.UpdateConfiguration = m(e.UpdateConfiguration)
+	e.ListAiScanTargets = m(e.ListAiScanTargets)
+	e.UpsertAiScanTarget = m(e.UpsertAiScanTarget)
+	e.DeleteAiScanTarget = m(e.DeleteAiScanTarget)
 	e.GetSessionMeta = m(e.GetSessionMeta)
 	e.ReportSessionMoved = m(e.ReportSessionMoved)
+	e.ReportAIScan = m(e.ReportAIScan)
 	e.CreateSessionHandoff = m(e.CreateSessionHandoff)
 }
 
@@ -143,6 +155,75 @@ func NewUpdateConfigurationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 	}
 }
 
+// NewListAiScanTargetsEndpoint returns an endpoint function that calls the
+// method "listAiScanTargets" of service "agent".
+func NewListAiScanTargetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAiScanTargetsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAiScanTargets(ctx, p)
+	}
+}
+
+// NewUpsertAiScanTargetEndpoint returns an endpoint function that calls the
+// method "upsertAiScanTarget" of service "agent".
+func NewUpsertAiScanTargetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpsertAiScanTargetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpsertAiScanTarget(ctx, p)
+	}
+}
+
+// NewDeleteAiScanTargetEndpoint returns an endpoint function that calls the
+// method "deleteAiScanTarget" of service "agent".
+func NewDeleteAiScanTargetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DeleteAiScanTargetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DeleteAiScanTarget(ctx, p)
+	}
+}
+
 // NewGetSessionMetaEndpoint returns an endpoint function that calls the method
 // "getSessionMeta" of service "agent".
 func NewGetSessionMetaEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -186,6 +267,29 @@ func NewReportSessionMovedEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return nil, s.ReportSessionMoved(ctx, p)
+	}
+}
+
+// NewReportAIScanEndpoint returns an endpoint function that calls the method
+// "reportAIScan" of service "agent".
+func NewReportAIScanEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ReportAIScanPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"agent_user"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.ReportAIScan(ctx, p)
 	}
 }
 

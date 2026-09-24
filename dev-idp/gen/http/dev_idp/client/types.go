@@ -42,7 +42,7 @@ type ClearCurrentUserRequestBody struct {
 type GetCurrentUserResponseBody struct {
 	// Mode whose currentUser is being reported.
 	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
-	// Local user record. Populated for mock-workos / oauth2-1 / oauth2.
+	// Local user record. Populated for the oauth2-1 slot.
 	User *UserResponseBody `form:"user,omitempty" json:"user,omitempty" xml:"user,omitempty"`
 	// Live WorkOS profile. Populated for workos mode only.
 	Workos *WorkosCurrentUserResponseBody `form:"workos,omitempty" json:"workos,omitempty" xml:"workos,omitempty"`
@@ -53,7 +53,7 @@ type GetCurrentUserResponseBody struct {
 type SetCurrentUserResponseBody struct {
 	// Mode whose currentUser is being reported.
 	Mode *string `form:"mode,omitempty" json:"mode,omitempty" xml:"mode,omitempty"`
-	// Local user record. Populated for mock-workos / oauth2-1 / oauth2.
+	// Local user record. Populated for the oauth2-1 slot.
 	User *UserResponseBody `form:"user,omitempty" json:"user,omitempty" xml:"user,omitempty"`
 	// Live WorkOS profile. Populated for workos mode only.
 	Workos *WorkosCurrentUserResponseBody `form:"workos,omitempty" json:"workos,omitempty" xml:"workos,omitempty"`
@@ -161,8 +161,8 @@ func ValidateGetCurrentUserResponseBody(body *GetCurrentUserResponseBody) (err e
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
 	}
 	if body.Mode != nil {
-		if !(*body.Mode == "mock-workos" || *body.Mode == "oauth2-1" || *body.Mode == "oauth2" || *body.Mode == "workos") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"mock-workos", "oauth2-1", "oauth2", "workos"}))
+		if !(*body.Mode == "oauth2-1" || *body.Mode == "workos") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"oauth2-1", "workos"}))
 		}
 	}
 	if body.User != nil {
@@ -185,8 +185,8 @@ func ValidateSetCurrentUserResponseBody(body *SetCurrentUserResponseBody) (err e
 		err = goa.MergeErrors(err, goa.MissingFieldError("mode", "body"))
 	}
 	if body.Mode != nil {
-		if !(*body.Mode == "mock-workos" || *body.Mode == "oauth2-1" || *body.Mode == "oauth2" || *body.Mode == "workos") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"mock-workos", "oauth2-1", "oauth2", "workos"}))
+		if !(*body.Mode == "oauth2-1" || *body.Mode == "workos") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.mode", *body.Mode, []any{"oauth2-1", "workos"}))
 		}
 	}
 	if body.User != nil {

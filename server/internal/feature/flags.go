@@ -19,9 +19,21 @@ const (
 	// cannot see the feature. Targeted by PostHog organization group (org
 	// slug), the same way the dashboard evaluates it.
 	FlagBudgets Flag = "gram-budgets"
-	// FlagRiskRecommendedScopes gates per-project composition of recommended
-	// per-category detection scopes. Default off during rollout.
-	FlagRiskRecommendedScopes Flag = "risk-recommended-scopes"
+	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
+	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
+	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
+	// truncation limit globally. Evaluated server-side with no targeting. The
+	// payload is {"max_content_bytes": <int>}; a missing or invalid payload
+	// keeps the default limit.
+	FlagRiskEnforcementMaxContentBytes Flag = "risk-enforcement-max-content-bytes"
+
+	// FlagAgentManagement gates the first-class agent management API. It is
+	// evaluated per organization and fails closed unless explicitly on.
+	FlagAgentManagement Flag = "agent-management"
+	// FlagAgentIdentityCredentials gates agent credential issuance, management,
+	// and agent identity selection in MCP OAuth authorization.
+	// It is evaluated per organization and fails closed unless explicitly on.
+	FlagAgentIdentityCredentials Flag = "agent-identity-credentials"
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
@@ -36,14 +48,31 @@ const (
 	FlagRiskFindingAnalytics Flag = "risk-finding-analytics"
 	FlagRiskAsyncScanShadow  Flag = "risk-async-scan-shadow"
 
-	// FlagPlatformMCP controls the engineering rollout of Platform MCP. The
-	// durable platform_mcp product feature remains the organization-admin opt-in
-	// once this release flag permits access.
-	FlagPlatformMCP Flag = "platform-mcp"
-	// FlagPlatformMCPDashboard controls dashboard discovery and onboarding for
-	// Platform MCP. It is presentation-only; runtime authorization requires
-	// FlagPlatformMCP and the durable organization product feature.
-	FlagPlatformMCPDashboard Flag = "platform-mcp-dashboard"
+	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
+	// policy and exclusion writes exposed through Platform MCP. It is evaluated
+	// at invocation time and fails closed when absent, disabled, or indeterminate.
+	FlagPlatformMCPRiskMutations Flag = "platform-mcp-risk-mutations"
+	// FlagPlatformMCPPluginAssignmentMutations is the exact-project kill switch for
+	// replacing a plugin's complete audience assignment set through Platform MCP.
+	// It is evaluated at invocation time and fails closed.
+	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
+	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for
+	// creating and updating custom MCP-only access roles through Platform MCP.
+	// It is evaluated at invocation time and fails closed.
+	FlagPlatformMCPAccessRoleMutations Flag = "platform-mcp-access-role-mutations"
+	// FlagPlatformMCPShadowAccessDecisions is the exact-project kill switch for
+	// approval decisions exposed through Platform MCP. It is evaluated at
+	// invocation time and fails closed independently of the dashboard workflow.
+	FlagPlatformMCPShadowAccessDecisions Flag = "platform-mcp-shadow-access-decisions"
+	// FlagPlatformMCPShadowAudienceEnforcement selects legacy, report, or enforce
+	// behavior for direct-remote distribution. An enabled flag must carry a closed
+	// mode payload; missing or invalid configuration fails closed for expanding
+	// writes.
+	FlagPlatformMCPShadowAudienceEnforcement Flag = "platform-mcp-shadow-audience-enforcement"
+	// FlagPlatformMCPDirectRemoteDistributionDisabled is the emergency stop for
+	// expanding direct-remote distribution. Cleanup, audience narrowing, and
+	// disable paths remain available while it is enabled.
+	FlagPlatformMCPDirectRemoteDistributionDisabled Flag = "platform-mcp-direct-remote-distribution-disabled"
 
 	// FlagAssistantPlatformMCP grants a project's managed (dashboard)
 	// assistant the Platform MCP read toolset — the "platform" platform
@@ -66,6 +95,25 @@ const (
 	// Key matches the dashboard's page-level flag so a single PostHog flag
 	// controls both the UI and the API surface.
 	FlagRiskWatchdog Flag = "gram-risk-watchdog"
+	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
+	// PII, prompt injection and destructive tool call detection on both the
+	// realtime enforcement lane and the batch flag lane. It is multivariate:
+	// VariantRiskLLMOff keeps the gitleaks, Presidio, prompt-injection and
+	// destructive-tool analyzers; VariantRiskLLMShadow keeps them enforcing
+	// and additionally runs the fine-tuned risk model on the same traffic,
+	// recording its findings for comparison without ever enforcing them;
+	// VariantRiskLLMLLM replaces the legacy analyzers with the model.
+	// Policies keep their configured sources; the variant swaps the engine
+	// behind them. Evaluated server-side with distinct id = organization id
+	// and the organization / slug groups (OrgProjectGroups), so a release
+	// condition selects organizations by the organization group key (org
+	// slug) or by distinct id (org id). Transition rule while the PostHog key
+	// is still boolean: an empty variant with the boolean read true resolves
+	// to VariantRiskLLMLLM (RiskLLMAnalyzerVariant). Fails safe to
+	// VariantRiskLLMOff when the flag is off, absent, unrecognized or the
+	// provider errors. Removed at GA, or promoted to a productfeatures
+	// entitlement if the analyzer becomes a sold capability.
+	FlagRiskLLMAnalyzer Flag = "gram-risk-llm-analyzer"
 
 	// FlagCanonicalIdentityFold serves cost analytics (telemetry.query /
 	// telemetry.listSessions) email filters and group-bys through the
@@ -85,6 +133,18 @@ const (
 	// Targeted by PostHog organization group (org slug) and removed once PAYG
 	// billing is generally available.
 	FlagPaygSelfServeBilling Flag = "gram-payg-self-serve-billing"
+
+	// FlagAssistantOAuthCIMD gates outbound Client ID Metadata Document
+	// (CIMD) support for assistant MCP OAuth clients. When on, and the
+	// upstream authorization server advertises
+	// client_id_metadata_document_supported, assistants publish a stable
+	// metadata document and send its URL as client_id instead of dynamic
+	// client registration. Off (the default) keeps the DCR reuse path.
+	// Gram-hosted issuers admit assistant documents ahead of their CIMD
+	// admission policy, so enabling this never depends on a catalog preset
+	// or a per-issuer custom URL. Targeted by PostHog organization group
+	// (org slug). Removed once CIMD is GA.
+	FlagAssistantOAuthCIMD Flag = "assistant-oauth-cimd"
 
 	// FlagMCPApproval gates the MCP approval workflow end to end: the
 	// approval queue, evidence gathering, deciding, and the promotion of
@@ -122,6 +182,9 @@ const (
 	// plugins.canaryHooksOrgSlugs), independent of this flag, so a PostHog outage
 	// can't strand it on stale hooks.
 	FlagHooksRollout Flag = "hooks-rollout"
+
+	// FlagOktaConnections gates creating Okta connections while the integration is dogfooded.
+	FlagOktaConnections Flag = "okta-connections"
 )
 
 // Variants of FlagAssistantPlatformMCP. Anything else — no variant, an
@@ -148,4 +211,44 @@ func AssistantToolsVariant(variant Variant) Variant {
 		return VariantAssistantToolsPlatformMCP
 	}
 	return VariantAssistantToolsLegacy
+}
+
+// Variants of FlagRiskLLMAnalyzer, the risk engine mode of an organization.
+// Anything else — no variant, an unrecognized key, an unavailable provider,
+// or an evaluation error — resolves to VariantRiskLLMOff, which is the
+// pre-rollout behaviour, so a PostHog outage never changes which engine
+// enforces a policy.
+const (
+	// VariantRiskLLMOff runs the legacy engines only (gitleaks, Presidio,
+	// prompt-injection, destructive-tool, CLI-destructive).
+	VariantRiskLLMOff Variant = "off"
+	// VariantRiskLLMShadow runs the legacy engines exactly as under
+	// VariantRiskLLMOff, and additionally runs the fine-tuned risk model on
+	// the same traffic. The model's findings are recorded for engine
+	// comparison and never enforced; a model failure never denies.
+	VariantRiskLLMShadow Variant = "shadow"
+	// VariantRiskLLMLLM replaces the legacy engines with the fine-tuned risk
+	// model for every covered policy source. The realtime lane fails closed
+	// on a model failure.
+	VariantRiskLLMLLM Variant = "llm"
+)
+
+// RiskLLMAnalyzerVariant normalizes a resolved FlagRiskLLMAnalyzer variant to
+// one of the three known modes. A known variant is returned as is. An empty
+// variant with legacyEnabled true — the boolean read of the same key —
+// resolves to VariantRiskLLMLLM, which keeps organizations on the boolean
+// flag on the model until the PostHog key is switched to multivariate.
+// Everything else resolves to VariantRiskLLMOff.
+func RiskLLMAnalyzerVariant(variant Variant, legacyEnabled bool) Variant {
+	switch variant {
+	case VariantRiskLLMOff, VariantRiskLLMShadow, VariantRiskLLMLLM:
+		return variant
+	case "":
+		if legacyEnabled {
+			return VariantRiskLLMLLM
+		}
+		return VariantRiskLLMOff
+	default:
+		return VariantRiskLLMOff
+	}
 }

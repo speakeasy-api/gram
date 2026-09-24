@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -257,9 +258,9 @@ func phaseName(span sdktrace.ReadOnlySpan) string {
 }
 
 func spanByName(spans []sdktrace.ReadOnlySpan, name string) sdktrace.ReadOnlySpan {
-	for i := len(spans) - 1; i >= 0; i-- {
-		if phaseName(spans[i]) == name {
-			return spans[i]
+	for _, span := range slices.Backward(spans) {
+		if phaseName(span) == name {
+			return span
 		}
 	}
 	return nil

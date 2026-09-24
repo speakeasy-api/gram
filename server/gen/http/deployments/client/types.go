@@ -1726,8 +1726,6 @@ type DeploymentExternalMCPResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the external MCP registry the server is from.
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// The ID of the internal collection registry the server is from.
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// The display name for the external MCP server.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// A URL-friendly identifier used for tool prefixing.
@@ -1827,8 +1825,6 @@ type AddDeploymentPackageFormRequestBody struct {
 type AddExternalMCPFormRequestBody struct {
 	// The ID of the external MCP registry the server is from.
 	RegistryID *string `form:"registry_id,omitempty" json:"registry_id,omitempty" xml:"registry_id,omitempty"`
-	// The ID of the internal collection registry the server is from.
-	OrganizationMcpCollectionRegistryID *string `form:"organization_mcp_collection_registry_id,omitempty" json:"organization_mcp_collection_registry_id,omitempty" xml:"organization_mcp_collection_registry_id,omitempty"`
 	// The display name for the external MCP server.
 	Name string `form:"name" json:"name" xml:"name"`
 	// A URL-friendly identifier used for tool prefixing (e.g., 'exa').
@@ -5671,9 +5667,6 @@ func ValidateAddFunctionsFormRequestBody(body *AddFunctionsFormRequestBody) (err
 func ValidateAddExternalMCPFormRequestBody(body *AddExternalMCPFormRequestBody) (err error) {
 	if body.RegistryID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.registry_id", *body.RegistryID, goa.FormatUUID))
-	}
-	if body.OrganizationMcpCollectionRegistryID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.organization_mcp_collection_registry_id", *body.OrganizationMcpCollectionRegistryID, goa.FormatUUID))
 	}
 	err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9_-]{1,128}$"))
 	if utf8.RuneCountInString(body.Slug) > 40 {

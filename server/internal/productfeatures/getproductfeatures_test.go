@@ -61,7 +61,7 @@ func TestProductFeaturesService_PlatformMCP(t *testing.T) {
 
 	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeaturePlatformMCP),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeaturePlatformMCP),
 		Enabled:        true,
 	}))
 	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{
@@ -80,7 +80,7 @@ func TestProductFeaturesService_SkillCaptureMetadataOnly(t *testing.T) {
 	require.False(t, res.SkillCaptureMetadataOnly)
 	require.NoError(t, ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
 		OrganizationID: requestedOrganizationID(ctx),
-		FeatureName:    string(productfeatures.FeatureSkillCaptureMetadataOnly),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureSkillCaptureMetadataOnly),
 		Enabled:        true,
 	}))
 	res, err = ti.service.GetProductFeatures(ctx, &gen.GetProductFeaturesPayload{

@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  GetProductFeaturesResponseBody,
-  GetProductFeaturesResponseBody$inboundSchema,
-} from "../models/components/getproductfeaturesresponsebody.js";
+  ProductFeatures,
+  ProductFeatures$inboundSchema,
+} from "../models/components/productfeatures.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -51,7 +51,7 @@ export function featuresGet(
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    GetProductFeaturesResponseBody,
+    ProductFeatures,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -79,7 +79,7 @@ async function $do(
 ): Promise<
   [
     Result<
-      GetProductFeaturesResponseBody,
+      ProductFeatures,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -176,7 +176,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    GetProductFeaturesResponseBody,
+    ProductFeatures,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -187,7 +187,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, GetProductFeaturesResponseBody$inboundSchema),
+    M.json(200, ProductFeatures$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

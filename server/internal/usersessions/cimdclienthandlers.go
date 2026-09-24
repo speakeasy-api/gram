@@ -124,11 +124,20 @@ func (s *Service) VerifyURL(ctx context.Context, payload *gen.VerifyURLPayload) 
 		Reason:     nil,
 		Detail:     result.Detail,
 		ClientName: nil,
+		Document:   nil,
 	}
 	view.HTTPStatus = conv.PtrEmpty(result.HTTPStatus)
 	view.Reason = conv.PtrEmpty(result.Reason)
 	if result.Document != nil {
 		view.ClientName = conv.PtrEmpty(result.Document.ClientName)
+		// A failure to render is not a failure to verify: the probe answered
+		// the operator's question either way, so log it and omit the body
+		// rather than turning a good result into an error.
+		if rendered, renderErr := cimd.CanonicalJSON(result.Document); renderErr != nil {
+			s.logger.WarnContext(ctx, "cimd document could not be rendered", attr.SlogError(renderErr))
+		} else {
+			view.Document = conv.PtrEmpty(rendered)
+		}
 	}
 
 	return view, nil
@@ -180,7 +189,7 @@ func (s *Service) CreateUserSessionIssuerCimdClient(ctx context.Context, payload
 
 	txRepo := repo.New(dbtx)
 
-	issuer, err := txRepo.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+	issuer, err := txRepo.GetProjectUserSessionIssuerByID(ctx, repo.GetProjectUserSessionIssuerByIDParams{
 		ID:        issuerID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -203,9 +212,18 @@ func (s *Service) CreateUserSessionIssuerCimdClient(ctx context.Context, payload
 		return nil, oops.E(oops.CodeUnexpected, err, "create user session issuer cimd client").LogError(ctx, logger)
 	}
 
+	projectID := ""
+	if row.ProjectID.Valid {
+		projectID = row.ProjectID.UUID.String()
+	}
+	organizationID := ""
+	if row.OrganizationID.Valid {
+		organizationID = row.OrganizationID.String
+	}
 	view := &types.UserSessionIssuerCimdClient{
 		ID:                  row.ID.String(),
-		ProjectID:           row.ProjectID.String(),
+		ProjectID:           projectID,
+		OrganizationID:      organizationID,
 		UserSessionIssuerID: row.UserSessionIssuerID.String(),
 		ClientIDMetadataURI: row.ClientIDMetadataUri,
 		CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),
@@ -271,6 +289,7 @@ func (s *Service) ListUserSessionIssuerCimdClients(ctx context.Context, payload 
 	limit := pageLimit(payload.Limit)
 	rows, err := repo.New(s.db).ListUserSessionIssuerCimdClientsByIssuerID(ctx, repo.ListUserSessionIssuerCimdClientsByIssuerIDParams{
 		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: issuerID,
 		Cursor:              cursor,
 		LimitValue:          limit,
@@ -309,8 +328,9 @@ func (s *Service) GetUserSessionIssuerCimdClient(ctx context.Context, payload *g
 	}
 
 	row, err := repo.New(s.db).GetUserSessionIssuerCimdClientByID(ctx, repo.GetUserSessionIssuerCimdClientByIDParams{
-		ID:        id,
-		ProjectID: *authCtx.ProjectID,
+		ID:             id,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -359,7 +379,7 @@ func (s *Service) DeleteUserSessionIssuerCimdClient(ctx context.Context, payload
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer cimd client").LogError(ctx, logger)
 	}
 
-	issuer, err := txRepo.GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
+	issuer, err := txRepo.GetProjectUserSessionIssuerByID(ctx, repo.GetProjectUserSessionIssuerByIDParams{
 		ID:        row.UserSessionIssuerID,
 		ProjectID: *authCtx.ProjectID,
 	})
@@ -390,9 +410,19 @@ func (s *Service) DeleteUserSessionIssuerCimdClient(ctx context.Context, payload
 }
 
 func userSessionIssuerCimdClientView(row repo.UserSessionIssuerCimdClient) *types.UserSessionIssuerCimdClient {
+	projectID := ""
+	if row.ProjectID.Valid {
+		projectID = row.ProjectID.UUID.String()
+	}
+	organizationID := ""
+	if row.OrganizationID.Valid {
+		organizationID = row.OrganizationID.String
+	}
+
 	return &types.UserSessionIssuerCimdClient{
 		ID:                  row.ID.String(),
-		ProjectID:           row.ProjectID.String(),
+		ProjectID:           projectID,
+		OrganizationID:      organizationID,
 		UserSessionIssuerID: row.UserSessionIssuerID.String(),
 		ClientIDMetadataURI: row.ClientIDMetadataUri,
 		CreatedAt:           row.CreatedAt.Time.Format(time.RFC3339),

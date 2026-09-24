@@ -1,3 +1,5 @@
+import { ToolUsageIdentity } from "@/components/tool-usage-identity";
+import { useReadableAgents } from "@/hooks/useReadableAgents";
 import { WidgetEmptyState } from "@/components/chart/WidgetEmptyState";
 import { Heading } from "@/components/ui/Heading";
 import { SkeletonTable } from "@/components/ui/Skeleton";
@@ -11,13 +13,24 @@ import { Column, Table } from "@/components/ui/Table";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-type UserRow = GetToolUsageUsersResult["users"][number];
+type UserRow = GetToolUsageUsersResult["users"][number] & {
+  agent?: { id: string; name: string };
+};
 
 const columns: Column<UserRow>[] = [
   {
     key: "userLabel",
     header: "User",
-    render: (row) => <Text className="truncate">{row.userLabel}</Text>,
+    render: (row) => (
+      <Text className="truncate">
+        <ToolUsageIdentity
+          kind={row.userKind}
+          identityKey={row.userKey}
+          label={row.userLabel}
+          agent={row.agent}
+        />
+      </Text>
+    ),
   },
   {
     key: "eventCount",
@@ -72,12 +85,32 @@ export function TopUsersTable({
     }),
   );
 
+  const agents = useReadableAgents(
+    data?.users.some((row) => row.userKind === "agent_id") ?? false,
+  );
+  const agentsById = useMemo(
+    () =>
+      new Map(
+        (agents.isError ? [] : (agents.data ?? [])).map((agent) => [
+          agent.id,
+          agent,
+        ]),
+      ),
+    [agents.data, agents.isError],
+  );
   const users = useMemo(
     () =>
       [...(data?.users ?? [])]
         .sort((a, b) => b.eventCount - a.eventCount)
-        .slice(0, 10),
-    [data],
+        .slice(0, 10)
+        .map((row) => ({
+          ...row,
+          agent:
+            row.userKind === "agent_id"
+              ? agentsById.get(row.userKey)
+              : undefined,
+        })),
+    [data, agentsById],
   );
 
   let content: React.JSX.Element;

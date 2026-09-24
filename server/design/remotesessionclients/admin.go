@@ -59,14 +59,32 @@ var ListOrganizationMcpServersResult = Type("ListOrganizationMcpServersResult", 
 	Required("items")
 })
 
+// TrustedClientUserSessionIssuerReference identifies an organization-owned
+// user-session issuer that uses a client for identity-provider login.
+var TrustedClientUserSessionIssuerReference = Type("TrustedClientUserSessionIssuerReference", func() {
+	Description("An organization-owned user-session issuer that uses this client for identity-provider login.")
+
+	Attribute("id", String, "The user_session_issuer id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("slug", String, "The user_session_issuer slug.")
+
+	Required("id", "slug")
+})
+
 // OrganizationClientDeletePreflight describes the impact of deleting a client.
 var OrganizationClientDeletePreflight = Type("OrganizationClientDeletePreflight", func() {
-	Description("Authoritative impact summary for deleting a remote_session_client: how many sessions it holds and the names of the MCP servers it is attached to.")
+	Description("Authoritative impact summary for deleting a remote_session_client, including identity-provider login references that block deletion.")
 
 	Attribute("session_count", Int, "Number of non-deleted remote_sessions minted against this client.")
 	Attribute("mcp_server_names", ArrayOf(String), "Display names of MCP servers this client is attached to.")
+	Attribute("trusted_user_session_issuers", ArrayOf(TrustedClientUserSessionIssuerReference), "Organization-owned user-session issuers that use this client for identity-provider login and block deletion.")
+	Attribute("can_delete", Boolean, "Whether the client can be deleted now.")
+	Attribute("blocking_reason", String, "Stable reason deletion is blocked. Present when can_delete is false.", func() {
+		Enum("identity_provider_login")
+	})
 
-	Required("session_count", "mcp_server_names")
+	Required("session_count", "mcp_server_names", "trusted_user_session_issuers", "can_delete")
 })
 
 // CreateOrganizationRemoteSessionClientForm registers a standalone
@@ -90,13 +108,16 @@ var CreateOrganizationRemoteSessionClientForm = Type("CreateOrganizationRemoteSe
 	})
 	Attribute("client_id", String, "client_id supplied by the caller, e.g. from Dynamic Client Registration.")
 	Attribute("client_secret", String, "Optional client_secret supplied by the caller. Gram encrypts before persisting; the plaintext is never returned.")
-	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", func() {
-		Enum("client_secret_basic", "client_secret_post", "none")
-	})
+	// Shares tokenEndpointAuthMethodEnum with the project-scoped forms rather
+	// than repeating the values: AIM-156 adds private_key_jwt to this enum, and
+	// a second copy is a second place to forget.
+	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
+	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.", tokenEndpointAuthAudienceFormatEnum)
 	Attribute("scope", ArrayOf(String), func() {
 		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", AudienceAttribute)
+	RegistrationProvenanceAttributes()
 	Required("remote_session_issuer_id", "client_id")
 })
 
@@ -125,3 +146,24 @@ var CreateCimdOrganizationRemoteSessionClientForm = Type("CreateCimdOrganization
 // in design.go). The two forms were structurally identical, so a dedicated
 // UpdateOrganizationRemoteSessionClientForm only forked the generated SDK
 // request-body component name without any shape difference.
+
+// OrganizationClientDelegationStatus contains aggregates only, never identities or credentials.
+var OrganizationClientDelegationStatus = Type("OrganizationClientDelegationStatus", func() {
+	Description("Latest per-human observations for the current client configuration within 30 days. Unknown when no matching observations exist. A known invalid delegation configuration, including a missing active signing key, reports configuration_failure with no observations. Credential presence does not guarantee future renewal.")
+	Attribute("status", String, "unknown means no current observations; observed means matching observations exist; configuration_failure means the current delegation configuration is known to be invalid, not a per-human observation.", func() { Enum("unknown", "observed", "configuration_failure") })
+	Attribute("window_start", String, "Inclusive observation window start.", func() { Format(FormatDateTime) })
+	Attribute("observations", ArrayOf(DelegationStatusCount))
+	Required("status", "window_start", "observations")
+})
+
+var DelegationStatusCount = Type("DelegationStatusCount", func() {
+	Description("Sanitized count of the latest observation per human, not a history of token requests.")
+	Attribute("status", String, "Observed per-human delegation outcome, present only when the top-level status is observed. A configuration_failure count records past per-human failures for the current configuration; it is distinct from top-level configuration_failure, which reports a currently invalid configuration and returns no observations.", func() {
+		Enum("durable_credential_present", "assertion_only", "offline_unsupported", "offline_not_requested", "refused", "reauthentication_required", "temporary_failure", "configuration_failure")
+	})
+	Attribute("count", Int64, "Number of humans with this latest outcome.", func() { Minimum(0) })
+	Attribute("last_observed_at", String, "Most recent matching observation.", func() { Format(FormatDateTime) })
+	Attribute("last_credential_obtained_at", String, "Most recent credential acquisition, distinct from renewal.", func() { Format(FormatDateTime) })
+	Attribute("last_refresh_succeeded_at", String, "Most recent successful assertion renewal.", func() { Format(FormatDateTime) })
+	Required("status", "count")
+})

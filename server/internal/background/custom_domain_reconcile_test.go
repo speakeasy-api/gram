@@ -140,10 +140,10 @@ func TestCustomDomainRegistrationWorkflowUsesReconcileBridgeBudget(t *testing.T)
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterActivityWithOptions(
-		func(context.Context, activities.VerifyCustomDomainArgs) error {
-			return nil
+		func(context.Context, activities.VerifyCustomDomainArgs) (activities.VerifyCustomDomainResult, error) {
+			return activities.VerifyCustomDomainResult{Status: activities.VerifyStatusVerified, Reason: ""}, nil
 		},
-		activity.RegisterOptions{Name: "VerifyCustomDomain"},
+		activity.RegisterOptions{Name: "VerifyCustomDomainV2"},
 	)
 	bridgeAttempts := 0
 	var bridgeTimeout time.Duration

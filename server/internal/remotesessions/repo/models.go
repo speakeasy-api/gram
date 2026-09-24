@@ -12,6 +12,7 @@ import (
 
 type RemoteSession struct {
 	ID                     uuid.UUID
+	GrantGeneration        int64
 	SubjectUrn             urn.SessionSubject
 	UserSessionIssuerID    uuid.UUID
 	RemoteSessionClientID  uuid.UUID
@@ -25,6 +26,14 @@ type RemoteSession struct {
 	AutoRefresh            bool
 	LastRefreshAttemptAt   pgtype.Timestamptz
 	LastUsedAt             pgtype.Timestamptz
+	UpstreamSubject        pgtype.Text
+	UpstreamEmail          pgtype.Text
+	UpstreamDisplayName    pgtype.Text
+	IdentitySource         pgtype.Text
+	Enrichment             []byte
+	LastValidatedAt        pgtype.Timestamptz
+	ValidationStatus       pgtype.Text
+	ValidationReason       pgtype.Text
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
@@ -32,52 +41,115 @@ type RemoteSession struct {
 }
 
 type RemoteSessionClient struct {
-	ID                      uuid.UUID
-	ProjectID               uuid.NullUUID
-	OrganizationID          pgtype.Text
-	RemoteSessionIssuerID   uuid.UUID
-	ClientID                string
-	ClientSecretEncrypted   pgtype.Text
-	ClientIDIssuedAt        pgtype.Timestamptz
-	ClientSecretExpiresAt   pgtype.Timestamptz
-	TokenEndpointAuthMethod pgtype.Text
-	Scope                   []string
-	Audience                pgtype.Text
-	ClientIDMetadataUri     pgtype.Text
-	LegacyCallbackUrl       bool
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
-	DeletedAt               pgtype.Timestamptz
-	Deleted                 bool
+	ID                              uuid.UUID
+	ProjectID                       uuid.NullUUID
+	OrganizationID                  pgtype.Text
+	AttachmentScope                 pgtype.Text
+	RemoteSessionIssuerID           uuid.UUID
+	ClientID                        string
+	ClientSecretEncrypted           pgtype.Text
+	ClientIDIssuedAt                pgtype.Timestamptz
+	ClientSecretExpiresAt           pgtype.Timestamptz
+	TokenEndpointAuthMethod         pgtype.Text
+	JsonWebKeySetID                 uuid.NullUUID
+	Scope                           []string
+	GrantTypes                      []string
+	Audience                        pgtype.Text
+	TokenEndpointAuthAudienceFormat pgtype.Text
+	ClientIDMetadataUri             pgtype.Text
+	LegacyCallbackUrl               bool
+	ResourceIdentifier              pgtype.Text
+	ResourceName                    pgtype.Text
+	ResourceDocumentation           pgtype.Text
+	ResourcePolicyUri               pgtype.Text
+	ResourceTosUri                  pgtype.Text
+	UpstreamRejectedAt              pgtype.Timestamptz
+	IdentityProviderConnectionID    uuid.NullUUID
+	CreatedAt                       pgtype.Timestamptz
+	UpdatedAt                       pgtype.Timestamptz
+	DeletedAt                       pgtype.Timestamptz
+	Deleted                         bool
 }
 
 type RemoteSessionIssuer struct {
-	ID                                uuid.UUID
-	ProjectID                         uuid.NullUUID
-	OrganizationID                    pgtype.Text
-	Slug                              string
-	Issuer                            string
-	AuthorizationEndpoint             pgtype.Text
-	TokenEndpoint                     pgtype.Text
-	RevocationEndpoint                pgtype.Text
-	RegistrationEndpoint              pgtype.Text
-	JwksUri                           pgtype.Text
-	ServiceDocumentation              pgtype.Text
-	OpPolicyUri                       pgtype.Text
-	OpTosUri                          pgtype.Text
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
-	CodeChallengeMethodsSupported     []string
-	ClientIDMetadataDocumentSupported bool
-	Oidc                              bool
-	Passthrough                       bool
-	Name                              pgtype.Text
-	LogoAssetID                       uuid.NullUUID
-	ClientSetupDocumentationUrl       pgtype.Text
-	CreatedAt                         pgtype.Timestamptz
-	UpdatedAt                         pgtype.Timestamptz
-	DeletedAt                         pgtype.Timestamptz
-	Deleted                           bool
+	ID                                         uuid.UUID
+	ProjectID                                  uuid.NullUUID
+	OrganizationID                             pgtype.Text
+	AttachmentScope                            pgtype.Text
+	Slug                                       string
+	Issuer                                     string
+	AuthorizationEndpoint                      pgtype.Text
+	TokenEndpoint                              pgtype.Text
+	RevocationEndpoint                         pgtype.Text
+	RegistrationEndpoint                       pgtype.Text
+	JwksUri                                    pgtype.Text
+	Jwks                                       []byte
+	JwksFetchedAt                              pgtype.Timestamptz
+	JwksLastError                              pgtype.Text
+	JwksLastErrorAt                            pgtype.Timestamptz
+	JwksCacheExpiresAt                         pgtype.Timestamptz
+	JwksEtag                                   pgtype.Text
+	ServiceDocumentation                       pgtype.Text
+	OpPolicyUri                                pgtype.Text
+	OpTosUri                                   pgtype.Text
+	ScopesSupported                            []string
+	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
+	ResponseTypesSupported                     []string
+	TokenEndpointAuthMethodsSupported          []string
+	CodeChallengeMethodsSupported              []string
+	ClientIDMetadataDocumentSupported          bool
+	UserinfoEndpoint                           pgtype.Text
+	IntrospectionEndpoint                      pgtype.Text
+	IntrospectionEndpointAuthMethodsSupported  []string
+	IDTokenSigningAlgValuesSupported           []string
+	ClaimsSupported                            []string
+	BackchannelLogoutSupported                 pgtype.Bool
+	AuthorizationResponseIssParameterSupported pgtype.Bool
+	ScopeOverride                              []string
+	ResourceIndicatorSupported                 pgtype.Bool
+	Oidc                                       bool
+	Passthrough                                bool
+	TunneledMcpServerID                        uuid.NullUUID
+	Name                                       pgtype.Text
+	LogoAssetID                                uuid.NullUUID
+	ClientSetupDocumentationUrl                pgtype.Text
+	Metadata                                   []byte
+	MetadataFetchedAt                          pgtype.Timestamptz
+	MetadataLastError                          pgtype.Text
+	MetadataLastErrorAt                        pgtype.Timestamptz
+	MetadataLastErrorUrl                       pgtype.Text
+	CreatedAt                                  pgtype.Timestamptz
+	UpdatedAt                                  pgtype.Timestamptz
+	DeletedAt                                  pgtype.Timestamptz
+	Deleted                                    bool
+}
+
+type TrustedIssuerSession struct {
+	ID                             uuid.UUID
+	RemoteSessionClientID          uuid.NullUUID
+	OrganizationID                 pgtype.Text
+	ProjectID                      uuid.NullUUID
+	SubjectUrn                     string
+	IdentityAssertionEncrypted     pgtype.Text
+	IdentityAssertionExpiresAt     pgtype.Timestamptz
+	RefreshTokenEncrypted          pgtype.Text
+	RefreshExpiresAt               pgtype.Timestamptz
+	LastRefreshAttemptAt           pgtype.Timestamptz
+	OfflineAccessRefusedAt         pgtype.Timestamptz
+	OfflineAccessRequestConfigHash pgtype.Text
+	CredentialGeneration           pgtype.Int8
+	RefreshClaimID                 uuid.NullUUID
+	UpstreamSubjectEncrypted       pgtype.Text
+	NonceEncrypted                 pgtype.Text
+	CredentialConfigHash           pgtype.Text
+	ObservationStatus              pgtype.Text
+	ObservedAt                     pgtype.Timestamptz
+	CredentialObtainedAt           pgtype.Timestamptz
+	LastRefreshSucceededAt         pgtype.Timestamptz
+	RetryAfter                     pgtype.Timestamptz
+	CreatedAt                      pgtype.Timestamptz
+	UpdatedAt                      pgtype.Timestamptz
+	DeletedAt                      pgtype.Timestamptz
+	Deleted                        bool
 }

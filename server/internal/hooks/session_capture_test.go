@@ -13,6 +13,7 @@ import (
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hookevents"
+	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -122,6 +123,74 @@ func TestClaudeHookSource_ConsistentAcrossAllWrites(t *testing.T) {
 		assert.True(t, m.UserID.Valid, "UserID should be set (role=%s)", m.Role)
 		assert.Equal(t, wantUserID, m.UserID.String,
 			"UserID should match metadata.UserID for all hook writes (role=%s)", m.Role)
+	}
+}
+
+func TestRealtimeToolScanLeavesPersistedMessagesUnlinked(t *testing.T) {
+	t.Parallel()
+	for _, provider := range []hookevents.Provider{hookevents.ProviderClaude, hookevents.ProviderCursor} {
+		t.Run(string(provider), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			ti.service.productFeatures = alwaysEnabledFeatures{}
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			sessionID := uuid.NewString()
+			toolName := "Edit"
+			toolUseID := " \ttool-call \n"
+			metadata := &SessionMetadata{
+				SessionID:     sessionID,
+				ServiceName:   string(provider),
+				UserEmail:     "",
+				UserID:        authCtx.UserID,
+				ExternalOrgID: "",
+				GramOrgID:     authCtx.ActiveOrganizationID,
+				ProjectID:     authCtx.ProjectID.String(),
+			}
+			payload := &gen.ClaudePayload{
+				HookEventName: "PreToolUse",
+				SessionID:     &sessionID,
+				ToolName:      &toolName,
+				ToolUseID:     &toolUseID,
+			}
+			require.NoError(t, ti.service.writeToolCallRequestToPG(ctx, payload, metadata))
+			messages, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+				ChatID:    sessionIDToUUID(sessionID),
+				ProjectID: *authCtx.ProjectID,
+			})
+			require.NoError(t, err)
+			require.Len(t, messages, 1)
+			ev := hookevents.Event{
+				Provider:     provider,
+				Type:         hookevents.EventTypeBeforeToolUse,
+				RawEventType: payload.HookEventName,
+				Timestamp:    time.Now().UTC(),
+				AuthContext:  authCtx,
+				Context: hookevents.EventContext{
+					OrganizationID: authCtx.ActiveOrganizationID,
+					ProjectID:      *authCtx.ProjectID,
+					User:           hookevents.User{ID: authCtx.UserID, Email: ""},
+				},
+				ConversationID: sessionID,
+				Raw:            payload,
+			}
+			if provider == hookevents.ProviderCursor {
+				ev.RawEventType = "preToolUse"
+				ev.Raw = &gen.CursorPayload{
+					HookEventName:  ev.RawEventType,
+					ConversationID: &sessionID,
+					ToolName:       &toolName,
+					ToolUseID:      &toolUseID,
+				}
+			}
+			scanner := &recordingCursorRiskScanner{}
+			ti.service.riskScanner = scanner
+			ti.service.scanHookEventForEnforcement(ctx, ev, "{}", message.ToolRequest, toolName)
+			require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatID)
+			require.Equal(t, sessionID, scanner.request.Provenance.ExternalConversationID)
+			require.Equal(t, uuid.Nil, scanner.request.Provenance.ChatMessageID)
+			require.Equal(t, "realtime_message_not_resolved", scanner.request.Provenance.MessageLinkReason)
+		})
 	}
 }
 
@@ -271,7 +340,7 @@ func TestClaudeSessionSurface_ResolvesBareClaudeAdapterToClaudeCode(t *testing.T
 
 	// A cached SessionStart variant still overrides the slug.
 	coworkSession := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(coworkSession), agentVariantCowork, sessionMCPListTTL))
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(testProjectID(t, ctx), coworkSession), agentVariantCowork, sessionMCPListTTL))
 	assert.Equal(t, agentVariantCowork, ti.service.claudeSessionSurface(ctx, &SessionMetadata{
 		SessionID:   coworkSession,
 		ServiceName: "claude",
@@ -344,7 +413,7 @@ func TestClaudeChatSource_CoworkFromVariantOverridesAmbiguousServiceName(t *test
 	sessionID := uuid.NewString()
 	chatID := sessionIDToUUID(sessionID)
 	prompt := "hello from legacy cowork"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(testProjectID(t, ctx), sessionID),
 		agentVariantCowork, sessionMCPListTTL))
 
 	metadata := &SessionMetadata{

@@ -93,7 +93,7 @@ linters:
       - path: internal/dns/net_resolver\.go
         linters:
           - wrapcheck
-      - path: _test\.go|internal/oauthtest
+      - path: _test\.go|internal/oauthtest|internal/identityproviderconnections/provisiontest
         linters:
           - exhaustruct
           - gosec
@@ -105,9 +105,9 @@ linters:
           - gosec
         text: G306
       # NOT a false positive: the local development seed deliberately provisions
-      # well-known API and tunnel keys so mise.toml can ship them as defaults.
-      # They only ever exist in a developer's own database, and both carry a
-      # `local` marker in their prefix. See seed/demo/README.md.
+      # a well-known API key so mise.toml can ship it as a default. It only
+      # ever exists in a developer's own database, and it carries a `local`
+      # marker in its prefix. See seed/demo/README.md.
       - path: internal/demoseed/(local|mcpapp)\.go
         linters:
           - gosec
@@ -255,6 +255,9 @@ linters:
         # Temporarily ignore this lint rule because it needs to be a separate
         # refactor to address properly.
         - G117
+        # Cookie hardening needs a dedicated audit of development and
+        # production cookie policies.
+        - G124
         # Taint analysis engine introduced in gosec v2.23.0 throws up a lot of
         # false positives that peppering the codebase with `#nosec` comments
         # starts the defeat the value of the linter. We'll parking these lints
@@ -262,6 +265,12 @@ linters:
         - G703
         - G704
         - G705
+        - G710
+    govet:
+      # Go 1.27's inline analyzer reports unsupported generic inference as
+      # diagnostics instead of limiting itself to safe rewrites.
+      disable:
+        - inline
     forbidigo:
       analyze-types: true
       forbid:
@@ -481,6 +490,9 @@ linters:
         - "github.com/speakeasy-api/gram/server/internal/oops.C("
         - "github.com/speakeasy-api/gram/server/internal/oops.E("
         - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("
+        - "github.com/speakeasy-api/gram/server/internal/managedrows.RequireUnmanaged("
+        - "github.com/speakeasy-api/gram/server/internal/managedrows.RequireDeletable("
+        - "github.com/speakeasy-api/gram/server/internal/managedrows.Error("
         - "github.com/speakeasy-api/gram/server/internal/httpcache.WriteCacheableJSON("
         - "github.com/speakeasy-api/gram/server/internal/platformtools/core.DecodeInput("
         - "github.com/speakeasy-api/gram/server/internal/platformtools/core.EncodeResult("
@@ -492,11 +504,13 @@ linters:
         - "github.com/speakeasy-api/gram/server/internal/auth.RequirePlatformAdmin("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Require("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).RequireAny("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).RequireAnyUnblocked("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).ShouldEnforce("
         - "github.com/speakeasy-api/gram/server/internal/authz.GrantsForRole("
         - "github.com/speakeasy-api/gram/server/internal/organizations/orgprovision.ValidateName("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
+        - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).AuthorizeWithHandlerProjectAccess("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/chatsessions.Manager).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).CheckProjectAccess("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/sessions.Manager).Authenticate("

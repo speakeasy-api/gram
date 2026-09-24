@@ -46,6 +46,11 @@ func seedOrg(t *testing.T, ctx context.Context, conn testrepo.DBTX, f orgFixture
 		f.accountType = "free"
 	}
 
+	// Stable default timestamps make ID tiebreaker expectations deterministic.
+	if f.createdAt == nil {
+		f.createdAt = new(time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC))
+	}
+
 	params := testrepo.CreateOrganizationMetadataFixtureParams{
 		ID:                 f.id,
 		Name:               f.name,
@@ -80,6 +85,29 @@ func seedMembership(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID
 		UserID:         pgtype.Text{String: userID, Valid: true},
 	})
 	require.NoError(t, err)
+}
+
+func TestGetOrganization_StripeCustomerWithoutSubscription(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	seedOrg(t, ctx, conn, orgFixture{id: "org_stripe_ids", name: "Billing Example", slug: "billing-example"})
+
+	org, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: "org_stripe_ids"})
+	require.NoError(t, err)
+	require.Nil(t, org.StripeCustomerID)
+	require.Nil(t, org.StripeSubscriptionID)
+
+	err = testrepo.New(conn).CreateStripeBillingMetadataFixture(ctx, testrepo.CreateStripeBillingMetadataFixtureParams{
+		OrganizationID:   org.ID,
+		StripeCustomerID: conv.ToPGText("cus_example"),
+	})
+	require.NoError(t, err)
+
+	org, err = svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: "org_stripe_ids"})
+	require.NoError(t, err)
+	require.NotNil(t, org.StripeCustomerID)
+	require.Equal(t, "cus_example", *org.StripeCustomerID)
+	require.Nil(t, org.StripeSubscriptionID)
 }
 
 func TestGetOrganization_ByID(t *testing.T) {
@@ -356,7 +384,7 @@ func TestListOrganizations_Empty(t *testing.T) {
 	require.Equal(t, int64(0), res.Total)
 }
 
-func TestListOrganizations_DefaultExcludesDisabled(t *testing.T) {
+func TestListOrganizations_ActiveExcludesDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -365,14 +393,14 @@ func TestListOrganizations_DefaultExcludesDisabled(t *testing.T) {
 	seedOrg(t, ctx, conn, orgFixture{id: "org_active", name: "Active Co", slug: "active-co", whitelisted: true})
 	seedOrg(t, ctx, conn, orgFixture{id: "org_disabled", name: "Disabled Co", slug: "disabled-co", whitelisted: true, disabledAt: &now})
 
-	res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{})
+	res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{DisabledStatus: new("active")})
 	require.NoError(t, err)
 	require.Len(t, res.Organizations, 1)
 	require.Equal(t, "org_active", res.Organizations[0].ID)
 	require.Nil(t, res.Organizations[0].DisabledAt)
 }
 
-func TestListOrganizations_IncludeDisabled(t *testing.T) {
+func TestListOrganizations_AllIncludesDisabled(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -381,8 +409,7 @@ func TestListOrganizations_IncludeDisabled(t *testing.T) {
 	seedOrg(t, ctx, conn, orgFixture{id: "org_a", name: "Alpha", slug: "alpha", whitelisted: true})
 	seedOrg(t, ctx, conn, orgFixture{id: "org_b", name: "Bravo", slug: "bravo", whitelisted: true, disabledAt: &now})
 
-	include := true
-	res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{IncludeDisabled: &include})
+	res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{DisabledStatus: new("all")})
 	require.NoError(t, err)
 	require.Len(t, res.Organizations, 2)
 
@@ -536,6 +563,97 @@ type trialStateCase struct {
 	trial *trialFixture
 }
 
+func TestGetOrganization_TrialDetails(t *testing.T) {
+	t.Parallel()
+
+	ctx, svc, conn := newTestAdminService(t)
+
+	endsAt := time.Date(2035, time.March, 4, 5, 6, 7, 0, time.UTC)
+	convertedAt := time.Date(2025, time.April, 5, 6, 7, 8, 0, time.UTC)
+	demotedAt := time.Date(2025, time.May, 6, 7, 8, 9, 0, time.UTC)
+	tier := "enterprise"
+	endsISO := endsAt.In(time.Local).Format(time.RFC3339)
+	convertedISO := convertedAt.In(time.Local).Format(time.RFC3339)
+	demotedISO := demotedAt.In(time.Local).Format(time.RFC3339)
+
+	cases := []struct {
+		name        string
+		orgID       string
+		trial       *trialFixture
+		wantTier    *string
+		wantEnds    *string
+		wantConvert *string
+		wantDemote  *string
+	}{
+		{
+			name:     "live",
+			orgID:    "org_trial_detail_live",
+			trial:    &trialFixture{tier: "enterprise", endsAt: endsAt},
+			wantTier: &tier,
+			wantEnds: &endsISO,
+		},
+		{
+			name:        "converted",
+			orgID:       "org_trial_detail_converted",
+			trial:       &trialFixture{tier: "enterprise", endsAt: endsAt, convertedAt: &convertedAt},
+			wantTier:    &tier,
+			wantEnds:    &endsISO,
+			wantConvert: &convertedISO,
+		},
+		{
+			name:       "demoted",
+			orgID:      "org_trial_detail_demoted",
+			trial:      &trialFixture{tier: "enterprise", endsAt: endsAt, demotedAt: &demotedAt},
+			wantTier:   &tier,
+			wantEnds:   &endsISO,
+			wantDemote: &demotedISO,
+		},
+		{name: "no trial", orgID: "org_trial_detail_none"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			seedOrg(t, ctx, conn, orgFixture{id: c.orgID, name: c.name, slug: c.orgID, whitelisted: true})
+			if c.trial != nil {
+				f := *c.trial
+				f.orgID = c.orgID
+				seedTrial(t, ctx, conn, f)
+			}
+
+			got, err := svc.GetOrganization(ctx, &gen.GetOrganizationPayload{IDOrSlug: c.orgID})
+			require.NoError(t, err)
+			fields := []struct {
+				name string
+				want *string
+				got  *string
+			}{
+				{name: "trial tier", want: c.wantTier, got: got.TrialTier},
+				{name: "trial end", want: c.wantEnds, got: got.TrialEndsAt},
+				{name: "trial conversion", want: c.wantConvert, got: got.TrialConvertedAt},
+				{name: "trial demotion", want: c.wantDemote, got: got.TrialDemotedAt},
+			}
+			for _, field := range fields {
+				if field.want == nil {
+					require.Nil(t, field.got, field.name)
+					continue
+				}
+				require.NotNil(t, field.got, field.name)
+				if field.name == "trial tier" {
+					require.Equal(t, *field.want, *field.got, field.name)
+					continue
+				}
+				wantTime, err := time.Parse(time.RFC3339, *field.want)
+				require.NoError(t, err, field.name)
+				gotTime, err := time.Parse(time.RFC3339, *field.got)
+				require.NoError(t, err, field.name)
+				require.True(t, wantTime.Equal(gotTime), field.name)
+			}
+		})
+	}
+}
+
 func TestAdminListOrganizations_TrialState(t *testing.T) {
 	t.Parallel()
 
@@ -602,10 +720,6 @@ func TestAdminListOrganizations_TrialState(t *testing.T) {
 		require.NoError(t, err, "parsing trial end date for %s", c.orgID)
 		require.WithinDuration(t, c.trial.endsAt, got, time.Second, "trial end date for %s", c.orgID)
 	}
-
-	// Expand only: the old free trial fields stay on the API.
-	require.NotNil(t, byID["org_trial_none"].FreeTrialStartedAt)
-	require.NotNil(t, byID["org_trial_none"].FreeTrialEndsAt)
 }
 
 type searchByIDCase struct {
@@ -725,7 +839,7 @@ type searchFilterCase struct {
 }
 
 // An id match escapes the disabled filter and no other: it is still one arm of
-// the q group as far as every remaining filter is concerned. TestListOrganizations_SearchByIDFindsADisabledOrganization
+// the q group as far as every remaining filter is concerned. TestListOrganizations_SearchStatusIsStrict
 // covers the one filter it does escape.
 func TestListOrganizations_SearchByIDRespectsFilters(t *testing.T) {
 	t.Parallel()
@@ -740,6 +854,8 @@ func TestListOrganizations_SearchByIDRespectsFilters(t *testing.T) {
 
 	seedOrg(t, ctx, conn, orgFixture{id: proID, name: "Pro Holdings", slug: "pro-holdings", accountType: "pro", whitelisted: true})
 	seedOrg(t, ctx, conn, orgFixture{id: cursorID, name: "Cursor Holdings", slug: "cursor-holdings", whitelisted: true})
+	// Cursor anchors must exist so their creation timestamp can be resolved.
+	seedOrg(t, ctx, conn, orgFixture{id: "org_search_id_a", name: "Anchor Holdings", slug: "anchor-holdings", whitelisted: true})
 	seedOrg(t, ctx, conn, orgFixture{id: trialID, name: "Trial Holdings", slug: "trial-holdings", whitelisted: true})
 	seedTrial(t, ctx, conn, trialFixture{orgID: trialID, endsAt: time.Now().UTC().Add(30 * 24 * time.Hour)})
 
@@ -775,24 +891,20 @@ func TestListOrganizations_SearchByIDRespectsFilters(t *testing.T) {
 }
 
 type searchDisabledCase struct {
-	name            string
-	q               string
-	includeDisabled bool
-	disabledStates  []string
-	wantIDs         []string
+	name           string
+	q              string
+	disabledStatus *string
+	wantIDs        []string
 }
 
-// Pasting the id of a suspended organization is a leading reason to paste an id
-// at all, so an exact id match reaches one whatever the disabled filter says.
-// Only the id arms escape it; the name and slug arms do not.
-func TestListOrganizations_SearchByIDFindsADisabledOrganization(t *testing.T) {
+// Status applies strictly to ID, WorkOS ID, name and slug searches.
+// Omitted status remains unrestricted.
+func TestListOrganizations_SearchStatusIsStrict(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
 
-	// Both ids are mixed case: the bypass carries its own copy of the id arms, so
-	// it needs its own proof that each folds case rather than borrowing the one
-	// TestListOrganizations_SearchByIDIgnoresCase gives an active organization.
+	// Both ID spaces remain case-insensitive when status is applied.
 	const (
 		disabledID = "org_search_id_Disabled"
 		activeID   = "org_search_id_active"
@@ -806,28 +918,31 @@ func TestListOrganizations_SearchByIDFindsADisabledOrganization(t *testing.T) {
 	seedOrg(t, ctx, conn, orgFixture{id: activeID, name: "Active Holdings", slug: "active-holdings", whitelisted: true})
 
 	cases := []searchDisabledCase{
-		{name: "disabled organization by id, disabled excluded", q: disabledID, wantIDs: []string{disabledID}},
-		{name: "disabled organization by id, disabled included", q: disabledID, includeDisabled: true, wantIDs: []string{disabledID}},
-		{name: "disabled organization by id, disabled_states active", q: disabledID, disabledStates: []string{"active"}, wantIDs: []string{disabledID}},
-		{name: "disabled organization by lowercased id, disabled excluded", q: strings.ToLower(disabledID), wantIDs: []string{disabledID}},
-		{name: "disabled organization by workos id, disabled excluded", q: disabledWorkosID, wantIDs: []string{disabledID}},
-		{name: "disabled organization by lowercased workos id, disabled excluded", q: strings.ToLower(disabledWorkosID), wantIDs: []string{disabledID}},
+		{name: "disabled organization by id, status omitted", q: disabledID, wantIDs: []string{disabledID}},
+		{name: "disabled organization by id, disabled included", q: disabledID, disabledStatus: new("all"), wantIDs: []string{disabledID}},
+		{name: "disabled lowercase ID excluded by active", q: strings.ToLower(disabledID), disabledStatus: new("active"), wantIDs: nil},
+		{name: "disabled WorkOS ID excluded by active", q: disabledWorkosID, disabledStatus: new("active"), wantIDs: nil},
+		{name: "disabled lowercase WorkOS ID excluded by active", q: strings.ToLower(disabledWorkosID), disabledStatus: new("active"), wantIDs: nil},
+		{name: "disabled ID matches disabled", q: disabledID, disabledStatus: new("disabled"), wantIDs: []string{disabledID}},
+		{name: "disabled organization by id, status active", q: disabledID, disabledStatus: new("active"), wantIDs: nil},
+		{name: "disabled organization by lowercased id, status omitted", q: strings.ToLower(disabledID), wantIDs: []string{disabledID}},
+		{name: "disabled organization by workos id, status omitted", q: disabledWorkosID, wantIDs: []string{disabledID}},
+		{name: "disabled organization by lowercased workos id, status omitted", q: strings.ToLower(disabledWorkosID), wantIDs: []string{disabledID}},
 
-		// The bypass is the two id arms, not the whole q group.
-		{name: "disabled organization by name, disabled excluded", q: "Disabled Holdings", wantIDs: nil},
-		{name: "disabled organization by slug, disabled excluded", q: "disabled-holdings", wantIDs: nil},
-		{name: "disabled organization by name, disabled included", q: "Disabled Holdings", includeDisabled: true, wantIDs: []string{disabledID}},
+		// Name and slug use the same status restriction.
+		{name: "disabled organization by name, disabled excluded", q: "Disabled Holdings", disabledStatus: new("active"), wantIDs: nil},
+		{name: "disabled organization by slug, disabled excluded", q: "disabled-holdings", disabledStatus: new("active"), wantIDs: nil},
+		{name: "disabled organization by name, disabled included", q: "Disabled Holdings", disabledStatus: new("all"), wantIDs: []string{disabledID}},
 
-		// Symmetric: the id arms escape the filter rather than widening it to disabled rows.
-		{name: "active organization by id, disabled_states disabled", q: activeID, disabledStates: []string{"disabled"}, wantIDs: []string{activeID}},
-		{name: "active organization by name, disabled_states disabled", q: "Active Holdings", disabledStates: []string{"disabled"}, wantIDs: nil},
+		// Symmetric: disabled status excludes active rows even by exact ID.
+		{name: "active organization by id, status disabled", q: activeID, disabledStatus: new("disabled"), wantIDs: nil},
+		{name: "active organization by name, status disabled", q: "Active Holdings", disabledStatus: new("disabled"), wantIDs: nil},
 	}
 
 	for _, c := range cases {
 		payload := &gen.ListOrganizationsPayload{
-			Q:               conv.PtrEmpty(c.q),
-			IncludeDisabled: conv.PtrEmpty(c.includeDisabled),
-			DisabledStates:  c.disabledStates,
+			Q:              conv.PtrEmpty(c.q),
+			DisabledStatus: c.disabledStatus,
 		}
 		requireSearchMatchesWithTotal(t, ctx, svc, payload, c.wantIDs, c.name)
 	}
@@ -994,9 +1109,9 @@ func seedSortFixtures(t *testing.T, ctx context.Context, conn *pgxpool.Pool) {
 // sortPayload builds an offset-mode request over the sort fixtures, which are all disabled.
 func sortPayload(sort, direction string) *gen.ListOrganizationsPayload {
 	return &gen.ListOrganizationsPayload{
-		Sort:            new(sort),
-		Direction:       new(direction),
-		IncludeDisabled: new(true),
+		Sort:           new(sort),
+		Direction:      new(direction),
+		DisabledStatus: new("all"),
 	}
 }
 
@@ -1033,7 +1148,7 @@ func TestListOrganizations_UnknownSortAndDirectionFallBack(t *testing.T) {
 	ctx, svc, conn := newTestAdminService(t)
 	seedSortFixtures(t, ctx, conn)
 
-	byID := []string{sortOrgA, sortOrgB, sortOrgC, sortOrgD}
+	newestFirst := []string{sortOrgA, sortOrgD, sortOrgB, sortOrgC}
 	nameAsc := []string{sortOrgB, sortOrgD, sortOrgA, sortOrgC}
 
 	cases := []struct {
@@ -1042,11 +1157,11 @@ func TestListOrganizations_UnknownSortAndDirectionFallBack(t *testing.T) {
 		direction string
 		want      []string
 	}{
-		{name: "a column that does not exist", sort: "not_a_column", direction: "asc", want: byID},
-		{name: "a real column left out of the whitelist", sort: "workos_id", direction: "asc", want: byID},
-		{name: "the default column cannot be named", sort: "id", direction: "asc", want: byID},
-		{name: "an empty sort", sort: "", direction: "asc", want: byID},
-		{name: "a SQL fragment", sort: "name; DROP TABLE organization_metadata", direction: "asc", want: byID},
+		{name: "a column that does not exist", sort: "not_a_column", direction: "asc", want: newestFirst},
+		{name: "a real column left out of the whitelist", sort: "workos_id", direction: "asc", want: newestFirst},
+		{name: "id is not a supported sort", sort: "id", direction: "asc", want: newestFirst},
+		{name: "an empty sort", sort: "", direction: "asc", want: newestFirst},
+		{name: "a SQL fragment", sort: "name; DROP TABLE organization_metadata", direction: "asc", want: newestFirst},
 		{name: "an unknown direction", sort: "name", direction: "sideways", want: nameAsc},
 		{name: "an empty direction", sort: "name", direction: "", want: nameAsc},
 		{name: "a direction spelled backwards", sort: "name", direction: "descending", want: nameAsc},
@@ -1176,7 +1291,7 @@ func TestListOrganizations_OffsetPaging(t *testing.T) {
 
 	for _, c := range cases {
 		payload := sortPayload("name", "asc")
-		payload.IncludeDisabled = nil
+		payload.DisabledStatus = new("active")
 		payload.Limit, payload.Page = new(2), c.page
 		requireOrder(t, ctx, svc, payload, c.want, c.name)
 	}
@@ -1185,7 +1300,7 @@ func TestListOrganizations_OffsetPaging(t *testing.T) {
 	var walked []string
 	for page := 1; page <= 3; page++ {
 		payload := sortPayload("name", "asc")
-		payload.IncludeDisabled = nil
+		payload.DisabledStatus = new("active")
 		payload.Limit, payload.Page = new(2), new(page)
 
 		res, err := svc.ListOrganizations(ctx, payload)
@@ -1201,7 +1316,7 @@ func TestListOrganizations_OffsetPaging(t *testing.T) {
 	// and every case above uses limit 2.
 	for page := 1; page <= len(pageOrgsByName); page++ {
 		payload := sortPayload("name", "asc")
-		payload.IncludeDisabled = nil
+		payload.DisabledStatus = new("active")
 		payload.Limit, payload.Page = new(1), new(page)
 		requireOrder(t, ctx, svc, payload, pageOrgsByName[page-1:page], fmt.Sprintf("limit 1, page %d", page))
 	}
@@ -1245,21 +1360,21 @@ func TestListOrganizations_TotalCountsMatchesNotPageLength(t *testing.T) {
 		wantTotal int64
 		wantLen   int
 	}{
-		{name: "no filter, first page", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Page: new(1)}, wantTotal: 7, wantLen: 2},
-		{name: "no filter, last page", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Page: new(4)}, wantTotal: 7, wantLen: 1},
-		{name: "search filter", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Q: new("holdings")}, wantTotal: 5, wantLen: 2},
+		{name: "no filter, first page", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Page: new(1)}, wantTotal: 8, wantLen: 2},
+		{name: "no filter, last page", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Page: new(4)}, wantTotal: 8, wantLen: 2},
+		{name: "search filter", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Q: new("holdings")}, wantTotal: 6, wantLen: 2},
 		{name: "account type filter", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), AccountType: new("pro")}, wantTotal: 2, wantLen: 2},
-		{name: "disabled included", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), IncludeDisabled: new(true)}, wantTotal: 8, wantLen: 2},
+		{name: "disabled included", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), DisabledStatus: new("all")}, wantTotal: 8, wantLen: 2},
 		{name: "a filter matching nothing", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Q: new("no such organization")}, wantTotal: 0, wantLen: 0},
 
 		// A page past the end still reports what the filters matched. A client that
 		// lands there, from a bookmark or from a filter typed while sitting on a
 		// later page, needs the count to find its way back to a page that exists.
-		{name: "past the end", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Page: new(9)}, wantTotal: 7, wantLen: 0},
-		{name: "past the end under a filter", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Q: new("holdings"), Page: new(4)}, wantTotal: 5, wantLen: 0},
+		{name: "past the end", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Page: new(9)}, wantTotal: 8, wantLen: 0},
+		{name: "past the end under a filter", payload: &gen.ListOrganizationsPayload{Sort: new("name"), Limit: new(2), Q: new("holdings"), Page: new(4)}, wantTotal: 6, wantLen: 0},
 
-		{name: "cursor mode", payload: &gen.ListOrganizationsPayload{Limit: new(2)}, wantTotal: 7, wantLen: 2},
-		{name: "cursor mode under a filter", payload: &gen.ListOrganizationsPayload{Limit: new(2), Q: new("holdings")}, wantTotal: 5, wantLen: 2},
+		{name: "cursor mode", payload: &gen.ListOrganizationsPayload{Limit: new(2)}, wantTotal: 8, wantLen: 2},
+		{name: "cursor mode under a filter", payload: &gen.ListOrganizationsPayload{Limit: new(2), Q: new("holdings")}, wantTotal: 6, wantLen: 2},
 	}
 
 	for _, c := range cases {
@@ -1276,10 +1391,10 @@ func TestListOrganizations_TotalCountsMatchesNotPageLength(t *testing.T) {
 	for page := 1; ; page++ {
 		res, err := svc.ListOrganizations(ctx, &gen.ListOrganizationsPayload{Limit: new(2), Cursor: cursor})
 		require.NoError(t, err, "cursor page %d", page)
-		require.Equal(t, int64(7), res.Total, "total on cursor page %d", page)
+		require.Equal(t, int64(8), res.Total, "total on cursor page %d", page)
 
 		if res.NextCursor == nil {
-			require.Equal(t, 4, page, "the walk covers seven rows in four pages of two")
+			require.Equal(t, 4, page, "the walk covers eight rows in four pages of two")
 			break
 		}
 		cursor = res.NextCursor
@@ -1406,4 +1521,46 @@ func TestListOrganizations_MemberCountSkipsRemovedMembers(t *testing.T) {
 	require.Equal(t, "org_gone_b", res.Organizations[0].ID, "the organization with a live member ranks first")
 	require.Equal(t, 1, res.Organizations[0].MemberCount)
 	require.Equal(t, 0, res.Organizations[1].MemberCount, "removed members are not counted")
+}
+
+// IDs intentionally disagree with creation order, including a timestamp tie
+// across the page boundary. Both APIs must walk exactly the same ordering.
+func TestListOrganizations_NewestFirstPagination(t *testing.T) {
+	t.Parallel()
+	ctx, svc, conn := newTestAdminService(t)
+	base := time.Date(2025, time.June, 1, 0, 0, 0, 0, time.UTC)
+	for _, f := range []orgFixture{
+		{id: "org_a", createdAt: new(base)},
+		{id: "org_z", createdAt: new(base.Add(2 * time.Hour))},
+		{id: "org_c", createdAt: new(base.Add(time.Hour))},
+		{id: "org_b", createdAt: new(base.Add(time.Hour))},
+	} {
+		f.name, f.slug = f.id, f.id
+		seedOrg(t, ctx, conn, f)
+	}
+	want := []string{"org_z", "org_b", "org_c", "org_a"}
+	for _, direction := range []*string{nil, new("asc"), new("desc")} {
+		first := requireOrder(t, ctx, svc, &gen.ListOrganizationsPayload{Limit: new(2), Direction: direction}, want[:2], "default cursor first page")
+		require.Equal(t, int64(4), first.Total)
+		require.Equal(t, new("org_b"), first.NextCursor)
+		last := requireOrder(t, ctx, svc, &gen.ListOrganizationsPayload{Limit: new(2), Cursor: first.NextCursor, Direction: direction}, want[2:], "default cursor last page")
+		require.Equal(t, int64(4), last.Total)
+		require.Nil(t, last.NextCursor)
+	}
+	for _, sort := range []*string{nil, new("created_at"), new("unknown")} {
+		for page := 1; page <= 3; page++ {
+			start := (page - 1) * 2
+			end := min(start+2, len(want))
+			res := requireOrder(t, ctx, svc, &gen.ListOrganizationsPayload{Limit: new(2), Page: &page, Sort: sort, Direction: new("desc")}, want[start:end], "offset newest-first")
+			require.Equal(t, int64(4), res.Total)
+			require.Nil(t, res.NextCursor)
+		}
+	}
+	// An existing ID-shaped cursor remains accepted, even if its anchor no
+	// longer matches the current filter. Its timestamp still defines the seek.
+	res := requireOrder(t, ctx, svc, &gen.ListOrganizationsPayload{Cursor: new("org_b"), Q: new("org_c")}, []string{"org_c"}, "filtered-out cursor anchor")
+	require.Equal(t, int64(1), res.Total)
+	res = requireOrder(t, ctx, svc, &gen.ListOrganizationsPayload{Cursor: new("org_missing")}, []string{}, "unknown cursor anchor")
+	require.Equal(t, int64(4), res.Total)
+	require.Nil(t, res.NextCursor)
 }

@@ -1,4 +1,7 @@
 -- name: UpsertUser :one
+-- Login and other IDP upserts mean the user is authenticating now, so clear
+-- WorkOS soft-delete markers left by a prior user.deleted event. Without this,
+-- email reuse after WorkOS deletion leaves the Gram user RBAC-inactive.
 INSERT INTO users (id, email, display_name, photo_url, admin)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (id) DO UPDATE SET
@@ -7,7 +10,9 @@ ON CONFLICT (id) DO UPDATE SET
   photo_url = EXCLUDED.photo_url,
   admin = EXCLUDED.admin,
   last_login = clock_timestamp(),
-  updated_at = clock_timestamp()
+  updated_at = clock_timestamp(),
+  workos_deleted_at = NULL,
+  deleted_at = NULL
 RETURNING *, (xmax = 0) AS was_created;
 
 -- name: UpsertSyncedUser :execrows
@@ -25,18 +30,24 @@ ON CONFLICT (workos_id) DO UPDATE SET
   updated_at = clock_timestamp()
 WHERE users.workos_updated_at IS NULL OR EXCLUDED.workos_updated_at >= users.workos_updated_at;
 
--- name: DisableUser :exec
+-- name: DisableUser :many
 UPDATE users
 SET workos_updated_at = @workos_updated_at,
   workos_deleted_at = @workos_deleted_at,
   deleted_at = COALESCE(deleted_at, clock_timestamp()),
   updated_at = clock_timestamp()
 WHERE workos_id = @workos_id
-  AND (workos_updated_at IS NULL OR @workos_updated_at >= workos_updated_at);
+  AND (workos_updated_at IS NULL OR @workos_updated_at >= workos_updated_at)
+RETURNING id;
 
 -- name: GetUser :one
 SELECT * FROM users
 WHERE id = $1;
+
+-- name: LockUserForPlatformAdminCheck :one
+SELECT * FROM users
+WHERE id = $1
+FOR SHARE;
 
 -- name: GetUserByEmail :one
 SELECT * FROM users
@@ -66,6 +77,7 @@ WHERE u.workos_id = ANY(@workos_ids::text[])
 SELECT u.* FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = lower(@email)
+  AND u.deleted_at IS NULL
   AND our.organization_id = @organization_id
   AND our.deleted_at IS NULL
 ORDER BY (u.email = lower(@email)) DESC, u.created_at, u.id
@@ -79,6 +91,7 @@ LIMIT 1;
 SELECT DISTINCT ON (lower(u.email)) u.* FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
 WHERE lower(u.email) = ANY(ARRAY(SELECT lower(e) FROM unnest(@emails::text[]) AS e))
+  AND u.deleted_at IS NULL
   AND our.organization_id = @organization_id
   AND our.deleted_at IS NULL
 ORDER BY lower(u.email), (u.email = lower(u.email)) DESC, u.created_at, u.id;
@@ -121,3 +134,35 @@ UPDATE users
 SET workos_id = @workos_id,
   updated_at = clock_timestamp()
 WHERE id = @id;
+
+-- name: SoftDeleteOrganizationUserFixture :exec
+-- Test fixture: hide a known tenant member from provisioned-human resolution.
+UPDATE users SET deleted_at = clock_timestamp()
+WHERE users.id = @user_id AND EXISTS (
+    SELECT 1 FROM organization_user_relationships m
+    WHERE m.user_id = users.id AND m.organization_id = @organization_id
+);
+
+-- name: SetOrganizationUserEmailFixture :exec
+UPDATE users SET email = @email
+WHERE users.id = @user_id AND EXISTS (
+    SELECT 1 FROM organization_user_relationships m
+    WHERE m.user_id = users.id AND m.organization_id = @organization_id
+);
+
+-- name: DuplicateOrganizationUserEmailFixture :exec
+-- Test fixture: distinct raw emails that collide under case-insensitive lookup.
+INSERT INTO users (id, email, display_name)
+SELECT @duplicate_user_id, upper(u.email), 'Ambiguous test human'
+FROM users u JOIN organization_user_relationships m ON m.user_id = u.id
+WHERE u.id = @user_id AND m.organization_id = @organization_id;
+
+-- name: SnapshotOrganizationUsersFixture :one
+-- Include the fixture's original user even after its membership is removed.
+-- xmin detects writes that leave the visible user values unchanged.
+SELECT coalesce(string_agg(u.id || ':' || u.xmin::text, ',' ORDER BY u.id), '')::text AS snapshot
+FROM users u
+WHERE u.id = @user_id OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m
+    WHERE m.user_id = u.id AND m.organization_id = ANY(@organization_ids::text[])
+);

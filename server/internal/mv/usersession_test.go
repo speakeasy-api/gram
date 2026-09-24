@@ -35,7 +35,7 @@ func TestBuildUserSessionView_ResolvesUser(t *testing.T) {
 		Deleted:             false,
 	}
 
-	got := BuildUserSessionView(row, nil)
+	got := BuildUserSessionView(row, nil, nil)
 
 	require.Equal(t, "my-issuer", got.IssuerSlug)
 	require.Equal(t, "user", got.SubjectType)
@@ -59,7 +59,7 @@ func TestBuildUserSessionView_UserFallsBackToEmail(t *testing.T) {
 		UserEmail:       pgtype.Text{String: "ada@example.com", Valid: true},
 	}
 
-	got := BuildUserSessionView(row, nil)
+	got := BuildUserSessionView(row, nil, nil)
 	require.NotNil(t, got.SubjectDisplayName)
 	require.Equal(t, "ada@example.com", *got.SubjectDisplayName)
 }
@@ -79,7 +79,7 @@ func TestBuildUserSessionView_APIKeyAndRevoked(t *testing.T) {
 		Deleted:    true,
 	}
 
-	got := BuildUserSessionView(row, nil)
+	got := BuildUserSessionView(row, nil, nil)
 	require.Equal(t, "apikey", got.SubjectType)
 	require.NotNil(t, got.SubjectDisplayName)
 	require.Equal(t, "ci-key", *got.SubjectDisplayName)
@@ -98,7 +98,197 @@ func TestBuildUserSessionView_AnonymousHasNoName(t *testing.T) {
 		IssuerSlug: "iss",
 	}
 
-	got := BuildUserSessionView(row, nil)
+	got := BuildUserSessionView(row, nil, nil)
 	require.Equal(t, "anonymous", got.SubjectType)
 	require.Nil(t, got.SubjectDisplayName)
+}
+
+// A workload with nothing resolved still reports the identity parsed from its
+// subject, and never borrows a user or API key name from the row.
+func TestBuildUserSessionView_WorkloadFallsBackToParsedSubject(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.New()
+	row := repo.ListUserSessionsByProjectIDRow{
+		ID:               uuid.New(),
+		SubjectUrn:       urn.NewWorkloadSubject(issuerID, "repo:acme/payments-api:ref:refs/heads/main"),
+		RefreshExpiresAt: ts(time.Now()), ExpiresAt: ts(time.Now()),
+		CreatedAt: ts(time.Now()), UpdatedAt: ts(time.Now()),
+		IssuerSlug:      "iss",
+		UserDisplayName: pgtype.Text{String: "Ada Lovelace", Valid: true},
+		ApiKeyName:      pgtype.Text{String: "ci-key", Valid: true},
+	}
+
+	got := BuildUserSessionView(row, nil, nil)
+	require.Equal(t, "workload", got.SubjectType)
+	require.NotNil(t, got.SubjectDisplayName)
+	require.Equal(t, "repo:acme/payments-api:ref:refs/heads/main", *got.SubjectDisplayName)
+	require.NotNil(t, got.Workload)
+	require.Equal(t, issuerID.String(), got.Workload.WorkloadIssuerID)
+	require.Equal(t, "repo:acme/payments-api:ref:refs/heads/main", got.Workload.ExternalSubject)
+	require.Nil(t, got.Workload.WorkloadIssuerName)
+	require.Nil(t, got.Workload.AgentID)
+	require.NotNil(t, got.Workload.Admissions)
+	require.Empty(t, got.Workload.Admissions)
+}
+
+func TestBuildUserSessionWorkloadIndex_ReportsAgentStatus(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.New()
+	agentID := uuid.New()
+	rows := []repo.ListWorkloadSessionLabelsRow{
+		{
+			WorkloadIssuerID:   issuerID,
+			Subject:            "sub-active",
+			WorkloadIssuerName: pgtype.Text{String: "CI", Valid: true},
+			WorkloadIssuerUrl:  pgtype.Text{String: "https://ci.example.com", Valid: true},
+			AgentID:            uuid.NullUUID{UUID: agentID, Valid: true},
+			AgentName:          pgtype.Text{String: "Deploy bot", Valid: true},
+		},
+		{
+			WorkloadIssuerID: issuerID,
+			Subject:          "sub-revoked",
+			AgentID:          uuid.NullUUID{UUID: agentID, Valid: true},
+			AgentRevokedAt:   ts(time.Now()),
+		},
+		{
+			WorkloadIssuerID: issuerID,
+			Subject:          "sub-unassigned",
+		},
+	}
+
+	index := BuildUserSessionWorkloadIndex(rows, nil)
+
+	active := index[WorkloadKey{WorkloadIssuerID: issuerID, ExternalSubject: "sub-active"}]
+	require.NotNil(t, active.AgentStatus)
+	require.Equal(t, "active", *active.AgentStatus)
+	require.Equal(t, "CI", *active.WorkloadIssuerName)
+
+	revoked := index[WorkloadKey{WorkloadIssuerID: issuerID, ExternalSubject: "sub-revoked"}]
+	require.Equal(t, "revoked", *revoked.AgentStatus)
+
+	unassigned := index[WorkloadKey{WorkloadIssuerID: issuerID, ExternalSubject: "sub-unassigned"}]
+	require.Nil(t, unassigned.AgentID)
+	require.Nil(t, unassigned.AgentStatus)
+	require.NotNil(t, unassigned.Admissions, "admissions is required, so an unadmitted workload reports an empty list")
+	require.Empty(t, unassigned.Admissions)
+}
+
+func TestBuildUserSessionWorkloadIndex_GroupsAdmissionsByWorkload(t *testing.T) {
+	t.Parallel()
+
+	issuerID := uuid.New()
+	projectAdmission := uuid.New()
+	orgAdmission := uuid.New()
+	otherIssuerAdmission := uuid.New()
+	rows := []repo.ListWorkloadSessionLabelsRow{
+		{WorkloadIssuerID: issuerID, Subject: "sub"},
+	}
+	admissions := []repo.ListWorkloadSessionAdmissionsRow{
+		{
+			WorkloadIssuerID: issuerID,
+			Subject:          "sub",
+			ID:               projectAdmission,
+			ProjectID:        uuid.NullUUID{UUID: uuid.New(), Valid: true},
+			Name:             pgtype.Text{String: "Payments deploy", Valid: true},
+		},
+		{
+			WorkloadIssuerID: issuerID,
+			Subject:          "sub",
+			ID:               orgAdmission,
+		},
+		{
+			WorkloadIssuerID: uuid.New(),
+			Subject:          "sub",
+			ID:               otherIssuerAdmission,
+		},
+	}
+
+	got := BuildUserSessionWorkloadIndex(rows, admissions)[WorkloadKey{WorkloadIssuerID: issuerID, ExternalSubject: "sub"}]
+
+	require.Len(t, got.Admissions, 2, "an admission under another issuer belongs to a different workload")
+	require.Equal(t, projectAdmission.String(), got.Admissions[0].ID)
+	require.Equal(t, "project", got.Admissions[0].Tier)
+	require.NotNil(t, got.Admissions[0].Name)
+	require.Equal(t, "Payments deploy", *got.Admissions[0].Name)
+	require.Equal(t, orgAdmission.String(), got.Admissions[1].ID)
+	require.Equal(t, "organization", got.Admissions[1].Tier)
+	require.Nil(t, got.Admissions[1].Name)
+}
+
+func TestBuildUserSessionView_ResolvesClientCredentialKind(t *testing.T) {
+	t.Parallel()
+
+	row := repo.ListUserSessionsByProjectIDRow{
+		ID:                            uuid.New(),
+		UserSessionIssuerID:           uuid.New(),
+		UserSessionClientID:           uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		SubjectUrn:                    urn.NewUserSubject("user-123"),
+		Jti:                           "jti-1",
+		RefreshExpiresAt:              ts(time.Now()),
+		ExpiresAt:                     ts(time.Now()),
+		CreatedAt:                     ts(time.Now()),
+		UpdatedAt:                     ts(time.Now()),
+		IssuerSlug:                    "my-issuer",
+		ClientTokenEndpointAuthMethod: pgtype.Text{String: "private_key_jwt", Valid: true},
+		ClientHasSecret:               false,
+	}
+
+	got := BuildUserSessionView(row, nil, nil)
+
+	require.NotNil(t, got.ClientCredentialKind)
+	require.Equal(t, "key", *got.ClientCredentialKind)
+	require.NotNil(t, got.ClientTokenEndpointAuthMethod)
+	require.Equal(t, "private_key_jwt", *got.ClientTokenEndpointAuthMethod)
+}
+
+// A client that predates the token_endpoint_auth_method column still resolves
+// to a kind, off the secret it stores. Reporting it as unknown would tell an
+// operator less than the token endpoint already knows.
+func TestBuildUserSessionView_LegacyClientResolvesOffStoredSecret(t *testing.T) {
+	t.Parallel()
+
+	row := repo.ListUserSessionsByProjectIDRow{
+		ID:                  uuid.New(),
+		UserSessionIssuerID: uuid.New(),
+		UserSessionClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		SubjectUrn:          urn.NewUserSubject("user-123"),
+		Jti:                 "jti-1",
+		RefreshExpiresAt:    ts(time.Now()),
+		ExpiresAt:           ts(time.Now()),
+		CreatedAt:           ts(time.Now()),
+		UpdatedAt:           ts(time.Now()),
+		IssuerSlug:          "my-issuer",
+		ClientHasSecret:     true,
+	}
+
+	got := BuildUserSessionView(row, nil, nil)
+
+	require.NotNil(t, got.ClientCredentialKind)
+	require.Equal(t, "secret", *got.ClientCredentialKind)
+	require.Nil(t, got.ClientTokenEndpointAuthMethod, "a row that declared nothing must not report a declared method")
+}
+
+// The join that lifts the client columns is a LEFT JOIN, so an unbound session
+// reads exactly like a legacy client row. Neither field may be reported.
+func TestBuildUserSessionView_NoBoundClientReportsNoCredentialFields(t *testing.T) {
+	t.Parallel()
+
+	row := repo.ListUserSessionsByProjectIDRow{
+		ID:                  uuid.New(),
+		UserSessionIssuerID: uuid.New(),
+		SubjectUrn:          urn.NewAPIKeySubject(uuid.New()),
+		Jti:                 "jti-1",
+		RefreshExpiresAt:    ts(time.Now()),
+		ExpiresAt:           ts(time.Now()),
+		CreatedAt:           ts(time.Now()),
+		UpdatedAt:           ts(time.Now()),
+		IssuerSlug:          "my-issuer",
+	}
+
+	got := BuildUserSessionView(row, nil, nil)
+
+	require.Nil(t, got.ClientCredentialKind)
+	require.Nil(t, got.ClientTokenEndpointAuthMethod)
 }

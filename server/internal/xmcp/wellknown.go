@@ -29,9 +29,14 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(slug))
 
-	endpoint, mcpServer, err := s.mcpService.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	endpoint, mcpServer, metaServer, err := s.mcpService.ResolveMCPEndpointAndServer(ctx, logger, slug)
 	if err != nil {
 		return fmt.Errorf("resolve mcp endpoint: %w", err)
+	}
+
+	// Meta-backed endpoints are served only on the canonical /mcp surface.
+	if metaServer != nil {
+		return oops.E(oops.CodeNotFound, nil, "mcp endpoint not found")
 	}
 
 	if err := s.mcpService.ServeWellKnownAuthorizationServerForServer(w, r, logger, endpoint, mcpServer, "x/mcp"); err != nil {
@@ -53,9 +58,14 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(slug))
 
-	endpoint, mcpServer, err := s.mcpService.ResolveMCPEndpointAndServer(ctx, logger, slug)
+	endpoint, mcpServer, metaServer, err := s.mcpService.ResolveMCPEndpointAndServer(ctx, logger, slug)
 	if err != nil {
 		return fmt.Errorf("resolve mcp endpoint: %w", err)
+	}
+
+	// Meta-backed endpoints are served only on the canonical /mcp surface.
+	if metaServer != nil {
+		return oops.E(oops.CodeNotFound, nil, "mcp endpoint not found")
 	}
 
 	if err := s.mcpService.ServeWellKnownProtectedResourceForServer(w, r, logger, endpoint, mcpServer, "x/mcp"); err != nil {

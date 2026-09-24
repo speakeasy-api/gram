@@ -18,6 +18,705 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+// BuildGetAnthropicInferenceConfigRequest instantiates a HTTP request object
+// with method and path set to call the "aiIntegrations" service
+// "getAnthropicInferenceConfig" endpoint
+func (c *Client) BuildGetAnthropicInferenceConfigRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetAnthropicInferenceConfigAiIntegrationsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("aiIntegrations", "getAnthropicInferenceConfig", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetAnthropicInferenceConfigRequest returns an encoder for requests
+// sent to the aiIntegrations getAnthropicInferenceConfig server.
+func EncodeGetAnthropicInferenceConfigRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*aiintegrations.GetAnthropicInferenceConfigPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("aiIntegrations", "getAnthropicInferenceConfig", "*aiintegrations.GetAnthropicInferenceConfigPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetAnthropicInferenceConfigResponse returns a decoder for responses
+// returned by the aiIntegrations getAnthropicInferenceConfig endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeGetAnthropicInferenceConfigResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetAnthropicInferenceConfigResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetAnthropicInferenceConfigResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			err = ValidateGetAnthropicInferenceConfigResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			res := NewGetAnthropicInferenceConfigAnthropicInferenceConfigOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetAnthropicInferenceConfigUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			err = ValidateGetAnthropicInferenceConfigUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			return nil, NewGetAnthropicInferenceConfigUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetAnthropicInferenceConfigForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			err = ValidateGetAnthropicInferenceConfigForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			return nil, NewGetAnthropicInferenceConfigForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetAnthropicInferenceConfigBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			err = ValidateGetAnthropicInferenceConfigBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			return nil, NewGetAnthropicInferenceConfigBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetAnthropicInferenceConfigNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			err = ValidateGetAnthropicInferenceConfigNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			return nil, NewGetAnthropicInferenceConfigNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetAnthropicInferenceConfigConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			err = ValidateGetAnthropicInferenceConfigConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			return nil, NewGetAnthropicInferenceConfigConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetAnthropicInferenceConfigUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			err = ValidateGetAnthropicInferenceConfigUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			return nil, NewGetAnthropicInferenceConfigUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetAnthropicInferenceConfigInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			err = ValidateGetAnthropicInferenceConfigInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			return nil, NewGetAnthropicInferenceConfigInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetAnthropicInferenceConfigInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "getAnthropicInferenceConfig", err)
+				}
+				err = ValidateGetAnthropicInferenceConfigInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "getAnthropicInferenceConfig", err)
+				}
+				return nil, NewGetAnthropicInferenceConfigInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetAnthropicInferenceConfigUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "getAnthropicInferenceConfig", err)
+				}
+				err = ValidateGetAnthropicInferenceConfigUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "getAnthropicInferenceConfig", err)
+				}
+				return nil, NewGetAnthropicInferenceConfigUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("aiIntegrations", "getAnthropicInferenceConfig", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetAnthropicInferenceConfigGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			err = ValidateGetAnthropicInferenceConfigGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "getAnthropicInferenceConfig", err)
+			}
+			return nil, NewGetAnthropicInferenceConfigGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "getAnthropicInferenceConfig", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildUpsertAnthropicInferenceConfigRequest instantiates a HTTP request
+// object with method and path set to call the "aiIntegrations" service
+// "upsertAnthropicInferenceConfig" endpoint
+func (c *Client) BuildUpsertAnthropicInferenceConfigRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UpsertAnthropicInferenceConfigAiIntegrationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("aiIntegrations", "upsertAnthropicInferenceConfig", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUpsertAnthropicInferenceConfigRequest returns an encoder for requests
+// sent to the aiIntegrations upsertAnthropicInferenceConfig server.
+func EncodeUpsertAnthropicInferenceConfigRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*aiintegrations.UpsertAnthropicInferenceConfigPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("aiIntegrations", "upsertAnthropicInferenceConfig", "*aiintegrations.UpsertAnthropicInferenceConfigPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewUpsertAnthropicInferenceConfigRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+		}
+		return nil
+	}
+}
+
+// DecodeUpsertAnthropicInferenceConfigResponse returns a decoder for responses
+// returned by the aiIntegrations upsertAnthropicInferenceConfig endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeUpsertAnthropicInferenceConfigResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUpsertAnthropicInferenceConfigResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UpsertAnthropicInferenceConfigResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			err = ValidateUpsertAnthropicInferenceConfigResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			res := NewUpsertAnthropicInferenceConfigAnthropicInferenceConfigOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UpsertAnthropicInferenceConfigUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			err = ValidateUpsertAnthropicInferenceConfigUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			return nil, NewUpsertAnthropicInferenceConfigUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UpsertAnthropicInferenceConfigForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			err = ValidateUpsertAnthropicInferenceConfigForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			return nil, NewUpsertAnthropicInferenceConfigForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UpsertAnthropicInferenceConfigBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			err = ValidateUpsertAnthropicInferenceConfigBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			return nil, NewUpsertAnthropicInferenceConfigBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UpsertAnthropicInferenceConfigNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			err = ValidateUpsertAnthropicInferenceConfigNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			return nil, NewUpsertAnthropicInferenceConfigNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UpsertAnthropicInferenceConfigConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			err = ValidateUpsertAnthropicInferenceConfigConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			return nil, NewUpsertAnthropicInferenceConfigConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UpsertAnthropicInferenceConfigUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			err = ValidateUpsertAnthropicInferenceConfigUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			return nil, NewUpsertAnthropicInferenceConfigUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UpsertAnthropicInferenceConfigInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			err = ValidateUpsertAnthropicInferenceConfigInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			return nil, NewUpsertAnthropicInferenceConfigInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UpsertAnthropicInferenceConfigInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+				}
+				err = ValidateUpsertAnthropicInferenceConfigInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+				}
+				return nil, NewUpsertAnthropicInferenceConfigInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UpsertAnthropicInferenceConfigUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+				}
+				err = ValidateUpsertAnthropicInferenceConfigUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+				}
+				return nil, NewUpsertAnthropicInferenceConfigUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("aiIntegrations", "upsertAnthropicInferenceConfig", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UpsertAnthropicInferenceConfigGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			err = ValidateUpsertAnthropicInferenceConfigGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "upsertAnthropicInferenceConfig", err)
+			}
+			return nil, NewUpsertAnthropicInferenceConfigGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "upsertAnthropicInferenceConfig", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeleteAnthropicInferenceConfigRequest instantiates a HTTP request
+// object with method and path set to call the "aiIntegrations" service
+// "deleteAnthropicInferenceConfig" endpoint
+func (c *Client) BuildDeleteAnthropicInferenceConfigRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteAnthropicInferenceConfigAiIntegrationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("aiIntegrations", "deleteAnthropicInferenceConfig", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteAnthropicInferenceConfigRequest returns an encoder for requests
+// sent to the aiIntegrations deleteAnthropicInferenceConfig server.
+func EncodeDeleteAnthropicInferenceConfigRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*aiintegrations.DeleteAnthropicInferenceConfigPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("aiIntegrations", "deleteAnthropicInferenceConfig", "*aiintegrations.DeleteAnthropicInferenceConfigPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeDeleteAnthropicInferenceConfigResponse returns a decoder for responses
+// returned by the aiIntegrations deleteAnthropicInferenceConfig endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeDeleteAnthropicInferenceConfigResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteAnthropicInferenceConfigResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteAnthropicInferenceConfigUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			err = ValidateDeleteAnthropicInferenceConfigUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			return nil, NewDeleteAnthropicInferenceConfigUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteAnthropicInferenceConfigForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			err = ValidateDeleteAnthropicInferenceConfigForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			return nil, NewDeleteAnthropicInferenceConfigForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteAnthropicInferenceConfigBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			err = ValidateDeleteAnthropicInferenceConfigBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			return nil, NewDeleteAnthropicInferenceConfigBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteAnthropicInferenceConfigNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			err = ValidateDeleteAnthropicInferenceConfigNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			return nil, NewDeleteAnthropicInferenceConfigNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteAnthropicInferenceConfigConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			err = ValidateDeleteAnthropicInferenceConfigConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			return nil, NewDeleteAnthropicInferenceConfigConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteAnthropicInferenceConfigUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			err = ValidateDeleteAnthropicInferenceConfigUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			return nil, NewDeleteAnthropicInferenceConfigUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteAnthropicInferenceConfigInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			err = ValidateDeleteAnthropicInferenceConfigInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			return nil, NewDeleteAnthropicInferenceConfigInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteAnthropicInferenceConfigInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+				}
+				err = ValidateDeleteAnthropicInferenceConfigInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+				}
+				return nil, NewDeleteAnthropicInferenceConfigInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteAnthropicInferenceConfigUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+				}
+				err = ValidateDeleteAnthropicInferenceConfigUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+				}
+				return nil, NewDeleteAnthropicInferenceConfigUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("aiIntegrations", "deleteAnthropicInferenceConfig", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteAnthropicInferenceConfigGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			err = ValidateDeleteAnthropicInferenceConfigGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("aiIntegrations", "deleteAnthropicInferenceConfig", err)
+			}
+			return nil, NewDeleteAnthropicInferenceConfigGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("aiIntegrations", "deleteAnthropicInferenceConfig", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetConfigRequest instantiates a HTTP request object with method and
 // path set to call the "aiIntegrations" service "getConfig" endpoint
 func (c *Client) BuildGetConfigRequest(ctx context.Context, v any) (*http.Request, error) {

@@ -10,6 +10,11 @@ import {
 } from "@gram/client/models/operations/listresources.js";
 import { QueryHookOptions } from "@gram/client/react-query/_types.js";
 import {
+  ActiveDeploymentQueryData,
+  ActiveDeploymentQueryError,
+  useActiveDeployment as useActiveDeploymentQuery,
+} from "@gram/client/react-query/activeDeployment.js";
+import {
   LatestDeploymentQueryData,
   LatestDeploymentQueryError,
   useLatestDeployment as useLatestDeploymentQuery,
@@ -141,4 +146,22 @@ export function useLatestDeployment(
     staleTime: 1000 * 60 * 60, // 1 hour
     ...options,
   });
+}
+
+/**
+ * Hook for fetching the active deployment: the newest one that completed.
+ *
+ * This is the deployment tools are generated from, and the one `tools.list`
+ * reads by default. Anything that joins deployment assets to tools — the
+ * sources pages, tool counts per source — must key on this rather than on
+ * the latest deployment, which may be a failed push whose assets carry fresh
+ * ids that no tool refers to.
+ */
+export function useActiveDeployment(
+  options?: QueryHookOptions<
+    ActiveDeploymentQueryData,
+    ActiveDeploymentQueryError
+  >,
+): ReturnType<typeof useActiveDeploymentQuery> {
+  return useActiveDeploymentQuery(undefined, undefined, options);
 }

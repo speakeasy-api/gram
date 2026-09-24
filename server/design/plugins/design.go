@@ -14,6 +14,18 @@ var _ = Service("plugins", func() {
 	Description("Manage distributable plugin bundles of MCP servers and hooks.")
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
+	HTTP(func() {
+		shared.DeclareHTTPErrorResponses()
+		Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+			ContentType("application/json")
+		})
+	})
+
+	distributionMethods()
 
 	Method("listPlugins", func() {
 		Description("List all plugins for the current project.")
@@ -304,53 +316,13 @@ var _ = Service("plugins", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadPluginPackage")
 	})
 
-	Method("downloadPlatformMCPPlugin", func() {
-		Description("Download a credential-free Platform MCP plugin ZIP from the server-owned package definition. This does not require a GitHub marketplace and does not mint an API key.")
-		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
-
-		Payload(func() {
-			Attribute("platform", String, func() {
-				Description("Target package format.")
-				Enum("claude", "cursor", "codex", "opencode", "agent-plugin")
-			})
-			Required("platform")
-			security.SessionPayload()
-			security.ProjectPayload()
-		})
-
-		Result(func() {
-			Attribute("content_type", String)
-			Attribute("content_disposition", String)
-			Required("content_type", "content_disposition")
-		})
-
-		HTTP(func() {
-			GET("/rpc/plugins.downloadPlatformMCPPlugin")
-			Param("platform")
-			security.SessionHeader()
-			security.ProjectHeader()
-			Response(StatusOK, func() {
-				ContentType("application/zip")
-				Header("content_type:Content-Type")
-				Header("content_disposition:Content-Disposition")
-			})
-			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
-				ContentType("application/json")
-			})
-			SkipResponseBodyEncodeDecode()
-		})
-
-		Meta("openapi:operationId", "downloadPlatformMCPPlugin")
-		Meta("openapi:extension:x-speakeasy-name-override", "downloadPlatformMCPPlugin")
-	})
-
 	Method("downloadObservabilityPlugin", func() {
 		Description("Download a ZIP of the per-org observability plugin (Gram hooks). Mints a fresh hooks-scoped API key on each download and embeds it in the plugin's hook script.")
 
 		Payload(func() {
 			Attribute("platform", String, func() {
 				Description("Target platform.")
-				Enum("claude", "cursor", "codex", "opencode")
+				Enum("claude", "cursor", "codex", "opencode", "copilot", "openclaw", "pi")
 			})
 			Required("platform")
 			security.SessionPayload()
@@ -408,53 +380,6 @@ var _ = Service("plugins", func() {
 
 		Meta("openapi:operationId", "downloadCodexInstallScript")
 		Meta("openapi:extension:x-speakeasy-name-override", "downloadCodexInstallScript")
-	})
-
-	Method("getPlatformMCPPackageStatus", func() {
-		Description("Get the organization-scoped Platform MCP package and canonical default-project marketplace status.")
-		Security(security.Session)
-
-		Payload(func() {
-			security.SessionPayload()
-		})
-
-		Result(PlatformMCPPackageStatusResult)
-
-		HTTP(func() {
-			GET("/rpc/plugins.getPlatformMCPPackageStatus")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "getPlatformMCPPackageStatus")
-		Meta("openapi:extension:x-speakeasy-name-override", "getPlatformMCPPackageStatus")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "PlatformMCPPackageStatus"}`)
-	})
-
-	Method("repairPlatformMCPPackage", func() {
-		Description("Idempotently publish or repair the Platform MCP package in the organization's canonical default-project marketplace.")
-		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
-
-		Payload(func() {
-			security.SessionPayload()
-			security.ProjectPayload()
-		})
-
-		Result(PlatformMCPPackageStatusResult)
-
-		HTTP(func() {
-			POST("/rpc/plugins.repairPlatformMCPPackage")
-			security.SessionHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
-				ContentType("application/json")
-			})
-		})
-
-		Meta("openapi:operationId", "repairPlatformMCPPackage")
-		Meta("openapi:extension:x-speakeasy-name-override", "repairPlatformMCPPackage")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RepairPlatformMCPPackage"}`)
 	})
 
 	Method("getPublishStatus", func() {
@@ -528,7 +453,8 @@ var _ = Service("plugins", func() {
 		Description("Update the marketplace settings for the current project. If a marketplace is already published, the updated settings are pushed to GitHub before the call returns.")
 
 		Payload(func() {
-			Attribute("marketplace_name", String, "Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string or omit to clear the override and fall back to the default.")
+			Attribute("marketplace_name", String, "Override for the marketplace name (the identifier users type as `<plugin>@<marketplace>`). Pass an empty string to clear the override and fall back to the default. Omit to leave the current override unchanged.")
+			Attribute("observability_enabled", Boolean, "Whether this project's observability plugin is included in the published marketplace and installed by the device agent. Omit to leave the current value unchanged.")
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
@@ -717,31 +643,6 @@ var ListAudiencesResult = Type("ListAudiencesResult", func() {
 	Attribute("audiences", ArrayOf(PluginAudienceModel), "Audiences that can be assigned to plugins.")
 })
 
-var PlatformMCPPackageStatusResult = Type("PlatformMCPPackageStatusResult", func() {
-	Required("admission", "available", "package_name", "claude_filename", "agent_plugin_filename", "marketplace_connected", "package_present", "freshness", "repair_allowed", "direct_download_available")
-
-	Attribute("admission", String, func() {
-		Description("Organization package admission: enabled, disabled, or indeterminate.")
-		Enum("enabled", "disabled", "indeterminate")
-	})
-	Attribute("available", Boolean, "Whether organization admission currently permits installing the package.")
-	Attribute("package_name", String, "Fixed Platform MCP package identity.")
-	Attribute("claude_filename", String, "Deterministic Claude direct-download ZIP filename.")
-	Attribute("agent_plugin_filename", String, "Deterministic portable Agent Plugins direct-download ZIP filename.")
-	Attribute("canonical_project_slug", String, "Literal default project that owns the canonical organization marketplace, when present.")
-	Attribute("marketplace_name", String, "Effective name of the canonical marketplace, when its default project is present.")
-	Attribute("marketplace_connected", Boolean, "Whether the canonical default project has a published GitHub marketplace.")
-	Attribute("marketplace_url", String, "Git URL used by supported clients to register the canonical marketplace.")
-	Attribute("repo_url", String, "Canonical GitHub repository URL.")
-	Attribute("package_present", Boolean, "Whether the last successful canonical publish recorded the Platform package fingerprint.")
-	Attribute("freshness", String, func() {
-		Description("Platform package freshness: current, stale, missing, unavailable, or indeterminate.")
-		Enum("current", "stale", "missing", "unavailable", "indeterminate")
-	})
-	Attribute("repair_allowed", Boolean, "Whether an organization admin can publish or repair the canonical package now.")
-	Attribute("direct_download_available", Boolean, "Whether keyless direct downloads are currently admitted.")
-})
-
 var PublishStatusResult = Type("PublishStatusResult", func() {
 	Required("configured", "connected")
 
@@ -753,6 +654,7 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 	Attribute("marketplace_url", String, "Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.")
 	Attribute("claude_observability_plugin", String, "Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
 	Attribute("codex_observability_plugin", String, "Slug of the generated Codex observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
+	Attribute("cursor_observability_plugin", String, "Slug of the generated Cursor observability plugin in the published marketplace — the value to mark required in Cursor's team marketplace. Present when connected.")
 	Attribute("has_collaborators", Boolean, "Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.")
 	Attribute("up_to_date", Boolean, "Whether the project's current plugin state matches what was last published to GitHub. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).")
 	Attribute("last_published_at", String, func() {
@@ -768,11 +670,12 @@ var PublishPluginsResult = Type("PublishPluginsResult", func() {
 })
 
 var MarketplaceSettingsResult = Type("MarketplaceSettingsResult", func() {
-	Required("default_name", "effective_name")
+	Required("default_name", "effective_name", "observability_enabled")
 
 	Attribute("marketplace_name", String, "User-provided override for the marketplace name. Absent when no override is configured.")
 	Attribute("default_name", String, "The default marketplace name used when no override is configured.")
 	Attribute("effective_name", String, "The marketplace name that will be used at publish time (override if set, otherwise default).")
+	Attribute("observability_enabled", Boolean, "Whether this project's observability plugin is included in the published marketplace and installed by the device agent. Defaults to true when unset.")
 })
 
 var UpdateMarketplaceSettingsResult = Type("UpdateMarketplaceSettingsResult", func() {

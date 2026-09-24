@@ -320,7 +320,7 @@ func TestServiceAttachRemoteMcpServerToAssistant(t *testing.T) {
 
 	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
 		ProjectID:   projectID,
-		McpServerID: server.ID,
+		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
 		Slug:        "team-remote-mcp",
 	})
 	require.NoError(t, err)
@@ -422,7 +422,7 @@ func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 	require.NoError(t, err)
 	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
 		ProjectID:   projectID,
-		McpServerID: disabled.ID,
+		McpServerID: uuid.NullUUID{UUID: disabled.ID, Valid: true},
 		Slug:        "disabled-remote-endpoint",
 	})
 	require.NoError(t, err)
@@ -435,9 +435,11 @@ func TestAssistantsService_AttachMCPServer_RejectsUnreachable(t *testing.T) {
 		{slug: disabled.Slug.String, wantErr: "is disabled"},
 	} {
 		// The resolver carries the reason; the endpoint maps it to a 400.
-		_, resolveErr := svc.core.resolveMcpServerRefsForWrite(t.Context(), projectID, []*types.AssistantMCPServerRef{
+		tx := testenv.BeginTx(t, t.Context(), conn)
+		_, resolveErr := svc.core.resolveMcpServerRefsForWrite(t.Context(), tx, projectID, []*types.AssistantMCPServerRef{
 			{McpServerSlug: tt.slug, EnvironmentSlug: nil},
 		})
+		require.NoError(t, tx.Rollback(t.Context()))
 		require.ErrorContains(t, resolveErr, tt.wantErr)
 
 		_, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{

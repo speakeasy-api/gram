@@ -1,4 +1,5 @@
 import { useTelemetry } from "@/contexts/Telemetry";
+import { safeSameOriginUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
 import { authInfo } from "@gram/client/funcs/authInfo";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -16,7 +17,11 @@ import {
   validateOrgName,
 } from "./org-name";
 
-export function RegisterPanel(): JSX.Element {
+export function RegisterPanel({
+  redirectTo,
+}: {
+  redirectTo?: string | null;
+}): JSX.Element {
   const telemetry = useTelemetry();
   const [companyName, setCompanyName] = useState("");
   const [validationError, setValidationError] = useState("");
@@ -47,7 +52,8 @@ export function RegisterPanel(): JSX.Element {
         company_name: companyName,
         is_gram: true,
       });
-      window.location.replace("/");
+      const destination = safeSameOriginUrl(redirectTo) ?? "/";
+      window.location.replace(destination);
     },
     onError: (error) => {
       setValidationError(error.message);

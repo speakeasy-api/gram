@@ -8,6 +8,14 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ToolUsageClientFilterOption,
+  ToolUsageClientFilterOption$inboundSchema,
+} from "./toolusageclientfilteroption.js";
+import {
+  ToolUsageGatewayFilterOption,
+  ToolUsageGatewayFilterOption$inboundSchema,
+} from "./toolusagegatewayfilteroption.js";
+import {
   ToolUsageHostedServerFilterOption,
   ToolUsageHostedServerFilterOption$inboundSchema,
 } from "./toolusagehostedserverfilteroption.js";
@@ -24,6 +32,14 @@ import {
  * Filter options for target-aware MCP and tool usage metrics
  */
 export type GetToolUsageFilterOptionsResult = {
+  /**
+   * MCP clients with usage in the selected time range
+   */
+  clients: Array<ToolUsageClientFilterOption>;
+  /**
+   * Gateways (meta MCP servers) with usage in the selected time range
+   */
+  gateways: Array<ToolUsageGatewayFilterOption>;
   /**
    * Hosted MCP servers with usage in the selected time range
    */
@@ -44,6 +60,8 @@ export const GetToolUsageFilterOptionsResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    clients: z.array(ToolUsageClientFilterOption$inboundSchema),
+    gateways: z.array(ToolUsageGatewayFilterOption$inboundSchema),
     hosted_servers: z.array(ToolUsageHostedServerFilterOption$inboundSchema),
     shadow_servers: z.array(ToolUsageShadowServerFilterOption$inboundSchema),
     users: z.array(ToolUsageUserFilterOption$inboundSchema),

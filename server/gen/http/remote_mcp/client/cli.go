@@ -23,9 +23,12 @@ func BuildCreateServerPayload(remoteMcpCreateServerBody string, remoteMcpCreateS
 	{
 		err = json.Unmarshal([]byte(remoteMcpCreateServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		if body.UserSessionIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -49,9 +52,10 @@ func BuildCreateServerPayload(remoteMcpCreateServerBody string, remoteMcpCreateS
 		}
 	}
 	v := &remotemcp.CreateServerPayload{
-		Name:          body.Name,
-		URL:           body.URL,
-		TransportType: body.TransportType,
+		Name:                body.Name,
+		URL:                 body.URL,
+		TransportType:       body.TransportType,
+		UserSessionIssuerID: body.UserSessionIssuerID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -68,9 +72,12 @@ func BuildCreateServerAndMcpServerPayload(remoteMcpCreateServerAndMcpServerBody 
 	{
 		err = json.Unmarshal([]byte(remoteMcpCreateServerAndMcpServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"abc123\",\n      \"transport_type\": \"abc123\",\n      \"url\": \"https://example.com/foo\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		if body.UserSessionIssuerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.user_session_issuer_id", *body.UserSessionIssuerID, goa.FormatUUID))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -94,9 +101,10 @@ func BuildCreateServerAndMcpServerPayload(remoteMcpCreateServerAndMcpServerBody 
 		}
 	}
 	v := &remotemcp.CreateServerAndMcpServerPayload{
-		Name:          body.Name,
-		URL:           body.URL,
-		TransportType: body.TransportType,
+		Name:                body.Name,
+		URL:                 body.URL,
+		TransportType:       body.TransportType,
+		UserSessionIssuerID: body.UserSessionIssuerID,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -265,6 +273,49 @@ func BuildDiscoverProtectedResourceMetadataPayload(remoteMcpDiscoverProtectedRes
 	}
 	v := &remotemcp.DiscoverProtectedResourceMetadataPayload{
 		RemoteMcpServerID: body.RemoteMcpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildProbeURLPayload builds the payload for the remoteMcp probeURL endpoint
+// from CLI flags.
+func BuildProbeURLPayload(remoteMcpProbeURLBody string, remoteMcpProbeURLSessionToken string, remoteMcpProbeURLApikeyToken string, remoteMcpProbeURLProjectSlugInput string) (*remotemcp.ProbeURLPayload, error) {
+	var err error
+	var body ProbeURLRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteMcpProbeURLBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteMcpProbeURLSessionToken != "" {
+			sessionToken = &remoteMcpProbeURLSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if remoteMcpProbeURLApikeyToken != "" {
+			apikeyToken = &remoteMcpProbeURLApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteMcpProbeURLProjectSlugInput != "" {
+			projectSlugInput = &remoteMcpProbeURLProjectSlugInput
+		}
+	}
+	v := &remotemcp.ProbeURLPayload{
+		URL: body.URL,
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

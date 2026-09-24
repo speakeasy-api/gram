@@ -44,6 +44,74 @@ if grep -E '^GRAM_ADMIN_SERVER_URL[[:space:]]*=' mise.local.toml \
   echo "✅ Cleared the stale admin origin declaration(s); re-mapped below."
 fi
 
+# A short-lived dev-idp setup stored the WorkOS API key under the downstream
+# GRAM_IDP_CLIENT_SECRET name. Its documented sk_* shape distinguishes it from
+# a generated dev-idp secret. Move it to WORKOS_API_KEY when needed, then mint a
+# fresh downstream credential. OIDC_CLIENT_SECRET belongs to the retired OIDC
+# application and is never treated as a WorkOS API key.
+generate_idp_client_secret=false
+case "${GRAM_IDP_CLIENT_SECRET:-}" in
+  ""|unset)
+    generate_idp_client_secret=true
+    ;;
+  sk_*)
+    case "${WORKOS_API_KEY:-}" in
+      ""|unset)
+        printf '%s' "${GRAM_IDP_CLIENT_SECRET}" \
+          | mise set --file mise.local.toml --stdin WORKOS_API_KEY >/dev/null
+        echo "✅ Moved the WorkOS API key to WORKOS_API_KEY."
+        ;;
+    esac
+    if grep -qE '^GRAM_IDP_CLIENT_SECRET[[:space:]]*=' mise.local.toml; then
+      mise unset --file mise.local.toml GRAM_IDP_CLIENT_SECRET
+    fi
+    generate_idp_client_secret=true
+    ;;
+esac
+
+if [ "$generate_idp_client_secret" = "true" ]; then
+  idp_client_secret="devidp_$(openssl rand -hex 32)"
+  printf '%s' "$idp_client_secret" \
+    | mise set --file mise.local.toml --stdin GRAM_IDP_CLIENT_SECRET >/dev/null
+  unset idp_client_secret
+  echo "✅ Generated a dev-idp client secret for Gram callers."
+fi
+unset generate_idp_client_secret
+
+if grep -qE '^OIDC_CLIENT_SECRET[[:space:]]*=' mise.local.toml; then
+  mise unset --file mise.local.toml OIDC_CLIENT_SECRET
+  echo "✅ Removed the retired OIDC client secret; it is not a WorkOS API key."
+fi
+
+# dev-idp folded its two identity modes into one WorkOS surface picked by
+# GRAM_DEVIDP_BACKEND. Preserve the old WorkOS choice when the replacement has
+# not been explicitly configured, then remove the retired setting. The
+# generated GRAM_IDP_BASE_URL and WORKOS_API_URL declarations from before the
+# prefix rename are refreshed by the remap pass below: they carry the old
+# template verbatim, which is how it tells them from hand-pinned values.
+if grep -qE '^GRAM_IDP_MODE[[:space:]]*=' mise.local.toml; then
+  if grep -qE "^GRAM_IDP_MODE[[:space:]]*=[[:space:]]*['\"]workos['\"][[:space:]]*(#.*)?$" mise.local.toml \
+     && ! grep -qE '^GRAM_DEVIDP_BACKEND[[:space:]]*=' mise.local.toml; then
+    mise set --file mise.local.toml GRAM_DEVIDP_BACKEND=workos
+    echo "✅ Migrated this worktree's identity backend setting to workos."
+  fi
+  mise unset --file mise.local.toml GRAM_IDP_MODE
+  echo "✅ Removed the retired GRAM_IDP_MODE setting."
+fi
+
+# Older WorkOS setup wrote a hosted AuthKit client id into the worktree. That
+# bypasses dev-idp's fixed login client and restores an interactive external
+# login. Remove only the recognizable WorkOS client_* value; custom local
+# client ids remain untouched.
+if grep -qE "^GRAM_IDP_CLIENT_ID[[:space:]]*=[[:space:]]*['\"]client_[^'\"]*['\"][[:space:]]*(#.*)?$" mise.local.toml; then
+  mise unset --file mise.local.toml GRAM_IDP_CLIENT_ID
+  echo "✅ Removed the stale WorkOS GRAM_IDP_CLIENT_ID override; using gram-local-dev."
+fi
+
+# Fill in per-developer local config added to the main worktree since this one
+# was created. Existing copies here are left alone — see git:workcopy.
+mise run git:workcopy --mode sync
+
 echo "⏳ Syncing port mappings..."
 added=0
 remap=$(mise run zero:remap-ports --preserve --format flat --file -)
@@ -59,6 +127,20 @@ if [ "$added" -eq 0 ]; then
   echo "✅ Port mappings already in sync."
 else
   echo "✅ Added ${added} env var declaration(s) to mise.local.toml."
+fi
+
+# Pub/Sub now uses one emulator on its default port. A generated host declaration
+# contains the port template copied from mise.toml, which proves the host and
+# port were emitted together by zero:remap-ports. Reset only that generated pair;
+# explicit endpoints remain untouched.
+if grep -E '^PUBSUB_EMULATOR_HOST[[:space:]]*=' mise.local.toml \
+     | grep -qF '{{env.PUBSUB_EMULATOR_PORT}}'; then
+  for key in PUBSUB_EMULATOR_HOST PUBSUB_EMULATOR_PORT; do
+    if grep -qE "^${key}[[:space:]]*=" mise.local.toml; then
+      mise unset --file mise.local.toml "$key"
+    fi
+  done
+  echo "✅ Reset auto-generated Pub/Sub emulator endpoint to the shared default."
 fi
 
 # Presidio moved to the shared stack (compose.shared.yml) and must use the
@@ -107,15 +189,28 @@ if grep -E '^OTEL_EXPORTER_OTLP_ENDPOINT[[:space:]]*=' mise.local.toml \
   echo "✅ Reset auto-generated LGTM ports to the shared defaults."
 fi
 
-# With one LGTM serving every worktree, a worktree that does not tag its
-# telemetry is indistinguishable from every other worktree on the same commit.
-# `git:workinit` writes this for new worktrees; add it here for the ones created
-# before the stack was shared. Only ever filled in when absent, so a
-# hand-customised value survives.
-if ! grep -qE '^OTEL_RESOURCE_ATTRIBUTES[[:space:]]*=' mise.local.toml; then
-  worktree_project=$(mise set --file mise.local.toml 2>/dev/null \
-    | awk '$1 == "COMPOSE_PROJECT_NAME" { print $2 }')
-  if [ -n "$worktree_project" ]; then
+# Backfill worktree identities written by git:workinit, preserving custom values.
+# Keep the namespace convention used before Temporal moved back to local containers.
+worktree_project=$(mise set --file mise.local.toml 2>/dev/null \
+  | awk '$1 == "COMPOSE_PROJECT_NAME" { print $2 }')
+if [ -n "$worktree_project" ]; then
+  # Workflow IDs, schedules, and task queues are namespace-scoped in Temporal.
+  if ! grep -qE '^TEMPORAL_NAMESPACE[[:space:]]*=' mise.local.toml \
+     || grep -qE '^TEMPORAL_NAMESPACE[[:space:]]*=[[:space:]]*"default"[[:space:]]*$' mise.local.toml; then
+    mise set --file mise.local.toml "TEMPORAL_NAMESPACE=${worktree_project}"
+    echo "✅ Namespaced this worktree's Temporal state under ${worktree_project}."
+  fi
+
+  # Pub/Sub resource paths include the project ID, so this isolates identical
+  # topic and subscription IDs inside the shared emulator.
+  if ! grep -qE '^GRAM_GCP_PROJECT_ID[[:space:]]*=' mise.local.toml; then
+    mise set --file mise.local.toml "GRAM_GCP_PROJECT_ID=${worktree_project}"
+    echo "✅ Namespaced this worktree's Pub/Sub resources under ${worktree_project}."
+  fi
+
+  # Without this label, telemetry from same-commit worktrees is
+  # indistinguishable in the shared LGTM stack.
+  if ! grep -qE '^OTEL_RESOURCE_ATTRIBUTES[[:space:]]*=' mise.local.toml; then
     mise set --file mise.local.toml \
       "OTEL_RESOURCE_ATTRIBUTES=worktree=${worktree_project}"
     echo "✅ Tagged this worktree's telemetry as worktree=${worktree_project}."
@@ -127,6 +222,12 @@ if [ "${usage_no_migrate:-false}" = "true" ]; then
   echo "ℹ️  Skipping database migrations (--no-migrate)."
   exit 0
 fi
+
+echo
+# Temporary support for dev-idp schema changes introduced on 2026-09-07.
+# Remove after 2026-10-15, when local environments can be assumed evolved.
+echo "⏳ Evolving dev-idp SQLite schema..."
+mise run db:devidp:evolve
 
 echo
 echo "⏳ Applying Postgres migrations..."

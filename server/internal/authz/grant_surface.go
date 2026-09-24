@@ -37,11 +37,19 @@ var scopeGrantSurfaces = map[Scope]GrantSurface{
 	ScopeSkillBlockedRead:        GrantSurfaceAccess,
 	ScopeSkillWrite:              GrantSurfaceAccess,
 	ScopeSkillBlockedWrite:       GrantSurfaceAccess,
+	ScopePluginWrite:             GrantSurfaceAccess,
+	ScopePluginBlockedWrite:      GrantSurfaceAccess,
 	ScopeRiskPolicyEvaluate:      GrantSurfaceRiskPolicy,
 	ScopeRiskPolicyBypass:        GrantSurfaceRiskPolicy,
 	ScopeRiskPolicyBlock:         GrantSurfaceRiskPolicy,
 	ScopeChatRead:                GrantSurfaceAccess,
 	ScopeChatWrite:               GrantSurfaceAccess,
+	ScopeAgentRead:               GrantSurfaceAccess,
+	ScopeAgentWrite:              GrantSurfaceAccess,
+	ScopeAgentAuthorize:          GrantSurfaceAccess,
+	ScopeAgentTransfer:           GrantSurfaceAccess,
+	ScopeOrgDeviceAgentSync:      GrantSurfaceAccess,
+	ScopeOrgHooksIngest:          GrantSurfaceAccess,
 }
 
 // GrantSurfaceForScope returns the surface that owns writes for scope.

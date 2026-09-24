@@ -22,6 +22,10 @@ const maxDimensionValues = 1000
 // plain Float64/Int64/UInt64) distinct and orderable.
 const measureAliasPrefix = "m_"
 
+// SortByLLMTokens ranks by input + output tokens — the population the
+// person-facing dashboards display — rather than the stored TUM total_tokens.
+const SortByLLMTokens = "llm_tokens"
+
 // attributeMeasureSelects reads the aggregate states back out of the
 // AggregatingMergeTree. The state functions are the *If variants (see
 // attribute_metrics_summaries_mv), so reads must use the matching *IfMerge
@@ -200,6 +204,10 @@ type AttributeMetricsQueryParams struct {
 	// IntervalSeconds is the timeseries bucket width. The source is bucketed
 	// hourly so this is expected to be a multiple of 3600.
 	IntervalSeconds int64
+
+	// IncludeDimensionValues controls whether table rows collect distinct values
+	// for dimensions other than the requested group.
+	IncludeDimensionValues bool
 }
 
 // attributeGroupValueExpr returns the SQL expression to select/group by for the
@@ -367,13 +375,19 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 	if err != nil {
 		return nil, err
 	}
-	if !attributeMeasureSet[arg.SortBy] {
+	// llm_tokens is a computed sort (input + output) rather than a stored
+	// measure: the dashboards that display LLM tokens need top-N selection to
+	// rank by the same population, or a cache-write-heavy group could displace
+	// a higher-LLM group before the client ever sees it.
+	sortExpr := measureAliasPrefix + arg.SortBy
+	if arg.SortBy == SortByLLMTokens {
+		sortExpr = "(" + measureAliasPrefix + "total_input_tokens + " + measureAliasPrefix + "total_output_tokens)"
+	} else if !attributeMeasureSet[arg.SortBy] {
 		return nil, fmt.Errorf("unknown sort_by measure %q", arg.SortBy)
 	}
 
 	sb := sq.Select(groupExpr+" AS group_value").
 		Columns(attributeMeasureSelects...).
-		Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)))).
 		From("attribute_metrics_summaries").
 		// Exclude tombstoned rows (soft-deleted backfill data; see the
 		// is_active column comment in server/clickhouse/schema.sql).
@@ -381,6 +395,10 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 		Where(squirrel.Eq{"gram_project_id": arg.ProjectIDs}).
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
 		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
+
+	if arg.IncludeDimensionValues {
+		sb = sb.Column(squirrel.Expr(attributeDimensionValuesExpr(arg.GroupBy, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))))
+	}
 
 	sb, err = applyAttributeFilters(sb, arg.Filters, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	if err != nil {
@@ -392,7 +410,7 @@ func (q *Queries) QueryAttributeMetricsTable(ctx context.Context, arg AttributeM
 	}
 	// Order by the prefixed merged alias (a comparable scalar), not the state
 	// column of the same base name.
-	sb = sb.OrderBy(measureAliasPrefix + arg.SortBy + " DESC")
+	sb = sb.OrderBy(sortExpr + " DESC")
 
 	sb = withCanonicalFoldSettings(sb, canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg))
 	query, args, err := sb.ToSql()

@@ -964,23 +964,25 @@ func EncodeRevokeUserSessionError(encoder func(context.Context, http.ResponseWri
 // *UserSessionResponseBody from a value of type *types.UserSession.
 func marshalTypesUserSessionToUserSessionResponseBody(v *types.UserSession) *UserSessionResponseBody {
 	res := &UserSessionResponseBody{
-		ID:                  v.ID,
-		UserSessionIssuerID: v.UserSessionIssuerID,
-		SubjectUrn:          v.SubjectUrn,
-		Jti:                 v.Jti,
-		RefreshExpiresAt:    v.RefreshExpiresAt,
-		ExpiresAt:           v.ExpiresAt,
-		CreatedAt:           v.CreatedAt,
-		UpdatedAt:           v.UpdatedAt,
-		IssuerSlug:          v.IssuerSlug,
-		UserSessionClientID: v.UserSessionClientID,
-		ClientName:          v.ClientName,
-		ClientIDMetadataURI: v.ClientIDMetadataURI,
-		SubjectType:         v.SubjectType,
-		SubjectDisplayName:  v.SubjectDisplayName,
-		SubjectPhotoURL:     v.SubjectPhotoURL,
-		RevokedAt:           v.RevokedAt,
-		LastUsedAt:          v.LastUsedAt,
+		ID:                            v.ID,
+		UserSessionIssuerID:           v.UserSessionIssuerID,
+		SubjectUrn:                    v.SubjectUrn,
+		Jti:                           v.Jti,
+		RefreshExpiresAt:              v.RefreshExpiresAt,
+		ExpiresAt:                     v.ExpiresAt,
+		CreatedAt:                     v.CreatedAt,
+		UpdatedAt:                     v.UpdatedAt,
+		IssuerSlug:                    v.IssuerSlug,
+		UserSessionClientID:           v.UserSessionClientID,
+		ClientName:                    v.ClientName,
+		ClientIDMetadataURI:           v.ClientIDMetadataURI,
+		ClientCredentialKind:          v.ClientCredentialKind,
+		ClientTokenEndpointAuthMethod: v.ClientTokenEndpointAuthMethod,
+		SubjectType:                   v.SubjectType,
+		SubjectDisplayName:            v.SubjectDisplayName,
+		SubjectPhotoURL:               v.SubjectPhotoURL,
+		RevokedAt:                     v.RevokedAt,
+		LastUsedAt:                    v.LastUsedAt,
 	}
 	if v.Upstreams != nil {
 		res.Upstreams = make([]*UserSessionUpstreamResponseBody, len(v.Upstreams))
@@ -993,6 +995,9 @@ func marshalTypesUserSessionToUserSessionResponseBody(v *types.UserSession) *Use
 		}
 	} else {
 		res.Upstreams = []*UserSessionUpstreamResponseBody{}
+	}
+	if v.Workload != nil {
+		res.Workload = marshalTypesUserSessionWorkloadToUserSessionWorkloadResponseBody(v.Workload)
 	}
 
 	return res
@@ -1021,6 +1026,51 @@ func marshalTypesUserSessionUpstreamToUserSessionUpstreamResponseBody(v *types.U
 		}
 	} else {
 		res.Scopes = []string{}
+	}
+
+	return res
+}
+
+// marshalTypesUserSessionWorkloadToUserSessionWorkloadResponseBody builds a
+// value of type *UserSessionWorkloadResponseBody from a value of type
+// *types.UserSessionWorkload.
+func marshalTypesUserSessionWorkloadToUserSessionWorkloadResponseBody(v *types.UserSessionWorkload) *UserSessionWorkloadResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &UserSessionWorkloadResponseBody{
+		WorkloadIssuerID:   v.WorkloadIssuerID,
+		ExternalSubject:    v.ExternalSubject,
+		WorkloadIssuerName: v.WorkloadIssuerName,
+		WorkloadIssuerURL:  v.WorkloadIssuerURL,
+		AgentID:            v.AgentID,
+		AgentName:          v.AgentName,
+		AgentStatus:        v.AgentStatus,
+	}
+	if v.Admissions != nil {
+		res.Admissions = make([]*UserSessionWorkloadAdmissionResponseBody, len(v.Admissions))
+		for i, val := range v.Admissions {
+			if val == nil {
+				res.Admissions[i] = nil
+				continue
+			}
+			res.Admissions[i] = marshalTypesUserSessionWorkloadAdmissionToUserSessionWorkloadAdmissionResponseBody(val)
+		}
+	} else {
+		res.Admissions = []*UserSessionWorkloadAdmissionResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTypesUserSessionWorkloadAdmissionToUserSessionWorkloadAdmissionResponseBody
+// builds a value of type *UserSessionWorkloadAdmissionResponseBody from a
+// value of type *types.UserSessionWorkloadAdmission.
+func marshalTypesUserSessionWorkloadAdmissionToUserSessionWorkloadAdmissionResponseBody(v *types.UserSessionWorkloadAdmission) *UserSessionWorkloadAdmissionResponseBody {
+	res := &UserSessionWorkloadAdmissionResponseBody{
+		ID:   v.ID,
+		Tier: v.Tier,
+		Name: v.Name,
 	}
 
 	return res

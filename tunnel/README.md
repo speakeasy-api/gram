@@ -47,6 +47,19 @@ MCP client
 The caller never supplies the tunnel ID. Gram derives it from the project-scoped
 MCP server row and overwrites any inbound tunnel header before forwarding.
 
+## OAuth Back-Channel Requests
+
+An issuer bound to a tunnel uses the same agent for persisted metadata refresh,
+dynamic client registration, token exchange, refresh, and revocation. Gram
+preserves each OAuth request's path and query, but the agent delivers the request
+to the origin pinned by `TUNNEL_LOCAL_MCP_URL`; the original URL's scheme and
+host are not used inside the customer network.
+
+If the MCP server and authorization server run on separate origins, point
+`TUNNEL_LOCAL_MCP_URL` at a local reverse proxy that routes their paths to the
+appropriate services. A tunnel agent cannot select separate upstream origins
+for MCP and OAuth traffic on its own.
+
 ## State
 
 Postgres is durable control-plane state:
@@ -64,31 +77,20 @@ Redis is live data-plane state:
 
 ## Local Validation
 
-Start the local dev stack with `./zero --agent`.
-The local Postgres MCP server and agent are declared in `compose.yml` under the
-`tunnel` profile:
+Start the local dev stack with `./zero --agent`. The `tunnel-gateway`
+pitchfork daemon runs the local gateway with agent `/connect` on `:8090` and
+internal forwarding on `:8091`, using Redis for routes.
+
+To exercise the full path, create a tunneled MCP source in the dashboard and
+run the agent against any local MCP server with the one-time key it issues:
 
 ```bash
-docker compose --profile tunnel up --build tunnel-postgres-mcp tunnel-agent
+TUNNEL_GATEWAY_URL=ws://localhost:8090/connect \
+TUNNEL_KEY=<one-time tunnel key> \
+TUNNEL_LOCAL_MCP_URL=<local MCP server url> \
+TUNNEL_SERVICE_VERSION=dev \
+go run ./tunnel/cmd/tunnel-agent
 ```
-
-Two pitchfork daemon entries wrap the same local path:
-
-- `tunnel-gateway`: local gateway with agent `/connect` on `:8090` and internal forwarding on `:8091`, using Redis for routes.
-- `tunnel-postgres-mcp`: starts Postgres MCP and the companion tunnel agent.
-
-The tunnel seed task writes the local tunnel ID and key to `mise.local.toml`:
-
-```bash
-TUNNEL_LOCAL_ID=<tunneled_mcp_servers.id>
-TUNNEL_LOCAL_KEY=<one-time tunnel key>
-TUNNEL_LOCAL_MCP_ENDPOINT_SLUG=<mcp endpoint slug>
-TUNNEL_LOCAL_MCP_SERVER_ID=<mcp server id>
-```
-
-The Compose service runs the agent in the Postgres MCP network namespace and
-pins the upstream to `http://127.0.0.1:9000/mcp`; Gram reaches it through the
-normal tunneled MCP endpoint seeded in the dashboard.
 
 ## Tests
 

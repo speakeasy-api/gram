@@ -1,4 +1,7 @@
-import { RequireScope } from "@/components/require-scope";
+import { useRoutes } from "@/routes";
+import { Link } from "react-router";
+import { RequirePluginWrite } from "@/components/require-plugin-write";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import {
   StatusBanner,
   type StatusBannerTone,
@@ -11,13 +14,12 @@ import {
 } from "@/components/ui/Popover";
 import { Spinner } from "@/components/ui/Spinner";
 import { Text } from "@/components/ui/Text";
-import { useProject } from "@/contexts/Auth";
 import { useDrainInfiniteQuery } from "@/hooks/useDrainInfiniteQuery";
 import { ClientIconFan } from "@/pages/mcp/overview/PluginStatusBanner";
-import type { Plugin } from "@gram/client/models/components/plugin.js";
+import type { DistributionPlugin } from "@gram/client/models/components/distributionplugin.js";
 import type { Skill } from "@gram/client/models/components/skill.js";
 import { useDistributeSkillMutation } from "@gram/client/react-query/distributeSkill.js";
-import { usePlugins } from "@gram/client/react-query/plugins.js";
+import { useDistributionPlugins } from "@gram/client/react-query/distributionPlugins.js";
 import {
   invalidateAllSkillDistributions,
   useSkillDistributionsInfinite,
@@ -37,7 +39,7 @@ import { toast } from "sonner";
 
 function summarizePluginSelection(
   selectedIds: string[],
-  plugins: Plugin[],
+  plugins: DistributionPlugin[],
 ): string {
   if (selectedIds.length === 0) return "No plugins selected";
   const firstName =
@@ -81,9 +83,10 @@ export function SkillPluginBanner({
   skill: Skill;
 }): JSX.Element | null {
   const skillId = skill.id;
-  const project = useProject();
+  const routes = useRoutes();
   const queryClient = useQueryClient();
-  const { data: pluginsData } = usePlugins(undefined, undefined, {
+  const canWritePlugin = usePluginWriteAccess();
+  const { data: pluginsData } = useDistributionPlugins({ skillId }, undefined, {
     throwOnError: false,
   });
   const distributionsQuery = useSkillDistributionsInfinite(
@@ -153,6 +156,7 @@ export function SkillPluginBanner({
   };
 
   const handleSave = async () => {
+    if (!canWritePlugin) return;
     const toAdd = selectedPluginIds.filter((id) => !memberIdSet.has(id));
     const toRemove = distributions.filter(
       (distribution) => !selectedIdSet.has(distribution.pluginId),
@@ -258,12 +262,21 @@ export function SkillPluginBanner({
               ? blockedReason
               : "Plugins are the preferred way to distribute skills to your organization's users. Skills distributed to a plugin ship inside the plugin package and reach everyone who installs it."}
           </Text>
+          {isDistributed && (
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {distributions.map((distribution) => (
+                <Link
+                  key={distribution.pluginId}
+                  to={`${routes.plugins.detail.href(distribution.pluginId)}?skillId=${encodeURIComponent(skillId)}`}
+                  className="text-sm underline underline-offset-4"
+                >
+                  View {distribution.pluginName}
+                </Link>
+              ))}
+            </div>
+          )}
           {!isBlocked && plugins.length > 0 && (
-            <RequireScope
-              scope="skill:write"
-              resourceId={project.id}
-              level="component"
-            >
+            <RequirePluginWrite>
               <div className="flex items-center gap-2">
                 <Popover open={isPickerOpen} onOpenChange={setIsPickerOpen}>
                   <PopoverTrigger asChild>
@@ -326,7 +339,7 @@ export function SkillPluginBanner({
                   </Button.Text>
                 </Button>
               </div>
-            </RequireScope>
+            </RequirePluginWrite>
           )}
         </div>
         <ClientIconFan />

@@ -1,6 +1,15 @@
 import { useFetcher } from "@/contexts/Fetcher";
-import { useSdkClient, useSlugs } from "@/contexts/Sdk";
-import { formatRemoteMcpDisplay } from "@/lib/sources";
+import { useIsPlatformAdmin } from "@/contexts/Auth";
+import {
+  deleteSourceCascade,
+  fetchLinkedMcpServers,
+} from "@/pages/mcp/x/tabs/settings/sections/sourceDelete";
+import { invalidateWrapperDeleteAuthViews } from "@/pages/mcp/x/tabs/settings/sections/sourceInvalidation";
+import {
+  useProjectSlugForRequests,
+  useSdkClient,
+  useSlugs,
+} from "@/contexts/Sdk";
 import {
   createDefaultMcpEndpoint,
   DEFAULT_ENDPOINT_FAILED_MESSAGE,
@@ -9,6 +18,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
+import { invalidateAllGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
 import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
@@ -27,6 +37,8 @@ import {
 export type CreateRemoteMcpSourceVariables = {
   name?: string | undefined;
   url: string;
+  userSessionIssuerId?: string | undefined;
+  organizationOwnedUserSessionIssuer?: boolean | undefined;
 };
 
 export type CreateRemoteMcpSourceData = {
@@ -44,15 +56,23 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
   const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
   const { orgSlug } = useSlugs();
+  const projectSlug = useProjectSlugForRequests();
+  const isPlatformAdmin = useIsPlatformAdmin();
 
   return useMutation({
-    mutationFn: async ({ name, url }) => {
+    mutationFn: async ({
+      name,
+      url,
+      userSessionIssuerId,
+      organizationOwnedUserSessionIssuer,
+    }) => {
       const { remoteMcpServer, mcpServer } =
         await client.remoteMcp.createServerAndMcpServer({
           createServerForm: {
             name,
             url,
             transportType: "streamable-http",
+            userSessionIssuerId,
           },
         });
 
@@ -61,6 +81,9 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         authedFetch,
         remoteMcpServer,
         mcpServer,
+        isPlatformAdmin,
+        projectSlug,
+        organizationOwnedUserSessionIssuer,
       });
       const configuredMcpServer =
         authAutoConfig.status === "configured"
@@ -89,8 +112,8 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
         invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-        // Every create links a fresh user_session_issuer, so its cache always
-        // goes stale regardless of whether auto-config attached a client.
+        // Creation either links an existing issuer or mints a project issuer,
+        // so refresh the effective list in both cases.
         invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
       ];
       // The issuer/client caches only change when auto-configuration actually
@@ -111,61 +134,8 @@ export function useCreateRemoteMcpSource(): UseMutationResult<
   });
 }
 
-export type LinkMcpServerToRemoteVariables = {
-  remoteMcpServer: RemoteMcpServer;
-};
-
-// Mirrors the auto-provisioning step in useCreateRemoteMcpSource: create an
-// mcp_servers row backed by the given remote MCP server, using the same
-// display-name fallback and "disabled" visibility default. Surfaced as its own
-// hook so the details page can re-link after a user deletes the auto-created
-// server.
-export function useLinkMcpServerToRemote(): UseMutationResult<
-  void,
-  Error,
-  LinkMcpServerToRemoteVariables
-> {
-  const client = useSdkClient();
-  const queryClient = useQueryClient();
-  const { orgSlug } = useSlugs();
-
-  return useMutation({
-    mutationFn: async ({ remoteMcpServer }) => {
-      // Auto-config of the upstream client is intentionally left to the
-      // Authentication tab here.
-      const mcpServer = await client.mcpServers.create({
-        createMcpServerForm: {
-          name: formatRemoteMcpDisplay(remoteMcpServer),
-          remoteMcpServerId: remoteMcpServer.id,
-          visibility: "disabled",
-        },
-      });
-
-      // Mirror the create flow: pre-stage a default endpoint. Best-effort.
-      if (orgSlug) {
-        await createDefaultMcpEndpoint(client, mcpServer, orgSlug);
-      } else {
-        toast.warning(DEFAULT_ENDPOINT_FAILED_MESSAGE);
-      }
-    },
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-        invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-        // Re-link now mints a fresh user_session_issuer too, so its cache goes
-        // stale just as it does on create.
-        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
-      ]);
-    },
-  });
-}
-
 export type DeleteRemoteMcpSourceVariables = {
   remoteMcpServerId: string;
-  // mcp_servers rows backed by this remote MCP server. Pre-fetched by the
-  // confirmation dialog so the same list the user just confirmed is exactly
-  // what gets soft-deleted.
-  mcpServerIds: string[];
 };
 
 export function useDeleteRemoteMcpSource(): UseMutationResult<
@@ -177,31 +147,42 @@ export function useDeleteRemoteMcpSource(): UseMutationResult<
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ remoteMcpServerId, mcpServerIds }) => {
+    mutationFn: async ({ remoteMcpServerId }) => {
       // Soft-delete each linked mcp_server first; the server-side handler
-      // cascades to its mcp_endpoints. The deletes are independent, so run
-      // them concurrently and surface any failure before touching the source.
-      const results = await Promise.allSettled(
-        mcpServerIds.map((id) => client.mcpServers.delete({ id })),
-      );
-      const failed = results.find(
-        (result): result is PromiseRejectedResult =>
-          result.status === "rejected",
-      );
-      if (failed) {
-        throw failed.reason instanceof Error
-          ? failed.reason
-          : new Error(String(failed.reason));
-      }
-
-      await client.remoteMcp.deleteServer({ id: remoteMcpServerId });
+      // cascades to its mcp_endpoints. Only then does the source go.
+      await deleteSourceCascade({
+        listLinked: () =>
+          fetchLinkedMcpServers(client, queryClient, { remoteMcpServerId }),
+        deleteMcpServer: (id) => client.mcpServers.delete({ id }),
+        deleteSource: () =>
+          client.remoteMcp.deleteServer({ id: remoteMcpServerId }),
+        sourceLabel: "remote MCP source",
+      });
     },
     onSuccess: async () => {
+      // Mark stale only (refetchType "none"): the deleted server's own queries
+      // are still mounted on its detail page until the caller navigates away,
+      // and force-refetching them here would block mutateAsync on requests for
+      // a resource that no longer exists. Consumers refetch on their next
+      // mount after navigation.
       await Promise.all([
-        invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteMcpServers(queryClient, { refetchType: "none" }),
+        invalidateAllMcpServers(queryClient, { refetchType: "none" }),
+        invalidateAllMcpEndpoints(queryClient, { refetchType: "none" }),
+        invalidateWrapperDeleteAuthViews(queryClient, { refetchType: "none" }),
+      ]);
+    },
+    onError: async () => {
+      // A partial run left some wrappers gone and the source in place. Refetch
+      // so the open dialog lists what remains before the user retries, and so
+      // the still-mounted Authentication section drops the issuer and client
+      // bindings the deleted wrappers took with them.
+      await Promise.all([
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),
         invalidateAllMcpEndpoints(queryClient, { refetchType: "all" }),
-        invalidateAllUserSessionIssuers(queryClient, { refetchType: "all" }),
+        invalidateAllGetRemoteMcpServer(queryClient, { refetchType: "all" }),
+        invalidateAllRemoteMcpServers(queryClient, { refetchType: "all" }),
+        invalidateWrapperDeleteAuthViews(queryClient, { refetchType: "all" }),
       ]);
     },
   });

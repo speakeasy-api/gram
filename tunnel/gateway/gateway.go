@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -47,15 +48,18 @@ type Config struct {
 	// so load moves to sibling gateway pods via agent retry.
 	MaxSessions  int
 	ForwardToken string
+
+	routeRefreshInterval time.Duration
 }
 
 // Gateway owns live agent yamux sessions and maps internal forwards to substreams.
 type Gateway struct {
-	cfg    Config
-	keys   KeyResolver
-	routes route.Store
-	reg    *registry
-	logger *slog.Logger
+	cfg        Config
+	keys       KeyResolver
+	reg        *registry
+	reconciler *routeReconciler
+	logger     *slog.Logger
+	drain      sync.Once
 }
 
 func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) (*Gateway, error) {
@@ -69,12 +73,17 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 	if cfg.MaxSessions <= 0 {
 		cfg.MaxSessions = defaultMaxSessions
 	}
+	if cfg.routeRefreshInterval <= 0 {
+		cfg.routeRefreshInterval = routeTTL / 2
+	}
+	reg := newRegistry()
 	return &Gateway{
-		cfg:    cfg,
-		keys:   keys,
-		routes: routes,
-		reg:    newRegistry(),
-		logger: logger,
+		cfg:        cfg,
+		keys:       keys,
+		reg:        reg,
+		reconciler: newRouteReconciler(reg, keys, routes, cfg.AdvertiseAddr, logger, cfg.routeRefreshInterval),
+		logger:     logger,
+		drain:      sync.Once{},
 	}, nil
 }
 
@@ -82,27 +91,71 @@ func New(cfg Config, keys KeyResolver, routes route.Store, logger *slog.Logger) 
 func (g *Gateway) PublicHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/connect", g.handleConnect)
-	mux.HandleFunc("/healthz", healthz)
+	mux.HandleFunc("/healthz", g.healthz)
 	return mux
 }
 
 func (g *Gateway) ForwardHandler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", healthz)
+	mux.HandleFunc("/healthz", g.healthz)
 	mux.HandleFunc("/", g.handleForward)
 	return mux
 }
 
-func healthz(w http.ResponseWriter, _ *http.Request) {
+// Liveness requires three 20s failures, longer than the 25s drain; returning
+// 503 here safely removes a draining pod from Service endpoints immediately.
+func (g *Gateway) healthz(w http.ResponseWriter, _ *http.Request) {
+	if g.reg.isDraining() {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 }
 
 func (g *Gateway) ActiveSessions() int { return g.reg.activeSessions() }
 
 // SetAdvertiseAddr lets tests publish listener addresses known only after bind.
-func (g *Gateway) SetAdvertiseAddr(addr string) { g.cfg.AdvertiseAddr = addr }
+func (g *Gateway) SetAdvertiseAddr(addr string) { g.reconciler.address.Store(addr) }
+
+// Drain stops session admission and removes every route this gateway has owned.
+// Existing sessions remain open until CloseSessions is called.
+func (g *Gateway) Drain(ctx context.Context) {
+	g.drain.Do(func() {
+		tunnelIDs := g.reg.beginDrain()
+		g.reconciler.requestDrain(ctx, tunnelIDs)
+	})
+	select {
+	case <-g.reconciler.done:
+	case <-ctx.Done():
+	}
+}
+
+// CloseSessions closes all live agent sessions concurrently within ctx.
+func (g *Gateway) CloseSessions(ctx context.Context) {
+	sessions := g.reg.sessionsSnapshot()
+	closed := make(chan struct{}, len(sessions))
+	for _, session := range sessions {
+		go func() {
+			_ = session.Close()
+			closed <- struct{}{}
+		}()
+	}
+	for range sessions {
+		select {
+		case <-closed:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
 
 func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
+	if g.reg.isDraining() {
+		http.Error(w, "tunnel gateway is draining", http.StatusServiceUnavailable)
+		return
+	}
+
 	// Shed before key lookup so a connect storm cannot load the key resolver.
 	if g.reg.activeSessions() >= g.cfg.MaxSessions {
 		g.logger.WarnContext(r.Context(), "tunnel connect rejected",
@@ -165,6 +218,16 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	// This best-effort re-check only narrows the upgrade-to-MarkConnected drain race.
+	// reg.add remains the authoritative session gate; losing the remaining race can
+	// write one spurious durable activation that self-corrects when the agent re-homes.
+	if g.reg.isDraining() {
+		g.logger.InfoContext(r.Context(), "tunnel connect rejected",
+			slog.String("reason", "draining"), slog.String("tunnel_id", tunnelID))
+		_ = session.Close()
+		return
+	}
+
 	// Record durable activation only after the session is actually live: a
 	// valid-key plain-HTTP probe (no upgrade) must not flip status to active
 	// or advance last_seen_at for a tunnel that never connected. On failure,
@@ -180,7 +243,7 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 	sessionID := uuid.NewString()
 	now := time.Now().UTC()
-	remove := g.reg.add(tunnelID, sessionID, session, g.newSessionProxy(tunnelID, session), route.Connection{
+	remove := g.reg.add(tunnelID, sessionID, presentedKeyHash, session, g.newSessionProxy(tunnelID, session), route.Connection{
 		GatewaySessionID:       sessionID,
 		ServiceVersion:         serviceVersion,
 		AgentVersion:           agentVersion,
@@ -191,89 +254,24 @@ func (g *Gateway) handleConnect(w http.ResponseWriter, r *http.Request) {
 		ActiveConsumerSessions: 0,
 		Metadata:               metadata,
 	})
-	stateCtx, cancelState := routeOperationContext(r.Context())
-	if err := g.routes.Publish(stateCtx, tunnelID, g.cfg.AdvertiseAddr, routeTTL); err != nil {
-		g.logger.WarnContext(r.Context(), "tunnel route publish failed", slog.Any("error", err))
+	if remove == nil {
+		g.logger.InfoContext(r.Context(), "tunnel connect rejected",
+			slog.String("reason", "draining"), slog.String("tunnel_id", tunnelID))
+		return
 	}
-	g.publishConnectionSnapshot(stateCtx, tunnelID, now)
-	cancelState()
+	g.reconciler.nudge(tunnelID)
 	g.logger.InfoContext(r.Context(), "tunnel connected",
 		slog.String("tunnel_id", tunnelID), slog.String("session_id", sessionID),
 		slog.String("agent_version", agentVersion), slog.Int("active", g.reg.activeSessions()))
 
 	go g.sayHello(session, tunnelID, sessionID)
 
-	stop := make(chan struct{})
-	go g.refreshSessionState(tunnelID, presentedKeyHash, session, stop)
-
 	<-session.CloseChan()
-	close(stop)
 	remove()
-	g.cleanupSessionState(tunnelID)
+	g.reconciler.nudge(tunnelID)
 	g.logger.InfoContext(context.Background(), "tunnel disconnected",
 		slog.String("tunnel_id", tunnelID), slog.String("session_id", sessionID),
 		slog.Int("active", g.reg.activeSessions()))
-}
-
-// cleanupSessionState tears down route/snapshot state after a session closes.
-// The count-check and Unpublish are not atomic with a concurrent connect's
-// add+Publish, so a dying session could delete the route a replacement session
-// just published; after unpublishing we re-check the registry and republish if
-// a session appeared. Any connect that adds itself after the re-check performs
-// its own Publish after our Unpublish, so every interleaving converges on a
-// published route while live sessions exist.
-func (g *Gateway) cleanupSessionState(tunnelID string) {
-	stateCtx, cancelState := routeOperationContext(context.Background())
-	defer cancelState()
-	if g.reg.tunnelSessionCount(tunnelID) > 0 {
-		g.publishConnectionSnapshot(stateCtx, tunnelID, time.Now().UTC())
-		return
-	}
-	if err := g.routes.Unpublish(stateCtx, tunnelID, g.cfg.AdvertiseAddr); err != nil {
-		g.logger.WarnContext(stateCtx, "tunnel route unpublish failed", slog.Any("error", err))
-	}
-	g.deleteConnectionSnapshot(stateCtx, tunnelID)
-	if g.reg.tunnelSessionCount(tunnelID) > 0 {
-		if err := g.routes.Publish(stateCtx, tunnelID, g.cfg.AdvertiseAddr, routeTTL); err != nil {
-			g.logger.WarnContext(stateCtx, "tunnel route republish after reconnect race failed", slog.Any("error", err))
-		}
-		g.publishConnectionSnapshot(stateCtx, tunnelID, time.Now().UTC())
-	}
-}
-
-func (g *Gateway) refreshSessionState(tunnelID, keyHash string, session *yamux.Session, stop <-chan struct{}) {
-	t := time.NewTicker(routeTTL / 2)
-	defer t.Stop()
-	for {
-		select {
-		case <-stop:
-			return
-		case <-t.C:
-			if checker, ok := g.keys.(ActiveTunnelChecker); ok {
-				opCtx, cancel := routeOperationContext(context.Background())
-				active, err := checker.IsActive(opCtx, tunnelID, keyHash)
-				cancel()
-				if err != nil {
-					g.logger.WarnContext(context.Background(), "tunnel active check failed",
-						slog.String("tunnel_id", tunnelID), slog.Any("error", err))
-					continue
-				}
-				if !active {
-					g.logger.InfoContext(context.Background(), "tunnel session no longer active",
-						slog.String("tunnel_id", tunnelID))
-					_ = session.Close()
-					return
-				}
-			}
-			opCtx, cancel := routeOperationContext(context.Background())
-			if err := g.routes.Publish(opCtx, tunnelID, g.cfg.AdvertiseAddr, routeTTL); err != nil {
-				g.logger.WarnContext(opCtx, "tunnel route refresh failed",
-					slog.String("tunnel_id", tunnelID), slog.Any("error", err))
-			}
-			g.publishConnectionSnapshot(opCtx, tunnelID, time.Now().UTC())
-			cancel()
-		}
-	}
 }
 
 func routeOperationContext(parent context.Context) (context.Context, context.CancelFunc) {
@@ -283,28 +281,6 @@ func routeOperationContext(parent context.Context) (context.Context, context.Can
 func hashBearerKey(bearer string) string {
 	key := strings.TrimSpace(strings.TrimPrefix(bearer, "Bearer "))
 	return wire.HashKey(key)
-}
-
-func (g *Gateway) publishConnectionSnapshot(ctx context.Context, tunnelID string, heartbeatAt time.Time) {
-	store, ok := g.routes.(route.ConnectionSnapshotStore)
-	if !ok {
-		return
-	}
-	if err := store.PublishConnections(ctx, tunnelID, g.cfg.AdvertiseAddr, g.reg.connections(tunnelID, heartbeatAt), routeTTL); err != nil {
-		g.logger.WarnContext(ctx, "tunnel connection snapshot publish failed",
-			slog.String("tunnel_id", tunnelID), slog.Any("error", err))
-	}
-}
-
-func (g *Gateway) deleteConnectionSnapshot(ctx context.Context, tunnelID string) {
-	store, ok := g.routes.(route.ConnectionSnapshotStore)
-	if !ok {
-		return
-	}
-	if err := store.DeleteConnectionOwner(ctx, tunnelID, g.cfg.AdvertiseAddr); err != nil {
-		g.logger.WarnContext(ctx, "tunnel connection snapshot delete failed",
-			slog.String("tunnel_id", tunnelID), slog.Any("error", err))
-	}
 }
 
 var errServiceMetadataTooLarge = errors.New("tunnel service metadata exceeds 1024 bytes serialized JSON")
@@ -363,6 +339,8 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Header.Del(wire.HeaderTunnelForwardToken)
+	requireActive := r.Header.Get(wire.HeaderTunnelRequireActive) == "1"
+	r.Header.Del(wire.HeaderTunnelRequireActive)
 
 	// Forwarding is internal-only; gram-server supplies the tunnel ID header.
 	tunnelID := r.Header.Get(wire.HeaderTunnelID)
@@ -372,21 +350,60 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 	}
 	consumerSession := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelConsumerSession))
 	exactSession := strings.TrimSpace(r.Header.Get(wire.HeaderTunnelAgentSession))
-	entry, failure := g.reg.beginForward(tunnelID, consumerSession, exactSession, time.Now().UTC(), g.cfg.MaxStreamsPerTunnel)
-	switch failure {
-	case forwardReserved:
-	case forwardBusy:
-		// Live sessions exist but all are at their substream cap. The gateway
-		// is healthy: callers must not unpublish its route; they may retry
-		// another gateway or surface the 502.
-		w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorTunnelBusy)
-		http.Error(w, "tunnel is at capacity", http.StatusBadGateway)
-		return
-	default:
-		// Distinguish known tunnel/no live session from auth failures.
-		w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorNoLiveSession)
-		http.Error(w, "tunnel has no live agent session", http.StatusBadGateway)
-		return
+	checker, hasChecker := g.keys.(ActiveTunnelChecker)
+	if requireActive {
+		if !hasChecker {
+			g.logger.ErrorContext(r.Context(), "tunnel active check unavailable", slog.String("tunnel_id", tunnelID))
+			w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorActiveCheckFailed)
+			http.Error(w, "tunnel active check unavailable", http.StatusBadGateway)
+			return
+		}
+	}
+
+	var entry *sessEntry
+	for {
+		var failure forwardFailure
+		entry, failure = g.reg.beginForward(tunnelID, consumerSession, exactSession, time.Now().UTC(), g.cfg.MaxStreamsPerTunnel)
+		switch failure {
+		case forwardReserved:
+		case forwardBusy:
+			// Live sessions exist but all are at their substream cap. The gateway
+			// is healthy: callers must not unpublish its route; they may retry
+			// another gateway or surface the 502.
+			w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorTunnelBusy)
+			http.Error(w, "MCP server is temporarily unavailable", http.StatusBadGateway)
+			return
+		default:
+			// Distinguish known tunnel/no live session from auth failures.
+			w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorNoLiveSession)
+			http.Error(w, "tunnel has no live agent session", http.StatusBadGateway)
+			return
+		}
+		if !requireActive {
+			break
+		}
+
+		checkCtx, cancel := routeOperationContext(r.Context())
+		active, err := checker.IsActive(checkCtx, tunnelID, entry.keyHash)
+		cancel()
+		if err != nil {
+			g.reg.finishForward(entry, time.Now().UTC())
+			g.logger.WarnContext(r.Context(), "tunnel active check failed",
+				slog.String("tunnel_id", tunnelID), slog.Any("error", err))
+			w.Header().Set(wire.HeaderTunnelError, wire.TunnelErrorActiveCheckFailed)
+			http.Error(w, "tunnel active check failed", http.StatusBadGateway)
+			return
+		}
+		if active {
+			break
+		}
+
+		// Key rotation can leave an old-key session beside a valid replacement.
+		// Remove only the stale session and keep looking before declaring the
+		// whole gateway route dead.
+		g.reg.finishForward(entry, time.Now().UTC())
+		g.reg.remove(tunnelID, entry)
+		_ = entry.session.Close()
 	}
 	r.Header.Del(wire.HeaderTunnelID)
 	r.Header.Del(wire.HeaderTunnelConsumerSession)
@@ -397,20 +414,11 @@ func (g *Gateway) handleForward(w http.ResponseWriter, r *http.Request) {
 	// existing header map without clearing it.
 	w.Header().Set(wire.HeaderTunnelAgentSession, entry.id)
 	// Publish the begin-forward snapshot asynchronously: mid-flight counter
-	// freshness matters (dashboards show active substreams during long-lived
-	// streams), but the forward's latency path must not block on Redis. At
-	// most one goroutine per in-flight forward, bounded by the substream cap
-	// and the routeOperationTimeout.
-	go func() {
-		opCtx, cancel := routeOperationContext(context.Background())
-		defer cancel()
-		g.publishConnectionSnapshot(opCtx, tunnelID, time.Now().UTC())
-	}()
+	// freshness matters, but coalescing keeps Redis out of the forwarding path.
+	g.reconciler.nudge(tunnelID)
 	defer func() {
 		g.reg.finishForward(entry, time.Now().UTC())
-		opCtx, cancel := routeOperationContext(context.Background())
-		defer cancel()
-		g.publishConnectionSnapshot(opCtx, tunnelID, time.Now().UTC())
+		g.reconciler.nudge(tunnelID)
 	}()
 
 	entry.proxy.ServeHTTP(w, r)
@@ -426,8 +434,9 @@ func (g *Gateway) newSessionProxy(tunnelID string, session *yamux.Session) http.
 			req.URL.Scheme = "http"
 			req.URL.Host = "tunnel" // ignored; substreamTransport dials the session
 		},
-		Transport:     substreamTransport(session),
-		FlushInterval: -1, // stream SSE immediately
+		Transport:      substreamTransport(session),
+		FlushInterval:  -1, // stream SSE immediately
+		ModifyResponse: stripUpstreamTunnelError,
 		ErrorHandler: func(rw http.ResponseWriter, _ *http.Request, err error) {
 			g.logger.Warn("tunnel forward failed",
 				slog.String("tunnel_id", tunnelID), slog.Any("error", err))
@@ -437,18 +446,22 @@ func (g *Gateway) newSessionProxy(tunnelID string, session *yamux.Session) http.
 	}
 }
 
-// RevokeTunnel clears live routes/sessions; durable revocation stays in the key resolver.
+func stripUpstreamTunnelError(resp *http.Response) error {
+	// Only the gateway may instruct gram-server to retry or unpublish a route.
+	// Never trust this internal control header from an upstream.
+	resp.Header.Del(wire.HeaderTunnelError)
+	return nil
+}
+
+// RevokeTunnel closes this gateway's sessions and globally removes every route
+// and connection snapshot owner. Durable revocation stays in the key resolver.
 func (g *Gateway) RevokeTunnel(ctx context.Context, tunnelID string) int {
 	if revoker, ok := g.keys.(interface{ Revoke(string) }); ok {
 		revoker.Revoke(tunnelID)
 	}
-	opCtx, cancel := routeOperationContext(ctx)
-	defer cancel()
-	_ = g.routes.Delete(opCtx, tunnelID)
-	if store, ok := g.routes.(route.ConnectionSnapshotStore); ok {
-		_ = store.DeleteConnections(opCtx, tunnelID)
-	}
-	return g.reg.kill(tunnelID)
+	killed := g.reg.kill(tunnelID)
+	g.reconciler.requestRevoke(ctx, tunnelID)
+	return killed
 }
 
 // Disable keepalives so each request opens and closes its own yamux substream.

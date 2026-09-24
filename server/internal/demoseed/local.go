@@ -23,46 +23,27 @@ import (
 
 // Fixed local-only material. These are deliberately well-known constants, not
 // generated values: everything that used to be written back into
-// mise.local.toml after a seed run (the API key, the tunnel key and ids) is
-// now a checked-in default in mise.toml, so a fresh clone works without a
-// round trip through the seed.
+// mise.local.toml after a seed run (the API key) is now a checked-in default
+// in mise.toml, so a fresh clone works without a round trip through the seed.
 //
 // Safe because they only ever exist in a developer's local database: the
-// server refuses `--local` material for any other tenant, and the prefixes
-// mark them as local (`gram_local_`, `gram_tunnel_local`).
+// server refuses `--local` material for any other tenant, and the prefix
+// marks them as local (`gram_local_`).
 const (
 	// LocalAPIKeyName is the api_keys row the local fixtures maintain.
 	LocalAPIKeyName = "seed-key"
 	// LocalAPIKeyToken is the random half of the local API key. The full key
 	// is auth.APIKeyPrefix(env) + this.
 	LocalAPIKeyToken = "5eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca15eed10ca11"
-
-	// LocalTunnelKey is the tunnel agent's key for the seeded local Postgres
-	// MCP source.
-	LocalTunnelKey = "gram_tunnel_localpostgresmcpseedkey000000000000000000000000000000"
-	// LocalTunnelKeyPrefix is its displayed prefix.
-	LocalTunnelKeyPrefix = "gram_tunnel_local"
-	// LocalTunnelSourceName names the tunneled MCP server row.
-	LocalTunnelSourceName = "Seeded Local Postgres MCP"
-	// LocalTunnelMCPSlug is the MCP server slug, and with it the endpoint
-	// slug the tunnel-agent task connects through.
-	LocalTunnelMCPSlug = "seeded-local-postgres-mcp"
 )
 
 // Fixed uuids for the local-only rows, derived from LocalSpec's prefix so they
 // live in the same identifier family as everything else the seed writes and
 // can be published as static environment defaults.
-func localTunnelSourceID() string   { return LocalSpec().FixedUUID("0000-4000-a000-000000007001") }
-func localMCPServerID() string      { return LocalSpec().FixedUUID("0000-4000-a000-000000007002") }
-func localIssuerID() string         { return LocalSpec().FixedUUID("0000-4000-a000-000000007003") }
 func localEnvironmentID() string    { return LocalSpec().FixedUUID("0000-4000-a000-000000007004") }
 func localAPIKeyID() string         { return LocalSpec().FixedUUID("0000-4000-a000-000000007005") }
 func localMCPAppAssetID() string    { return LocalSpec().FixedUUID("0000-4000-a000-000000007006") }
 func localMCPAppFunctionID() string { return LocalSpec().FixedUUID("0000-4000-a000-000000007007") }
-
-// LocalTunnelEndpointSlug is the MCP endpoint the seeded tunnel is reachable
-// on: /mcp/<slug>.
-const LocalTunnelEndpointSlug = "default-" + LocalTunnelMCPSlug
 
 // LocalFixturesOptions configures RunLocalFixtures.
 type LocalFixturesOptions struct {
@@ -83,8 +64,8 @@ type LocalFixturesOptions struct {
 //   - you, as a real member with the Admin role and platform super-admin;
 //   - the system roles and their grants, plus a direct chat:read grant so the
 //     Agent Sessions list shows the seeded chats rather than only your own;
-//   - a fixed API key, tunnel fixture, and default environment, all with
-//     well-known ids so mise.toml can hardcode them;
+//   - a fixed API key and default environment, both with well-known ids so
+//     mise.toml can hardcode them;
 //   - the global MCP registry row, which is not tenant-scoped and so cannot
 //     live in the seed proper.
 //
@@ -99,8 +80,6 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	if err != nil {
 		return err
 	}
-	logger.InfoContext(ctx, "adopting developer into the local org", attr.SlogUserID(dev.ID))
-
 	// The system roles are a prerequisite for the Admin assignment below and
 	// are not org-specific data the seed can fabricate — provisioning owns
 	// them in every other environment, so reuse its seeder rather than
@@ -118,11 +97,6 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	if err != nil {
 		return fmt.Errorf("hash local api key: %w", err)
 	}
-	tunnelKeyHash, err := auth.GetAPIKeyHash(LocalTunnelKey)
-	if err != nil {
-		return fmt.Errorf("hash local tunnel key: %w", err)
-	}
-
 	// Upload the MCP App bundle before the transaction: the assets row has to
 	// point at a blob that already exists, and the write is idempotent by
 	// object name.
@@ -141,21 +115,26 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		}
 	}()
 
+	// Resolve the developer's user row before anything references it: a login
+	// that happened before this seed owns an id we cannot predict.
+	var workosID string
+	if err := tx.QueryRow(ctx, localUpsertDeveloperSQL, dev.ID, dev.Email, dev.Name, dev.WorkOSID).
+		Scan(&dev.ID, &workosID); err != nil {
+		return fmt.Errorf("local fixture %q: %w", "upsert developer", err)
+	}
+	logger.InfoContext(ctx, "adopting developer into the local org", attr.SlogUserID(dev.ID))
+
 	for _, step := range []struct {
 		name string
 		sql  string
 		args []any
 	}{
 		{"link org to the dev-idp", localLinkWorkOSOrgSQL, []any{spec.OrgID, spec.WorkOSOrgID}},
-		{"adopt developer", localAdoptDeveloperSQL, []any{spec.OrgID, dev.ID, dev.Email, dev.Name}},
+		{"adopt developer", localAdoptDeveloperSQL, []any{spec.OrgID, dev.ID, workosID}},
 		{"grant session visibility", localSessionVisibilitySQL, []any{spec.OrgID, dev.ID}},
 		{"enable platform mcp", localPlatformMCPFeatureSQL, []any{spec.OrgID}},
 		{"api key", localAPIKeySQL, []any{spec.OrgID, spec.ProjectID(), dev.ID, localAPIKeyID(), LocalAPIKeyName, apiKeyHash, apiKey[:len(auth.APIKeyPrefix(env))+5]}},
 		{"default environment", localEnvironmentSQL, []any{spec.OrgID, spec.ProjectID(), localEnvironmentID()}},
-		{"tunnel fixture", localTunnelSQL, []any{
-			spec.ProjectID(), localTunnelSourceID(), localIssuerID(), localMCPServerID(),
-			LocalTunnelSourceName, tunnelKeyHash, LocalTunnelKeyPrefix, LocalTunnelMCPSlug, LocalTunnelEndpointSlug,
-		}},
 		{"mcp registry", localMCPRegistrySQL, nil},
 		{"mcp app asset", localMCPAppAssetSQL, []any{
 			localMCPAppAssetID(), spec.ProjectID(), spec.OrgID, app.url, app.size, app.sha256,
@@ -188,18 +167,13 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 // mise.local.toml by the old seed script; they are now fixed and ship in
 // mise.toml. mise.local.toml wins over mise.toml, so a worktree that predates
 // this change keeps serving the old values — an API key that no longer exists
-// and a tunnel endpoint on a project that no longer exists — with nothing to
-// explain why.
+// — with nothing to explain why.
 //
 // The observed environment is passed in rather than read here: the caller in
 // cmd/ owns environment access.
 func warnOnStaleOverrides(ctx context.Context, logger *slog.Logger, env map[string]string, apiKey string) {
 	for _, v := range []struct{ name, want string }{
 		{"GRAM_API_KEY", apiKey},
-		{"TUNNEL_LOCAL_KEY", LocalTunnelKey},
-		{"TUNNEL_LOCAL_ID", localTunnelSourceID()},
-		{"TUNNEL_LOCAL_MCP_SERVER_ID", localMCPServerID()},
-		{"TUNNEL_LOCAL_MCP_ENDPOINT_SLUG", LocalTunnelEndpointSlug},
 	} {
 		if got := env[v.name]; got != "" && got != v.want {
 			logger.WarnContext(ctx, fmt.Sprintf(
@@ -214,18 +188,19 @@ func warnOnStaleOverrides(ctx context.Context, logger *slog.Logger, env map[stri
 func StaleOverrideVars() []string {
 	return []string{
 		"GRAM_API_KEY",
-		"TUNNEL_LOCAL_KEY",
-		"TUNNEL_LOCAL_ID",
-		"TUNNEL_LOCAL_MCP_SERVER_ID",
-		"TUNNEL_LOCAL_MCP_ENDPOINT_SLUG",
 	}
 }
 
 // developer is the local user the fixtures adopt into the org.
 type developer struct {
-	ID    string
-	Email string
-	Name  string
+	// ID is the id a user row would get if none exists yet. An earlier login
+	// may already have created one under a different id, in which case
+	// localUpsertDeveloperSQL returns that one instead.
+	ID string
+	// WorkOSID is the subject the dev-idp presents for this developer.
+	WorkOSID string
+	Email    string
+	Name     string
 }
 
 // resolveDeveloper mirrors the dev-idp's default-user bootstrap: the git
@@ -251,10 +226,12 @@ func resolveDeveloper(ctx context.Context, email string) (developer, error) {
 		}
 	}
 
+	uid := devidentity.DeterministicUserID(email)
 	return developer{
-		ID:    devidentity.DeterministicUserID(email).String(),
-		Email: email,
-		Name:  name,
+		ID:       uid.String(),
+		WorkOSID: devidentity.WorkOSUserID(uid),
+		Email:    email,
+		Name:     name,
 	}, nil
 }
 
@@ -295,24 +272,37 @@ SET workos_id = $2, updated_at = clock_timestamp()
 WHERE id = $1 AND workos_id IS DISTINCT FROM $2
 `
 
-// You, as a real member. users.workos_id doubles as the WorkOS subject the
-// dev-idp will present at login, and the dev-idp uses the same user id there,
-// so the row survives your first real login unchanged.
+// You, as a real member.
+//
+// Keyed on email, not id: a developer who logged in before seeding already has
+// a row whose id the auth callback derived from the dev-idp subject
+// (users.UserIDFromWorkOSID), which is not the id derived here from the email.
+// ON CONFLICT (id) would miss that row and collide on users_email_key instead,
+// so the statement returns the id that actually exists and the rest of the
+// fixtures use it. Login-first and seed-first therefore converge on one row:
+// the auth callback resolves an existing user by email too (see
+// identity.resolveGramUserID).
+//
+// users.workos_id is the subject the dev-idp will present at login. It has to
+// be the WorkOS-shaped form, not a bare UUID — a mismatch there is invisible
+// until login mints a second user.
+const localUpsertDeveloperSQL = `
+INSERT INTO users (id, email, display_name, workos_id, admin)
+VALUES ($1, $2, $3, $4, TRUE)
+ON CONFLICT (email) DO UPDATE
+  SET display_name = EXCLUDED.display_name,
+      workos_id = EXCLUDED.workos_id,
+      admin = TRUE, deleted_at = NULL, updated_at = clock_timestamp()
+RETURNING id, workos_id
+`
+
+// Your membership and Admin role assignment, against the user id
+// localUpsertDeveloperSQL resolved.
 const localAdoptDeveloperSQL = `
-WITH dev AS (
-  INSERT INTO users (id, email, display_name, workos_id, admin)
-  VALUES ($2, $3, $4, $2, TRUE)
-  ON CONFLICT (id) DO UPDATE
-    SET email = EXCLUDED.email, display_name = EXCLUDED.display_name,
-        workos_id = COALESCE(users.workos_id, EXCLUDED.workos_id),
-        admin = TRUE, updated_at = clock_timestamp()
-  RETURNING id, workos_id
-),
-membership AS (
+WITH membership AS (
   INSERT INTO organization_user_relationships
     (organization_id, user_id, workos_user_id, workos_membership_id)
-  SELECT $1, dev.id, dev.workos_id, 'devidp_mem_' || dev.id
-  FROM dev
+  VALUES ($1, $2, $3, 'devidp_mem_' || $2)
   ON CONFLICT (organization_id, user_id) WHERE deleted IS FALSE
   DO UPDATE SET
     workos_user_id = EXCLUDED.workos_user_id,
@@ -369,52 +359,6 @@ INSERT INTO environments (id, organization_id, project_id, name, slug)
 VALUES ($3, $1, $2, 'Default', 'default')
 ON CONFLICT (project_id, slug) WHERE deleted IS FALSE
 DO UPDATE SET name = EXCLUDED.name, updated_at = clock_timestamp()
-`
-
-// The tunnel fixture: a tunneled MCP source with a well-known key, an
-// interactive session issuer, and the MCP server/endpoint pair that exposes
-// it. .mise-tasks/start/tunnel-postgres-mcp.sh runs the agent against it.
-const localTunnelSQL = `
-WITH source AS (
-  INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix, status)
-  VALUES ($2, $1, $5, $6, $7, 'created')
-  ON CONFLICT (id) DO UPDATE SET
-    project_id = EXCLUDED.project_id, name = EXCLUDED.name,
-    key_hash = EXCLUDED.key_hash, key_prefix = EXCLUDED.key_prefix,
-    status = 'created', agent_version = NULL, last_seen_at = NULL,
-    deleted_at = NULL, updated_at = clock_timestamp()
-  RETURNING id, project_id
-),
-issuer AS (
-  INSERT INTO user_session_issuers (id, project_id, slug, authn_challenge_mode, session_duration)
-  VALUES ($3, $1, $8 || '-issuer', 'interactive', '14 days'::interval)
-  ON CONFLICT (id) DO UPDATE SET
-    project_id = EXCLUDED.project_id, slug = EXCLUDED.slug,
-    authn_challenge_mode = EXCLUDED.authn_challenge_mode,
-    session_duration = EXCLUDED.session_duration,
-    deleted_at = NULL, updated_at = clock_timestamp()
-  RETURNING id
-),
-mcp_server AS (
-  INSERT INTO mcp_servers (id, project_id, name, slug, user_session_issuer_id, tunneled_mcp_server_id, visibility)
-  SELECT $4, source.project_id, $5, $8, issuer.id, source.id, 'private'
-  FROM source CROSS JOIN issuer
-  ON CONFLICT (id) DO UPDATE SET
-    project_id = EXCLUDED.project_id, name = EXCLUDED.name, slug = EXCLUDED.slug,
-    user_session_issuer_id = EXCLUDED.user_session_issuer_id,
-    remote_mcp_server_id = NULL,
-    tunneled_mcp_server_id = EXCLUDED.tunneled_mcp_server_id,
-    toolset_id = NULL, visibility = EXCLUDED.visibility,
-    deleted_at = NULL, updated_at = clock_timestamp()
-  RETURNING id, project_id
-)
-INSERT INTO mcp_endpoints (project_id, mcp_server_id, slug)
-SELECT mcp_server.project_id, mcp_server.id, $9
-FROM mcp_server
-ON CONFLICT (slug) WHERE custom_domain_id IS NULL AND deleted IS FALSE
-DO UPDATE SET
-  project_id = EXCLUDED.project_id, mcp_server_id = EXCLUDED.mcp_server_id,
-  updated_at = clock_timestamp()
 `
 
 // The default registry backing the Catalog page. Global, not tenant-scoped,

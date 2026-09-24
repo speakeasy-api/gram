@@ -5,10 +5,15 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 func tokenEndpointAuthMethodEnum() {
-	Enum("client_secret_basic", "client_secret_post", "none")
+	Enum("client_secret_basic", "client_secret_post", "none", "private_key_jwt")
+}
+
+func tokenEndpointAuthAudienceFormatEnum() {
+	Enum("issuer", "token_endpoint")
 }
 
 // scopePattern matches RFC 6749 §3.3 scope-token: printable ASCII
@@ -180,6 +185,85 @@ var _ = Service("remoteSessionClients", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DetachUserSessionIssuer"}`)
 	})
 
+	Method("attachKeySet", func() {
+		Description("Attach an organization JSON Web Key Set to a remote_session_client, opting it into signing private_key_jwt assertions. The set must belong to the client's organization. Requires the customer_managed_encryption_keys entitlement.")
+
+		// Declared here rather than in shared.DeclareErrorResponses because only
+		// the key set methods can return it, and putting it in the shared set
+		// would type a 412 onto every method of every service. Returned when the
+		// client's owning organization cannot be resolved, so the tenant pinning
+		// the key set link depends on cannot be established.
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+
+		Payload(func() {
+			Extend(AttachKeySetForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RemoteSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/remoteSessionClients.attachKeySet")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "attachRemoteSessionClientKeySet")
+		Meta("openapi:extension:x-speakeasy-name-override", "attachKeySet")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AttachRemoteSessionClientKeySet"}`)
+	})
+
+	Method("detachKeySet", func() {
+		Description("Detach the JSON Web Key Set from a remote_session_client. Refused while the client declares token_endpoint_auth_method=private_key_jwt. A no-op when no set is attached. Requires the customer_managed_encryption_keys entitlement.")
+
+		// DELETE with the id as a query parameter, like deleteRemoteSessionClient
+		// beside it, rather than POST with a one-field body. Speakeasy collapses
+		// structurally identical request bodies into a single SDK component, so a
+		// bare {id: uuid} body here merges with risk's shared RiskIDRequestBody
+		// and renames the request field on every unrelated endpoint that uses it.
+		// Declared here rather than in shared.DeclareErrorResponses because only
+		// the key set methods can return it, and putting it in the shared set
+		// would type a 412 onto every method of every service. Returned when the
+		// client's owning organization cannot be resolved, so the tenant pinning
+		// the key set link depends on cannot be established.
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RemoteSessionClient)
+
+		HTTP(func() {
+			DELETE("/rpc/remoteSessionClients.detachKeySet")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "detachRemoteSessionClientKeySet")
+		Meta("openapi:extension:x-speakeasy-name-override", "detachKeySet")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DetachRemoteSessionClientKeySet"}`)
+	})
+
 	Method("listRemoteSessionClients", func() {
 		Description("List remote_session_clients in the caller's project.")
 
@@ -347,8 +431,28 @@ var _ = Service("organizationRemoteSessionClients", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClient"}`)
 	})
 
+	Method("getClientDelegationStatus", func() {
+		Security(security.Session)
+		Description("Read sanitized delegation observations for the current upstream configuration in the last 30 days. Requires org:admin. Never exercises credentials; presence is not proof of future refresh success.")
+		Payload(func() {
+			Attribute("id", String, "The remote_session_client id.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+		})
+		Result(OrganizationClientDelegationStatus)
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionClients.getDelegationStatus")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getOrganizationRemoteSessionClientDelegationStatus")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDelegationStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClientDelegationStatus"}`)
+	})
+
 	Method("getClientDeletePreflight", func() {
-		Description("Authoritative impact summary for deleting a remote_session_client: associated session count and affected MCP server names. Requires org:read.")
+		Description("Authoritative impact summary for deleting a remote_session_client: associated session count, affected MCP server names, and trusted identity-provider login references that must be explicitly unlinked before deletion. Requires org:read.")
 
 		Payload(func() {
 			Attribute("id", String, "The remote_session_client id.", func() {
@@ -474,6 +578,103 @@ var _ = Service("organizationRemoteSessionClients", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateOrganizationRemoteSessionClient"}`)
 	})
 
+	Method("attachClientKeySet", func() {
+		Description("Attach an organization JSON Web Key Set to a remote_session_client in the caller's organization, opting it into signing private_key_jwt assertions. Requires org:admin and the customer_managed_encryption_keys entitlement.")
+
+		// Declared here rather than in shared.DeclareErrorResponses because only
+		// the key set methods can return it, and putting it in the shared set
+		// would type a 412 onto every method of every service. Returned when the
+		// client's owning organization cannot be resolved, so the tenant pinning
+		// the key set link depends on cannot be established.
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+
+		Payload(func() {
+			Extend(AttachKeySetForm)
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(RemoteSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionClients.attachKeySet")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "attachOrganizationRemoteSessionClientKeySet")
+		Meta("openapi:extension:x-speakeasy-name-override", "attachKeySet")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AttachOrganizationRemoteSessionClientKeySet"}`)
+	})
+
+	Method("detachClientKeySet", func() {
+		Description("Detach the JSON Web Key Set from a remote_session_client in the caller's organization. Refused while the client declares token_endpoint_auth_method=private_key_jwt. A no-op when no set is attached. Requires org:admin and the customer_managed_encryption_keys entitlement.")
+
+		// DELETE + Param for the same reason as the project-scoped detachKeySet.
+		// Declared here rather than in shared.DeclareErrorResponses because only
+		// the key set methods can return it, and putting it in the shared set
+		// would type a 412 onto every method of every service. Returned when the
+		// client's owning organization cannot be resolved, so the tenant pinning
+		// the key set link depends on cannot be established.
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(RemoteSessionClient)
+
+		HTTP(func() {
+			DELETE("/rpc/organizationRemoteSessionClients.detachKeySet")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "detachOrganizationRemoteSessionClientKeySet")
+		Meta("openapi:extension:x-speakeasy-name-override", "detachKeySet")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DetachOrganizationRemoteSessionClientKeySet"}`)
+	})
+
+	Method("rotateClient", func() {
+		Description("Re-register a dynamically registered remote_session_client with its issuer in place, replacing the client_id and secret while keeping the row's id, issuer bindings, MCP server attachments, and key set links. Every remote session minted against the old client_id is revoked, so users reconnect once. Use when the issuer reports the registration expired (upstream_rejected_at is set) or to rotate proactively. The replacement is registered at the registration_endpoint the client's issuer publishes, so the issuer must publish one. Requires org:admin.")
+
+		Payload(func() {
+			Attribute("id", String, "The remote_session_client id.", func() {
+				Format(FormatUUID)
+			})
+			security.SessionPayload()
+			security.ByKeyPayload()
+			Required("id")
+		})
+
+		Result(RemoteSessionClient)
+
+		HTTP(func() {
+			POST("/rpc/organizationRemoteSessionClients.rotate")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "rotateOrganizationRemoteSessionClient")
+		Meta("openapi:extension:x-speakeasy-name-override", "rotate")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RotateOrganizationRemoteSessionClient"}`)
+	})
+
 	Method("deleteClient", func() {
 		Description("Soft-delete a remote_session_client in the caller's organization. Cascades to the remote_sessions minted against it. Requires org:admin.")
 
@@ -541,12 +742,28 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	Attribute("client_id", String, "client_id supplied by the caller.")
 	Attribute("client_secret", String, "client_secret supplied by the caller. Gram encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
+	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.", tokenEndpointAuthAudienceFormatEnum)
 	Attribute("scope", ArrayOf(String), func() {
 		ScopeAttribute("Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.")
 	})
 	Attribute("audience", String, "Optional upstream OAuth audience to send on the authorize redirect and token exchange.", AudienceAttribute)
+	RegistrationProvenanceAttributes()
 	Required("remote_session_issuer_id", "client_id")
 })
+
+// RegistrationProvenanceAttributes are the optional lifecycle stamps a create
+// form carries when the credentials came from Dynamic Client Registration
+// through /oauth/proxy-register. They let Gram track when the registration
+// expires and re-register the client in place at its issuer's registration
+// endpoint before that. Forms for credentials obtained out-of-band omit them.
+func RegistrationProvenanceAttributes() {
+	Attribute("client_id_issued_at", String, "When the issuer reported issuing the client_id (RFC 7591 client_id_issued_at). Omit to record the time of this call.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("client_secret_expires_at", String, "When the issuer reported the client secret expires (RFC 7591 client_secret_expires_at). Omit when the issuer reported no expiry.", func() {
+		Format(FormatDateTime)
+	})
+}
 
 var CreateCimdForm = Type("CreateCimdForm", func() {
 	Description("Form for creating a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the row carries no secret and authenticates with token_endpoint_auth_method=none. The caller supplies no client_id or credentials.")
@@ -575,12 +792,35 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 	})
 	Attribute("client_secret", String, "Rotate the client secret. Gram re-encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", tokenEndpointAuthMethodEnum)
+	Attribute("token_endpoint_auth_audience_format", String, "Change the aud claim format used in private_key_jwt assertions. Omit to leave unchanged.", tokenEndpointAuthAudienceFormatEnum)
 	Attribute("scope", ArrayOf(String), func() {
 		ScopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
 	})
 	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.", AudienceAttribute)
 
 	Required("id")
+})
+
+// AttachKeySetForm backs the attachKeySet methods on both tenant client
+// services; detachKeySet needs no body and takes the id as a query parameter.
+// The link lives on its own pair of methods rather than on the create and
+// update forms for two reasons: the
+// entitlement gate applies to this link alone and would otherwise have to fire
+// conditionally on a field's presence inside handlers the rest of the
+// organization can use ungated; the private_key_jwt coupling rule needs to tell
+// "leave unchanged" from "clear", which a Format(FormatUUID) patch attribute
+// cannot express (an empty string fails validation before a handler sees it).
+var AttachKeySetForm = Type("AttachKeySetForm", func() {
+	Description("Form for attaching an organization JSON Web Key Set to a remote_session_client.")
+
+	Attribute("id", String, "The remote_session_client id.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("json_web_key_set_id", String, "The organization JSON Web Key Set to sign this client's private_key_jwt assertions with. Must belong to the client's organization.", func() {
+		Format(FormatUUID)
+	})
+
+	Required("id", "json_web_key_set_id")
 })
 
 var AttachUserSessionIssuerForm = Type("AttachUserSessionIssuerForm", func() {
@@ -638,7 +878,19 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	Attribute("client_secret_expires_at", String, "Null when the secret does not expire.", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("upstream_rejected_at", String, "When the issuer's token endpoint last answered invalid_client for this client_id, meaning the issuer no longer recognizes the registration. Null while the registration is in good standing; cleared by a successful rotation, a successful refresh, or a replaced secret.", func() {
+		Format(FormatDateTime)
+	})
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Null resolves to client_secret_basic at runtime.", tokenEndpointAuthMethodEnum)
+	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Null resolves to issuer.", tokenEndpointAuthAudienceFormatEnum)
+	// Read-only here. The link is mutated through attachKeySet / detachKeySet
+	// rather than the create and update forms: it is entitlement-gated where the
+	// rest of client CRUD is not, it is coupled to token_endpoint_auth_method in
+	// a way a field patch cannot express, and it is invalid by construction on
+	// the global clients that share UpdateRemoteSessionClientForm.
+	Attribute("json_web_key_set_id", String, "The organization JSON Web Key Set attached to this client, managed through attachKeySet and detachKeySet. Null when no key set is attached.", func() {
+		Format(FormatUUID)
+	})
 	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.")
 	Attribute("audience", String, "Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.")
 	Attribute("created_at", String, func() {
@@ -648,7 +900,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "client_id_issued_at", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "created_at", "updated_at")
 })
 
 var ListRemoteSessionClientsResult = Type("ListRemoteSessionClientsResult", func() {

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
@@ -12,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -88,6 +90,149 @@ func TestListRemoteSessions_OrgLevelClientScopedByUserSessionIssuerProject(t *te
 	}
 	require.True(t, ids[mine.ID.String()], "org-level client session for this project's user_session_issuer must be listed")
 	require.False(t, ids[theirs.ID.String()], "another project's session on the shared org-level client must not be listed")
+}
+
+// An organization-tier issuer is reachable throughout its organization, but a
+// project-tier remote client bound to it remains confined to its owning project.
+func TestListRemoteSessions_OrganizationTierIssuerScopesProjectClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "rs-org-issuer-list")
+	remoteIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "rs-org-remote-list")
+	callerClient := seedRemoteClientAtTier(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), conv.ToPGText(authCtx.ActiveOrganizationID), remoteIssuer, "rs-org-caller-list", userIssuer)
+	otherProject := createProject(t, ctx, ti.conn, "rs-org-other-list")
+	otherClient := seedRemoteClientAtTier(t, ctx, ti.conn, conv.ToNullUUID(otherProject), conv.ToPGText(authCtx.ActiveOrganizationID), remoteIssuer, "rs-org-sibling-list", userIssuer)
+
+	mine := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("rs_org_list_mine"), userIssuer.String(), callerClient.String())
+	theirs := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("rs_org_list_theirs"), userIssuer.String(), otherClient.String())
+
+	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{})
+	require.NoError(t, err)
+
+	ids := make(map[string]bool, len(result.Items))
+	for _, item := range result.Items {
+		ids[item.ID] = true
+	}
+	require.True(t, ids[mine.ID.String()], "the owning project's client session must be listed")
+	require.False(t, ids[theirs.ID.String()], "a sibling project's client session must stay hidden")
+}
+
+// Fetching a session under an organization-tier issuer still requires the
+// remote client to belong to the caller's project or a broader tier.
+func TestGetRemoteSessionByID_OrganizationTierIssuerScopesProjectClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "rs-org-issuer-get")
+	remoteIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "rs-org-remote-get")
+	callerClient := seedRemoteClientAtTier(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), conv.ToPGText(authCtx.ActiveOrganizationID), remoteIssuer, "rs-org-caller-get", userIssuer)
+	otherProject := createProject(t, ctx, ti.conn, "rs-org-other-get")
+	otherClient := seedRemoteClientAtTier(t, ctx, ti.conn, conv.ToNullUUID(otherProject), conv.ToPGText(authCtx.ActiveOrganizationID), remoteIssuer, "rs-org-sibling-get", userIssuer)
+
+	mine := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("rs_org_get_mine"), userIssuer.String(), callerClient.String())
+	theirs := insertRemoteSession(t, ctx, ti.conn, urn.NewUserSubject("rs_org_get_theirs"), userIssuer.String(), otherClient.String())
+	q := repo.New(ti.conn)
+
+	got, err := q.GetRemoteSessionByID(ctx, repo.GetRemoteSessionByIDParams{
+		ID:             mine.ID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, mine.ID, got.ID)
+
+	_, err = q.GetRemoteSessionByID(ctx, repo.GetRemoteSessionByIDParams{
+		ID:             theirs.ID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a sibling project's client session must stay hidden")
+}
+
+// Revoking through an organization-tier issuer is allowed for the owning
+// project's client and remains a no-op for a sibling project's client.
+func TestRevokeRemoteSession_OrganizationTierIssuerScopesProjectClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "rs-org-issuer-revoke")
+	remoteIssuer := seedOrgLevelRemoteIssuer(t, ctx, ti.conn, authCtx.ActiveOrganizationID, "rs-org-remote-revoke")
+	callerClient := seedRemoteClientAtTier(t, ctx, ti.conn, conv.ToNullUUID(*authCtx.ProjectID), conv.ToPGText(authCtx.ActiveOrganizationID), remoteIssuer, "rs-org-caller-revoke", userIssuer)
+	otherProject := createProject(t, ctx, ti.conn, "rs-org-other-revoke")
+	otherClient := seedRemoteClientAtTier(t, ctx, ti.conn, conv.ToNullUUID(otherProject), conv.ToPGText(authCtx.ActiveOrganizationID), remoteIssuer, "rs-org-sibling-revoke", userIssuer)
+
+	mineSubject := urn.NewUserSubject("rs_org_revoke_mine")
+	theirsSubject := urn.NewUserSubject("rs_org_revoke_theirs")
+	mine := insertRemoteSession(t, ctx, ti.conn, mineSubject, userIssuer.String(), callerClient.String())
+	theirs := insertRemoteSession(t, ctx, ti.conn, theirsSubject, userIssuer.String(), otherClient.String())
+
+	require.NoError(t, ti.service.RevokeRemoteSession(ctx, &gen.RevokeRemoteSessionPayload{ID: mine.ID.String()}))
+	_, err := repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            mineSubject,
+		RemoteSessionClientID: callerClient,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the owning project's session must be revoked")
+
+	require.NoError(t, ti.service.RevokeRemoteSession(ctx, &gen.RevokeRemoteSessionPayload{ID: theirs.ID.String()}))
+	got, err := repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            theirsSubject,
+		RemoteSessionClientID: otherClient,
+	})
+	require.NoError(t, err)
+	require.Equal(t, theirs.ID, got.ID, "a sibling project's session must remain active")
+}
+
+// A global client is a tenantless catalog entry, so a project can read and
+// revoke its sessions when the provenance issuer is in scope.
+func TestRemoteSessions_GlobalClientRemainsReadableAndRevocable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	userIssuer := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "rs-global-issuer")
+	remoteIssuer := seedGlobalRemoteIssuer(t, ctx, ti.conn, "rs-global-remote")
+	client := seedRemoteClientAtTier(t, ctx, ti.conn, uuid.NullUUID{}, conv.ToPGTextEmpty(""), remoteIssuer, "rs-global-client", userIssuer)
+	subject := urn.NewUserSubject("rs_global_client")
+	session := insertRemoteSession(t, ctx, ti.conn, subject, userIssuer.String(), client.String())
+
+	result, err := ti.service.ListRemoteSessions(ctx, &gen.ListRemoteSessionsPayload{})
+	require.NoError(t, err)
+	listed := false
+	for _, item := range result.Items {
+		listed = listed || item.ID == session.ID.String()
+	}
+	require.True(t, listed, "a global-client session must be listed")
+
+	got, err := repo.New(ti.conn).GetRemoteSessionByID(ctx, repo.GetRemoteSessionByIDParams{
+		ID:             session.ID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, session.ID, got.ID)
+
+	require.NoError(t, ti.service.RevokeRemoteSession(ctx, &gen.RevokeRemoteSessionPayload{ID: session.ID.String()}))
+	_, err = repo.New(ti.conn).GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            subject,
+		RemoteSessionClientID: client,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "a global-client session must be revocable")
 }
 
 // TestRevokeRemoteSession_OrgLevelClientFromOwningProject confirms a project

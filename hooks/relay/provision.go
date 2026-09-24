@@ -41,12 +41,27 @@ const configFileName = "speakeasy.json"
 
 // WritePlugin renders a provider hook package under dir that drives the
 // speakeasy-hooks binary. provider is the agenthooks slug (claude-code,
-// cursor, codex, opencode). For claude-code and cursor, dir is a plugin
-// directory; for codex, which has no plugin layout for hooks, dir is the
-// Codex home the config installs into; for opencode, dir receives an
-// .opencode/plugin shim usable either as a project directory or referenced
-// from an OpenCode config's plugin list.
+// cursor, codex, opencode, copilot, openclaw) or "pi". For claude-code, cursor
+// and copilot, dir is a plugin directory; for codex, which has no plugin
+// layout for hooks, dir is the Codex home the config installs into; for
+// opencode, dir receives an .opencode/plugin shim usable either as a project
+// directory or referenced from an OpenCode config's plugin list; for openclaw,
+// dir is a native OpenClaw plugin package installed with `openclaw plugins
+// install <dir>` (plus a Gateway restart, and plugins.entries.<id>.hooks
+// .allowConversationAccess: true for the prompt/stop/llm events); for pi, dir
+// receives a .pi/extensions module usable as a project directory (or copied
+// into ~/.pi/agent).
 func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) error {
+	// Pi is rendered here rather than by agenthooks/install: it has no hook
+	// config dialect to render, only a TypeScript extension module, and the
+	// frame protocol that module speaks is this package's own.
+	if provider == "pi" {
+		if err := writeConfigFile(dir, cfg); err != nil {
+			return err
+		}
+		return writePiExtensionPackage(dir, cfg)
+	}
+
 	var target install.Target
 	switch provider {
 	case "claude-code", "claude":
@@ -57,9 +72,15 @@ func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) er
 		target = install.Target{Provider: agenthooks.ProviderCodex, Scope: install.ScopeUser, Dir: dir}
 	case "opencode":
 		target = install.Target{Provider: agenthooks.ProviderOpenCode, Scope: install.ScopeProject, Dir: dir}
+	case "copilot":
+		target = install.Target{Provider: agenthooks.ProviderCopilot, Scope: install.ScopePlugin, Dir: dir}
+	case "openclaw":
+		target = install.Target{Provider: agenthooks.ProviderOpenClaw, Scope: install.ScopeProject, Dir: dir}
 	default:
 		return fmt.Errorf("unknown provider %q", provider)
 	}
+	// Written only once the provider is known, so a misspelled provider leaves
+	// no credential-bearing file behind.
 	if err := writeConfigFile(dir, cfg); err != nil {
 		return err
 	}
@@ -67,6 +88,24 @@ func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) er
 		return err
 	}
 	return alignPublishedHookEvents(target.Provider, dir)
+}
+
+// writePiExtensionPackage installs the Pi extension into dir's project-local
+// Pi configuration directory, pointed at the binary and the speakeasy.json
+// already written beside it.
+func writePiExtensionPackage(dir string, cfg PluginConfig) error {
+	content, err := RenderPiExtensionForBinary(cfg.BinaryPath, filepath.Join(dir, configFileName))
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dir, piConfigDirName, filepath.FromSlash(PiExtensionFile))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create pi extension directory: %w", err)
+	}
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		return fmt.Errorf("write pi extension: %w", err)
+	}
+	return nil
 }
 
 // manifest declares the event subscriptions every provider config is rendered
@@ -92,7 +131,7 @@ func manifest(provider agenthooks.Provider, cfg PluginConfig, dir string) instal
 		observe(agenthooks.KindNotification),
 		observe(agenthooks.KindModelResponse),
 	}
-	if provider == agenthooks.ProviderCodex || provider == agenthooks.ProviderOpenCode {
+	if provider == agenthooks.ProviderCodex || provider == agenthooks.ProviderOpenCode || provider == agenthooks.ProviderCopilot {
 		hooks = append(hooks, gate(agenthooks.KindPermission, 60*time.Second))
 	}
 	return install.Manifest{

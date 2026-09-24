@@ -80,7 +80,7 @@ type testInstance struct {
 	assetStorage   assets.BlobStore
 }
 
-func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
+func newTestToolsetsService(t *testing.T, policies ...*guardian.Policy) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx := t.Context()
@@ -90,6 +90,9 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	meterProvider := testenv.NewMeterProvider(t)
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
+	if len(policies) > 0 {
+		guardianPolicy = policies[0]
+	}
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -122,9 +125,8 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	chatSessionsManager := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
-
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, false)
+	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, false)
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporalEnv, sessionManager, assetStorage, posthog, testenv.DefaultSiteURL(t), mcpRegistryClient, authzEngine, auditLogger)
 	assetsSvc := assets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, chatSessionsManager, assetStorage, "test-jwt-secret", authzEngine, auditLogger)
 	packagesSvc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
@@ -204,7 +206,7 @@ func newTestToolsetsServiceWithGitHubPublishing(t *testing.T) (context.Context, 
 		Org:            "test-org",
 		InstallationID: 12345,
 	}
-	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f, nil)
+	pluginPublisher := plugins.NewPublisher(logger, conn, auditLogger, ghConfig, "local", "https://app.getgram.ai", f)
 
 	worker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider,
 		background.ForDeploymentProcessing(guardianPolicy, conn, f, assetStorage, enc, funcs, mcpRegistryClient, auditLogger),
@@ -223,12 +225,12 @@ func newTestToolsetsServiceWithGitHubPublishing(t *testing.T) (context.Context, 
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("gram-local"), billingClient)
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
-
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := toolsets.NewService(logger, tracerProvider, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, true)
+	svc := toolsets.NewService(logger, tracerProvider, guardianPolicy, conn, sessionManager, nil, authzEngine, auditLogger, temporalEnv, true)
 
 	return ctx, &testInstance{
 		service:        svc,
+		feature:        f,
 		conn:           conn,
 		temporalEnv:    temporalEnv,
 		sessionManager: sessionManager,
@@ -339,7 +341,7 @@ func zipManifest(t *testing.T, path string, runtime string) (rdr io.Reader, err 
 
 	manifest := testenv.ReadFixture(t, path)
 	zipWriter := zip.NewWriter(buf)
-	defer o11y.LogDefer(t.Context(), testenv.NewLogger(t), func() error {
+	defer o11y.LogDefer(t.Context(), testenv.NewLogger(t), "failed to close zip writer", func() error {
 		return zipWriter.Close()
 	})
 
@@ -470,15 +472,22 @@ func createFunctionsDeploymentWithResources(t *testing.T, ctx context.Context, t
 	return dep
 }
 
-func withProAccount(t *testing.T, ctx context.Context) context.Context {
+// withAccountType returns a context whose auth context is a copy carrying the
+// given account type. The stub billing repository reports every org as pro
+// during authentication, so tier-specific paths are only reachable through
+// this override. The auth context is copied because contexts share the
+// underlying pointer; mutating it in place would retier every context derived
+// from ctx.
+func withAccountType(t *testing.T, ctx context.Context, accountType string) context.Context {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	authCtx.AccountType = "pro"
+	clone := *authCtx
+	clone.AccountType = accountType
 
-	return contextvalues.SetAuthContext(ctx, authCtx)
+	return contextvalues.SetAuthContext(ctx, &clone)
 }
 
 func createMinimalPrivateToolset(t *testing.T, ctx context.Context, ti *testInstance, name string) *types.Toolset {

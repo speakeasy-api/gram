@@ -5,17 +5,27 @@
 
 #USAGE flag "--local" help="Always use local plugin directory instead of published plugin"
 #USAGE flag "--project <slug>" help="Project slug for OTEL session validation (enables blocking)" default="default"
-#USAGE flag "--agent <agent>" help="Agent to launch with the dev hooks installed: claude or opencode" default="claude"
+#USAGE flag "--agent <agent>" help="Agent to launch with the dev hooks installed: claude, opencode or copilot" default="claude"
+#USAGE flag "--model <model>" help="Model to launch Claude Code with, e.g. haiku or opus (claude only)" default=""
+#USAGE flag "--prompt <text>" help="Run one headless turn with this prompt and exit, instead of an interactive session (claude only)" default=""
 
 set -euo pipefail
 
 case "${usage_agent:-claude}" in
-  claude|opencode) ;;
+  claude|opencode|copilot) ;;
   *)
-    echo "hooks:test: --agent must be claude or opencode, got '${usage_agent}'" >&2
+    echo "hooks:test: --agent must be claude, opencode or copilot, got '${usage_agent}'" >&2
     exit 2
     ;;
 esac
+
+# --model and --prompt are Claude Code's own flags. OpenCode and Copilot spell
+# both differently, so refuse rather than launch an interactive session that
+# silently ignores what was asked for.
+if [ "${usage_agent:-claude}" != "claude" ] && { [ -n "${usage_model:-}" ] || [ -n "${usage_prompt:-}" ]; }; then
+  echo "hooks:test: --model and --prompt are only supported with --agent claude" >&2
+  exit 2
+fi
 
 export GRAM_HOOKS_SERVER_URL=$GRAM_SERVER_URL
 # Local dev splits the API and dashboard across ports; the browser sign-in
@@ -118,11 +128,35 @@ EOF
     export OTEL_EXPORTER_OTLP_LOGS_ENDPOINT="${GRAM_SERVER_URL}/rpc/hooks.otel/v1/logs"
     export OTEL_EXPORTER_OTLP_METRICS_ENDPOINT="${GRAM_SERVER_URL}/rpc/hooks.otel/v1/metrics"
     export OTEL_EXPORTER_OTLP_HEADERS="Gram-Key=${api_key},Gram-Project=${project_slug}"
+    # Claude Code redacts prompts, responses and tool parameters unless told
+    # otherwise. This is a local test of the pipeline, and content is what it
+    # exists to carry, so ask for all of it. See
+    # https://code.claude.com/docs/en/monitoring-usage#configuration-variables
+    export OTEL_LOG_USER_PROMPTS=1
+    export OTEL_LOG_ASSISTANT_RESPONSES=1
+    export OTEL_LOG_TOOL_DETAILS=1
     export GRAM_HOOKS_API_KEY="${api_key}"
     export GRAM_HOOKS_PROJECT_SLUG="${project_slug}"
     echo "OTEL configured (key: ${api_key:0:20}...)"
     fi
   fi
+fi
+
+# Extra arguments for the Claude Code launch, assembled once and appended to
+# whichever plugin path the dispatch below picks.
+claude_args=()
+if [ -n "${usage_model:-}" ]; then
+  claude_args+=(--model "$usage_model")
+fi
+if [ -n "${usage_prompt:-}" ]; then
+  # A headless turn exits the moment the reply lands, so the exporters have to
+  # flush on a short interval — at the 60s metric default the process is long
+  # gone before anything reaches /rpc/hooks.otel, which reads as "no events".
+  export OTEL_METRIC_EXPORT_INTERVAL=1000
+  export OTEL_LOGS_EXPORT_INTERVAL=1000
+  # Nothing is watching to answer a permission prompt or a question.
+  claude_args+=(--permission-mode bypassPermissions -p "$usage_prompt")
+  echo "Headless turn: ${usage_prompt}"
 fi
 echo ""
 
@@ -175,6 +209,30 @@ if [ "${usage_agent:-claude}" = "opencode" ]; then
 EOF
   echo ""
   OPENCODE_CONFIG="${plugin_out}/opencode.json" exec opencode
+elif [ "${usage_agent:-claude}" = "copilot" ]; then
+  # Copilot needs no install/uninstall cycle: --plugin-dir loads the package
+  # for the session, so both paths just render into a temp dir and point at it.
+  # Hooks only run in Copilot CLI — VS Code and the Copilot app load the plugin
+  # but never fire its hooks.
+  plugin_out="$(mktemp -d)"
+  if [ "${usage_local:-}" = "true" ]; then
+    hooks_binary="${plugin_out}/speakeasy-hooks"
+    echo "Building local hooks binary: ${hooks_binary}"
+    go build -o "$hooks_binary" ./hooks/cmd/speakeasy-hooks
+    "$hooks_binary" install \
+      --provider=copilot \
+      --dir="${plugin_out}/plugin-copilot" \
+      --server-url="$GRAM_SERVER_URL" \
+      --site-url="$GRAM_SITE_URL" \
+      --project="$project_slug" \
+      --browser-login \
+      --binary="$hooks_binary"
+  else
+    echo "Rendering local plugin into: ${plugin_out}"
+    (cd server && go run ./cmd/export-hook-plugin -out "$plugin_out" >/dev/null)
+  fi
+  echo ""
+  exec copilot --plugin-dir "${plugin_out}/plugin-copilot"
 elif [ "${usage_local:-}" = "true" ]; then
   plugin_out="$(mktemp -d)"
   hooks_binary="${plugin_out}/speakeasy-hooks"
@@ -189,15 +247,19 @@ elif [ "${usage_local:-}" = "true" ]; then
     --browser-login \
     --binary="$hooks_binary"
   echo ""
-  exec claude --setting-sources project,local --plugin-dir "${plugin_out}/plugin-claude" --debug
+  # bash 3.2 (macOS) treats an empty array as unset under `set -u`, so the
+  # expansion is guarded rather than bare.
+  exec claude --setting-sources project,local --plugin-dir "${plugin_out}/plugin-claude" --debug ${claude_args[@]+"${claude_args[@]}"}
 elif ! git diff --quiet main -- server/internal/plugins/ server/cmd/export-hook-plugin/; then
   plugin_out="$(mktemp -d)"
   echo "Rendering local plugin into: ${plugin_out}"
   (cd server && go run ./cmd/export-hook-plugin -out "$plugin_out" >/dev/null)
   echo ""
-  exec claude --setting-sources project,local --plugin-dir "${plugin_out}/plugin-claude" --debug
+  # bash 3.2 (macOS) treats an empty array as unset under `set -u`, so the
+  # expansion is guarded rather than bare.
+  exec claude --setting-sources project,local --plugin-dir "${plugin_out}/plugin-claude" --debug ${claude_args[@]+"${claude_args[@]}"}
 else
   echo "No branch changes to the plugin generators vs main — using published plugin"
   echo ""
-  exec claude --setting-sources project,local --debug
+  exec claude --setting-sources project,local --debug ${claude_args[@]+"${claude_args[@]}"}
 fi

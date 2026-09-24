@@ -6,7 +6,7 @@ import type { Role } from "@gram/client/models/components/role.js";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { useShadowMCPInventory } from "@gram/client/react-query/shadowMCPInventory.js";
 import { Badge } from "@/components/ui/Badge";
-import { Icon } from "@/components/ui/Icon";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { type Column, type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { useEffect, useMemo, useState } from "react";
@@ -40,14 +40,13 @@ import {
   shadowMCPInventoryStatusDescription,
   shadowMCPInventoryStatusLabel,
   type ShadowMCPPolicy,
-  type ShadowMCPPolicyDisposition,
-  type ShadowMCPPolicyState,
 } from "./shadowMCPInventoryStatus";
 
 const REVIEW_FILTER_OPTIONS = [
   { value: "requested", label: "Awaiting decision" },
   { value: "approved", label: "Approved" },
   { value: "denied", label: "Denied" },
+  { value: "superseded", label: "Superseded" },
   { value: "none", label: "No review" },
 ];
 
@@ -66,41 +65,39 @@ type InventoryPage = {
 
 const EMPTY_INVENTORY_PAGES: InventoryPage[] = [];
 
-function InventoryStatusCell({
-  disposition,
-  policyState,
-  server,
-}: {
-  disposition: ShadowMCPPolicyDisposition | null;
-  policyState: ShadowMCPPolicyState;
-  server: ShadowMCPInventoryServer;
-}) {
-  const status = shadowMCPInventoryStatus(server, policyState);
+function InventoryStatusCell({ server }: { server: ShadowMCPInventoryServer }) {
+  const status = shadowMCPInventoryStatus(server);
 
+  // The badge is the verdict; the description is the mechanism behind it,
+  // which a one-word badge cannot carry. "Restricted" covers five different
+  // postures — selected users only, mixed, blocked for some, and two ways a
+  // denial still leaves standing access — and "Observed" can hide a decision
+  // lying dormant for want of a blocking policy, which is the state that
+  // should worry an admin most. Triaging those apart is the column's job, so
+  // the detail stays on the row rather than only on the server page. It sits
+  // in a tooltip to keep the column scannable, on a focusable span so it is
+  // reachable by keyboard and announced through aria-describedby rather than
+  // being hover-only.
   return (
-    <div className="space-y-1">
-      <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
-        <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
-      </Badge>
-      <Text variant="small" className="text-muted-foreground text-xs">
-        {shadowMCPInventoryStatusDescription(server, policyState, disposition)}
-      </Text>
-    </div>
+    <SimpleTooltip tooltip={shadowMCPInventoryStatusDescription(server)}>
+      <span tabIndex={0} className="inline-flex cursor-help">
+        <Badge variant={shadowMCPInventoryStatusBadgeVariant(status)}>
+          <Badge.Text>{shadowMCPInventoryStatusLabel(status)}</Badge.Text>
+        </Badge>
+      </span>
+    </SimpleTooltip>
   );
 }
 
 function InventoryEmptyState() {
   return (
-    <div className="bg-muted/20 flex flex-col items-center justify-center border border-dashed px-8 py-16 text-center">
-      <div className="bg-muted/50 mb-4 flex h-12 w-12 items-center justify-center rounded-full">
-        <Icon name="shield-check" className="text-muted-foreground h-6 w-6" />
-      </div>
-      <Text variant="subheading" className="mb-1">
-        No Shadow MCP servers
+    <div className="bg-background flex min-h-32 flex-col items-center justify-center gap-1 px-4 py-8 text-center">
+      <Text variant="body" className="font-medium">
+        No MCP servers observed yet
       </Text>
-      <Text small muted className="mb-4 max-w-md">
-        Inventory URLs will appear here after hook startup captures configured
-        Shadow MCP servers.
+      <Text muted small className="max-w-md">
+        Servers appear here once your AI integration reports activity. Check
+        back after your first agent run.
       </Text>
     </div>
   );
@@ -111,7 +108,6 @@ export function ShadowMCPInventoryTable({
   enabled = true,
   members,
   onOpenServer,
-  policyState,
   projectID,
   roles,
   shadowMCPPolicies,
@@ -120,7 +116,6 @@ export function ShadowMCPInventoryTable({
   enabled?: boolean;
   members: AccessMember[];
   onOpenServer?: (server: ShadowMCPInventoryServer) => void;
-  policyState: ShadowMCPPolicyState;
   projectID: string;
   roles: Role[];
   shadowMCPPolicies: ShadowMCPPolicy[];
@@ -152,9 +147,11 @@ export function ShadowMCPInventoryTable({
   );
   const [reviewSheetServer, setReviewSheetServer] =
     useState<ShadowMCPInventoryServer | null>(null);
+  // The sheet words its form and picks its write path from the policy set's
+  // disposition; row rendering no longer touches it.
+  const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
   const { values, setValue, clearValue, clearAll } =
     useFilterState(INVENTORY_FILTERS);
-  const disposition = shadowMCPBlockingPolicyDisposition(shadowMCPPolicies);
 
   useEffect(() => {
     setPaginationScope(inventoryScope);
@@ -274,9 +271,7 @@ export function ShadowMCPInventoryTable({
       header: "Status",
       sortable: true,
       sortValue: (server) =>
-        shadowMCPInventoryStatusLabel(
-          shadowMCPInventoryStatus(server, policyState),
-        ),
+        shadowMCPInventoryStatusLabel(shadowMCPInventoryStatus(server)),
       width: "0.9fr",
       render: (server) =>
         server.targetKind === "stdio_command" ? (
@@ -284,11 +279,7 @@ export function ShadowMCPInventoryTable({
             —
           </Text>
         ) : (
-          <InventoryStatusCell
-            disposition={disposition}
-            policyState={policyState}
-            server={server}
-          />
+          <InventoryStatusCell server={server} />
         ),
     },
     {

@@ -97,7 +97,7 @@ describe("TrialStatusCard", () => {
 
     expect(screen.getByText("1 day left")).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Talk to sales about upgrading" }),
+      screen.getByRole("button", { name: "Talk to sales about upgrading" }),
     ).toBeTruthy();
   });
 
@@ -116,7 +116,7 @@ describe("TrialStatusCard", () => {
 
     expect(screen.getByText("Your trial has ended")).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Talk to sales about upgrading" }),
+      screen.getByRole("button", { name: "Talk to sales about upgrading" }),
     ).toBeTruthy();
     const progressBar = screen.getByRole("progressbar", {
       name: "Trial ended",
@@ -169,7 +169,7 @@ describe("TrialStatusCard", () => {
       screen.getByRole("progressbar", { name: "Trial ended" }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Talk to sales about upgrading" }),
+      screen.getByRole("button", { name: "Talk to sales about upgrading" }),
     ).toBeTruthy();
   });
 
@@ -243,7 +243,7 @@ describe("TrialStatusCard", () => {
     ).toBe(true);
   });
 
-  it("offers self-serve checkout beside the sales link during the trial", () => {
+  it("offers self-serve checkout beside the sales trigger during the trial", () => {
     mocks.flagResult.mockReturnValue({ status: "enabled" });
 
     render(<TrialStatusCard />);
@@ -252,10 +252,10 @@ describe("TrialStatusCard", () => {
       screen.getByRole("button", { name: /add payment method/i }),
     ).toBeTruthy();
     // Sales stays available; checkout is an addition, not a replacement.
-    expect(screen.getByRole("link", { name: "Talk to sales" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Talk to sales" })).toBeTruthy();
   });
 
-  it("keeps only the sales link for a member", () => {
+  it("keeps only the sales trigger for a member", () => {
     mocks.flagResult.mockReturnValue({ status: "enabled" });
     mocks.hasScope.mockReturnValue(false);
 
@@ -264,10 +264,10 @@ describe("TrialStatusCard", () => {
     expect(
       screen.queryByRole("button", { name: /add payment method/i }),
     ).toBeNull();
-    expect(screen.getByRole("link", { name: "Talk to sales" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Talk to sales" })).toBeTruthy();
   });
 
-  it("keeps only the sales link once the trial has ended", () => {
+  it("keeps only the sales trigger once the trial has ended", () => {
     mocks.flagResult.mockReturnValue({ status: "enabled" });
     vi.setSystemTime(new Date("2026-08-19T00:00:00.000Z"));
 
@@ -277,17 +277,16 @@ describe("TrialStatusCard", () => {
       screen.queryByRole("button", { name: /add payment method/i }),
     ).toBeNull();
     expect(
-      screen.getByRole("link", { name: "Talk to sales about upgrading" }),
+      screen.getByRole("button", { name: "Talk to sales about upgrading" }),
     ).toBeTruthy();
   });
 
-  it("sends the Sales conversation to the in-app upgrade gate", () => {
+  it("opens Sales conversations without a navigation link", () => {
     render(<TrialStatusCard />);
 
-    // In-app rather than the marketing site: the gate prefills the booking
-    // form from the session, so it stays in the same tab.
-    const salesLink = screen.getByRole("link", { name: "Talk to sales" });
-    expect(salesLink.getAttribute("href")).toBe("/talk-to-us");
-    expect(salesLink.getAttribute("target")).toBeNull();
+    const salesTrigger = screen.getByRole("button", {
+      name: "Talk to sales",
+    });
+    expect(salesTrigger.getAttribute("type")).toBe("button");
   });
 });

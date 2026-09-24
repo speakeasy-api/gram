@@ -1,3 +1,7 @@
+import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/gramAdminClient";
+
+export { isRedirectingToLogin } from "@/lib/gramAdminClient";
+
 // Gram admin API client.
 //
 // This app is served from the same origin as the Gram admin API (the admin
@@ -44,8 +48,7 @@ export type QueryParams = Record<
   string | number | boolean | string[] | undefined
 >;
 
-// Values the admin API reads as unset. Every boolean it takes is an opt-in
-// flag, so `false` is the same request as no flag at all.
+// Values the admin API reads as unset. Boolean flags are opt-in.
 //
 // A cache key runs through this too, so the key and the request agree on what
 // "unset" means. Without that, `{type: []}` and `{}` send one request and cache
@@ -97,14 +100,9 @@ async function gramAdminRequest(
     // absolute return_to silently loses the page the operator was on. The hash
     // is left out because the router keeps the whole route in the path and
     // query.
-    const returnTo = encodeURIComponent(
-      window.location.pathname + window.location.search,
+    startLoginRedirect(
+      new GramAdminError(401, null, "redirecting to admin login"),
     );
-    redirectingToLogin = true;
-    window.location.href = `/admin/auth.login?return_to=${returnTo}&prompt=consent`;
-    // Setting window.location starts the navigation but does not stop the code
-    // that follows it. Throw to unwind the in-flight call.
-    throw new GramAdminError(401, null, "redirecting to admin login");
   }
 
   if (!res.ok) {
@@ -134,7 +132,7 @@ export async function gramAdminFetch<T>(
 
 // A mutation reports its own failure rather than taking the 401 redirect,
 // which would sign the operator back in behind the action they just took.
-async function gramAdminMutation<T>(
+export async function gramAdminMutation<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
@@ -147,19 +145,6 @@ async function gramAdminMutation<T>(
 // the action they just took.
 async function gramAdminSend(path: string, init?: RequestInit): Promise<void> {
   await gramAdminRequest(path, init, false);
-}
-
-// True once gramAdminFetch has sent the browser to the login page. The document
-// is on its way out, so no caller should report the failure that caused it.
-//
-// The module records the navigation instead of reading it back off the failed
-// query, because React Query clears the error of a query that holds no data on
-// the next refetch, and a refetch on window focus would then reopen the gate
-// while the browser is still leaving.
-let redirectingToLogin = false;
-
-export function isRedirectingToLogin(): boolean {
-  return redirectingToLogin;
 }
 
 // Identity of the admin operator that owns the current session. The backend
@@ -177,6 +162,57 @@ export function getSession(): Promise<AdminSessionInfo> {
 export function organizationDashboardUrl(organizationId: string): string {
   const query = new URLSearchParams({ organization_id: organizationId });
   return `/admin/organization.open-dashboard?${query.toString()}`;
+}
+
+// The same handoff `RecordHeader` renders, for a caller that has no form to
+// render it in.
+//
+// A real <form> around a submit button is the better shape wherever there is a
+// button, and RecordHeader keeps it. The command palette has no button: the row
+// that triggers this unmounts with the dialog in the commit that follows a
+// selection, so a form inside that row can be gone before it submits. This one
+// lives on `document.body`, where closing the dialog cannot reach it.
+//
+// Every attribute is load-bearing, and each is the one RecordHeader gives its
+// reason for:
+//   - POST, so the admin origin check protects handoff issuance.
+//   - `_blank`, so the admin record stays open in the tab the operator is in.
+//   - `noopener` and deliberately not `noreferrer`: noreferrer makes Chromium
+//     send `Origin: null` for this POST, which the admin CSRF middleware
+//     correctly rejects.
+//
+// One element, reused, and never detached. Creating one per handoff and
+// removing it after `submit()` is the obvious shape and it is a bug: submission
+// is processed in a later task, and Firefox abandons the navigation when the
+// form has left the document before that task runs. Keeping one settles the
+// timing question without a timer to reason about, and leaves nothing
+// accumulating behind it.
+let handoffForm: HTMLFormElement | undefined;
+
+function dashboardHandoffForm(): HTMLFormElement {
+  handoffForm ??= (() => {
+    const form = document.createElement("form");
+    form.method = "post";
+    form.target = "_blank";
+    form.setAttribute("rel", "noopener");
+    // It carries no controls and so draws nothing, but a form is still a block
+    // box. Said outright rather than left to the user agent's margins.
+    form.hidden = true;
+    return form;
+  })();
+
+  // Re-attached rather than assumed attached: a submit from a form outside the
+  // document does nothing at all, and a test harness that resets the document
+  // between cases takes it back out.
+  if (!handoffForm.isConnected) document.body.append(handoffForm);
+
+  return handoffForm;
+}
+
+export function openOrganizationDashboard(organizationId: string): void {
+  const form = dashboardHandoffForm();
+  form.action = organizationDashboardUrl(organizationId);
+  form.submit();
 }
 
 // Ends the admin session, then sends the browser into the OIDC flow.
@@ -211,47 +247,94 @@ export type TrialState = (typeof TRIAL_STATES)[number];
 
 // Convenience method for the listOrganizations endpoint. Mirrors the backend
 // payload shape from server/gen/admin/service.go.
-//
-// `free_trial_started_at` and `free_trial_ends_at` are `NOT NULL` columns with
-// a signup-plus-fourteen-days default that no application code writes, so they
-// report a trial for every organization ever made. Nothing here reads them.
-// They stay declared only because the API still sends them; a follow-up takes
-// them off the wire.
 export type AdminOrganization = {
   id: string;
   name: string;
   slug: string;
   account_type: string;
   workos_id?: string;
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
   whitelisted: boolean;
   disabled_at?: string;
-  free_trial_started_at?: string;
-  free_trial_ends_at?: string;
   trial_state?: TrialState;
   trial_ends_at?: string;
+  trial_tier?: string;
+  trial_converted_at?: string;
+  trial_demoted_at?: string;
+  // The flow that created the organization. Absent when nothing recorded one,
+  // and absent on every row the list endpoint returns: only the record read
+  // selects it.
+  creation_source?: string;
   member_count: number;
   created_at: string;
   updated_at: string;
 };
 
+export type AdminStripeCustomer = {
+  id: string;
+  name?: string;
+  email?: string;
+  description?: string;
+  livemode: boolean;
+};
+
+export function getStripeCustomer(
+  organizationID: string,
+  stripeCustomerID: string,
+): Promise<AdminStripeCustomer> {
+  const query = toSearchParams({
+    organization_id: organizationID,
+    stripe_customer_id: stripeCustomerID,
+  });
+  return gramAdminFetch<AdminStripeCustomer>(
+    `/admin/organization.stripeCustomer?${query}`,
+    { cache: "no-store" },
+  );
+}
+
+export type SetStripeCustomerRequest = {
+  organization_id: string;
+  stripe_customer_id: string;
+};
+
+export function setStripeCustomer(
+  body: SetStripeCustomerRequest,
+): Promise<AdminOrganization> {
+  return gramAdminMutation<AdminOrganization>(
+    "/admin/organization.setStripeCustomer",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
 export type ListOrganizationsResult = {
+  total: number;
   organizations: AdminOrganization[];
   next_cursor?: string;
 };
 
-// Each filter is a repeated parameter the server reads as a set, and an absent
-// one means no filter of that kind: no account_types is every type, no
-// trial_states is every state, no disabled_states is active organizations only.
-//
-// The scalar `account_type` and the `include_disabled` flag these replaced are
-// still accepted by the server, so its half of this change can merge first.
-// Nothing here sends them, and nothing should: two ways to say the same filter
-// is how the browser and the server end up disagreeing about what is on.
+// Set filters match any supplied value; omitted filters are unrestricted.
+// Status is strict even for exact ID searches.
 export type ListOrganizationsParams = {
+  sort?: string;
+  direction?: "asc" | "desc";
+  page?: number;
   q?: string;
   account_types?: string[];
   trial_states?: string[];
-  disabled_states?: string[];
+  disabled_status?: "all" | "active" | "disabled";
+  /** Nonnegative int64. Use decimal strings above Number.MAX_SAFE_INTEGER. */
+  min_members?: number | string;
+  /** Nonnegative int64. Unsafe numeric values are rejected before sending. */
+  max_members?: number | string;
+  /** Inclusive UTC calendar date, strictly YYYY-MM-DD (not a timestamp). */
+  created_from?: string;
+  /** Inclusive UTC calendar date, strictly YYYY-MM-DD (not a timestamp). */
+  created_to?: string;
   cursor?: string;
   limit?: number;
 };
@@ -259,6 +342,32 @@ export type ListOrganizationsParams = {
 export function listOrganizations(
   params: ListOrganizationsParams = {},
 ): Promise<ListOrganizationsResult> {
+  for (const key of ["min_members", "max_members"] as const) {
+    const value = params[key];
+    if (value === undefined) continue;
+    // Never convert a decimal string through Number: int64 exceeds JS precision.
+    if (
+      (typeof value === "number" && !Number.isSafeInteger(value)) ||
+      !/^[0-9]+$/.test(String(value)) ||
+      BigInt(value) > 9223372036854775807n
+    ) {
+      throw new RangeError(
+        `${key} must be a nonnegative int64; use a decimal string for large values`,
+      );
+    }
+  }
+  for (const key of ["created_from", "created_to"] as const) {
+    const value = params[key];
+    if (value === undefined) continue;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (
+      !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value) ||
+      !Number.isFinite(date.getTime()) ||
+      date.toISOString().slice(0, 10) !== value
+    ) {
+      throw new RangeError(`${key} must be a valid YYYY-MM-DD UTC date`);
+    }
+  }
   const qs = toSearchParams(params).toString();
   return gramAdminFetch<ListOrganizationsResult>(
     `/admin/organizations.list${qs ? `?${qs}` : ""}`,
@@ -268,6 +377,9 @@ export function listOrganizations(
 export type AdminOrganizationStats = {
   total: number;
   created_last_7_days: number;
+  /** Organizations on a paid account type, payg or enterprise. */
+  customers: number;
+  customers_created_last_7_days: number;
   trials_ending_soon: number;
   disabled: number;
   disabled_last_7_days: number;
@@ -358,26 +470,22 @@ export type OrganizationRequest = {
   id: string;
 };
 
-// Both answer the organization in its new state, so a caller updates its cache
-// from the response rather than reading the record back.
-export function disableOrganization(
-  body: OrganizationRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/organization.disable", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
+export type MarkEnterpriseTrialConvertedResult = {
+  organization_id: string;
+  converted_at: string;
+};
 
-export function enableOrganization(
+export function markEnterpriseTrialConverted(
   body: OrganizationRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/organization.enable", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+): Promise<MarkEnterpriseTrialConvertedResult> {
+  return gramAdminMutation<MarkEnterpriseTrialConvertedResult>(
+    "/admin/trial.convert",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 // The server's own bounds, mirrored so a value it would reject never leaves the
@@ -388,23 +496,6 @@ export function enableOrganization(
 export const MIN_TRIAL_EXTENSION_DAYS = 1;
 export const MAX_TRIAL_EXTENSION_DAYS = 365;
 
-export type ExtendTrialRequest = {
-  id: string;
-  days: number;
-};
-
-// The days are added to the trial's current end date, not to today, so an
-// extension applied early does not shorten the trial.
-export function extendTrial(
-  body: ExtendTrialRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/trial.extend", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
 // The server's own bounds for a re-arm, mirrored the way the extension bounds
 // above are. See MinTrialRearmDays and MaxTrialRearmDays in
 // server/internal/constants/trials.go: separate names from the extension pair
@@ -413,27 +504,15 @@ export function extendTrial(
 export const MIN_TRIAL_REARM_DAYS = 1;
 export const MAX_TRIAL_REARM_DAYS = 365;
 
-export type RearmTrialRequest = {
-  id: string;
-  days: number;
-};
-
-// Not an extension with a different verb. The days are the whole length of a
-// fresh run counted from now, and the write also restores the organization's
-// account type and whitelist flag and revives its model provider keys. Only a
-// demoted trial can be re-armed; anything else is refused with a conflict.
-export function rearmTrial(
-  body: RearmTrialRequest,
-): Promise<AdminOrganization> {
-  return gramAdminFetch<AdminOrganization>("/admin/trial.rearm", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
+// The server's own bounds for a start, mirrored the way the re-arm bounds
+// above are. See MinTrialStartDays and MaxTrialStartDays in
+// server/internal/constants/trials.go.
+export const MIN_TRIAL_START_DAYS = 1;
+export const MAX_TRIAL_START_DAYS = 365;
 
 export type CreateOrganizationRequest = {
-  name: string;
+  url: string;
+  ownership_confirmed: boolean;
 };
 
 export function createOrganization(
@@ -493,61 +572,21 @@ export function listOrganizationMembers(
   );
 }
 
-export type AdminInferenceKey = {
+type AdminInferenceKeyResponse = {
   key_type: string;
   credits_used: number;
   monthly_credits: number;
   disabled: boolean;
+  disable_causes?: string[];
+  disable_causes_classified: boolean;
 };
 
-export type AdminOrganizationFeatures = {
-  authz_challenge_logging_enabled: boolean;
-  customer_managed_encryption_keys_enabled: boolean;
-  custom_model_keys_enabled: boolean;
-  platform_mcp_enabled: boolean;
-  remote_session_auto_refresh_enabled: boolean;
-  session_portability_enabled: boolean;
-  sso_enabled: boolean;
-  scim_enabled: boolean;
+export type AdminInferenceKey = Omit<
+  AdminInferenceKeyResponse,
+  "disable_causes"
+> & {
+  disable_causes: string[] | null;
 };
-
-export type AdminOrganizationFeatureName =
-  | "authz_challenge_logging"
-  | "customer_managed_encryption_keys"
-  | "custom_model_keys"
-  | "platform_mcp"
-  | "remote_session_auto_refresh"
-  | "session_portability"
-  | "sso"
-  | "scim";
-
-export function getOrganizationFeatures(
-  organizationID: string,
-): Promise<AdminOrganizationFeatures> {
-  const qs = toSearchParams({ organization_id: organizationID });
-  return gramAdminFetch<AdminOrganizationFeatures>(
-    `/admin/organization.features?${qs}`,
-  );
-}
-
-export function setOrganizationFeature(input: {
-  organizationID: string;
-  featureName: AdminOrganizationFeatureName;
-  enabled: boolean;
-}): Promise<AdminOrganizationFeatures> {
-  return gramAdminMutation<AdminOrganizationFeatures>(
-    "/admin/organization.features",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        organization_id: input.organizationID,
-        feature_name: input.featureName,
-        enabled: input.enabled,
-      }),
-    },
-  );
-}
 
 export type AdminChatAnalysisJudge = "work_units" | "business_memory";
 
@@ -607,12 +646,59 @@ export function setOrganizationChatAnalysisSetting(input: {
   );
 }
 
-export function getInferenceKeys(
+export async function getInferenceKeys(
   organizationID: string,
 ): Promise<AdminInferenceKey[]> {
   const qs = toSearchParams({ organization_id: organizationID });
-  return gramAdminFetch<AdminInferenceKey[]>(
+  const keys = await gramAdminFetch<AdminInferenceKeyResponse[]>(
     `/admin/organization.inferenceKeys?${qs}`,
+  );
+  return keys.map((key) => ({
+    ...key,
+    disable_causes: key.disable_causes_classified
+      ? (key.disable_causes ?? [])
+      : null,
+  }));
+}
+
+export type AdminInferenceKeyType = "chat" | "internal";
+
+export type AdminInferenceKeyLimit = Pick<
+  AdminInferenceKey,
+  "key_type" | "monthly_credits"
+>;
+
+export function setInferenceKeyMonthlyLimit(input: {
+  organizationID: string;
+  keyType: AdminInferenceKeyType;
+  monthlyCredits: number;
+}): Promise<AdminInferenceKeyLimit> {
+  return gramAdminMutation<AdminInferenceKeyLimit>(
+    "/admin/organization.setInferenceKeyMonthlyLimit",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organization_id: input.organizationID,
+        key_type: input.keyType,
+        monthly_credits: input.monthlyCredits,
+      }),
+    },
+  );
+}
+
+export type AdminInferenceSpendMonth = {
+  period_start: string;
+  period_end: string;
+  spend_usd: string;
+};
+
+export function getInferenceSpendHistory(
+  organizationID: string,
+): Promise<AdminInferenceSpendMonth[]> {
+  const qs = toSearchParams({ organization_id: organizationID });
+  return gramAdminFetch<AdminInferenceSpendMonth[]>(
+    `/admin/organization.inferenceSpendHistory?${qs}`,
   );
 }
 

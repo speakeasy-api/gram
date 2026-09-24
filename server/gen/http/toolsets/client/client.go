@@ -45,6 +45,10 @@ type Client struct {
 	// listToolFilters endpoint.
 	ListToolFiltersDoer goahttp.Doer
 
+	// ListToolSchemaStaticValues Doer is the HTTP client used to make requests to
+	// the listToolSchemaStaticValues endpoint.
+	ListToolSchemaStaticValuesDoer goahttp.Doer
+
 	// CheckMCPSlugAvailability Doer is the HTTP client used to make requests to
 	// the checkMCPSlugAvailability endpoint.
 	CheckMCPSlugAvailabilityDoer goahttp.Doer
@@ -56,6 +60,10 @@ type Client struct {
 	// AddExternalOAuthServer Doer is the HTTP client used to make requests to the
 	// addExternalOAuthServer endpoint.
 	AddExternalOAuthServerDoer goahttp.Doer
+
+	// UpdateExternalOAuthServer Doer is the HTTP client used to make requests to
+	// the updateExternalOAuthServer endpoint.
+	UpdateExternalOAuthServerDoer goahttp.Doer
 
 	// RemoveOAuthServer Doer is the HTTP client used to make requests to the
 	// removeOAuthServer endpoint.
@@ -89,24 +97,26 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		CreateToolsetDoer:            doer,
-		ListToolsetsDoer:             doer,
-		ListToolsetsForOrgDoer:       doer,
-		UpdateToolsetDoer:            doer,
-		DeleteToolsetDoer:            doer,
-		GetToolsetDoer:               doer,
-		ListToolFiltersDoer:          doer,
-		CheckMCPSlugAvailabilityDoer: doer,
-		CloneToolsetDoer:             doer,
-		AddExternalOAuthServerDoer:   doer,
-		RemoveOAuthServerDoer:        doer,
-		SetUserSessionIssuerDoer:     doer,
-		SetToolVariationsGroupDoer:   doer,
-		RestoreResponseBody:          restoreBody,
-		scheme:                       scheme,
-		host:                         host,
-		decoder:                      dec,
-		encoder:                      enc,
+		CreateToolsetDoer:              doer,
+		ListToolsetsDoer:               doer,
+		ListToolsetsForOrgDoer:         doer,
+		UpdateToolsetDoer:              doer,
+		DeleteToolsetDoer:              doer,
+		GetToolsetDoer:                 doer,
+		ListToolFiltersDoer:            doer,
+		ListToolSchemaStaticValuesDoer: doer,
+		CheckMCPSlugAvailabilityDoer:   doer,
+		CloneToolsetDoer:               doer,
+		AddExternalOAuthServerDoer:     doer,
+		UpdateExternalOAuthServerDoer:  doer,
+		RemoveOAuthServerDoer:          doer,
+		SetUserSessionIssuerDoer:       doer,
+		SetToolVariationsGroupDoer:     doer,
+		RestoreResponseBody:            restoreBody,
+		scheme:                         scheme,
+		host:                           host,
+		decoder:                        dec,
+		encoder:                        enc,
 	}
 }
 
@@ -278,6 +288,30 @@ func (c *Client) ListToolFilters() goa.Endpoint {
 	}
 }
 
+// ListToolSchemaStaticValues returns an endpoint that makes HTTP requests to
+// the toolsets service listToolSchemaStaticValues server.
+func (c *Client) ListToolSchemaStaticValues() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListToolSchemaStaticValuesRequest(c.encoder)
+		decodeResponse = DecodeListToolSchemaStaticValuesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListToolSchemaStaticValuesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListToolSchemaStaticValuesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "listToolSchemaStaticValues", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // CheckMCPSlugAvailability returns an endpoint that makes HTTP requests to the
 // toolsets service checkMCPSlugAvailability server.
 func (c *Client) CheckMCPSlugAvailability() goa.Endpoint {
@@ -345,6 +379,30 @@ func (c *Client) AddExternalOAuthServer() goa.Endpoint {
 		resp, err := c.AddExternalOAuthServerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "addExternalOAuthServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateExternalOAuthServer returns an endpoint that makes HTTP requests to
+// the toolsets service updateExternalOAuthServer server.
+func (c *Client) UpdateExternalOAuthServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateExternalOAuthServerRequest(c.encoder)
+		decodeResponse = DecodeUpdateExternalOAuthServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateExternalOAuthServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateExternalOAuthServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "updateExternalOAuthServer", err)
 		}
 		return decodeResponse(resp)
 	}

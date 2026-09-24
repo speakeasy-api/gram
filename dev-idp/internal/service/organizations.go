@@ -55,6 +55,8 @@ func (s *OrganizationsService) Create(ctx context.Context, p *gen.CreatePayload)
 		Slug:        p.Slug,
 		AccountType: conv.PtrToNullString(p.AccountType),
 		WorkosID:    conv.PtrToNullString(p.WorkosID),
+		ExternalID:  sql.NullString{String: "", Valid: false},
+		Domains:     nil,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "create organization").Log(ctx, s.logger)
@@ -117,7 +119,7 @@ func (s *OrganizationsService) List(ctx context.Context, p *gen.ListPayload) (*g
 	queries := repo.New(s.db)
 	rows, err := queries.ListOrganizations(ctx, repo.ListOrganizationsParams{
 		After:   after,
-		MaxRows: int64(p.Limit) + 1, //nolint:gosec // Goa validates Limit ∈ [1, 100]
+		MaxRows: int64(p.Limit) + 1,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list organizations").Log(ctx, s.logger)

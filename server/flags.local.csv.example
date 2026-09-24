@@ -14,3 +14,13 @@ distinct_id,flag,enabled,variant
 #   select id, slug from organization_metadata;
 #
 # <your-organization-id>,assistant-platform-mcp,true,platformmcp
+#
+# gram-risk-llm-analyzer is multivariate: off | shadow | llm. The variant
+# selects the risk engine mode for that organization: off keeps the gitleaks /
+# Presidio / prompt-injection / destructive-tool engines, shadow keeps them
+# enforcing and also runs the fine-tuned risk model for comparison, llm swaps
+# the engines for the model. A row without the variant column resolves to
+# llm while the boolean value is true (the transition rule for the boolean
+# PostHog key).
+#
+# <your-organization-id>,gram-risk-llm-analyzer,true,shadow

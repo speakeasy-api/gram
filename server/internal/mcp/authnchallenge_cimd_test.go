@@ -21,9 +21,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -64,6 +66,20 @@ type cimdDocServer struct {
 	// conditionalRequests counts the subset of requests that carried an
 	// If-None-Match header.
 	conditionalRequests atomic.Int64
+
+	// jwks, when non-empty, is served at /oauth/jwks.json so a document can
+	// name a jwks_uri on the same host and the token endpoint can resolve
+	// it over the same trusted TLS certificate.
+	jwks []byte
+
+	// jwksRequests counts key set fetches, so tests can assert that a
+	// warm key cache costs no request and a cold one costs exactly one.
+	jwksRequests atomic.Int64
+}
+
+// jwksURI is the URL a document names to publish keys from this host.
+func (ds *cimdDocServer) jwksURI() string {
+	return ds.srv.URL + "/oauth/jwks.json"
 }
 
 // set applies a mutation to the served response under the same lock the
@@ -89,6 +105,8 @@ func startCIMDDocServer(t *testing.T) *cimdDocServer {
 		status:              0,
 		requests:            atomic.Int64{},
 		conditionalRequests: atomic.Int64{},
+		jwks:                nil,
+		jwksRequests:        atomic.Int64{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/oauth/client.json", func(w http.ResponseWriter, r *http.Request) {
@@ -126,6 +144,19 @@ func startCIMDDocServer(t *testing.T) *cimdDocServer {
 			t.Errorf("encode cimd document: %v", err)
 		}
 	})
+	mux.HandleFunc("/oauth/jwks.json", func(w http.ResponseWriter, _ *http.Request) {
+		ds.jwksRequests.Add(1)
+		ds.mu.Lock()
+		defer ds.mu.Unlock()
+		if len(ds.jwks) == 0 {
+			http.NotFound(w, nil)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write(ds.jwks); err != nil {
+			t.Errorf("write key set: %v", err)
+		}
+	})
 	ds.srv = httptest.NewTLSServer(mux)
 	t.Cleanup(ds.srv.Close)
 
@@ -151,14 +182,22 @@ func (ds *cimdDocServer) certPool() *x509.CertPool {
 //
 // The seeded issuer is put in "open" admission mode. These tests exercise
 // DOCUMENT validation, and the doc server's URL is (necessarily) not a
-// catalog preset, so the default "presets" mode would deny every one of them
+// catalog preset, so "presets" mode would deny every one of them
 // before a document was ever fetched. Admission itself is covered by
 // authnchallenge_cimd_admission_test.go, which seeds modes explicitly.
 func newTestCIMDService(t *testing.T) (context.Context, *testInstance, *cimdDocServer, toolsets_repo.Toolset) {
 	t.Helper()
 
+	return newTestCIMDServiceWithMeterProvider(t, testenv.NewMeterProvider(t))
+}
+
+// newTestCIMDServiceWithMeterProvider is newTestCIMDService over a caller's
+// meter provider, for tests that read the admission counter back.
+func newTestCIMDServiceWithMeterProvider(t *testing.T, meterProvider metric.MeterProvider) (context.Context, *testInstance, *cimdDocServer, toolsets_repo.Toolset) {
+	t.Helper()
+
 	ds := startCIMDDocServer(t)
-	ctx, ti := newTestMCPServiceWithGuardianOptions(t, guardian.WithTLSRootCAs(ds.certPool()))
+	ctx, ti := newTestMCPServiceWithMeterProviderAndGuardianOptions(t, meterProvider, guardian.WithTLSRootCAs(ds.certPool()))
 
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeOpen)
@@ -341,14 +380,18 @@ func TestOAuthCIMD_DocumentClientIDMismatchRejected(t *testing.T) {
 	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_client_metadata")
 }
 
-func TestOAuthCIMD_CrossOriginRedirectURIRejected(t *testing.T) {
+// TestOAuthCIMD_CrossOriginRedirectURIAccepted: a document may register
+// redirect_uris on a different origin than the client_id URL (AIS-597
+// removed the same-origin binding); the authorization request matching the
+// registered URI exactly proceeds to consent.
+func TestOAuthCIMD_CrossOriginRedirectURIAccepted(t *testing.T) {
 	t.Parallel()
 
 	_, ti, ds, toolset := newTestCIMDService(t)
 	ds.set(t, func(ds *cimdDocServer) { ds.doc["redirect_uris"] = []any{"https://elsewhere.example.com/callback"} })
 
 	w := doCIMDAuthorize(t, ti, toolset.McpSlug.String, ds.clientID, "https://elsewhere.example.com/callback", pkceChallenge(pkceVerifier(t)))
-	requireAuthorizeOAuthError(t, w, http.StatusBadRequest, "invalid_redirect_uri")
+	require.Equal(t, http.StatusFound, w.Code, "cross-origin registered redirect_uris must be accepted: %s", w.Body.String())
 }
 
 func TestOAuthCIMD_UnregisteredRedirectURIRejected(t *testing.T) {
@@ -644,7 +687,7 @@ func TestOAuthCIMD_PurgeForcesUnconditionalReread(t *testing.T) {
 
 	purged, err := usersessions_repo.New(ti.conn).PurgeUserSessionClientCIMDCache(ctx, usersessions_repo.PurgeUserSessionClientCIMDCacheParams{
 		ID:        first.ID,
-		ProjectID: first.ProjectID,
+		ProjectID: first.ProjectID.UUID,
 	})
 	require.NoError(t, err)
 	require.False(t, purged.ClientIDMetadataCacheExpiresAt.Valid)
@@ -746,12 +789,13 @@ func TestOAuthCIMD_SecretBearingCollisionRejected(t *testing.T) {
 	ctx, ti, ds, toolset := newTestCIMDService(t)
 
 	_, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
-		UserSessionIssuerID:   toolset.UserSessionIssuerID.UUID,
-		ClientID:              ds.clientID,
-		ClientSecretHash:      conv.ToPGText("bcrypt-hash-placeholder"),
-		ClientName:            "Confidential DCR Client",
-		RedirectUris:          []string{"http://127.0.0.1:33418/callback"},
-		ClientSecretExpiresAt: pgtype.Timestamptz{},
+		UserSessionIssuerID:     toolset.UserSessionIssuerID.UUID,
+		ClientID:                ds.clientID,
+		ClientSecretHash:        conv.ToPGText("bcrypt-hash-placeholder"),
+		ClientName:              "Confidential DCR Client",
+		RedirectUris:            []string{"http://127.0.0.1:33418/callback"},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{},
+		TokenEndpointAuthMethod: "client_secret_basic",
 	})
 	require.NoError(t, err)
 
