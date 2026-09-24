@@ -1,0 +1,21 @@
+server/internal/platformmcp/workflow_run_test.go
+  s_fc4a57d3a07893::t_8c0561623554f1 82-85,88-100,110,112
+server/internal/platformmcp/workflow_run.go
+  s_fc4a57d3a07893::t_09c7bf7d963f93 127,182-190,192,195,199,201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1ef1fd71a7301e0e66aeda7c806426a086fe470f",
+  "prompts": {},
+  "sessions": {
+    "s_fc4a57d3a07893": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c8a2fba3-9438-400d-9886-62fdc8005ae9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Alex Martin <alex.martin@speakeasy.com>"
+    }
+  }
+}
