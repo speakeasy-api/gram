@@ -34,13 +34,8 @@ var claudeProviderSurfaces = []agentsurface.Surface{
 }
 
 // blockProviderSurfaces returns the surfaces a tool_call_blocks.provider could
-// have been returned to.
-//
-// Providers are not a separate vocabulary: the unified ingest path writes the
-// sender's adapter slug straight into the column, so the provider is a
-// hook_source and folds through the same taxonomy. Enumerating providers by
-// hand here is what made the blocking row under-report every adapter outside
-// the three the Claude, Codex and Cursor hook paths hardcode.
+// have been returned to. The unified ingest path writes the sender's adapter
+// slug into the column, so a provider is a hook_source and folds the same way.
 func blockProviderSurfaces(provider string) []agentsurface.Surface {
 	if agentsurface.Normalize(provider) == "claude" {
 		return claudeProviderSurfaces
@@ -67,22 +62,16 @@ type surfaceEvidence struct {
 	shadowLastSeen time.Time
 }
 
-// GetSupportCoverage assembles the org's observed coverage matrix.
-//
-// Every (capability, surface) pair is returned, always. The page this feeds
-// previously hardcoded three of its five rows as unavailable, which made an
-// unwired row indistinguishable from a genuinely empty one; returning a
-// complete grid with an explicit per-cell status is what removes that
-// ambiguity, so callers must never infer meaning from an absent cell.
+// GetSupportCoverage assembles the org's observed coverage matrix. Every
+// (capability, surface) pair is always returned with an explicit status, so
+// callers must never infer meaning from an absent cell.
 func (s *Service) GetSupportCoverage(ctx context.Context, payload *telem_gen.GetSupportCoveragePayload) (*telem_gen.SupportCoverageResult, error) {
 	windowDays := defaultSupportCoverageWindowDays
 	if payload != nil && payload.WindowDays > 0 {
 		windowDays = payload.WindowDays
 	}
-	// Gated on the platform-admin flag, not just org membership: this is a
-	// Speakeasy support view of one organization at a time, and the page in
-	// front of it (PlatformAdminGate) is presentation only. Routing through
-	// the shared helper keeps it with every other platform-tier handler.
+	// Platform-admin, not just org membership: this is a support view, and the
+	// dashboard's PlatformAdminGate is presentation only.
 	if _, _, err := auth.RequirePlatformAdmin(ctx, s.logger); err != nil {
 		return nil, err
 	}
@@ -133,10 +122,8 @@ func (s *Service) collectSessionEvidence(ctx context.Context, scope orgQueryScop
 	for _, row := range rows {
 		surface, known := agentsurface.ForHookSource(row.HookSource, "")
 		if surface == agentsurface.SurfaceUnknown {
-			// Both an unrecognized source and a recognized-but-ambiguous one
-			// (bare "claude" with no variant) are reported rather than
-			// dropped: either way this activity is real and is not in the
-			// matrix, which the client has to be able to say out loud.
+			// Unrecognized and recognized-but-ambiguous sources are both
+			// reported: the activity is real and absent from the matrix.
 			_ = known
 			unmapped[row.HookSource] += clampCount(row.Sessions)
 			continue
@@ -158,17 +145,14 @@ func (s *Service) collectShadowEvidence(ctx context.Context, scope orgQueryScope
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to read surface shadow exposure")
 	}
-	// Counted over distinct (surface, server) pairs rather than summed per
-	// row: the table keys sightings by the raw hook_source, so one server
-	// reached under two aliases of the same surface ("claude-code" and
-	// "claudecode") arrives as two rows that must not count as two servers.
+	// Counted over distinct (surface, server) pairs: one server reached under
+	// two aliases of the same surface arrives as two rows.
 	serversBySurface := make(map[agentsurface.Surface]map[string]bool, len(agentsurface.All))
 	for _, row := range rows {
 		surface, _ := agentsurface.ForHookSource(row.HookSource, "")
 		if surface == agentsurface.SurfaceUnknown {
-			// Shadow sightings carry no session count, so an unmapped source
-			// here must not inflate the unmapped session totals. Register the
-			// source with a zero delta so it is still reported.
+			// Zero delta: shadow rows carry no session count, but the source
+			// still needs reporting.
 			unmapped[row.HookSource] += 0
 			continue
 		}
@@ -233,17 +217,12 @@ func (s *Service) collectBlockEvidence(ctx context.Context, scope orgQueryScope,
 			continue
 		}
 
-		// No resolvable chat, so the block is only known at provider
-		// granularity. Counting it once per candidate surface would multiply
-		// the org's block count, so it is recorded as a provider-level signal
-		// on each candidate and the cell says the count is not exact.
+		// Known only at provider granularity. Counting it per candidate would
+		// multiply the org's block total, so it is flagged rather than added.
 		candidates := blockProviderSurfaces(block.Provider)
 		if len(candidates) == 0 {
-			// A provider the fold does not recognize, with no chat to fall
-			// back on. Dropping it here would lose real enforcement evidence
-			// as silently as the client-side hook_source map used to lose
-			// sessions, so it is reported alongside the unmapped sources
-			// instead.
+			// Unrecognized provider with no chat to fall back on: report it
+			// rather than lose the enforcement evidence.
 			if provider := strings.TrimSpace(block.Provider); provider != "" {
 				unmapped[provider] += 0
 			}
@@ -295,10 +274,8 @@ func buildCoverageCell(capability string, surface agentsurface.Surface, item *su
 	case "identity":
 		cell.Value = item.attributedSessions
 		cell.LastSeen = stamp(item.lastSeen)
-		// A session bound only to a device hostname is not bound to a person.
-		// Reporting the two together is what let a surface read as
-		// identity-covered on the strength of a hostname, so the split is
-		// stated rather than summed.
+		// A session bound only to a device is not bound to a person, so the
+		// split is stated rather than summed.
 		switch {
 		case item.attributedSessions > 0 && item.deviceOnlySessions > 0:
 			cell.Detail = fmt.Sprintf("%d device-only", item.deviceOnlySessions)
@@ -346,10 +323,8 @@ func buildUnmappedList(unmapped map[string]int64) []*telem_gen.SupportCoverageUn
 	return list
 }
 
-// clampCount narrows a ClickHouse UInt64 count to the int64 the API exposes.
-// The counts here are sessions, tokens and servers over a bounded window, so
-// the ceiling is unreachable in practice - it exists so the conversion is
-// total rather than wrapping into a negative count if it ever is not.
+// clampCount narrows a ClickHouse UInt64 to the int64 the API exposes. The
+// ceiling is unreachable in practice; this keeps the conversion total.
 func clampCount(v uint64) int64 {
 	if v > math.MaxInt64 {
 		return math.MaxInt64

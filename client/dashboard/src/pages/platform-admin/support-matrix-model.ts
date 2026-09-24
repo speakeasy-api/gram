@@ -8,19 +8,10 @@ export type SurfaceId = SupportCoverageCellSurface;
 export type CapabilityId = Capability;
 
 /**
- * Column and row labels for the matrix.
- *
- * The ordering here mirrors the order the endpoint returns cells in, but the
- * page never depends on that: cells are looked up by (capability, surface), so
- * a reordering on either side cannot silently shift a value into the wrong
- * column.
- *
- * There is deliberately no hook_source mapping in this file any more. Folding
- * a raw hook_source onto a surface now happens server-side in
- * internal/agentsurface, next to the ingest that produces the values. The copy
- * that used to live here silently dropped every source missing from it, so
- * unrecognized activity disappeared from the table while the summary tiles
- * still reported full coverage.
+ * Column and row labels for the matrix. Cells are looked up by (capability,
+ * surface), so a reordering on either side cannot shift a value into the wrong
+ * column. Folding hook_source onto a surface is server-side, in
+ * internal/agentsurface.
  */
 export const surfaces: ReadonlyArray<{
   id: SurfaceId;
@@ -84,12 +75,9 @@ export type IntegrationMethod = {
 };
 
 /**
- * What each integration can reach.
- *
- * This is static product capability, not observed state: it answers "if this
- * org installed X, what would start reporting?". The page only renders it
- * against the observed matrix, so a card always reads as a recommendation for
- * this organization rather than as a general capability chart.
+ * What each integration can reach: static product capability, not observed
+ * state. Rendered only against the observed matrix, so a card reads as a
+ * recommendation for this org.
  */
 export const methods: IntegrationMethod[] = [
   {
@@ -156,11 +144,9 @@ export function indexCells(
 }
 
 /**
- * The cells an integration would fill that are not already observed.
- *
- * A method that only covers ground the org already has is not worth
- * recommending, which is what makes this the ranking key rather than the raw
- * footprint size.
+ * The cells an integration would fill that are not already observed. Ranking
+ * on this rather than footprint size keeps a method that covers only existing
+ * ground from being recommended.
  */
 export function gapsClosedBy(
   method: IntegrationMethod,

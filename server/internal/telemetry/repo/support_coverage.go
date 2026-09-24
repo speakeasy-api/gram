@@ -6,10 +6,9 @@ import (
 	"time"
 )
 
-// SurfaceEvidenceRow is one hook_source's aggregate evidence inside the
-// observation window. hook_source is returned raw: folding it into a surface
-// is internal/agentsurface's job, so an unmapped source stays visible to the
-// caller instead of being silently dropped by the query.
+// SurfaceEvidenceRow is one hook_source's aggregate evidence in the window.
+// hook_source is raw so the caller can report unmapped sources; folding is
+// internal/agentsurface's job.
 type SurfaceEvidenceRow struct {
 	HookSource         string
 	Sessions           uint64
@@ -29,26 +28,18 @@ type SurfaceEvidenceParams struct {
 // ListSurfaceEvidence returns per-hook_source session, token and identity
 // evidence from chat_session_summaries.
 //
-// Identity is split three ways rather than reported as one "attributed"
-// number. A session carrying a user email is bound to a person; a session
-// carrying only a device hostname is bound to a machine but not a person
-// (company-credential sessions emit no user identity); a session with neither
-// is unattributed. Collapsing the middle case into "attributed" is what makes
-// a surface look identity-covered on the strength of a hostname, so the read
-// keeps the two apart and lets the caller say which it has.
+// Sessions bound to a user and sessions bound only to a device hostname are
+// counted separately: company-credential sessions emit no user identity, so
+// merging them would let a hostname read as identity coverage.
 func (q *Queries) ListSurfaceEvidence(ctx context.Context, arg SurfaceEvidenceParams) ([]SurfaceEvidenceRow, error) {
 	if len(arg.GramProjectIDs) == 0 {
 		return []SurfaceEvidenceRow{}, nil
 	}
 
-	// chat_session_summaries is an AggregatingMergeTree keyed per chat, so the
-	// per-chat merge has to happen before the per-surface rollup: a chat's
-	// buckets must collapse to one row before its identity is classified,
-	// otherwise a chat spanning two hours counts twice.
-	// Aggregate aliases are prefixed so none of them shadows the base column
-	// it derives from: an alias that collides lets ClickHouse merge the
-	// subquery back into the outer aggregate, which silently changes what the
-	// grouping means.
+	// The per-chat merge must precede the per-surface rollup, or a chat
+	// spanning two hourly buckets counts twice. Aggregate aliases are prefixed
+	// so none shadows the column it derives from — a collision lets ClickHouse
+	// fold the subquery into the outer aggregate.
 	const query = `
 		SELECT
 			s_hook_source AS hook_source,
@@ -107,32 +98,21 @@ type SurfaceShadowRow struct {
 }
 
 // ListSurfaceShadowExposure returns which surfaces reached which shadow MCP
-// servers inside the window.
+// servers in the window, derived from trace_summaries, which already carries
+// both the server URL and the hook_source per trace.
 //
-// Derived from trace_summaries rather than captured into a table of its own:
-// every tool call already carries the MCP server URL and the hook_source on
-// the same trace, so the (server, surface) pair is a grouping of data that
-// exists rather than a new fact to record. GetUnproxiedMcpServerClientUsage
-// groups the same rows by hook_source for the shadow MCP product surface.
-// Deriving it also covers the full retention window instead of starting empty
-// at deploy, and adds no write to the hook path.
+// "Shadow" means a URL shadow_mcp_inventory_urls knows about, which keeps the
+// Gram-hosted exclusion in one place.
 //
-// "Shadow" is defined by the existing inventory: a server counts when its
-// canonical URL is one shadow_mcp_inventory_urls already knows about, which
-// keeps the Gram-hosted exclusion in one place rather than re-deriving it.
-//
-// Servers are not counted here. hook_source is stored raw, so two aliases of
-// one surface produce two rows for the same server, and only the caller —
-// which owns the fold — can collapse them.
+// Servers are not counted here: two aliases of one surface produce two rows
+// for the same server, and only the caller owns the fold that collapses them.
 func (q *Queries) ListSurfaceShadowExposure(ctx context.Context, arg SurfaceEvidenceParams) ([]SurfaceShadowRow, error) {
 	if len(arg.GramProjectIDs) == 0 {
 		return []SurfaceShadowRow{}, nil
 	}
 
-	// The per-trace collapse mirrors unproxiedMcpServerUsagePerTrace: a trace
-	// carries the server URL and the hook_source on different rows, so both
-	// must be merged per trace before they can be paired. Aggregate aliases
-	// are prefixed so none shadows the base column it derives from.
+	// Mirrors unproxiedMcpServerUsagePerTrace: server URL and hook_source sit
+	// on different rows of a trace and must be merged before pairing.
 	const query = `
 		SELECT
 			t_hook_source AS hook_source,
@@ -185,14 +165,9 @@ func (q *Queries) ListSurfaceShadowExposure(ctx context.Context, arg SurfaceEvid
 	return results, nil
 }
 
-// MapChatHookSources resolves chat ids to the hook_source of the session they
-// belong to.
-//
-// Blocks are recorded in Postgres and carry a chat id but no surface, so this
-// is the join that attributes a synchronous policy decision to the surface it
-// was returned to. Chats missing from the result are ones the summaries have
-// no row for, which the caller must treat as unattributed rather than as
-// belonging to any surface.
+// MapChatHookSources resolves chat ids to their session's hook_source. Blocks
+// carry a chat id but no surface, so this is what attributes a policy decision
+// to a surface. Chats absent from the result are unattributed.
 func (q *Queries) MapChatHookSources(ctx context.Context, projectIDs []string, chatIDs []string) (map[string]string, error) {
 	if len(projectIDs) == 0 || len(chatIDs) == 0 {
 		return map[string]string{}, nil

@@ -1,23 +1,15 @@
-// Package agentsurface folds the client-supplied hook_source values into the
-// fixed set of consuming surfaces that coverage reporting is organized around.
+// Package agentsurface folds hook_source values into the consuming surfaces
+// coverage reporting is organized around.
 //
-// hook_source is not a controlled vocabulary. The Claude hook path stamps a
-// flat "claude" for every Claude product, the generic ingest path passes
-// payload.Source.Adapter through verbatim, and adapters spell the same product
-// several ways ("claude-code", "claudecode", "claude_code"). Folding therefore
-// has to happen somewhere, and it belongs next to ingest rather than in each
-// consumer: the dashboard previously carried its own copy of this map and
-// silently dropped every source missing from it, so an unrecognized adapter
-// vanished from the coverage matrix instead of being reported as unmapped.
+// hook_source is not a controlled vocabulary: adapters report it verbatim and
+// spell the same product several ways.
 package agentsurface
 
 import "strings"
 
-// Surface is a consuming surface in the coverage matrix. The zero value is
-// SurfaceUnknown, which callers must treat as "not attributable to a surface"
-// rather than folding it into SurfaceOther: Other is a real bucket of known
-// third-party agents, while Unknown means the fold did not recognize the
-// value at all and the operator should be told.
+// Surface is a consuming surface in the coverage matrix. Unknown means the
+// fold did not recognize the value and is not the same as Other, which is a
+// real bucket of known third-party agents.
 type Surface string
 
 const (
@@ -30,9 +22,8 @@ const (
 	SurfaceOther      Surface = "other"
 )
 
-// All lists the surfaces in the order the coverage matrix renders them.
-// SurfaceUnknown is deliberately absent: it is a reporting signal, not a
-// column.
+// All lists the surfaces in the order the matrix renders them. Unknown is a
+// reporting signal, not a column.
 var All = []Surface{
 	SurfaceClaudeCode,
 	SurfaceClaudeChat,
@@ -42,17 +33,15 @@ var All = []Surface{
 	SurfaceOther,
 }
 
-// bySource maps a normalized hook_source to its surface. Bare "claude" is
-// absent on purpose: the Claude hook path stamps it for Claude Code, Cowork
-// and Claude Chat alike, so resolving it to any one of them would invent
-// attribution. ForHookSource handles it through the agent-variant hint.
+// Bare "claude" is absent on purpose: the Claude hook path stamps it for
+// Claude Code, Cowork and Claude Chat alike, so mapping it would invent
+// attribution. ForHookSource resolves it from the agent variant instead.
 var bySource = map[string]Surface{
 	"claude-code":         SurfaceClaudeCode,
 	"claude-code-cli":     SurfaceClaudeCode,
 	"claude-code-web":     SurfaceClaudeCode,
 	"claude-code-desktop": SurfaceClaudeCode,
-	// claudeSessionSurface stamps "claude-tag" for Claude-in-Slack sessions,
-	// which run the Claude Code runtime.
+	// Claude-in-Slack, which runs the Claude Code runtime.
 	"claude-tag": SurfaceClaudeCode,
 
 	"claude-chat":     SurfaceClaudeChat,
@@ -86,10 +75,8 @@ var bySource = map[string]Surface{
 	"pi":             SurfaceOther,
 }
 
-// compact indexes the same surfaces under their separator-free spelling, so
-// "claudecode" resolves alongside "claude-code" without every adapter's
-// spelling having to be enumerated. Built once; collisions cannot occur
-// because no two bySource keys differ only by their separators.
+// compact indexes the same surfaces separator-free, so "claudecode" resolves
+// alongside "claude-code" without enumerating every spelling.
 var compact = func() map[string]Surface {
 	index := make(map[string]Surface, len(bySource))
 	for source, surface := range bySource {
@@ -98,8 +85,7 @@ var compact = func() map[string]Surface {
 	return index
 }()
 
-// Normalize canonicalizes a raw hook_source for lookup: case-folded, trimmed,
-// and with underscores and whitespace unified to the hyphen the map keys use.
+// Normalize case-folds a raw hook_source and unifies separators to hyphens.
 func Normalize(raw string) string {
 	lowered := strings.ToLower(strings.TrimSpace(raw))
 	return strings.Join(strings.FieldsFunc(lowered, func(r rune) bool {
@@ -108,13 +94,10 @@ func Normalize(raw string) string {
 }
 
 // ForHookSource folds a hook_source into a surface. variant is the session's
-// agent variant when the caller has one (the hooks session cache records
-// "cowork" or "claude-code" to separate Cowork from Claude Code Desktop);
-// pass "" when it is unknown.
+// cached agent variant, or "" when unknown.
 //
-// The second return reports whether the value was recognized. A false result
-// means the source is genuinely unmapped, and callers should surface that as
-// unmapped activity rather than discarding the row.
+// The second return reports whether the source was recognized. Callers must
+// surface an unrecognized source as unmapped rather than discarding the row.
 func ForHookSource(source string, variant string) (Surface, bool) {
 	normalized := Normalize(source)
 	if normalized == "" {
@@ -126,9 +109,8 @@ func ForHookSource(source string, variant string) (Surface, bool) {
 	if surface, ok := compact[strings.ReplaceAll(normalized, "-", "")]; ok {
 		return surface, true
 	}
-	// Bare "claude" carries no product of its own, so the variant decides.
-	// Without one the event is real but unattributable, which is a different
-	// statement from "we have never heard of this source".
+	// Recognized but unattributable without a variant, which differs from an
+	// unknown source.
 	if normalized == "claude" {
 		if surface, ok := bySource[Normalize(variant)]; ok {
 			return surface, true

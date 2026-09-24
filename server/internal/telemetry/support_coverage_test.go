@@ -14,9 +14,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
-// platformAdminCtx marks the caller as Speakeasy staff. Coverage is a support
-// view, so every read below goes through the platform-admin gate the handler
-// enforces.
+// platformAdminCtx marks the caller as Speakeasy staff, which the handler
+// requires.
 func platformAdminCtx(t *testing.T, ctx context.Context) context.Context {
 	t.Helper()
 
@@ -45,15 +44,13 @@ func waitForSupportCoverage(
 		})
 		return err == nil && result != nil && ready(result)
 	}, 10*time.Second, 200*time.Millisecond, "expected support coverage to become query-ready")
-	// Asserted after Eventually, not inside it: the condition runs in its own
-	// goroutine, so a require in there only stops that goroutine and the poll
-	// still burns its full timeout before reporting a cause-free failure.
+	// After Eventually, not inside it: the condition runs in its own
+	// goroutine, so a require there would not fail fast.
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	return result
 }
 
-// cellFor finds the cell for a (capability, surface) pair. Every pair is
-// promised by the contract, so a miss is a failure rather than a skip.
+// cellFor finds the cell for a pair. Every pair is promised, so a miss fails.
 func cellFor(t *testing.T, result *telem_gen.SupportCoverageResult, capability, surface string) *telem_gen.SupportCoverageCell {
 	t.Helper()
 
@@ -71,8 +68,7 @@ func TestGetSupportCoverage_RefusesNonPlatformAdmins(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 
-	// Org membership is not enough: this is a Speakeasy support view, and the
-	// dashboard's PlatformAdminGate in front of it is presentation only.
+	// Org membership is not enough; PlatformAdminGate is presentation only.
 	_, err := ti.service.GetSupportCoverage(ctx, &telem_gen.GetSupportCoveragePayload{
 		SessionToken: nil, WindowDays: 30,
 	})
@@ -91,9 +87,7 @@ func TestGetSupportCoverage_EmptyOrganization(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// The grid is always complete: the bug this endpoint replaces was a page
-	// that could not tell an unwired row from an empty one, so a missing cell
-	// must never be something a client has to interpret.
+	// Always complete, so a client never has to interpret a missing cell.
 	require.Len(t, result.Cells, 5*6, "every capability/surface pair is returned")
 	require.Equal(t, 30, result.WindowDays)
 
@@ -147,8 +141,7 @@ func TestGetSupportCoverage_SessionAndIdentityEvidence(t *testing.T) {
 	require.Equal(t, "observed", cost.Status)
 	require.Equal(t, int64(40), cost.Value)
 
-	// Only the emailed session counts as bound to a person. Reporting both as
-	// attributed is the exact overstatement this split exists to prevent.
+	// Only the emailed session is bound to a person.
 	identity := cellFor(t, result, "identity", "cursor")
 	require.Equal(t, "observed", identity.Status)
 	require.Equal(t, int64(1), identity.Value)
@@ -164,11 +157,9 @@ func TestGetSupportCoverage_ReportsUnmappedHookSources(t *testing.T) {
 	ctx = platformAdminCtx(t, ctx)
 	now := time.Now().UTC().Add(-time.Hour)
 
-	// Shadow capture records whatever hook_source the session reported, so a
-	// newly shipped adapter reaches this table before anything knows how to
-	// fold it onto a surface. The session-summary path cannot stand in for
-	// this case: its materialized view only ingests a known set of sources,
-	// so an unrecognized one never lands there in the first place.
+	// Traces carry whatever hook_source was reported, so a new adapter shows
+	// up before the fold knows it. The session-summary MV cannot stand in:
+	// it only ingests a known set of sources.
 	insertShadowSurfaceSighting(t, ctx, ti.projectID, "https://unknown.example.com/mcp", "some-brand-new-agent", now)
 
 	result := waitForSupportCoverage(t, ctx, ti, func(res *telem_gen.SupportCoverageResult) bool {
@@ -239,10 +230,8 @@ func cellStatus(result *telem_gen.SupportCoverageResult, capability, surface str
 	return ""
 }
 
-// insertShadowSurfaceSighting records a shadow MCP server in the inventory and
-// a matching tool-call trace that reached it from one surface — the same two
-// places the product already writes, since coverage derives the pair rather
-// than capturing it.
+// insertShadowSurfaceSighting writes the two rows coverage derives the
+// (server, surface) pair from: an inventory entry and a matching trace.
 func insertShadowSurfaceSighting(t *testing.T, ctx context.Context, projectID, serverURL, hookSource string, seenAt time.Time) {
 	t.Helper()
 

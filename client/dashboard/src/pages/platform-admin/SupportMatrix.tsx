@@ -82,19 +82,15 @@ function OrganizationSupportMatrix(): JSX.Element {
     throwOnError: false,
   });
 
-  // Deliberately dropped when the query is errored: react-query keeps the
-  // last successful payload in the cache, so a failed refetch would otherwise
-  // render stale observed values directly under the banner saying evidence is
-  // unavailable.
+  // Dropped on error: react-query keeps the last successful payload, which
+  // would render stale values under the "unavailable" banner.
   const cells = useMemo(
     () => indexCells(coverage.isError ? undefined : coverage.data?.cells),
     [coverage.isError, coverage.data?.cells],
   );
   const coverageLoaded = !coverage.isError && !coverage.isPending;
 
-  // Hovering an integration card highlights the cells it would fill, so the
-  // recommendation and the evidence it is derived from are legible as one
-  // statement rather than two disconnected sections.
+  // Hovering a card highlights the cells it would fill.
   const [hoveredMethod, setHoveredMethod] = useState<IntegrationMethod | null>(
     null,
   );
@@ -113,11 +109,8 @@ function OrganizationSupportMatrix(): JSX.Element {
         cells.get(cellKey(capability.id, surface.id))?.status === "observed",
     ),
   ).length;
-  // All three read through coverageLoaded rather than straight off
-  // coverage.data: react-query keeps the last successful payload on a failed
-  // refetch, and on the first request there is no payload at all. Either way
-  // an ungated read puts a stale or zeroed number next to the banner saying
-  // the evidence is unavailable.
+  // Gated for the same reason as the cells above: an ungated read shows a
+  // stale or zeroed number while the banner says evidence is unavailable.
   const latestSeen = coverageLoaded
     ? latestEvidence(coverage.data?.cells)
     : null;
@@ -440,8 +433,7 @@ function EvidenceCell({
           className={cn(
             "flex min-h-20 flex-col justify-center border px-3 py-2 transition-opacity",
             observed ? "border-success-default" : "border-border bg-muted/15",
-            // A highlighted cell that is already observed is not a gap the
-            // hovered integration would close, so only the gaps are called out.
+            // An already-observed cell in the footprint is not a gap.
             closesGap && "border-information-default border-2",
             dimmed && "opacity-40",
           )}
@@ -483,9 +475,7 @@ function IntegrationRecommendations({
   hoveredMethodId: string | null;
   onHover: (method: IntegrationMethod | null) => void;
 }) {
-  // Ranked by how much of this organization's missing coverage the
-  // integration would close, so the list reads as advice for this org rather
-  // than as a static capability chart that looks the same everywhere.
+  // Ranked by missing coverage closed, so the list is advice for this org.
   const ranked = useMemo(() => {
     const entries = methods.map((method) => ({
       method,
@@ -493,9 +483,8 @@ function IntegrationRecommendations({
       footprint: footprintOf(method),
     }));
     if (!isRanked) {
-      // Against an empty cell map every method's gaps equal its footprint, so
-      // sorting here would silently rank by footprint size while the copy
-      // says the cards are not ranked for this organization yet.
+      // Against an empty map every method's gaps equal its footprint, so
+      // sorting would rank by footprint while the copy says otherwise.
       return entries;
     }
     return entries.sort((a, b) => b.gaps.size - a.gaps.size);

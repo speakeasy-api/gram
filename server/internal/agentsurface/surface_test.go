@@ -28,8 +28,7 @@ func TestForHookSource(t *testing.T) {
 		{name: "it folds claude tag onto claude code", source: "claude-tag", variant: "", want: agentsurface.SurfaceClaudeCode, known: true},
 		{name: "it folds claude chat web", source: "claude-chat-web", variant: "", want: agentsurface.SurfaceClaudeChat, known: true},
 
-		// Bare "claude" is what the Claude hook path stamps for Claude Code,
-		// Cowork and Claude Chat alike, so only the variant can resolve it.
+		// Bare "claude" covers three products, so only the variant resolves it.
 		{name: "it resolves bare claude through the cowork variant", source: "claude", variant: "cowork", want: agentsurface.SurfaceCowork, known: true},
 		{name: "it resolves bare claude through the claude-code variant", source: "claude", variant: "claude-code", want: agentsurface.SurfaceClaudeCode, known: true},
 		{name: "it leaves bare claude unattributed without a variant", source: "claude", variant: "", want: agentsurface.SurfaceUnknown, known: true},
@@ -50,14 +49,11 @@ func TestForHookSource(t *testing.T) {
 	}
 }
 
-// The matrix renders one column per surface, so the ordering and membership of
-// All is part of the contract the coverage endpoint promises its clients.
 func TestAllOmitsUnknown(t *testing.T) {
 	t.Parallel()
 
-	// Asserted as an ordered slice, not by membership and length: the matrix
-	// renders one column per entry in this order, so a reordering is a
-	// user-visible change that a set comparison would not catch.
+	// Ordered, not set-compared: the matrix renders one column per entry in
+	// this order, so a reordering is user-visible.
 	require.Equal(t, []agentsurface.Surface{
 		agentsurface.SurfaceClaudeCode,
 		agentsurface.SurfaceClaudeChat,
