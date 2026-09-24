@@ -47,6 +47,24 @@ export function WorkloadIdentitiesPage(): JSX.Element {
   );
 }
 
+// Returns null when a workload can be admitted, or the reason it cannot.
+function admitPrecondition(
+  issuerCount: number,
+  agentCount: number,
+  agentsFailed: boolean,
+): string | null {
+  if (issuerCount === 0) {
+    return "Trust an issuer before admitting a workload: a subject is only meaningful under the issuer that asserts it.";
+  }
+  if (agentsFailed) {
+    return "Agents could not be listed, so there is nothing to assign. Agent management is not enabled for this organization.";
+  }
+  if (agentCount === 0) {
+    return "Create an agent first. An admitted workload inherits its policy from an agent, and one admitted without an agent is refused when it tries to authenticate.";
+  }
+  return null;
+}
+
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
@@ -54,7 +72,12 @@ function errorMessage(error: unknown, fallback: string): string {
 function WorkloadIdentitiesOverview(): JSX.Element {
   const queryClient = useQueryClient();
   const { data, isPending } = useWorkloadIdentities({});
-  const agentsQuery = useAgents({});
+  // throwOnError because the whole agents service 404s when the agent
+  // management rollout is off for the organization, and the global query policy
+  // only suppresses 401 and 403. Left to throw it takes this page down with it,
+  // even though the trust policy itself loaded: listing and withdrawing do not
+  // need an agent, only admitting does.
+  const agentsQuery = useAgents({}, undefined, { throwOnError: false });
 
   const [registerOpen, setRegisterOpen] = useState(false);
   const [admitOpen, setAdmitOpen] = useState(false);
@@ -159,13 +182,22 @@ function WorkloadIdentitiesOverview(): JSX.Element {
     </RequireScope>
   );
 
+  // Admitting needs an agent to assign, because a subject admitted without one
+  // is refused at the token endpoint. Say which precondition is missing rather
+  // than offering a control that fails on submit.
+  const admitBlockedReason = admitPrecondition(
+    issuers.length,
+    agents.length,
+    agentsQuery.isError,
+  );
+
   const admitButton = (
     <RequireScope scope="workload:write" level="component">
       <Button
         size="sm"
         variant="secondary"
         onClick={() => setAdmitOpen(true)}
-        disabled={issuers.length === 0}
+        disabled={admitBlockedReason !== null}
       >
         <Button.LeftIcon>
           <Plus />
@@ -338,6 +370,12 @@ function WorkloadIdentitiesOverview(): JSX.Element {
             </div>
             {admitButton}
           </Stack>
+
+          {admitBlockedReason !== null && (
+            <Text muted small className="max-w-2xl">
+              {admitBlockedReason}
+            </Text>
+          )}
 
           {admissions.length === 0 ? (
             <InlineEmptyState

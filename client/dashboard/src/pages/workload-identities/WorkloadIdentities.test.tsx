@@ -80,8 +80,13 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
   }),
   invalidateAllWorkloadIdentities: vi.fn(),
 }));
+const agentsState: { data?: { id: string; name: string }[]; isError: boolean } =
+  {
+    data: [{ id: "agent-1", name: "poc-agent" }],
+    isError: false,
+  };
 vi.mock("@gram/client/react-query/agents.js", () => ({
-  useAgents: () => ({ data: [{ id: "agent-1", name: "poc-agent" }] }),
+  useAgents: () => agentsState,
 }));
 vi.mock("@gram/client/react-query/registerWorkloadIssuer.js", () => ({
   useRegisterWorkloadIssuerMutation: () => ({
@@ -108,7 +113,11 @@ vi.mock("@gram/client/react-query/withdrawWorkloadSubject.js", () => ({
   }),
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  agentsState.data = [{ id: "agent-1", name: "poc-agent" }];
+  agentsState.isError = false;
+});
 
 function renderPage(): void {
   render(
@@ -150,4 +159,22 @@ it("names a subject with no assigned agent, which cannot authenticate", () => {
   renderPage();
 
   expect(screen.getByText("None assigned")).toBeTruthy();
+});
+
+it("still renders the policy when agents cannot be listed", () => {
+  // The whole agents service 404s when the agent management rollout is off, and
+  // the global query policy only suppresses 401 and 403 — so left to throw it
+  // took this page down even though the trust policy had loaded.
+  agentsState.data = undefined;
+  agentsState.isError = true;
+
+  renderPage();
+
+  expect(screen.getByText(`${FLEET_STEM}*`)).toBeTruthy();
+  expect(
+    screen.getByText(/Agent management is not enabled for this organization/),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "Admit a workload" }),
+  ).toHaveProperty("disabled", true);
 });
