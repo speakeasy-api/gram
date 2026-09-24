@@ -1,3 +1,24 @@
+import type {
+  AdminSetRegistryEntryPublishedMutationData,
+  AdminSetRegistryEntryPublishedMutationError,
+  AdminSetRegistryEntryPublishedMutationVariables,
+} from "@gram/admin-client/react-query/adminSetRegistryEntryPublished";
+import type {
+  AdminSaveRegistryEntryMutationData,
+  AdminSaveRegistryEntryMutationError,
+  AdminSaveRegistryEntryMutationVariables,
+} from "@gram/admin-client/react-query/adminSaveRegistryEntry";
+import type {
+  AdminCreateRegistryEntryMutationData,
+  AdminCreateRegistryEntryMutationError,
+  AdminCreateRegistryEntryMutationVariables,
+} from "@gram/admin-client/react-query/adminCreateRegistryEntry";
+import type { AdminListRegistryEntriesRequest } from "@gram/admin-client/models/operations/adminlistregistryentries";
+import { buildAdminListRegistryEntriesQuery } from "@gram/admin-client/react-query/adminListRegistryEntries.core";
+import { buildAdminGetRegistryEntryQuery } from "@gram/admin-client/react-query/adminGetRegistryEntry.core";
+import { buildAdminCreateRegistryEntryMutation } from "@gram/admin-client/react-query/adminCreateRegistryEntry";
+import { buildAdminSaveRegistryEntryMutation } from "@gram/admin-client/react-query/adminSaveRegistryEntry";
+import { buildAdminSetRegistryEntryPublishedMutation } from "@gram/admin-client/react-query/adminSetRegistryEntryPublished";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { AdminMeterUsageResponse } from "@gram/admin-client/models/components/adminmeterusageresponse";
 import { buildAdminGetMeterUsageQuery } from "@gram/admin-client/react-query/adminGetMeterUsage.core";
@@ -573,4 +594,66 @@ export function adminIssuerImageQuery(
   id: string,
 ): ReturnType<typeof createAdminIssuerImageQuery> {
   return createAdminIssuerImageQuery(id);
+}
+
+function createRegistryEntriesQuery(params: AdminListRegistryEntriesRequest) {
+  const generated = buildAdminListRegistryEntriesQuery(
+    redirectingClient,
+    params,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+function createRegistryEntryQuery(id: string) {
+  const generated = buildAdminGetRegistryEntryQuery(redirectingClient, { id });
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    enabled: id !== "",
+  });
+}
+
+export function useCreateRegistryEntryMutation(): UseMutationResult<
+  AdminCreateRegistryEntryMutationData,
+  AdminCreateRegistryEntryMutationError,
+  AdminCreateRegistryEntryMutationVariables
+> {
+  return useMutation({
+    ...buildAdminCreateRegistryEntryMutation(redirectingClient),
+    retry: false,
+  });
+}
+export function useSaveRegistryEntryMutation(): UseMutationResult<
+  AdminSaveRegistryEntryMutationData,
+  AdminSaveRegistryEntryMutationError,
+  AdminSaveRegistryEntryMutationVariables
+> {
+  return useMutation({
+    ...buildAdminSaveRegistryEntryMutation(redirectingClient),
+    retry: false,
+  });
+}
+export function useSetRegistryEntryPublishedMutation(): UseMutationResult<
+  AdminSetRegistryEntryPublishedMutationData,
+  AdminSetRegistryEntryPublishedMutationError,
+  AdminSetRegistryEntryPublishedMutationVariables
+> {
+  return useMutation({
+    ...buildAdminSetRegistryEntryPublishedMutation(redirectingClient),
+    retry: false,
+  });
+}
+
+export function registryEntriesQuery(
+  params: AdminListRegistryEntriesRequest,
+): ReturnType<typeof createRegistryEntriesQuery> {
+  return createRegistryEntriesQuery(params);
+}
+
+export function registryEntryQuery(
+  id: string,
+): ReturnType<typeof createRegistryEntryQuery> {
+  return createRegistryEntryQuery(id);
 }

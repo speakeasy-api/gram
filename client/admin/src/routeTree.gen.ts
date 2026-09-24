@@ -14,6 +14,7 @@ import { Route as IntegrationCoverageRouteImport } from './routes/integration-co
 import { Route as McpSetupRouteImport } from './routes/mcp-setup'
 import { Route as OrganizationsRouteImport } from './routes/organizations'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RemoteSessionIssuersRouteImport } from './routes/remote-session-issuers'
 import { Route as StokenCalculatorRouteImport } from './routes/stoken-calculator'
 import { Route as OrganizationsIndexRouteImport } from './routes/organizations.index'
@@ -58,6 +59,11 @@ const OrganizationsRoute = OrganizationsRouteImport.update({
 const ProjectsRoute = ProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegistryRoute = RegistryRouteImport.update({
+  id: '/registry',
+  path: '/registry',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RemoteSessionIssuersRoute = RemoteSessionIssuersRouteImport.update({
@@ -181,6 +187,7 @@ export interface FileRoutesByFullPath {
   '/mcp-setup': typeof McpSetupRoute
   '/organizations': typeof OrganizationsRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
+  '/registry': typeof RegistryRoute
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
@@ -206,6 +213,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
+  '/registry': typeof RegistryRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations': typeof OrganizationsIndexRoute
@@ -231,6 +239,7 @@ export interface FileRoutesById {
   '/mcp-setup': typeof McpSetupRoute
   '/organizations': typeof OrganizationsRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
+  '/registry': typeof RegistryRoute
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
@@ -260,6 +269,7 @@ export interface FileRouteTypes {
     | '/mcp-setup'
     | '/organizations'
     | '/projects'
+    | '/registry'
     | '/remote-session-issuers'
     | '/stoken-calculator'
     | '/organizations/$idOrSlug'
@@ -285,6 +295,7 @@ export interface FileRouteTypes {
     | '/'
     | '/integration-coverage'
     | '/mcp-setup'
+    | '/registry'
     | '/stoken-calculator'
     | '/projects/$idOrSlug'
     | '/organizations'
@@ -309,6 +320,7 @@ export interface FileRouteTypes {
     | '/mcp-setup'
     | '/organizations'
     | '/projects'
+    | '/registry'
     | '/remote-session-issuers'
     | '/stoken-calculator'
     | '/organizations/$idOrSlug'
@@ -337,6 +349,7 @@ export interface RootRouteChildren {
   McpSetupRoute: typeof McpSetupRoute
   OrganizationsRoute: typeof OrganizationsRouteWithChildren
   ProjectsRoute: typeof ProjectsRouteWithChildren
+  RegistryRoute: typeof RegistryRoute
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
   StokenCalculatorRoute: typeof StokenCalculatorRoute
 }
@@ -376,6 +389,13 @@ declare module '@tanstack/react-router' {
       path: '/projects'
       fullPath: '/projects'
       preLoaderRoute: typeof ProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/registry': {
+      id: '/registry'
+      path: '/registry'
+      fullPath: '/registry'
+      preLoaderRoute: typeof RegistryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/remote-session-issuers': {
@@ -621,6 +641,7 @@ const rootRouteChildren: RootRouteChildren = {
   McpSetupRoute: McpSetupRoute,
   OrganizationsRoute: OrganizationsRouteWithChildren,
   ProjectsRoute: ProjectsRouteWithChildren,
+  RegistryRoute: RegistryRoute,
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,
   StokenCalculatorRoute: StokenCalculatorRoute,
 }
