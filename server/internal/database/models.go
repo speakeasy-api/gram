@@ -3168,10 +3168,12 @@ type SupportMatrixIntegrationMethod struct {
 	Vendor      string
 	Description string
 	PlanNotes   string
-	SortOrder   int32
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	DeletedAt   pgtype.Timestamptz
+	// Application-validated object keyed by account type (personal, team, enterprise) with values supported, unsupported, or unknown. An absent key is unknown. Eligibility is assessed separately from capability coverage: an ineligible account never has coverage, an eligible one is not thereby covered.
+	AccountEligibility []byte
+	SortOrder          int32
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
 }
 
 // Method-level reference claims. These do not establish support for any specific platform.
@@ -3200,11 +3202,13 @@ type SupportMatrixMethodPlatform struct {
 	// NULL means unassessed; an empty array means unrestricted; otherwise lists eligible operating systems. Coverage restrictions supplement mapping restrictions.
 	OperatingSystems []string
 	// NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.
-	PlanTypes  []string
-	Conditions string
-	CreatedAt  pgtype.Timestamptz
-	UpdatedAt  pgtype.Timestamptz
-	DeletedAt  pgtype.Timestamptz
+	PlanTypes []string
+	// Same shape as the method-level column, holding only the account types this platform differs on. An absent key inherits the method's eligibility rather than meaning unknown.
+	AccountEligibility []byte
+	Conditions         string
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
 }
 
 // Global admin support catalog of upstream product surfaces, independent of customer installations.
