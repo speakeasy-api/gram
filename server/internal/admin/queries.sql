@@ -455,6 +455,68 @@ WHERE p.organization_id = @organization_id
 ORDER BY p.created_at DESC
 LIMIT 200;
 
+-- name: AdminProjectBelongsToOrganization :one
+SELECT EXISTS (
+    SELECT 1 FROM projects
+    WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE
+);
+
+-- name: AdminListProjectMcpServerRows :many
+-- One row per live endpoint, and one with no endpoint columns for a server that
+-- has none. custom_domain is null for an endpoint whose domain cannot serve it;
+-- the caller skips those and picks the address with mcpendpoints.PrimaryEndpoint.
+SELECT
+    m.id,
+    m.name,
+    m.slug,
+    t.name AS toolset_name,
+    m.visibility,
+    m.toolset_id,
+    m.remote_mcp_server_id,
+    m.tunneled_mcp_server_id,
+    e.id AS endpoint_id,
+    e.slug AS endpoint_slug,
+    e.custom_domain_id AS endpoint_custom_domain_id,
+    e.is_domain_root AS endpoint_is_domain_root,
+    e.created_at AS endpoint_created_at,
+    d.domain AS custom_domain,
+    m.created_at
+FROM mcp_servers m
+JOIN projects p ON p.id = m.project_id
+LEFT JOIN toolsets t ON t.id = m.toolset_id
+LEFT JOIN mcp_endpoints e ON e.mcp_server_id = m.id AND e.deleted IS FALSE
+LEFT JOIN custom_domains d ON d.id = e.custom_domain_id AND d.deleted IS FALSE
+    AND d.organization_id = p.organization_id
+    AND d.verified IS TRUE AND d.activated IS TRUE
+WHERE m.project_id = @project_id
+  AND m.deleted IS FALSE
+ORDER BY m.created_at, m.id;
+
+-- name: AdminListProjectToolsetOnlyMcpServers :many
+-- The legacy half of AdminListProjectsForOrganization's count, with the same
+-- anti join, so this list and that count agree.
+SELECT
+    t.id,
+    t.name,
+    t.slug,
+    t.mcp_slug,
+    t.mcp_is_public,
+    t.default_environment_slug,
+    p.slug AS project_slug,
+    d.domain AS custom_domain,
+    t.created_at
+FROM toolsets t
+JOIN projects p ON p.id = t.project_id
+LEFT JOIN custom_domains d ON d.id = t.custom_domain_id AND d.deleted IS FALSE
+    AND d.organization_id = p.organization_id
+    AND d.verified IS TRUE AND d.activated IS TRUE
+WHERE t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND t.mcp_enabled IS TRUE
+  AND NOT EXISTS (SELECT 1 FROM mcp_servers m
+                   WHERE m.toolset_id = t.id AND m.deleted IS FALSE)
+ORDER BY t.created_at, t.id;
+
 -- name: AdminListOrganizationMembers :many
 SELECT
     u.id,

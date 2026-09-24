@@ -149,6 +149,11 @@ func newAdminCommand() *cli.Command {
 			Required: true,
 		},
 		&cli.StringFlag{
+			Name:    "server-url",
+			Usage:   "The public URL of the Gram server, used to build MCP server URLs. Defaults to site-url.",
+			EnvVars: []string{"GRAM_SERVER_URL"},
+		},
+		&cli.StringFlag{
 			Name:     "database-url",
 			Usage:    "Database URL",
 			EnvVars:  []string{"GRAM_DATABASE_URL"},
@@ -450,6 +455,17 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("initialize support matrix: %w", err)
 			}
 			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL)
+			mcpServerURL := siteURL
+			if raw := c.String("server-url"); raw != "" {
+				mcpServerURL, err = url.Parse(raw)
+				if err != nil {
+					return fmt.Errorf("invalid server-url: %w", err)
+				}
+				if err := validateServerURL(mcpServerURL, c.String("environment")); err != nil {
+					return fmt.Errorf("invalid server-url: %w", err)
+				}
+			}
+			adminService.SetMCPServerURL(mcpServerURL)
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {
 				return err

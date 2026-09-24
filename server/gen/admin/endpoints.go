@@ -35,6 +35,7 @@ type Endpoints struct {
 	GetOrganization                       goa.Endpoint
 	ListOrganizationMembers               goa.Endpoint
 	ListOrganizationProjects              goa.Endpoint
+	ListProjectMcpServers                 goa.Endpoint
 	ListOrganizationActivity              goa.Endpoint
 	ListOrganizations                     goa.Endpoint
 	ExtendTrial                           goa.Endpoint
@@ -115,6 +116,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetOrganization:                       NewGetOrganizationEndpoint(s, a.APIKeyAuth),
 		ListOrganizationMembers:               NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
 		ListOrganizationProjects:              NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
+		ListProjectMcpServers:                 NewListProjectMcpServersEndpoint(s, a.APIKeyAuth),
 		ListOrganizationActivity:              NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
 		ListOrganizations:                     NewListOrganizationsEndpoint(s, a.APIKeyAuth),
 		ExtendTrial:                           NewExtendTrialEndpoint(s, a.APIKeyAuth),
@@ -175,6 +177,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetOrganization = m(e.GetOrganization)
 	e.ListOrganizationMembers = m(e.ListOrganizationMembers)
 	e.ListOrganizationProjects = m(e.ListOrganizationProjects)
+	e.ListProjectMcpServers = m(e.ListProjectMcpServers)
 	e.ListOrganizationActivity = m(e.ListOrganizationActivity)
 	e.ListOrganizations = m(e.ListOrganizations)
 	e.ExtendTrial = m(e.ExtendTrial)
@@ -595,6 +598,29 @@ func NewListOrganizationProjectsEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.ListOrganizationProjects(ctx, p)
+	}
+}
+
+// NewListProjectMcpServersEndpoint returns an endpoint function that calls the
+// method "listProjectMcpServers" of service "admin".
+func NewListProjectMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListProjectMcpServersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListProjectMcpServers(ctx, p)
 	}
 }
 
