@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidptest"
@@ -2320,4 +2321,25 @@ func TestDiscoverIssuerMetadata_OtherIssuersDocumentStaysOutOfMetadata(t *testin
 	require.NotContains(t, document, "jwks_uri")
 	require.NotContains(t, document, "userinfo_endpoint")
 	require.NotContains(t, document, "claims_supported")
+}
+
+// Only operator input permits surrounding whitespace; the identifier itself is exact.
+func TestFetchRemoteSessionIssuerMetadata_OperatorInputPreservesSlash(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{
+			"issuer":                 server.URL + "/tenant/",
+			"authorization_endpoint": server.URL + "/authorize",
+			"token_endpoint":         server.URL + "/token",
+		}))
+	}))
+	defer server.Close()
+	draft, err := ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{Issuer: " \t" + server.URL + "/tenant/ \n"})
+	require.NoError(t, err)
+	require.Equal(t, server.URL+"/tenant/", draft.Issuer)
+	_, err = ti.service.FetchRemoteSessionIssuerMetadata(ctx, &gen.FetchRemoteSessionIssuerMetadataPayload{Issuer: server.URL + "/tenant"})
+	require.ErrorContains(t, err, "trailing slash")
 }

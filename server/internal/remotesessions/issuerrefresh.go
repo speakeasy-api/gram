@@ -408,6 +408,8 @@ const issuerDiscoveryFailureRecordTimeout = 5 * time.Second
 // recordIssuerDiscoveryFailure records the attempt without modifying the last
 // successful snapshot. The observed identity and timestamps prevent a failed
 // in-flight request from overwriting a newer refresh or a concurrent tier move.
+// A superseded failure record is only skipped bookkeeping: unlike a successful
+// refresh whose snapshot cannot be saved, it must not hide the discovery error.
 func (s *Service) recordIssuerDiscoveryFailure(ctx context.Context, logger *slog.Logger, existing repo.RemoteSessionIssuer, discoveryErr error) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerDiscoveryFailureRecordTimeout)
 	defer cancel()

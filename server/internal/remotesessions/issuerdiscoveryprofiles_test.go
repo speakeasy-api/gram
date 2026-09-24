@@ -76,12 +76,15 @@ func TestIssuerDiscoveryEvidence(t *testing.T) {
 	}
 }
 
-// Discovery requires an exact issuer match, unlike token validation.
-func TestIssuerDiscoveryRejectsTrailingSlashVariants(t *testing.T) {
+// Discovery and token validation both require an exact issuer match.
+func TestIssuerDiscoveryExactTrailingSlashIdentity(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, requestedSuffix, servedSuffix string }{
 		{"added slash", "", "/"},
 		{"removed slash", "/", ""},
+		{"exact root slash", "/", "/"},
+		{"exact path slash", "/tenant/", "/tenant/"},
+		{"exact repeated slash", "/tenant//", "/tenant//"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -99,6 +102,11 @@ func TestIssuerDiscoveryRejectsTrailingSlashVariants(t *testing.T) {
 			policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 			require.NoError(t, err)
 			doc, err := DiscoverIssuerMetadata(t.Context(), policy, server.URL+tc.requestedSuffix)
+			if tc.requestedSuffix == tc.servedSuffix {
+				require.NoError(t, err)
+				require.Equal(t, server.URL+tc.servedSuffix, doc.Issuer)
+				return
+			}
 			var untrusted *untrustedDocumentError
 			require.ErrorAs(t, err, &untrusted)
 			require.Equal(t, DiscoveredIssuerMetadata{}, doc)

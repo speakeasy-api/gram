@@ -145,7 +145,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	if err := lockQ.LockPlatformMCPRemoteIssuerAttachment(ctx, platformrepo.LockPlatformMCPRemoteIssuerAttachmentParams{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      project.ID.String(),
-		Issuer:         strings.TrimRight(metadata.Issuer, "/"),
+		Issuer:         metadata.Issuer,
 	}); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("lock identity-provider issuer attachment: %w", err)
 	}
@@ -201,8 +201,9 @@ func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetada
 	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	for _, rawAuthorizationServer := range authorizationServers {
-		authorizationServer := strings.TrimSpace(rawAuthorizationServer)
+	// Resource metadata contains issuer identifiers, not operator input.
+	// Do not normalize advertised authorization_servers before discovery.
+	for _, authorizationServer := range authorizationServers {
 		if authorizationServer == "" {
 			continue
 		}
@@ -492,7 +493,7 @@ func attachmentIssuerSlug(registrationID uuid.UUID) string {
 }
 
 func sameIssuerURL(a, b string) bool {
-	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
+	return a == b
 }
 
 func validDynamicClientRegistrationEndpoint(raw string) bool {

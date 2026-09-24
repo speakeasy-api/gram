@@ -218,7 +218,7 @@ func (v *jwksIDTokenVerifier) Verify(ctx context.Context, rawIDToken string, exp
 	if claims.Expiry == nil {
 		return UpstreamIdentity{}, errors.New("id token has no exp")
 	}
-	// Compared by hand so a trailing-slash difference is tolerated like elsewhere in the package.
+	// Bind the token to the exact configured issuer, including any trailing slash.
 	if !issuerURLsEqual(claims.Issuer, expect.issuer) {
 		return UpstreamIdentity{}, fmt.Errorf("id token issuer %q is not the grant's issuer", truncateForMessage(claims.Issuer))
 	}

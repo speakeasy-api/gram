@@ -226,6 +226,8 @@ func (s *Service) FetchRemoteSessionIssuerMetadata(ctx context.Context, payload 
 	// the doc comment above). There is no project resource here to gate.
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
+	// Only surrounding operator-entered whitespace is a supported input convenience.
+	// Paths, escaping, case, ports, and trailing slashes are issuer identity.
 	issuerURL := strings.TrimSpace(payload.Issuer)
 	if issuerURL == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "issuer is required").LogError(ctx, logger)
@@ -1296,7 +1298,7 @@ func discoverIssuerMetadataWithDoer(ctx context.Context, client httpDoer, issuer
 			continue
 		}
 		if doc.Issuer != issuerURL {
-			untrustedErr = &untrustedDocumentError{reason: fmt.Sprintf("metadata document advertises issuer %q, but the requested issuer is %q; refusing to adopt another authorization server's metadata", truncateForMessage(doc.Issuer), issuerURL)}
+			untrustedErr = &untrustedDocumentError{reason: fmt.Sprintf("metadata document advertises issuer %q, but the requested issuer is %q; refusing to adopt another authorization server's metadata; verify the configured issuer exactly, including its path and trailing slash", truncateForMessage(doc.Issuer), issuerURL)}
 			continue
 		}
 
@@ -1781,9 +1783,10 @@ func collectDiscoveryWarnings(requestedIssuer string, doc rfc8414Document) []str
 	return warnings
 }
 
-// issuerURLsEqual compares two issuer URLs ignoring trailing slashes.
+// issuerURLsEqual compares issuer identifiers byte-for-byte, as discovery and
+// token validation require. A trailing slash is significant, not URL decoration.
 func issuerURLsEqual(a, b string) bool {
-	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
+	return a == b
 }
 
 // maxMessageValueBytes caps an upstream-controlled string quoted in a warning

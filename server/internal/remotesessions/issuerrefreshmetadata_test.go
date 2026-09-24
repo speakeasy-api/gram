@@ -1810,5 +1810,10 @@ func TestRefreshIssuerFailedDiscoveryAfterConcurrentEditPreservesDiscoveryError(
 	payload.ID = created.ID
 	_, err = ti.service.RefreshRemoteSessionIssuerMetadata(ctx, &payload)
 	require.NoError(t, <-editErr)
+	// A superseded failure record is skipped, not reported as a refresh
+	// conflict: the caller still needs the upstream discovery error.
 	requireOopsCode(t, err, oops.CodeGatewayError)
+	stored := loadIssuerRow(t, ctx, ti, created)
+	require.Equal(t, "Concurrent edit", stored.Name.String)
+	require.False(t, stored.MetadataLastErrorAt.Valid, "the stale failure record must not overwrite the concurrent edit")
 }
