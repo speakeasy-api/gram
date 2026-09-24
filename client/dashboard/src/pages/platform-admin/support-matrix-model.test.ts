@@ -1,45 +1,31 @@
 import { describe, expect, it } from "vitest";
+import type { SupportCoverageCell } from "@gram/client/models/components/supportcoveragecell.js";
 import {
   activeAgentCoverageLabel,
   capabilities,
+  cellKey,
+  footprintOf,
+  gapsClosedBy,
+  indexCells,
   methods,
-  surfaceForHookSource,
   surfaces,
+  type CapabilityId,
+  type SurfaceId,
 } from "./support-matrix-model";
 
-describe("support matrix model", () => {
-  it.each([
-    ["claude-code", "cc"],
-    ["claude-code-web", "cc"],
-    ["claudecode", "cc"],
-    ["claude", "chat"],
-    ["claude-desktop", "chat"],
-    ["claude-chat", "chat"],
-    ["claude-chat-web", "chat"],
-    ["claude-web", "chat"],
-    ["cowork-desktop", "cowork"],
-    ["cursor", "cursor"],
-    ["cursor-app", "cursor"],
-    ["codex-cli", "codex"],
-    ["chatgpt", "codex"],
-    ["chatgpt-work", "codex"],
-    ["gemini", "other"],
-    ["opencode", "other"],
-    ["github_copilot", "other"],
-  ])("maps %s to %s", (source, expected) => {
-    expect(surfaceForHookSource(source)).toBe(expected);
-  });
+function cell(
+  capability: CapabilityId,
+  surface: SurfaceId,
+  status: SupportCoverageCell["status"],
+): SupportCoverageCell {
+  return { capability, surface, status, value: 0, detail: "", lastSeen: "" };
+}
 
-  it.each([
-    "gram",
-    "openai",
-    "chatgpt-web",
-    "future-agent",
-    "cursor-internal",
-    "codex-experimental",
-  ])("does not classify unknown source %s", (source) => {
-    expect(surfaceForHookSource(source)).toBeNull();
-  });
+describe("support matrix model", () => {
+  // hook_source folding moved to the server (internal/agentsurface) and is
+  // covered by its own Go tests. The copy that used to live here silently
+  // dropped unrecognized sources, so the page reported full coverage while
+  // hiding real activity.
 
   it.each([
     ["device", 60, "devices running the agent within 60 minutes"],
@@ -73,5 +59,54 @@ describe("support matrix model", () => {
         ),
       ).toBe(true);
     }
+  });
+
+  it("indexes cells by capability and surface", () => {
+    const index = indexCells([
+      cell("session", "cursor", "observed"),
+      cell("shadow", "cowork", "pending"),
+    ]);
+
+    expect(index.get(cellKey("session", "cursor"))?.status).toBe("observed");
+    expect(index.get(cellKey("shadow", "cowork"))?.status).toBe("pending");
+    expect(index.get(cellKey("session", "cowork"))).toBeUndefined();
+  });
+
+  it("counts only unobserved cells as gaps an integration would close", () => {
+    const method = {
+      id: "test",
+      name: "Test",
+      description: "",
+      setup: "",
+      surfaces: ["cursor", "codex"] as SurfaceId[],
+      capabilities: ["session", "cost"] as CapabilityId[],
+    };
+
+    // One of the four cells the method reaches is already reporting, so it is
+    // not a gap. Ranking on the raw footprint instead would recommend an
+    // integration that adds nothing.
+    const index = indexCells([cell("session", "cursor", "observed")]);
+
+    expect(footprintOf(method).size).toBe(4);
+    expect(gapsClosedBy(method, index).size).toBe(3);
+    expect(gapsClosedBy(method, index).has(cellKey("session", "cursor"))).toBe(
+      false,
+    );
+  });
+
+  it("treats a pending cell as a gap", () => {
+    const method = {
+      id: "test",
+      name: "Test",
+      description: "",
+      setup: "",
+      surfaces: ["cowork"] as SurfaceId[],
+      capabilities: ["shadow"] as CapabilityId[],
+    };
+
+    // "Not yet reportable" is still missing coverage from the operator's
+    // point of view, so an integration that would report it counts.
+    const index = indexCells([cell("shadow", "cowork", "pending")]);
+    expect(gapsClosedBy(method, index).size).toBe(1);
   });
 });

@@ -1033,6 +1033,8 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "listHooksTraces")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListHooksTraces", "type": "query"}`)
 	})
+
+	supportCoverageMethods()
 })
 
 var TelemetryFilter = Type("TelemetryFilter", func() {
