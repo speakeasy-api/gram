@@ -1305,6 +1305,83 @@ func BuildListRiskCategoriesPayload(riskListRiskCategoriesApikeyToken string, ri
 	return v, nil
 }
 
+// BuildListRiskPresetsPayload builds the payload for the risk listRiskPresets
+// endpoint from CLI flags.
+func BuildListRiskPresetsPayload(riskListRiskPresetsApikeyToken string, riskListRiskPresetsSessionToken string, riskListRiskPresetsProjectSlugInput string) (*risk.ListRiskPresetsPayload, error) {
+	var apikeyToken *string
+	{
+		if riskListRiskPresetsApikeyToken != "" {
+			apikeyToken = &riskListRiskPresetsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskListRiskPresetsSessionToken != "" {
+			sessionToken = &riskListRiskPresetsSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskListRiskPresetsProjectSlugInput != "" {
+			projectSlugInput = &riskListRiskPresetsProjectSlugInput
+		}
+	}
+	v := &risk.ListRiskPresetsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSuggestRiskPolicyPayload builds the payload for the risk
+// suggestRiskPolicy endpoint from CLI flags.
+func BuildSuggestRiskPolicyPayload(riskSuggestRiskPolicyBody string, riskSuggestRiskPolicyApikeyToken string, riskSuggestRiskPolicySessionToken string, riskSuggestRiskPolicyProjectSlugInput string) (*risk.SuggestRiskPolicyPayload, error) {
+	var err error
+	var body SuggestRiskPolicyRequestBody
+	{
+		err = json.Unmarshal([]byte(riskSuggestRiskPolicyBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"prompt\": \"aaa\"\n   }'")
+		}
+		if utf8.RuneCountInString(body.Prompt) < 3 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 3, true))
+		}
+		if utf8.RuneCountInString(body.Prompt) > 500 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.prompt", body.Prompt, utf8.RuneCountInString(body.Prompt), 500, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if riskSuggestRiskPolicyApikeyToken != "" {
+			apikeyToken = &riskSuggestRiskPolicyApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if riskSuggestRiskPolicySessionToken != "" {
+			sessionToken = &riskSuggestRiskPolicySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if riskSuggestRiskPolicyProjectSlugInput != "" {
+			projectSlugInput = &riskSuggestRiskPolicyProjectSlugInput
+		}
+	}
+	v := &risk.SuggestRiskPolicyPayload{
+		Prompt: body.Prompt,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildCompileExprPayload builds the payload for the risk compileExpr endpoint
 // from CLI flags.
 func BuildCompileExprPayload(riskCompileExprExpr string, riskCompileExprApikeyToken string, riskCompileExprSessionToken string, riskCompileExprProjectSlugInput string) (*risk.CompileExprPayload, error) {

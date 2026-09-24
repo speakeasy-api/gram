@@ -53,7 +53,8 @@ type createRiskPolicyInput struct {
 	ProjectSlug            string               `json:"project_slug"`
 	PolicyType             string               `json:"policy_type"`
 	Name                   string               `json:"name"`
-	Enabled                bool                 `json:"enabled"`
+	Enabled                *bool                `json:"enabled,omitempty"`
+	Preset                 string               `json:"preset,omitempty"`
 	Action                 string               `json:"action,omitempty"`
 	Score                  *float64             `json:"score,omitempty"`
 	UserMessage            *string              `json:"user_message,omitempty"`
@@ -147,6 +148,10 @@ func (s *riskPolicyMutationService) createPolicyTool(ctx context.Context, _ *mcp
 	}
 	var input createRiskPolicyInput
 	if err := decodeRiskMutationInput(raw, &input); err != nil {
+		return riskMutationToolRefusal[CreateRiskPolicyToolOutput](err)
+	}
+	input, err = applyRiskPolicyPreset(input)
+	if err != nil {
 		return riskMutationToolRefusal[CreateRiskPolicyToolOutput](err)
 	}
 	project, err := s.controls.Admit(ctx, principal, strings.TrimSpace(input.ProjectSlug))
@@ -374,6 +379,10 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 	if input.ProjectSlug != project.Slug || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 128 || policycore.ValidateName(input.Name) != nil || !slices.Contains(s.catalog.PolicyTypes, input.PolicyType) {
 		return preparedRiskPolicyCreate{}, invalidRiskPolicyRequest()
 	}
+	enabled := true
+	if input.Enabled != nil {
+		enabled = *input.Enabled
+	}
 	action := input.Action
 	if action == "" {
 		action = defaultRiskPolicyAction
@@ -390,7 +399,7 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 	}
 
 	normalized := normalizedCreateRiskPolicy{
-		ProjectSlug: project.Slug, PolicyType: input.PolicyType, Name: input.Name, Enabled: input.Enabled,
+		ProjectSlug: project.Slug, PolicyType: input.PolicyType, Name: input.Name, Enabled: enabled,
 		Action: action, Score: score, UserMessage: input.UserMessage,
 		Sources: []string{}, PresidioEntities: []string{}, PresidioScoreThreshold: nil, PromptInjectionRules: []string{}, DisabledRules: []string{}, ApprovedEmailDomains: []string{}, DetectionScopes: []riskDetectionScope{}, PromptDigest: "",
 	}
@@ -398,7 +407,7 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 		ID: uuid.Nil, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: input.Name,
 		PolicyType: input.PolicyType, Sources: []string{}, PresidioEntities: []string{}, AnalyzerConfig: nil, McpScope: nil,
 		PromptInjectionRules: []string{}, DisabledRules: []string{}, CustomRuleIds: []string{},
-		Enabled: input.Enabled, Action: action,
+		Enabled: enabled, Action: action,
 		AudienceType: riskPolicyAudienceEveryone, ShadowMcpDisposition: pgtype.Text{String: "", Valid: false}, AutoName: false,
 		UserMessage: conv.PtrToPGTextEmpty(input.UserMessage), Prompt: pgtype.Text{String: "", Valid: false}, ModelConfig: nil,
 		Score: pgtype.Float8{Float64: score, Valid: true},
