@@ -102,7 +102,7 @@ func (s *Service) GetSupportCoverage(ctx context.Context, payload *telem_gen.Get
 	if err := s.collectShadowEvidence(ctx, scope, from, to, evidence, unmapped); err != nil {
 		return nil, err
 	}
-	if err := s.collectBlockEvidence(ctx, scope, authCtx.ActiveOrganizationID, from, to, evidence); err != nil {
+	if err := s.collectBlockEvidence(ctx, scope, authCtx.ActiveOrganizationID, from, to, evidence, unmapped); err != nil {
 		return nil, err
 	}
 
@@ -180,7 +180,7 @@ func (s *Service) collectShadowEvidence(ctx context.Context, scope orgQueryScope
 }
 
 // collectBlockEvidence attributes synchronous policy decisions to surfaces.
-func (s *Service) collectBlockEvidence(ctx context.Context, scope orgQueryScope, orgID string, from, to time.Time, evidence map[agentsurface.Surface]*surfaceEvidence) error {
+func (s *Service) collectBlockEvidence(ctx context.Context, scope orgQueryScope, orgID string, from, to time.Time, evidence map[agentsurface.Surface]*surfaceEvidence, unmapped map[string]int64) error {
 	blocks, err := s.hooksRepo.ListToolCallBlockSurfaceEvidence(ctx, hooksRepo.ListToolCallBlockSurfaceEvidenceParams{
 		OrganizationID: orgID,
 		ProjectIds:     scope.projectUUIDs,
@@ -227,7 +227,17 @@ func (s *Service) collectBlockEvidence(ctx context.Context, scope orgQueryScope,
 		// granularity. Counting it once per candidate surface would multiply
 		// the org's block count, so it is recorded as a provider-level signal
 		// on each candidate and the cell says the count is not exact.
-		for _, candidate := range blockProviderSurfaces(block.Provider) {
+		candidates := blockProviderSurfaces(block.Provider)
+		if len(candidates) == 0 {
+			// A provider the fold does not recognize, with no chat to fall
+			// back on. Dropping it here would lose real enforcement evidence
+			// as silently as the client-side hook_source map used to lose
+			// sessions, so it is reported alongside the unmapped sources
+			// instead.
+			unmapped[block.Provider] += 0
+			continue
+		}
+		for _, candidate := range candidates {
 			item := evidence[candidate]
 			item.blocksProviderOnly = true
 			if lastSeen.After(item.blocksLastSeen) {

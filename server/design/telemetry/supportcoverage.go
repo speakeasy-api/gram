@@ -55,6 +55,26 @@ var SupportCoverageResult = Type("SupportCoverageResult", func() {
 	Required("cells", "unmapped", "window_days", "from", "to")
 })
 
+// Platform MCP assessment (see .agents/skills/maintaining-platform-mcp):
+// decision is to intentionally omit a tool for this endpoint, for now.
+//
+//   - Outcome: "which agent surfaces is this organization's telemetry actually
+//     covering, and which integration would close the biggest gap".
+//   - Actor: a Speakeasy platform admin. The page that renders this sits
+//     behind PlatformAdminGate and exists for support and onboarding
+//     conversations, not for the organization's own administrators.
+//   - Existing tools: the underlying evidence is already reachable through
+//     query_mcp_metrics, list_shadow_mcp_inventory, query_skill_usage and
+//     get_project_overview. What this endpoint adds is the framing — a fixed
+//     capability-by-surface matrix and a gap ranking — rather than new facts.
+//   - Rationale for omitting: admitting it would put an internal support view
+//     in front of org members and external agents, which is an audience change
+//     the product has not decided. Half the payload is also static product
+//     capability rather than organization state, so an agent would be liable
+//     to present integration advice as if it were grounded in this org's data.
+//   - Revisit when: the coverage view is promoted out of platform-admin to a
+//     customer-facing surface. The contract is settled at that point and this
+//     becomes a genuine administrator outcome worth a tool.
 func supportCoverageMethods() {
 	Method("getSupportCoverage", func() {
 		Description("Observed support coverage for the caller's organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure. Every cell distinguishes evidence found from evidence absent from evidence not yet answerable, so an empty cell is never rendered as unsupported.")

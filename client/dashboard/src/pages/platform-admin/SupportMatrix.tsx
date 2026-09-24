@@ -113,8 +113,15 @@ function OrganizationSupportMatrix(): JSX.Element {
         cells.get(cellKey(capability.id, surface.id))?.status === "observed",
     ),
   ).length;
-  const latestSeen = latestEvidence(coverage.data?.cells);
-  const unmapped = coverage.data?.unmapped ?? [];
+  // All three read through coverageLoaded rather than straight off
+  // coverage.data: react-query keeps the last successful payload on a failed
+  // refetch, and on the first request there is no payload at all. Either way
+  // an ungated read puts a stale or zeroed number next to the banner saying
+  // the evidence is unavailable.
+  const latestSeen = coverageLoaded
+    ? latestEvidence(coverage.data?.cells)
+    : null;
+  const unmapped = coverageLoaded ? (coverage.data?.unmapped ?? []) : [];
 
   return (
     <main className="mx-auto max-w-[1240px] space-y-8 py-3">
@@ -182,7 +189,7 @@ function OrganizationSupportMatrix(): JSX.Element {
       <section className="grid border-y sm:grid-cols-2 lg:grid-cols-4">
         <SummaryMetric
           value={
-            coverage.isError ? "—" : `${observedSurfaces}/${surfaces.length}`
+            coverageLoaded ? `${observedSurfaces}/${surfaces.length}` : "—"
           }
           label="surfaces with activity evidence"
         />
@@ -480,14 +487,19 @@ function IntegrationRecommendations({
   // integration would close, so the list reads as advice for this org rather
   // than as a static capability chart that looks the same everywhere.
   const ranked = useMemo(() => {
-    return methods
-      .map((method) => ({
-        method,
-        gaps: gapsClosedBy(method, cells),
-        footprint: footprintOf(method),
-      }))
-      .sort((a, b) => b.gaps.size - a.gaps.size);
-  }, [cells]);
+    const entries = methods.map((method) => ({
+      method,
+      gaps: gapsClosedBy(method, cells),
+      footprint: footprintOf(method),
+    }));
+    if (!isRanked) {
+      // Against an empty cell map every method's gaps equal its footprint, so
+      // sorting here would silently rank by footprint size while the copy
+      // says the cards are not ranked for this organization yet.
+      return entries;
+    }
+    return entries.sort((a, b) => b.gaps.size - a.gaps.size);
+  }, [cells, isRanked]);
 
   return (
     <section className="space-y-4">
