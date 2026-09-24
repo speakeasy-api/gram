@@ -153,7 +153,7 @@ func (s *Service) List(ctx context.Context, opts ListOptions) (Page, error) {
 			// Keep invalid stored records discoverable for repair without loading them.
 			issues = []Issue{{Path: "", Message: "record exceeds byte limit"}}
 		} else {
-			issues = s.validator.Validate(r.Data)
+			issues = s.validator.ValidateStored(r.Data)
 		}
 		page.Entries = append(page.Entries, Summary{ID: r.ID, Name: r.Name, Published: r.Published, UpdatedAt: r.UpdatedAt.Time.UTC().Format(time.RFC3339Nano), Issues: issues})
 	}
