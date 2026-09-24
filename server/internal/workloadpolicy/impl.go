@@ -644,6 +644,18 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading the admission's issuer").LogError(ctx, s.logger)
 	}
 
+	// Taken before the tombstone so a concurrent withdrawal of the other tier
+	// blocks here rather than reading this row as still live and leaving the
+	// shared assignment behind.
+	if _, err := q.LockWorkloadAdmissionsForSubject(ctx, repo.LockWorkloadAdmissionsForSubjectParams{
+		OrganizationID:   t.organizationID,
+		WorkloadIssuerID: existing.WorkloadIssuerID,
+		MatchKind:        existing.MatchKind,
+		Subject:          existing.Subject,
+	}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error locking the workload's admissions").LogError(ctx, s.logger)
+	}
+
 	withdrawn, err := q.SoftDeleteWorkloadAdmission(ctx, repo.SoftDeleteWorkloadAdmissionParams{
 		OrganizationID: t.organizationID,
 		ID:             id,

@@ -444,6 +444,58 @@ func (q *Queries) ListWorkloadIssuers(ctx context.Context, arg ListWorkloadIssue
 	return items, nil
 }
 
+const lockWorkloadAdmissionsForSubject = `-- name: LockWorkloadAdmissionsForSubject :many
+SELECT id
+FROM workload_identity_admissions
+WHERE organization_id = $1
+  AND workload_issuer_id = $2
+  AND match_kind = $3
+  AND subject = $4
+  AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE
+`
+
+type LockWorkloadAdmissionsForSubjectParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	MatchKind        string
+	Subject          string
+}
+
+// Locks every live admission naming this tuple, both tiers, before the tier being
+// withdrawn is tombstoned. Two withdrawals of the same workload otherwise race:
+// under READ COMMITTED neither transaction sees the other's uncommitted delete, so
+// both count the sibling tier as live and both leave the shared assignment behind,
+// stranding an assignment with no admission. A NOT EXISTS in the delete closes the
+// window inside one transaction but not between two, which is why this locks
+// instead. Ordered by id so concurrent callers take the rows in the same
+// sequence.
+func (q *Queries) LockWorkloadAdmissionsForSubject(ctx context.Context, arg LockWorkloadAdmissionsForSubjectParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockWorkloadAdmissionsForSubject,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+		arg.MatchKind,
+		arg.Subject,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const softDeleteWorkloadAdmission = `-- name: SoftDeleteWorkloadAdmission :one
 UPDATE workload_identity_admissions
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()

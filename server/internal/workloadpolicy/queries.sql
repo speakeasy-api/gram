@@ -141,6 +141,25 @@ ON CONFLICT (organization_id, workload_issuer_id, match_kind, subject) WHERE del
 DO UPDATE SET agent_id = EXCLUDED.agent_id, updated_at = clock_timestamp()
 RETURNING *;
 
+-- name: LockWorkloadAdmissionsForSubject :many
+-- Locks every live admission naming this tuple, both tiers, before the tier being
+-- withdrawn is tombstoned. Two withdrawals of the same workload otherwise race:
+-- under READ COMMITTED neither transaction sees the other's uncommitted delete, so
+-- both count the sibling tier as live and both leave the shared assignment behind,
+-- stranding an assignment with no admission. A NOT EXISTS in the delete closes the
+-- window inside one transaction but not between two, which is why this locks
+-- instead. Ordered by id so concurrent callers take the rows in the same
+-- sequence.
+SELECT id
+FROM workload_identity_admissions
+WHERE organization_id = @organization_id
+  AND workload_issuer_id = @workload_issuer_id
+  AND match_kind = @match_kind
+  AND subject = @subject
+  AND deleted IS FALSE
+ORDER BY id
+FOR UPDATE;
+
 -- name: CountLiveAdmissionsForSubject :one
 -- How many live admissions still name this tuple, across both tiers. The agent
 -- assignment is keyed on (issuer, match_kind, subject) and is therefore shared
