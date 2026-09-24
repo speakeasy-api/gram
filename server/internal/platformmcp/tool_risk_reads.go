@@ -13,6 +13,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
+	"github.com/speakeasy-api/gram/server/internal/risk/presets"
 )
 
 // registerRiskToolsWithMutations is the single handler-selection seam used by
@@ -406,21 +407,34 @@ func riskGetPolicySchema() *jsonschema.Schema {
 
 func createRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	standard := riskPolicyCreateCommonProperties(catalog)
-	standard["policy_type"] = constSchema("standard")
-	standard["sources"] = arraySchema(catalogEnumSchema(catalog, catalog.Sources), 1, true)
-	standard["presidio_entities"] = arraySchema(catalogEnumSchema(catalog, catalog.PresidioEntities), 0, true)
-	standard["presidio_score_threshold"] = &jsonschema.Schema{Type: "number", Minimum: new(float64(0)), Maximum: new(float64(1))}
+	standard["policy_type"] = describedConstSchema("standard", policycatalog.PolicyTypeDescriptions["standard"])
+	standard["sources"] = arraySchema(describedCatalogEnumSchema(catalog, catalog.Sources, "Detector sources to enable. One of:", func(value string) string { return policycatalog.SourceDescriptions[value] }), 1, true)
+	standard["presidio_entities"] = arraySchema(describedCatalogEnumSchema(catalog, catalog.PresidioEntities, "Personal-data entities to detect; required when sources include presidio. One of:", policycatalog.PresidioEntityDescription), 0, true)
+	standard["presidio_score_threshold"] = &jsonschema.Schema{Type: "number", Minimum: new(float64(0)), Maximum: new(float64(1)), Description: "Minimum Presidio confidence (0-1) a personal-data match must clear; default 0.5."}
 	standard["prompt_injection_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.PromptInjectionRules), 0, true)
 	standard["disabled_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.DisabledRules), 0, true)
+	standard["disabled_rules"].Description = "Individual rules to switch off within the enabled sources, such as secret.aws-access-key or pii.email_address. Leave empty to keep every rule on."
 	standard["approved_email_domains"] = boundedArraySchema(stringSchema("Canonical email domain.", 1, 253), 0, 50, true)
+	standard["approved_email_domains"].Description = "Email domains treated as corporate by the account_identity source; sessions from other domains are flagged."
 	standard["detection_scopes"] = detectionScopesSchema(catalog)
 
 	prompt := riskPolicyCreateCommonProperties(catalog)
-	prompt["policy_type"] = constSchema("prompt_based")
-	prompt["prompt"] = stringSchema("Prompt-policy instruction; never logged or placed in receipts.", 1, 4000)
+	prompt["policy_type"] = describedConstSchema("prompt_based", policycatalog.PolicyTypeDescriptions["prompt_based"])
+	prompt["prompt"] = stringSchema("Prompt-policy instruction the judge applies to each in-scope message; never logged or placed in receipts.", 1, 4000)
+
+	preset := riskPolicyCreateCommonProperties(catalog)
+	preset["preset"] = describedEnumSchema(presets.IDs(), "Use-case preset to expand into a complete policy; see list_risk_presets. One of:", riskPresetDescription)
+	preset["name"] = stringSchema("Policy name; defaults to the preset label.", 1, 100)
+	preset["presidio_entities"] = arraySchema(describedCatalogEnumSchema(catalog, catalog.PresidioEntities, "Replaces the preset's personal-data entities. One of:", policycatalog.PresidioEntityDescription), 1, true)
+	preset["approved_email_domains"] = boundedArraySchema(stringSchema("Canonical email domain.", 1, 253), 0, 50, true)
+	preset["approved_email_domains"].Description = "Email domains treated as corporate; required for the non_corporate_accounts preset to detect anything."
+	preset["prompt"] = stringSchema("Replaces the preset's judge instruction; only for prompt-based presets.", 1, 4000)
+	delete(preset, "enabled")
+	preset["enabled"] = &jsonschema.Schema{Type: "boolean", Description: "Defaults to true."}
 	return &jsonschema.Schema{Type: "object", OneOf: []*jsonschema.Schema{
 		closedObject(standard, []string{"project_slug", "policy_type", "name", "enabled", "sources", "idempotency_key"}),
 		closedObject(prompt, []string{"project_slug", "policy_type", "name", "enabled", "prompt", "idempotency_key"}),
+		closedObject(preset, []string{"project_slug", "preset", "idempotency_key"}),
 	}}
 }
 
@@ -489,14 +503,17 @@ func riskPolicyCreateCommonProperties(catalog policycatalog.Catalog) map[string]
 		"name":            stringSchema("Policy name.", 1, 100),
 		"enabled":         {Type: "boolean"},
 		"action":          riskPolicyActionSchema(catalog),
-		"score":           {Type: "number", Minimum: new(0.1), Maximum: new(float64(10))},
+		"score":           {Type: "number", Minimum: new(0.1), Maximum: new(float64(10)), Description: "CVSS-style severity shown on findings (0.1-10); default 5. Does not change what is detected."},
 		"user_message":    stringSchema("Optional user-facing enforcement message.", 0, 500),
 		"idempotency_key": stringSchema("Caller key retained for 24-hour replay safety.", 1, 128),
 	}
 }
 func riskPolicyActionSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
-	schema := catalogEnumSchema(catalog, catalog.Actions)
-	schema.Description = "Policy action. MCP-scoped policies support flag and block only."
+	const mcpNote = "MCP-scoped policies support flag and block only."
+	schema := describedCatalogEnumSchema(catalog, catalog.Actions, "What happens when the policy fires; default flag. "+mcpNote+" One of:", func(value string) string { return policycatalog.ActionDescriptions[value] })
+	if schema.Description == "" {
+		schema.Description = "Policy action. " + mcpNote
+	}
 	return schema
 }
 
@@ -513,11 +530,33 @@ func fallbackCreateRiskExclusionSchema() *jsonschema.Schema {
 }
 
 func detectionScopesSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
+	categoryDescriptions := policycatalog.CategoryDescriptions()
 	scope := closedObject(map[string]*jsonschema.Schema{
-		"category":      catalogEnumSchema(catalog, catalog.DetectionScopeCategories),
+		"category":      describedCatalogEnumSchema(catalog, catalog.DetectionScopeCategories, "Detector category the scope applies to. One of:", func(value string) string { return categoryDescriptions[value] }),
 		"message_types": arraySchema(catalogEnumSchema(catalog, catalog.PolicyMessageTypes), 1, true),
 	}, []string{"category", "message_types"})
-	return arraySchema(scope, 0, true)
+	schema := arraySchema(scope, 0, true)
+	schema.Description = "Optional per-category override of which message surfaces are scanned. Omit to use the recommended scope for each category."
+	return schema
+}
+
+func describedCatalogEnumSchema(catalog policycatalog.Catalog, values []string, lead string, describe func(string) string) *jsonschema.Schema {
+	if catalog.Schema == "" {
+		return catalogEnumSchema(catalog, values)
+	}
+	return describedEnumSchema(values, lead, describe)
+}
+
+func describedEnumSchema(values []string, lead string, describe func(string) string) *jsonschema.Schema {
+	schema := enumSchema(values...)
+	schema.Description = lead + "\n" + policycatalog.DescribeValues(values, describe)
+	return schema
+}
+
+func describedConstSchema(value, description string) *jsonschema.Schema {
+	schema := constSchema(value)
+	schema.Description = description
+	return schema
 }
 
 func projectSelectorSchema(common map[string]*jsonschema.Schema, required []string) *jsonschema.Schema {
