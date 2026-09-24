@@ -59,6 +59,7 @@ var (
 	OrganizationDeviceAgentConfigurationV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_device_agent_configuration_event_v1", "Emitted when the organization's device-agent configuration is changed")
 	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed, started, extended, given a new end date, demoted, re-armed, or converted")
 	OrganizationInviteV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_invite_event_v1", "Emitted when changes to organization invites are made")
+	OrganizationOnboardingV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_onboarding_event_v1", "Emitted when an organization's onboarding selection is saved")
 	OrganizationProductFeatureV1           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_product_feature_event_v1", "Emitted when an organization product feature flag is toggled")
 	OrganizationSetupTaskV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_setup_task_event_v1", "Emitted when an organization setup task is changed")
 	OrganizationWebhooksV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_webhooks_event_v1", "Emitted when changes to organization webhooks are made")
