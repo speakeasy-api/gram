@@ -139,3 +139,46 @@ func TestList_RequiresWorkloadRead(t *testing.T) {
 	_, err := ti.service.List(noScopes, &gen.ListPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
+
+func TestWithdrawSubject_LeavesTheOtherTiersAgentInPlace(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	// The same tuple admitted at both tiers. They share one agent assignment,
+	// because the assignment is keyed on (issuer, match_kind, subject) while an
+	// admission is tiered.
+	orgTier, err := admit(t, ctx, ti, channelOne, string(workloadidentity.MatchKindExact), agentID)
+	require.NoError(t, err)
+	require.Len(t, orgTier.Admissions, 1)
+
+	_, err = ti.service.AdmitSubject(ctx, &gen.AdmitSubjectPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Issuer:           anthropicIssuer,
+		Subject:          channelOne,
+		MatchKind:        new(string(workloadidentity.MatchKindExact)),
+		Name:             nil,
+		AgentID:          agentID.String(),
+		ProjectScoped:    new(true),
+	})
+	require.NoError(t, err)
+
+	after, err := ti.service.WithdrawSubject(ctx, &gen.WithdrawSubjectPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               orgTier.Admissions[0].ID,
+	})
+	require.NoError(t, err)
+
+	// The surviving admission must keep its agent. Without it the workload
+	// authenticates and is then refused for having no agent, which reads as a
+	// broken rule rather than a withdrawn one.
+	require.Len(t, after.Admissions, 1)
+	require.Equal(t, agentID.String(), after.Admissions[0].AgentID,
+		"the remaining tier's admission lost its agent when the other tier was withdrawn")
+}

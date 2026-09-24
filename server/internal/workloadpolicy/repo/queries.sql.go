@@ -12,6 +12,40 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countLiveAdmissionsForSubject = `-- name: CountLiveAdmissionsForSubject :one
+SELECT count(*)
+FROM workload_identity_admissions
+WHERE organization_id = $1
+  AND workload_issuer_id = $2
+  AND match_kind = $3
+  AND subject = $4
+  AND deleted IS FALSE
+`
+
+type CountLiveAdmissionsForSubjectParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	MatchKind        string
+	Subject          string
+}
+
+// How many live admissions still name this tuple, across both tiers. The agent
+// assignment is keyed on (issuer, match_kind, subject) and is therefore shared
+// by them, so withdrawing one tier must not strip the agent from the other:
+// that admission would survive with no policy and be refused at the token
+// endpoint, which reads as a broken rule rather than a withdrawn one.
+func (q *Queries) CountLiveAdmissionsForSubject(ctx context.Context, arg CountLiveAdmissionsForSubjectParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveAdmissionsForSubject,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+		arg.MatchKind,
+		arg.Subject,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createWorkloadAdmission = `-- name: CreateWorkloadAdmission :one
 INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind, name)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -187,16 +221,18 @@ SELECT id, organization_id, project_id, workload_issuer_id, subject, match_kind,
 FROM workload_identity_admissions
 WHERE organization_id = $1
   AND id = $2
+  AND (project_id IS NULL OR project_id = $3)
   AND deleted IS FALSE
 `
 
 type GetWorkloadAdmissionParams struct {
 	OrganizationID string
 	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
 }
 
 func (q *Queries) GetWorkloadAdmission(ctx context.Context, arg GetWorkloadAdmissionParams) (WorkloadIdentityAdmission, error) {
-	row := q.db.QueryRow(ctx, getWorkloadAdmission, arg.OrganizationID, arg.ID)
+	row := q.db.QueryRow(ctx, getWorkloadAdmission, arg.OrganizationID, arg.ID, arg.ProjectID)
 	var i WorkloadIdentityAdmission
 	err := row.Scan(
 		&i.ID,
@@ -261,6 +297,10 @@ JOIN workload_issuers i
   ON i.organization_id = a.organization_id
  AND i.id = a.workload_issuer_id
  AND i.deleted IS FALSE
+ -- The same visibility predicate the issuer list uses. Without it an admission
+ -- naming another project's issuer would surface here, and the issuer column
+ -- would name a row this caller cannot otherwise see.
+ AND (i.project_id IS NULL OR i.project_id = $1)
 LEFT JOIN workload_agent_assignments g
   ON g.organization_id = a.organization_id
  AND g.workload_issuer_id = a.workload_issuer_id
@@ -271,15 +311,15 @@ LEFT JOIN agents ag
   ON ag.organization_id = g.organization_id
  AND ag.id = g.agent_id
  AND ag.deleted IS FALSE
-WHERE a.organization_id = $1
-  AND (a.project_id IS NULL OR a.project_id = $2)
+WHERE a.organization_id = $2
+  AND (a.project_id IS NULL OR a.project_id = $1)
   AND a.deleted IS FALSE
 ORDER BY (a.project_id IS NULL) DESC, i.name, a.subject
 `
 
 type ListWorkloadAdmissionsParams struct {
-	OrganizationID string
 	ProjectID      uuid.NullUUID
+	OrganizationID string
 }
 
 type ListWorkloadAdmissionsRow struct {
@@ -306,7 +346,7 @@ type ListWorkloadAdmissionsRow struct {
 // on (issuer, match_kind, subject) rather than on the admission row, because an
 // admission is tiered and an assignment is not.
 func (q *Queries) ListWorkloadAdmissions(ctx context.Context, arg ListWorkloadAdmissionsParams) ([]ListWorkloadAdmissionsRow, error) {
-	rows, err := q.db.Query(ctx, listWorkloadAdmissions, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listWorkloadAdmissions, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -403,6 +443,7 @@ UPDATE workload_identity_admissions
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE organization_id = $1
   AND id = $2
+  AND (project_id IS NULL OR project_id = $3)
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_kind, name, created_at, updated_at, deleted_at, deleted
 `
@@ -410,10 +451,11 @@ RETURNING id, organization_id, project_id, workload_issuer_id, subject, match_ki
 type SoftDeleteWorkloadAdmissionParams struct {
 	OrganizationID string
 	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
 }
 
 func (q *Queries) SoftDeleteWorkloadAdmission(ctx context.Context, arg SoftDeleteWorkloadAdmissionParams) (WorkloadIdentityAdmission, error) {
-	row := q.db.QueryRow(ctx, softDeleteWorkloadAdmission, arg.OrganizationID, arg.ID)
+	row := q.db.QueryRow(ctx, softDeleteWorkloadAdmission, arg.OrganizationID, arg.ID, arg.ProjectID)
 	var i WorkloadIdentityAdmission
 	err := row.Scan(
 		&i.ID,

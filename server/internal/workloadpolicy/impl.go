@@ -479,23 +479,32 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 	// Resolve, do not validate: the lookup is tenancy-scoped, so naming an issuer
 	// the caller cannot see is impossible rather than guarded. The composite
 	// foreign key is the backstop, not the first line.
+	//
+	// Scoped to the tier being written, not to the selected project. An
+	// organization-tier admission that bound itself to a project-tier issuer
+	// would be visible to every other project through the admission list's join,
+	// and would outlive that project's own view of the issuer.
 	issuers, err := q.FindWorkloadIssuersByIssuer(ctx, repo.FindWorkloadIssuersByIssuerParams{
 		OrganizationID: t.organizationID,
-		ProjectID:      t.projectID,
+		ProjectID:      projectID,
 		Issuers:        canonical.MatchCandidates(),
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving workload issuer").LogError(ctx, s.logger)
 	}
 	if len(issuers) == 0 {
-		return nil, oops.E(oops.CodeNotFound, nil, "no trusted issuer matches %q; register it first", payload.Issuer)
+		return nil, oops.E(oops.CodeNotFound, nil, "no trusted issuer matches %q at this tier; register it first", payload.Issuer)
 	}
-	// The issuer column is not unique, and picking one would decide which keys
-	// verify this subject on the operator's behalf.
-	if len(issuers) > 1 {
-		return nil, oops.E(oops.CodeInvalid, nil, "%q matches %d trusted issuers; withdraw the duplicates first", payload.Issuer, len(issuers))
-	}
+	// The same issuer URL may legitimately be registered at both tiers, and the
+	// verification path gives the project row precedence, so follow it rather
+	// than asking an operator to withdraw a row that is doing its job. The list
+	// query orders organization tier first, so walk to the most specific.
 	issuerRow := issuers[0]
+	for _, candidate := range issuers {
+		if candidate.ProjectID.Valid {
+			issuerRow = candidate
+		}
+	}
 
 	// The early, legible refusal. The issuer's permission is re-checked on every
 	// lookup, which is what makes clearing it revoke rules already written.
@@ -598,6 +607,7 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 	existing, err := q.GetWorkloadAdmission(ctx, repo.GetWorkloadAdmissionParams{
 		OrganizationID: t.organizationID,
 		ID:             id,
+		ProjectID:      t.projectID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -620,28 +630,43 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 	withdrawn, err := q.SoftDeleteWorkloadAdmission(ctx, repo.SoftDeleteWorkloadAdmissionParams{
 		OrganizationID: t.organizationID,
 		ID:             id,
+		ProjectID:      t.projectID,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error withdrawing the admitted subject").LogError(ctx, s.logger)
 	}
 
 	// The assignment is keyed on (issuer, match_kind, subject) rather than on the
-	// admission, because an admission is tiered and an assignment is not. The
-	// same tuple admitted at the other tier therefore loses its agent too, which
-	// is correct: one assignment existed for both.
-	assignments, err := q.SoftDeleteWorkloadAgentAssignmentForSubject(ctx, repo.SoftDeleteWorkloadAgentAssignmentForSubjectParams{
+	// admission, because an admission is tiered and an assignment is not — so one
+	// assignment serves both tiers. It may only go when the last admission naming
+	// the tuple has gone: stripping it while the other tier is still admitted
+	// would leave that admission with no policy, which the token endpoint refuses
+	// for having no agent and which reads as a broken rule rather than a
+	// withdrawn one.
+	remaining, err := q.CountLiveAdmissionsForSubject(ctx, repo.CountLiveAdmissionsForSubjectParams{
 		OrganizationID:   t.organizationID,
 		WorkloadIssuerID: existing.WorkloadIssuerID,
 		MatchKind:        existing.MatchKind,
 		Subject:          existing.Subject,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error clearing the workload's agent assignment").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "error counting admissions for the withdrawn subject").LogError(ctx, s.logger)
 	}
 
 	assignedAgent := ""
-	if len(assignments) > 0 {
-		assignedAgent = assignments[0].AgentID.String()
+	if remaining == 0 {
+		assignments, err := q.SoftDeleteWorkloadAgentAssignmentForSubject(ctx, repo.SoftDeleteWorkloadAgentAssignmentForSubjectParams{
+			OrganizationID:   t.organizationID,
+			WorkloadIssuerID: existing.WorkloadIssuerID,
+			MatchKind:        existing.MatchKind,
+			Subject:          existing.Subject,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error clearing the workload's agent assignment").LogError(ctx, s.logger)
+		}
+		if len(assignments) > 0 {
+			assignedAgent = assignments[0].AgentID.String()
+		}
 	}
 
 	if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, dbtx, audit.LogWorkloadAdmissionWithdrawEvent{
