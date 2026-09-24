@@ -46,20 +46,33 @@ func clientUpstreamResource(rows []repo.ListOrganizationMcpServersForClientRow) 
 }
 
 // clientResourceForUpstream qualifies a client's grant for the upstream the
-// user is connecting through. When the client is attached to that upstream
-// it wins, so a client shared by servers with different upstreams still
-// records one this server routes to; otherwise the client's own derivation
-// applies, so an endpoint never stamps its upstream onto another's client.
-func clientResourceForUpstream(rows []repo.ListOrganizationMcpServersForClientRow, upstream string) string {
+// user is connecting through. A client that derives a resource of its own
+// keeps it. A client whose derivation is ambiguous claims upstream only when
+// it is attached to it and no sibling bound to the same endpoint could: an
+// endpoint's own server sits in every bound client's rows, so a looser rule
+// would let a second client record the same resource and fail routing closed
+// as a duplicate.
+func clientResourceForUpstream(own []repo.ListOrganizationMcpServersForClientRow, siblings [][]repo.ListOrganizationMcpServersForClientRow, upstream string) string {
+	derived := clientUpstreamResource(own)
 	want := strings.TrimRight(upstream, "/")
-	if want != "" {
-		for _, row := range rows {
-			if strings.TrimRight(row.Url, "/") == want {
-				return want
-			}
+	if want == "" || derived != "" || !rowsServeUpstream(own, want) {
+		return derived
+	}
+	for _, rows := range siblings {
+		if rowsServeUpstream(rows, want) {
+			return ""
 		}
 	}
-	return clientUpstreamResource(rows)
+	return want
+}
+
+func rowsServeUpstream(rows []repo.ListOrganizationMcpServersForClientRow, upstream string) bool {
+	for _, row := range rows {
+		if strings.TrimRight(row.Url, "/") == upstream {
+			return true
+		}
+	}
+	return false
 }
 
 // ListClientSessions lists the sessions minted against a client in the

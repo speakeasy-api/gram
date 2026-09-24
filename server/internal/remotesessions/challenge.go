@@ -768,8 +768,8 @@ func (m *ChallengeManager) FallbackResourceForClient(ctx context.Context, client
 
 // ResourceForClientAtUpstream derives one client's RFC 8707 resource for a
 // connect made through upstream; see RefreshService.ResourceForClientAtUpstream.
-func (m *ChallengeManager) ResourceForClientAtUpstream(ctx context.Context, clientID uuid.UUID, upstream string) (string, error) {
-	return m.refresher.ResourceForClientAtUpstream(ctx, clientID, upstream)
+func (m *ChallengeManager) ResourceForClientAtUpstream(ctx context.Context, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
+	return m.refresher.ResourceForClientAtUpstream(ctx, clientID, siblingIDs, upstream)
 }
 
 // DisconnectRemoteSession soft-deletes the subject's remote_session for one
