@@ -379,7 +379,7 @@ describe("IdentityProviderStep domain verification", () => {
     fireEvent.click(screen.getByRole("button", { name: "Verify domain" }));
 
     expect(toast.error).toHaveBeenCalledWith(
-      "Unable to open the WorkOS portal",
+      "Unable to open the WorkOS portal. Allow popups and try again.",
     );
     expect(
       screen.queryByRole("button", { name: "Check verification" }),
@@ -400,7 +400,7 @@ describe("IdentityProviderStep domain verification", () => {
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
-        "Domain not verified yet. Finish setup in the WorkOS tab, then try again.",
+        "No domain verification detected yet. Finish setup in the WorkOS tab, then try again.",
       ),
     );
     expect(refetch).toHaveBeenCalledOnce();
@@ -491,5 +491,111 @@ describe("IdentityProviderStep prerequisites", () => {
     render(<IdentityProviderStep onComplete={vi.fn<() => void>()} />);
     fireEvent.click(screen.getByRole("button", { name: "Connect directory" }));
     expect(portal.mutate).toHaveBeenCalledOnce();
+  });
+});
+
+describe("IdentityProviderStep failure feedback", () => {
+  function openPortalFor(button: string) {
+    portal.mutate.mockImplementation((_vars, opts) =>
+      opts.onSuccess({ url: "https://workos.test/portal" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: button }));
+  }
+
+  it("passes the server's explanation of a refused portal link straight through", () => {
+    const message =
+      "WorkOS rejected the Directory Sync setup request. Contact Speakeasy support if it keeps failing.";
+    portal.mutate.mockImplementation(() =>
+      portal.options?.onError?.(new Error(message)),
+    );
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect directory" }));
+
+    expect(toast.error).toHaveBeenCalledWith(message);
+  });
+
+  it("falls back to its own copy when the failure carries no message", () => {
+    portal.mutate.mockImplementation(() =>
+      portal.options?.onError?.(new Error("   ")),
+    );
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect directory" }));
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "Could not start directory sync setup. Try again, and contact support if it keeps failing.",
+    );
+  });
+
+  // A status check that never completed is not the same answer as a directory
+  // WorkOS says is missing, and only one of them is worth retrying right away.
+  it("separates a failed status check from setup WorkOS has not seen", async () => {
+    const refetch = vi
+      .fn()
+      .mockResolvedValueOnce({ data: undefined })
+      .mockResolvedValueOnce({
+        data: { ...onboardingStatus.current.data },
+      });
+    onboardingStatus.current = { ...onboardingStatus.current, refetch };
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+    openPortalFor("Connect directory");
+
+    const verify = screen.getByRole("button", { name: "Verify connection" });
+    fireEvent.click(verify);
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "Could not check directory sync. Try again in a moment.",
+      ),
+    );
+
+    fireEvent.click(verify);
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "No directory sync detected yet. Finish setup in the WorkOS tab, then try again.",
+      ),
+    );
+  });
+
+  it("stays quiet when verification finds the directory", async () => {
+    const refetch = vi.fn().mockResolvedValue({
+      data: { ...onboardingStatus.current.data, dsyncConfigured: true },
+    });
+    onboardingStatus.current = { ...onboardingStatus.current, refetch };
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+    openPortalFor("Connect directory");
+    fireEvent.click(screen.getByRole("button", { name: "Verify connection" }));
+
+    await waitFor(() => expect(refetch).toHaveBeenCalledOnce());
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+});
+
+// Every sub-step's done state comes from one call that reaches WorkOS for the
+// domains, the connections and the directory, so a directory lookup failure
+// would otherwise render a confident, wrong "not set up".
+describe("IdentityProviderStep unreadable status", () => {
+  it("says the state is unknown and offers a retry", () => {
+    const refetch = vi.fn();
+    onboardingStatus.current = {
+      ...onboardingStatus.current,
+      data: undefined,
+      isError: true,
+      refetch,
+    } as unknown as typeof onboardingStatus.current;
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+
+    expect(screen.getByText("Setup status unavailable")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it("stays out of the way when the status loads", () => {
+    render(<IdentityProviderStep onComplete={() => {}} />);
+
+    expect(screen.queryByText("Setup status unavailable")).toBeNull();
   });
 });
