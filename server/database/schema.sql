@@ -3210,7 +3210,7 @@ CREATE TABLE IF NOT EXISTS workload_identity_admissions (
   -- trailing `*` is accepted: an interior one would allow matching a suffix while
   -- leaving the middle open, which is strictly more dangerous and buys nothing.
   --
-  -- The risk this column reintroduces, and why it is opt-in per issuer rather
+  -- The risk this column carries, and why it is opt-in per issuer rather
   -- than a field every issuer can set by accident: where sub encodes something
   -- the caller controls, a wildcard admits far more than its author intends.
   -- GitHub Actions puts `repo:org/repo:ref:refs/heads/main` in sub, so
@@ -3266,7 +3266,7 @@ WHERE deleted IS FALSE;
 -- silently creating a second row, while two projects admitting the same subject
 -- stay independent of each other and of the organization tier.
 --
--- match_kind is part of the key because the pair is what was admitted: a
+-- match_kind is part of the key because the pair is what an admission names: a
 -- wildcard and an exact subject are different admissions even where one covers
 -- the other, and the narrower one exists precisely to sit alongside the broader.
 CREATE UNIQUE INDEX IF NOT EXISTS workload_identity_admissions_project_key
@@ -5132,12 +5132,14 @@ CREATE TABLE IF NOT EXISTS workload_agent_assignments (
 -- One live assignment per (principal or wildcard, kind). Also serves looking up a
 -- workload's agent.
 --
--- This no longer makes at most one row match a given subject: a wildcard
+-- Deliberately does NOT make at most one row match a given subject: a wildcard
 -- assignment and an exact one can both cover it, which is the point — a
 -- fleet-wide default with individual principals pinned elsewhere. "One agent per
--- workload" is now resolved rather than stored, by taking the most specific
--- match (exact before wildcard, longer wildcard stem before shorter).
--- Uniqueness here only stops the same rule being written twice.
+-- workload" is therefore resolved rather than stored, by
+-- workloadidentity.ResolveWorkloadAgentAssignment taking the most specific match
+-- (exact before wildcard, longer wildcard stem before shorter). Uniqueness here
+-- only stops the same rule being written twice, so any read that resolves an
+-- agent from this table must apply that ordering.
 CREATE UNIQUE INDEX IF NOT EXISTS workload_agent_assignments_workload_key
 ON workload_agent_assignments (organization_id, workload_issuer_id, match_kind, subject)
 WHERE deleted IS FALSE;
