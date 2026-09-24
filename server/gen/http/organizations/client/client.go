@@ -80,9 +80,9 @@ type Client struct {
 	// updateSetupTask endpoint.
 	UpdateSetupTaskDoer goahttp.Doer
 
-	// SetSetupTaskSelection Doer is the HTTP client used to make requests to the
-	// setSetupTaskSelection endpoint.
-	SetSetupTaskSelectionDoer goahttp.Doer
+	// SubmitOnboardingSurvey Doer is the HTTP client used to make requests to the
+	// submitOnboardingSurvey endpoint.
+	SubmitOnboardingSurveyDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -121,7 +121,7 @@ func NewClient(
 		GenerateWorkOSAdminPortalLinkDoer:      doer,
 		ListSetupTasksDoer:                     doer,
 		UpdateSetupTaskDoer:                    doer,
-		SetSetupTaskSelectionDoer:              doer,
+		SubmitOnboardingSurveyDoer:             doer,
 		RestoreResponseBody:                    restoreBody,
 		scheme:                                 scheme,
 		host:                                   host,
@@ -515,15 +515,15 @@ func (c *Client) UpdateSetupTask() goa.Endpoint {
 	}
 }
 
-// SetSetupTaskSelection returns an endpoint that makes HTTP requests to the
-// organizations service setSetupTaskSelection server.
-func (c *Client) SetSetupTaskSelection() goa.Endpoint {
+// SubmitOnboardingSurvey returns an endpoint that makes HTTP requests to the
+// organizations service submitOnboardingSurvey server.
+func (c *Client) SubmitOnboardingSurvey() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeSetSetupTaskSelectionRequest(c.encoder)
-		decodeResponse = DecodeSetSetupTaskSelectionResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeSubmitOnboardingSurveyRequest(c.encoder)
+		decodeResponse = DecodeSubmitOnboardingSurveyResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildSetSetupTaskSelectionRequest(ctx, v)
+		req, err := c.BuildSubmitOnboardingSurveyRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -531,9 +531,9 @@ func (c *Client) SetSetupTaskSelection() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.SetSetupTaskSelectionDoer.Do(req)
+		resp, err := c.SubmitOnboardingSurveyDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("organizations", "setSetupTaskSelection", err)
+			return nil, goahttp.ErrRequestError("organizations", "submitOnboardingSurvey", err)
 		}
 		return decodeResponse(resp)
 	}

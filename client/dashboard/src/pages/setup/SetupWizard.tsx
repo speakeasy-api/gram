@@ -26,7 +26,7 @@ import { useJourneyView } from "./components/journey-steps";
 import { OnboardingStepper, type Step } from "./components/onboarding-stepper";
 import { SetupShell } from "./components/setup-shell";
 import { SetupTaskContent } from "./components/setup-task-content";
-import { setupTaskKeyForSlug, setupTaskSlug } from "./task-slugs";
+import { setupTaskKeyForSlug, setupTaskSlug } from "./setup-cards";
 
 /** Query parameter naming the card on screen, e.g. ?task=idp. */
 const TASK_PARAM = "task";
@@ -35,7 +35,7 @@ const STEP_PARAM = "step";
 
 // The way through setup: every selected card in order, one on screen at a
 // time. Which cards appear is the organization's setup task selection, set by
-// staff or by the onboarding survey through setSetupTaskSelection.
+// staff or by the onboarding survey through submitOnboardingSurvey.
 export default function SetupWizard(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">

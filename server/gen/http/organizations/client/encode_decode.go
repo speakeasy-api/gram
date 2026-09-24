@@ -3692,14 +3692,14 @@ func DecodeUpdateSetupTaskResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
-// BuildSetSetupTaskSelectionRequest instantiates a HTTP request object with
+// BuildSubmitOnboardingSurveyRequest instantiates a HTTP request object with
 // method and path set to call the "organizations" service
-// "setSetupTaskSelection" endpoint
-func (c *Client) BuildSetSetupTaskSelectionRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetSetupTaskSelectionOrganizationsPath()}
+// "submitOnboardingSurvey" endpoint
+func (c *Client) BuildSubmitOnboardingSurveyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SubmitOnboardingSurveyOrganizationsPath()}
 	req, err := http.NewRequest("POST", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("organizations", "setSetupTaskSelection", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("organizations", "submitOnboardingSurvey", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -3708,30 +3708,30 @@ func (c *Client) BuildSetSetupTaskSelectionRequest(ctx context.Context, v any) (
 	return req, nil
 }
 
-// EncodeSetSetupTaskSelectionRequest returns an encoder for requests sent to
-// the organizations setSetupTaskSelection server.
-func EncodeSetSetupTaskSelectionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeSubmitOnboardingSurveyRequest returns an encoder for requests sent to
+// the organizations submitOnboardingSurvey server.
+func EncodeSubmitOnboardingSurveyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*organizations.SetSetupTaskSelectionPayload)
+		p, ok := v.(*organizations.SubmitOnboardingSurveyPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("organizations", "setSetupTaskSelection", "*organizations.SetSetupTaskSelectionPayload", v)
+			return goahttp.ErrInvalidType("organizations", "submitOnboardingSurvey", "*organizations.SubmitOnboardingSurveyPayload", v)
 		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
-		body := NewSetSetupTaskSelectionRequestBody(p)
+		body := NewSubmitOnboardingSurveyRequestBody(p)
 		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("organizations", "setSetupTaskSelection", err)
+			return goahttp.ErrEncodingError("organizations", "submitOnboardingSurvey", err)
 		}
 		return nil
 	}
 }
 
-// DecodeSetSetupTaskSelectionResponse returns a decoder for responses returned
-// by the organizations setSetupTaskSelection endpoint. restoreBody controls
-// whether the response body should be restored after having been read.
-// DecodeSetSetupTaskSelectionResponse may return the following errors:
+// DecodeSubmitOnboardingSurveyResponse returns a decoder for responses
+// returned by the organizations submitOnboardingSurvey endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSubmitOnboardingSurveyResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -3743,7 +3743,7 @@ func EncodeSetSetupTaskSelectionRequest(encoder func(*http.Request) goahttp.Enco
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeSetSetupTaskSelectionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeSubmitOnboardingSurveyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -3760,169 +3760,169 @@ func DecodeSetSetupTaskSelectionResponse(decoder func(*http.Response) goahttp.De
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body SetSetupTaskSelectionResponseBody
+				body SubmitOnboardingSurveyResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
 			}
-			err = ValidateSetSetupTaskSelectionResponseBody(&body)
+			err = ValidateSubmitOnboardingSurveyResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
 			}
-			res := NewSetSetupTaskSelectionListSetupTasksResultOK(&body)
+			res := NewSubmitOnboardingSurveyListSetupTasksResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body SetSetupTaskSelectionUnauthorizedResponseBody
+				body SubmitOnboardingSurveyUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
 			}
-			err = ValidateSetSetupTaskSelectionUnauthorizedResponseBody(&body)
+			err = ValidateSubmitOnboardingSurveyUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
 			}
-			return nil, NewSetSetupTaskSelectionUnauthorized(&body)
+			return nil, NewSubmitOnboardingSurveyUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body SetSetupTaskSelectionForbiddenResponseBody
+				body SubmitOnboardingSurveyForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
 			}
-			err = ValidateSetSetupTaskSelectionForbiddenResponseBody(&body)
+			err = ValidateSubmitOnboardingSurveyForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
 			}
-			return nil, NewSetSetupTaskSelectionForbidden(&body)
+			return nil, NewSubmitOnboardingSurveyForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body SetSetupTaskSelectionBadRequestResponseBody
+				body SubmitOnboardingSurveyBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
 			}
-			err = ValidateSetSetupTaskSelectionBadRequestResponseBody(&body)
+			err = ValidateSubmitOnboardingSurveyBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
 			}
-			return nil, NewSetSetupTaskSelectionBadRequest(&body)
+			return nil, NewSubmitOnboardingSurveyBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body SetSetupTaskSelectionNotFoundResponseBody
+				body SubmitOnboardingSurveyNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
 			}
-			err = ValidateSetSetupTaskSelectionNotFoundResponseBody(&body)
+			err = ValidateSubmitOnboardingSurveyNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
 			}
-			return nil, NewSetSetupTaskSelectionNotFound(&body)
+			return nil, NewSubmitOnboardingSurveyNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body SetSetupTaskSelectionConflictResponseBody
+				body SubmitOnboardingSurveyConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
 			}
-			err = ValidateSetSetupTaskSelectionConflictResponseBody(&body)
+			err = ValidateSubmitOnboardingSurveyConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
 			}
-			return nil, NewSetSetupTaskSelectionConflict(&body)
+			return nil, NewSubmitOnboardingSurveyConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body SetSetupTaskSelectionUnsupportedMediaResponseBody
+				body SubmitOnboardingSurveyUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
 			}
-			err = ValidateSetSetupTaskSelectionUnsupportedMediaResponseBody(&body)
+			err = ValidateSubmitOnboardingSurveyUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
 			}
-			return nil, NewSetSetupTaskSelectionUnsupportedMedia(&body)
+			return nil, NewSubmitOnboardingSurveyUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body SetSetupTaskSelectionInvalidResponseBody
+				body SubmitOnboardingSurveyInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
 			}
-			err = ValidateSetSetupTaskSelectionInvalidResponseBody(&body)
+			err = ValidateSubmitOnboardingSurveyInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
 			}
-			return nil, NewSetSetupTaskSelectionInvalid(&body)
+			return nil, NewSubmitOnboardingSurveyInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body SetSetupTaskSelectionInvariantViolationResponseBody
+					body SubmitOnboardingSurveyInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+					return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
 				}
-				err = ValidateSetSetupTaskSelectionInvariantViolationResponseBody(&body)
+				err = ValidateSubmitOnboardingSurveyInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+					return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
 				}
-				return nil, NewSetSetupTaskSelectionInvariantViolation(&body)
+				return nil, NewSubmitOnboardingSurveyInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body SetSetupTaskSelectionUnexpectedResponseBody
+					body SubmitOnboardingSurveyUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+					return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
 				}
-				err = ValidateSetSetupTaskSelectionUnexpectedResponseBody(&body)
+				err = ValidateSubmitOnboardingSurveyUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+					return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
 				}
-				return nil, NewSetSetupTaskSelectionUnexpected(&body)
+				return nil, NewSubmitOnboardingSurveyUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("organizations", "setSetupTaskSelection", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("organizations", "submitOnboardingSurvey", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body SetSetupTaskSelectionGatewayErrorResponseBody
+				body SubmitOnboardingSurveyGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
 			}
-			err = ValidateSetSetupTaskSelectionGatewayErrorResponseBody(&body)
+			err = ValidateSubmitOnboardingSurveyGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
 			}
-			return nil, NewSetSetupTaskSelectionGatewayError(&body)
+			return nil, NewSubmitOnboardingSurveyGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("organizations", "setSetupTaskSelection", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("organizations", "submitOnboardingSurvey", resp.StatusCode, string(body))
 		}
 	}
 }

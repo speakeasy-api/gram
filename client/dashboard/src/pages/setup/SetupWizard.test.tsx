@@ -85,7 +85,9 @@ vi.mock("@gram/client/react-query/_context.js", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-one" }),
 }));
-vi.mock("@tanstack/react-query", () => ({
+// setup-cards pulls in every step, which needs the real module's exports.
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => ({}),
   useQuery: (query: unknown) => query,
 }));

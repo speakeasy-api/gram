@@ -49,6 +49,13 @@ type setupTaskDefinition struct {
 	HiddenByDefault bool
 }
 
+// setupTaskCatalog lists every setup card in wizard order. To add a card:
+//  1. Add an entry here (usually HiddenByDefault: true).
+//  2. Add its content to SETUP_CARDS in client/dashboard/src/pages/setup/setup-cards.tsx.
+//  3. Add its key to any onboardingPresets entry that should show it.
+//  4. Optionally mark it done from organization facts in projectSetupTasks.
+//
+// Tests on both sides fail if the catalog, SETUP_CARDS, and presets disagree.
 var setupTaskCatalog = []setupTaskDefinition{
 	{Key: "domain-verification", Title: "Verify your domain", Description: "Prove the organization owns its email domain. Single sign-on cannot be set up until a domain is verified.", Prerequisites: nil, HiddenByDefault: false},
 	{Key: "connect-idp", Title: "Connect identity provider", Description: "Configure single sign-on for the organization.", Prerequisites: []string{"domain-verification"}, HiddenByDefault: true},
@@ -481,9 +488,9 @@ func setupTaskAuditSnapshot(task *gen.SetupTask) *audit.OrganizationSetupTaskSna
 	}
 }
 
-// SetSetupTaskSelection lets an organization admin choose which tasks the
-// wizard walks, through the same path staff use in the admin dashboard.
-func (s *Service) SetSetupTaskSelection(ctx context.Context, payload *gen.SetSetupTaskSelectionPayload) (*gen.ListSetupTasksResult, error) {
+// SubmitOnboardingSurvey maps the survey result to a task selection through
+// the same path staff use in the admin dashboard. Callers never pick tasks.
+func (s *Service) SubmitOnboardingSurvey(ctx context.Context, payload *gen.SubmitOnboardingSurveyPayload) (*gen.ListSetupTasksResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
 		return nil, err
@@ -491,9 +498,13 @@ func (s *Service) SetSetupTaskSelection(ctx context.Context, payload *gen.SetSet
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
+	preset := onboardingPresetByKey(payload.Preset)
+	if preset == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "invalid onboarding preset").LogError(ctx, s.logger)
+	}
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)
-	if _, err := SaveOnboardingConfiguration(ctx, s.db, s.audit, ac.ActiveOrganizationID, payload.VisibleTaskKeys, payload.Preset, actor, ac.Email); err != nil {
-		return nil, fmt.Errorf("save setup task selection: %w", err)
+	if _, err := SaveOnboardingConfiguration(ctx, s.db, s.audit, ac.ActiveOrganizationID, preset.TaskKeys, &payload.Preset, actor, ac.Email); err != nil {
+		return nil, fmt.Errorf("save onboarding survey result: %w", err)
 	}
 	tasks, err := projectSetupTasks(ctx, orgrepo.New(s.db), ac.ActiveOrganizationID)
 	if err != nil {

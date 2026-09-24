@@ -162,6 +162,7 @@ describe("generated admin boundary", () => {
       presets: [
         {
           key: "gateway",
+          title: "Gateway",
           visible_task_keys: ["create-marketplace", "distribute-servers"],
         },
       ],

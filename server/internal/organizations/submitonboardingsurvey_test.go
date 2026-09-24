@@ -11,13 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestService_SetSetupTaskSelectionControlsVisibleTasks(t *testing.T) {
+func TestService_SubmitOnboardingSurveySelectsPresetTasks(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	result, err := ti.service.SetSetupTaskSelection(ctx, &gen.SetSetupTaskSelectionPayload{
-		VisibleTaskKeys: []string{"create-marketplace", "distribute-servers"},
-	})
+	result, err := ti.service.SubmitOnboardingSurvey(ctx, &gen.SubmitOnboardingSurveyPayload{Preset: "gateway"})
 	require.NoError(t, err)
 	keys := make([]string, 0, len(result.Tasks))
 	for _, task := range result.Tasks {
@@ -30,23 +28,23 @@ func TestService_SetSetupTaskSelectionControlsVisibleTasks(t *testing.T) {
 	require.Equal(t, result.Tasks, listed.Tasks)
 }
 
-func TestService_SetSetupTaskSelectionRejectsUnknownTasks(t *testing.T) {
+func TestService_SubmitOnboardingSurveyRejectsUnknownPreset(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
-	result, err := ti.service.SetSetupTaskSelection(ctx, &gen.SetSetupTaskSelectionPayload{VisibleTaskKeys: []string{"unknown-task"}})
+	result, err := ti.service.SubmitOnboardingSurvey(ctx, &gen.SubmitOnboardingSurveyPayload{Preset: "unknown"})
 	require.Nil(t, result)
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-func TestService_SetSetupTaskSelectionRequiresOrgAdmin(t *testing.T) {
+func TestService_SubmitOnboardingSurveyRequiresOrgAdmin(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestOrganizationsService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	readOnlyCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authCtx.ActiveOrganizationID))
-	result, err := ti.service.SetSetupTaskSelection(readOnlyCtx, &gen.SetSetupTaskSelectionPayload{VisibleTaskKeys: []string{}})
+	result, err := ti.service.SubmitOnboardingSurvey(readOnlyCtx, &gen.SubmitOnboardingSurveyPayload{Preset: "gateway"})
 	require.Nil(t, result)
 	requireOopsCode(t, err, oops.CodeForbidden)
 }

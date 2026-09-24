@@ -31,23 +31,23 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  SetSetupTaskSelectionRequest,
-  SetSetupTaskSelectionRequest$outboundSchema,
-  SetSetupTaskSelectionSecurity,
-} from "../models/operations/setsetuptaskselection.js";
+  SubmitOnboardingSurveyRequest,
+  SubmitOnboardingSurveyRequest$outboundSchema,
+  SubmitOnboardingSurveySecurity,
+} from "../models/operations/submitonboardingsurvey.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * setSetupTaskSelection organizations
+ * submitOnboardingSurvey organizations
  *
  * @remarks
- * Replace which setup tasks the organization sees in the setup wizard. Tasks left out are hidden; progress and assignments are kept.
+ * Record the onboarding survey result. The server derives which setup tasks the wizard walks from it; progress and assignments are kept.
  */
-export function organizationsSetSetupTaskSelection(
+export function organizationsSubmitOnboardingSurvey(
   client: GramCore,
-  request: SetSetupTaskSelectionRequest,
-  security?: SetSetupTaskSelectionSecurity | undefined,
+  request: SubmitOnboardingSurveyRequest,
+  security?: SubmitOnboardingSurveySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
@@ -73,8 +73,8 @@ export function organizationsSetSetupTaskSelection(
 
 async function $do(
   client: GramCore,
-  request: SetSetupTaskSelectionRequest,
-  security?: SetSetupTaskSelectionSecurity | undefined,
+  request: SubmitOnboardingSurveyRequest,
+  security?: SubmitOnboardingSurveySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
@@ -95,18 +95,18 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => z.parse(SetSetupTaskSelectionRequest$outboundSchema, value),
+    (value) => z.parse(SubmitOnboardingSurveyRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.SetSetupTaskSelectionRequestBody, {
+  const body = encodeJSON("body", payload.SubmitOnboardingSurveyRequestBody, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/organizations.setSetupTaskSelection")();
+  const path = pathToFunc("/rpc/organizations.submitOnboardingSurvey")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -130,7 +130,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "setSetupTaskSelection",
+    operationID: "submitOnboardingSurvey",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,

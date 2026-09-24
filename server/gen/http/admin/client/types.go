@@ -143,7 +143,8 @@ type SetOrganizationOnboardingRequestBody struct {
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Complete explicit selection; an empty array selects no tasks.
 	VisibleTaskKeys []string `form:"visible_task_keys" json:"visible_task_keys" xml:"visible_task_keys"`
-	// Omit to preserve the saved preset. Null/reset is not supported.
+	// A key from presets. Omit to preserve the saved preset. Null/reset is not
+	// supported.
 	Preset *string `form:"preset,omitempty" json:"preset,omitempty" xml:"preset,omitempty"`
 }
 
@@ -12563,6 +12564,7 @@ type AdminOnboardingTaskResponseBody struct {
 // types.
 type AdminOnboardingPresetResponseBody struct {
 	Key             *string  `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	Title           *string  `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	VisibleTaskKeys []string `form:"visible_task_keys,omitempty" json:"visible_task_keys,omitempty" xml:"visible_task_keys,omitempty"`
 }
 
@@ -24215,11 +24217,6 @@ func ValidateGetOrganizationOnboardingResponseBody(body *GetOrganizationOnboardi
 	if body.Presets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("presets", "body"))
 	}
-	if body.Preset != nil {
-		if !(*body.Preset == "gateway" || *body.Preset == "security") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.preset", *body.Preset, []any{"gateway", "security"}))
-		}
-	}
 	for _, e := range body.Tasks {
 		if e != nil {
 			if err2 := ValidateAdminOnboardingTaskResponseBody(e); err2 != nil {
@@ -24248,11 +24245,6 @@ func ValidateSetOrganizationOnboardingResponseBody(body *SetOrganizationOnboardi
 	}
 	if body.Presets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("presets", "body"))
-	}
-	if body.Preset != nil {
-		if !(*body.Preset == "gateway" || *body.Preset == "security") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.preset", *body.Preset, []any{"gateway", "security"}))
-		}
 	}
 	for _, e := range body.Tasks {
 		if e != nil {
@@ -39190,13 +39182,11 @@ func ValidateAdminOnboardingPresetResponseBody(body *AdminOnboardingPresetRespon
 	if body.Key == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
 	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
 	if body.VisibleTaskKeys == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("visible_task_keys", "body"))
-	}
-	if body.Key != nil {
-		if !(*body.Key == "gateway" || *body.Key == "security") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key", *body.Key, []any{"gateway", "security"}))
-		}
 	}
 	return
 }

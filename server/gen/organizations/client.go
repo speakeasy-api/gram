@@ -31,11 +31,11 @@ type Client struct {
 	GenerateWorkOSAdminPortalLinkEndpoint      goa.Endpoint
 	ListSetupTasksEndpoint                     goa.Endpoint
 	UpdateSetupTaskEndpoint                    goa.Endpoint
-	SetSetupTaskSelectionEndpoint              goa.Endpoint
+	SubmitOnboardingSurveyEndpoint             goa.Endpoint
 }
 
 // NewClient initializes a "organizations" service client given the endpoints.
-func NewClient(get, sendInvite, revokeInvite, updateInviteRole, listInvites, listUsers, removeUser, enableWebhooks, disableWebhooks, createPortalSession, getOnboardingStatus, verifyOnboardingHooksSetup, sendEnterpriseAdminOnboardingEmail, generateWorkOSAdminPortalLink, listSetupTasks, updateSetupTask, setSetupTaskSelection goa.Endpoint) *Client {
+func NewClient(get, sendInvite, revokeInvite, updateInviteRole, listInvites, listUsers, removeUser, enableWebhooks, disableWebhooks, createPortalSession, getOnboardingStatus, verifyOnboardingHooksSetup, sendEnterpriseAdminOnboardingEmail, generateWorkOSAdminPortalLink, listSetupTasks, updateSetupTask, submitOnboardingSurvey goa.Endpoint) *Client {
 	return &Client{
 		GetEndpoint:                                get,
 		SendInviteEndpoint:                         sendInvite,
@@ -53,7 +53,7 @@ func NewClient(get, sendInvite, revokeInvite, updateInviteRole, listInvites, lis
 		GenerateWorkOSAdminPortalLinkEndpoint:      generateWorkOSAdminPortalLink,
 		ListSetupTasksEndpoint:                     listSetupTasks,
 		UpdateSetupTaskEndpoint:                    updateSetupTask,
-		SetSetupTaskSelectionEndpoint:              setSetupTaskSelection,
+		SubmitOnboardingSurveyEndpoint:             submitOnboardingSurvey,
 	}
 }
 
@@ -404,9 +404,9 @@ func (c *Client) UpdateSetupTask(ctx context.Context, p *UpdateSetupTaskPayload)
 	return ires.(*SetupTask), nil
 }
 
-// SetSetupTaskSelection calls the "setSetupTaskSelection" endpoint of the
+// SubmitOnboardingSurvey calls the "submitOnboardingSurvey" endpoint of the
 // "organizations" service.
-// SetSetupTaskSelection may return the following errors:
+// SubmitOnboardingSurvey may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -418,9 +418,9 @@ func (c *Client) UpdateSetupTask(ctx context.Context, p *UpdateSetupTaskPayload)
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) SetSetupTaskSelection(ctx context.Context, p *SetSetupTaskSelectionPayload) (res *ListSetupTasksResult, err error) {
+func (c *Client) SubmitOnboardingSurvey(ctx context.Context, p *SubmitOnboardingSurveyPayload) (res *ListSetupTasksResult, err error) {
 	var ires any
-	ires, err = c.SetSetupTaskSelectionEndpoint(ctx, p)
+	ires, err = c.SubmitOnboardingSurveyEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

@@ -32,7 +32,7 @@ type Endpoints struct {
 	GenerateWorkOSAdminPortalLink      goa.Endpoint
 	ListSetupTasks                     goa.Endpoint
 	UpdateSetupTask                    goa.Endpoint
-	SetSetupTaskSelection              goa.Endpoint
+	SubmitOnboardingSurvey             goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "organizations" service with endpoints.
@@ -56,7 +56,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GenerateWorkOSAdminPortalLink:      NewGenerateWorkOSAdminPortalLinkEndpoint(s, a.APIKeyAuth),
 		ListSetupTasks:                     NewListSetupTasksEndpoint(s, a.APIKeyAuth),
 		UpdateSetupTask:                    NewUpdateSetupTaskEndpoint(s, a.APIKeyAuth),
-		SetSetupTaskSelection:              NewSetSetupTaskSelectionEndpoint(s, a.APIKeyAuth),
+		SubmitOnboardingSurvey:             NewSubmitOnboardingSurveyEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -79,7 +79,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GenerateWorkOSAdminPortalLink = m(e.GenerateWorkOSAdminPortalLink)
 	e.ListSetupTasks = m(e.ListSetupTasks)
 	e.UpdateSetupTask = m(e.UpdateSetupTask)
-	e.SetSetupTaskSelection = m(e.SetSetupTaskSelection)
+	e.SubmitOnboardingSurvey = m(e.SubmitOnboardingSurvey)
 }
 
 // NewGetEndpoint returns an endpoint function that calls the method "get" of
@@ -451,11 +451,11 @@ func NewUpdateSetupTaskEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 	}
 }
 
-// NewSetSetupTaskSelectionEndpoint returns an endpoint function that calls the
-// method "setSetupTaskSelection" of service "organizations".
-func NewSetSetupTaskSelectionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewSubmitOnboardingSurveyEndpoint returns an endpoint function that calls
+// the method "submitOnboardingSurvey" of service "organizations".
+func NewSubmitOnboardingSurveyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*SetSetupTaskSelectionPayload)
+		p := req.(*SubmitOnboardingSurveyPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "session",
@@ -470,6 +470,6 @@ func NewSetSetupTaskSelectionEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 		if err != nil {
 			return nil, err
 		}
-		return s.SetSetupTaskSelection(ctx, p)
+		return s.SubmitOnboardingSurvey(ctx, p)
 	}
 }

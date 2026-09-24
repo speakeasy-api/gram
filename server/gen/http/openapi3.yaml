@@ -43234,10 +43234,10 @@ paths:
             x-speakeasy-name-override: sendInvite
             x-speakeasy-react-hook:
                 name: SendInvite
-    /rpc/organizations.setSetupTaskSelection:
+    /rpc/organizations.submitOnboardingSurvey:
         post:
-            description: Replace which setup tasks the organization sees in the setup wizard. Tasks left out are hidden; progress and assignments are kept.
-            operationId: setSetupTaskSelection
+            description: Record the onboarding survey result. The server derives which setup tasks the wizard walks from it; progress and assignments are kept.
+            operationId: submitOnboardingSurvey
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -43250,7 +43250,7 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/SetSetupTaskSelectionRequestBody'
+                            $ref: '#/components/schemas/SubmitOnboardingSurveyRequestBody'
                 required: true
             responses:
                 "200":
@@ -43315,12 +43315,12 @@ paths:
                     description: 'gateway_error: an unexpected error occurred'
             security:
                 - session_header_Gram-Session: []
-            summary: setSetupTaskSelection organizations
+            summary: submitOnboardingSurvey organizations
             tags:
                 - organizations
-            x-speakeasy-name-override: setSetupTaskSelection
+            x-speakeasy-name-override: submitOnboardingSurvey
             x-speakeasy-react-hook:
-                name: SetSetupTaskSelection
+                name: SubmitOnboardingSurvey
     /rpc/organizations.updateInviteRole:
         put:
             description: Change the role assigned to a pending WorkOS invitation.
@@ -76616,9 +76616,6 @@ components:
                 preset:
                     type: string
                     description: Absent for legacy organizations.
-                    enum:
-                        - gateway
-                        - security
                 presets:
                     type: array
                     items:
@@ -76636,15 +76633,15 @@ components:
             properties:
                 key:
                     type: string
-                    enum:
-                        - gateway
-                        - security
+                title:
+                    type: string
                 visible_task_keys:
                     type: array
                     items:
                         type: string
             required:
                 - key
+                - title
                 - visible_task_keys
         AdminOnboardingTask:
             type: object
@@ -98620,10 +98617,7 @@ components:
                     type: string
                 preset:
                     type: string
-                    description: Omit to preserve the saved preset. Null/reset is not supported.
-                    enum:
-                        - gateway
-                        - security
+                    description: A key from presets. Omit to preserve the saved preset. Null/reset is not supported.
                 visible_task_keys:
                     type: array
                     items:
@@ -98839,22 +98833,6 @@ components:
                 - provider
                 - schedule
                 - enabled
-        SetSetupTaskSelectionRequestBody:
-            type: object
-            properties:
-                preset:
-                    type: string
-                    description: Omit to preserve the saved preset.
-                    enum:
-                        - gateway
-                        - security
-                visible_task_keys:
-                    type: array
-                    items:
-                        type: string
-                    description: Complete explicit selection; an empty array selects no tasks.
-            required:
-                - visible_task_keys
         SetSourceEnvironmentLinkRequestBody:
             type: object
             properties:
@@ -101033,6 +101011,14 @@ components:
             required:
                 - id
                 - client_id
+        SubmitOnboardingSurveyRequestBody:
+            type: object
+            properties:
+                preset:
+                    type: string
+                    description: Onboarding preset key the survey answers resolved to.
+            required:
+                - preset
         SubmitRiskBlockFeedbackRequestBody:
             type: object
             properties:

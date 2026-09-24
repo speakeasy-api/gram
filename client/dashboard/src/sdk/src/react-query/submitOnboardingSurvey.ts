@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { organizationsSetSetupTaskSelection } from "../funcs/organizationsSetSetupTaskSelection.js";
+import { organizationsSubmitOnboardingSurvey } from "../funcs/organizationsSubmitOnboardingSurvey.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { ListSetupTasksResult } from "../models/components/listsetuptasksresult.js";
@@ -24,22 +24,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
-  SetSetupTaskSelectionRequest,
-  SetSetupTaskSelectionSecurity,
-} from "../models/operations/setsetuptaskselection.js";
+  SubmitOnboardingSurveyRequest,
+  SubmitOnboardingSurveySecurity,
+} from "../models/operations/submitonboardingsurvey.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type SetSetupTaskSelectionMutationVariables = {
-  request: SetSetupTaskSelectionRequest;
-  security?: SetSetupTaskSelectionSecurity | undefined;
+export type SubmitOnboardingSurveyMutationVariables = {
+  request: SubmitOnboardingSurveyRequest;
+  security?: SubmitOnboardingSurveySecurity | undefined;
   options?: RequestOptions;
 };
 
-export type SetSetupTaskSelectionMutationData = ListSetupTasksResult;
+export type SubmitOnboardingSurveyMutationData = ListSetupTasksResult;
 
-export type SetSetupTaskSelectionMutationError =
+export type SubmitOnboardingSurveyMutationError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -51,49 +51,49 @@ export type SetSetupTaskSelectionMutationError =
   | SDKValidationError;
 
 /**
- * setSetupTaskSelection organizations
+ * submitOnboardingSurvey organizations
  *
  * @remarks
- * Replace which setup tasks the organization sees in the setup wizard. Tasks left out are hidden; progress and assignments are kept.
+ * Record the onboarding survey result. The server derives which setup tasks the wizard walks from it; progress and assignments are kept.
  */
-export function useSetSetupTaskSelectionMutation(
+export function useSubmitOnboardingSurveyMutation(
   options?: MutationHookOptions<
-    SetSetupTaskSelectionMutationData,
-    SetSetupTaskSelectionMutationError,
-    SetSetupTaskSelectionMutationVariables
+    SubmitOnboardingSurveyMutationData,
+    SubmitOnboardingSurveyMutationError,
+    SubmitOnboardingSurveyMutationVariables
   >,
 ): UseMutationResult<
-  SetSetupTaskSelectionMutationData,
-  SetSetupTaskSelectionMutationError,
-  SetSetupTaskSelectionMutationVariables
+  SubmitOnboardingSurveyMutationData,
+  SubmitOnboardingSurveyMutationError,
+  SubmitOnboardingSurveyMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildSetSetupTaskSelectionMutation(client, options),
+    ...buildSubmitOnboardingSurveyMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeySetSetupTaskSelection(): MutationKey {
-  return ["@gram/client", "organizations", "setSetupTaskSelection"];
+export function mutationKeySubmitOnboardingSurvey(): MutationKey {
+  return ["@gram/client", "organizations", "submitOnboardingSurvey"];
 }
 
-export function buildSetSetupTaskSelectionMutation(
+export function buildSubmitOnboardingSurveyMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: SetSetupTaskSelectionMutationVariables,
-  ) => Promise<SetSetupTaskSelectionMutationData>;
+    variables: SubmitOnboardingSurveyMutationVariables,
+  ) => Promise<SubmitOnboardingSurveyMutationData>;
 } {
   return {
-    mutationKey: mutationKeySetSetupTaskSelection(),
-    mutationFn: function setSetupTaskSelectionMutationFn({
+    mutationKey: mutationKeySubmitOnboardingSurvey(),
+    mutationFn: function submitOnboardingSurveyMutationFn({
       request,
       security,
       options,
-    }): Promise<SetSetupTaskSelectionMutationData> {
+    }): Promise<SubmitOnboardingSurveyMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -106,7 +106,7 @@ export function buildSetSetupTaskSelectionMutation(
           ),
         },
       };
-      return unwrapAsync(organizationsSetSetupTaskSelection(
+      return unwrapAsync(organizationsSubmitOnboardingSurvey(
         client$,
         request,
         security,

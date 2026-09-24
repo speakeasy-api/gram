@@ -3236,25 +3236,25 @@ func EncodeUpdateSetupTaskError(encoder func(context.Context, http.ResponseWrite
 	}
 }
 
-// EncodeSetSetupTaskSelectionResponse returns an encoder for responses
-// returned by the organizations setSetupTaskSelection endpoint.
-func EncodeSetSetupTaskSelectionResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeSubmitOnboardingSurveyResponse returns an encoder for responses
+// returned by the organizations submitOnboardingSurvey endpoint.
+func EncodeSubmitOnboardingSurveyResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*organizations.ListSetupTasksResult)
 		enc := encoder(ctx, w)
-		body := NewSetSetupTaskSelectionResponseBody(res)
+		body := NewSubmitOnboardingSurveyResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeSetSetupTaskSelectionRequest returns a decoder for requests sent to
-// the organizations setSetupTaskSelection endpoint.
-func DecodeSetSetupTaskSelectionRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*organizations.SetSetupTaskSelectionPayload, error) {
-	return func(r *http.Request) (*organizations.SetSetupTaskSelectionPayload, error) {
-		var payload *organizations.SetSetupTaskSelectionPayload
+// DecodeSubmitOnboardingSurveyRequest returns a decoder for requests sent to
+// the organizations submitOnboardingSurvey endpoint.
+func DecodeSubmitOnboardingSurveyRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*organizations.SubmitOnboardingSurveyPayload, error) {
+	return func(r *http.Request) (*organizations.SubmitOnboardingSurveyPayload, error) {
+		var payload *organizations.SubmitOnboardingSurveyPayload
 		var (
-			body SetSetupTaskSelectionRequestBody
+			body SubmitOnboardingSurveyRequestBody
 			err  error
 		)
 		err = decoder(r).Decode(&body)
@@ -3268,7 +3268,7 @@ func DecodeSetSetupTaskSelectionRequest(mux goahttp.Muxer, decoder func(*http.Re
 			}
 			return payload, goa.DecodePayloadError(err.Error())
 		}
-		err = ValidateSetSetupTaskSelectionRequestBody(&body)
+		err = ValidateSubmitOnboardingSurveyRequestBody(&body)
 		if err != nil {
 			return payload, err
 		}
@@ -3280,7 +3280,7 @@ func DecodeSetSetupTaskSelectionRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		payload = NewSetSetupTaskSelectionPayload(&body, sessionToken)
+		payload = NewSubmitOnboardingSurveyPayload(&body, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3293,9 +3293,9 @@ func DecodeSetSetupTaskSelectionRequest(mux goahttp.Muxer, decoder func(*http.Re
 	}
 }
 
-// EncodeSetSetupTaskSelectionError returns an encoder for errors returned by
-// the setSetupTaskSelection organizations endpoint.
-func EncodeSetSetupTaskSelectionError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeSubmitOnboardingSurveyError returns an encoder for errors returned by
+// the submitOnboardingSurvey organizations endpoint.
+func EncodeSubmitOnboardingSurveyError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -3312,7 +3312,7 @@ func EncodeSetSetupTaskSelectionError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSetSetupTaskSelectionUnauthorizedResponseBody(res)
+				body = NewSubmitOnboardingSurveyUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -3326,7 +3326,7 @@ func EncodeSetSetupTaskSelectionError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSetSetupTaskSelectionForbiddenResponseBody(res)
+				body = NewSubmitOnboardingSurveyForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -3340,7 +3340,7 @@ func EncodeSetSetupTaskSelectionError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSetSetupTaskSelectionBadRequestResponseBody(res)
+				body = NewSubmitOnboardingSurveyBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -3354,7 +3354,7 @@ func EncodeSetSetupTaskSelectionError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSetSetupTaskSelectionNotFoundResponseBody(res)
+				body = NewSubmitOnboardingSurveyNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -3368,7 +3368,7 @@ func EncodeSetSetupTaskSelectionError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSetSetupTaskSelectionConflictResponseBody(res)
+				body = NewSubmitOnboardingSurveyConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -3382,7 +3382,7 @@ func EncodeSetSetupTaskSelectionError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSetSetupTaskSelectionUnsupportedMediaResponseBody(res)
+				body = NewSubmitOnboardingSurveyUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -3396,7 +3396,7 @@ func EncodeSetSetupTaskSelectionError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSetSetupTaskSelectionInvalidResponseBody(res)
+				body = NewSubmitOnboardingSurveyInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -3410,7 +3410,7 @@ func EncodeSetSetupTaskSelectionError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSetSetupTaskSelectionInvariantViolationResponseBody(res)
+				body = NewSubmitOnboardingSurveyInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3424,7 +3424,7 @@ func EncodeSetSetupTaskSelectionError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSetSetupTaskSelectionUnexpectedResponseBody(res)
+				body = NewSubmitOnboardingSurveyUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -3438,7 +3438,7 @@ func EncodeSetSetupTaskSelectionError(encoder func(context.Context, http.Respons
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewSetSetupTaskSelectionGatewayErrorResponseBody(res)
+				body = NewSubmitOnboardingSurveyGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

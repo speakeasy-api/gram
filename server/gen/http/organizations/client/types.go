@@ -73,13 +73,11 @@ type UpdateSetupTaskRequestBody struct {
 	Hidden *bool `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
 }
 
-// SetSetupTaskSelectionRequestBody is the type of the "organizations" service
-// "setSetupTaskSelection" endpoint HTTP request body.
-type SetSetupTaskSelectionRequestBody struct {
-	// Complete explicit selection; an empty array selects no tasks.
-	VisibleTaskKeys []string `form:"visible_task_keys" json:"visible_task_keys" xml:"visible_task_keys"`
-	// Omit to preserve the saved preset.
-	Preset *string `form:"preset,omitempty" json:"preset,omitempty" xml:"preset,omitempty"`
+// SubmitOnboardingSurveyRequestBody is the type of the "organizations" service
+// "submitOnboardingSurvey" endpoint HTTP request body.
+type SubmitOnboardingSurveyRequestBody struct {
+	// Onboarding preset key the survey answers resolved to.
+	Preset string `form:"preset" json:"preset" xml:"preset"`
 }
 
 // GetResponseBody is the type of the "organizations" service "get" endpoint
@@ -247,9 +245,9 @@ type UpdateSetupTaskResponseBody struct {
 	Hidden *bool `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
 }
 
-// SetSetupTaskSelectionResponseBody is the type of the "organizations" service
-// "setSetupTaskSelection" endpoint HTTP response body.
-type SetSetupTaskSelectionResponseBody struct {
+// SubmitOnboardingSurveyResponseBody is the type of the "organizations"
+// service "submitOnboardingSurvey" endpoint HTTP response body.
+type SubmitOnboardingSurveyResponseBody struct {
 	// Setup tasks in catalog order.
 	Tasks []*SetupTaskResponseBody `form:"tasks,omitempty" json:"tasks,omitempty" xml:"tasks,omitempty"`
 }
@@ -3252,10 +3250,10 @@ type UpdateSetupTaskGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetSetupTaskSelectionUnauthorizedResponseBody is the type of the
-// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// SubmitOnboardingSurveyUnauthorizedResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
 // for the "unauthorized" error.
-type SetSetupTaskSelectionUnauthorizedResponseBody struct {
+type SubmitOnboardingSurveyUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3271,10 +3269,10 @@ type SetSetupTaskSelectionUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetSetupTaskSelectionForbiddenResponseBody is the type of the
-// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// SubmitOnboardingSurveyForbiddenResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
 // for the "forbidden" error.
-type SetSetupTaskSelectionForbiddenResponseBody struct {
+type SubmitOnboardingSurveyForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3290,10 +3288,10 @@ type SetSetupTaskSelectionForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetSetupTaskSelectionBadRequestResponseBody is the type of the
-// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// SubmitOnboardingSurveyBadRequestResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
 // for the "bad_request" error.
-type SetSetupTaskSelectionBadRequestResponseBody struct {
+type SubmitOnboardingSurveyBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3309,10 +3307,10 @@ type SetSetupTaskSelectionBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetSetupTaskSelectionNotFoundResponseBody is the type of the "organizations"
-// service "setSetupTaskSelection" endpoint HTTP response body for the
-// "not_found" error.
-type SetSetupTaskSelectionNotFoundResponseBody struct {
+// SubmitOnboardingSurveyNotFoundResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
+// for the "not_found" error.
+type SubmitOnboardingSurveyNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3328,10 +3326,10 @@ type SetSetupTaskSelectionNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetSetupTaskSelectionConflictResponseBody is the type of the "organizations"
-// service "setSetupTaskSelection" endpoint HTTP response body for the
-// "conflict" error.
-type SetSetupTaskSelectionConflictResponseBody struct {
+// SubmitOnboardingSurveyConflictResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
+// for the "conflict" error.
+type SubmitOnboardingSurveyConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3347,10 +3345,10 @@ type SetSetupTaskSelectionConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetSetupTaskSelectionUnsupportedMediaResponseBody is the type of the
-// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// SubmitOnboardingSurveyUnsupportedMediaResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
 // for the "unsupported_media" error.
-type SetSetupTaskSelectionUnsupportedMediaResponseBody struct {
+type SubmitOnboardingSurveyUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3366,10 +3364,10 @@ type SetSetupTaskSelectionUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetSetupTaskSelectionInvalidResponseBody is the type of the "organizations"
-// service "setSetupTaskSelection" endpoint HTTP response body for the
+// SubmitOnboardingSurveyInvalidResponseBody is the type of the "organizations"
+// service "submitOnboardingSurvey" endpoint HTTP response body for the
 // "invalid" error.
-type SetSetupTaskSelectionInvalidResponseBody struct {
+type SubmitOnboardingSurveyInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3385,10 +3383,10 @@ type SetSetupTaskSelectionInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetSetupTaskSelectionInvariantViolationResponseBody is the type of the
-// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// SubmitOnboardingSurveyInvariantViolationResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
 // for the "invariant_violation" error.
-type SetSetupTaskSelectionInvariantViolationResponseBody struct {
+type SubmitOnboardingSurveyInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3404,10 +3402,10 @@ type SetSetupTaskSelectionInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetSetupTaskSelectionUnexpectedResponseBody is the type of the
-// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// SubmitOnboardingSurveyUnexpectedResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
 // for the "unexpected" error.
-type SetSetupTaskSelectionUnexpectedResponseBody struct {
+type SubmitOnboardingSurveyUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3423,10 +3421,10 @@ type SetSetupTaskSelectionUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// SetSetupTaskSelectionGatewayErrorResponseBody is the type of the
-// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// SubmitOnboardingSurveyGatewayErrorResponseBody is the type of the
+// "organizations" service "submitOnboardingSurvey" endpoint HTTP response body
 // for the "gateway_error" error.
-type SetSetupTaskSelectionGatewayErrorResponseBody struct {
+type SubmitOnboardingSurveyGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3652,20 +3650,12 @@ func NewUpdateSetupTaskRequestBody(p *organizations.UpdateSetupTaskPayload) *Upd
 	return body
 }
 
-// NewSetSetupTaskSelectionRequestBody builds the HTTP request body from the
-// payload of the "setSetupTaskSelection" endpoint of the "organizations"
+// NewSubmitOnboardingSurveyRequestBody builds the HTTP request body from the
+// payload of the "submitOnboardingSurvey" endpoint of the "organizations"
 // service.
-func NewSetSetupTaskSelectionRequestBody(p *organizations.SetSetupTaskSelectionPayload) *SetSetupTaskSelectionRequestBody {
-	body := &SetSetupTaskSelectionRequestBody{
+func NewSubmitOnboardingSurveyRequestBody(p *organizations.SubmitOnboardingSurveyPayload) *SubmitOnboardingSurveyRequestBody {
+	body := &SubmitOnboardingSurveyRequestBody{
 		Preset: p.Preset,
-	}
-	if p.VisibleTaskKeys != nil {
-		body.VisibleTaskKeys = make([]string, len(p.VisibleTaskKeys))
-		for i, val := range p.VisibleTaskKeys {
-			body.VisibleTaskKeys[i] = val
-		}
-	} else {
-		body.VisibleTaskKeys = []string{}
 	}
 	return body
 }
@@ -6260,9 +6250,9 @@ func NewUpdateSetupTaskGatewayError(body *UpdateSetupTaskGatewayErrorResponseBod
 	return v
 }
 
-// NewSetSetupTaskSelectionListSetupTasksResultOK builds a "organizations"
-// service "setSetupTaskSelection" endpoint result from a HTTP "OK" response.
-func NewSetSetupTaskSelectionListSetupTasksResultOK(body *SetSetupTaskSelectionResponseBody) *organizations.ListSetupTasksResult {
+// NewSubmitOnboardingSurveyListSetupTasksResultOK builds a "organizations"
+// service "submitOnboardingSurvey" endpoint result from a HTTP "OK" response.
+func NewSubmitOnboardingSurveyListSetupTasksResultOK(body *SubmitOnboardingSurveyResponseBody) *organizations.ListSetupTasksResult {
 	v := &organizations.ListSetupTasksResult{}
 	v.Tasks = make([]*organizations.SetupTask, len(body.Tasks))
 	for i, val := range body.Tasks {
@@ -6276,9 +6266,9 @@ func NewSetSetupTaskSelectionListSetupTasksResultOK(body *SetSetupTaskSelectionR
 	return v
 }
 
-// NewSetSetupTaskSelectionUnauthorized builds a organizations service
-// setSetupTaskSelection endpoint unauthorized error.
-func NewSetSetupTaskSelectionUnauthorized(body *SetSetupTaskSelectionUnauthorizedResponseBody) *goa.ServiceError {
+// NewSubmitOnboardingSurveyUnauthorized builds a organizations service
+// submitOnboardingSurvey endpoint unauthorized error.
+func NewSubmitOnboardingSurveyUnauthorized(body *SubmitOnboardingSurveyUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6291,9 +6281,9 @@ func NewSetSetupTaskSelectionUnauthorized(body *SetSetupTaskSelectionUnauthorize
 	return v
 }
 
-// NewSetSetupTaskSelectionForbidden builds a organizations service
-// setSetupTaskSelection endpoint forbidden error.
-func NewSetSetupTaskSelectionForbidden(body *SetSetupTaskSelectionForbiddenResponseBody) *goa.ServiceError {
+// NewSubmitOnboardingSurveyForbidden builds a organizations service
+// submitOnboardingSurvey endpoint forbidden error.
+func NewSubmitOnboardingSurveyForbidden(body *SubmitOnboardingSurveyForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6306,9 +6296,9 @@ func NewSetSetupTaskSelectionForbidden(body *SetSetupTaskSelectionForbiddenRespo
 	return v
 }
 
-// NewSetSetupTaskSelectionBadRequest builds a organizations service
-// setSetupTaskSelection endpoint bad_request error.
-func NewSetSetupTaskSelectionBadRequest(body *SetSetupTaskSelectionBadRequestResponseBody) *goa.ServiceError {
+// NewSubmitOnboardingSurveyBadRequest builds a organizations service
+// submitOnboardingSurvey endpoint bad_request error.
+func NewSubmitOnboardingSurveyBadRequest(body *SubmitOnboardingSurveyBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6321,9 +6311,9 @@ func NewSetSetupTaskSelectionBadRequest(body *SetSetupTaskSelectionBadRequestRes
 	return v
 }
 
-// NewSetSetupTaskSelectionNotFound builds a organizations service
-// setSetupTaskSelection endpoint not_found error.
-func NewSetSetupTaskSelectionNotFound(body *SetSetupTaskSelectionNotFoundResponseBody) *goa.ServiceError {
+// NewSubmitOnboardingSurveyNotFound builds a organizations service
+// submitOnboardingSurvey endpoint not_found error.
+func NewSubmitOnboardingSurveyNotFound(body *SubmitOnboardingSurveyNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6336,9 +6326,9 @@ func NewSetSetupTaskSelectionNotFound(body *SetSetupTaskSelectionNotFoundRespons
 	return v
 }
 
-// NewSetSetupTaskSelectionConflict builds a organizations service
-// setSetupTaskSelection endpoint conflict error.
-func NewSetSetupTaskSelectionConflict(body *SetSetupTaskSelectionConflictResponseBody) *goa.ServiceError {
+// NewSubmitOnboardingSurveyConflict builds a organizations service
+// submitOnboardingSurvey endpoint conflict error.
+func NewSubmitOnboardingSurveyConflict(body *SubmitOnboardingSurveyConflictResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6351,9 +6341,9 @@ func NewSetSetupTaskSelectionConflict(body *SetSetupTaskSelectionConflictRespons
 	return v
 }
 
-// NewSetSetupTaskSelectionUnsupportedMedia builds a organizations service
-// setSetupTaskSelection endpoint unsupported_media error.
-func NewSetSetupTaskSelectionUnsupportedMedia(body *SetSetupTaskSelectionUnsupportedMediaResponseBody) *goa.ServiceError {
+// NewSubmitOnboardingSurveyUnsupportedMedia builds a organizations service
+// submitOnboardingSurvey endpoint unsupported_media error.
+func NewSubmitOnboardingSurveyUnsupportedMedia(body *SubmitOnboardingSurveyUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6366,9 +6356,9 @@ func NewSetSetupTaskSelectionUnsupportedMedia(body *SetSetupTaskSelectionUnsuppo
 	return v
 }
 
-// NewSetSetupTaskSelectionInvalid builds a organizations service
-// setSetupTaskSelection endpoint invalid error.
-func NewSetSetupTaskSelectionInvalid(body *SetSetupTaskSelectionInvalidResponseBody) *goa.ServiceError {
+// NewSubmitOnboardingSurveyInvalid builds a organizations service
+// submitOnboardingSurvey endpoint invalid error.
+func NewSubmitOnboardingSurveyInvalid(body *SubmitOnboardingSurveyInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6381,9 +6371,9 @@ func NewSetSetupTaskSelectionInvalid(body *SetSetupTaskSelectionInvalidResponseB
 	return v
 }
 
-// NewSetSetupTaskSelectionInvariantViolation builds a organizations service
-// setSetupTaskSelection endpoint invariant_violation error.
-func NewSetSetupTaskSelectionInvariantViolation(body *SetSetupTaskSelectionInvariantViolationResponseBody) *goa.ServiceError {
+// NewSubmitOnboardingSurveyInvariantViolation builds a organizations service
+// submitOnboardingSurvey endpoint invariant_violation error.
+func NewSubmitOnboardingSurveyInvariantViolation(body *SubmitOnboardingSurveyInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6396,9 +6386,9 @@ func NewSetSetupTaskSelectionInvariantViolation(body *SetSetupTaskSelectionInvar
 	return v
 }
 
-// NewSetSetupTaskSelectionUnexpected builds a organizations service
-// setSetupTaskSelection endpoint unexpected error.
-func NewSetSetupTaskSelectionUnexpected(body *SetSetupTaskSelectionUnexpectedResponseBody) *goa.ServiceError {
+// NewSubmitOnboardingSurveyUnexpected builds a organizations service
+// submitOnboardingSurvey endpoint unexpected error.
+func NewSubmitOnboardingSurveyUnexpected(body *SubmitOnboardingSurveyUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6411,9 +6401,9 @@ func NewSetSetupTaskSelectionUnexpected(body *SetSetupTaskSelectionUnexpectedRes
 	return v
 }
 
-// NewSetSetupTaskSelectionGatewayError builds a organizations service
-// setSetupTaskSelection endpoint gateway_error error.
-func NewSetSetupTaskSelectionGatewayError(body *SetSetupTaskSelectionGatewayErrorResponseBody) *goa.ServiceError {
+// NewSubmitOnboardingSurveyGatewayError builds a organizations service
+// submitOnboardingSurvey endpoint gateway_error error.
+func NewSubmitOnboardingSurveyGatewayError(body *SubmitOnboardingSurveyGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6709,9 +6699,9 @@ func ValidateUpdateSetupTaskResponseBody(body *UpdateSetupTaskResponseBody) (err
 	return
 }
 
-// ValidateSetSetupTaskSelectionResponseBody runs the validations defined on
-// SetSetupTaskSelectionResponseBody
-func ValidateSetSetupTaskSelectionResponseBody(body *SetSetupTaskSelectionResponseBody) (err error) {
+// ValidateSubmitOnboardingSurveyResponseBody runs the validations defined on
+// SubmitOnboardingSurveyResponseBody
+func ValidateSubmitOnboardingSurveyResponseBody(body *SubmitOnboardingSurveyResponseBody) (err error) {
 	if body.Tasks == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tasks", "body"))
 	}
@@ -10582,9 +10572,9 @@ func ValidateUpdateSetupTaskGatewayErrorResponseBody(body *UpdateSetupTaskGatewa
 	return
 }
 
-// ValidateSetSetupTaskSelectionUnauthorizedResponseBody runs the validations
-// defined on setSetupTaskSelection_unauthorized_response_body
-func ValidateSetSetupTaskSelectionUnauthorizedResponseBody(body *SetSetupTaskSelectionUnauthorizedResponseBody) (err error) {
+// ValidateSubmitOnboardingSurveyUnauthorizedResponseBody runs the validations
+// defined on submitOnboardingSurvey_unauthorized_response_body
+func ValidateSubmitOnboardingSurveyUnauthorizedResponseBody(body *SubmitOnboardingSurveyUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10606,9 +10596,9 @@ func ValidateSetSetupTaskSelectionUnauthorizedResponseBody(body *SetSetupTaskSel
 	return
 }
 
-// ValidateSetSetupTaskSelectionForbiddenResponseBody runs the validations
-// defined on setSetupTaskSelection_forbidden_response_body
-func ValidateSetSetupTaskSelectionForbiddenResponseBody(body *SetSetupTaskSelectionForbiddenResponseBody) (err error) {
+// ValidateSubmitOnboardingSurveyForbiddenResponseBody runs the validations
+// defined on submitOnboardingSurvey_forbidden_response_body
+func ValidateSubmitOnboardingSurveyForbiddenResponseBody(body *SubmitOnboardingSurveyForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10630,9 +10620,9 @@ func ValidateSetSetupTaskSelectionForbiddenResponseBody(body *SetSetupTaskSelect
 	return
 }
 
-// ValidateSetSetupTaskSelectionBadRequestResponseBody runs the validations
-// defined on setSetupTaskSelection_bad_request_response_body
-func ValidateSetSetupTaskSelectionBadRequestResponseBody(body *SetSetupTaskSelectionBadRequestResponseBody) (err error) {
+// ValidateSubmitOnboardingSurveyBadRequestResponseBody runs the validations
+// defined on submitOnboardingSurvey_bad_request_response_body
+func ValidateSubmitOnboardingSurveyBadRequestResponseBody(body *SubmitOnboardingSurveyBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10654,9 +10644,9 @@ func ValidateSetSetupTaskSelectionBadRequestResponseBody(body *SetSetupTaskSelec
 	return
 }
 
-// ValidateSetSetupTaskSelectionNotFoundResponseBody runs the validations
-// defined on setSetupTaskSelection_not_found_response_body
-func ValidateSetSetupTaskSelectionNotFoundResponseBody(body *SetSetupTaskSelectionNotFoundResponseBody) (err error) {
+// ValidateSubmitOnboardingSurveyNotFoundResponseBody runs the validations
+// defined on submitOnboardingSurvey_not_found_response_body
+func ValidateSubmitOnboardingSurveyNotFoundResponseBody(body *SubmitOnboardingSurveyNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10678,9 +10668,9 @@ func ValidateSetSetupTaskSelectionNotFoundResponseBody(body *SetSetupTaskSelecti
 	return
 }
 
-// ValidateSetSetupTaskSelectionConflictResponseBody runs the validations
-// defined on setSetupTaskSelection_conflict_response_body
-func ValidateSetSetupTaskSelectionConflictResponseBody(body *SetSetupTaskSelectionConflictResponseBody) (err error) {
+// ValidateSubmitOnboardingSurveyConflictResponseBody runs the validations
+// defined on submitOnboardingSurvey_conflict_response_body
+func ValidateSubmitOnboardingSurveyConflictResponseBody(body *SubmitOnboardingSurveyConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10702,9 +10692,9 @@ func ValidateSetSetupTaskSelectionConflictResponseBody(body *SetSetupTaskSelecti
 	return
 }
 
-// ValidateSetSetupTaskSelectionUnsupportedMediaResponseBody runs the
-// validations defined on setSetupTaskSelection_unsupported_media_response_body
-func ValidateSetSetupTaskSelectionUnsupportedMediaResponseBody(body *SetSetupTaskSelectionUnsupportedMediaResponseBody) (err error) {
+// ValidateSubmitOnboardingSurveyUnsupportedMediaResponseBody runs the
+// validations defined on submitOnboardingSurvey_unsupported_media_response_body
+func ValidateSubmitOnboardingSurveyUnsupportedMediaResponseBody(body *SubmitOnboardingSurveyUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10726,9 +10716,9 @@ func ValidateSetSetupTaskSelectionUnsupportedMediaResponseBody(body *SetSetupTas
 	return
 }
 
-// ValidateSetSetupTaskSelectionInvalidResponseBody runs the validations
-// defined on setSetupTaskSelection_invalid_response_body
-func ValidateSetSetupTaskSelectionInvalidResponseBody(body *SetSetupTaskSelectionInvalidResponseBody) (err error) {
+// ValidateSubmitOnboardingSurveyInvalidResponseBody runs the validations
+// defined on submitOnboardingSurvey_invalid_response_body
+func ValidateSubmitOnboardingSurveyInvalidResponseBody(body *SubmitOnboardingSurveyInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10750,10 +10740,10 @@ func ValidateSetSetupTaskSelectionInvalidResponseBody(body *SetSetupTaskSelectio
 	return
 }
 
-// ValidateSetSetupTaskSelectionInvariantViolationResponseBody runs the
+// ValidateSubmitOnboardingSurveyInvariantViolationResponseBody runs the
 // validations defined on
-// setSetupTaskSelection_invariant_violation_response_body
-func ValidateSetSetupTaskSelectionInvariantViolationResponseBody(body *SetSetupTaskSelectionInvariantViolationResponseBody) (err error) {
+// submitOnboardingSurvey_invariant_violation_response_body
+func ValidateSubmitOnboardingSurveyInvariantViolationResponseBody(body *SubmitOnboardingSurveyInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10775,9 +10765,9 @@ func ValidateSetSetupTaskSelectionInvariantViolationResponseBody(body *SetSetupT
 	return
 }
 
-// ValidateSetSetupTaskSelectionUnexpectedResponseBody runs the validations
-// defined on setSetupTaskSelection_unexpected_response_body
-func ValidateSetSetupTaskSelectionUnexpectedResponseBody(body *SetSetupTaskSelectionUnexpectedResponseBody) (err error) {
+// ValidateSubmitOnboardingSurveyUnexpectedResponseBody runs the validations
+// defined on submitOnboardingSurvey_unexpected_response_body
+func ValidateSubmitOnboardingSurveyUnexpectedResponseBody(body *SubmitOnboardingSurveyUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -10799,9 +10789,9 @@ func ValidateSetSetupTaskSelectionUnexpectedResponseBody(body *SetSetupTaskSelec
 	return
 }
 
-// ValidateSetSetupTaskSelectionGatewayErrorResponseBody runs the validations
-// defined on setSetupTaskSelection_gateway_error_response_body
-func ValidateSetSetupTaskSelectionGatewayErrorResponseBody(body *SetSetupTaskSelectionGatewayErrorResponseBody) (err error) {
+// ValidateSubmitOnboardingSurveyGatewayErrorResponseBody runs the validations
+// defined on submitOnboardingSurvey_gateway_error_response_body
+func ValidateSubmitOnboardingSurveyGatewayErrorResponseBody(body *SubmitOnboardingSurveyGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

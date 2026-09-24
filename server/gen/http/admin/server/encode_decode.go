@@ -12237,7 +12237,8 @@ func marshalAdminAdminOnboardingTaskToAdminOnboardingTaskResponseBody(v *admin.A
 // *admin.AdminOnboardingPreset.
 func marshalAdminAdminOnboardingPresetToAdminOnboardingPresetResponseBody(v *admin.AdminOnboardingPreset) *AdminOnboardingPresetResponseBody {
 	res := &AdminOnboardingPresetResponseBody{
-		Key: v.Key,
+		Key:   v.Key,
+		Title: v.Title,
 	}
 	if v.VisibleTaskKeys != nil {
 		res.VisibleTaskKeys = make([]string, len(v.VisibleTaskKeys))

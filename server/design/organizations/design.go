@@ -365,27 +365,26 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateSetupTask"}`)
 	})
 
-	Method("setSetupTaskSelection", func() {
-		Description("Replace which setup tasks the organization sees in the setup wizard. Tasks left out are hidden; progress and assignments are kept.")
+	Method("submitOnboardingSurvey", func() {
+		Description("Record the onboarding survey result. The server derives which setup tasks the wizard walks from it; progress and assignments are kept.")
 
 		Payload(func() {
-			Attribute("visible_task_keys", ArrayOf(String), "Complete explicit selection; an empty array selects no tasks.")
-			Attribute("preset", String, "Omit to preserve the saved preset.", func() { Enum("gateway", "security") })
-			Required("visible_task_keys")
+			Attribute("preset", String, "Onboarding preset key the survey answers resolved to.")
+			Required("preset")
 			security.SessionPayload()
 		})
 
 		Result(ListSetupTasksResult)
 
 		HTTP(func() {
-			POST("/rpc/organizations.setSetupTaskSelection")
+			POST("/rpc/organizations.submitOnboardingSurvey")
 			security.SessionHeader()
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "setSetupTaskSelection")
-		Meta("openapi:extension:x-speakeasy-name-override", "setSetupTaskSelection")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetSetupTaskSelection"}`)
+		Meta("openapi:operationId", "submitOnboardingSurvey")
+		Meta("openapi:extension:x-speakeasy-name-override", "submitOnboardingSurvey")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SubmitOnboardingSurvey"}`)
 	})
 })
 

@@ -17,7 +17,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn, getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import { setupTaskSlug } from "../../task-slugs";
+import { setupTaskSlug } from "../../setup-cards";
 import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
 import { IDP_PROVIDERS } from "../../providers";

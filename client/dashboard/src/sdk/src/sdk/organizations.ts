@@ -15,7 +15,7 @@ import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
 import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js";
 import { organizationsSendEnterpriseAdminOnboardingEmail } from "../funcs/organizationsSendEnterpriseAdminOnboardingEmail.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
-import { organizationsSetSetupTaskSelection } from "../funcs/organizationsSetSetupTaskSelection.js";
+import { organizationsSubmitOnboardingSurvey } from "../funcs/organizationsSubmitOnboardingSurvey.js";
 import { organizationsUpdateInviteRole } from "../funcs/organizationsUpdateInviteRole.js";
 import { organizationsUpdateSetupTask } from "../funcs/organizationsUpdateSetupTask.js";
 import { organizationsVerifyOnboardingHooksSetup } from "../funcs/organizationsVerifyOnboardingHooksSetup.js";
@@ -84,9 +84,9 @@ import {
   SendInviteSecurity,
 } from "../models/operations/sendinvite.js";
 import {
-  SetSetupTaskSelectionRequest,
-  SetSetupTaskSelectionSecurity,
-} from "../models/operations/setsetuptaskselection.js";
+  SubmitOnboardingSurveyRequest,
+  SubmitOnboardingSurveySecurity,
+} from "../models/operations/submitonboardingsurvey.js";
 import {
   UpdateInviteRoleRequest,
   UpdateInviteRoleSecurity,
@@ -350,17 +350,17 @@ export class Organizations extends ClientSDK {
   }
 
   /**
-   * setSetupTaskSelection organizations
+   * submitOnboardingSurvey organizations
    *
    * @remarks
-   * Replace which setup tasks the organization sees in the setup wizard. Tasks left out are hidden; progress and assignments are kept.
+   * Record the onboarding survey result. The server derives which setup tasks the wizard walks from it; progress and assignments are kept.
    */
-  async setSetupTaskSelection(
-    request: SetSetupTaskSelectionRequest,
-    security?: SetSetupTaskSelectionSecurity | undefined,
+  async submitOnboardingSurvey(
+    request: SubmitOnboardingSurveyRequest,
+    security?: SubmitOnboardingSurveySecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListSetupTasksResult> {
-    return unwrapAsync(organizationsSetSetupTaskSelection(
+    return unwrapAsync(organizationsSubmitOnboardingSurvey(
       this,
       request,
       security,

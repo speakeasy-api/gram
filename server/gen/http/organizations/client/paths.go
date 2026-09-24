@@ -87,7 +87,7 @@ func UpdateSetupTaskOrganizationsPath() string {
 	return "/rpc/organizations.updateSetupTask"
 }
 
-// SetSetupTaskSelectionOrganizationsPath returns the URL path to the organizations service setSetupTaskSelection HTTP endpoint.
-func SetSetupTaskSelectionOrganizationsPath() string {
-	return "/rpc/organizations.setSetupTaskSelection"
+// SubmitOnboardingSurveyOrganizationsPath returns the URL path to the organizations service submitOnboardingSurvey HTTP endpoint.
+func SubmitOnboardingSurveyOrganizationsPath() string {
+	return "/rpc/organizations.submitOnboardingSurvey"
 }

@@ -317,14 +317,15 @@ var AdminOnboardingTask = Type("AdminOnboardingTask", func() {
 })
 
 var AdminOnboardingPreset = Type("AdminOnboardingPreset", func() {
-	Attribute("key", String, func() { Enum("gateway", "security") })
+	Attribute("key", String)
+	Attribute("title", String)
 	Attribute("visible_task_keys", ArrayOf(String))
-	Required("key", "visible_task_keys")
+	Required("key", "title", "visible_task_keys")
 })
 
 var AdminOnboardingConfiguration = Type("AdminOnboardingConfiguration", func() {
 	Attribute("organization_id", String)
-	Attribute("preset", String, "Absent for legacy organizations.", func() { Enum("gateway", "security") })
+	Attribute("preset", String, "Absent for legacy organizations.")
 	Attribute("tasks", ArrayOf(AdminOnboardingTask))
 	Attribute("presets", ArrayOf(AdminOnboardingPreset))
 	Required("organization_id", "tasks", "presets")
@@ -1114,7 +1115,7 @@ var _ = Service("admin", func() {
 			security.AdminAuthPayload()
 			Attribute("organization_id", String)
 			Attribute("visible_task_keys", ArrayOf(String), "Complete explicit selection; an empty array selects no tasks.")
-			Attribute("preset", String, "Omit to preserve the saved preset. Null/reset is not supported.", func() { Enum("gateway", "security") })
+			Attribute("preset", String, "A key from presets. Omit to preserve the saved preset. Null/reset is not supported.")
 			Required("organization_id", "visible_task_keys")
 		})
 		Result(AdminOnboardingConfiguration)

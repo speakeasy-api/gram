@@ -10,7 +10,7 @@ import type { IdpProvider } from "../../types";
 import { Input } from "@/components/ui/Input";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useOrgRoutes } from "@/routes";
-import { setupTaskSlug } from "../../task-slugs";
+import { setupTaskSlug } from "../../setup-cards";
 import { cn, getServerURL } from "@/lib/utils";
 
 function ProviderIcon({

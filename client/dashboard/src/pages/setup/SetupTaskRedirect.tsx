@@ -1,6 +1,6 @@
 import { useOrgRoutes } from "@/routes";
 import { Navigate, useParams } from "react-router";
-import { setupTaskKeyForSlug, setupTaskSlug } from "./task-slugs";
+import { setupTaskKeyForSlug, setupTaskSlug } from "./setup-cards";
 
 /**
  * Legacy route target: each setup card used to have its own page at
