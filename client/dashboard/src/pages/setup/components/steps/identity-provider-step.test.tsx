@@ -267,7 +267,12 @@ describe("split identity prerequisites", () => {
         domainVerified,
         ssoConfigured,
       } as typeof onboardingStatus.current.data;
-      render(<ConnectIdpStep onComplete={vi.fn()} onSkip={vi.fn()} />);
+      render(
+        <ConnectIdpStep
+          onComplete={vi.fn<() => void>()}
+          onSkip={vi.fn<() => void>()}
+        />,
+      );
       fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
       const connect = screen.getByRole<HTMLButtonElement>("button", {
         name: "Connect",
@@ -286,14 +291,25 @@ describe("split identity prerequisites", () => {
       isLoading: false,
       refetch: vi.fn(),
     } as unknown as typeof onboardingStatus.current;
-    render(<ConnectIdpStep onComplete={vi.fn()} onSkip={vi.fn()} />);
+    render(
+      <ConnectIdpStep
+        onComplete={vi.fn<() => void>()}
+        onSkip={vi.fn<() => void>()}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     expect(portal.mutate).toHaveBeenCalledOnce();
   });
   it("does not gate directory sync on domain verification", () => {
     onboardingStatus.current.data.domainVerified = false;
-    render(<DirectorySyncStep onComplete={vi.fn()} onSkip={vi.fn()} />);
+    render(
+      <DirectorySyncStep
+        onBack={vi.fn<() => void>()}
+        onComplete={vi.fn<() => void>()}
+        onSkip={vi.fn<() => void>()}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Connect directory" }));
     expect(portal.mutate).toHaveBeenCalledOnce();
   });

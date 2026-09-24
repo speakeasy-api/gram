@@ -1,11 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  KeyRound,
-  ExternalLink,
-  Loader2,
-  ChevronDown,
-  Search,
-} from "lucide-react";
+import { ExternalLink, Loader2, ChevronDown, Search } from "lucide-react";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
@@ -148,11 +142,6 @@ export function ConnectIdpStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <KeyRound className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Connect identity provider"
       description="Connect your SSO provider to enable secure authentication for your team. This allows employees to sign in with their existing credentials."
       onContinue={continueAction}

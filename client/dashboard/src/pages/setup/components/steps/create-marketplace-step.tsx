@@ -75,11 +75,6 @@ export function CreateMarketplaceStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <GitBranch className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Create plugin marketplace"
       description="Speakeasy publishes a private GitHub repo that acts as your team's plugin marketplace for supported coding agents. It ships with our core observability plugin, required for us to collect usage metrics and enforce authorization, and is also where any plugins you build in Speakeasy later get published — so this only needs to be set up once per project."
       onContinue={primaryAction}

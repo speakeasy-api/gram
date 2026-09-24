@@ -9,7 +9,6 @@ import {
   DirectorySyncStep,
   DistributeServersStep,
   DomainVerificationStep,
-  LiteLLMSetupStep,
   InstrumentAgentsStep,
   LiteLLMSetupStep,
   PlatformMCPSetupStep,
@@ -98,7 +97,6 @@ export function TaskStepContent({
     case "enable-logging":
       return (
         <StepContainer
-          icon={null}
           title="Enable logging"
           description="Enable logging and session capture to observe your team's AI usage."
           onContinue={onComplete}
@@ -109,8 +107,6 @@ export function TaskStepContent({
       );
     case "domain-verification":
       return <DomainVerificationStep onComplete={onComplete} />;
-    case "litellm":
-      return <LiteLLMSetupStep onComplete={onComplete} />;
     case "identity-provider":
       return <IdentityProviderStep onComplete={onComplete} />;
     case "anthropic-observability":

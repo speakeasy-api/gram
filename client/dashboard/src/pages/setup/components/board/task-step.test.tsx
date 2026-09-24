@@ -152,7 +152,7 @@ describe("workstream task coverage", () => {
     const step = TaskStepContent({
       taskId: "domain-verification",
       onComplete,
-      onClose: vi.fn(),
+      onClose: vi.fn<() => void>(),
     });
     expect(step.type).toBe(DomainVerificationStep);
     expect(step.props.onComplete).toBe(onComplete);

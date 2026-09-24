@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Users, ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
@@ -89,11 +89,6 @@ export function DirectorySyncStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <Users className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Directory sync"
       description="Connect your identity provider's directory to automatically sync users, groups, and roles. Changes in your IdP will be reflected in Speakeasy."
       onContinue={continueAction}

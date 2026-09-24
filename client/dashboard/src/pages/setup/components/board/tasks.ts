@@ -1,6 +1,5 @@
 export type OnboardingTaskId =
   | "domain-verification"
-  | "litellm"
   | "identity-provider"
   | "anthropic-observability"
   | "anthropic-admin-controls"

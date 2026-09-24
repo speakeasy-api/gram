@@ -1,17 +1,19 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { SetupTaskContent } from "./setup-task-content";
-import { StepSupportButton } from "./step-container";
+import { StepContainer } from "./step-container";
 import type { TaskStepProps } from "./board/task-step";
 
 vi.mock("./board/task-step", () => ({
   TaskStep: ({ taskId, onComplete, onClose }: TaskStepProps) => (
-    <div>
-      <p>{taskId}</p>
-      <button onClick={onComplete}>Complete</button>
+    <StepContainer
+      title={taskId}
+      description="Setup task"
+      onContinue={onComplete}
+      markDoneLabel="Complete"
+    >
       <button onClick={onClose}>Skip</button>
-      <StepSupportButton />
-    </div>
+    </StepContainer>
   ),
 }));
 
