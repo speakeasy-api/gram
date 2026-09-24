@@ -549,7 +549,10 @@ type Message_builder struct {
 	ToolCallId *string
 	// Source value. Absence does not imply successful completion.
 	FinishReason *string
-	// Producers must supply exactly one body representation.
+	// Producers must supply exactly one body representation. Protobuf oneof only
+	// enforces at most one: ChatMessageWriter.enqueueMessages sets an inline body
+	// (including for empty messages), replacing it with a reference when oversized.
+	// Consumers must reject snapshots with neither representation.
 
 	// Fields of oneof xxx_hidden_Content:
 	Body *Message_Body
