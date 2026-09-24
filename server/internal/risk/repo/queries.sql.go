@@ -2805,12 +2805,13 @@ FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
   AND action IN ('block', 'warn', 'quarantine')
+  AND mcp_scope IS NULL
   AND deleted IS FALSE
 `
 
 // Enforcing actions are block (hard deny), warn (challenge: deny + ack link,
 // allowed after acknowledgement), and quarantine (hard deny + session circuit).
-// flag is non-enforcing and excluded.
+// flag is non-enforcing and excluded. MCP-scoped policies run only at the MCP seams.
 func (q *Queries) ListEnabledEnforcingPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
 	rows, err := q.db.Query(ctx, listEnabledEnforcingPoliciesByProject, projectID)
 	if err != nil {
@@ -2970,6 +2971,7 @@ FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
   AND deleted IS FALSE
+  AND mcp_scope IS NULL
   AND 'shadow_mcp' = ANY(sources)
 ORDER BY id
 `
@@ -3036,6 +3038,63 @@ ORDER BY id
 
 func (q *Queries) ListEnabledToolIdentityPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
 	rows, err := q.db.Query(ctx, listEnabledToolIdentityPoliciesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.McpScope,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnabledUnscopedRiskPoliciesByProject = `-- name: ListEnabledUnscopedRiskPoliciesByProject :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE project_id = $1
+  AND enabled IS TRUE
+  AND mcp_scope IS NULL
+  AND deleted IS FALSE
+`
+
+// MCP-scoped policies are evaluated only at the MCP seams.
+func (q *Queries) ListEnabledUnscopedRiskPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listEnabledUnscopedRiskPoliciesByProject, projectID)
 	if err != nil {
 		return nil, err
 	}

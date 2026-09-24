@@ -1182,6 +1182,12 @@ function ScopeStep({
             tool traffic.
           </Text>
         ) : null}
+        {mcpScoped && selectedCategories.has("shadow_mcp") ? (
+          <Text small className="text-destructive">
+            Shadow MCP detection watches unmanaged servers, so it cannot be
+            limited to selected MCP servers.
+          </Text>
+        ) : null}
         <InspectMatrix
           selectedCategories={selectedCategories}
           scopeOverrides={scopeOverrides}
@@ -3690,7 +3696,9 @@ export function StandardPolicyEditor({
     !mcpScope.allServers &&
     mcpScope.servers.length === 0;
   const mcpScopeIncompatible =
-    mcpScope.mode === "mcp" && selectedCategories.has("account_identity");
+    mcpScope.mode === "mcp" &&
+    (selectedCategories.has("account_identity") ||
+      selectedCategories.has("shadow_mcp"));
   const saveBlocked =
     !hasEnabledDetector ||
     audienceMissing ||

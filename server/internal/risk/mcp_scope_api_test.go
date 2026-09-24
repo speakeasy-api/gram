@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -226,4 +227,68 @@ func sortedPolicyNames(policies []*types.RiskPolicy) []string {
 	}
 	slices.Sort(names)
 	return names
+}
+
+func TestRiskPolicyMCPScopeRejectsShadowMCP(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	projectID, organizationID := riskTestProject(t, ctx)
+	serverID, _, _ := seedRiskMCPServers(t, ctx, ti, projectID, organizationID)
+
+	name := "Scoped shadow MCP"
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:    &name,
+		Sources: []string{"shadow_mcp"},
+		Action:  "flag",
+		McpScope: &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{{
+			McpServerID: serverID.String(),
+		}}},
+	})
+	require.ErrorContains(t, err, `source "shadow_mcp" cannot be used by an MCP-scoped policy`)
+}
+
+func TestMCPScopedPoliciesExcludedFromHookAndBatchLookups(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	projectID, organizationID := riskTestProject(t, ctx)
+	serverID, _, _ := seedRiskMCPServers(t, ctx, ti, projectID, organizationID)
+
+	create := func(name string, scope *types.RiskMCPScope) uuid.UUID {
+		t.Helper()
+		policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+			Name:     &name,
+			Sources:  []string{"gitleaks"},
+			Action:   "block",
+			McpScope: scope,
+		})
+		require.NoError(t, err)
+		return uuid.MustParse(policy.ID)
+	}
+	everywhere := create("Everywhere", nil)
+	scoped := create("Scoped", &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{{
+		McpServerID: serverID.String(),
+	}}})
+
+	ids := func(policies []riskrepo.RiskPolicy) []uuid.UUID {
+		out := make([]uuid.UUID, 0, len(policies))
+		for _, policy := range policies {
+			out = append(out, policy.ID)
+		}
+		return out
+	}
+	queries := riskrepo.New(ti.conn)
+
+	unscoped, err := queries.ListEnabledUnscopedRiskPoliciesByProject(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{everywhere}, ids(unscoped))
+
+	enforcing, err := queries.ListEnabledEnforcingPoliciesByProject(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{everywhere}, ids(enforcing))
+
+	all, err := queries.ListEnabledRiskPoliciesByProject(ctx, projectID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []uuid.UUID{everywhere, scoped}, ids(all))
 }

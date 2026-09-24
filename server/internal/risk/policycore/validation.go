@@ -172,8 +172,10 @@ func ValidateMCPScopeSources(scope *MCPScope, sources []string) error {
 	if scope == nil {
 		return nil
 	}
-	if slices.Contains(sources, ra.SourceAccountIdentity) {
-		return fmt.Errorf("source %q cannot be used by an MCP-scoped policy", ra.SourceAccountIdentity)
+	for _, source := range []string{ra.SourceAccountIdentity, shadowmcp.SourceShadowMCP} {
+		if slices.Contains(sources, source) {
+			return fmt.Errorf("source %q cannot be used by an MCP-scoped policy", source)
+		}
 	}
 	return nil
 }

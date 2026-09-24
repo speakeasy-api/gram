@@ -73,6 +73,11 @@ func TestValidateMCPScopeSources(t *testing.T) {
 		ValidateMCPScopeSources(scope, []string{ra.SourceAccountIdentity}),
 		`source "account_identity" cannot be used by an MCP-scoped policy`,
 	)
+	require.EqualError(
+		t,
+		ValidateMCPScopeSources(scope, []string{shadowmcp.SourceShadowMCP}),
+		`source "shadow_mcp" cannot be used by an MCP-scoped policy`,
+	)
 }
 
 func TestValidateActionAndSourceCompatibility(t *testing.T) {

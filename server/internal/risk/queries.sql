@@ -129,6 +129,15 @@ WHERE project_id = @project_id
   AND enabled IS TRUE
   AND deleted IS FALSE;
 
+-- name: ListEnabledUnscopedRiskPoliciesByProject :many
+-- MCP-scoped policies are evaluated only at the MCP seams.
+SELECT *
+FROM risk_policies
+WHERE project_id = @project_id
+  AND enabled IS TRUE
+  AND mcp_scope IS NULL
+  AND deleted IS FALSE;
+
 -- name: ListRiskPolicyMCPScopeServerIDs :many
 SELECT server.id
 FROM mcp_servers AS server
@@ -1490,12 +1499,13 @@ LIMIT @page_limit;
 -- name: ListEnabledEnforcingPoliciesByProject :many
 -- Enforcing actions are block (hard deny), warn (challenge: deny + ack link,
 -- allowed after acknowledgement), and quarantine (hard deny + session circuit).
--- flag is non-enforcing and excluded.
+-- flag is non-enforcing and excluded. MCP-scoped policies run only at the MCP seams.
 SELECT *
 FROM risk_policies
 WHERE project_id = @project_id
   AND enabled IS TRUE
   AND action IN ('block', 'warn', 'quarantine')
+  AND mcp_scope IS NULL
   AND deleted IS FALSE;
 
 -- name: IsOrganizationHooksFailOpenEnabled :one
@@ -1582,6 +1592,7 @@ FROM risk_policies
 WHERE project_id = @project_id
   AND enabled IS TRUE
   AND deleted IS FALSE
+  AND mcp_scope IS NULL
   AND 'shadow_mcp' = ANY(sources)
 ORDER BY id;
 
