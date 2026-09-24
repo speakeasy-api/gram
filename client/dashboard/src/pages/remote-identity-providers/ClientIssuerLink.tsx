@@ -21,5 +21,5 @@ export function ClientIssuerLink({
     return <>{issuerDisplayName(issuer)}</>;
   }
 
-  return <IssuerLink issuer={issuer} className="text-foreground" />;
+  return <IssuerLink issuer={issuer} className="hover:text-foreground" />;
 }

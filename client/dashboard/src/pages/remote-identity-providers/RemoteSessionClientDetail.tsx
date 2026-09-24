@@ -103,14 +103,14 @@ export default function RemoteSessionClientDetail(): JSX.Element {
               />
             )}
           </div>
+          {issuer && (
+            <Text small muted className="mt-2 block">
+              <ClientIssuerLink issuer={issuer} />
+            </Text>
+          )}
           <Heading variant="h1" className="break-all normal-case">
             {label}
           </Heading>
-          {issuer && (
-            <Text small muted>
-              Remote Identity Provider: <ClientIssuerLink issuer={issuer} />
-            </Text>
-          )}
         </DetailHero>
 
         <RequireScope scope={["org:read", "org:admin"]} level="page">
