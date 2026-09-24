@@ -3633,6 +3633,7 @@ type WorkloadAgentAssignment struct {
 	OrganizationID   string
 	WorkloadIssuerID uuid.UUID
 	Subject          string
+	MatchKind        string
 	AgentID          uuid.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
@@ -3646,6 +3647,7 @@ type WorkloadIdentityAdmission struct {
 	ProjectID        uuid.NullUUID
 	WorkloadIssuerID uuid.UUID
 	Subject          string
+	MatchKind        string
 	Name             pgtype.Text
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
@@ -3654,18 +3656,19 @@ type WorkloadIdentityAdmission struct {
 }
 
 type WorkloadIssuer struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	Name           string
-	Tags           []string
-	Issuer         string
-	JwksUri        string
-	Metadata       []byte
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.NullUUID
+	Name                   string
+	Tags                   []string
+	Issuer                 string
+	JwksUri                string
+	AllowWildcardAdmission bool
+	Metadata               []byte
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 type WorkosOrganizationSync struct {
