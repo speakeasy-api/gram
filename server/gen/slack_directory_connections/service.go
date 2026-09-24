@@ -27,8 +27,7 @@ type Service interface {
 	ListMembers(context.Context, *ListMembersPayload) (res *ListMembersResult, err error)
 	// Read mapped Slack accounts for an active organization person by exact Gram
 	// user ID. Browser session only; caller must be that person or an organization
-	// administrator. Requires the organization rollout. Does not infer
-	// associations from email or grant permissions.
+	// administrator. Does not infer associations from email or grant permissions.
 	ListPersonAccounts(context.Context, *ListPersonAccountsPayload) (res *ListPersonAccountsResult, err error)
 	// Read current Slack profile and mapping before an administrator confirms a
 	// selection.

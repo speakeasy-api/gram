@@ -25397,7 +25397,7 @@ func slackDirectoryConnectionsUsage() {
 	fmt.Fprintln(os.Stderr, `    list: List implements list.`)
 	fmt.Fprintln(os.Stderr, `    sync: Request a complete Slack workspace directory sync. Concurrent requests join the running sync.`)
 	fmt.Fprintln(os.Stderr, `    list-members: Read observed Slack members across the organization or within one workspace. Does not create identity mappings.`)
-	fmt.Fprintln(os.Stderr, `    list-person-accounts: Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Requires the organization rollout. Does not infer associations from email or grant permissions.`)
+	fmt.Fprintln(os.Stderr, `    list-person-accounts: Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Does not infer associations from email or grant permissions.`)
 	fmt.Fprintln(os.Stderr, `    get-member: Read current Slack profile and mapping before an administrator confirms a selection.`)
 	fmt.Fprintln(os.Stderr, `    set-mapping: Explicitly confirm, reassign or remove a Slack association. This grants no permissions and does not establish runtime eligibility.`)
 	fmt.Fprintln(os.Stderr, `    begin: Begin implements begin.`)
@@ -25490,7 +25490,7 @@ func slackDirectoryConnectionsListPersonAccountsUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Requires the organization rollout. Does not infer associations from email or grant permissions.`)
+	fmt.Fprintln(os.Stderr, `Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Does not infer associations from email or grant permissions.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)

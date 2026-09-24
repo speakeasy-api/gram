@@ -152,7 +152,7 @@ var _ = Service("slackDirectoryConnections", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SlackDirectoryMembers"}`)
 	})
 	Method("listPersonAccounts", func() {
-		Description("Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Requires the organization rollout. Does not infer associations from email or grant permissions.")
+		Description("Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Does not infer associations from email or grant permissions.")
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("user_id", String, "Exact Gram user ID of the active organization person.", func() { MinLength(1) })

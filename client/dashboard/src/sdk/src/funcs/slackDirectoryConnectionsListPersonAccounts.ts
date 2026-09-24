@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * listPersonAccounts slackDirectoryConnections
  *
  * @remarks
- * Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Requires the organization rollout. Does not infer associations from email or grant permissions.
+ * Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Does not infer associations from email or grant permissions.
  */
 export function slackDirectoryConnectionsListPersonAccounts(
   client: GramCore,
