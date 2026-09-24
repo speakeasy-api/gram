@@ -11,6 +11,8 @@ package mcpservers_test
 import (
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
@@ -47,6 +49,17 @@ func TestToolDispositionResolver_DerivesFromMetadata(t *testing.T) {
 		"list_items":  "read_only",
 		"delete_item": "destructive",
 	}, got)
+
+	annotations, err := ti.dispositions.ToolAnnotations(
+		ctx,
+		uuid.MustParse(serverID),
+		*authCtx.ProjectID,
+		"delete_item",
+	)
+	require.NoError(t, err)
+	require.NotNil(t, annotations)
+	require.NotNil(t, annotations.DestructiveHint)
+	require.True(t, *annotations.DestructiveHint)
 }
 
 func TestToolDispositionResolver_UnknownServerResolvesEmpty(t *testing.T) {

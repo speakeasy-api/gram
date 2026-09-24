@@ -1,0 +1,294 @@
+package risk_test
+
+import (
+	"context"
+	"slices"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	gen "github.com/speakeasy-api/gram/server/gen/risk"
+	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+)
+
+func TestRiskPolicyMCPScopeRoundTripsAndFiltersEnabledPolicies(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	projectID, organizationID := riskTestProject(t, ctx)
+	serverID, otherServerID, gatewayID := seedRiskMCPServers(t, ctx, ti, projectID, organizationID)
+
+	_, err := mcpserversrepo.New(ti.conn).AddMCPServerToolMetadata(ctx, mcpserversrepo.AddMCPServerToolMetadataParams{
+		ProjectID:   projectID,
+		McpServerID: serverID,
+		Tools:       []byte(`[{"tool_name":"danger","destructive_hint":true}]`),
+	})
+	require.NoError(t, err)
+
+	allPolicy := createMCPScopedPolicy(t, ctx, ti, "Everywhere", true, nil)
+	annotationPolicy := createMCPScopedPolicy(t, ctx, ti, "Destructive tools", true, &types.RiskMCPScope{
+		AllServers:      true,
+		ToolAnnotations: []string{"destructiveHint"},
+		Servers:         []*types.RiskMCPServerScope{},
+	})
+	directPolicy := createMCPScopedPolicy(t, ctx, ti, "Direct search", true, &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{{
+		McpServerID: serverID.String(),
+		Tools:       []string{"search"},
+	}}})
+	gatewayPolicy := createMCPScopedPolicy(t, ctx, ti, "Gateway", true, &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{{
+		McpServerID: gatewayID.String(),
+	}}})
+	createMCPScopedPolicy(t, ctx, ti, "Other server", true, &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{{
+		McpServerID: otherServerID.String(),
+		Tools:       []string{"search"},
+	}}})
+	createMCPScopedPolicy(t, ctx, ti, "Disabled", false, &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{{
+		McpServerID: serverID.String(),
+	}}})
+
+	got, err := ti.service.GetRiskPolicy(ctx, &gen.GetRiskPolicyPayload{ID: directPolicy.ID})
+	require.NoError(t, err)
+	require.Equal(t, directPolicy.McpScope, got.McpScope)
+
+	annotationRoundTrip, err := ti.service.GetRiskPolicy(ctx, &gen.GetRiskPolicyPayload{ID: annotationPolicy.ID})
+	require.NoError(t, err)
+	require.Equal(t, annotationPolicy.McpScope, annotationRoundTrip.McpScope)
+
+	searchPolicies, err := ti.service.ListRiskPoliciesForMcpServer(ctx, &gen.ListRiskPoliciesForMcpServerPayload{
+		McpServerID: serverID.String(),
+		ToolName:    new("search"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"Direct search", "Gateway"}, sortedPolicyNames(searchPolicies.Policies))
+
+	destructivePolicies, err := ti.service.ListRiskPoliciesForMcpServer(ctx, &gen.ListRiskPoliciesForMcpServerPayload{
+		McpServerID: serverID.String(),
+		ToolName:    new("danger"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"Destructive tools", "Gateway"}, sortedPolicyNames(destructivePolicies.Policies))
+
+	otherToolPolicies, err := ti.service.ListRiskPoliciesForMcpServer(ctx, &gen.ListRiskPoliciesForMcpServerPayload{
+		McpServerID: serverID.String(),
+		ToolName:    new("write"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"Gateway"}, sortedPolicyNames(otherToolPolicies.Policies))
+
+	serverOnlyPolicies, err := ti.service.ListRiskPoliciesForMcpServer(ctx, &gen.ListRiskPoliciesForMcpServerPayload{
+		McpServerID: serverID.String(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"Destructive tools", "Direct search", "Gateway"}, sortedPolicyNames(serverOnlyPolicies.Policies))
+
+	cleared, err := ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:       gatewayPolicy.ID,
+		Name:     gatewayPolicy.Name,
+		McpScope: &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{}},
+	})
+	require.NoError(t, err)
+	require.Nil(t, cleared.McpScope)
+
+	_, err = ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:    new("Foreign server"),
+		Sources: []string{"destructive_tool"},
+		Action:  "flag",
+		McpScope: &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{{
+			McpServerID: uuid.NewString(),
+		}}},
+	})
+	require.ErrorContains(t, err, "does not belong to the project")
+
+	require.NotNil(t, allPolicy)
+}
+
+func TestRiskPolicyMCPScopeRejectsAccountIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	projectID, organizationID := riskTestProject(t, ctx)
+	serverID, _, _ := seedRiskMCPServers(t, ctx, ti, projectID, organizationID)
+	scope := &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{{
+		McpServerID: serverID.String(),
+	}}}
+
+	name := "Scoped account identity"
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:     &name,
+		Sources:  []string{"account_identity"},
+		Action:   "flag",
+		McpScope: scope,
+	})
+	require.ErrorContains(t, err, `source "account_identity" cannot be used by an MCP-scoped policy`)
+
+	name = "All-server account identity"
+	unscoped, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:    &name,
+		Sources: []string{"account_identity"},
+		Action:  "flag",
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateRiskPolicy(ctx, &gen.UpdateRiskPolicyPayload{
+		ID:       unscoped.ID,
+		Name:     unscoped.Name,
+		McpScope: scope,
+	})
+	require.ErrorContains(t, err, `source "account_identity" cannot be used by an MCP-scoped policy`)
+}
+
+func createMCPScopedPolicy(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	name string,
+	enabled bool,
+	scope *types.RiskMCPScope,
+) *types.RiskPolicy {
+	t.Helper()
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:     &name,
+		Sources:  []string{"destructive_tool"},
+		Enabled:  &enabled,
+		Action:   "flag",
+		McpScope: scope,
+	})
+	require.NoError(t, err)
+	return policy
+}
+
+func riskTestProject(t *testing.T, ctx context.Context) (uuid.UUID, string) {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	return *authCtx.ProjectID, authCtx.ActiveOrganizationID
+}
+
+func seedRiskMCPServers(
+	t *testing.T,
+	ctx context.Context,
+	ti *testInstance,
+	projectID uuid.UUID,
+	organizationID string,
+) (uuid.UUID, uuid.UUID, uuid.UUID) {
+	t.Helper()
+	fixtures := testrepo.New(ti.conn)
+	toolsetID := uuid.New()
+	_, err := fixtures.CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{
+		ID:             toolsetID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		Name:           "Risk scope tools",
+		Slug:           "risk-scope-tools",
+	})
+	require.NoError(t, err)
+
+	createServer := func() uuid.UUID {
+		id := uuid.New()
+		_, err := fixtures.CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
+			ID:         id,
+			ProjectID:  projectID,
+			ToolsetID:  uuid.NullUUID{UUID: toolsetID, Valid: true},
+			Visibility: "private",
+		})
+		require.NoError(t, err)
+		return id
+	}
+	serverID := createServer()
+	otherServerID := createServer()
+	gatewayID := uuid.New()
+	_, err = fixtures.CreateMCPGatewayFixture(ctx, testrepo.CreateMCPGatewayFixtureParams{
+		ID:             gatewayID,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		Name:           "Risk scope gateway",
+	})
+	require.NoError(t, err)
+	_, err = metamcprepo.New(ti.conn).CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{
+		ProjectID:       projectID,
+		MetaMcpServerID: gatewayID,
+		McpServerID:     serverID,
+		SortOrder:       0,
+	})
+	require.NoError(t, err)
+	return serverID, otherServerID, gatewayID
+}
+
+func sortedPolicyNames(policies []*types.RiskPolicy) []string {
+	names := make([]string, 0, len(policies))
+	for _, policy := range policies {
+		names = append(names, policy.Name)
+	}
+	slices.Sort(names)
+	return names
+}
+
+func TestRiskPolicyMCPScopeRejectsShadowMCP(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	projectID, organizationID := riskTestProject(t, ctx)
+	serverID, _, _ := seedRiskMCPServers(t, ctx, ti, projectID, organizationID)
+
+	name := "Scoped shadow MCP"
+	_, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name:    &name,
+		Sources: []string{"shadow_mcp"},
+		Action:  "flag",
+		McpScope: &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{{
+			McpServerID: serverID.String(),
+		}}},
+	})
+	require.ErrorContains(t, err, `source "shadow_mcp" cannot be used by an MCP-scoped policy`)
+}
+
+func TestMCPScopedPoliciesExcludedFromHookAndBatchLookups(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestRiskService(t)
+	projectID, organizationID := riskTestProject(t, ctx)
+	serverID, _, _ := seedRiskMCPServers(t, ctx, ti, projectID, organizationID)
+
+	create := func(name string, scope *types.RiskMCPScope) uuid.UUID {
+		t.Helper()
+		policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+			Name:     &name,
+			Sources:  []string{"gitleaks"},
+			Action:   "block",
+			McpScope: scope,
+		})
+		require.NoError(t, err)
+		return uuid.MustParse(policy.ID)
+	}
+	everywhere := create("Everywhere", nil)
+	scoped := create("Scoped", &types.RiskMCPScope{Servers: []*types.RiskMCPServerScope{{
+		McpServerID: serverID.String(),
+	}}})
+
+	ids := func(policies []riskrepo.RiskPolicy) []uuid.UUID {
+		out := make([]uuid.UUID, 0, len(policies))
+		for _, policy := range policies {
+			out = append(out, policy.ID)
+		}
+		return out
+	}
+	queries := riskrepo.New(ti.conn)
+
+	unscoped, err := queries.ListEnabledUnscopedRiskPoliciesByProject(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{everywhere}, ids(unscoped))
+
+	enforcing, err := queries.ListEnabledEnforcingPoliciesByProject(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{everywhere}, ids(enforcing))
+
+	all, err := queries.ListEnabledRiskPoliciesByProject(ctx, projectID)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []uuid.UUID{everywhere, scoped}, ids(all))
+}
