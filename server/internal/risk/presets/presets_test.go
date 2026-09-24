@@ -20,7 +20,7 @@ func TestPresetsResolveToValidCreatePayloads(t *testing.T) {
 	require.NoError(t, err)
 
 	ids := presets.IDs()
-	require.Equal(t, len(ids), len(uniqueStrings(ids)), "preset ids must be unique")
+	require.Len(t, uniqueStrings(ids), len(ids), "preset ids must be unique")
 	require.Equal(t, ids, keys(presets.All()))
 
 	for _, preset := range presets.All() {
