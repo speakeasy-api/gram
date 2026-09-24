@@ -1,5 +1,16 @@
 # dashboard
 
+## 0.125.0
+
+### Minor Changes
+
+- 0dd4657: Platform admins get a Support Coverage page under Platform Admin that compares integration-method capability coverage across Claude Chat, Claude Code, Cowork, Cursor, Codex, and other recognized agents. It shows 30-day aggregate telemetry and current device-agent health for the organization, and reports evidence that is loading, unavailable, or unknown as such rather than as zero coverage. The `telemetry.query` endpoint gains an optional `include_dimension_values` flag, defaulting to true, so callers that only need aggregates can omit per-row dimension values.
+- 3884bcb: Shadow AI tools open onto the people who run them. A new `access.listAIDetectionUsers` read expands one detected tool into the enrolled users it was found for, each with their devices, signals, versions and first and last sightings, with linked alias emails folded to one person. On the Harnesses, Assistants and Local Models tabs, opening a row now shows that list, the identity page's Shadow AI table turned around; each user links to their identity page. Access decisions move to the row's context menu and a button on the tool page.
+
+### Patch Changes
+
+- ee613dc: Preserve onboarding task visibility and verified completion across guided setup, and support focused identity, marketplace, logging, and traffic tasks without changing existing task selections.
+
 ## 0.124.0
 
 ### Minor Changes
