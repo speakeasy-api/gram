@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/provisiontest"
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -33,7 +34,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 var infra *testenv.Environment

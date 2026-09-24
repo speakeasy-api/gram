@@ -112,7 +112,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
 		"agent (get-plugins|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -188,7 +188,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|get-organization-onboarding|set-organization-onboarding|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -356,6 +356,10 @@ func ParseEndpoint(
 		accessListEmployeeAIDetectionsSessionTokenFlag     = accessListEmployeeAIDetectionsFlags.String("session-token", "", "")
 		accessListEmployeeAIDetectionsProjectSlugInputFlag = accessListEmployeeAIDetectionsFlags.String("project-slug-input", "", "")
 
+		accessListAIDetectionUsersFlags            = flag.NewFlagSet("list-ai-detection-users", flag.ExitOnError)
+		accessListAIDetectionUsersTargetIDFlag     = accessListAIDetectionUsersFlags.String("target-id", "REQUIRED", "")
+		accessListAIDetectionUsersSessionTokenFlag = accessListAIDetectionUsersFlags.String("session-token", "", "")
+
 		accessSetAIToolDecisionFlags            = flag.NewFlagSet("set-ai-tool-decision", flag.ExitOnError)
 		accessSetAIToolDecisionBodyFlag         = accessSetAIToolDecisionFlags.String("body", "REQUIRED", "")
 		accessSetAIToolDecisionSessionTokenFlag = accessSetAIToolDecisionFlags.String("session-token", "", "")
@@ -498,6 +502,7 @@ func ParseEndpoint(
 		agentsListDelegableGrantsFlags            = flag.NewFlagSet("list-delegable-grants", flag.ExitOnError)
 		agentsListDelegableGrantsAgentIDFlag      = agentsListDelegableGrantsFlags.String("agent-id", "REQUIRED", "")
 		agentsListDelegableGrantsToolsetIDFlag    = agentsListDelegableGrantsFlags.String("toolset-id", "", "")
+		agentsListDelegableGrantsToolsetIdsFlag   = agentsListDelegableGrantsFlags.String("toolset-ids", "", "")
 		agentsListDelegableGrantsSessionTokenFlag = agentsListDelegableGrantsFlags.String("session-token", "", "")
 
 		agentsListPolicyGrantsFlags            = flag.NewFlagSet("list-policy-grants", flag.ExitOnError)
@@ -4059,6 +4064,14 @@ func ParseEndpoint(
 		adminMarkEnterpriseTrialConvertedBodyFlag              = adminMarkEnterpriseTrialConvertedFlags.String("body", "REQUIRED", "")
 		adminMarkEnterpriseTrialConvertedAdminSessionTokenFlag = adminMarkEnterpriseTrialConvertedFlags.String("admin-session-token", "", "")
 
+		adminGetOrganizationOnboardingFlags                 = flag.NewFlagSet("get-organization-onboarding", flag.ExitOnError)
+		adminGetOrganizationOnboardingOrganizationIDFlag    = adminGetOrganizationOnboardingFlags.String("organization-id", "REQUIRED", "")
+		adminGetOrganizationOnboardingAdminSessionTokenFlag = adminGetOrganizationOnboardingFlags.String("admin-session-token", "", "")
+
+		adminSetOrganizationOnboardingFlags                 = flag.NewFlagSet("set-organization-onboarding", flag.ExitOnError)
+		adminSetOrganizationOnboardingBodyFlag              = adminSetOrganizationOnboardingFlags.String("body", "REQUIRED", "")
+		adminSetOrganizationOnboardingAdminSessionTokenFlag = adminSetOrganizationOnboardingFlags.String("admin-session-token", "", "")
+
 		adminCreateGlobalIssuerFlags                 = flag.NewFlagSet("create-global-issuer", flag.ExitOnError)
 		adminCreateGlobalIssuerBodyFlag              = adminCreateGlobalIssuerFlags.String("body", "REQUIRED", "")
 		adminCreateGlobalIssuerAdminSessionTokenFlag = adminCreateGlobalIssuerFlags.String("admin-session-token", "", "")
@@ -4414,6 +4427,7 @@ func ParseEndpoint(
 	accessResolveShadowMCPInventoryRequestFlags.Usage = accessResolveShadowMCPInventoryRequestUsage
 	accessListAIDetectionsFlags.Usage = accessListAIDetectionsUsage
 	accessListEmployeeAIDetectionsFlags.Usage = accessListEmployeeAIDetectionsUsage
+	accessListAIDetectionUsersFlags.Usage = accessListAIDetectionUsersUsage
 	accessSetAIToolDecisionFlags.Usage = accessSetAIToolDecisionUsage
 	accessListResourceAudienceFlags.Usage = accessListResourceAudienceUsage
 	accessSetResourceAudienceFlags.Usage = accessSetResourceAudienceUsage
@@ -5240,6 +5254,8 @@ func ParseEndpoint(
 	adminCancelStripeSubscriptionFlags.Usage = adminCancelStripeSubscriptionUsage
 	adminResumeStripeSubscriptionFlags.Usage = adminResumeStripeSubscriptionUsage
 	adminMarkEnterpriseTrialConvertedFlags.Usage = adminMarkEnterpriseTrialConvertedUsage
+	adminGetOrganizationOnboardingFlags.Usage = adminGetOrganizationOnboardingUsage
+	adminSetOrganizationOnboardingFlags.Usage = adminSetOrganizationOnboardingUsage
 	adminCreateGlobalIssuerFlags.Usage = adminCreateGlobalIssuerUsage
 	adminGetGlobalIssuerDuplicatePreflightFlags.Usage = adminGetGlobalIssuerDuplicatePreflightUsage
 	adminListGlobalIssuersFlags.Usage = adminListGlobalIssuersUsage
@@ -5614,6 +5630,9 @@ func ParseEndpoint(
 
 			case "list-employee-ai-detections":
 				epf = accessListEmployeeAIDetectionsFlags
+
+			case "list-ai-detection-users":
+				epf = accessListAIDetectionUsersFlags
 
 			case "set-ai-tool-decision":
 				epf = accessSetAIToolDecisionFlags
@@ -7941,6 +7960,12 @@ func ParseEndpoint(
 			case "mark-enterprise-trial-converted":
 				epf = adminMarkEnterpriseTrialConvertedFlags
 
+			case "get-organization-onboarding":
+				epf = adminGetOrganizationOnboardingFlags
+
+			case "set-organization-onboarding":
+				epf = adminSetOrganizationOnboardingFlags
+
 			case "create-global-issuer":
 				epf = adminCreateGlobalIssuerFlags
 
@@ -8266,6 +8291,9 @@ func ParseEndpoint(
 			case "list-employee-ai-detections":
 				endpoint = c.ListEmployeeAIDetections()
 				data, err = accessc.BuildListEmployeeAIDetectionsPayload(*accessListEmployeeAIDetectionsUserEmailFlag, *accessListEmployeeAIDetectionsSessionTokenFlag, *accessListEmployeeAIDetectionsProjectSlugInputFlag)
+			case "list-ai-detection-users":
+				endpoint = c.ListAIDetectionUsers()
+				data, err = accessc.BuildListAIDetectionUsersPayload(*accessListAIDetectionUsersTargetIDFlag, *accessListAIDetectionUsersSessionTokenFlag)
 			case "set-ai-tool-decision":
 				endpoint = c.SetAIToolDecision()
 				data, err = accessc.BuildSetAIToolDecisionPayload(*accessSetAIToolDecisionBodyFlag, *accessSetAIToolDecisionSessionTokenFlag)
@@ -8354,7 +8382,7 @@ func ParseEndpoint(
 				data, err = agentsc.BuildRenamePayload(*agentsRenameBodyFlag, *agentsRenameSessionTokenFlag)
 			case "list-delegable-grants":
 				endpoint = c.ListDelegableGrants()
-				data, err = agentsc.BuildListDelegableGrantsPayload(*agentsListDelegableGrantsAgentIDFlag, *agentsListDelegableGrantsToolsetIDFlag, *agentsListDelegableGrantsSessionTokenFlag)
+				data, err = agentsc.BuildListDelegableGrantsPayload(*agentsListDelegableGrantsAgentIDFlag, *agentsListDelegableGrantsToolsetIDFlag, *agentsListDelegableGrantsToolsetIdsFlag, *agentsListDelegableGrantsSessionTokenFlag)
 			case "list-policy-grants":
 				endpoint = c.ListPolicyGrants()
 				data, err = agentsc.BuildListPolicyGrantsPayload(*agentsListPolicyGrantsAgentIDFlag, *agentsListPolicyGrantsSessionTokenFlag)
@@ -10618,6 +10646,12 @@ func ParseEndpoint(
 			case "mark-enterprise-trial-converted":
 				endpoint = c.MarkEnterpriseTrialConverted()
 				data, err = adminc.BuildMarkEnterpriseTrialConvertedPayload(*adminMarkEnterpriseTrialConvertedBodyFlag, *adminMarkEnterpriseTrialConvertedAdminSessionTokenFlag)
+			case "get-organization-onboarding":
+				endpoint = c.GetOrganizationOnboarding()
+				data, err = adminc.BuildGetOrganizationOnboardingPayload(*adminGetOrganizationOnboardingOrganizationIDFlag, *adminGetOrganizationOnboardingAdminSessionTokenFlag)
+			case "set-organization-onboarding":
+				endpoint = c.SetOrganizationOnboarding()
+				data, err = adminc.BuildSetOrganizationOnboardingPayload(*adminSetOrganizationOnboardingBodyFlag, *adminSetOrganizationOnboardingAdminSessionTokenFlag)
 			case "create-global-issuer":
 				endpoint = c.CreateGlobalIssuer()
 				data, err = adminc.BuildCreateGlobalIssuerPayload(*adminCreateGlobalIssuerBodyFlag, *adminCreateGlobalIssuerAdminSessionTokenFlag)
@@ -11114,6 +11148,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    resolve-shadow-mcp-inventory-request: Review the latest pending Shadow MCP URL request and resolve all pending requests for that URL.`)
 	fmt.Fprintln(os.Stderr, `    list-ai-detections: List AI tools detected on enrolled devices by device-agent AI scans, aggregated per detection target across the organization. Org-scoped — detections attach to devices and enrolled users, not projects. Requires an authenticated session authorized for org:admin on the active organization. Each row carries the organization's gateway access decision for that tool. Display names and categories are decorated from the server's detection target catalog at read time; targets the catalog does not know are listed under their raw reported id.`)
 	fmt.Fprintln(os.Stderr, `    list-employee-ai-detections: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.`)
+	fmt.Fprintln(os.Stderr, `    list-ai-detection-users: List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.`)
 	fmt.Fprintln(os.Stderr, `    set-ai-tool-decision: Record whether a detected AI tool may reach this organization's MCP gateway. The decision is organization-level and applies to every server: a blocked tool is refused when it authenticates, so its users see an error their client cannot recover from. Enforcement needs a credential Gram can verify, so a tool that carries no verifiable gateway matcher — one linked only by a self-reported client name, or by nothing at all — cannot be decided on: the request is rejected with bad_request, nothing is recorded, and no summary is returned. An id the organization's scan target catalog does not know is rejected with not_found. Requires an authenticated session authorized for org:admin on the active organization.`)
 	fmt.Fprintln(os.Stderr, `    list-resource-audience: List who can reach one resource: the principals granted or blocked on it, and the organization-wide rules they inherit.`)
 	fmt.Fprintln(os.Stderr, `    set-resource-audience: Replace the rules that name one resource. Organization-wide rules are left untouched.`)
@@ -11499,6 +11534,26 @@ func accessListEmployeeAIDetectionsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-employee-ai-detections --user-email \"aaa\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func accessListAIDetectionUsersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-ai-detection-users", os.Args[0])
+	fmt.Fprint(os.Stderr, " -target-id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -target-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-ai-detection-users --target-id \"aa\" --session-token \"abc123\"")
 }
 
 func accessSetAIToolDecisionUsage() {
@@ -12134,6 +12189,7 @@ func agentsListDelegableGrantsUsage() {
 	fmt.Fprintf(os.Stderr, "%s [flags] agents list-delegable-grants", os.Args[0])
 	fmt.Fprint(os.Stderr, " -agent-id STRING")
 	fmt.Fprint(os.Stderr, " -toolset-id STRING")
+	fmt.Fprint(os.Stderr, " -toolset-ids JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
@@ -12144,11 +12200,12 @@ func agentsListDelegableGrantsUsage() {
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -agent-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -toolset-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -toolset-ids JSON: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-delegable-grants --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-delegable-grants --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --toolset-ids '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --session-token \"abc123\"")
 }
 
 func agentsListPolicyGrantsUsage() {
@@ -25355,7 +25412,7 @@ func telemetryQueryUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry query --body '{\n      \"filters\": [\n         {\n            \"dimension\": \"job_title\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"granularity_seconds\": 1,\n      \"group_by\": \"department_name\",\n      \"sort_by\": \"total_tokens\",\n      \"to\": \"2025-12-26T10:00:00Z\",\n      \"top_n\": 2\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry query --body '{\n      \"filters\": [\n         {\n            \"dimension\": \"job_title\",\n            \"values\": [\n               \"abc123\",\n               \"abc123\"\n            ]\n         }\n      ],\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"granularity_seconds\": 1,\n      \"group_by\": \"department_name\",\n      \"include_dimension_values\": false,\n      \"sort_by\": \"total_tokens\",\n      \"to\": \"2025-12-26T10:00:00Z\",\n      \"top_n\": 2\n   }' --session-token \"abc123\"")
 }
 
 func telemetryQueryTumDetailsUsage() {
@@ -27411,6 +27468,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    cancel-stripe-subscription: Schedules an organization's PAYG subscription to cancel at period end.`)
 	fmt.Fprintln(os.Stderr, `    resume-stripe-subscription: Removes a scheduled period-end cancellation from an organization's PAYG subscription.`)
 	fmt.Fprintln(os.Stderr, `    mark-enterprise-trial-converted: Records that an organization's enterprise trial converted to a signed contract.`)
+	fmt.Fprintln(os.Stderr, `    get-organization-onboarding: GetOrganizationOnboarding implements getOrganizationOnboarding.`)
+	fmt.Fprintln(os.Stderr, `    set-organization-onboarding: SetOrganizationOnboarding implements setOrganizationOnboarding.`)
 	fmt.Fprintln(os.Stderr, `    create-global-issuer: Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.`)
 	fmt.Fprintln(os.Stderr, `    get-global-issuer-duplicate-preflight: Report the global remote_session_issuers that already describe an upstream issuer URL, so the catalog create and edit forms can warn before curating a second entry for the same authorization server. Requires platform admin.
 	
@@ -28148,6 +28207,46 @@ func adminMarkEnterpriseTrialConvertedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin mark-enterprise-trial-converted --body '{\n      \"id\": \"aa\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetOrganizationOnboardingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-organization-onboarding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `GetOrganizationOnboarding implements getOrganizationOnboarding.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-organization-onboarding --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminSetOrganizationOnboardingUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-organization-onboarding", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `SetOrganizationOnboarding implements setOrganizationOnboarding.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-organization-onboarding --body '{\n      \"organization_id\": \"abc123\",\n      \"preset\": \"security\",\n      \"visible_task_keys\": [\n         \"abc123\"\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminCreateGlobalIssuerUsage() {

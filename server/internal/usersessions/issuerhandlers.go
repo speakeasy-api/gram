@@ -25,6 +25,7 @@ import (
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/lifecycle"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -141,6 +142,9 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := lifecycle.LockUserIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id); err != nil {
+		return nil, fmt.Errorf("lock project user session issuer: %w", err)
+	}
 
 	existing, err := txRepo.GetProjectUserSessionIssuerByID(ctx, repo.GetProjectUserSessionIssuerByIDParams{
 		ID:        id,
@@ -151,6 +155,17 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 			return nil, oops.E(oops.CodeNotFound, err, "user session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
+	}
+
+	// Compare under the issuer row lock, which also serializes binding
+	// preparation. Slug-only and no-op patches do not reconfigure bindings.
+	bindingSensitive := (payload.AuthnChallengeMode != nil && *payload.AuthnChallengeMode != existing.AuthnChallengeMode) ||
+		(durPtr != nil && conv.PtrToPGInterval(durPtr) != existing.SessionDuration) ||
+		(payload.ClientIDMetadataAdmissionMode != nil && *payload.ClientIDMetadataAdmissionMode != existing.ClientIDMetadataAdmissionMode.String)
+	if bindingSensitive {
+		if err := guardScopedUserIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id); err != nil {
+			return nil, err
+		}
 	}
 
 	beforeView := UserSessionIssuerView(existing)
@@ -353,6 +368,9 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+	if err := guardScopedUserIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id); err != nil {
+		return err
+	}
 	if err := txRepo.LockUserSessionIssuerForOwnerBinding(ctx, id); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock user session issuer for owner binding").LogError(ctx, logger)
 	}

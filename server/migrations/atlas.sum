@@ -1,4 +1,4 @@
-h1:e1bR9oPtUKrZE0MkwhiHgo7Ttb+yZ4JMGuBF4sdZFN4=
+h1:8nePbLb53seerBuTILNSovr9AOZSRzmYTMGNWdWxXSk=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -430,4 +430,5 @@ h1:e1bR9oPtUKrZE0MkwhiHgo7Ttb+yZ4JMGuBF4sdZFN4=
 20260923172149_risk-policies-add-mcp-scope.sql h1:ZLQtnDLXrHcas+F6qBCAOkysAPxjDHR0GBPk+Kw7uF8=
 20260923175416_organization-metadata-add-verified-domains.sql h1:gKLrBw8W7Xbr6CS1VpXKkUi1cfjHHz0zo4PB2R7o8EY=
 20260923183736_scope_gateway_plugin_membership.sql h1:Hsqt9NF+ixW9QZuY/sQ2jtQRPGfHlBqe3rxzwuNxUP4=
-20260923221303_admin-mcp-oauth-state.sql h1:wPf2Tk8yw9FQdggcJEy9aGqftpMifVxuPZZQ+a6cK3E=
+20260923235951_chat-messages-project-listing-idx.sql h1:B1BnEowzQSVKW7Qg583M9TED4MXBKHalT1iB2/5x3vM=
+20260924165809_admin-mcp-oauth-state.sql h1:U2AXTjGOoQMqYPKjqw988iukHF+SIOQjlq4wS6yCdW8=

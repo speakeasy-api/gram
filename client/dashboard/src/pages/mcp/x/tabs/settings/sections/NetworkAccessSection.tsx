@@ -297,6 +297,8 @@ function NetworkAccessSectionContent({
     entitled,
     ingressOnline,
     hasEligibleEndpoint: eligibleEndpoints.length > 0,
+    endpointNamespaceKind: ingress?.endpointNamespaceKind,
+    isGateway: !!metaMcpServer,
     privateStatusPending,
     privateStatusUnavailable,
     currentMode: server.networkAccessMode,
@@ -514,6 +516,8 @@ function networkAccessHint({
   entitled,
   ingressOnline,
   hasEligibleEndpoint,
+  endpointNamespaceKind,
+  isGateway,
   privateStatusPending,
   privateStatusUnavailable,
   currentMode,
@@ -521,6 +525,8 @@ function networkAccessHint({
   entitled: boolean;
   ingressOnline: boolean;
   hasEligibleEndpoint: boolean;
+  endpointNamespaceKind?: "platform" | "custom_domain";
+  isGateway: boolean;
   privateStatusPending: boolean;
   privateStatusUnavailable: boolean;
   currentMode:
@@ -546,9 +552,14 @@ function networkAccessHint({
       : "Private ingress is offline. You can still switch to public only.";
   }
   if (!hasEligibleEndpoint) {
+    const address =
+      endpointNamespaceKind === "custom_domain"
+        ? "Custom Address on the domain configured for your private network"
+        : "Hosted Address";
+    const section = isGateway ? "Gateway URL" : "Server URL";
     return currentMode === McpServerNetworkAccessMode.PublicOnly
-      ? "Add an MCP endpoint in the private ingress's pinned namespace before enabling private access."
-      : "No live endpoint remains in the pinned namespace. You can still switch to public only.";
+      ? `In ${section}, add a ${address} so clients can reach this ${isGateway ? "gateway" : "server"} through your private network.`
+      : `This ${isGateway ? "gateway" : "server"} no longer has a ${address} in ${section}, so clients cannot reach it through your private network. You can still switch to public only.`;
   }
   return "Changes apply to new connections.";
 }

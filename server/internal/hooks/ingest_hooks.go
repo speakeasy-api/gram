@@ -307,6 +307,9 @@ type skillCaptureSignal struct {
 // from a nil capture signal, which only says the payload carried no usable raw
 // hash — so callers can tell a durable write apart from a no-op or a failure.
 func (s *Service) recordSkillActivation(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, seenAt time.Time, blockReason string) (*skillCaptureSignal, bool, error) {
+	ctx, span := s.tracer.Start(ctx, "hooks.recordSkillActivation")
+	defer span.End()
+
 	if payload.Data == nil || payload.Data.Skill == nil {
 		return nil, false, nil
 	}
@@ -379,6 +382,9 @@ func normalizeRawSHA256(value string) string {
 // Best-effort: on lookup failure the effects are omitted and senders keep
 // their last-seen value.
 func (s *Service) withOrgSettings(ctx context.Context, orgID string, res *gen.IngestHookResult, capture *skillCaptureSignal) *gen.IngestHookResult {
+	ctx, span := s.tracer.Start(ctx, "hooks.withOrgSettings")
+	defer span.End()
+
 	if s.productFeatures == nil {
 		return res
 	}
@@ -455,6 +461,9 @@ type canonicalActor struct {
 // used as a fallback: an event from such a key with no self-reported email
 // stays unattributed rather than crediting every machine to the publisher.
 func (s *Service) resolveCanonicalActor(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) canonicalActor {
+	ctx, span := s.tracer.Start(ctx, "hooks.resolveCanonicalActor")
+	defer span.End()
+
 	// An agent key is the actor itself; it has no human identity to resolve.
 	if isAgentActor(ctx) {
 		return canonicalActor{UserID: "", Email: ""}
@@ -559,6 +568,9 @@ func isReservedAssistantAdapter(adapter string) bool {
 }
 
 func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time) (string, string) {
+	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalHook")
+	defer span.End()
+
 	event := canonicalHookEvent(payload, authCtx, actor, timestamp)
 	eventType := strings.TrimSpace(payload.Event.Type)
 
@@ -710,6 +722,9 @@ func (s *Service) evaluateCanonicalHook(ctx context.Context, payload *gen.Ingest
 // legacy per-provider handlers. Retried deliveries keep the deny but must not
 // mint a second row.
 func (s *Service) appendCanonicalBlockURL(ctx context.Context, authCtx *contextvalues.AuthContext, actor canonicalActor, payload *gen.IngestPayload, auditReason, toolName, policyID, userReason string) string {
+	ctx, span := s.tracer.Start(ctx, "hooks.appendCanonicalBlockURL")
+	defer span.End()
+
 	if s.isHookDuplicate(ctx) {
 		return userReason
 	}
@@ -792,6 +807,9 @@ func canonicalRiskEventType(payload *gen.IngestPayload) hookevents.EventType {
 }
 
 func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *contextvalues.AuthContext, actor canonicalActor, payload *gen.IngestPayload, rawToolName string, toolInput any) (string, string) {
+	ctx, span := s.tracer.Start(ctx, "hooks.evaluateCanonicalShadowMCP")
+	defer span.End()
+
 	policy := s.lookupShadowMCPBlockingPolicy(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID)
 	if policy == nil {
 		return "", ""
@@ -875,6 +893,9 @@ func (s *Service) resolveEvidenceFromSessionInventory(ctx context.Context, evide
 // resolve a later tool call's target to a configured server. Best-effort: a
 // cache miss downgrades a deny's detail, it never changes the decision.
 func (s *Service) cacheCanonicalMCPList(ctx context.Context, sessionID string, entries []MCPServerEntry, inventoryRead bool) {
+	ctx, span := s.tracer.Start(ctx, "hooks.cacheCanonicalMCPList")
+	defer span.End()
+
 	projectID := s.mcpListProjectID(ctx, sessionID)
 	if sessionID == "" || projectID == "" {
 		return
@@ -964,6 +985,9 @@ func (s *Service) canonicalCodexMetaTool(ctx context.Context, payload *gen.Inges
 // current behavior until they upgrade, rather than enforcement depending on a
 // server deploy and a hooks release landing in the right order.
 func (s *Service) canonicalClientReportsMCPInventory(ctx context.Context, payload *gen.IngestPayload) bool {
+	ctx, span := s.tracer.Start(ctx, "hooks.canonicalClientReportsMCPInventory")
+	defer span.End()
+
 	if canonicalMCPInventoryRead(payload) {
 		return true
 	}
@@ -1012,6 +1036,9 @@ func canonicalShadowMCPEvidence(payload *gen.IngestPayload, rawToolName string) 
 }
 
 func (s *Service) recordCanonicalHook(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext, actor canonicalActor, timestamp time.Time, blockReason string) {
+	ctx, span := s.tracer.Start(ctx, "hooks.recordCanonicalHook")
+	defer span.End()
+
 	// Resolve the session identity once, before the telemetry write, so the
 	// hook row and the chat persistence below stamp the same AI-account
 	// attribution.

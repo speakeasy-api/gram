@@ -83,13 +83,19 @@ func (m *ChallengeManager) RefreshFederatedIdentity(ctx context.Context, p *Fede
 	if err != nil {
 		return nil, err
 	}
+	return m.verifyFederatedRefresh(ctx, p, tok, receivedAt, expectedSubject, expectedNonce, doer)
+}
+
+// Keep the exchange result even if verification fails: its rotated credential
+// can be quarantined, but neither its identity nor assertion is yet trusted.
+func (m *ChallengeManager) verifyFederatedRefresh(ctx context.Context, p *FederatedProvider, tok tokenResponse, receivedAt time.Time, expectedSubject, expectedNonce string, doer httpDoer) (*FederatedRefreshResult, error) {
 	result := &FederatedRefreshResult{Identity: nil, Credentials: federatedRefreshCredentials(tok, receivedAt)}
 	if tok.IDToken == "" {
 		return result, nil
 	}
 	identity, err := m.verifyFederatedIdentityMode(ctx, p, tok, "", expectedNonce, expectedSubject, doer, true)
 	if err != nil {
-		return nil, classifyFederatedRefreshVerificationError(err)
+		return result, classifyFederatedRefreshVerificationError(err)
 	}
 	result.Identity = identity
 	return result, nil

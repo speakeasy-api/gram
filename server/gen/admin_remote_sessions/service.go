@@ -313,6 +313,10 @@ type GlobalRemoteSessionIssuer struct {
 	// Number of active tenant-owned user_session_issuers that trust this issuer.
 	// These block deletion and must be unlinked by their owning organizations.
 	TrustedUserSessionIssuerCount int
+	// Number of active identity-chaining bindings that block deletion and must be
+	// explicitly unlinked by their owning organizations. Included in the detail
+	// response; omitted from listings.
+	EmaBindingCount *int
 }
 
 // An organization- or project-level remote_session_issuer that names the same
@@ -363,8 +367,13 @@ type IssuerMigratePreflight struct {
 	// Number of user_session_issuers that trust the source. Any non-zero value
 	// blocks migration.
 	TrustedUserSessionIssuerCount int
-	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
-	// MCP-server bindings, or user-session issuers that trust the source.
+	// Number of active identity-chaining bindings on the source. Non-zero blocks
+	// migration; explicitly unlink these bindings before migration, then prepare
+	// new bindings for the target.
+	EmaBindingCount int
+	// TRUE when the migration would succeed: no active identity-chaining bindings,
+	// endpoint mismatches, conflicting MCP-server bindings, or user-session
+	// issuers that trust the source.
 	CanMigrate bool
 	// Number of tenant-owned remote_session_clients already registered with the
 	// target issuer, BEFORE this migration. Any non-zero value blocks deleting the

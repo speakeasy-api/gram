@@ -167,6 +167,22 @@ beforeEach(() => {
 });
 
 describe("SetupTaskPage", () => {
+  it("opens support for verified tasks without changing their status", async () => {
+    mocks.taskSlug = "idp";
+    render(<SetupTaskPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Get support" }));
+    await waitFor(() => expect(mocks.showPylonChat).toHaveBeenCalledOnce());
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("returns from verified tasks without rewriting their completion", async () => {
+    mocks.taskSlug = "idp";
+    render(<SetupTaskPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+    await waitFor(() => expect(mocks.goToBoard).toHaveBeenCalledOnce());
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
   it("resolves the slug to its task and lists only that task's own steps", () => {
     render(<SetupTaskPage />);
 

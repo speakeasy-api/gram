@@ -1414,3 +1414,55 @@ JOIN user_session_consents AS consent ON consent.id = @consent_id
 JOIN user_session_issuer_cimd_clients AS cimd ON cimd.id = @cimd_id
 JOIN remote_sessions AS remote ON remote.id = @remote_session_id
 WHERE client.id = @client_id;
+
+-- name: DisableDelegationOrganizationFixture :exec
+-- Test-only revocation of organization-scoped delegation authority.
+UPDATE organization_metadata SET disabled_at = clock_timestamp()
+WHERE id = @organization_id::text;
+
+-- name: RevokeDelegationUserIssuersFixture :exec
+-- Test-only revocation of organization-scoped delegation authority.
+UPDATE user_session_issuers SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id::text;
+
+-- name: RevokeDelegationClientsFixture :exec
+-- Test-only revocation of organization-scoped delegation authority.
+UPDATE remote_session_clients SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id::text;
+
+-- name: RevokeDelegationIssuersFixture :exec
+-- Test-only revocation of organization-scoped delegation authority.
+UPDATE remote_session_issuers SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id::text;
+
+-- name: GetDelegationRefreshClaimFixture :one
+-- Inspect persisted cleanup even after the authority has been revoked.
+SELECT refresh_claim_id, last_refresh_attempt_at FROM trusted_issuer_sessions
+WHERE organization_id = @organization_id::text
+AND remote_session_client_id = @client_id::uuid AND subject_urn = @subject;
+
+-- name: SeedDelegationLoaderOrganizationFixture :exec
+INSERT INTO organization_metadata (id, name, slug)
+VALUES (@organization_id, @name, @slug);
+
+-- name: SeedDelegationLoaderIssuerFixture :exec
+-- A NULL organization represents a globally shared issuer.
+INSERT INTO remote_session_issuers (id, organization_id, slug, issuer, authorization_endpoint, token_endpoint, jwks_uri)
+VALUES (@id, sqlc.narg('organization_id')::text, @slug, @issuer, sqlc.narg('authorization_endpoint')::text, sqlc.narg('token_endpoint')::text, sqlc.narg('jwks_uri')::text);
+
+-- name: SeedDelegationLoaderClientFixture :exec
+-- Permit deliberately mismatched issuer ownership to test loader isolation.
+INSERT INTO remote_session_clients (id, organization_id, remote_session_issuer_id, client_id, scope, token_endpoint_auth_method)
+VALUES (@id, @organization_id::text, @remote_session_issuer_id, @client_id, @scope::text[], 'client_secret_basic');
+
+-- name: CountPreparationFixtureBindingByID :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE id = @id AND project_id = @project_id;
+
+-- name: SeedLifecycleBindingClientFixture :exec
+-- Include cross-tenant and deleted clients to exercise binding ownership guards.
+INSERT INTO remote_session_clients (id, project_id, organization_id, remote_session_issuer_id, client_id, deleted_at)
+VALUES (@id, sqlc.narg('project_id')::uuid, sqlc.narg('organization_id')::text, @remote_session_issuer_id, @client_id, CASE WHEN @deleted::boolean THEN clock_timestamp() ELSE NULL END);
+
+-- name: IsLifecycleBackendBlockedFixture :one
+-- Observe a specific writer's lock wait instead of relying on a scheduling delay.
+SELECT cardinality(pg_blocking_pids(@pid::integer)) > 0 AS blocked;

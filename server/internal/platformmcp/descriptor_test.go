@@ -272,6 +272,10 @@ func TestGetPlatformContextPreservesAssistantCallsWithoutExternalGrants(t *testi
 	contextResult, ok := result.(PlatformContext)
 	require.True(t, ok)
 	require.Equal(t, principal.OrganizationID, contextResult.OrganizationID)
+	require.Contains(t, contextResult.Overview, "binding inspection, unlinking, and rebinding are not available through this server")
+	require.Contains(t, contextResult.Overview, "explicitly unlink affected bindings")
+	require.Contains(t, contextResult.Overview, "If that workflow is unavailable, stop and contact support")
+	require.Contains(t, contextResult.Overview, "never bypass the binding safeguard")
 	require.Empty(t, contextResult.AvailableWorkflows)
 	require.Empty(t, contextResult.RequestableWorkflows)
 }

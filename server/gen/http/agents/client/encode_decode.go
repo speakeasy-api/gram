@@ -1448,6 +1448,9 @@ func EncodeListDelegableGrantsRequest(encoder func(*http.Request) goahttp.Encode
 		if p.ToolsetID != nil {
 			values.Add("toolset_id", *p.ToolsetID)
 		}
+		for _, value := range p.ToolsetIds {
+			values.Add("toolset_ids", value)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

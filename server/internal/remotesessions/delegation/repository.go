@@ -146,7 +146,7 @@ func (r *delegationRepository) markRefreshAttempt(ctx context.Context, b Binding
 
 func (r *delegationRepository) release(ctx context.Context, b Binding, generation int64, claim uuid.UUID) (bool, error) {
 	count, err := repo.New(r.db).ReleaseTrustedDelegationRefresh(ctx, repo.ReleaseTrustedDelegationRefreshParams{
-		OrganizationID: b.OrganizationID, ClientID: b.ClientID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(), ExpectedGeneration: generation, RefreshClaimID: claim,
+		OrganizationID: b.OrganizationID, IssuerID: b.IssuerID, ClientID: b.ClientID, SubjectUrn: urn.NewUserSubject(b.HumanID).String(), ExpectedGeneration: generation, RefreshClaimID: claim,
 	})
 	if err != nil {
 		return false, fmt.Errorf("release delegation refresh claim: %w", err)

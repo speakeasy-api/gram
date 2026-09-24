@@ -373,7 +373,7 @@ const mcpGeneratorVersion = "11"
 // platformMCPGeneratorVersion is independent from mcpGeneratorVersion so adding
 // or changing the first-party Platform MCP never triggers a fleet-wide customer
 // plugin republish.
-const platformMCPGeneratorVersion = "3"
+const platformMCPGeneratorVersion = "4"
 
 // hooksGeneratorVersion is the sole rollout signal for the observability (hooks)
 // plugin. It is stamped into the hooks plugin.json version (see
@@ -386,7 +386,7 @@ const platformMCPGeneratorVersion = "3"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "42"
+const hooksGeneratorVersion = "43"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -829,7 +829,7 @@ func generateSharedFiles(plugins []PluginInfo, cfg GenerateConfig) (map[string][
 
 	codexManifest, err := marshalJSON(codexMarketplaceManifest{
 		Name:      marketplaceName,
-		Interface: codexInterface{DisplayName: cfg.OrgName + " Plugins", ShortDescription: ""},
+		Interface: codexInterface{DisplayName: cfg.OrgName + " Plugins", ShortDescription: "", LongDescription: ""},
 		Plugins:   codexPlugins,
 	})
 	if err != nil {
@@ -1065,15 +1065,20 @@ func codexAuthPolicy(p PluginInfo, cfg GenerateConfig) string {
 }
 
 func generateCodexPluginInDir(files map[string][]byte, subdir, name string, p PluginInfo, cfg GenerateConfig) error {
+	description := strings.TrimSpace(p.Description)
+	if description == "" {
+		description = "Tools and skills for " + conv.Default(strings.TrimSpace(p.Name), p.Slug) + "."
+	}
 	pluginJSON, err := marshalJSON(codexPluginMeta{
 		Name:        name,
 		Version:     pluginManifestVersion(cfg),
-		Description: p.Description,
+		Description: description,
 		MCPServers:  "./.mcp.json",
 		Hooks:       "",
 		Interface: &codexInterface{
 			DisplayName:      p.Name,
-			ShortDescription: p.Description,
+			ShortDescription: conv.TruncateString(strings.Join(strings.Fields(description), " "), 240),
+			LongDescription:  conv.TruncateString(description, 4000),
 		},
 	})
 	if err != nil {
@@ -1406,7 +1411,7 @@ func generateCodexObservabilityPluginFlat(files map[string][]byte, cfg GenerateC
 	// plugin root. path "." points back to the plugin at the ZIP root.
 	marketplaceJSON, err := marshalJSON(codexMarketplaceManifest{
 		Name:      resolveMarketplaceName(cfg),
-		Interface: codexInterface{DisplayName: cfg.OrgName + " Plugins", ShortDescription: ""},
+		Interface: codexInterface{DisplayName: cfg.OrgName + " Plugins", ShortDescription: "", LongDescription: ""},
 		Plugins: []codexMarketplaceEntry{{
 			Name: CodexObservabilitySlug(cfg),
 			Source: codexMarketplaceSource{
@@ -1441,15 +1446,17 @@ func generateCodexObservabilityPluginInDir(files map[string][]byte, subdir strin
 	if name == "" {
 		name = CodexObservabilitySlug(cfg)
 	}
+	description := "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard."
 	pluginJSON, err := marshalJSON(codexPluginMeta{
 		Name:        name,
 		Version:     hooksManifestVersion(cfg),
-		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
+		Description: description,
 		MCPServers:  "",
 		Hooks:       "./hooks/hooks.json",
 		Interface: &codexInterface{
 			DisplayName:      "Observability (Codex)",
 			ShortDescription: "Speakeasy observability hooks",
+			LongDescription:  conv.TruncateString(description, 4000),
 		},
 	})
 	if err != nil {
@@ -3418,7 +3425,7 @@ var CodexObservabilityHookEvents = []string{
 type codexPluginMeta struct {
 	Name        string          `json:"name"`
 	Version     string          `json:"version"`
-	Description string          `json:"description,omitempty"`
+	Description string          `json:"description"`
 	MCPServers  string          `json:"mcpServers,omitempty"`
 	Hooks       string          `json:"hooks,omitempty"`
 	Interface   *codexInterface `json:"interface,omitempty"`
@@ -3427,6 +3434,7 @@ type codexPluginMeta struct {
 type codexInterface struct {
 	DisplayName      string `json:"displayName"`
 	ShortDescription string `json:"shortDescription,omitempty"`
+	LongDescription  string `json:"longDescription,omitempty"`
 }
 
 type codexMCPConfig struct {

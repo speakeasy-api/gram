@@ -91,7 +91,7 @@ func TestService_UpdateSetupTaskSendsAssignmentEmailAfterCommit(t *testing.T) {
 			input.DataVariables["task_description"] == "Choose the organization's initial risk policies." &&
 			input.DataVariables["assigner_name"] != "" &&
 			input.DataVariables["organization_name"] != "" &&
-			strings.HasSuffix(input.DataVariables["setup_link"], "/setup?step=configure-policies") &&
+			strings.HasSuffix(input.DataVariables["setup_link"], "/setup?task=configure-policies") &&
 			strings.HasPrefix(input.IdempotencyKey, "setup-task-assignment:") &&
 			len(input.IdempotencyKey) <= 100 &&
 			!input.AddToAudience
