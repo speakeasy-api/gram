@@ -15,8 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 var staffGrantTypes = []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}
