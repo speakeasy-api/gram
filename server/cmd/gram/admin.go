@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"log/slog"
 	"net"
@@ -449,7 +450,15 @@ func newAdminCommand() *cli.Command {
 			if err := admin.SeedSupportMatrix(ctx, db); err != nil {
 				return fmt.Errorf("initialize support matrix: %w", err)
 			}
-			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL)
+			registryValidator, err := mcpregistry.LoadValidator()
+			if err != nil {
+				return fmt.Errorf("load registry validator: %w", err)
+			}
+			registryService := mcpregistry.New(db, registryValidator)
+			if err := registryService.Ready(ctx); err != nil {
+				return fmt.Errorf("registry readiness: %w", err)
+			}
+			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, siteURL, registryService)
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {
 				return err

@@ -281,3 +281,28 @@ func GetSupportMatrixAdminPath() string {
 func UpdateSupportMatrixAdminPath() string {
 	return "/admin/supportMatrix.update"
 }
+
+// ListRegistryEntriesAdminPath returns the URL path to the admin service listRegistryEntries HTTP endpoint.
+func ListRegistryEntriesAdminPath() string {
+	return "/admin/registry.list"
+}
+
+// GetRegistryEntryAdminPath returns the URL path to the admin service getRegistryEntry HTTP endpoint.
+func GetRegistryEntryAdminPath() string {
+	return "/admin/registry.get"
+}
+
+// CreateRegistryEntryAdminPath returns the URL path to the admin service createRegistryEntry HTTP endpoint.
+func CreateRegistryEntryAdminPath() string {
+	return "/admin/registry.create"
+}
+
+// SaveRegistryEntryAdminPath returns the URL path to the admin service saveRegistryEntry HTTP endpoint.
+func SaveRegistryEntryAdminPath() string {
+	return "/admin/registry.save"
+}
+
+// SetRegistryEntryPublishedAdminPath returns the URL path to the admin service setRegistryEntryPublished HTTP endpoint.
+func SetRegistryEntryPublishedAdminPath() string {
+	return "/admin/registry.setPublished"
+}

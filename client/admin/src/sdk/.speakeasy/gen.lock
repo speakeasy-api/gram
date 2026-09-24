@@ -36,6 +36,7 @@ trackedFiles:
   src/funcs/adminChangeTrialEndDate.ts: {}
   src/funcs/adminCreateGlobalIssuer.ts: {}
   src/funcs/adminCreateOrganization.ts: {}
+  src/funcs/adminCreateRegistryEntry.ts: {}
   src/funcs/adminDeleteGlobalIssuer.ts: {}
   src/funcs/adminDisableOrganization.ts: {}
   src/funcs/adminEnableOrganization.ts: {}
@@ -54,6 +55,7 @@ trackedFiles:
   src/funcs/adminGetOrganizationStats.ts: {}
   src/funcs/adminGetPaygBillingSummary.ts: {}
   src/funcs/adminGetProject.ts: {}
+  src/funcs/adminGetRegistryEntry.ts: {}
   src/funcs/adminGetSession.ts: {}
   src/funcs/adminGetSpendBreakdown.ts: {}
   src/funcs/adminGetStripeCustomer.ts: {}
@@ -65,17 +67,20 @@ trackedFiles:
   src/funcs/adminListOrganizationMembers.ts: {}
   src/funcs/adminListOrganizationProjects.ts: {}
   src/funcs/adminListOrganizations.ts: {}
+  src/funcs/adminListRegistryEntries.ts: {}
   src/funcs/adminLogout.ts: {}
   src/funcs/adminMarkEnterpriseTrialConverted.ts: {}
   src/funcs/adminMigrateToGlobalIssuer.ts: {}
   src/funcs/adminRearmTrial.ts: {}
   src/funcs/adminRefreshGlobalIssuerMetadata.ts: {}
   src/funcs/adminResumeStripeSubscription.ts: {}
+  src/funcs/adminSaveRegistryEntry.ts: {}
   src/funcs/adminServeImage.ts: {}
   src/funcs/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/funcs/adminSetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminSetOrganizationFeature.ts: {}
   src/funcs/adminSetOrganizationOnboarding.ts: {}
+  src/funcs/adminSetRegistryEntryPublished.ts: {}
   src/funcs/adminSetStripeCustomer.ts: {}
   src/funcs/adminStartTrial.ts: {}
   src/funcs/adminTriggerOrganizationChatAnalysis.ts: {}
@@ -121,6 +126,10 @@ trackedFiles:
   src/models/components/adminpaygbillingsummary.ts: {}
   src/models/components/adminproject.ts: {}
   src/models/components/adminprojectdetail.ts: {}
+  src/models/components/adminregistryentry.ts: {}
+  src/models/components/adminregistryissue.ts: {}
+  src/models/components/adminregistrypage.ts: {}
+  src/models/components/adminregistrysummary.ts: {}
   src/models/components/adminsession.ts: {}
   src/models/components/adminspendbreakdownresponse.ts: {}
   src/models/components/adminstripecustomer.ts: {}
@@ -131,6 +140,7 @@ trackedFiles:
   src/models/components/cancelstripesubscriptionrequestbody.ts: {}
   src/models/components/changetrialenddaterequestbody.ts: {}
   src/models/components/createorganizationrequestbody.ts: {}
+  src/models/components/createregistryentryrequestbody.ts: {}
   src/models/components/createremotesessionissuerform.ts: {}
   src/models/components/disableorganizationrequestbody.ts: {}
   src/models/components/enableorganizationrequestbody.ts: {}
@@ -156,10 +166,12 @@ trackedFiles:
   src/models/components/remotesessionissuerrefresh.ts: {}
   src/models/components/resumestripesubscriptionrequestbody.ts: {}
   src/models/components/riskidrequestbody.ts: {}
+  src/models/components/saveregistryentryrequestbody.ts: {}
   src/models/components/setinferencekeymonthlylimitrequestbody.ts: {}
   src/models/components/setorganizationchatanalysissettingsrequestbody.ts: {}
   src/models/components/setorganizationfeaturerequestbody.ts: {}
   src/models/components/setorganizationonboardingrequestbody.ts: {}
+  src/models/components/setregistryentrypublishedrequestbody.ts: {}
   src/models/components/setstripecustomerrequestbody.ts: {}
   src/models/components/spendbucket.ts: {}
   src/models/components/spendproduct.ts: {}
@@ -195,6 +207,7 @@ trackedFiles:
   src/models/operations/admingetorganizationonboarding.ts: {}
   src/models/operations/admingetpaygbillingsummary.ts: {}
   src/models/operations/admingetproject.ts: {}
+  src/models/operations/admingetregistryentry.ts: {}
   src/models/operations/admingetspendbreakdown.ts: {}
   src/models/operations/admingetstripecustomer.ts: {}
   src/models/operations/admingetstripesubscription.ts: {}
@@ -204,6 +217,7 @@ trackedFiles:
   src/models/operations/adminlistorganizationmembers.ts: {}
   src/models/operations/adminlistorganizationprojects.ts: {}
   src/models/operations/adminlistorganizations.ts: {}
+  src/models/operations/adminlistregistryentries.ts: {}
   src/models/operations/adminserveimage.ts: {}
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
@@ -212,6 +226,7 @@ trackedFiles:
   src/react-query/adminChangeTrialEndDate.ts: {}
   src/react-query/adminCreateGlobalIssuer.ts: {}
   src/react-query/adminCreateOrganization.ts: {}
+  src/react-query/adminCreateRegistryEntry.ts: {}
   src/react-query/adminDeleteGlobalIssuer.ts: {}
   src/react-query/adminDisableOrganization.ts: {}
   src/react-query/adminEnableOrganization.ts: {}
@@ -239,6 +254,8 @@ trackedFiles:
   src/react-query/adminGetPaygBillingSummary.ts: {}
   src/react-query/adminGetProject.core.ts: {}
   src/react-query/adminGetProject.ts: {}
+  src/react-query/adminGetRegistryEntry.core.ts: {}
+  src/react-query/adminGetRegistryEntry.ts: {}
   src/react-query/adminGetSession.core.ts: {}
   src/react-query/adminGetSession.ts: {}
   src/react-query/adminGetSpendBreakdown.core.ts: {}
@@ -261,6 +278,8 @@ trackedFiles:
   src/react-query/adminListOrganizationProjects.ts: {}
   src/react-query/adminListOrganizations.core.ts: {}
   src/react-query/adminListOrganizations.ts: {}
+  src/react-query/adminListRegistryEntries.core.ts: {}
+  src/react-query/adminListRegistryEntries.ts: {}
   src/react-query/adminLogout.ts: {}
   src/react-query/adminMarkEnterpriseTrialConverted.ts: {}
   src/react-query/adminMigrateToGlobalIssuer.ts: {}
@@ -271,10 +290,12 @@ trackedFiles:
   src/react-query/adminRearmTrial.ts: {}
   src/react-query/adminRefreshGlobalIssuerMetadata.ts: {}
   src/react-query/adminResumeStripeSubscription.ts: {}
+  src/react-query/adminSaveRegistryEntry.ts: {}
   src/react-query/adminServeImage.core.ts: {}
   src/react-query/adminServeImage.ts: {}
   src/react-query/adminSetInferenceKeyMonthlyLimit.ts: {}
   src/react-query/adminSetOrganizationChatAnalysisSettings.ts: {}
+  src/react-query/adminSetRegistryEntryPublished.ts: {}
   src/react-query/adminSetStripeCustomer.ts: {}
   src/react-query/adminStartTrial.ts: {}
   src/react-query/adminTriggerOrganizationChatAnalysis.ts: {}
@@ -383,6 +404,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminCreateRegistryEntry:
+    speakeasy-default-admin-create-registry-entry:
+      requestBody:
+        application/json: {"data_json": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "1713084893815", "data_json": "<value>", "id": "<id>", "issues": [{"message": "<value>", "path": "/lost+found"}], "published": false, "updated_at": "1735655237442"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminDeleteGlobalIssuer:
     speakeasy-default-admin-delete-global-issuer:
       parameters:
@@ -644,6 +676,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminGetRegistryEntry:
+    speakeasy-default-admin-get-registry-entry:
+      parameters:
+        query:
+          id: "fe22df0a-cba2-4e06-823e-9a155419b7cc"
+      responses:
+        "200":
+          application/json: {"created_at": "1723222232044", "data_json": "<value>", "id": "<id>", "issues": [{"message": "<value>", "path": "/etc/defaults"}], "published": true, "updated_at": "1735662060030"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminGetSession:
     speakeasy-default-admin-get-session:
       responses:
@@ -786,6 +830,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminListRegistryEntries:
+    speakeasy-default-admin-list-registry-entries:
+      responses:
+        "200":
+          application/json: {"entries": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminLogout:
     speakeasy-default-admin-logout:
       responses:
@@ -870,6 +923,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminSaveRegistryEntry:
+    speakeasy-default-admin-save-registry-entry:
+      requestBody:
+        application/json: {"data_json": "<value>", "id": "5bd36f59-cbae-41ee-8395-275f50903061", "updated_at": "1735614587197"}
+      responses:
+        "200":
+          application/json: {"created_at": "1731310587128", "data_json": "<value>", "id": "<id>", "issues": [], "published": true, "updated_at": "1735643729544"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   adminServeImage:
     speakeasy-default-admin-serve-image:
       parameters:
@@ -922,6 +986,17 @@ examples:
       responses:
         "200":
           application/json: {"organization_id": "<id>", "presets": [], "tasks": [{"description": "lovely amid ew lest wherever another splurge aside smoothly never", "hidden": false, "key": "<key>", "title": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminSetRegistryEntryPublished:
+    speakeasy-default-admin-set-registry-entry-published:
+      requestBody:
+        application/json: {"id": "12a8d579-e8b1-4bcf-a18e-72bd41a290e7", "published": false, "updated_at": "1735614635424"}
+      responses:
+        "200":
+          application/json: {"created_at": "1708711107630", "data_json": "<value>", "id": "<id>", "issues": [{"message": "<value>", "path": "/var/mail"}], "published": false, "updated_at": "1735612556541"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

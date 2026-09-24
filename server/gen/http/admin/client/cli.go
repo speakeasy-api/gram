@@ -1893,3 +1893,179 @@ func BuildUpdateSupportMatrixPayload(adminUpdateSupportMatrixBody string, adminU
 
 	return v, nil
 }
+
+// BuildListRegistryEntriesPayload builds the payload for the admin
+// listRegistryEntries endpoint from CLI flags.
+func BuildListRegistryEntriesPayload(adminListRegistryEntriesQuery string, adminListRegistryEntriesPublished string, adminListRegistryEntriesCursor string, adminListRegistryEntriesLimit string, adminListRegistryEntriesAdminSessionToken string) (*admin.ListRegistryEntriesPayload, error) {
+	var err error
+	var query *string
+	{
+		if adminListRegistryEntriesQuery != "" {
+			query = &adminListRegistryEntriesQuery
+		}
+	}
+	var published *bool
+	{
+		if adminListRegistryEntriesPublished != "" {
+			var val bool
+			val, err = strconv.ParseBool(adminListRegistryEntriesPublished)
+			published = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for published, must be BOOL")
+			}
+		}
+	}
+	var cursor *string
+	{
+		if adminListRegistryEntriesCursor != "" {
+			cursor = &adminListRegistryEntriesCursor
+		}
+	}
+	var limit *int32
+	{
+		if adminListRegistryEntriesLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListRegistryEntriesLimit, 10, 32)
+			val := int32(v)
+			limit = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT32")
+			}
+			if *limit < 0 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 0, true))
+			}
+			if *limit > 50 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", *limit, 50, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListRegistryEntriesAdminSessionToken != "" {
+			adminSessionToken = &adminListRegistryEntriesAdminSessionToken
+		}
+	}
+	v := &admin.ListRegistryEntriesPayload{}
+	v.Query = query
+	v.Published = published
+	v.Cursor = cursor
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetRegistryEntryPayload builds the payload for the admin
+// getRegistryEntry endpoint from CLI flags.
+func BuildGetRegistryEntryPayload(adminGetRegistryEntryID string, adminGetRegistryEntryAdminSessionToken string) (*admin.GetRegistryEntryPayload, error) {
+	var err error
+	var id string
+	{
+		id = adminGetRegistryEntryID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetRegistryEntryAdminSessionToken != "" {
+			adminSessionToken = &adminGetRegistryEntryAdminSessionToken
+		}
+	}
+	v := &admin.GetRegistryEntryPayload{}
+	v.ID = id
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildCreateRegistryEntryPayload builds the payload for the admin
+// createRegistryEntry endpoint from CLI flags.
+func BuildCreateRegistryEntryPayload(adminCreateRegistryEntryBody string, adminCreateRegistryEntryAdminSessionToken string) (*admin.CreateRegistryEntryPayload, error) {
+	var err error
+	var body CreateRegistryEntryRequestBody
+	{
+		err = json.Unmarshal([]byte(adminCreateRegistryEntryBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data_json\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminCreateRegistryEntryAdminSessionToken != "" {
+			adminSessionToken = &adminCreateRegistryEntryAdminSessionToken
+		}
+	}
+	v := &admin.CreateRegistryEntryPayload{
+		DataJSON: body.DataJSON,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSaveRegistryEntryPayload builds the payload for the admin
+// saveRegistryEntry endpoint from CLI flags.
+func BuildSaveRegistryEntryPayload(adminSaveRegistryEntryBody string, adminSaveRegistryEntryAdminSessionToken string) (*admin.SaveRegistryEntryPayload, error) {
+	var err error
+	var body SaveRegistryEntryRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSaveRegistryEntryBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"data_json\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"updated_at\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSaveRegistryEntryAdminSessionToken != "" {
+			adminSessionToken = &adminSaveRegistryEntryAdminSessionToken
+		}
+	}
+	v := &admin.SaveRegistryEntryPayload{
+		ID:        body.ID,
+		UpdatedAt: body.UpdatedAt,
+		DataJSON:  body.DataJSON,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetRegistryEntryPublishedPayload builds the payload for the admin
+// setRegistryEntryPublished endpoint from CLI flags.
+func BuildSetRegistryEntryPublishedPayload(adminSetRegistryEntryPublishedBody string, adminSetRegistryEntryPublishedAdminSessionToken string) (*admin.SetRegistryEntryPublishedPayload, error) {
+	var err error
+	var body SetRegistryEntryPublishedRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetRegistryEntryPublishedBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"published\": false,\n      \"updated_at\": \"abc123\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetRegistryEntryPublishedAdminSessionToken != "" {
+			adminSessionToken = &adminSetRegistryEntryPublishedAdminSessionToken
+		}
+	}
+	v := &admin.SetRegistryEntryPublishedPayload{
+		ID:        body.ID,
+		UpdatedAt: body.UpdatedAt,
+		Published: body.Published,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

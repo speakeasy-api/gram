@@ -3083,6 +3083,417 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/registry.create:
+        post:
+            description: Staff-only registry administration.
+            operationId: adminCreateRegistryEntry
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateRegistryEntryRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryEntry'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: createRegistryEntry admin
+            tags:
+                - admin
+            x-speakeasy-name-override: createRegistryEntry
+    /admin/registry.get:
+        get:
+            description: Staff-only registry administration.
+            operationId: adminGetRegistryEntry
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    format: uuid
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryEntry'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getRegistryEntry admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getRegistryEntry
+    /admin/registry.list:
+        get:
+            description: Staff-only registry administration.
+            operationId: adminListRegistryEntries
+            parameters:
+                - allowEmptyValue: true
+                  description: Search query; at most 1024 UTF-8 bytes (enforced by the server).
+                  in: query
+                  name: query
+                  schema:
+                    description: Search query; at most 1024 UTF-8 bytes (enforced by the server).
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: published
+                  schema:
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Opaque continuation cursor from next_cursor; at most 8192 UTF-8 bytes (enforced by the server).
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Opaque continuation cursor from next_cursor; at most 8192 UTF-8 bytes (enforced by the server).
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size; zero uses the server default of 25.
+                  in: query
+                  name: limit
+                  schema:
+                    description: Page size; zero uses the server default of 25.
+                    format: int32
+                    maximum: 50
+                    minimum: 0
+                    type: integer
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryPage'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: listRegistryEntries admin
+            tags:
+                - admin
+            x-speakeasy-name-override: listRegistryEntries
+    /admin/registry.save:
+        post:
+            description: Staff-only registry administration.
+            operationId: adminSaveRegistryEntry
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SaveRegistryEntryRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryEntry'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: saveRegistryEntry admin
+            tags:
+                - admin
+            x-speakeasy-name-override: saveRegistryEntry
+    /admin/registry.setPublished:
+        post:
+            description: Staff-only registry administration.
+            operationId: adminSetRegistryEntryPublished
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetRegistryEntryPublishedRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryEntry'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: setRegistryEntryPublished admin
+            tags:
+                - admin
+            x-speakeasy-name-override: setRegistryEntryPublished
     /admin/remote-session-issuers.createGlobalIssuer:
         post:
             description: Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.
@@ -76345,6 +76756,74 @@ components:
                 - assistant_count
                 - created_at
                 - updated_at
+        AdminRegistryEntry:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                data_json:
+                    type: string
+                    description: Complete lossless registry record JSON
+                id:
+                    type: string
+                issues:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminRegistryIssue'
+                published:
+                    type: boolean
+                updated_at:
+                    type: string
+                    description: Opaque write precondition; echo unchanged
+            required:
+                - id
+                - data_json
+                - published
+                - created_at
+                - updated_at
+                - issues
+        AdminRegistryIssue:
+            type: object
+            properties:
+                message:
+                    type: string
+                path:
+                    type: string
+            required:
+                - path
+                - message
+        AdminRegistryPage:
+            type: object
+            properties:
+                entries:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminRegistrySummary'
+                next_cursor:
+                    type: string
+            required:
+                - entries
+        AdminRegistrySummary:
+            type: object
+            properties:
+                id:
+                    type: string
+                issues:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminRegistryIssue'
+                name:
+                    type: string
+                published:
+                    type: boolean
+                updated_at:
+                    type: string
+            required:
+                - id
+                - name
+                - published
+                - updated_at
+                - issues
         AdminSession:
             type: object
             properties:
@@ -80555,6 +81034,14 @@ components:
                 - name
                 - dataset
                 - spec
+        CreateRegistryEntryRequestBody:
+            type: object
+            properties:
+                data_json:
+                    type: string
+                    description: Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced by the server on incoming writes. Stored records remain readable for repair.
+            required:
+                - data_json
         CreateRemoteSessionClientForm:
             type: object
             properties:
@@ -96517,6 +97004,21 @@ components:
             required:
                 - server
                 - tunnel_key
+        SaveRegistryEntryRequestBody:
+            type: object
+            properties:
+                data_json:
+                    type: string
+                    description: Complete registry record JSON; at most 8388608 UTF-8 bytes (8 MiB), enforced by the server on incoming writes. Stored records remain readable for repair.
+                id:
+                    type: string
+                    format: uuid
+                updated_at:
+                    type: string
+            required:
+                - id
+                - updated_at
+                - data_json
         SaveRiskEvalReviewRequestBody:
             type: object
             properties:
@@ -97836,6 +98338,20 @@ components:
                     $ref: '#/components/schemas/Project'
             required:
                 - project
+        SetRegistryEntryPublishedRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                published:
+                    type: boolean
+                updated_at:
+                    type: string
+            required:
+                - id
+                - updated_at
+                - published
         SetRemoteSessionAutoRefreshPolicyRequestBody:
             type: object
             properties:
