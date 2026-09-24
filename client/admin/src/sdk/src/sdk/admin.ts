@@ -36,6 +36,7 @@ import { adminListOrganizationActivity } from "../funcs/adminListOrganizationAct
 import { adminListOrganizationMembers } from "../funcs/adminListOrganizationMembers.js";
 import { adminListOrganizationProjects } from "../funcs/adminListOrganizationProjects.js";
 import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
+import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
@@ -63,6 +64,7 @@ import { AdminInferenceKeyLimit } from "../models/components/admininferencekeyli
 import { AdminInferenceSpendMonth } from "../models/components/admininferencespendmonth.js";
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
+import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOnboardingConfiguration } from "../models/components/adminonboardingconfiguration.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
@@ -142,6 +144,7 @@ import {
   AdminListOrganizationsRequest,
   AdminListOrganizationsResponse,
 } from "../models/operations/adminlistorganizations.js";
+import { AdminListProjectMcpServersRequest } from "../models/operations/adminlistprojectmcpservers.js";
 import {
   AdminServeImageRequest,
   AdminServeImageResponse,
@@ -679,6 +682,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminProjectDetail> {
     return unwrapAsync(adminGetProject(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listProjectMcpServers admin
+   *
+   * @remarks
+   * Lists the MCP servers in a project (admin view, no auth scoping).
+   */
+  async listProjectMcpServers(
+    request: AdminListProjectMcpServersRequest,
+    options?: RequestOptions,
+  ): Promise<AdminListProjectMcpServersResult> {
+    return unwrapAsync(adminListProjectMcpServers(
       this,
       request,
       options,

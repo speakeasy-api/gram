@@ -390,7 +390,7 @@ type Client struct {
 
 	IssuerURL string
 
-	// IssuerIdentifier is the discovery document's issuer, else IssuerURL; what iss must equal.
+	// IssuerIdentifier is the stored issuer verbatim; what iss must equal.
 	IssuerIdentifier string
 	// ClientAssertionIssuer preserves the exact RFC 8414 issuer identifier for
 	// private_key_jwt aud claims, including a significant trailing slash.
@@ -494,23 +494,16 @@ func (c Client) RequestedScopes() (scopes []string, widened []string) {
 	return scopes, widened
 }
 
-// issuerIdentifier is the document's issuer verbatim, else the stored URL without a trailing slash.
-func issuerIdentifier(metadata []byte, issuerURL string) string {
-	if doc := rawDocumentIssuer(metadata); doc != "" {
-		return doc
-	}
-	return strings.TrimRight(issuerURL, "/")
+// issuerIdentifier preserves the configured identity verbatim. Retained legacy
+// metadata must never override the stored issuer, even for a slash-only difference.
+func issuerIdentifier(_ []byte, issuerURL string) string {
+	return issuerURL
 }
 
-// clientAssertionIssuer is the RFC 8414 issuer identifier used as the default
-// private_key_jwt audience. Preserve the configured URL verbatim when no
-// discovery document is stored: a trailing slash is significant to audience
-// comparison (notably for Auth0 issuers).
-func clientAssertionIssuer(metadata []byte, issuerURL string) string {
-	if doc := rawDocumentIssuer(metadata); doc != "" && issuerURLsCanonicallyEqual(doc, issuerURL) {
-		return doc
-	}
-	return strings.TrimSpace(issuerURL)
+// clientAssertionIssuer is the configured issuer identifier used as the default
+// private_key_jwt audience. It is not normalized or replaced by legacy metadata.
+func clientAssertionIssuer(_ []byte, issuerURL string) string {
+	return issuerURL
 }
 
 // ListClients returns the joined client + issuer rows linked to a user

@@ -218,7 +218,7 @@ func TestHandleClientMetadataDocument_ServesDocument(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
-	require.Equal(t, "public, max-age=3600", rec.Header().Get("Cache-Control"))
+	require.Equal(t, "public, no-cache", rec.Header().Get("Cache-Control"))
 	require.NotEmpty(t, rec.Header().Get("ETag"))
 
 	var got map[string]any
@@ -231,6 +231,59 @@ func TestHandleClientMetadataDocument_ServesDocument(t *testing.T) {
 	require.Equal(t, "read:tools", got["scope"])
 	_, present := got["jwks_uri"]
 	require.False(t, present)
+}
+
+func TestHandleClientMetadataDocument_RevalidatesChangedGrantEvidence(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, auth.ProjectID)
+	issuerID := createCIMDIssuer(t, ctx, ti, "cimd-revalidate", "https://idp.example.com/authorize", "https://idp.example.com/token")
+	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cimd-revalidate-usi")
+	created := createCimdClient(t, ctx, ti, issuerID.String(), userIssuer.String(), nil)
+	mgr := newCIMDChallengeManager(t, ti, cimdServerURL)
+	setGrants := func(grants []string) {
+		t.Helper()
+		_, err := repo.New(ti.conn).SetEMAClientGrants(ctx, repo.SetEMAClientGrantsParams{
+			ID: uuid.MustParse(created.ID), ProjectID: conv.ToNullUUID(*auth.ProjectID),
+			OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), GrantTypes: grants,
+		})
+		require.NoError(t, err)
+	}
+	fetch := func(etag string, status int) *httptest.ResponseRecorder {
+		t.Helper()
+		req := cimdDocumentRequest(t, created.ID, false)
+		req.Header.Set("If-None-Match", etag)
+		rec := httptest.NewRecorder()
+		require.NoError(t, mgr.HandleClientMetadataDocument(rec, req))
+		require.Equal(t, status, rec.Code)
+		require.Equal(t, "public, no-cache", rec.Result().Header.Get("Cache-Control"))
+		require.NotEmpty(t, rec.Header().Get("ETag"))
+		return rec
+	}
+	setGrants([]string{"authorization_code", "refresh_token"})
+	initial := fetch("", http.StatusOK)
+	etag := initial.Header().Get("ETag")
+	for _, validator := range []string{etag, "W/" + etag, `"other", ` + etag, "*"} {
+		unchanged := fetch(validator, http.StatusNotModified)
+		require.Equal(t, etag, unchanged.Header().Get("ETag"))
+		require.Empty(t, unchanged.Body.String())
+		require.Empty(t, unchanged.Header().Get("Content-Type"))
+	}
+	// Revoke recorded grant evidence explicitly. Unlinking a binding is not
+	// assumed to revoke the client's grants.
+	setGrants([]string{})
+	changed := fetch(etag, http.StatusOK)
+	require.NotEqual(t, etag, changed.Header().Get("ETag"))
+	require.Equal(t, "application/json; charset=utf-8", changed.Header().Get("Content-Type"))
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(changed.Body.Bytes(), &doc))
+	require.Equal(t, []any{}, doc["grant_types"])
+	require.Equal(t, []any{}, doc["response_types"])
+	unchanged := fetch(changed.Header().Get("ETag"), http.StatusNotModified)
+	require.Equal(t, changed.Header().Get("ETag"), unchanged.Header().Get("ETag"))
+	require.Empty(t, unchanged.Body.String())
 }
 
 func TestHandleClientMetadataDocument_PublishesAttachedKeySetAndStoredAuthMethod(t *testing.T) {

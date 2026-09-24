@@ -145,7 +145,7 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	if err := lockQ.LockPlatformMCPRemoteIssuerAttachment(ctx, platformrepo.LockPlatformMCPRemoteIssuerAttachmentParams{
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      project.ID.String(),
-		Issuer:         strings.TrimRight(metadata.Issuer, "/"),
+		Issuer:         metadata.Issuer,
 	}); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("lock identity-provider issuer attachment: %w", err)
 	}
@@ -201,9 +201,10 @@ func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetada
 	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	for _, rawAuthorizationServer := range authorizationServers {
-		authorizationServer := strings.TrimSpace(rawAuthorizationServer)
-		if authorizationServer == "" {
+	// Resource metadata contains issuer identifiers, not operator input.
+	// Do not normalize advertised authorization_servers before discovery.
+	for _, authorizationServer := range authorizationServers {
+		if strings.TrimSpace(authorizationServer) == "" {
 			continue
 		}
 		metadata, err := remotesessions.DiscoverIssuerMetadata(probeCtx, s.policy, authorizationServer)
@@ -284,24 +285,25 @@ func (s *CatalogIdentityProviderAttachmentService) createIssuer(ctx context.Cont
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := remotesessionsrepo.New(tx)
 	issuer, err := q.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
-		ProjectID:                         conv.ToNullUUID(project.ID),
-		OrganizationID:                    conv.ToPGText(principal.OrganizationID),
-		Slug:                              attachmentIssuerSlug(registrationID),
-		Issuer:                            metadata.Issuer,
-		Name:                              conv.ToPGText("Remote identity provider"),
-		LogoAssetID:                       uuid.NullUUID{},
-		ClientSetupDocumentationUrl:       pgtype.Text{},
-		AuthorizationEndpoint:             conv.ToPGText(metadata.AuthorizationEndpoint),
-		TokenEndpoint:                     conv.ToPGText(metadata.TokenEndpoint),
-		RegistrationEndpoint:              conv.ToPGText(metadata.RegistrationEndpoint),
-		JwksUri:                           pgtype.Text{},
-		ServiceDocumentation:              pgtype.Text{},
-		OpPolicyUri:                       pgtype.Text{},
-		OpTosUri:                          pgtype.Text{},
-		ScopesSupported:                   append([]string(nil), metadata.ScopesSupported...),
-		GrantTypesSupported:               append([]string(nil), metadata.GrantTypesSupported...),
-		ResponseTypesSupported:            append([]string(nil), metadata.ResponseTypesSupported...),
-		TokenEndpointAuthMethodsSupported: append([]string(nil), metadata.TokenEndpointAuthMethodsSupported...),
+		ProjectID:                           conv.ToNullUUID(project.ID),
+		OrganizationID:                      conv.ToPGText(principal.OrganizationID),
+		Slug:                                attachmentIssuerSlug(registrationID),
+		Issuer:                              metadata.Issuer,
+		Name:                                conv.ToPGText("Remote identity provider"),
+		LogoAssetID:                         uuid.NullUUID{},
+		ClientSetupDocumentationUrl:         pgtype.Text{},
+		AuthorizationEndpoint:               conv.ToPGText(metadata.AuthorizationEndpoint),
+		TokenEndpoint:                       conv.ToPGText(metadata.TokenEndpoint),
+		RegistrationEndpoint:                conv.ToPGText(metadata.RegistrationEndpoint),
+		JwksUri:                             pgtype.Text{},
+		ServiceDocumentation:                pgtype.Text{},
+		OpPolicyUri:                         pgtype.Text{},
+		OpTosUri:                            pgtype.Text{},
+		ScopesSupported:                     append([]string(nil), metadata.ScopesSupported...),
+		GrantTypesSupported:                 append([]string(nil), metadata.GrantTypesSupported...),
+		AuthorizationGrantProfilesSupported: slices.Clone(metadata.AuthorizationGrantProfilesSupported),
+		ResponseTypesSupported:              append([]string(nil), metadata.ResponseTypesSupported...),
+		TokenEndpointAuthMethodsSupported:   append([]string(nil), metadata.TokenEndpointAuthMethodsSupported...),
 		// An empty advertised list must survive as empty here: discovery ran,
 		// so the nullable column should record "advertises no methods" ({})
 		// rather than "not captured" (NULL). The plain append copy used by the
@@ -491,7 +493,7 @@ func attachmentIssuerSlug(registrationID uuid.UUID) string {
 }
 
 func sameIssuerURL(a, b string) bool {
-	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
+	return a == b
 }
 
 func validDynamicClientRegistrationEndpoint(raw string) bool {

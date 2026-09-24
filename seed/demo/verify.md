@@ -390,6 +390,35 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       usable upstream credentials. This
       fixture proves display and identity relationships, not live execution.
 
+23. **Identity-chaining registration evidence**
+    - Run `mise run seed` twice in an isolated local stack. In its `default`
+      project, open **Remote Identity Providers → Identity chaining example**.
+      The Overview must render `https://authorization.example.com` and
+      JWT-bearer under **Identity Provider Details → Grant Types**, without an
+      error boundary. This is issuer capability, not a client's grant evidence.
+    - Open **Clients → demo-resource-client**. Its Overview must render client
+      ID `demo-resource-client`, scope `documents:read`, and token endpoint
+      authentication method `none`, without an error boundary.
+    - Open the client's **Sessions** tab. Expect **No active sessions for this
+      client** and disabled **Revoke all sessions**. Search for
+      `demo-resource-client` in the project's **MCP Sessions** page: expect no
+      matching connection. Do not create a session or attach this inert public
+      registration merely to populate a selector or connection inventory.
+    - The current client Overview does not display `grant_types`, and the issuer
+      Overview does not display the ID-JAG profile. Supplement the browser check
+      with the real management API responses: issuer `grant_types_supported`
+      includes JWT-bearer and `authorization_grant_profiles_supported` includes
+      ID-JAG; the separate client's `grant_types` includes JWT-bearer and `scope`
+      is `documents:read`. Do not describe these raw fields as rendered UI.
+    - Check the client's deletion preflight: `session_count=0`,
+      `ema_binding_count=0`, and no trusted user-session issuers. A read-only
+      query against the isolated seeded database must also confirm no encrypted
+      client secret, EMA binding, or remote session. Do not print credentials.
+    - The fixture must make no provider-acceptance or usable-human-access claim.
+      Capture the actual issuer/client pages before changing PAGES.md from
+      `[~]` to `[x]`; API-only checks and the separate synthetic consolidation
+      blocker demo do not complete this fixture's display verification.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns

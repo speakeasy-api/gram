@@ -2,12 +2,14 @@ package remotesessions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"reflect"
+	"slices"
 	"sync"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -399,6 +402,7 @@ func (r *IssuerMetadataRefresher) reproject(ctx context.Context, existing repo.R
 	outcome, err := r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
 		return q.ReprojectRemoteSessionIssuerMetadataCapabilities(ctx, repo.ReprojectRemoteSessionIssuerMetadataCapabilitiesParams{
 			CodeChallengeMethodsSupported:              orEmptySlice(doc.CodeChallengeMethodsSupported),
+			AuthorizationGrantProfilesSupported:        orEmptySlice(doc.AuthorizationGrantProfilesSupported),
 			IntrospectionEndpointAuthMethodsSupported:  orEmptySlice(doc.IntrospectionEndpointAuthMethodsSupported),
 			IDTokenSigningAlgValuesSupported:           orEmptySlice(doc.IDTokenSigningAlgValuesSupported),
 			ClaimsSupported:                            orEmptySlice(doc.ClaimsSupported),
@@ -487,7 +491,8 @@ func issuerMetadataUseFromRow(row repo.RemoteSessionIssuer) IssuerMetadataUse {
 			row.ClaimsSupported == nil ||
 			!row.BackchannelLogoutSupported.Valid ||
 			!row.AuthorizationResponseIssParameterSupported.Valid ||
-			row.CodeChallengeMethodsSupported == nil),
+			row.CodeChallengeMethodsSupported == nil ||
+			issuerProfilesNeedReprojection(row)),
 	}
 }
 
@@ -499,7 +504,7 @@ func decodeStoredIssuerDocument(existing repo.RemoteSessionIssuer) (rfc8414Docum
 	if len(existing.Metadata) == 0 {
 		return rfc8414Document{}, errors.New("no stored metadata document")
 	}
-	doc, err := decodeIssuerDocument(existing.Metadata, requested)
+	doc, err := decodeIssuerDocumentWithLegacyNulls(existing.Metadata, requested, true)
 	if err != nil {
 		return rfc8414Document{}, err
 	}
@@ -516,6 +521,9 @@ func (r *IssuerMetadataRefresher) record(ctx context.Context, issuerURL string, 
 
 // recordFailure stamps the error trio on the row as the refresh read it; a newer write, fetch or failure, wins. A retry URL marks the failure transient.
 func (r *IssuerMetadataRefresher) recordFailure(ctx context.Context, existing repo.RemoteSessionIssuer, msg, retryURL string, outcome remotesessionmetrics.IssuerMetadataRefreshOutcome) (remotesessionmetrics.IssuerMetadataRefreshOutcome, error) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerDiscoveryFailureRecordTimeout)
+	defer cancel()
+
 	rows, err := repo.New(r.db).RecordRemoteSessionIssuerMetadataRefreshFailure(ctx, repo.RecordRemoteSessionIssuerMetadataRefreshFailureParams{
 		MetadataLastError:         msg,
 		MetadataLastErrorUrl:      retryURL,
@@ -649,10 +657,13 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 	return success, nil
 }
 
-// issuerViewChanged compares the audited views ignoring updated_at, which every write moves; the view carries none of the tracking columns.
+// issuerViewChanged ignores write and JWKS-cache freshness timestamps. A
+// refresh can move those without changing issuer configuration or capabilities.
 func issuerViewChanged(before, after *types.RemoteSessionIssuer) bool {
 	b, a := *before, *after
 	b.UpdatedAt, a.UpdatedAt = "", ""
+	b.JwksFetchedAt, a.JwksFetchedAt = nil, nil
+	b.JwksCacheExpiresAt, a.JwksCacheExpiresAt = nil, nil
 	return !reflect.DeepEqual(b, a)
 }
 
@@ -661,4 +672,22 @@ func sameTimestamp(a, b pgtype.Timestamptz) bool {
 		return false
 	}
 	return !a.Valid || a.Time.Equal(b.Time)
+}
+
+// The profile column predates capture and is non-null, so its empty default
+// cannot identify an uncaptured row. Compare it with the stored evidence.
+func issuerProfilesNeedReprojection(row repo.RemoteSessionIssuer) bool {
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(row.Metadata, &members); err != nil {
+		return true
+	}
+	raw, present := members[oauthwire.MetadataAuthorizationGrantProfilesSupported]
+	if !present {
+		return len(row.AuthorizationGrantProfilesSupported) != 0
+	}
+	var profiles []string
+	if err := json.Unmarshal(raw, &profiles); err != nil {
+		return true
+	}
+	return !slices.Equal(row.AuthorizationGrantProfilesSupported, profiles)
 }

@@ -755,6 +755,160 @@ func (q *Queries) AdminListOrganizations(ctx context.Context, arg AdminListOrgan
 	return items, nil
 }
 
+const adminListProjectMcpServerRows = `-- name: AdminListProjectMcpServerRows :many
+SELECT
+    m.id,
+    m.name,
+    m.slug,
+    t.name AS toolset_name,
+    m.visibility,
+    m.toolset_id,
+    m.remote_mcp_server_id,
+    m.tunneled_mcp_server_id,
+    e.id AS endpoint_id,
+    e.slug AS endpoint_slug,
+    e.custom_domain_id AS endpoint_custom_domain_id,
+    e.is_domain_root AS endpoint_is_domain_root,
+    e.created_at AS endpoint_created_at,
+    d.domain AS custom_domain,
+    m.created_at
+FROM mcp_servers m
+JOIN projects p ON p.id = m.project_id
+LEFT JOIN toolsets t ON t.id = m.toolset_id
+LEFT JOIN mcp_endpoints e ON e.mcp_server_id = m.id AND e.deleted IS FALSE
+LEFT JOIN custom_domains d ON d.id = e.custom_domain_id AND d.deleted IS FALSE
+    AND d.organization_id = p.organization_id
+    AND d.verified IS TRUE AND d.activated IS TRUE
+WHERE m.project_id = $1
+  AND m.deleted IS FALSE
+ORDER BY m.created_at, m.id
+`
+
+type AdminListProjectMcpServerRowsRow struct {
+	ID                     uuid.UUID
+	Name                   pgtype.Text
+	Slug                   pgtype.Text
+	ToolsetName            pgtype.Text
+	Visibility             string
+	ToolsetID              uuid.NullUUID
+	RemoteMcpServerID      uuid.NullUUID
+	TunneledMcpServerID    uuid.NullUUID
+	EndpointID             uuid.NullUUID
+	EndpointSlug           pgtype.Text
+	EndpointCustomDomainID uuid.NullUUID
+	EndpointIsDomainRoot   pgtype.Bool
+	EndpointCreatedAt      pgtype.Timestamptz
+	CustomDomain           pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+}
+
+// One row per live endpoint, and one with no endpoint columns for a server that
+// has none. custom_domain is null for an endpoint whose domain cannot serve it;
+// the caller skips those and picks the address with mcpendpoints.PrimaryEndpoint.
+func (q *Queries) AdminListProjectMcpServerRows(ctx context.Context, projectID uuid.UUID) ([]AdminListProjectMcpServerRowsRow, error) {
+	rows, err := q.db.Query(ctx, adminListProjectMcpServerRows, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListProjectMcpServerRowsRow
+	for rows.Next() {
+		var i AdminListProjectMcpServerRowsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.ToolsetName,
+			&i.Visibility,
+			&i.ToolsetID,
+			&i.RemoteMcpServerID,
+			&i.TunneledMcpServerID,
+			&i.EndpointID,
+			&i.EndpointSlug,
+			&i.EndpointCustomDomainID,
+			&i.EndpointIsDomainRoot,
+			&i.EndpointCreatedAt,
+			&i.CustomDomain,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListProjectToolsetOnlyMcpServers = `-- name: AdminListProjectToolsetOnlyMcpServers :many
+SELECT
+    t.id,
+    t.name,
+    t.slug,
+    t.mcp_slug,
+    t.mcp_is_public,
+    t.default_environment_slug,
+    p.slug AS project_slug,
+    d.domain AS custom_domain,
+    t.created_at
+FROM toolsets t
+JOIN projects p ON p.id = t.project_id
+LEFT JOIN custom_domains d ON d.id = t.custom_domain_id AND d.deleted IS FALSE
+    AND d.organization_id = p.organization_id
+    AND d.verified IS TRUE AND d.activated IS TRUE
+WHERE t.project_id = $1
+  AND t.deleted IS FALSE
+  AND t.mcp_enabled IS TRUE
+  AND NOT EXISTS (SELECT 1 FROM mcp_servers m
+                   WHERE m.toolset_id = t.id AND m.deleted IS FALSE)
+ORDER BY t.created_at, t.id
+`
+
+type AdminListProjectToolsetOnlyMcpServersRow struct {
+	ID                     uuid.UUID
+	Name                   string
+	Slug                   string
+	McpSlug                pgtype.Text
+	McpIsPublic            bool
+	DefaultEnvironmentSlug pgtype.Text
+	ProjectSlug            string
+	CustomDomain           pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+}
+
+// The legacy half of AdminListProjectsForOrganization's count, with the same
+// anti join, so this list and that count agree.
+func (q *Queries) AdminListProjectToolsetOnlyMcpServers(ctx context.Context, projectID uuid.UUID) ([]AdminListProjectToolsetOnlyMcpServersRow, error) {
+	rows, err := q.db.Query(ctx, adminListProjectToolsetOnlyMcpServers, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListProjectToolsetOnlyMcpServersRow
+	for rows.Next() {
+		var i AdminListProjectToolsetOnlyMcpServersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.McpSlug,
+			&i.McpIsPublic,
+			&i.DefaultEnvironmentSlug,
+			&i.ProjectSlug,
+			&i.CustomDomain,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListProjectsForOrganization = `-- name: AdminListProjectsForOrganization :many
 SELECT
     p.id,
@@ -813,6 +967,25 @@ func (q *Queries) AdminListProjectsForOrganization(ctx context.Context, organiza
 		return nil, err
 	}
 	return items, nil
+}
+
+const adminProjectBelongsToOrganization = `-- name: AdminProjectBelongsToOrganization :one
+SELECT EXISTS (
+    SELECT 1 FROM projects
+    WHERE id = $1 AND organization_id = $2 AND deleted IS FALSE
+)
+`
+
+type AdminProjectBelongsToOrganizationParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) AdminProjectBelongsToOrganization(ctx context.Context, arg AdminProjectBelongsToOrganizationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, adminProjectBelongsToOrganization, arg.ProjectID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const adminResolveOrganizationID = `-- name: AdminResolveOrganizationID :one

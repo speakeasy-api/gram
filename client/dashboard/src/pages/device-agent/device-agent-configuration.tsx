@@ -28,6 +28,7 @@ import {
 import { useUpdateDeviceAgentConfigurationMutation } from "@gram/client/react-query/updateDeviceAgentConfiguration.js";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
+import { Switch } from "@/components/ui/Switch";
 import {
   enforcementLayer,
   recordValue,
@@ -110,6 +111,12 @@ function autoUpdateSetting(config: DeviceAgentConfiguration): string {
 function syncIntervalSetting(config: DeviceAgentConfiguration): string {
   const value = config.config.sync_interval_seconds;
   return typeof value === "number" ? String(value) : "60";
+}
+
+// disable_ai_scan is only ever stored as true: turning the scan back on
+// deletes the key so each device's local or MDM setting still applies.
+function aiScanEnabledSetting(config: DeviceAgentConfiguration): boolean {
+  return config.config.disable_ai_scan !== true;
 }
 
 function blockedVersionsSetting(config: DeviceAgentConfiguration): string {
@@ -222,6 +229,9 @@ function DeviceAgentConfigurationForm({
   const [blockedVersions, setBlockedVersions] = useState(() =>
     blockedVersionsSetting(configuration),
   );
+  const [aiScanEnabled, setAIScanEnabled] = useState(() =>
+    aiScanEnabledSetting(configuration),
+  );
   const [saveError, setSaveError] = useState<string>();
 
   const mutation = useUpdateDeviceAgentConfigurationMutation({
@@ -255,7 +265,8 @@ function DeviceAgentConfigurationForm({
     autoUpdate !== autoUpdateSetting(configuration) ||
     syncInterval !== syncIntervalSetting(configuration) ||
     pinnedTarget !== stringSetting(configuration, "pinned_target", "") ||
-    blockedVersions !== blockedVersionsSetting(configuration);
+    blockedVersions !== blockedVersionsSetting(configuration) ||
+    aiScanEnabled !== aiScanEnabledSetting(configuration);
   const disabled = mutation.isPending || !canEdit;
 
   const handleSave = () => {
@@ -278,6 +289,12 @@ function DeviceAgentConfigurationForm({
       config.auto_update = autoUpdate;
     }
     config.sync_interval_seconds = Number(syncInterval);
+
+    if (aiScanEnabled) {
+      delete config.disable_ai_scan;
+    } else {
+      config.disable_ai_scan = true;
+    }
 
     if (pinnedTarget.trim()) {
       config.pinned_target = pinnedTarget.trim();
@@ -370,6 +387,26 @@ function DeviceAgentConfigurationForm({
               </Select>
             </div>
           ))}
+        </div>
+
+        <div className="border-border border-t" />
+
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <Text variant="body" className="font-medium">
+              Shadow AI scan
+            </Text>
+            <Text muted small>
+              Allow scanning unless a device&apos;s local or MDM setting
+              disables it. Turn off to disable scanning across the fleet.
+            </Text>
+          </div>
+          <Switch
+            checked={aiScanEnabled}
+            onCheckedChange={setAIScanEnabled}
+            disabled={disabled}
+            aria-label="Shadow AI scan"
+          />
         </div>
 
         <div className="border-border border-t" />
