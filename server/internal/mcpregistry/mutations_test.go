@@ -349,6 +349,7 @@ func TestEndpointStructureErrorPaths(t *testing.T) {
 	t.Parallel()
 	for _, key := range []string{"type", "url", "variables"} {
 		t.Run(key, func(t *testing.T) {
+			t.Parallel()
 			old := json.RawMessage(`{"server":{"remotes":[{}]}}`)
 			updated := json.RawMessage(`{"server":{"remotes":[{"` + key + `":null}]}}`)
 			err := checkStructure(old, updated)
