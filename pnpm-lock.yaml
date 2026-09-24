@@ -653,11 +653,11 @@ importers:
         specifier: ^1.7.0
         version: 1.7.0
       '@logtape/logtape':
-        specifier: ^2.3.4
-        version: 2.3.4
+        specifier: ^2.3.5
+        version: 2.3.5
       '@logtape/pretty':
         specifier: ^2.3.4
-        version: 2.3.4(@logtape/logtape@2.3.4)
+        version: 2.3.4(@logtape/logtape@2.3.5)
       '@stricli/core':
         specifier: ^1.3.0
         version: 1.3.0
@@ -1396,8 +1396,8 @@ packages:
   '@kurkle/color@0.3.4':
     resolution: {integrity: sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w==}
 
-  '@logtape/logtape@2.3.4':
-    resolution: {integrity: sha512-oW5Q6EOdjemL94c324j2fUn+2nRGuODwmOKmrwY6YAVkjqNWYVgkzpfbckFc4CKmDDCMk+GiwNfPybMZB3QqNQ==}
+  '@logtape/logtape@2.3.5':
+    resolution: {integrity: sha512-s4LlalG0JO2Fg8ENy1aQVdOS47VOD2pip6mOW29TNuCxW5zOhrQk/ck/xs77M7O15b2pK2KnDSr7L0Tf6LIUXg==}
 
   '@logtape/pretty@2.3.4':
     resolution: {integrity: sha512-l4g4/9+6FoqVWsdmC8qqHt7a1VchL6YYkxWeNuQEGu11ewSE2Ng04/56xjRrkCictGgSjG/T66kRVi/SP+tYyA==}
@@ -8660,11 +8660,11 @@ snapshots:
 
   '@kurkle/color@0.3.4': {}
 
-  '@logtape/logtape@2.3.4': {}
+  '@logtape/logtape@2.3.5': {}
 
-  '@logtape/pretty@2.3.4(@logtape/logtape@2.3.4)':
+  '@logtape/pretty@2.3.4(@logtape/logtape@2.3.5)':
     dependencies:
-      '@logtape/logtape': 2.3.4
+      '@logtape/logtape': 2.3.5
 
   '@manypkg/find-root@3.1.0':
     dependencies:
