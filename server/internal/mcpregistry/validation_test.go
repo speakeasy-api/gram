@@ -13,8 +13,10 @@ import (
 
 func TestRecordContract(t *testing.T) {
 	t.Parallel()
+
 	v, err := LoadValidator()
 	require.NoError(t, err)
+
 	raw, err := os.ReadFile("contract/testdata/contract-cases.json")
 	require.NoError(t, err)
 	var cases []struct {
@@ -23,19 +25,24 @@ func TestRecordContract(t *testing.T) {
 		Valid  bool            `json:"valid"`
 	}
 	require.NoError(t, json.Unmarshal(raw, &cases))
+
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) { t.Parallel(); require.Equal(t, tc.Valid, len(v.Validate(tc.Record)) == 0) })
 	}
 }
+
 func TestValidationBoundaries(t *testing.T) {
 	t.Parallel()
+
 	v, err := LoadValidator()
 	require.NoError(t, err)
+
 	for _, raw := range []string{`{} {}`, `{} trailing`, `null`, `{"server":{"name":""}}`} {
 		require.NotEmpty(t, v.Validate([]byte(raw)))
 	}
 	valid := []byte(`{"server":{"name":"io.example/test","description":"test","version":"1"}}`)
 	require.Empty(t, v.Validate(valid))
+
 	for _, suffix := range []string{" {}", " trailing"} {
 		require.NotEmpty(t, v.Validate(append(append([]byte{}, valid...), suffix...)))
 	}
@@ -46,8 +53,10 @@ func TestValidationBoundaries(t *testing.T) {
 
 func TestValidationDiagnostics(t *testing.T) {
 	t.Parallel()
+
 	v, err := LoadValidator()
 	require.NoError(t, err)
+
 	issues := v.Validate([]byte(`{"server":{"name":"SECRET_BAD_NAME","version":42,"description":false,"remotes":[{"type":"streamable-http","url":"SECRET_BAD_URL"}]}}`))
 	paths := map[string]bool{}
 	for _, issue := range issues {
@@ -58,6 +67,7 @@ func TestValidationDiagnostics(t *testing.T) {
 	require.True(t, paths["/server/name"])
 	require.True(t, paths["/server/version"])
 	require.True(t, paths["/server/remotes/0/url"])
+
 	remotes := make([]any, 100)
 	for i := range remotes {
 		remotes[i] = map[string]any{"type": "streamable-http", "url": "SECRET_BAD_URL"}
@@ -66,8 +76,10 @@ func TestValidationDiagnostics(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, v.Validate(raw), 20)
 }
+
 func TestValidationSize(t *testing.T) {
 	t.Parallel()
+
 	v, err := LoadValidator()
 	require.NoError(t, err)
 	require.NotEmpty(t, v.Validate(make([]byte, (8<<20)+1)))
@@ -75,6 +87,7 @@ func TestValidationSize(t *testing.T) {
 
 func TestDiagnosticPointerEscapingAndBounds(t *testing.T) {
 	t.Parallel()
+
 	for _, key := range []string{"a~/b", strings.Repeat("x", 300)} {
 		schema, err := json.Marshal(map[string]any{"type": "object", "properties": map[string]any{key: map[string]any{"type": "string"}}})
 		require.NoError(t, err)
@@ -98,8 +111,10 @@ func TestDiagnosticPointerEscapingAndBounds(t *testing.T) {
 
 func TestApprovedRecordSizeLimit(t *testing.T) {
 	t.Parallel()
+
 	v, err := LoadValidator()
 	require.NoError(t, err)
+
 	prefix := `{"server":{"name":"io.example/test","description":"test","version":"1"},"extension":"`
 	suffix := `"}`
 	raw := []byte(prefix + strings.Repeat("x", (8<<20)-len(prefix)-len(suffix)) + suffix)

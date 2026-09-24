@@ -24,8 +24,10 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(code)
 }
+
 func newTestService(t *testing.T) (context.Context, *Service, *pgxpool.Pool) {
 	t.Helper()
+
 	db, err := infra.CloneTestDatabase(t, "registrytestdb")
 	require.NoError(t, err)
 	v, err := LoadValidator()
