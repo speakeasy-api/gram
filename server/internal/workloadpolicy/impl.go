@@ -682,19 +682,33 @@ func (s *Service) WithdrawSubject(ctx context.Context, payload *gen.WithdrawSubj
 		return nil, oops.E(oops.CodeUnexpected, err, "error counting admissions for the withdrawn subject").LogError(ctx, s.logger)
 	}
 
+	// Read before the conditional delete, and unconditionally: the snapshot has to
+	// record which agent this admission ran under whether or not the assignment
+	// itself goes. Reading it only inside the delete branch left every
+	// withdrawal-while-the-other-tier-survives with no agent in its audit record.
+	live, err := q.GetWorkloadAgentAssignmentForSubject(ctx, repo.GetWorkloadAgentAssignmentForSubjectParams{
+		OrganizationID:   t.organizationID,
+		WorkloadIssuerID: existing.WorkloadIssuerID,
+		MatchKind:        existing.MatchKind,
+		Subject:          existing.Subject,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error reading the workload's agent assignment").LogError(ctx, s.logger)
+	}
+
 	assignedAgent := ""
+	if len(live) > 0 {
+		assignedAgent = live[0].AgentID.String()
+	}
+
 	if remaining == 0 {
-		assignments, err := q.SoftDeleteWorkloadAgentAssignmentForSubject(ctx, repo.SoftDeleteWorkloadAgentAssignmentForSubjectParams{
+		if _, err := q.SoftDeleteWorkloadAgentAssignmentForSubject(ctx, repo.SoftDeleteWorkloadAgentAssignmentForSubjectParams{
 			OrganizationID:   t.organizationID,
 			WorkloadIssuerID: existing.WorkloadIssuerID,
 			MatchKind:        existing.MatchKind,
 			Subject:          existing.Subject,
-		})
-		if err != nil {
+		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error clearing the workload's agent assignment").LogError(ctx, s.logger)
-		}
-		if len(assignments) > 0 {
-			assignedAgent = assignments[0].AgentID.String()
 		}
 	}
 

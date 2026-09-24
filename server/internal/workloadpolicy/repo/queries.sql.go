@@ -250,6 +250,64 @@ func (q *Queries) GetWorkloadAdmission(ctx context.Context, arg GetWorkloadAdmis
 	return i, err
 }
 
+const getWorkloadAgentAssignmentForSubject = `-- name: GetWorkloadAgentAssignmentForSubject :many
+SELECT id, organization_id, workload_issuer_id, subject, match_kind, agent_id, created_at, updated_at, deleted_at, deleted
+FROM workload_agent_assignments
+WHERE organization_id = $1
+  AND workload_issuer_id = $2
+  AND match_kind = $3
+  AND subject = $4
+  AND deleted IS FALSE
+`
+
+type GetWorkloadAgentAssignmentForSubjectParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	MatchKind        string
+	Subject          string
+}
+
+// The live assignment for this tuple, read before any conditional delete so the
+// withdrawal's before-snapshot records which agent the admission ran under even
+// when the other tier keeps the assignment. Returns rows rather than one so a
+// missing assignment is an empty result, not an error: an admission with no agent
+// is a state the policy allows and the audit record has to be able to say so.
+func (q *Queries) GetWorkloadAgentAssignmentForSubject(ctx context.Context, arg GetWorkloadAgentAssignmentForSubjectParams) ([]WorkloadAgentAssignment, error) {
+	rows, err := q.db.Query(ctx, getWorkloadAgentAssignmentForSubject,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+		arg.MatchKind,
+		arg.Subject,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkloadAgentAssignment
+	for rows.Next() {
+		var i WorkloadAgentAssignment
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.WorkloadIssuerID,
+			&i.Subject,
+			&i.MatchKind,
+			&i.AgentID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getWorkloadIssuer = `-- name: GetWorkloadIssuer :one
 SELECT id, organization_id, project_id, name, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers

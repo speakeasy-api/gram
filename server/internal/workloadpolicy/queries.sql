@@ -174,6 +174,20 @@ WHERE organization_id = @organization_id
   AND subject = @subject
   AND deleted IS FALSE;
 
+-- name: GetWorkloadAgentAssignmentForSubject :many
+-- The live assignment for this tuple, read before any conditional delete so the
+-- withdrawal's before-snapshot records which agent the admission ran under even
+-- when the other tier keeps the assignment. Returns rows rather than one so a
+-- missing assignment is an empty result, not an error: an admission with no agent
+-- is a state the policy allows and the audit record has to be able to say so.
+SELECT *
+FROM workload_agent_assignments
+WHERE organization_id = @organization_id
+  AND workload_issuer_id = @workload_issuer_id
+  AND match_kind = @match_kind
+  AND subject = @subject
+  AND deleted IS FALSE;
+
 -- name: SoftDeleteWorkloadAgentAssignmentForSubject :many
 -- Keyed the way the assignment is, not by admission id. Returns rows so the
 -- withdrawal is auditable, and is a no-op when nothing was assigned.

@@ -196,6 +196,17 @@ func TestWithdrawSubject_LeavesTheOtherTiersAgentInPlace(t *testing.T) {
 	// left: withdrawing the wrong tier would satisfy it too.
 	require.Equal(t, ti.projectID.String(), after.Admissions[0].ProjectID,
 		"the project-tier admission should have survived withdrawing the organization-tier one")
+
+	// The before-snapshot has to say which agent the withdrawn admission ran
+	// under, whether or not the shared assignment went with it. Reading the agent
+	// only on the branch that deletes the assignment left exactly this case — the
+	// other tier surviving — with no agent recorded.
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	snapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, agentID.String(), snapshot["assigned_agent_id"],
+		"the withdrawal's snapshot lost the agent because the other tier kept the assignment")
 }
 
 // A sibling project's issuer is invisible in the caller's list, so it must not be
