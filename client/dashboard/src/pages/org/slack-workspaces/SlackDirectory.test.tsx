@@ -192,9 +192,7 @@ it("distinguishes never-synced, stale, unknown progress and failed states", () =
   expect(screen.getByText(/Sync to refresh it/).textContent).not.toContain(
     "Reconnect",
   );
-  expect(screen.getByRole("status").textContent).toContain(
-    "progress is unavailable",
-  );
+  expect(screen.queryByRole("status")).toBeNull();
   expect(screen.getByRole("alert").textContent).toContain(
     "last complete directory is kept",
   );

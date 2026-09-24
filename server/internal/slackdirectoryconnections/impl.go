@@ -119,6 +119,7 @@ func (s *Service) List(ctx context.Context, _ *gen.ListPayload) (*gen.ListResult
 		view.MemberCount = summary.MemberCount
 		state, stateErr := s.syncScheduler.State(statusCtx, row.ID, row.Generation)
 		if stateErr != nil {
+			s.logger.WarnContext(ctx, "could not read Slack directory sync state", attr.SlogError(stateErr))
 			view.SyncStatus = "unknown"
 		} else {
 			view.SyncStatus = state.Status

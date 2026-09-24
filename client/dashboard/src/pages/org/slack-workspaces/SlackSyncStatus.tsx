@@ -88,11 +88,6 @@ export function SlackSyncStatus({
           </span>
         </div>
       )}
-      {connection.syncStatus === "unknown" && (
-        <p role="status">
-          Sync progress is unavailable. Refresh to check again.
-        </p>
-      )}
       {failed && (
         <p role="alert" className="text-destructive">
           {connection.lastSyncFailedAt && (
