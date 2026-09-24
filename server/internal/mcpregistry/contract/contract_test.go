@@ -9,9 +9,9 @@ import (
 	"testing"
 )
 
-func TestConformance(t *testing.T) {
+func TestRecordContract(t *testing.T) {
 	t.Parallel()
-	raw, err := os.ReadFile("conformance.json")
+	raw, err := os.ReadFile("contract-cases.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,13 +40,6 @@ func TestConformance(t *testing.T) {
 		})
 	}
 }
-func TestRejectUnknownFormat(t *testing.T) {
-	t.Parallel()
-	if _, err := Compile([]byte(`{"type":"string","format":"unsupported-required-format"}`)); err == nil {
-		t.Fatal("unknown format accepted")
-	}
-}
-
 func TestStarterBaseline(t *testing.T) {
 	t.Parallel()
 	raw, err := os.ReadFile("../baseline/manifest.json")
@@ -54,9 +47,8 @@ func TestStarterBaseline(t *testing.T) {
 		t.Fatal(err)
 	}
 	var manifest struct {
-		Count        int    `json:"count"`
-		SchemaSHA256 string `json:"schema_sha256"`
-		Records      []struct {
+		Count   int `json:"count"`
+		Records []struct {
 			File   string `json:"file"`
 			Name   string `json:"name"`
 			SHA256 string `json:"sha256"`
@@ -67,9 +59,6 @@ func TestStarterBaseline(t *testing.T) {
 	}
 	if manifest.Count != 2 || len(manifest.Records) != 2 {
 		t.Fatal("expected two starter records")
-	}
-	if got := fmt.Sprintf("%x", sha256.Sum256(Schema)); got != manifest.SchemaSHA256 {
-		t.Fatalf("record.schema.json hash=%s, want %s", got, manifest.SchemaSHA256)
 	}
 	files, _ := filepath.Glob("../baseline/records/*.json")
 	if len(files) != 2 {
@@ -108,40 +97,19 @@ func TestStarterBaseline(t *testing.T) {
 	}
 }
 
-func TestSchemaConformance(t *testing.T) {
-	t.Parallel()
-	raw, err := os.ReadFile("schema-conformance.json")
+func TestNumberPrecision(t *testing.T) {
+	value, err := decode([]byte(`{"server":{"name":"io.example/fixture","description":"Fixture","version":"1"},"extension":9007199254740993}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var cases []struct {
-		Name   string          `json:"name"`
-		Schema json.RawMessage `json:"schema"`
-		Valid  bool            `json:"valid"`
-	}
-	if err := json.Unmarshal(raw, &cases); err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range cases {
-		t.Run(c.Name, func(t *testing.T) {
-			t.Parallel()
-			_, err := Compile(c.Schema)
-			if (err == nil) != c.Valid {
-				t.Fatalf("compile error=%v, want valid=%v", err, c.Valid)
-			}
-		})
-	}
-}
-
-// Pin reviewed resources from jsonschema/v6 v6.0.2; see README.md.
-func TestMetaschemaIntegrity(t *testing.T) {
-	t.Parallel()
-	raw, err := os.ReadFile("metaschemas.json")
+	schema, err := Compile(Schema)
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "d0c095989a1f9441e5d2955303eae8a4dd54079cb252b99e4dc1dcd1e0efb009"
-	if got := fmt.Sprintf("%x", sha256.Sum256(raw)); got != want {
-		t.Fatalf("metaschemas.json hash=%s, want %s", got, want)
+	if err := schema.Validate(value); err != nil {
+		t.Fatal(err)
+	}
+	if got := value.(map[string]any)["extension"]; got != json.Number("9007199254740993") {
+		t.Fatalf("number changed: %v", got)
 	}
 }

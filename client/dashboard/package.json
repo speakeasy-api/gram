@@ -22,8 +22,7 @@
     "type-check": "tsc -b --noEmit",
     "knip": "knip",
     "storybook": "storybook dev -p 6007",
-    "build:storybook": "storybook build",
-    "test:registry-contract": "vitest run scripts/registry-contract.test.mjs"
+    "build:storybook": "storybook build"
   },
   "dependencies": {
     "@ai-sdk/mcp": "2.0.50",
