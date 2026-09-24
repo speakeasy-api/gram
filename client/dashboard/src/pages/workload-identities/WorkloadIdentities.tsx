@@ -51,6 +51,7 @@ export function WorkloadIdentitiesPage(): JSX.Element {
 function admitPrecondition(
   issuerCount: number,
   agentCount: number,
+  activeAgentCount: number,
   agentsFailed: boolean,
 ): string | null {
   if (issuerCount === 0) {
@@ -61,6 +62,12 @@ function admitPrecondition(
   }
   if (agentCount === 0) {
     return "Create an agent first. An admitted workload inherits its policy from an agent, and one admitted without an agent is refused when it tries to authenticate.";
+  }
+  // Only active agents are assignable, so an organization can hold agents and
+  // still have none to offer. Saying "create an agent" there sends someone to
+  // make a second one instead of reactivating the one they have.
+  if (activeAgentCount === 0) {
+    return "Every agent is suspended or revoked. A workload inherits its policy from an agent, so reactivate one before admitting a workload.";
   }
   return null;
 }
@@ -194,6 +201,7 @@ function WorkloadIdentitiesOverview(): JSX.Element {
   // than offering a control that fails on submit.
   const admitBlockedReason = admitPrecondition(
     issuers.length,
+    agentsQuery.data?.length ?? 0,
     agents.length,
     agentsQuery.isError,
   );

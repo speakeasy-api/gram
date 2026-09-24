@@ -81,10 +81,10 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
   invalidateAllWorkloadIdentities: vi.fn(),
 }));
 const agentsState = vi.hoisted<{
-  data?: { id: string; name: string }[];
+  data?: { id: string; name: string; lifecycle: string }[];
   isError: boolean;
 }>(() => ({
-  data: [{ id: "agent-1", name: "poc-agent" }],
+  data: [{ id: "agent-1", name: "poc-agent", lifecycle: "active" }],
   isError: false,
 }));
 vi.mock("@gram/client/react-query/agents.js", () => ({
@@ -117,7 +117,9 @@ vi.mock("@gram/client/react-query/withdrawWorkloadSubject.js", () => ({
 
 afterEach(() => {
   cleanup();
-  agentsState.data = [{ id: "agent-1", name: "poc-agent" }];
+  agentsState.data = [
+    { id: "agent-1", name: "poc-agent", lifecycle: "active" },
+  ];
   agentsState.isError = false;
 });
 
@@ -176,6 +178,43 @@ it("still renders the policy when agents cannot be listed", () => {
   expect(
     screen.getByText(/Agent management is not enabled for this organization/),
   ).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "Admit a workload" }),
+  ).toHaveProperty("disabled", true);
+});
+
+it("offers admitting a workload when an active agent can back it", () => {
+  renderPage();
+
+  expect(
+    screen.getByRole("button", { name: "Admit a workload" }),
+  ).toHaveProperty("disabled", false);
+});
+
+it("says to create an agent when the organization has none", () => {
+  agentsState.data = [];
+
+  renderPage();
+
+  expect(screen.getByText(/Create an agent first/)).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "Admit a workload" }),
+  ).toHaveProperty("disabled", true);
+});
+
+it("says to reactivate rather than create when every agent is inactive", () => {
+  // Only active agents are assignable, so this organization has agents and
+  // still nothing to offer. Telling it to create one sends it to make a second
+  // agent instead of reactivating the one it has.
+  agentsState.data = [
+    { id: "agent-1", name: "poc-agent", lifecycle: "suspended" },
+    { id: "agent-2", name: "old-agent", lifecycle: "revoked" },
+  ];
+
+  renderPage();
+
+  expect(screen.getByText(/Every agent is suspended or revoked/)).toBeTruthy();
+  expect(screen.queryByText(/Create an agent first/)).toBeNull();
   expect(
     screen.getByRole("button", { name: "Admit a workload" }),
   ).toHaveProperty("disabled", true);

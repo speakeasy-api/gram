@@ -315,6 +315,7 @@ E'---\nname: runbook\ndescription: General operational runbook for the Acme stac
   member_count int;
   tool_count int;
   stray int;
+  stray_detail text;
 BEGIN
   ------------------------------------------------------------------
   -- Preflight isolation asserts: refuse to run if the demo constants
@@ -3078,25 +3079,46 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   END IF;
 
   -- The seed writes these tables in raw SQL, so it never passes through
-  -- workloadidentity.ValidateSubjectRule the way the management API does. These
-  -- two asserts are that validation, applied to what was actually written: a
-  -- wildcard rule under an issuer that forbids wildcards is inert, and a stem
-  -- with no trailing "*" matches nothing. Either would reseed daily into the
-  -- demo organization and read as working configuration.
-  SELECT count(*) INTO stray
-  FROM workload_identity_admissions a
-  JOIN workload_issuers i ON i.id = a.workload_issuer_id
-  WHERE a.organization_id = demo_org AND a.deleted IS FALSE
-    AND a.match_kind = 'wildcard' AND i.allow_wildcard_admission IS FALSE;
+  -- workloadidentity.ValidateSubjectRule the way the management API does. This
+  -- assert is that validation, applied to what was actually written, over both
+  -- tables that carry a subject rule: an admission decides whether a machine is
+  -- recognised at all, an assignment decides what it inherits, and the two have
+  -- to widen together. Anything wrong here reseeds daily into the demo
+  -- organization and reads as working configuration.
+  WITH rules AS (
+    SELECT 'admission' AS source, a.subject, a.match_kind, i.allow_wildcard_admission
+    FROM workload_identity_admissions a
+    JOIN workload_issuers i ON i.id = a.workload_issuer_id
+    WHERE a.organization_id = demo_org AND a.deleted IS FALSE
+    UNION ALL
+    SELECT 'assignment', g.subject, g.match_kind, i.allow_wildcard_admission
+    FROM workload_agent_assignments g
+    JOIN workload_issuers i ON i.id = g.workload_issuer_id
+    WHERE g.organization_id = demo_org AND g.deleted IS FALSE
+  )
+  SELECT count(*), coalesce(string_agg(format('%s %L', source, subject), ', '), '')
+  INTO stray, stray_detail
+  FROM rules
+  WHERE CASE match_kind
+    -- A subject is otherwise opaque, so no character would be reserved. A "*"
+    -- is refused anyway: no platform puts one in a sub, so its presence means
+    -- the author wanted a wildcard and instead stored a literal matching
+    -- nothing at all.
+    WHEN 'exact' THEN subject LIKE '%*%'
+    WHEN 'wildcard' THEN
+      -- Enforced on read, so clearing the issuer flag is a kill switch. A rule
+      -- written under an issuer that forbids wildcards is already inert.
+      allow_wildcard_admission IS FALSE
+      -- The terminator is mandatory and is the only "*" permitted: everything
+      -- before it is the stem, which has to be a non-empty prefix rather than
+      -- "match anything".
+      OR subject NOT LIKE '%*'
+      OR left(subject, length(subject) - 1) = ''
+      OR left(subject, length(subject) - 1) LIKE '%*%'
+    ELSE TRUE
+  END;
   IF stray <> 0 THEN
-    RAISE EXCEPTION 'demo seed postflight: % wildcard admissions under an issuer that forbids wildcards', stray;
-  END IF;
-
-  SELECT count(*) INTO stray FROM workload_identity_admissions
-  WHERE organization_id = demo_org AND deleted IS FALSE
-    AND match_kind = 'wildcard' AND subject NOT LIKE '%*';
-  IF stray <> 0 THEN
-    RAISE EXCEPTION 'demo seed postflight: % wildcard admissions with no trailing star', stray;
+    RAISE EXCEPTION 'demo seed postflight: % workload subject rules ValidateSubjectRule would refuse: %', stray, stray_detail;
   END IF;
 
   SELECT count(*) INTO stray FROM workload_agent_assignments
