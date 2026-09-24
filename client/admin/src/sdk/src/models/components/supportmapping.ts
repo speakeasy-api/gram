@@ -14,6 +14,13 @@ import {
   SupportFact$outboundSchema,
 } from "./supportfact.js";
 
+export const SupportMappingAccounts = {
+  Supported: "supported",
+  Unsupported: "unsupported",
+  Unknown: "unknown",
+} as const;
+export type SupportMappingAccounts = ClosedEnum<typeof SupportMappingAccounts>;
+
 export const Applicability = {
   Unknown: "unknown",
   Applicable: "applicable",
@@ -22,10 +29,20 @@ export const Applicability = {
 export type Applicability = ClosedEnum<typeof Applicability>;
 
 export type SupportMapping = {
+  accounts: { [k: string]: SupportMappingAccounts };
   applicability: Applicability;
   conditions: string;
   facts: { [k: string]: SupportFact };
 };
+
+/** @internal */
+export const SupportMappingAccounts$inboundSchema: z.ZodMiniEnum<
+  typeof SupportMappingAccounts
+> = z.enum(SupportMappingAccounts);
+/** @internal */
+export const SupportMappingAccounts$outboundSchema: z.ZodMiniEnum<
+  typeof SupportMappingAccounts
+> = SupportMappingAccounts$inboundSchema;
 
 /** @internal */
 export const Applicability$inboundSchema: z.ZodMiniEnum<typeof Applicability> =
@@ -39,12 +56,14 @@ export const SupportMapping$inboundSchema: z.ZodMiniType<
   SupportMapping,
   unknown
 > = z.object({
+  accounts: z.record(z.string(), SupportMappingAccounts$inboundSchema),
   applicability: Applicability$inboundSchema,
   conditions: z.string(),
   facts: z.record(z.string(), SupportFact$inboundSchema),
 });
 /** @internal */
 export type SupportMapping$Outbound = {
+  accounts: { [k: string]: string };
   applicability: string;
   conditions: string;
   facts: { [k: string]: SupportFact$Outbound };
@@ -55,6 +74,7 @@ export const SupportMapping$outboundSchema: z.ZodMiniType<
   SupportMapping$Outbound,
   SupportMapping
 > = z.object({
+  accounts: z.record(z.string(), SupportMappingAccounts$outboundSchema),
   applicability: Applicability$outboundSchema,
   conditions: z.string(),
   facts: z.record(z.string(), SupportFact$outboundSchema),

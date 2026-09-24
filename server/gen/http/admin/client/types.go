@@ -12823,11 +12823,12 @@ type SpendBucketResponseBody struct {
 
 // SupportMethodResponseBody is used to define fields on response body types.
 type SupportMethodResponseBody struct {
-	ID     *string                             `json:"id"`
-	Name   *string                             `json:"name"`
-	Vendor *string                             `json:"vendor"`
-	Plans  *string                             `json:"plans"`
-	Facts  map[string]*SupportFactResponseBody `json:"facts"`
+	ID       *string                             `json:"id"`
+	Name     *string                             `json:"name"`
+	Vendor   *string                             `json:"vendor"`
+	Plans    *string                             `json:"plans"`
+	Accounts map[string]string                   `json:"accounts"`
+	Facts    map[string]*SupportFactResponseBody `json:"facts"`
 }
 
 // SupportFactResponseBody is used to define fields on response body types.
@@ -12858,12 +12859,14 @@ type SupportCapabilityResponseBody struct {
 type SupportDraftResponseBody struct {
 	Mappings   map[string]*SupportMappingResponseBody         `json:"mappings"`
 	References map[string]map[string]*SupportFactResponseBody `json:"references"`
+	Accounts   map[string]map[string]string                   `json:"accounts"`
 }
 
 // SupportMappingResponseBody is used to define fields on response body types.
 type SupportMappingResponseBody struct {
 	Applicability *string                             `json:"applicability"`
 	Conditions    *string                             `json:"conditions"`
+	Accounts      map[string]string                   `json:"accounts"`
 	Facts         map[string]*SupportFactResponseBody `json:"facts"`
 }
 
@@ -12871,12 +12874,14 @@ type SupportMappingResponseBody struct {
 type SupportDraftRequestBody struct {
 	Mappings   map[string]*SupportMappingRequestBody         `json:"mappings"`
 	References map[string]map[string]*SupportFactRequestBody `json:"references"`
+	Accounts   map[string]map[string]string                  `json:"accounts"`
 }
 
 // SupportMappingRequestBody is used to define fields on request body types.
 type SupportMappingRequestBody struct {
 	Applicability string                             `json:"applicability"`
 	Conditions    string                             `json:"conditions"`
+	Accounts      map[string]string                  `json:"accounts"`
 	Facts         map[string]*SupportFactRequestBody `json:"facts"`
 }
 
@@ -39527,8 +39532,19 @@ func ValidateSupportMethodResponseBody(body *SupportMethodResponseBody) (err err
 	if body.Plans == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("plans", "body"))
 	}
+	if body.Accounts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("accounts", "body"))
+	}
 	if body.Facts == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("facts", "body"))
+	}
+	for k, v := range body.Accounts {
+		if !(k == "personal" || k == "team" || k == "enterprise") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.accounts.key", k, []any{"personal", "team", "enterprise"}))
+		}
+		if !(v == "supported" || v == "unsupported" || v == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.accounts[key]", v, []any{"supported", "unsupported", "unknown"}))
+		}
 	}
 	for _, v := range body.Facts {
 		if v != nil {
@@ -39610,6 +39626,9 @@ func ValidateSupportDraftResponseBody(body *SupportDraftResponseBody) (err error
 	if body.References == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("references", "body"))
 	}
+	if body.Accounts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("accounts", "body"))
+	}
 	for _, v := range body.Mappings {
 		if v != nil {
 			if err2 := ValidateSupportMappingResponseBody(v); err2 != nil {
@@ -39626,6 +39645,16 @@ func ValidateSupportDraftResponseBody(body *SupportDraftResponseBody) (err error
 			}
 		}
 	}
+	for _, v := range body.Accounts {
+		for k, v := range v {
+			if !(k == "personal" || k == "team" || k == "enterprise") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.accounts[key].key", k, []any{"personal", "team", "enterprise"}))
+			}
+			if !(v == "supported" || v == "unsupported" || v == "unknown") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.accounts[key][key]", v, []any{"supported", "unsupported", "unknown"}))
+			}
+		}
+	}
 	return
 }
 
@@ -39638,6 +39667,9 @@ func ValidateSupportMappingResponseBody(body *SupportMappingResponseBody) (err e
 	if body.Conditions == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("conditions", "body"))
 	}
+	if body.Accounts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("accounts", "body"))
+	}
 	if body.Facts == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("facts", "body"))
 	}
@@ -39649,6 +39681,14 @@ func ValidateSupportMappingResponseBody(body *SupportMappingResponseBody) (err e
 	if body.Conditions != nil {
 		if utf8.RuneCountInString(*body.Conditions) > 10000 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.conditions", *body.Conditions, utf8.RuneCountInString(*body.Conditions), 10000, false))
+		}
+	}
+	for k, v := range body.Accounts {
+		if !(k == "personal" || k == "team" || k == "enterprise") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.accounts.key", k, []any{"personal", "team", "enterprise"}))
+		}
+		if !(v == "supported" || v == "unsupported" || v == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.accounts[key]", v, []any{"supported", "unsupported", "unknown"}))
 		}
 	}
 	for _, v := range body.Facts {
@@ -39670,6 +39710,9 @@ func ValidateSupportDraftRequestBody(body *SupportDraftRequestBody) (err error) 
 	if body.References == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("references", "body"))
 	}
+	if body.Accounts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("accounts", "body"))
+	}
 	for _, v := range body.Mappings {
 		if v != nil {
 			if err2 := ValidateSupportMappingRequestBody(v); err2 != nil {
@@ -39686,12 +39729,25 @@ func ValidateSupportDraftRequestBody(body *SupportDraftRequestBody) (err error) 
 			}
 		}
 	}
+	for _, v := range body.Accounts {
+		for k, v := range v {
+			if !(k == "personal" || k == "team" || k == "enterprise") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.accounts[key].key", k, []any{"personal", "team", "enterprise"}))
+			}
+			if !(v == "supported" || v == "unsupported" || v == "unknown") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.accounts[key][key]", v, []any{"supported", "unsupported", "unknown"}))
+			}
+		}
+	}
 	return
 }
 
 // ValidateSupportMappingRequestBody runs the validations defined on
 // SupportMappingRequestBody
 func ValidateSupportMappingRequestBody(body *SupportMappingRequestBody) (err error) {
+	if body.Accounts == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("accounts", "body"))
+	}
 	if body.Facts == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("facts", "body"))
 	}
@@ -39700,6 +39756,14 @@ func ValidateSupportMappingRequestBody(body *SupportMappingRequestBody) (err err
 	}
 	if utf8.RuneCountInString(body.Conditions) > 10000 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.conditions", body.Conditions, utf8.RuneCountInString(body.Conditions), 10000, false))
+	}
+	for k, v := range body.Accounts {
+		if !(k == "personal" || k == "team" || k == "enterprise") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.accounts.key", k, []any{"personal", "team", "enterprise"}))
+		}
+		if !(v == "supported" || v == "unsupported" || v == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.accounts[key]", v, []any{"supported", "unsupported", "unknown"}))
+		}
 	}
 	for _, v := range body.Facts {
 		if v != nil {

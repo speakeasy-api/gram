@@ -1475,6 +1475,7 @@ type SupportCapability struct {
 type SupportDraft struct {
 	Mappings   map[string]*SupportMapping         `json:"mappings"`
 	References map[string]map[string]*SupportFact `json:"references"`
+	Accounts   map[string]map[string]string       `json:"accounts"`
 }
 
 type SupportFact struct {
@@ -1486,6 +1487,7 @@ type SupportFact struct {
 type SupportMapping struct {
 	Applicability string                  `json:"applicability"`
 	Conditions    string                  `json:"conditions"`
+	Accounts      map[string]string       `json:"accounts"`
 	Facts         map[string]*SupportFact `json:"facts"`
 }
 
@@ -1500,11 +1502,12 @@ type SupportMatrix struct {
 }
 
 type SupportMethod struct {
-	ID     string                  `json:"id"`
-	Name   string                  `json:"name"`
-	Vendor string                  `json:"vendor"`
-	Plans  string                  `json:"plans"`
-	Facts  map[string]*SupportFact `json:"facts"`
+	ID       string                  `json:"id"`
+	Name     string                  `json:"name"`
+	Vendor   string                  `json:"vendor"`
+	Plans    string                  `json:"plans"`
+	Accounts map[string]string       `json:"accounts"`
+	Facts    map[string]*SupportFact `json:"facts"`
 }
 
 type SupportPlatform struct {
