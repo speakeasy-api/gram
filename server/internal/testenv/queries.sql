@@ -1674,3 +1674,15 @@ AND p.proname IN ('validate_remote_session_ema_binding_scope', 'guard_remote_ses
 -- Test fixture: represent a binding created without application lifecycle defaults.
 UPDATE remote_session_ema_bindings SET state = NULL, grant_source = NULL
 WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id;
+
+-- name: InsertOrganizationOnboardingFixture :exec
+-- Plain insert with no ON CONFLICT so schema tests can hit the NOT NULL and
+-- unique constraints that SetOrganizationOnboardingPreset's upsert hides.
+INSERT INTO organization_onboarding (organization_id)
+VALUES (sqlc.narg('organization_id')::text);
+
+-- name: DeleteOrganizationMetadataFixture :exec
+DELETE FROM organization_metadata WHERE id = @id;
+
+-- name: CountOrganizationOnboardingFixture :one
+SELECT count(*) FROM organization_onboarding;

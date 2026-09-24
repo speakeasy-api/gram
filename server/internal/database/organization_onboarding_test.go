@@ -1,12 +1,14 @@
-//nolint:glint // Schema regression tests need raw writes to exercise database constraints.
 package database_test
 
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,28 +20,43 @@ func TestOrganizationOnboardingOwnership(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, container.Terminate(context.Background())) })
 	conn, err := clone(t, "onboarding_ownership")
 	require.NoError(t, err)
+	fixtures := testrepo.New(conn)
 
-	_, err = conn.Exec(ctx, `INSERT INTO organization_onboarding (organization_id) VALUES (NULL)`)
+	err = fixtures.InsertOrganizationOnboardingFixture(ctx, pgtype.Text{String: "", Valid: false})
 	var pgErr *pgconn.PgError
 	require.ErrorAs(t, err, &pgErr)
 	require.Equal(t, "23502", pgErr.Code)
 	require.Equal(t, "organization_id", pgErr.ColumnName)
 
 	const orgID = "org_onboarding_ownership_test"
-	_, err = conn.Exec(ctx, `INSERT INTO organization_metadata (id, name, slug) VALUES ($1, 'Test organization', 'onboarding-ownership-test')`, orgID)
-	require.NoError(t, err)
-	_, err = conn.Exec(ctx, `INSERT INTO organization_onboarding (organization_id) VALUES ($1)`, orgID)
-	require.NoError(t, err) // The preset may remain unset while onboarding is incomplete.
+	now := time.Now().UTC()
+	at := func(value time.Time) pgtype.Timestamptz {
+		return pgtype.Timestamptz{Time: value, InfinityModifier: pgtype.Finite, Valid: true}
+	}
+	unset := pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false}
+	require.NoError(t, fixtures.CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID:                 orgID,
+		Name:               "Test organization",
+		Slug:               "onboarding-ownership-test",
+		GramAccountType:    "free",
+		WorkosID:           pgtype.Text{String: "", Valid: false},
+		Whitelisted:        false,
+		FreeTrialStartedAt: at(now),
+		FreeTrialEndsAt:    at(now.AddDate(0, 0, 14)),
+		DisabledAt:         unset,
+		CreatedAt:          unset,
+	}))
+	orgText := pgtype.Text{String: orgID, Valid: true}
+	// The preset may remain unset while onboarding is incomplete.
+	require.NoError(t, fixtures.InsertOrganizationOnboardingFixture(ctx, orgText))
 
-	_, err = conn.Exec(ctx, `INSERT INTO organization_onboarding (organization_id) VALUES ($1)`, orgID)
+	err = fixtures.InsertOrganizationOnboardingFixture(ctx, orgText)
 	require.ErrorAs(t, err, &pgErr)
 	require.Equal(t, "23505", pgErr.Code)
 	require.Equal(t, "organization_onboarding_organization_id_key", pgErr.ConstraintName)
 
-	_, err = conn.Exec(ctx, `DELETE FROM organization_metadata WHERE id = $1`, orgID)
-	require.NoError(t, err)
-	var remaining int
-	err = conn.QueryRow(ctx, `SELECT count(*) FROM organization_onboarding`).Scan(&remaining)
+	require.NoError(t, fixtures.DeleteOrganizationMetadataFixture(ctx, orgID))
+	remaining, err := fixtures.CountOrganizationOnboardingFixture(ctx)
 	require.NoError(t, err)
 	require.Zero(t, remaining)
 }
