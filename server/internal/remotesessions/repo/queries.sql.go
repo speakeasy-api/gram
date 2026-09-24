@@ -1148,6 +1148,7 @@ INSERT INTO remote_session_issuers (
     registration_endpoint,
     scopes_supported,
     grant_types_supported,
+    authorization_grant_profiles_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
     code_challenge_methods_supported,
@@ -1168,9 +1169,10 @@ VALUES (
     $8,
     $9,
     $10,
-    $11,
+    COALESCE($11::text[], ARRAY[]::text[]),
     $12,
     $13,
+    $14,
     FALSE,
     FALSE,
     FALSE
@@ -1186,6 +1188,7 @@ SET
     registration_endpoint = EXCLUDED.registration_endpoint,
     scopes_supported = EXCLUDED.scopes_supported,
     grant_types_supported = EXCLUDED.grant_types_supported,
+    authorization_grant_profiles_supported = EXCLUDED.authorization_grant_profiles_supported,
     response_types_supported = EXCLUDED.response_types_supported,
     token_endpoint_auth_methods_supported = EXCLUDED.token_endpoint_auth_methods_supported,
     code_challenge_methods_supported = EXCLUDED.code_challenge_methods_supported,
@@ -1216,19 +1219,20 @@ RETURNING id, project_id, organization_id, attachment_scope, slug, issuer, autho
 `
 
 type CreateLocalFixtureGlobalRemoteSessionIssuerParams struct {
-	ID                                uuid.UUID
-	Slug                              string
-	Issuer                            string
-	Name                              pgtype.Text
-	AuthorizationEndpoint             pgtype.Text
-	TokenEndpoint                     pgtype.Text
-	RevocationEndpoint                pgtype.Text
-	RegistrationEndpoint              pgtype.Text
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
-	CodeChallengeMethodsSupported     []string
+	ID                                  uuid.UUID
+	Slug                                string
+	Issuer                              string
+	Name                                pgtype.Text
+	AuthorizationEndpoint               pgtype.Text
+	TokenEndpoint                       pgtype.Text
+	RevocationEndpoint                  pgtype.Text
+	RegistrationEndpoint                pgtype.Text
+	ScopesSupported                     []string
+	GrantTypesSupported                 []string
+	AuthorizationGrantProfilesSupported []string
+	ResponseTypesSupported              []string
+	TokenEndpointAuthMethodsSupported   []string
+	CodeChallengeMethodsSupported       []string
 }
 
 // The local Platform MCP fixture owns this fixed global issuer identity. The
@@ -1247,6 +1251,7 @@ func (q *Queries) CreateLocalFixtureGlobalRemoteSessionIssuer(ctx context.Contex
 		arg.RegistrationEndpoint,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
@@ -1525,6 +1530,7 @@ INSERT INTO remote_session_issuers (
     op_tos_uri,
     scopes_supported,
     grant_types_supported,
+    authorization_grant_profiles_supported,
     response_types_supported,
     token_endpoint_auth_methods_supported,
     code_challenge_methods_supported,
@@ -1565,34 +1571,35 @@ VALUES (
     $15,
     $16,
     $17,
-    $18,
+    COALESCE($18::text[], ARRAY[]::text[]),
     $19,
+    $20,
     -- Nullable on purpose: a caller with neither a discovery document nor an
     -- operator-supplied value passes NULL ("not captured"), which must stay
     -- distinct from the empty array ("the issuer advertises no methods").
-    $20,
     $21,
+    $22,
     -- Session-enrichment capabilities, nullable like
     -- code_challenge_methods_supported: a caller without a discovery
     -- document passes NULL ("not captured").
-    $22,
     $23,
     $24,
     $25,
     $26,
     $27,
     $28,
-    -- Operator knobs, nullable: NULL is "not set".
     $29,
+    -- Operator knobs, nullable: NULL is "not set".
     $30,
     $31,
     $32,
-    NULLIF($33::text, ''),
-    CASE WHEN $33::text = '' THEN NULL ELSE clock_timestamp() END,
+    $33,
     NULLIF($34::text, ''),
-    $35,
+    CASE WHEN $34::text = '' THEN NULL ELSE clock_timestamp() END,
+    NULLIF($35::text, ''),
     $36,
-    $37
+    $37,
+    $38
 )
 RETURNING id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
@@ -1615,6 +1622,7 @@ type CreateRemoteSessionIssuerParams struct {
 	OpTosUri                                   pgtype.Text
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string
@@ -1666,6 +1674,7 @@ func (q *Queries) CreateRemoteSessionIssuer(ctx context.Context, arg CreateRemot
 		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
@@ -4286,6 +4295,9 @@ SELECT
         OR i.backchannel_logout_supported IS NULL
         OR i.authorization_response_iss_parameter_supported IS NULL
         OR i.code_challenge_methods_supported IS NULL
+        OR (jsonb_typeof(COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb)) IS DISTINCT FROM 'array'
+          OR COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
+        )
       )
     )::boolean                             AS metadata_needs_reprojection
 FROM remote_session_clients AS c
@@ -6974,6 +6986,9 @@ SELECT
         OR i.backchannel_logout_supported IS NULL
         OR i.authorization_response_iss_parameter_supported IS NULL
         OR i.code_challenge_methods_supported IS NULL
+        OR (jsonb_typeof(COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb)) IS DISTINCT FROM 'array'
+          OR COALESCE(NULLIF(i.metadata->'authorization_grant_profiles_supported', 'null'::jsonb), '[]'::jsonb) IS DISTINCT FROM to_jsonb(i.authorization_grant_profiles_supported)
+        )
       )
     )::boolean                             AS metadata_needs_reprojection
 FROM remote_session_client_user_session_issuers AS link
@@ -9057,22 +9072,24 @@ func (q *Queries) ReplaceRemoteSessionClientRegistration(ctx context.Context, ar
 const reprojectRemoteSessionIssuerMetadataCapabilities = `-- name: ReprojectRemoteSessionIssuerMetadataCapabilities :one
 UPDATE remote_session_issuers
 SET
-    code_challenge_methods_supported = COALESCE(code_challenge_methods_supported, $1::text[]),
-    introspection_endpoint_auth_methods_supported = COALESCE(introspection_endpoint_auth_methods_supported, $2::text[]),
-    id_token_signing_alg_values_supported = COALESCE(id_token_signing_alg_values_supported, $3::text[]),
-    claims_supported = COALESCE(claims_supported, $4::text[]),
-    backchannel_logout_supported = COALESCE(backchannel_logout_supported, $5::boolean),
-    authorization_response_iss_parameter_supported = COALESCE(authorization_response_iss_parameter_supported, $6::boolean),
+    authorization_grant_profiles_supported = $1::text[],
+    code_challenge_methods_supported = COALESCE(code_challenge_methods_supported, $2::text[]),
+    introspection_endpoint_auth_methods_supported = COALESCE(introspection_endpoint_auth_methods_supported, $3::text[]),
+    id_token_signing_alg_values_supported = COALESCE(id_token_signing_alg_values_supported, $4::text[]),
+    claims_supported = COALESCE(claims_supported, $5::text[]),
+    backchannel_logout_supported = COALESCE(backchannel_logout_supported, $6::boolean),
+    authorization_response_iss_parameter_supported = COALESCE(authorization_response_iss_parameter_supported, $7::boolean),
     updated_at = clock_timestamp()
-WHERE id = $7
-  AND issuer = $8::text
-  AND project_id IS NOT DISTINCT FROM $9::uuid
-  AND organization_id IS NOT DISTINCT FROM $10::text
+WHERE id = $8
+  AND issuer = $9::text
+  AND project_id IS NOT DISTINCT FROM $10::uuid
+  AND organization_id IS NOT DISTINCT FROM $11::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
 type ReprojectRemoteSessionIssuerMetadataCapabilitiesParams struct {
+	AuthorizationGrantProfilesSupported        []string
 	CodeChallengeMethodsSupported              []string
 	IntrospectionEndpointAuthMethodsSupported  []string
 	IDTokenSigningAlgValuesSupported           []string
@@ -9085,9 +9102,10 @@ type ReprojectRemoteSessionIssuerMetadataCapabilitiesParams struct {
 	OrganizationID                             pgtype.Text
 }
 
-// Fills only the capability columns that are still NULL from the stored document; a value an operator or a fetch already set stands, and metadata and the tracking columns stay as they are. The columns written are exactly the ones metadata_needs_reprojection tests: userinfo_endpoint and introspection_endpoint are left to the fetch, since NULL there is a value (the issuer advertises none) rather than a gap.
+// Restates advertised grant profiles and fills capability columns that are still NULL from the stored document; a value an operator or a fetch already set stands, and metadata and the tracking columns stay as they are. The columns written are exactly the ones metadata_needs_reprojection tests: userinfo_endpoint and introspection_endpoint are left to the fetch, since NULL there is a value (the issuer advertises none) rather than a gap.
 func (q *Queries) ReprojectRemoteSessionIssuerMetadataCapabilities(ctx context.Context, arg ReprojectRemoteSessionIssuerMetadataCapabilitiesParams) (RemoteSessionIssuer, error) {
 	row := q.db.QueryRow(ctx, reprojectRemoteSessionIssuerMetadataCapabilities,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.CodeChallengeMethodsSupported,
 		arg.IntrospectionEndpointAuthMethodsSupported,
 		arg.IDTokenSigningAlgValuesSupported,
@@ -10533,34 +10551,41 @@ SET
     END,
     scopes_supported = COALESCE($14::text[], scopes_supported),
     grant_types_supported = COALESCE($15::text[], grant_types_supported),
-    response_types_supported = COALESCE($16::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    authorization_grant_profiles_supported = COALESCE($16::text[], authorization_grant_profiles_supported),
+    -- Keep the local projection source aligned with an explicit operator edit.
+    -- Discovery timestamps are unchanged; only a fresh fetch replaces this evidence.
+    metadata = CASE
+        WHEN $16::text[] IS NULL OR metadata IS NULL THEN metadata
+        ELSE jsonb_set(metadata, '{authorization_grant_profiles_supported}', to_jsonb($16::text[]))
+    END,
+    response_types_supported = COALESCE($17::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE($18::text[], token_endpoint_auth_methods_supported),
+    code_challenge_methods_supported = COALESCE($19::text[], code_challenge_methods_supported),
+    client_id_metadata_document_supported = COALESCE($20, client_id_metadata_document_supported),
     userinfo_endpoint = CASE
-        WHEN $20::text = '' THEN NULL
-        ELSE COALESCE($20, userinfo_endpoint)
+        WHEN $21::text = '' THEN NULL
+        ELSE COALESCE($21, userinfo_endpoint)
     END,
     introspection_endpoint = CASE
-        WHEN $21::text = '' THEN NULL
-        ELSE COALESCE($21, introspection_endpoint)
+        WHEN $22::text = '' THEN NULL
+        ELSE COALESCE($22, introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE($22::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE($23::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE($24::text[], claims_supported),
-    backchannel_logout_supported = COALESCE($25, backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE($26, authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = COALESCE($23::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE($24::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE($25::text[], claims_supported),
+    backchannel_logout_supported = COALESCE($26, backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE($27, authorization_response_iss_parameter_supported),
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
-        WHEN $27::text[] IS NULL THEN scope_override
-        WHEN cardinality($27::text[]) = 0 THEN NULL
-        ELSE $27::text[]
+        WHEN $28::text[] IS NULL THEN scope_override
+        WHEN cardinality($28::text[]) = 0 THEN NULL
+        ELSE $28::text[]
     END,
-    resource_indicator_supported = COALESCE($28, resource_indicator_supported),
-    oidc = COALESCE($29, oidc),
-    passthrough = COALESCE($30, passthrough),
+    resource_indicator_supported = COALESCE($29, resource_indicator_supported),
+    oidc = COALESCE($30, oidc),
+    passthrough = COALESCE($31, passthrough),
     updated_at = clock_timestamp()
-WHERE id = $31 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
+WHERE id = $32 AND project_id IS NULL AND organization_id IS NULL AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -10580,6 +10605,7 @@ type UpdateGlobalRemoteSessionIssuerParams struct {
 	OpTosUri                                   pgtype.Text
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string
@@ -10617,6 +10643,7 @@ func (q *Queries) UpdateGlobalRemoteSessionIssuer(ctx context.Context, arg Updat
 		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
@@ -10842,39 +10869,46 @@ SET
     END,
     scopes_supported = COALESCE($14::text[], scopes_supported),
     grant_types_supported = COALESCE($15::text[], grant_types_supported),
-    response_types_supported = COALESCE($16::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    authorization_grant_profiles_supported = COALESCE($16::text[], authorization_grant_profiles_supported),
+    -- Keep the local projection source aligned with an explicit operator edit.
+    -- Discovery timestamps are unchanged; only a fresh fetch replaces this evidence.
+    metadata = CASE
+        WHEN $16::text[] IS NULL OR metadata IS NULL THEN metadata
+        ELSE jsonb_set(metadata, '{authorization_grant_profiles_supported}', to_jsonb($16::text[]))
+    END,
+    response_types_supported = COALESCE($17::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE($18::text[], token_endpoint_auth_methods_supported),
+    code_challenge_methods_supported = COALESCE($19::text[], code_challenge_methods_supported),
+    client_id_metadata_document_supported = COALESCE($20, client_id_metadata_document_supported),
     userinfo_endpoint = CASE
-        WHEN $20::text = '' THEN NULL
-        ELSE COALESCE($20, userinfo_endpoint)
+        WHEN $21::text = '' THEN NULL
+        ELSE COALESCE($21, userinfo_endpoint)
     END,
     introspection_endpoint = CASE
-        WHEN $21::text = '' THEN NULL
-        ELSE COALESCE($21, introspection_endpoint)
+        WHEN $22::text = '' THEN NULL
+        ELSE COALESCE($22, introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE($22::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE($23::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE($24::text[], claims_supported),
-    backchannel_logout_supported = COALESCE($25, backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE($26, authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = COALESCE($23::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE($24::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE($25::text[], claims_supported),
+    backchannel_logout_supported = COALESCE($26, backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE($27, authorization_response_iss_parameter_supported),
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
-        WHEN $27::text[] IS NULL THEN scope_override
-        WHEN cardinality($27::text[]) = 0 THEN NULL
-        ELSE $27::text[]
+        WHEN $28::text[] IS NULL THEN scope_override
+        WHEN cardinality($28::text[]) = 0 THEN NULL
+        ELSE $28::text[]
     END,
-    resource_indicator_supported = COALESCE($28, resource_indicator_supported),
-    oidc = COALESCE($29, oidc),
-    passthrough = COALESCE($30, passthrough),
+    resource_indicator_supported = COALESCE($29, resource_indicator_supported),
+    oidc = COALESCE($30, oidc),
+    passthrough = COALESCE($31, passthrough),
     tunneled_mcp_server_id = CASE
-        WHEN $31::text = '' THEN NULL
-        WHEN $31::text IS NULL THEN tunneled_mcp_server_id
-        ELSE ($31::text)::uuid
+        WHEN $32::text = '' THEN NULL
+        WHEN $32::text IS NULL THEN tunneled_mcp_server_id
+        ELSE ($32::text)::uuid
     END,
     updated_at = clock_timestamp()
-WHERE id = $32 AND organization_id = $33 AND deleted IS FALSE
+WHERE id = $33 AND organization_id = $34 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -10894,6 +10928,7 @@ type UpdateOrganizationRemoteSessionIssuerParams struct {
 	OpTosUri                                   pgtype.Text
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string
@@ -10933,6 +10968,7 @@ func (q *Queries) UpdateOrganizationRemoteSessionIssuer(ctx context.Context, arg
 		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
@@ -11398,39 +11434,46 @@ SET
     END,
     scopes_supported = COALESCE($14::text[], scopes_supported),
     grant_types_supported = COALESCE($15::text[], grant_types_supported),
-    response_types_supported = COALESCE($16::text[], response_types_supported),
-    token_endpoint_auth_methods_supported = COALESCE($17::text[], token_endpoint_auth_methods_supported),
-    code_challenge_methods_supported = COALESCE($18::text[], code_challenge_methods_supported),
-    client_id_metadata_document_supported = COALESCE($19, client_id_metadata_document_supported),
+    authorization_grant_profiles_supported = COALESCE($16::text[], authorization_grant_profiles_supported),
+    -- Keep the local projection source aligned with an explicit operator edit.
+    -- Discovery timestamps are unchanged; only a fresh fetch replaces this evidence.
+    metadata = CASE
+        WHEN $16::text[] IS NULL OR metadata IS NULL THEN metadata
+        ELSE jsonb_set(metadata, '{authorization_grant_profiles_supported}', to_jsonb($16::text[]))
+    END,
+    response_types_supported = COALESCE($17::text[], response_types_supported),
+    token_endpoint_auth_methods_supported = COALESCE($18::text[], token_endpoint_auth_methods_supported),
+    code_challenge_methods_supported = COALESCE($19::text[], code_challenge_methods_supported),
+    client_id_metadata_document_supported = COALESCE($20, client_id_metadata_document_supported),
     userinfo_endpoint = CASE
-        WHEN $20::text = '' THEN NULL
-        ELSE COALESCE($20, userinfo_endpoint)
+        WHEN $21::text = '' THEN NULL
+        ELSE COALESCE($21, userinfo_endpoint)
     END,
     introspection_endpoint = CASE
-        WHEN $21::text = '' THEN NULL
-        ELSE COALESCE($21, introspection_endpoint)
+        WHEN $22::text = '' THEN NULL
+        ELSE COALESCE($22, introspection_endpoint)
     END,
-    introspection_endpoint_auth_methods_supported = COALESCE($22::text[], introspection_endpoint_auth_methods_supported),
-    id_token_signing_alg_values_supported = COALESCE($23::text[], id_token_signing_alg_values_supported),
-    claims_supported = COALESCE($24::text[], claims_supported),
-    backchannel_logout_supported = COALESCE($25, backchannel_logout_supported),
-    authorization_response_iss_parameter_supported = COALESCE($26, authorization_response_iss_parameter_supported),
+    introspection_endpoint_auth_methods_supported = COALESCE($23::text[], introspection_endpoint_auth_methods_supported),
+    id_token_signing_alg_values_supported = COALESCE($24::text[], id_token_signing_alg_values_supported),
+    claims_supported = COALESCE($25::text[], claims_supported),
+    backchannel_logout_supported = COALESCE($26, backchannel_logout_supported),
+    authorization_response_iss_parameter_supported = COALESCE($27, authorization_response_iss_parameter_supported),
     -- An empty array clears scope_override to NULL; omitted keeps it. resource_indicator_supported is set-only.
     scope_override = CASE
-        WHEN $27::text[] IS NULL THEN scope_override
-        WHEN cardinality($27::text[]) = 0 THEN NULL
-        ELSE $27::text[]
+        WHEN $28::text[] IS NULL THEN scope_override
+        WHEN cardinality($28::text[]) = 0 THEN NULL
+        ELSE $28::text[]
     END,
-    resource_indicator_supported = COALESCE($28, resource_indicator_supported),
-    oidc = COALESCE($29, oidc),
-    passthrough = COALESCE($30, passthrough),
+    resource_indicator_supported = COALESCE($29, resource_indicator_supported),
+    oidc = COALESCE($30, oidc),
+    passthrough = COALESCE($31, passthrough),
     tunneled_mcp_server_id = CASE
-        WHEN $31::text = '' THEN NULL
-        WHEN $31::text IS NULL THEN tunneled_mcp_server_id
-        ELSE ($31::text)::uuid
+        WHEN $32::text = '' THEN NULL
+        WHEN $32::text IS NULL THEN tunneled_mcp_server_id
+        ELSE ($32::text)::uuid
     END,
     updated_at = clock_timestamp()
-WHERE id = $32 AND project_id = $33 AND deleted IS FALSE
+WHERE id = $33 AND project_id = $34 AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
 
@@ -11450,6 +11493,7 @@ type UpdateRemoteSessionIssuerParams struct {
 	OpTosUri                                   pgtype.Text
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string
@@ -11496,6 +11540,7 @@ func (q *Queries) UpdateRemoteSessionIssuer(ctx context.Context, arg UpdateRemot
 		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,
@@ -11591,30 +11636,31 @@ SET
     op_tos_uri = CASE WHEN $12::text = '' THEN NULL ELSE $12::text END,
     scopes_supported = $13::text[],
     grant_types_supported = $14::text[],
-    response_types_supported = $15::text[],
-    token_endpoint_auth_methods_supported = $16::text[],
-    code_challenge_methods_supported = $17::text[],
-    client_id_metadata_document_supported = $18::boolean,
-    userinfo_endpoint = CASE WHEN $19::text = '' THEN NULL ELSE $19::text END,
-    introspection_endpoint = CASE WHEN $20::text = '' THEN NULL ELSE $20::text END,
-    introspection_endpoint_auth_methods_supported = $21::text[],
-    id_token_signing_alg_values_supported = $22::text[],
-    claims_supported = $23::text[],
-    backchannel_logout_supported = $24::boolean,
-    authorization_response_iss_parameter_supported = $25::boolean,
-    metadata = NULLIF($26::text, '')::jsonb,
+    authorization_grant_profiles_supported = $15::text[],
+    response_types_supported = $16::text[],
+    token_endpoint_auth_methods_supported = $17::text[],
+    code_challenge_methods_supported = $18::text[],
+    client_id_metadata_document_supported = $19::boolean,
+    userinfo_endpoint = CASE WHEN $20::text = '' THEN NULL ELSE $20::text END,
+    introspection_endpoint = CASE WHEN $21::text = '' THEN NULL ELSE $21::text END,
+    introspection_endpoint_auth_methods_supported = $22::text[],
+    id_token_signing_alg_values_supported = $23::text[],
+    claims_supported = $24::text[],
+    backchannel_logout_supported = $25::boolean,
+    authorization_response_iss_parameter_supported = $26::boolean,
+    metadata = NULLIF($27::text, '')::jsonb,
     -- statement_timestamp() is one instant for the whole statement, so a partial read stamps
     -- metadata_fetched_at and metadata_last_error_at equal: an error is only
     -- an outright failure when it is strictly newer than the last fetch.
     metadata_fetched_at = statement_timestamp(),
-    metadata_last_error = NULLIF($27::text, ''),
-    metadata_last_error_at = CASE WHEN $27::text = '' THEN NULL ELSE statement_timestamp() END,
-    metadata_last_error_url = NULLIF($28::text, ''),
+    metadata_last_error = NULLIF($28::text, ''),
+    metadata_last_error_at = CASE WHEN $28::text = '' THEN NULL ELSE statement_timestamp() END,
+    metadata_last_error_url = NULLIF($29::text, ''),
     updated_at = clock_timestamp()
-WHERE id = $29
-  AND issuer = $30::text
-  AND project_id IS NOT DISTINCT FROM $31::uuid
-  AND organization_id IS NOT DISTINCT FROM $32::text
+WHERE id = $30
+  AND issuer = $31::text
+  AND project_id IS NOT DISTINCT FROM $32::uuid
+  AND organization_id IS NOT DISTINCT FROM $33::text
   AND deleted IS FALSE
 RETURNING id, project_id, organization_id, attachment_scope, slug, issuer, authorization_endpoint, token_endpoint, revocation_endpoint, registration_endpoint, jwks_uri, jwks, jwks_fetched_at, jwks_last_error, jwks_last_error_at, jwks_cache_expires_at, jwks_etag, service_documentation, op_policy_uri, op_tos_uri, scopes_supported, grant_types_supported, authorization_grant_profiles_supported, response_types_supported, token_endpoint_auth_methods_supported, code_challenge_methods_supported, client_id_metadata_document_supported, userinfo_endpoint, introspection_endpoint, introspection_endpoint_auth_methods_supported, id_token_signing_alg_values_supported, claims_supported, backchannel_logout_supported, authorization_response_iss_parameter_supported, scope_override, resource_indicator_supported, oidc, passthrough, tunneled_mcp_server_id, name, logo_asset_id, client_setup_documentation_url, metadata, metadata_fetched_at, metadata_last_error, metadata_last_error_at, metadata_last_error_url, created_at, updated_at, deleted_at, deleted
 `
@@ -11634,6 +11680,7 @@ type UpdateRemoteSessionIssuerDiscoveredMetadataParams struct {
 	OpTosUri                                   string
 	ScopesSupported                            []string
 	GrantTypesSupported                        []string
+	AuthorizationGrantProfilesSupported        []string
 	ResponseTypesSupported                     []string
 	TokenEndpointAuthMethodsSupported          []string
 	CodeChallengeMethodsSupported              []string
@@ -11722,6 +11769,7 @@ func (q *Queries) UpdateRemoteSessionIssuerDiscoveredMetadata(ctx context.Contex
 		arg.OpTosUri,
 		arg.ScopesSupported,
 		arg.GrantTypesSupported,
+		arg.AuthorizationGrantProfilesSupported,
 		arg.ResponseTypesSupported,
 		arg.TokenEndpointAuthMethodsSupported,
 		arg.CodeChallengeMethodsSupported,

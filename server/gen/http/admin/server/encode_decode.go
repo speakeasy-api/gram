@@ -12107,6 +12107,12 @@ func marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v *types.R
 			res.GrantTypesSupported[i] = val
 		}
 	}
+	if v.AuthorizationGrantProfilesSupported != nil {
+		res.AuthorizationGrantProfilesSupported = make([]string, len(v.AuthorizationGrantProfilesSupported))
+		for i, val := range v.AuthorizationGrantProfilesSupported {
+			res.AuthorizationGrantProfilesSupported[i] = val
+		}
+	}
 	if v.ResponseTypesSupported != nil {
 		res.ResponseTypesSupported = make([]string, len(v.ResponseTypesSupported))
 		for i, val := range v.ResponseTypesSupported {
