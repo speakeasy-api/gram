@@ -70,6 +70,11 @@ type ActivityReader interface {
 	ListOrganizationActivity(context.Context, *gen.ListOrganizationActivityPayload) (*gen.AdminListOrganizationActivityResult, error)
 }
 
+// UsageReader exposes the dashboard's current-cycle PAYG billing estimate.
+type UsageReader interface {
+	GetPaygBillingSummary(context.Context, *gen.GetPaygBillingSummaryPayload) (*gen.AdminPaygBillingSummary, error)
+}
+
 func NewRuntime(authenticator Authenticator, resourceURL string, reads ...OrganizationReader) *Runtime {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "admin-mcp",
@@ -86,11 +91,13 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	projectReader, _ := reader.(ProjectReader)
 	configurationReader, _ := reader.(ConfigurationReader)
 	activityReader, _ := reader.(ActivityReader)
-	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil)
+	usageReader, _ := reader.(UsageReader)
+	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, usageReader != nil)
 	registerOrganizationTools(server, reader)
 	registerProjectTools(server, reader, projectReader)
 	registerConfigurationTools(server, reader, configurationReader)
 	registerActivityTools(server, reader, activityReader)
+	registerUsageTools(server, reader, usageReader)
 	return &Runtime{authenticator: authenticator, server: server, resourceURL: resourceURL}
 }
 
