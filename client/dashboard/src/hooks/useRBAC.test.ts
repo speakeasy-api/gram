@@ -57,6 +57,22 @@ describe("resourceKindForScope", () => {
     expect(resourceKindForScope("risk_policy:bypass")).toBe("risk_policy");
   });
 
+  // Regression: a scope family missing from this function falls through to "*",
+  // and a grant written with a concrete resource_kind then never matches the
+  // check — selectorMatches requires the GRANT value to be "*", not the check's.
+  // The page gate therefore denies a holder whose grant rows are correct, which
+  // reads as a broken feature rather than a missing branch here.
+  it("returns 'workload' for workload scopes", () => {
+    expect(resourceKindForScope("workload:read")).toBe("workload");
+    expect(resourceKindForScope("workload:write")).toBe("workload");
+  });
+
+  it("matches a wildcard workload grant against an unscoped check", () => {
+    const grant = { resource_kind: "workload", resource_id: "*" };
+    const check = { resource_kind: resourceKindForScope("workload:read") };
+    expect(selectorMatches(grant, check)).toBe(true);
+  });
+
   // Regression: chat scopes must map to "chat" so a restricted chat:read grant
   // (selector {resource_kind:"chat", resource_id:"*"}) matches the hasScope
   // check. When this returned "*" the check selector ({resource_kind:"*"}) never
