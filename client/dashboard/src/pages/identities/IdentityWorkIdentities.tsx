@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import type { SlackPersonAccount } from "@gram/client/models/components/slackpersonaccount.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { buildSlackPersonAccountsQuery } from "@gram/client/react-query/slackPersonAccounts.js";
 import { SESSION_SECURITY } from "../org/identity-provider/identityProviderQueries";
@@ -30,19 +29,11 @@ export function IdentityWorkIdentities({
   const { user } = useSession();
   const organization = useOrganization();
   const { hasScope, isLoading } = useRBAC();
-  const features = useProductFeatures(
-    { organizationId: organization.id },
-    undefined,
-    { throwOnError: false, retry: false },
-  );
   const userId =
     identity.userIds.length === 1 ? identity.userIds[0] : undefined;
   const canReview = !isLoading && hasScope("org:admin", organization.id);
   // The resolver must identify one person. Email and telemetry identifiers never authorize this read.
   if (
-    features.isPending ||
-    features.isError ||
-    !features.data?.claudeTagSupportEnabled ||
     identity.kind !== "user" ||
     !userId ||
     identity.canonicalUrn !== `user:${userId}` ||

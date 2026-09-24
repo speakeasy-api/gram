@@ -463,7 +463,7 @@ The mutation check runs only in the local organization. Support sessions cannot 
 
 ## Work identities
 
-The seed enables the `claude_tag_support` product feature for its target organization. For the shared demo check, enter through `/explore-demo` with an ordinary browser session. Support impersonation is refused by these endpoints. The visitor must not need a membership in the demo organization.
+For the shared demo check, enter through `/explore-demo` with an ordinary browser session. Support impersonation is refused by these endpoints. The visitor must not need a membership in the demo organization.
 
 Open Amara Okafor's identity and select Accounts & devices. Work identities should show three memberships across Acme Engineering and Acme Operations, including two accounts in Engineering. The guest account shows Deactivated, Needs review and the source finding; directory freshness stays visible separately. Each Open in Slack members link opens the member table filtered to that workspace and Slack ID without changing the mapping.
 

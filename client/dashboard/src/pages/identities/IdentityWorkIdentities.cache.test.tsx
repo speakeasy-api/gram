@@ -18,13 +18,6 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => false, isLoading: false }),
 }));
-vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({
-    data: { claudeTagSupportEnabled: true },
-    isPending: false,
-    isError: false,
-  }),
-}));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ identity: { href: () => "/example/identity" } }),
 }));

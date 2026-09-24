@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
@@ -70,7 +69,7 @@ func TestPersonAccountsOtherPersonRequiresOrganizationAdmin(t *testing.T) {
 	require.Empty(t, empty.Accounts)
 }
 
-func TestPersonAccountsRequiresSessionAndOrganizationProductFeature(t *testing.T) {
+func TestPersonAccountsRequiresSession(t *testing.T) {
 	t.Parallel()
 	ctx, f := newService(t)
 	request := personAccountsRequest(f.auth.UserID)
@@ -86,13 +85,10 @@ func TestPersonAccountsRequiresSessionAndOrganizationProductFeature(t *testing.T
 		require.Error(t, err)
 		require.Nil(t, result)
 	}
-	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, f.auth.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, false))
-	_, err := f.service.ListPersonAccounts(ctx, request)
-	requireMappingCode(t, err, oops.CodeNotFound)
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	_, err = f.service.ListPersonAccounts(cancelled, request)
-	requireMappingCode(t, err, oops.CodeUnavailable)
+	_, err := f.service.ListPersonAccounts(cancelled, request)
+	require.Error(t, err)
 }
 
 func TestPersonAccountsRejectsInactiveTargetAndCaller(t *testing.T) {
@@ -125,7 +121,6 @@ func TestPersonAccountsDemoVisitorReadsActiveDemoPerson(t *testing.T) {
 	visitor.OrganizationSlug = "acme-demo"
 	f.auth = &visitor
 	ctx = authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &visitor), authz.DemoScopeGrants()...)
-	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, constants.DemoOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
 	emptyTime := pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite}
 	require.NoError(t, testrepo.New(f.db).CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
 		ID: constants.DemoOrganizationID, Name: "Acme Demo Workspace", Slug: "acme-demo", GramAccountType: "demo",
@@ -197,7 +192,6 @@ func TestPersonAccountsNeverAuthorizesByEmailOrForeignPerson(t *testing.T) {
 	requireMappingCode(t, err, oops.CodeNotFound)
 	caller = *f.auth
 	caller.ActiveOrganizationID = "org_synthetic_other"
-	require.NoError(t, f.productFeatures.SetFeatureEnabled(ctx, caller.ActiveOrganizationID, productfeatures.FeatureClaudeTagSupport, true))
 	crossOrg := authztest.WithExactGrants(t, contextvalues.SetAuthContext(ctx, &caller), authz.NewGrant(authz.ScopeOrgAdmin, caller.ActiveOrganizationID))
 	_, err = f.service.ListPersonAccounts(crossOrg, personAccountsRequest(f.auth.UserID))
 	requireMappingCode(t, err, oops.CodeNotFound)

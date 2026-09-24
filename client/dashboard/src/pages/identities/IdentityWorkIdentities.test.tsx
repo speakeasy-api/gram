@@ -10,7 +10,6 @@ const mocks = vi.hoisted(() => ({
   options: vi.fn(),
   admin: false,
   loadingAccess: false,
-  featureState: "enabled",
   pending: false,
   error: false,
   refetch: vi.fn(),
@@ -28,16 +27,6 @@ vi.mock("@/hooks/useRBAC", () => ({
     hasScope: (scope: string, id: string) =>
       scope === "org:admin" && id === "org_example" && mocks.admin,
     isLoading: mocks.loadingAccess,
-  }),
-}));
-vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({
-    data:
-      mocks.featureState === "missing"
-        ? undefined
-        : { claudeTagSupportEnabled: mocks.featureState !== "disabled" },
-    isPending: mocks.featureState === "loading",
-    isError: mocks.featureState === "error",
   }),
 }));
 vi.mock("@/routes", () => ({
@@ -118,7 +107,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.admin = false;
   mocks.loadingAccess = false;
-  mocks.featureState = "enabled";
   mocks.pending = false;
   mocks.error = false;
   mocks.accounts = [account];
@@ -170,14 +158,6 @@ it("rejects a canonical identity that does not match the stable ID", () => {
   show({ ...identity, canonicalUrn: "user:user_other" });
   expect(mocks.query).not.toHaveBeenCalled();
 });
-it.each(["disabled", "missing", "loading", "error"])(
-  "does not request mappings with product feature %s",
-  (status) => {
-    mocks.featureState = status;
-    show();
-    expect(mocks.query).not.toHaveBeenCalled();
-  },
-);
 it("waits for admin authorization before requesting another person's accounts", () => {
   mocks.admin = true;
   mocks.loadingAccess = true;
