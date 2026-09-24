@@ -45,6 +45,23 @@ func clientUpstreamResource(rows []repo.ListOrganizationMcpServersForClientRow) 
 	return resource
 }
 
+// clientResourceForUpstream qualifies a client's grant for the upstream the
+// user is connecting through. When the client is attached to that upstream
+// it wins, so a client shared by servers with different upstreams still
+// records one this server routes to; otherwise the client's own derivation
+// applies, so an endpoint never stamps its upstream onto another's client.
+func clientResourceForUpstream(rows []repo.ListOrganizationMcpServersForClientRow, upstream string) string {
+	want := strings.TrimRight(upstream, "/")
+	if want != "" {
+		for _, row := range rows {
+			if strings.TrimRight(row.Url, "/") == want {
+				return want
+			}
+		}
+	}
+	return clientUpstreamResource(rows)
+}
+
 // ListClientSessions lists the sessions minted against a client in the
 // caller's organization.
 func (s *Service) ListClientSessions(ctx context.Context, payload *orgsessionsgen.ListClientSessionsPayload) (*orgsessionsgen.ListOrganizationRemoteSessionsResult, error) {

@@ -277,6 +277,25 @@ func TestServeConsentAction_ConnectAmbiguousUpstreamsSendsNoResource(t *testing.
 	require.Empty(t, state.Resource)
 }
 
+// AIM-362: a client shared by servers with different upstreams, connected
+// through one of those servers, records that server's upstream — not "",
+// which no remote backend routes to and loops the consent page.
+func TestServeConsentAction_ConnectSharedClientRecordsEndpointUpstream(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedMultiClientConsentEndpoint(t)
+	fx.endpoint.UpstreamResource = consentUpstreamA + "/"
+
+	loc := postConnectAction(t, fx, fx.clientD)
+	require.Equal(t, consentUpstreamA, loc.Query().Get("resource"))
+	state := mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state"))
+	require.Equal(t, consentUpstreamA, state.Resource)
+
+	// A client not attached to the endpoint's upstream keeps its own.
+	locB := postConnectAction(t, fx, fx.clientB)
+	require.Equal(t, consentUpstreamB, locB.Query().Get("resource"))
+}
+
 // A derivation failure must fail the connect closed: error out before any
 // upstream redirect or login state exists.
 func TestServeConsentAction_ConnectDerivationErrorFailsClosed(t *testing.T) {
