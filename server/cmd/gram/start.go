@@ -319,7 +319,7 @@ func mcpRuntimeFlags() []cli.Flag {
 	flags := []cli.Flag{
 		&cli.StringSliceFlag{
 			Name:    "platform-hosts",
-			Usage:   "Extra first-party hosts that serve the full product alongside the server URL's host, e.g. ai.speakeasy.com. Login on these hosts completes on the same host.",
+			Usage:   "First-party hosts that serve the full product, e.g. app.getgram.ai,ai.speakeasy.com. The server URL's host is always included. Login on the other hosts completes on the same host.",
 			EnvVars: []string{"GRAM_PLATFORM_HOSTS"},
 		},
 		&cli.StringFlag{

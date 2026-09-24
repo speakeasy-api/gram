@@ -19,9 +19,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/wide"
 )
 
-// ParsePlatformHosts validates the extra first-party hosts (GRAM_PLATFORM_HOSTS)
-// and maps each canonical host to the base URL rendered for requests on it. The
-// server URL's own host is always first-party and need not be listed.
+// ParsePlatformHosts validates the first-party hosts (GRAM_PLATFORM_HOSTS) and
+// maps each canonical host to the base URL rendered for requests on it. The
+// server URL's own host is always first-party; if listed, it keeps the server
+// URL as its base URL.
 func ParsePlatformHosts(rawHosts []string) (map[string]string, error) {
 	hosts := make(map[string]string, len(rawHosts))
 	for _, raw := range rawHosts {

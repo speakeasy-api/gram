@@ -70,7 +70,8 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 
 	serverURL, err := url.Parse("https://api.speakeasyapi.dev")
 	require.NoError(t, err)
-	platformHosts, err := customdomains.ParsePlatformHosts([]string{"ai.speakeasy.com"})
+	// Deployments list the server host too; it must keep its configured base URL.
+	platformHosts, err := customdomains.ParsePlatformHosts([]string{"api.speakeasyapi.dev", "ai.speakeasy.com"})
 	require.NoError(t, err)
 
 	tests := []struct {
