@@ -37,6 +37,22 @@ var ErrChatNotFound = errors.New("chat not found")
 // messages onto a sibling project's chat.
 var errChatProjectMismatch = errors.New("chat belongs to another project")
 
+// logHookPersistFailure reports a failed hook write for one of the async
+// ingest paths. A cross-project refusal is a deliberate outcome rather than a
+// server fault — an org-scoped key can name a session that already lives in a
+// sibling project — so it is logged as a warning under one event every adapter
+// shares, instead of as an error indistinguishable from a database failure.
+func (s *Service) logHookPersistFailure(ctx context.Context, subject string, err error, attrs ...any) {
+	if errors.Is(err, errChatProjectMismatch) {
+		s.logger.WarnContext(ctx, "refusing to persist "+subject+" for a session bound to another project",
+			append([]any{attr.SlogEvent("hooks_ingest_chat_project_mismatch"), attr.SlogError(err)}, attrs...)...)
+		return
+	}
+
+	s.logger.ErrorContext(ctx, "failed to persist "+subject,
+		append([]any{attr.SlogError(err)}, attrs...)...)
+}
+
 // isForeignKeyViolation checks if the error is a PostgreSQL foreign key constraint violation.
 // This indicates that the referenced chat does not exist.
 func isForeignKeyViolation(err error) bool {

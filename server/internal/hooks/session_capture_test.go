@@ -1,7 +1,12 @@
 package hooks
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -11,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -756,4 +762,56 @@ func TestIngest_DoesNotMisfileChatIntoSiblingProject(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, foreign)
+}
+
+func TestLogHookPersistFailure_ClassifiesCrossProjectRefusal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		err       error
+		wantLevel slog.Level
+		wantMsg   string
+		wantEvent string
+	}{
+		{
+			name:      "cross-project refusal is a warning under the shared event",
+			err:       fmt.Errorf("persist codex user prompt: %w", errChatProjectMismatch),
+			wantLevel: slog.LevelWarn,
+			wantMsg:   "refusing to persist Codex user prompt for a session bound to another project",
+			wantEvent: "hooks_ingest_chat_project_mismatch",
+		},
+		{
+			name:      "any other failure stays an error",
+			err:       errors.New("connection reset"),
+			wantLevel: slog.LevelError,
+			wantMsg:   "failed to persist Codex user prompt",
+			wantEvent: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+			svc := &Service{logger: slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{
+				AddSource:   false,
+				Level:       slog.LevelDebug,
+				ReplaceAttr: nil,
+			}))}
+
+			svc.logHookPersistFailure(t.Context(), "Codex user prompt", tt.err)
+
+			var record map[string]any
+			require.NoError(t, json.Unmarshal(buf.Bytes(), &record))
+			require.Equal(t, tt.wantLevel.String(), record["level"])
+			require.Equal(t, tt.wantMsg, record["msg"])
+			if tt.wantEvent == "" {
+				require.NotContains(t, record, string(attr.EventKey))
+			} else {
+				require.Equal(t, tt.wantEvent, record[string(attr.EventKey)])
+			}
+		})
+	}
 }

@@ -900,25 +900,11 @@ func (s *Service) persistHook(ctx context.Context, payload *gen.ClaudePayload, m
 
 	if isConversationEvent(payload.HookEventName) {
 		if err := s.persistConversationEvent(ctx, payload, metadata); err != nil {
-			if errors.Is(err, errChatProjectMismatch) {
-				s.logger.WarnContext(ctx, "refusing to persist conversation event for a session bound to another project",
-					attr.SlogEvent("hooks_ingest_chat_project_mismatch"),
-					attr.SlogError(err),
-				)
-			} else {
-				s.logger.ErrorContext(ctx, "Failed to persist conversation event", attr.SlogError(err))
-			}
+			s.logHookPersistFailure(ctx, "conversation event", err)
 		}
 	} else {
 		if err := s.persistToolCallEvent(ctx, payload, metadata); err != nil {
-			if errors.Is(err, errChatProjectMismatch) {
-				s.logger.WarnContext(ctx, "refusing to persist tool call event for a session bound to another project",
-					attr.SlogEvent("hooks_ingest_chat_project_mismatch"),
-					attr.SlogError(err),
-				)
-			} else {
-				s.logger.ErrorContext(ctx, "Failed to persist tool call event", attr.SlogError(err))
-			}
+			s.logHookPersistFailure(ctx, "tool call event", err)
 		}
 	}
 }
