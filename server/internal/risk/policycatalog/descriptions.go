@@ -32,6 +32,7 @@ var PolicyTypeDescriptions = map[string]string{
 	"prompt_based": "A plain-language instruction judged by the policy model on each in-scope message. Use when the risk is about intent or context, such as destructive changes to production.",
 }
 
+//nolint:gosec // Plain-language names of entity types, not credentials.
 var presidioEntityDescriptions = map[string]string{
 	"AU_TFN":                        "Australian tax file number",
 	"CREDIT_CARD":                   "Payment card number",

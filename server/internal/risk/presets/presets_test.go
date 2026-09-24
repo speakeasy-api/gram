@@ -19,12 +19,13 @@ func TestPresetsResolveToValidCreatePayloads(t *testing.T) {
 	catalog, err := policycatalog.Build()
 	require.NoError(t, err)
 
-	seen := map[string]bool{}
+	ids := presets.IDs()
+	require.Equal(t, len(ids), len(uniqueStrings(ids)), "preset ids must be unique")
+	require.Equal(t, ids, keys(presets.All()))
+
 	for _, preset := range presets.All() {
 		t.Run(preset.ID, func(t *testing.T) {
 			t.Parallel()
-			require.False(t, seen[preset.ID], "duplicate preset id")
-			seen[preset.ID] = true
 			require.NotEmpty(t, preset.Label)
 			require.NotEmpty(t, preset.Description)
 			require.NotEmpty(t, preset.Keywords)
@@ -61,7 +62,19 @@ func TestPresetsResolveToValidCreatePayloads(t *testing.T) {
 			}
 		})
 	}
-	require.Equal(t, presets.IDs(), keys(presets.All()))
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func TestByIDReturnsCopies(t *testing.T) {
@@ -117,7 +130,7 @@ func TestSuggestFallsBackToBespokePromptPolicy(t *testing.T) {
 	suggestion := presets.Suggest(description)
 	require.Nil(t, suggestion.Preset)
 	require.Empty(t, suggestion.Alternatives)
-	require.Equal(t, 0.0, suggestion.Confidence)
+	require.InDelta(t, 0.0, suggestion.Confidence, 0)
 	require.Equal(t, presets.PolicyTypePromptBased, suggestion.Draft.PolicyType)
 	require.Equal(t, description, suggestion.Draft.Prompt)
 	require.Equal(t, "flag", suggestion.Draft.Action)

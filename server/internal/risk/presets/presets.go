@@ -161,7 +161,8 @@ func ByID(id string) (Preset, bool) {
 			return preset.clone(), true
 		}
 	}
-	return Preset{}, false
+	var missing Preset
+	return missing, false
 }
 
 func (p Preset) clone() Preset {
@@ -231,7 +232,6 @@ func Suggest(description string) Suggestion {
 	matches := make([]Match, 0, len(registry))
 	for _, preset := range registry {
 		score := 0.0
-		hits := make([]string, 0, 3)
 		for _, keyword := range preset.Keywords {
 			if !strings.Contains(normalized, strings.ToLower(keyword)) {
 				continue
@@ -241,7 +241,6 @@ func Suggest(description string) Suggestion {
 				weight = 2
 			}
 			score += weight
-			hits = append(hits, strings.TrimSpace(keyword))
 		}
 		if score == 0 {
 			continue
