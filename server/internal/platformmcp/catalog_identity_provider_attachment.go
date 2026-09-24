@@ -204,7 +204,7 @@ func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetada
 	// Resource metadata contains issuer identifiers, not operator input.
 	// Do not normalize advertised authorization_servers before discovery.
 	for _, authorizationServer := range authorizationServers {
-		if authorizationServer == "" {
+		if strings.TrimSpace(authorizationServer) == "" {
 			continue
 		}
 		metadata, err := remotesessions.DiscoverIssuerMetadata(probeCtx, s.policy, authorizationServer)

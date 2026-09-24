@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIssuerPartialRefreshUsesOnlyFreshEvidence(t *testing.T) {
+func TestIssuerPartialRefreshRejectsIncompleteEvidence(t *testing.T) {
 	t.Parallel()
 	var upstream *httptest.Server
 	upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,14 +33,12 @@ func TestIssuerPartialRefreshUsesOnlyFreshEvidence(t *testing.T) {
 			t.Parallel()
 			issuer := repo.RemoteSessionIssuer{Issuer: upstream.URL, Metadata: []byte(`{"issuer":"` + storedIssuer + `","token_endpoint":"https://old.example.com/token","claims_supported":["email"],"authorization_grant_profiles_supported":["urn:ietf:params:oauth:grant-profile:id-jag"]}`)}
 			params, warnings, err := refreshIssuerMetadata(t.Context(), policy, nil, nil, issuer)
-			require.NoError(t, err)
-			require.Equal(t, upstream.URL+"/new-token", params.TokenEndpoint)
-			require.NotEmpty(t, params.MetadataLastErrorUrl)
-			require.NotEmpty(t, warnings)
-			// Stored merged metadata cannot attribute omitted claims to the
-			// unavailable candidate, even when its issuer matches.
-			require.Empty(t, params.ClaimsSupported)
-			require.Empty(t, params.AuthorizationGrantProfilesSupported)
+			require.Error(t, err)
+			message, transient := discoveryFailureMessage(err)
+			require.True(t, transient)
+			require.Contains(t, message, "Unexpected HTTP 503")
+			require.Zero(t, params, "incomplete evidence cannot replace the stored snapshot")
+			require.Empty(t, warnings)
 		})
 	}
 }

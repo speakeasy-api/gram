@@ -387,7 +387,7 @@ func TestIssuerMetadataRefresh_Refresh_PartialReadKeepsTheRetryURL(t *testing.T)
 
 			after := loadIssuerByID(t, ctx, ti, id)
 			require.True(t, after.AuthorizationEndpoint.Valid)
-			require.Equal(t, upstream.URL+"/authorize", after.AuthorizationEndpoint.String, "stored endpoints are preserved")
+			require.Equal(t, before.AuthorizationEndpoint, after.AuthorizationEndpoint, "stored endpoints are preserved")
 			require.Contains(t, after.MetadataLastError.String, fmt.Sprintf("Unexpected HTTP %d", status))
 			requireIssuerSnapshotUnchanged(t, before, after)
 			require.Contains(t, after.MetadataLastErrorUrl.String, upstream.URL+"/.well-known/oauth-authorization-server")

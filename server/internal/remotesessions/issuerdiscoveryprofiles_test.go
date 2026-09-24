@@ -205,7 +205,7 @@ func TestIssuerDiscoverySkipsUntrustedCandidates(t *testing.T) {
 	}
 }
 
-// A successful candidate replaces prior evidence even when its peer is down.
+// Public discovery reports partial evidence, but refresh must not persist it.
 // Diagnostics must retain the peer's status, never its response body.
 func TestIssuerDiscoveryPartialSuccessPreservesStatusAndFreshEvidence(t *testing.T) {
 	t.Parallel()
@@ -239,15 +239,13 @@ func TestIssuerDiscoveryPartialSuccessPreservesStatusAndFreshEvidence(t *testing
 					Metadata:                            []byte(fmt.Sprintf(`{"issuer":%q,"authorization_grant_profiles_supported":["stale-profile"],"grant_types_supported":["stale-grant"],"registration_endpoint":"https://stale.example/register"}`, server.URL)),
 				}
 				params, warnings, err := refreshIssuerMetadata(t.Context(), policy, nil, nil, stored)
-				require.NoError(t, err)
-				require.Equal(t, discovered.UnreadableMessage, params.MetadataLastError)
-				require.Equal(t, expectedURL, params.MetadataLastErrorUrl)
-				require.Contains(t, warnings, discovered.UnreadableMessage)
-				require.Empty(t, params.AuthorizationGrantProfilesSupported)
-				require.Empty(t, params.GrantTypesSupported)
-				require.Empty(t, params.RegistrationEndpoint)
-				require.Equal(t, []string{"fresh"}, params.ScopesSupported)
-				require.NotContains(t, params.Metadata, "stale-")
+				require.Error(t, err)
+				message, transient := discoveryFailureMessage(err)
+				require.True(t, transient)
+				require.Equal(t, discovered.UnreadableMessage, message)
+				require.Equal(t, expectedURL, discoveryRetryURL(err))
+				require.Zero(t, params, "partial discovery must not overwrite stored evidence")
+				require.Empty(t, warnings)
 			})
 		}
 	}
