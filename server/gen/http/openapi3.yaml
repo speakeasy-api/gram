@@ -76188,10 +76188,14 @@ components:
             properties:
                 display_name:
                     type: string
-                    description: Display name for the server. Defaults to the backing toolset or mcp_server name when omitted.
+                    description: Display name for the server. Defaults to the backing server name when omitted.
                 mcp_server_id:
                     type: string
-                    description: Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of toolset_id or mcp_server_id.
+                    description: Gram MCP server ID. Provide exactly one backend ID.
+                    format: uuid
+                meta_mcp_server_id:
+                    type: string
+                    description: MCP gateway ID. Provide exactly one backend ID.
                     format: uuid
                 plugin_id:
                     type: string
@@ -76208,7 +76212,7 @@ components:
                     format: int32
                 toolset_id:
                     type: string
-                    description: Gram toolset ID for a toolset-backed MCP server. Provide exactly one of toolset_id or mcp_server_id.
+                    description: Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.
                     format: uuid
             required:
                 - plugin_id
@@ -93106,7 +93110,11 @@ components:
                     format: uuid
                 mcp_server_id:
                     type: string
-                    description: Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one of toolset_id / mcp_server_id is set).
+                    description: Gram MCP server ID. Exactly one backend ID is set.
+                    format: uuid
+                meta_mcp_server_id:
+                    type: string
+                    description: MCP gateway ID. Exactly one backend ID is set.
                     format: uuid
                 policy:
                     type: string
@@ -93120,7 +93128,7 @@ components:
                     format: int32
                 toolset_id:
                     type: string
-                    description: Gram toolset ID. Set when this server is toolset-backed (exactly one of toolset_id / mcp_server_id is set).
+                    description: Gram toolset ID. Exactly one backend ID is set.
                     format: uuid
             required:
                 - id
