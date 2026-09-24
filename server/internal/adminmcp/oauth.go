@@ -17,15 +17,16 @@ import (
 // StaffOAuth groups the staff-only authorization server handlers. Composition
 // does not attach them to a public mux; ingress remains a deployment decision.
 type StaffOAuth struct {
-	Clients       *StaffOAuthClients
-	Authorization *StaffOAuthAuthorization
-	Tokens        *StaffOAuthTokens
-	issuer        string
-	resource      string
+	Clients              *StaffOAuthClients
+	Authorization        *StaffOAuthAuthorization
+	Tokens               *StaffOAuthTokens
+	issuer               string
+	resource             string
+	protectedResourceURL string
 }
 
 func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cache, verifier adminSessionVerifier, cipher *encryption.Client, signer *sessiontokens.Signer) (*StaffOAuth, error) {
-	if baseURL == nil || baseURL.Scheme != "https" || baseURL.Host == "" || db == nil || challengeCache == nil || verifier == nil || cipher == nil || signer == nil {
+	if baseURL == nil || baseURL.Scheme != "https" || baseURL.Host == "" || (baseURL.Path != "" && baseURL.Path != "/") || db == nil || challengeCache == nil || verifier == nil || cipher == nil || signer == nil {
 		return nil, errors.New("staff OAuth configuration is incomplete")
 	}
 	base := *baseURL
@@ -39,16 +40,27 @@ func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cach
 	if err != nil {
 		return nil, fmt.Errorf("build staff MCP resource: %w", err)
 	}
+	protectedResourceURL, err := url.JoinPath(base.String(), ".well-known", "oauth-protected-resource", "admin-mcp")
+	if err != nil {
+		return nil, fmt.Errorf("build staff MCP resource metadata URL: %w", err)
+	}
 	clients := NewStaffOAuthClients(db)
 	clientStore := clients.store
 	return &StaffOAuth{
-		Clients:       clients,
-		Authorization: NewStaffOAuthAuthorization(clientStore, postgresStaffAuthorizationStore{db: db}, challengeCache, verifier, cipher, resource),
-		Tokens:        NewStaffOAuthTokens(clientStore, postgresStaffGrantStore{db: db}, verifier, cipher, signer, issuer, resource),
-		issuer:        issuer,
-		resource:      resource,
+		Clients:              clients,
+		Authorization:        NewStaffOAuthAuthorization(clientStore, postgresStaffAuthorizationStore{db: db}, challengeCache, verifier, cipher, resource),
+		Tokens:               NewStaffOAuthTokens(clientStore, postgresStaffGrantStore{db: db}, verifier, cipher, signer, issuer, resource),
+		issuer:               issuer,
+		resource:             resource,
+		protectedResourceURL: protectedResourceURL,
 	}, nil
 }
+
+func (s *StaffOAuth) Issuer() string { return s.issuer }
+
+func (s *StaffOAuth) Resource() string { return s.resource }
+
+func (s *StaffOAuth) ProtectedResourceURL() string { return s.protectedResourceURL }
 
 func (s *StaffOAuth) Attach(mux interface {
 	Handle(string, string, http.HandlerFunc)

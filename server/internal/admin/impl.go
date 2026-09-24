@@ -480,6 +480,9 @@ func (s *Service) strictAdminJSON(next http.Handler, body func() any) http.Handl
 	})
 }
 
+// Verifier exposes the live staff session verifier to the admin-only MCP transport.
+func (s *Service) Verifier() *Verifier { return s.verifier }
+
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	if preauthorized, _ := ctx.Value(adminPreauthorizedKey{}).(bool); preauthorized {
 		return ctx, nil
