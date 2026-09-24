@@ -147,9 +147,9 @@ func titleIsUpForGrabs(title string, messages []repo.ChatMessage) bool {
 }
 
 // buildTitleContext concatenates the last few user/assistant messages into a
-// single string suitable for LLM title generation. Each turn is truncated and
-// the whole context is capped: an agent transcript's turns are unbounded, and
-// a title is not worth a frontier-sized prompt.
+// single string suitable for LLM title generation. Turns are cut to
+// maxTitleMessageRunes on the way in: an agent transcript's turns are
+// unbounded, and only their opening lines say what the turn is about.
 func buildTitleContext(messages []repo.ChatMessage) string {
 	lines := make([]string, 0, titleContextMessages)
 	for _, msg := range slices.Backward(messages) { // Start from the last message and work backwards to make sure we capture the most recent messages

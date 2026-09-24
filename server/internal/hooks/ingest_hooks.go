@@ -1653,7 +1653,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 // refreshed on every wake, and a generated name would be overwritten on the
 // next message anyway.
 func (s *Service) scheduleCanonicalChatTitle(ctx context.Context, authCtx *contextvalues.AuthContext, chatID uuid.UUID, hookSource string) {
-	if s.chatTitleGenerator == nil || hookSource == "claude-tag" {
+	if s.chatTitleGenerator == nil || authCtx.ProjectID == nil || hookSource == "claude-tag" {
 		return
 	}
 	// WithoutCancel so a client that hangs up as soon as the hook is
