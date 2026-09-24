@@ -12,12 +12,14 @@ const security = {
     projectSlugHeaderGramProject: process.env.REGISTRY_TEST_PROJECT!,
   },
 };
+
 const first = await client.discoverServers(security, {
   limit: 1,
   search: "io.example/sdk",
 });
 assert.equal(first.metadata.count, 1);
 assert.ok(first.metadata.nextCursor);
+
 const second = await client.discoverServers(security, {
   limit: 1,
   search: "io.example/sdk",
@@ -26,6 +28,7 @@ const second = await client.discoverServers(security, {
 assert.equal(second.metadata.count, 1);
 assert.notEqual(first.servers[0].server.name, second.servers[0].server.name);
 assert.equal(second.metadata.nextCursor, undefined);
+
 const serverName = "io.example/sdk-a";
 const record = await client.discoverVersion(security, {
   serverName,
@@ -34,9 +37,11 @@ const record = await client.discoverVersion(security, {
 assert.equal(record.server.name, serverName);
 assert.equal(record.server.extension.nested, "retained");
 assert.equal(record._meta.extension, "retained");
+
 const versions = await client.discoverVersions(security, { serverName });
 assert.equal(versions.metadata.count, 1);
 assert.equal(versions.servers[0].server.version, "v/1+2");
+
 await assert.rejects(
   client.discoverVersion(security, { serverName, version: "old" }),
   (error: unknown) => {
@@ -46,6 +51,7 @@ await assert.rejects(
     return true;
   },
 );
+
 for (const [credentials, status, name] of [
   [
     { option2: { ...security.option2, apikeyHeaderGramKey: "" } },
@@ -102,6 +108,7 @@ for (const [credentials, status, name] of [
     },
   );
 }
+
 await assert.rejects(
   client.discoverVersions(security, { serverName, updatedSince: "" }),
   (error: unknown) => {
