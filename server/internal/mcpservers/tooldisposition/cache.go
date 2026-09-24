@@ -3,6 +3,7 @@ package tooldisposition
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"sync"
 	"time"
@@ -44,6 +45,10 @@ func (s serverTools) TTL() time.Duration {
 	return ttl
 }
 
+// Keys hash onto a fixed set of generations so the registry stays bounded; a
+// collision only skips one cache write.
+const generationStripes = 256
+
 type cacheGeneration struct {
 	mu    sync.Mutex
 	value uint64
@@ -51,22 +56,20 @@ type cacheGeneration struct {
 
 // Cache resolves effective tool annotations and dispositions through a pull-through cache.
 type Cache struct {
-	logger        *slog.Logger
-	db            *pgxpool.Pool
-	cache         cache.TypedCacheObject[serverTools]
-	generationsMu sync.Mutex
-	generations   map[string]*cacheGeneration
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	cache       cache.TypedCacheObject[serverTools]
+	generations [generationStripes]cacheGeneration
 }
 
 // New creates a tool annotation cache.
 func New(logger *slog.Logger, db *pgxpool.Pool, c cache.Cache) *Cache {
 	logger = logger.With(attr.SlogComponent("tool-disposition"))
 	return &Cache{
-		logger:        logger,
-		db:            db,
-		cache:         cache.NewTypedObjectCache[serverTools](logger.With(attr.SlogCacheNamespace("tool-disposition")), c, cache.SuffixNone),
-		generationsMu: sync.Mutex{},
-		generations:   make(map[string]*cacheGeneration),
+		logger:      logger,
+		db:          db,
+		cache:       cache.NewTypedObjectCache[serverTools](logger.With(attr.SlogCacheNamespace("tool-disposition")), c, cache.SuffixNone),
+		generations: [generationStripes]cacheGeneration{},
 	}
 }
 
@@ -163,15 +166,9 @@ func (c *Cache) storeResolved(
 }
 
 func (c *Cache) generationFor(key string) *cacheGeneration {
-	c.generationsMu.Lock()
-	defer c.generationsMu.Unlock()
-
-	if generation, ok := c.generations[key]; ok {
-		return generation
-	}
-	generation := &cacheGeneration{mu: sync.Mutex{}, value: 0}
-	c.generations[key] = generation
-	return generation
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(key))
+	return &c.generations[h.Sum32()%generationStripes]
 }
 
 // Invalidate evicts one project's cached annotations for a server.

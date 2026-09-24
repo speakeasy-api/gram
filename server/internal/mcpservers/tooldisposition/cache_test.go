@@ -59,7 +59,10 @@ func TestCacheUsesProjectQualifiedGeneration(t *testing.T) {
 
 	otherKey := cacheKey(otherProjectID.String(), serverID.String())
 	otherGeneration := resolver.generationFor(otherKey)
-	resolver.storeResolved(t.Context(), otherGeneration, 0, serverTools{
+	otherGeneration.mu.Lock()
+	otherResolveGeneration := otherGeneration.value
+	otherGeneration.mu.Unlock()
+	resolver.storeResolved(t.Context(), otherGeneration, otherResolveGeneration, serverTools{
 		ProjectID:    otherProjectID.String(),
 		MCPServerID:  serverID.String(),
 		Dispositions: map[string]string{"read": "read_only"},
