@@ -716,3 +716,56 @@ func TestBuildAuthorizationUrl_RotationOfBoundIssuerRidesTheTunnel(t *testing.T)
 	require.Equal(t, "rotated-cid", client.ClientID)
 	require.False(t, client.UpstreamRejectedAt.Valid, "a completed rotation clears the marker")
 }
+
+func TestBuildAuthorizationUrl_LegacyRegistrationCallback(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name         string
+		endpointPath string
+		rotate       bool
+	}{
+		{name: "successful rotation", endpointPath: "/register", rotate: true},
+		{name: "failed rotation", endpointPath: "/missing"},
+		{name: "no rotation"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
+			ctx, env := newSyntheticExpiryEnv(t, "legacy-callback", upstream.handler())
+			_, err := env.db.Exec(ctx, "UPDATE remote_session_clients SET legacy_callback_url = TRUE WHERE id = $1", env.clientID)
+			require.NoError(t, err)
+			if tc.endpointPath != "" {
+				rejectedAt := time.Now().Add(-time.Hour)
+				stageRegistration(t, env, issuerTokenEndpoint(t, env)+tc.endpointPath, &rejectedAt, nil)
+			}
+
+			client := listClient(t, env)
+			require.True(t, client.LegacyCallbackUrl)
+			authURL, err := env.mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+				ID:                  uuid.NewString(),
+				ProjectID:           env.projectID,
+				OrganizationID:      env.organizationID,
+				UserSessionIssuerID: env.session.UserSessionIssuerID,
+				Subject:             &env.subject,
+				McpSlug:             "rotation-mcp",
+			}, client)
+			require.NoError(t, err)
+			parsed, err := url.Parse(authURL)
+			require.NoError(t, err)
+			callback, err := url.Parse(parsed.Query().Get("redirect_uri"))
+			require.NoError(t, err)
+			stored := loadClient(t, env)
+			require.Equal(t, !tc.rotate, stored.LegacyCallbackUrl)
+			if tc.rotate {
+				require.Equal(t, "rotated-cid", parsed.Query().Get("client_id"))
+				require.Equal(t, "/mcp/remote_login_callback", callback.Path)
+				registration := *upstream.lastRegistration.Load()
+				require.Equal(t, []any{callback.String()}, registration["redirect_uris"], "registration and authorization must use the same canonical callback")
+			} else {
+				require.Equal(t, client.ExternalClientID, parsed.Query().Get("client_id"))
+				require.Equal(t, "/oauth/callback", callback.Path)
+			}
+		})
+	}
+}
