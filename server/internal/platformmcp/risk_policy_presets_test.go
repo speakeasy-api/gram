@@ -119,12 +119,17 @@ func TestCreateRiskPolicySchemaAcceptsPresetBranch(t *testing.T) {
 			Properties map[string]struct {
 				Description string `json:"description"`
 				Enum        []any  `json:"enum"`
+				Items       struct {
+					Description string `json:"description"`
+				} `json:"items"`
 			} `json:"properties"`
 		} `json:"oneOf"`
 	}
 	require.NoError(t, json.Unmarshal(create.InputSchema, &schema))
 	require.Len(t, schema.OneOf, 3)
 	require.Contains(t, schema.OneOf[0].Properties["sources"].Description, "gitleaks: Secrets")
+	require.Contains(t, schema.OneOf[0].Properties["sources"].Items.Description, "gitleaks: Secrets")
+	require.Contains(t, schema.OneOf[0].Properties["presidio_entities"].Description, "US_SSN: US social security number")
 	require.Contains(t, schema.OneOf[0].Properties["action"].Description, "block: Deny")
 	require.Contains(t, schema.OneOf[0].Properties["policy_type"].Description, "Built-in detectors")
 	require.Contains(t, schema.OneOf[1].Properties["policy_type"].Description, "policy model")
@@ -171,11 +176,12 @@ func TestRiskPresetToolsAnswerWithoutServices(t *testing.T) {
 
 	bespoke, err := suggest.Invoke(ctx, json.RawMessage(`{"description":"Agents must never promise refunds to customers"}`))
 	require.NoError(t, err)
-	roundTrip(t, bespoke, &suggestion)
-	require.Empty(t, suggestion.Preset)
-	require.Equal(t, "prompt_based", suggestion.Draft.PolicyType)
-	require.Equal(t, "Agents must never promise refunds to customers", suggestion.Draft.Prompt)
-	require.Empty(t, suggestion.Alternatives)
+	var bespokeOut SuggestRiskPolicyOutput
+	roundTrip(t, bespoke, &bespokeOut)
+	require.Empty(t, bespokeOut.Preset)
+	require.Equal(t, "prompt_based", bespokeOut.Draft.PolicyType)
+	require.Equal(t, "Agents must never promise refunds to customers", bespokeOut.Draft.Prompt)
+	require.Empty(t, bespokeOut.Alternatives)
 
 	_, err = suggest.Invoke(ctx, json.RawMessage(`{"description":"no"}`))
 	require.ErrorContains(t, err, "arguments do not match the tool schema")
