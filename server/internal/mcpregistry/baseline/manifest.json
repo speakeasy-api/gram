@@ -2,7 +2,6 @@
   "source_revision": "c5873aaaad0a2988e39f1ed7c237006bbfb05826",
   "source_repository": "speakeasy-api/mcp-registry",
   "scope": "User-approved two-record starter baseline; not full-catalog or Stage B cutover proof.",
-  "schema_sha256": "c26886742febcc9cc79808f4b6aa0986d0b53855527d71ac334dc0ca1a51f12d",
   "records": [
     {
       "file": "records/app.linear__linear.json",
