@@ -59,9 +59,9 @@ export const AdmitWorkloadSubjectFormMatchKind$outboundSchema: z.ZodMiniEnum<
 export type AdmitWorkloadSubjectForm$Outbound = {
   agent_id: string;
   issuer: string;
-  match_kind?: string | undefined;
+  match_kind: string;
   name?: string | undefined;
-  project_scoped?: boolean | undefined;
+  project_scoped: boolean;
   subject: string;
 };
 
@@ -73,9 +73,12 @@ export const AdmitWorkloadSubjectForm$outboundSchema: z.ZodMiniType<
   z.object({
     agentId: z.string(),
     issuer: z.string(),
-    matchKind: z.optional(AdmitWorkloadSubjectFormMatchKind$outboundSchema),
+    matchKind: z._default(
+      AdmitWorkloadSubjectFormMatchKind$outboundSchema,
+      "exact",
+    ),
     name: z.optional(z.string()),
-    projectScoped: z.optional(z.boolean()),
+    projectScoped: z._default(z.boolean(), false),
     subject: z.string(),
   }),
   z.transform((v) => {

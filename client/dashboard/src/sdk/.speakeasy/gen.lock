@@ -3817,7 +3817,7 @@ examples:
   admitWorkloadSubject:
     speakeasy-default-admit-workload-subject:
       requestBody:
-        application/json: {"agent_id": "2aa24d85-0c2a-4342-a8ed-4db1a21ba276", "issuer": "mastercard", "subject": "<value>"}
+        application/json: {"agent_id": "2aa24d85-0c2a-4342-a8ed-4db1a21ba276", "issuer": "mastercard", "match_kind": "exact", "project_scoped": false, "subject": "<value>"}
       responses:
         "200":
           application/json: {"admissions": [{"agent_id": "699d2770-2c50-4076-b7ec-41ff4e2c2e85", "agent_name": "<value>", "created_at": "2025-07-09T02:12:37.415Z", "id": "55001c0c-1e9a-4559-95c4-5bffb2aa31f3", "issuer": "diners_club", "issuer_name": "<value>", "match_kind": "wildcard", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "updated_at": "2025-05-31T20:36:13.884Z", "wildcard_active": true, "workload_issuer_id": "bb712eab-4d75-409f-a571-6d332e042074"}], "issuers": []}
@@ -10045,7 +10045,7 @@ examples:
   registerWorkloadIssuer:
     speakeasy-default-register-workload-issuer:
       requestBody:
-        application/json: {"issuer": "visa", "jwks_uri": "https://beneficial-outlaw.name", "name": "<value>"}
+        application/json: {"allow_wildcard_admission": false, "issuer": "visa", "jwks_uri": "https://beneficial-outlaw.name", "name": "<value>", "project_scoped": false}
       responses:
         "200":
           application/json: {"admissions": [{"agent_id": "d71bc33d-0ac0-482b-a72c-2f9f2ee4fd35", "agent_name": "<value>", "created_at": "2026-11-27T16:58:02.027Z", "id": "e341442f-6e78-4f2b-a588-9369a859d62b", "issuer": "diners_club", "issuer_name": "<value>", "match_kind": "exact", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "subject": "<value>", "updated_at": "2026-08-31T08:44:17.617Z", "wildcard_active": false, "workload_issuer_id": "8ff4d533-47f7-43b5-91b7-7b4059134b79"}], "issuers": []}

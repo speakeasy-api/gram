@@ -174,8 +174,12 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 	Attribute("jwks_uri", String, "Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.", func() {
 		Format(FormatURI)
 	})
-	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to false, and is re-checked on every lookup, so clearing it revokes wildcard rules already written.")
-	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Defaults to false.")
+	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to false, and is re-checked on every lookup, so clearing it revokes wildcard rules already written.", func() {
+		Default(false)
+	})
+	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Defaults to false.", func() {
+		Default(false)
+	})
 
 	Required("name", "issuer", "jwks_uri")
 })
@@ -189,6 +193,7 @@ var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
 	Attribute("subject", String, "The sub claim the issuer must assert, stored and compared exactly as supplied.")
 	Attribute("match_kind", String, "How the subject is compared: exact compares the whole value; wildcard requires a trailing * and matches anything beginning with the value before it. Wildcard additionally requires the issuer to permit it. Defaults to exact.", func() {
 		Enum("exact", "wildcard")
+		Default("exact")
 	})
 	Attribute("name", String, "Optional label, for platforms whose subjects are not self-describing.", func() {
 		MinLength(1)
@@ -196,7 +201,9 @@ var AdmitWorkloadSubjectForm = Type("AdmitWorkloadSubjectForm", func() {
 	Attribute("agent_id", String, "The agent whose policy the admitted workload inherits.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("project_scoped", Boolean, "Admit the subject for the selected project alone rather than the whole organization. Defaults to false.")
+	Attribute("project_scoped", Boolean, "Admit the subject for the selected project alone rather than the whole organization. Defaults to false.", func() {
+		Default(false)
+	})
 
 	Required("issuer", "subject", "agent_id")
 })

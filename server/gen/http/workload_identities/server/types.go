@@ -1988,11 +1988,21 @@ func NewListPayload(sessionToken *string, apikeyToken *string, projectSlugInput 
 // endpoint payload.
 func NewRegisterIssuerPayload(body *RegisterIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.RegisterIssuerPayload {
 	v := &workloadidentities.RegisterIssuerPayload{
-		Name:                   *body.Name,
-		Issuer:                 *body.Issuer,
-		JwksURI:                *body.JwksURI,
-		AllowWildcardAdmission: body.AllowWildcardAdmission,
-		ProjectScoped:          body.ProjectScoped,
+		Name:    *body.Name,
+		Issuer:  *body.Issuer,
+		JwksURI: *body.JwksURI,
+	}
+	if body.AllowWildcardAdmission != nil {
+		v.AllowWildcardAdmission = *body.AllowWildcardAdmission
+	}
+	if body.ProjectScoped != nil {
+		v.ProjectScoped = *body.ProjectScoped
+	}
+	if body.AllowWildcardAdmission == nil {
+		v.AllowWildcardAdmission = false
+	}
+	if body.ProjectScoped == nil {
+		v.ProjectScoped = false
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -2017,12 +2027,22 @@ func NewWithdrawIssuerPayload(id string, sessionToken *string, apikeyToken *stri
 // endpoint payload.
 func NewAdmitSubjectPayload(body *AdmitSubjectRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.AdmitSubjectPayload {
 	v := &workloadidentities.AdmitSubjectPayload{
-		Issuer:        *body.Issuer,
-		Subject:       *body.Subject,
-		MatchKind:     body.MatchKind,
-		Name:          body.Name,
-		AgentID:       *body.AgentID,
-		ProjectScoped: body.ProjectScoped,
+		Issuer:  *body.Issuer,
+		Subject: *body.Subject,
+		Name:    body.Name,
+		AgentID: *body.AgentID,
+	}
+	if body.MatchKind != nil {
+		v.MatchKind = *body.MatchKind
+	}
+	if body.ProjectScoped != nil {
+		v.ProjectScoped = *body.ProjectScoped
+	}
+	if body.MatchKind == nil {
+		v.MatchKind = "exact"
+	}
+	if body.ProjectScoped == nil {
+		v.ProjectScoped = false
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

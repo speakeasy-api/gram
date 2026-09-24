@@ -60,9 +60,24 @@ export function canAdmit(input: {
   subject: string;
   agentId: string;
   warning: string | null;
+  /**
+   * Whether the selected issuer URL still resolves to a row in the list. A
+   * preselected single issuer, or one withdrawn in another tab between render
+   * and submit, can leave a URL selected that no longer exists.
+   */
+  issuerExists: boolean;
+  /**
+   * Whether the rule as typed is permitted by that issuer. The picker disables
+   * the wildcard option, but the selected match kind is held in state: switching
+   * issuers, or the issuer's permission being cleared elsewhere, can leave a
+   * wildcard selected under an issuer that forbids it.
+   */
+  matchKindPermitted: boolean;
 }): boolean {
   return (
     input.issuer.length > 0 &&
+    input.issuerExists &&
+    input.matchKindPermitted &&
     input.subject.trim().length > 0 &&
     input.agentId.length > 0 &&
     input.warning === null

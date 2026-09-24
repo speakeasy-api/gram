@@ -136,9 +136,10 @@ function renderPage(): void {
 it("lists the trusted issuers and the subjects admitted under them", () => {
   renderPage();
 
-  // The issuer's name appears in its own row, in the issuer column of each
-  // admission, and in the admit dialog's picker, so the count is what is worth
-  // asserting rather than uniqueness.
+  // The issuer's name appears in its own row and in the issuer column of each
+  // admission it vouches for, so a count is worth asserting rather than
+  // uniqueness. The admit dialog's picker contributes nothing here: no test opens
+  // the dialog, and Radix mounts its portal content only while open.
   expect(screen.getAllByText(/Example Platform/).length).toBeGreaterThan(1);
   expect(screen.getByText("https://identity.example.com")).toBeTruthy();
   expect(screen.getByText(`${FLEET_STEM}*`)).toBeTruthy();

@@ -77,10 +77,17 @@ it("blocks the submit on the warning alone, with everything else filled in", () 
     subject: "wimse://identity.example.com/org/acme/agent/a-1",
     agentId: "22222222-2222-2222-2222-222222222222",
     warning: null,
+    issuerExists: true,
+    matchKindPermitted: true,
   };
 
   expect(canAdmit(complete)).toBe(true);
   expect(canAdmit({ ...complete, warning: "would admit nothing" })).toBe(false);
+  // Both guard stale dialog state rather than anything the user can see: an
+  // issuer withdrawn elsewhere, or a wildcard left selected under an issuer that
+  // forbids it. Either would submit a request the server must reject.
+  expect(canAdmit({ ...complete, issuerExists: false })).toBe(false);
+  expect(canAdmit({ ...complete, matchKindPermitted: false })).toBe(false);
 });
 
 it("does not warn about an exact subject with no star", () => {

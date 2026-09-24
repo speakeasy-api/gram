@@ -80,14 +80,14 @@ type AdmitSubjectPayload struct {
 	// requires a trailing * and matches anything beginning with the value before
 	// it. Wildcard additionally requires the issuer to permit it. Defaults to
 	// exact.
-	MatchKind *string
+	MatchKind string
 	// Optional label, for platforms whose subjects are not self-describing.
 	Name *string
 	// The agent whose policy the admitted workload inherits.
 	AgentID string
 	// Admit the subject for the selected project alone rather than the whole
 	// organization. Defaults to false.
-	ProjectScoped *bool
+	ProjectScoped bool
 }
 
 // ListPayload is the payload type of the workloadIdentities service list
@@ -115,10 +115,10 @@ type RegisterIssuerPayload struct {
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to false, and is re-checked on every lookup, so clearing it revokes
 	// wildcard rules already written.
-	AllowWildcardAdmission *bool
+	AllowWildcardAdmission bool
 	// Register the issuer for the selected project alone rather than the whole
 	// organization. Defaults to false.
-	ProjectScoped *bool
+	ProjectScoped bool
 }
 
 // WithdrawIssuerPayload is the payload type of the workloadIdentities service

@@ -98,6 +98,16 @@ func TestWithdrawIssuer_CascadesToItsAdmittedSubjects(t *testing.T) {
 	issuerEvents, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionWorkloadIssuerDelete)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), issuerEvents)
+
+	// The assignments are keyed independently of the admissions, so every
+	// assertion above would still pass while the tuples kept resolving to an
+	// agent. Mirrors what the single-subject withdrawal test checks.
+	assignments, err := repo.New(ti.conn).SoftDeleteWorkloadAgentAssignmentsByIssuer(ctx, repo.SoftDeleteWorkloadAgentAssignmentsByIssuerParams{
+		OrganizationID:   ti.orgID,
+		WorkloadIssuerID: uuid.MustParse(policy.Issuers[0].ID),
+	})
+	require.NoError(t, err)
+	require.Empty(t, assignments, "withdrawing the issuer should already have tombstoned every assignment under it")
 }
 
 func TestWithdrawIssuer_RefusesAnIssuerOutsideTheCallersTenancy(t *testing.T) {
@@ -160,10 +170,10 @@ func TestWithdrawSubject_LeavesTheOtherTiersAgentInPlace(t *testing.T) {
 		ProjectSlugInput: nil,
 		Issuer:           anthropicIssuer,
 		Subject:          channelOne,
-		MatchKind:        new(string(workloadidentity.MatchKindExact)),
+		MatchKind:        string(workloadidentity.MatchKindExact),
 		Name:             nil,
 		AgentID:          agentID.String(),
-		ProjectScoped:    new(true),
+		ProjectScoped:    true,
 	})
 	require.NoError(t, err)
 

@@ -24,8 +24,8 @@ func registerAnthropic(t *testing.T, ctx context.Context, ti *testInstance, allo
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: new(allowWildcard),
-		ProjectScoped:          nil,
+		AllowWildcardAdmission: allowWildcard,
+		ProjectScoped:          false,
 	})
 	require.NoError(t, err)
 
@@ -71,8 +71,8 @@ func TestRegisterIssuer_DefaultsToRefusingWildcards(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: nil,
-		ProjectScoped:          nil,
+		AllowWildcardAdmission: false,
+		ProjectScoped:          false,
 	})
 	require.NoError(t, err)
 
@@ -115,8 +115,8 @@ func TestRegisterIssuer_RefusesUnsafeURLs(t *testing.T) {
 				Name:                   "Claude Tag " + tc.name,
 				Issuer:                 tc.issuer,
 				JwksURI:                tc.jwksURI,
-				AllowWildcardAdmission: nil,
-				ProjectScoped:          nil,
+				AllowWildcardAdmission: false,
+				ProjectScoped:          false,
 			})
 			requireOopsCode(t, err, oops.CodeInvalid)
 		})
@@ -136,8 +136,8 @@ func TestRegisterIssuer_RefusesADuplicateNameAtTheSameTier(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 "https://identity.example.com",
 		JwksURI:                "https://identity.example.com/jwks",
-		AllowWildcardAdmission: nil,
-		ProjectScoped:          nil,
+		AllowWildcardAdmission: false,
+		ProjectScoped:          false,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
 }
@@ -157,8 +157,8 @@ func TestRegisterIssuer_RequiresWorkloadWrite(t *testing.T) {
 		Name:                   "Claude Tag",
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: nil,
-		ProjectScoped:          nil,
+		AllowWildcardAdmission: false,
+		ProjectScoped:          false,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
@@ -177,8 +177,8 @@ func TestRegisterIssuer_RefusesABlankName(t *testing.T) {
 		Name:                   strings.Repeat(" ", 4),
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
-		AllowWildcardAdmission: nil,
-		ProjectScoped:          nil,
+		AllowWildcardAdmission: false,
+		ProjectScoped:          false,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 }

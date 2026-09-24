@@ -43,3 +43,13 @@ it("warns about an interior star", () => {
 it("ignores surrounding whitespace, which the page trims before submitting", () => {
   expect(subjectRuleWarning("wildcard", `  ${STEM}*  `)).toBeNull();
 });
+
+it("warns when the stem ends in whitespace before its star", () => {
+  // The same silent failure as a missing terminator and invisible in the field:
+  // only the outer whitespace is trimmed, so the space stays part of the stem
+  // and the rule matches nothing. Refused by ValidateSubjectRule too, so the
+  // client and the server share one grammar.
+  const warning = subjectRuleWarning("wildcard", `${STEM} *`);
+
+  expect(warning).toContain("whitespace");
+});

@@ -27,10 +27,10 @@ type RegisterIssuerRequestBody struct {
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to false, and is re-checked on every lookup, so clearing it revokes
 	// wildcard rules already written.
-	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
+	AllowWildcardAdmission bool `form:"allow_wildcard_admission" json:"allow_wildcard_admission" xml:"allow_wildcard_admission"`
 	// Register the issuer for the selected project alone rather than the whole
 	// organization. Defaults to false.
-	ProjectScoped *bool `form:"project_scoped,omitempty" json:"project_scoped,omitempty" xml:"project_scoped,omitempty"`
+	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
 }
 
 // AdmitSubjectRequestBody is the type of the "workloadIdentities" service
@@ -47,14 +47,14 @@ type AdmitSubjectRequestBody struct {
 	// requires a trailing * and matches anything beginning with the value before
 	// it. Wildcard additionally requires the issuer to permit it. Defaults to
 	// exact.
-	MatchKind *string `form:"match_kind,omitempty" json:"match_kind,omitempty" xml:"match_kind,omitempty"`
+	MatchKind string `form:"match_kind" json:"match_kind" xml:"match_kind"`
 	// Optional label, for platforms whose subjects are not self-describing.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The agent whose policy the admitted workload inherits.
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
 	// Admit the subject for the selected project alone rather than the whole
 	// organization. Defaults to false.
-	ProjectScoped *bool `form:"project_scoped,omitempty" json:"project_scoped,omitempty" xml:"project_scoped,omitempty"`
+	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
 }
 
 // ListResponseBody is the type of the "workloadIdentities" service "list"
@@ -1101,6 +1101,18 @@ func NewRegisterIssuerRequestBody(p *workloadidentities.RegisterIssuerPayload) *
 		AllowWildcardAdmission: p.AllowWildcardAdmission,
 		ProjectScoped:          p.ProjectScoped,
 	}
+	{
+		var zero bool
+		if body.AllowWildcardAdmission == zero {
+			body.AllowWildcardAdmission = false
+		}
+	}
+	{
+		var zero bool
+		if body.ProjectScoped == zero {
+			body.ProjectScoped = false
+		}
+	}
 	return body
 }
 
@@ -1114,6 +1126,18 @@ func NewAdmitSubjectRequestBody(p *workloadidentities.AdmitSubjectPayload) *Admi
 		Name:          p.Name,
 		AgentID:       p.AgentID,
 		ProjectScoped: p.ProjectScoped,
+	}
+	{
+		var zero string
+		if body.MatchKind == zero {
+			body.MatchKind = "exact"
+		}
+	}
+	{
+		var zero bool
+		if body.ProjectScoped == zero {
+			body.ProjectScoped = false
+		}
 	}
 	return body
 }

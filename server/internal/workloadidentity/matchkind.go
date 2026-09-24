@@ -88,6 +88,12 @@ var (
 	// always someone expecting a wildcard and getting a literal that matches
 	// nothing.
 	ErrExactSubjectHasWildcard = errors.New(`an exact subject must not contain "*"; use the wildcard match kind`)
+
+	// ErrWildcardStemTrailingWhitespace reports whitespace between the stem and
+	// its "*". The stem is stored and compared verbatim, so the space is part of
+	// the subject and the rule matches nothing — the same silent failure as a
+	// missing terminator, and invisible wherever the value is displayed.
+	ErrWildcardStemTrailingWhitespace = errors.New(`a wildcard subject must not end in whitespace before its "*"`)
 )
 
 // ParseMatchKind resolves a stored or submitted value to a known kind. An empty
@@ -153,6 +159,9 @@ func ValidateSubjectRule(kind MatchKind, subject string, allowWildcard bool) err
 		}
 		if stem == "" {
 			return ErrWildcardStemEmpty
+		}
+		if stem != strings.TrimRight(stem, " \t\r\n") {
+			return ErrWildcardStemTrailingWhitespace
 		}
 		return nil
 	default:

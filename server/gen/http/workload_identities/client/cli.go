@@ -92,6 +92,18 @@ func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, wor
 		AllowWildcardAdmission: body.AllowWildcardAdmission,
 		ProjectScoped:          body.ProjectScoped,
 	}
+	{
+		var zero bool
+		if v.AllowWildcardAdmission == zero {
+			v.AllowWildcardAdmission = false
+		}
+	}
+	{
+		var zero bool
+		if v.ProjectScoped == zero {
+			v.ProjectScoped = false
+		}
+	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -149,10 +161,8 @@ func BuildAdmitSubjectPayload(workloadIdentitiesAdmitSubjectBody string, workloa
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"https://example.com/foo\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.issuer", body.Issuer, goa.FormatURI))
-		if body.MatchKind != nil {
-			if !(*body.MatchKind == "exact" || *body.MatchKind == "wildcard") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_kind", *body.MatchKind, []any{"exact", "wildcard"}))
-			}
+		if !(body.MatchKind == "exact" || body.MatchKind == "wildcard") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.match_kind", body.MatchKind, []any{"exact", "wildcard"}))
 		}
 		if body.Name != nil {
 			if utf8.RuneCountInString(*body.Name) < 1 {
@@ -189,6 +199,18 @@ func BuildAdmitSubjectPayload(workloadIdentitiesAdmitSubjectBody string, workloa
 		Name:          body.Name,
 		AgentID:       body.AgentID,
 		ProjectScoped: body.ProjectScoped,
+	}
+	{
+		var zero string
+		if v.MatchKind == zero {
+			v.MatchKind = "exact"
+		}
+	}
+	{
+		var zero bool
+		if v.ProjectScoped == zero {
+			v.ProjectScoped = false
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

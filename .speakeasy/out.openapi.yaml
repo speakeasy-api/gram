@@ -72757,6 +72757,7 @@ components:
         match_kind:
           type: string
           description: 'How the subject is compared: exact compares the whole value; wildcard requires a trailing * and matches anything beginning with the value before it. Wildcard additionally requires the issuer to permit it. Defaults to exact.'
+          default: exact
           enum:
             - exact
             - wildcard
@@ -72767,6 +72768,7 @@ components:
         project_scoped:
           type: boolean
           description: Admit the subject for the selected project alone rather than the whole organization. Defaults to false.
+          default: false
         subject:
           type: string
           description: The sub claim the issuer must assert, stored and compared exactly as supplied.
@@ -89567,6 +89569,7 @@ components:
         allow_wildcard_admission:
           type: boolean
           description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to false, and is re-checked on every lookup, so clearing it revokes wildcard rules already written.
+          default: false
         issuer:
           type: string
           description: The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name, with no query or fragment.
@@ -89583,6 +89586,7 @@ components:
         project_scoped:
           type: boolean
           description: Register the issuer for the selected project alone rather than the whole organization. Defaults to false.
+          default: false
       description: Form for trusting an external workload issuer.
       required:
         - name

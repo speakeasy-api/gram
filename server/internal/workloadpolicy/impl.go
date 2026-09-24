@@ -156,8 +156,10 @@ func tier(projectID uuid.NullUUID) string {
 // opt-in: the organization tier is the default because that is what a federated
 // platform's issuer is, and a caller that has not thought about tiers should not
 // silently write a row only one project can see.
-func (t tenancy) requestedTier(projectScoped *bool) (uuid.NullUUID, error) {
-	if !conv.PtrValOr(projectScoped, false) {
+// The contract declares Default(false), so the value arrives decided and this
+// takes a plain bool rather than re-deriving the default from a nil pointer.
+func (t tenancy) requestedTier(projectScoped bool) (uuid.NullUUID, error) {
+	if !projectScoped {
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, nil
 	}
 	if !t.projectID.Valid {
@@ -256,7 +258,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 		return nil, oops.E(oops.CodeInvalid, nil, "name must not be blank")
 	}
 
-	allowWildcard := conv.PtrValOr(payload.AllowWildcardAdmission, false)
+	allowWildcard := payload.AllowWildcardAdmission
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -460,7 +462,7 @@ func (s *Service) AdmitSubject(ctx context.Context, payload *gen.AdmitSubjectPay
 		return nil, oops.E(oops.CodeInvalid, err, "agent_id is not a valid uuid")
 	}
 
-	matchKind, err := workloadidentity.ParseMatchKind(conv.PtrValOr(payload.MatchKind, ""))
+	matchKind, err := workloadidentity.ParseMatchKind(payload.MatchKind)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "match_kind is not a recognised subject match kind")
 	}

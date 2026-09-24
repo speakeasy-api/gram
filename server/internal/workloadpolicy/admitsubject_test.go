@@ -25,10 +25,10 @@ func admit(t *testing.T, ctx context.Context, ti *testInstance, subject string, 
 		ProjectSlugInput: nil,
 		Issuer:           anthropicIssuer,
 		Subject:          subject,
-		MatchKind:        new(matchKind),
+		MatchKind:        matchKind,
 		Name:             nil,
 		AgentID:          agentID.String(),
-		ProjectScoped:    nil,
+		ProjectScoped:    false,
 	})
 	if err != nil {
 		// Wrapped so wrapcheck is satisfied; every assertion on this error uses
@@ -175,8 +175,8 @@ func TestAdmitSubject_RefusesTwoIssuersSharingAURLAtOneTier(t *testing.T) {
 			Name:                   name,
 			Issuer:                 anthropicIssuer,
 			JwksURI:                anthropicJWKS,
-			AllowWildcardAdmission: nil,
-			ProjectScoped:          new(true),
+			AllowWildcardAdmission: false,
+			ProjectScoped:          true,
 		})
 		require.NoError(t, err)
 	}
@@ -189,10 +189,10 @@ func TestAdmitSubject_RefusesTwoIssuersSharingAURLAtOneTier(t *testing.T) {
 		ProjectSlugInput: nil,
 		Issuer:           anthropicIssuer,
 		Subject:          channelOne,
-		MatchKind:        new(string(workloadidentity.MatchKindExact)),
+		MatchKind:        string(workloadidentity.MatchKindExact),
 		Name:             nil,
 		AgentID:          agentID.String(),
-		ProjectScoped:    new(true),
+		ProjectScoped:    true,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
 	require.Contains(t, err.Error(), "same tier")

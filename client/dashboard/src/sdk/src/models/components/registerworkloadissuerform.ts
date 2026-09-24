@@ -33,11 +33,11 @@ export type RegisterWorkloadIssuerForm = {
 
 /** @internal */
 export type RegisterWorkloadIssuerForm$Outbound = {
-  allow_wildcard_admission?: boolean | undefined;
+  allow_wildcard_admission: boolean;
   issuer: string;
   jwks_uri: string;
   name: string;
-  project_scoped?: boolean | undefined;
+  project_scoped: boolean;
 };
 
 /** @internal */
@@ -46,11 +46,11 @@ export const RegisterWorkloadIssuerForm$outboundSchema: z.ZodMiniType<
   RegisterWorkloadIssuerForm
 > = z.pipe(
   z.object({
-    allowWildcardAdmission: z.optional(z.boolean()),
+    allowWildcardAdmission: z._default(z.boolean(), false),
     issuer: z.string(),
     jwksUri: z.string(),
     name: z.string(),
-    projectScoped: z.optional(z.boolean()),
+    projectScoped: z._default(z.boolean(), false),
   }),
   z.transform((v) => {
     return remap$(v, {

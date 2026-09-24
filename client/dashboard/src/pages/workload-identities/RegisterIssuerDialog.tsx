@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/Label";
 import { Stack } from "@/components/ui/Stack";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export interface RegisterIssuerValues {
   name: string;
@@ -66,6 +66,16 @@ export function RegisterIssuerDialog({
 }: RegisterIssuerDialogProps): JSX.Element {
   const [values, setValues] = useState<RegisterIssuerValues>(EMPTY);
 
+  // A successful registration closes the dialog through the parent's own state,
+  // which never reaches handleOpenChange — so without this the next registration
+  // opens prefilled with the previous issuer. The dialog stays mounted, so there
+  // is no unmount to do it for us. Same reason as AdmitSubjectDialog.
+  useEffect(() => {
+    if (!open) {
+      setValues(EMPTY);
+    }
+  }, [open]);
+
   const handleOpenChange = (next: boolean) => {
     if (!next) {
       setValues(EMPTY);
@@ -115,10 +125,19 @@ export function RegisterIssuerDialog({
               id="workload-issuer-url"
               value={values.issuer}
               placeholder="https://identity.example.com"
+              aria-invalid={issuerProblem !== null}
+              aria-describedby={
+                issuerProblem !== null ? "workload-issuer-url-error" : undefined
+              }
               onChange={(value) => setValues({ ...values, issuer: value })}
             />
             {issuerProblem !== null ? (
-              <Text role="alert" small destructive>
+              <Text
+                id="workload-issuer-url-error"
+                role="alert"
+                small
+                destructive
+              >
                 {issuerProblem}
               </Text>
             ) : (
@@ -136,10 +155,19 @@ export function RegisterIssuerDialog({
               id="workload-issuer-jwks"
               value={values.jwksUri}
               placeholder="https://identity.example.com/.well-known/jwks.json"
+              aria-invalid={jwksProblem !== null}
+              aria-describedby={
+                jwksProblem !== null ? "workload-issuer-jwks-error" : undefined
+              }
               onChange={(value) => setValues({ ...values, jwksUri: value })}
             />
             {jwksProblem !== null ? (
-              <Text role="alert" small destructive>
+              <Text
+                id="workload-issuer-jwks-error"
+                role="alert"
+                small
+                destructive
+              >
                 {jwksProblem}
               </Text>
             ) : (

@@ -92,6 +92,8 @@ export function AdmitSubjectDialog({
     subject: values.subject,
     agentId: values.agentId,
     warning,
+    issuerExists: selectedIssuer !== undefined,
+    matchKindPermitted: values.matchKind !== "wildcard" || wildcardAvailable,
   });
 
   const handleIssuerChange = (issuer: string) => {
