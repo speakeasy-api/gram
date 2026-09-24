@@ -1544,7 +1544,7 @@ func newStartCommand() *cli.Command {
 			// through the interface and defeat the services' own nil guards.
 			var pluginsPublishSignaler plugins.PluginPublishSignaler
 			var skillsPublishSignaler skills.PluginPublishSignaler
-			if pluginsGitHub != nil {
+			if pluginsGitHub != nil && temporalEnv != nil {
 				publishSignaler := &background.TemporalPluginPublisher{TemporalEnv: temporalEnv}
 				pluginsPublishSignaler, skillsPublishSignaler = publishSignaler, publishSignaler
 			}
@@ -1740,6 +1740,9 @@ func newStartCommand() *cli.Command {
 				AuditLogger:             auditLogger,
 				AccessRoles:             roleClient,
 				PluginPublisher:         pluginPublisher,
+				PluginPublishSignaler:   pluginsPublishSignaler,
+				NetworkAccessAdmission:  networkIngressAdmission,
+				PublicationRequests:     plugins.PublicationRequests{Enabled: publicationEmit},
 				TemporalEnv:             temporalEnv,
 				Skills:                  skillsService,
 				RiskPolicyApprovals:     mcpApprovalService,

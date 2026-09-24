@@ -72,6 +72,12 @@ func TestGetMCPConnectionSettingsScopesExactTargetToProjectAndOrganization(t *te
 	require.Equal(t, project.ID.String(), got.ProjectID)
 	require.Equal(t, serverID, got.TargetID)
 	require.Equal(t, "public_only", got.NetworkMode)
+	require.Len(t, got.Version, 64)
+	again, err := service.Get(ctx, principal, GetMCPConnectionSettingsInput{
+		ProjectID: project.ID.String(), TargetKind: MCPConnectionSettingsMCPServer, TargetID: serverID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, got.Version, again.Version)
 
 	_, err = service.Get(authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)}), principal, GetMCPConnectionSettingsInput{
 		ProjectID: project.ID.String(), TargetKind: MCPConnectionSettingsMCPServer, TargetID: serverID,

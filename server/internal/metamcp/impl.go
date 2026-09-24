@@ -333,12 +333,11 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
-	}
-
 	if err := finalizeNetworkAccess.Finalize(ctx, dbtx); err != nil {
 		return nil, fmt.Errorf("finalize network access admission: %w", err)
+	}
+	if err := admission.LockProject(ctx, dbtx, *authCtx.ProjectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock distribution admission").LogError(ctx, logger)
 	}
 	txRepo := repo.New(dbtx)
 
@@ -476,6 +475,50 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, false)
 
 	return afterView, nil
+}
+
+// UpdateMetaMCPServerNetworkAccessModeInTransaction changes only an existing
+// gateway's network access mode. The caller owns the transaction and performs
+// authorization before calling. Admission is finalized before project and row locks.
+func UpdateMetaMCPServerNetworkAccessModeInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, organizationID string, projectID uuid.UUID, actorUserID string, actorEmail *string, serverID uuid.UUID, mode networkaccess.Mode, finalize networkaccess.AdmissionFinalizer) (repo.MetaMcpServer, error) {
+	if tx == nil || auditLogger == nil || organizationID == "" || projectID == uuid.Nil || actorUserID == "" || serverID == uuid.Nil {
+		return repo.MetaMcpServer{}, fmt.Errorf("invalid gateway network access update input")
+	}
+	if _, err := networkaccess.Parse(string(mode)); err != nil {
+		return repo.MetaMcpServer{}, fmt.Errorf("validate gateway network access mode: %w", err)
+	}
+	if err := finalize.Finalize(ctx, tx); err != nil {
+		return repo.MetaMcpServer{}, fmt.Errorf("finalize network access admission: %w", err)
+	}
+	if err := admission.LockProject(ctx, tx, projectID); err != nil {
+		return repo.MetaMcpServer{}, fmt.Errorf("lock distribution admission: %w", err)
+	}
+	queries := repo.New(tx)
+	existing, err := queries.LockMetaMCPServer(ctx, repo.LockMetaMCPServerParams{ID: serverID, OrganizationID: organizationID, ProjectID: projectID})
+	if err != nil {
+		return repo.MetaMcpServer{}, fmt.Errorf("lock gateway: %w", err)
+	}
+	updated, err := tx.Exec(ctx, `UPDATE meta_mcp_servers SET network_access_mode = $1, updated_at = clock_timestamp() WHERE id = $2 AND organization_id = $3 AND project_id = $4 AND deleted IS FALSE`, networkaccess.Storage(mode), serverID, organizationID, projectID)
+	if err != nil {
+		return repo.MetaMcpServer{}, fmt.Errorf("update gateway network access mode: %w", err)
+	}
+	if updated.RowsAffected() != 1 {
+		return repo.MetaMcpServer{}, pgx.ErrNoRows
+	}
+	after, err := queries.GetMetaMCPServer(ctx, repo.GetMetaMCPServerParams{ID: serverID, OrganizationID: organizationID, ProjectID: projectID})
+	if err != nil {
+		return repo.MetaMcpServer{}, fmt.Errorf("reload gateway: %w", err)
+	}
+	if err := auditLogger.LogMetaMcpServerUpdate(ctx, tx, audit.LogMetaMcpServerUpdateEvent{
+		OrganizationID: organizationID, ProjectID: projectID,
+		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, actorUserID), ActorDisplayName: actorEmail,
+		ActorSlug: nil, MetaMcpServerURN: urn.NewMetaMcpServer(after.ID), Name: after.Name,
+		MetaMcpServerSnapshotBefore: mv.BuildMetaMcpServerView(existing),
+		MetaMcpServerSnapshotAfter:  mv.BuildMetaMcpServerView(after),
+	}); err != nil {
+		return repo.MetaMcpServer{}, fmt.Errorf("audit gateway network access update: %w", err)
+	}
+	return after, nil
 }
 
 func (s *Service) prepareNetworkAccessMode(ctx context.Context, organizationID string, mode networkaccess.Mode) (networkaccess.AdmissionFinalizer, error) {

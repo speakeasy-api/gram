@@ -1,3 +1,4 @@
+//nolint:glint // Caller-owned transaction tests directly exercise network-mode-only writes.
 package mcpservers_test
 
 import (
@@ -15,15 +16,87 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+func TestUpdateMcpServer_NetworkModeOnlyTransaction(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name: "network mode only", RemoteMcpServerID: &remoteID,
+		Visibility: types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created.UserSessionIssuerID)
+	issuerBefore := created.UserSessionIssuerID
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
+	require.NoError(t, err)
+	tx, err := ti.conn.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	updated, err := mcpservers.UpdateMCPServerNetworkAccessModeInTransaction(ctx, tx, audit.NewLogger(), mcpservers.LifecycleUpdateInput{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		ActorUserID: authCtx.UserID, ActorEmail: authCtx.Email,
+		ServerID: uuid.MustParse(created.ID),
+	}, networkaccess.ModeDual, networkaccess.NewAdmissionFinalizer(func(context.Context, pgx.Tx) error { return nil }))
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	require.Equal(t, *created.Name, conv.FromPGTextOrEmpty[string](updated.Name))
+	require.Equal(t, *issuerBefore, updated.UserSessionIssuerID.UUID.String())
+	require.Equal(t, "dual", updated.NetworkAccessMode.String)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestUpdateMcpServer_LifecycleRejectsUnproxiedPrivateMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	unproxiedID := seedUnproxiedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	created, err := ti.service.CreateMcpServer(withStaffEmail(t, ctx), &gen.CreateMcpServerPayload{
+		Name: "unproxied lifecycle", UnproxiedMcpServerID: &unproxiedID,
+		Visibility: types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+
+	tx, err := ti.conn.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	existing, err := mcpserversrepo.New(tx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
+		ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	mode := networkaccess.ModePrivateOnly
+	_, err = mcpservers.UpdateMCPServerLifecycleInTransaction(ctx, tx, audit.NewLogger(), existing, mcpservers.LifecycleUpdateInput{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		ActorUserID: authCtx.UserID, ActorEmail: authCtx.Email,
+		ServerID: existing.ID, Visibility: existing.Visibility,
+		NetworkAccessMode:    &mode,
+		UnproxiedMcpServerID: existing.UnproxiedMcpServerID,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
 
 func TestUpdateMcpServer_FullReplace(t *testing.T) {
 	t.Parallel()

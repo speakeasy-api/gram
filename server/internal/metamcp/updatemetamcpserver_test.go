@@ -1,11 +1,13 @@
 package metamcp_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -19,10 +21,38 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
+
+func TestUpdateMetaMcpServer_NetworkModeOnlyTransaction(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	created, err := ti.service.CreateMetaMcpServer(ctx, &gen.CreateMetaMcpServerPayload{Name: "gateway network mode only"})
+	require.NoError(t, err)
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMetaMcpServerUpdate)
+	require.NoError(t, err)
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // Caller-owned transaction exercises the network-mode-only write.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	updated, err := metamcp.UpdateMetaMCPServerNetworkAccessModeInTransaction(ctx, tx, audit.NewLogger(), authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, authCtx.Email, uuid.MustParse(created.ID), networkaccess.ModeDual, networkaccess.NewAdmissionFinalizer(func(context.Context, pgx.Tx) error { return nil }))
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	require.Equal(t, created.Name, updated.Name)
+	require.Equal(t, uuid.MustParse(*created.UserSessionIssuerID), updated.UserSessionIssuerID.UUID)
+	require.Equal(t, "dual", updated.NetworkAccessMode.String)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMetaMcpServerUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
 
 func TestUpdateMetaMcpServer_RenamesAndAttachesIssuer(t *testing.T) {
 	t.Parallel()

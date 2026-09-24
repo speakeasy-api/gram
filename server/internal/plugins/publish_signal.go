@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 
@@ -17,6 +18,21 @@ import (
 // per project, so a burst of changes collapses into one publish.
 type PluginPublishSignaler interface {
 	SignalPluginPublish(ctx context.Context, projectID uuid.UUID, createdByUserID string) error
+}
+
+// SignalPluginPublishAfterRequest schedules the legacy publish signal after the
+// transaction that requested publication has committed. A durable outbox request
+// already covers the publication, so it must not be signalled again. When the
+// request was disabled or no marketplace was configured, preserve the legacy
+// signal path. A nil signaler is a no-op.
+func SignalPluginPublishAfterRequest(ctx context.Context, signaler PluginPublishSignaler, outcome ProjectPublicationRequestOutcome, projectID uuid.UUID, createdByUserID string) error {
+	if signaler == nil || outcome == ProjectPublicationEnqueued {
+		return nil
+	}
+	if err := signaler.SignalPluginPublish(context.WithoutCancel(ctx), projectID, createdByUserID); err != nil {
+		return fmt.Errorf("signal plugin publication: %w", err)
+	}
+	return nil
 }
 
 // signalPublish enqueues a republish for the project whose plugins just
