@@ -1,10 +1,7 @@
 export type OnboardingTaskId =
-  | "domain-verification"
   | "identity-provider"
   | "anthropic-observability"
   | "anthropic-admin-controls"
-  | "connect-idp"
-  | "directory-sync"
   | "enable-logging"
   | "create-marketplace"
   | "litellm"
@@ -20,11 +17,8 @@ export interface OnboardingTaskDefinition {
 }
 
 export const ONBOARDING_TASKS: OnboardingTaskDefinition[] = [
-  { id: "domain-verification" },
   { id: "litellm" },
   { id: "identity-provider" },
-  { id: "connect-idp" },
-  { id: "directory-sync" },
   { id: "enable-logging" },
   { id: "anthropic-observability" },
   { id: "anthropic-admin-controls" },
@@ -51,12 +45,7 @@ export const ONBOARDING_WORKSTREAMS: OnboardingWorkstreamDefinition[] = [
     id: "connect",
     title: "Connect identity",
     description: "Authenticate people and agents. Sync IDP roles.",
-    taskIds: [
-      "domain-verification",
-      "identity-provider",
-      "connect-idp",
-      "directory-sync",
-    ],
+    taskIds: ["identity-provider"],
   },
   {
     id: "observe",

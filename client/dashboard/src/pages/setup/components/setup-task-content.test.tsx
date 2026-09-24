@@ -21,8 +21,6 @@ afterEach(cleanup);
 
 it.each([
   "enable-logging",
-  "connect-idp",
-  "directory-sync",
   "create-marketplace",
   "confirm-traffic",
   "identity-provider",

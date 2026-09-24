@@ -520,9 +520,7 @@ BEGIN
   INSERT INTO organization_setup_tasks
     (organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at)
   VALUES
-    (demo_org, 'identity-provider', 'todo', NULL, NULL, now()),
-    (demo_org, 'connect-idp', 'todo', NULL, NULL, NULL),
-    (demo_org, 'directory-sync', 'todo', NULL, NULL, NULL),
+    (demo_org, 'identity-provider', 'todo', NULL, NULL, NULL),
     (demo_org, 'create-marketplace', 'todo', NULL, NULL, NULL),
     (demo_org, 'distribute-servers', 'todo', NULL, NULL, NULL),
     (demo_org, 'enable-logging', 'todo', NULL, NULL, NULL),
@@ -2405,13 +2403,13 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   FROM organization_user_relationships WHERE organization_id = demo_org AND deleted_at IS NULL;
   SELECT count(*) INTO stray FROM organization_setup_tasks
   WHERE organization_id = demo_org;
-  IF stray <> 13 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 13 setup task selections, found %', stray;
+  IF stray <> 11 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 11 setup task selections, found %', stray;
   END IF;
   IF (SELECT preset FROM organization_onboarding WHERE organization_id = demo_org) IS DISTINCT FROM 'security'
-    OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = demo_org AND hidden_at IS NULL) <> 10
+    OR (SELECT count(*) FROM organization_setup_tasks WHERE organization_id = demo_org AND hidden_at IS NULL) <> 9
     OR EXISTS (SELECT 1 FROM organization_setup_tasks WHERE organization_id = demo_org
-      AND ((task_key IN ('identity-provider', 'anthropic-admin-controls', 'platform-mcp')) IS DISTINCT FROM (hidden_at IS NOT NULL))) THEN
+      AND ((task_key IN ('anthropic-admin-controls', 'platform-mcp')) IS DISTINCT FROM (hidden_at IS NOT NULL))) THEN
     RAISE EXCEPTION 'demo seed postflight: expected customized Security onboarding selection';
   END IF;
   SELECT count(*) INTO stray FROM organization_features

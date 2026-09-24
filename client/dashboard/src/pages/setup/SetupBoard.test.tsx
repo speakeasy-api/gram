@@ -181,8 +181,8 @@ vi.mock("./components/setup-task-assignment-dialog", () => ({
 
 const tasks: SetupTask[] = [
   {
-    key: "connect-idp",
-    title: "Connect identity provider",
+    key: "identity-provider",
+    title: "Set up identity provider",
     description: "Connect SSO",
     status: "todo",
     completedByFact: false,
@@ -286,20 +286,23 @@ describe("SetupBoard", () => {
     expect(screen.queryByText("4 tasks")).toBeNull();
 
     fireEvent.click(
-      within(screen.getByTestId("setup-task-connect-idp")).getByRole("button", {
-        name: "Start: Connect identity provider",
-      }),
+      within(screen.getByTestId("setup-task-identity-provider")).getByRole(
+        "button",
+        {
+          name: "Start: Set up identity provider",
+        },
+      ),
     );
-    expect(mocks.goToTask).toHaveBeenLastCalledWith("connect-idp");
+    expect(mocks.goToTask).toHaveBeenLastCalledWith("idp");
     expect(mocks.update).not.toHaveBeenCalled();
   });
 
   it("opens the task named by ?step= as a page", async () => {
-    mocks.searchParams = new URLSearchParams("step=connect-idp");
+    mocks.searchParams = new URLSearchParams("step=identity-provider");
     render(<SetupBoard />);
 
     await waitFor(() =>
-      expect(mocks.navigate).toHaveBeenCalledWith("/acme/setup/connect-idp", {
+      expect(mocks.navigate).toHaveBeenCalledWith("/acme/setup/idp", {
         replace: true,
       }),
     );
@@ -342,7 +345,9 @@ describe("SetupBoard", () => {
   it("moves a task to the status column it is dropped into", async () => {
     render(<SetupBoard />);
 
-    const draggedTask = screen.getByTestId("setup-task-draggable-connect-idp");
+    const draggedTask = screen.getByTestId(
+      "setup-task-draggable-identity-provider",
+    );
     const destination = screen.getByTestId("setup-column-in_progress");
     const dataTransfer = {
       effectAllowed: "none",
@@ -375,7 +380,7 @@ describe("SetupBoard", () => {
       expect(mocks.update).toHaveBeenCalledWith({
         request: {
           updateSetupTaskRequestBody: {
-            taskKey: "connect-idp",
+            taskKey: "identity-provider",
             status: "in_progress",
           },
         },
@@ -387,10 +392,10 @@ describe("SetupBoard", () => {
     mocks.canAdmin = false;
     render(<SetupBoard />);
 
-    const unassignedTask = screen.getByTestId("setup-task-connect-idp");
+    const unassignedTask = screen.getByTestId("setup-task-identity-provider");
     expect(
       within(unassignedTask)
-        .getAllByRole("button", { name: /Connect identity provider/ })
+        .getAllByRole("button", { name: /Set up identity provider/ })
         .every((button) => button.hasAttribute("disabled")),
     ).toBe(true);
   });
@@ -399,10 +404,10 @@ describe("SetupBoard", () => {
     mocks.updatePending = true;
     render(<SetupBoard />);
 
-    const task = screen.getByTestId("setup-task-connect-idp");
+    const task = screen.getByTestId("setup-task-identity-provider");
     expect(
       within(task)
-        .getAllByRole("button", { name: /Connect identity provider/ })
+        .getAllByRole("button", { name: /Set up identity provider/ })
         .every((button) => button.hasAttribute("disabled")),
     ).toBe(true);
   });
@@ -451,9 +456,12 @@ describe("SetupBoard", () => {
     render(<SetupBoard />);
 
     fireEvent.click(
-      within(screen.getByTestId("setup-task-connect-idp")).getByRole("button", {
-        name: "Assign",
-      }),
+      within(screen.getByTestId("setup-task-identity-provider")).getByRole(
+        "button",
+        {
+          name: "Assign",
+        },
+      ),
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Choose email and invite" }),
@@ -507,7 +515,7 @@ describe("SetupBoard", () => {
       }),
     );
 
-    const card = screen.getByTestId("setup-task-connect-idp");
+    const card = screen.getByTestId("setup-task-identity-provider");
     expect(
       within(screen.getByTestId("setup-task-instrument-agents")).getByRole(
         "button",
@@ -520,7 +528,7 @@ describe("SetupBoard", () => {
       expect(mocks.update).toHaveBeenCalledWith({
         request: {
           updateSetupTaskRequestBody: {
-            taskKey: "connect-idp",
+            taskKey: "identity-provider",
             assignee: { userId: "user-member" },
           },
         },
@@ -533,7 +541,7 @@ describe("SetupBoard", () => {
       expect(mocks.update).toHaveBeenCalledWith({
         request: {
           updateSetupTaskRequestBody: {
-            taskKey: "connect-idp",
+            taskKey: "identity-provider",
             clearAssignee: true,
           },
         },
@@ -557,7 +565,10 @@ describe("SetupBoard", () => {
     await waitFor(() =>
       expect(mocks.update).toHaveBeenCalledWith({
         request: {
-          updateSetupTaskRequestBody: { taskKey: "connect-idp", hidden: true },
+          updateSetupTaskRequestBody: {
+            taskKey: "identity-provider",
+            hidden: true,
+          },
         },
       }),
     );
@@ -570,7 +581,7 @@ describe("SetupBoard", () => {
       screen.queryByRole("switch", { name: "Show hidden tasks" }),
     ).toBeNull();
     expect(
-      within(screen.getByTestId("setup-task-connect-idp")).queryByRole(
+      within(screen.getByTestId("setup-task-identity-provider")).queryByRole(
         "button",
         { name: "Move to in progress" },
       ),

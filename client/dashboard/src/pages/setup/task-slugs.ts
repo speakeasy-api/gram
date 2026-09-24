@@ -2,10 +2,7 @@
 // from the task keys the server uses so a key can change without moving a
 // page, and so the URLs read as destinations rather than identifiers.
 export const SETUP_TASK_SLUGS: Record<string, string> = {
-  "domain-verification": "domain",
   "enable-logging": "enable-logging",
-  "connect-idp": "connect-idp",
-  "directory-sync": "directory-sync",
   "create-marketplace": "create-marketplace",
   "confirm-traffic": "confirm-traffic",
   "identity-provider": "idp",

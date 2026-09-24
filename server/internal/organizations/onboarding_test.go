@@ -89,7 +89,7 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 			visible = append(visible, task.Key)
 		}
 	}
-	require.ElementsMatch(t, []string{"domain-verification", "identity-provider", "instrument-agents", "additional-agent-config", "platform-mcp"}, visible)
+	require.ElementsMatch(t, []string{"identity-provider", "instrument-agents", "additional-agent-config", "platform-mcp"}, visible)
 	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
 	require.Len(t, listed.Tasks, len(visible))
@@ -109,11 +109,8 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 			keys = append(keys, task.Key)
 		}
 		require.ElementsMatch(t, preset.VisibleTaskKeys, keys)
-		require.Nil(t, setupTask(listed.Tasks, "identity-provider"), "presets must not duplicate the split identity tasks")
 		if preset.Key == "security" {
-			require.NotNil(t, setupTask(listed.Tasks, "domain-verification"))
-			require.Equal(t, []string{"domain-verification"}, setupTask(listed.Tasks, "connect-idp").BlockedBy)
-			require.Empty(t, setupTask(listed.Tasks, "directory-sync").BlockedBy)
+			require.Empty(t, setupTask(listed.Tasks, "identity-provider").BlockedBy)
 		}
 	}
 }
