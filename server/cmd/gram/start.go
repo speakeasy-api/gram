@@ -1132,16 +1132,16 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
 			policyBypass := risk.NewPolicyBypassEvaluator(logger, db)
+			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
 			mcpPolicyEvaluator := mcpriskscan.NewPolicyEvaluator(
 				logger,
 				tracerProvider,
 				meterProvider,
-				policycore.New(db),
+				policycore.NewWithToolAnnotations(db, toolDispositionCache),
 				risk.NewMCPPolicyScanner(riskScanner, shadowMCPClient),
 				publishers.RiskFindings,
 				mcpriskscan.DefaultPolicyConfig,
 			)
-			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
 			mcpService, err := newMCPService(c, mcpServiceDependencies{
 				Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
 				Sessions: sessionManager, ChatSessions: chatSessionsManager, Environment: env,

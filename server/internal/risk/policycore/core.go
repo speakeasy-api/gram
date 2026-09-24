@@ -92,6 +92,27 @@ func (c *Core) ListEnabledForMCPServer(
 	projectID, serverID uuid.UUID,
 	toolName string,
 ) ([]Policy, error) {
+	rows, err := c.queries.ListEnabledRiskPoliciesByProject(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list enabled risk policies: %w", err)
+	}
+	// Runs on every MCP call, so projects without scoped policies stop here.
+	scopedRows := make([]repo.RiskPolicy, 0, len(rows))
+	scopes := make([]*MCPScope, 0, len(rows))
+	needsAnnotations := false
+	for _, row := range rows {
+		scope := Project(row, nil, nil).MCPScope
+		if scope == nil {
+			continue
+		}
+		scopedRows = append(scopedRows, row)
+		scopes = append(scopes, scope)
+		needsAnnotations = needsAnnotations || len(scope.ToolAnnotations) > 0
+	}
+	if len(scopedRows) == 0 {
+		return []Policy{}, nil
+	}
+
 	var gatewayIDs []uuid.UUID
 	if serverID != uuid.Nil {
 		ownedIDs, err := c.queries.ListRiskPolicyMCPScopeServerIDs(ctx, repo.ListRiskPolicyMCPScopeServerIDsParams{
@@ -113,27 +134,19 @@ func (c *Core) ListEnabledForMCPServer(
 			return nil, fmt.Errorf("list MCP server gateways: %w", err)
 		}
 	}
-	rows, err := c.queries.ListEnabledRiskPoliciesByProject(ctx, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("list enabled risk policies: %w", err)
-	}
 
 	var annotations *gentypes.ToolAnnotations
-	if toolName != "" && c.toolAnnotations != nil {
+	if needsAnnotations && toolName != "" && c.toolAnnotations != nil {
 		annotations, err = c.toolAnnotations.ToolAnnotations(ctx, serverID, projectID, toolName)
 		if err != nil {
 			return nil, fmt.Errorf("resolve MCP tool annotations: %w", err)
 		}
 	}
 
-	matchedRows := make([]repo.RiskPolicy, 0, len(rows))
-	policyIDs := make([]string, 0, len(rows))
-	for _, row := range rows {
-		policy := Project(row, nil, nil)
-		if policy.MCPScope == nil {
-			continue
-		}
-		if !policy.MCPScope.Applies(serverID, toolName, annotations, gatewayIDs) {
+	matchedRows := make([]repo.RiskPolicy, 0, len(scopedRows))
+	policyIDs := make([]string, 0, len(scopedRows))
+	for i, row := range scopedRows {
+		if !scopes[i].Applies(serverID, toolName, annotations, gatewayIDs) {
 			continue
 		}
 		matchedRows = append(matchedRows, row)

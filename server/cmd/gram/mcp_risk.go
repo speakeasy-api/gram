@@ -12,8 +12,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/background"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
@@ -74,7 +76,7 @@ func newMCPRiskEvaluator(
 		logger,
 		tracerProvider,
 		meterProvider,
-		policycore.New(db),
+		policycore.NewWithToolAnnotations(db, mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))),
 		risk.NewMCPPolicyScanner(scanner, shadowMCPClient),
 		publishers.RiskFindings,
 		mcpriskscan.DefaultPolicyConfig,
