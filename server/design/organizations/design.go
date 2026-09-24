@@ -364,6 +364,29 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "updateSetupTask")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UpdateSetupTask"}`)
 	})
+
+	Method("setSetupTaskSelection", func() {
+		Description("Replace which setup tasks the organization sees in the setup wizard. Tasks left out are hidden; progress and assignments are kept.")
+
+		Payload(func() {
+			Attribute("visible_task_keys", ArrayOf(String), "Complete explicit selection; an empty array selects no tasks.")
+			Attribute("preset", String, "Omit to preserve the saved preset.", func() { Enum("gateway", "security") })
+			Required("visible_task_keys")
+			security.SessionPayload()
+		})
+
+		Result(ListSetupTasksResult)
+
+		HTTP(func() {
+			POST("/rpc/organizations.setSetupTaskSelection")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setSetupTaskSelection")
+		Meta("openapi:extension:x-speakeasy-name-override", "setSetupTaskSelection")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetSetupTaskSelection"}`)
+	})
 })
 
 // OrganizationInvitation is a non-sensitive admin view (no invitation token or accept URL).

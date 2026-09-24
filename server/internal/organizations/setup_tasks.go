@@ -480,3 +480,24 @@ func setupTaskAuditSnapshot(task *gen.SetupTask) *audit.OrganizationSetupTaskSna
 		Assignee: assignee, BlockedBy: task.BlockedBy, Hidden: task.Hidden,
 	}
 }
+
+// SetSetupTaskSelection lets an organization admin choose which tasks the
+// wizard walks, through the same path staff use in the admin dashboard.
+func (s *Service) SetSetupTaskSelection(ctx context.Context, payload *gen.SetSetupTaskSelectionPayload) (*gen.ListSetupTasksResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+	actor := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)
+	if _, err := SaveOnboardingConfiguration(ctx, s.db, s.audit, ac.ActiveOrganizationID, payload.VisibleTaskKeys, payload.Preset, actor, ac.Email); err != nil {
+		return nil, fmt.Errorf("save setup task selection: %w", err)
+	}
+	tasks, err := projectSetupTasks(ctx, orgrepo.New(s.db), ac.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "project setup tasks").LogError(ctx, s.logger)
+	}
+	return &gen.ListSetupTasksResult{Tasks: slices.DeleteFunc(tasks, func(task *gen.SetupTask) bool { return task.Hidden })}, nil
+}

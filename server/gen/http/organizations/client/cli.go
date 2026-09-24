@@ -397,3 +397,47 @@ func BuildUpdateSetupTaskPayload(organizationsUpdateSetupTaskBody string, organi
 
 	return v, nil
 }
+
+// BuildSetSetupTaskSelectionPayload builds the payload for the organizations
+// setSetupTaskSelection endpoint from CLI flags.
+func BuildSetSetupTaskSelectionPayload(organizationsSetSetupTaskSelectionBody string, organizationsSetSetupTaskSelectionSessionToken string) (*organizations.SetSetupTaskSelectionPayload, error) {
+	var err error
+	var body SetSetupTaskSelectionRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationsSetSetupTaskSelectionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"preset\": \"security\",\n      \"visible_task_keys\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.VisibleTaskKeys == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("visible_task_keys", "body"))
+		}
+		if body.Preset != nil {
+			if !(*body.Preset == "gateway" || *body.Preset == "security") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.preset", *body.Preset, []any{"gateway", "security"}))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsSetSetupTaskSelectionSessionToken != "" {
+			sessionToken = &organizationsSetSetupTaskSelectionSessionToken
+		}
+	}
+	v := &organizations.SetSetupTaskSelectionPayload{
+		Preset: body.Preset,
+	}
+	if body.VisibleTaskKeys != nil {
+		v.VisibleTaskKeys = make([]string, len(body.VisibleTaskKeys))
+		for i, val := range body.VisibleTaskKeys {
+			v.VisibleTaskKeys[i] = val
+		}
+	} else {
+		v.VisibleTaskKeys = []string{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}

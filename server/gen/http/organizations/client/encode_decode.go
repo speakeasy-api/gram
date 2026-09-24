@@ -3692,6 +3692,241 @@ func DecodeUpdateSetupTaskResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildSetSetupTaskSelectionRequest instantiates a HTTP request object with
+// method and path set to call the "organizations" service
+// "setSetupTaskSelection" endpoint
+func (c *Client) BuildSetSetupTaskSelectionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetSetupTaskSelectionOrganizationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "setSetupTaskSelection", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetSetupTaskSelectionRequest returns an encoder for requests sent to
+// the organizations setSetupTaskSelection server.
+func EncodeSetSetupTaskSelectionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.SetSetupTaskSelectionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "setSetupTaskSelection", "*organizations.SetSetupTaskSelectionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetSetupTaskSelectionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizations", "setSetupTaskSelection", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetSetupTaskSelectionResponse returns a decoder for responses returned
+// by the organizations setSetupTaskSelection endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeSetSetupTaskSelectionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetSetupTaskSelectionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetSetupTaskSelectionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+			}
+			err = ValidateSetSetupTaskSelectionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+			}
+			res := NewSetSetupTaskSelectionListSetupTasksResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetSetupTaskSelectionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+			}
+			err = ValidateSetSetupTaskSelectionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+			}
+			return nil, NewSetSetupTaskSelectionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetSetupTaskSelectionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+			}
+			err = ValidateSetSetupTaskSelectionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+			}
+			return nil, NewSetSetupTaskSelectionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetSetupTaskSelectionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+			}
+			err = ValidateSetSetupTaskSelectionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+			}
+			return nil, NewSetSetupTaskSelectionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetSetupTaskSelectionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+			}
+			err = ValidateSetSetupTaskSelectionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+			}
+			return nil, NewSetSetupTaskSelectionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetSetupTaskSelectionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+			}
+			err = ValidateSetSetupTaskSelectionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+			}
+			return nil, NewSetSetupTaskSelectionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetSetupTaskSelectionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+			}
+			err = ValidateSetSetupTaskSelectionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+			}
+			return nil, NewSetSetupTaskSelectionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetSetupTaskSelectionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+			}
+			err = ValidateSetSetupTaskSelectionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+			}
+			return nil, NewSetSetupTaskSelectionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetSetupTaskSelectionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+				}
+				err = ValidateSetSetupTaskSelectionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+				}
+				return nil, NewSetSetupTaskSelectionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetSetupTaskSelectionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+				}
+				err = ValidateSetSetupTaskSelectionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+				}
+				return nil, NewSetSetupTaskSelectionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "setSetupTaskSelection", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetSetupTaskSelectionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "setSetupTaskSelection", err)
+			}
+			err = ValidateSetSetupTaskSelectionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "setSetupTaskSelection", err)
+			}
+			return nil, NewSetSetupTaskSelectionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "setSetupTaskSelection", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalOrganizationInvitationResponseBodyToOrganizationsOrganizationInvitation
 // builds a value of type *organizations.OrganizationInvitation from a value of
 // type *OrganizationInvitationResponseBody.

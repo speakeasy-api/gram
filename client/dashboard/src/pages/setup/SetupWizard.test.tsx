@@ -16,7 +16,6 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   updatePending: false,
   invalidate: vi.fn(),
-  goToBoard: vi.fn(),
   showPylonChat: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
@@ -32,7 +31,7 @@ vi.mock("react-router", () => ({
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
-    setup: { goTo: mocks.goToBoard, href: () => "/org/setup" },
+    setup: { href: () => "/org/setup" },
   }),
 }));
 vi.mock("@/components/require-scope", () => ({
@@ -153,7 +152,6 @@ beforeEach(() => {
   mocks.setupQuery.mockReset().mockReturnValue(loaded());
   mocks.update.mockReset().mockResolvedValue(tasks[1]);
   mocks.invalidate.mockReset();
-  mocks.goToBoard.mockReset();
   mocks.showPylonChat.mockReset();
   mocks.toastSuccess.mockReset();
   mocks.toastError.mockReset();
@@ -174,7 +172,7 @@ describe("SetupWizard", () => {
     ).toBeTruthy();
   });
 
-  it("walks the board's default list, without hidden cards", () => {
+  it("walks the selected cards, without hidden ones", () => {
     render(<SetupWizard />);
 
     expect(mocks.setupQuery).toHaveBeenCalledWith("client", "org-one", false, {
@@ -286,7 +284,7 @@ describe("SetupWizard", () => {
     );
     expect(mocks.invalidate).toHaveBeenCalled();
     expect(mocks.toastSuccess).toHaveBeenCalled();
-    expect(mocks.goToBoard).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it("completes the last card and leaves for the dashboard", async () => {
@@ -413,13 +411,13 @@ describe("SetupWizard", () => {
     expect(mocks.setSearchParams).not.toHaveBeenCalled();
   });
 
-  it("points at the board when every card is hidden", () => {
+  it("leaves for the dashboard when no card is selected", () => {
     mocks.setupQuery.mockReturnValue(loaded([]));
     render(<SetupWizard />);
 
     expect(screen.getByText("Nothing to set up")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Setup board" }));
-    expect(mocks.goToBoard).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Go to dashboard" }));
+    expect(mocks.navigate).toHaveBeenCalledWith("/org");
   });
 
   it("offers a retry when the list fails to load", () => {

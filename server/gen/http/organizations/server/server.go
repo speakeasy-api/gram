@@ -35,6 +35,7 @@ type Server struct {
 	GenerateWorkOSAdminPortalLink      http.Handler
 	ListSetupTasks                     http.Handler
 	UpdateSetupTask                    http.Handler
+	SetSetupTaskSelection              http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -80,6 +81,7 @@ func New(
 			{"GenerateWorkOSAdminPortalLink", "POST", "/rpc/organizations.generateWorkOSAdminPortalLink"},
 			{"ListSetupTasks", "GET", "/rpc/organizations.listSetupTasks"},
 			{"UpdateSetupTask", "POST", "/rpc/organizations.updateSetupTask"},
+			{"SetSetupTaskSelection", "POST", "/rpc/organizations.setSetupTaskSelection"},
 		},
 		Get:                                NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
 		SendInvite:                         NewSendInviteHandler(e.SendInvite, mux, decoder, encoder, errhandler, formatter),
@@ -97,6 +99,7 @@ func New(
 		GenerateWorkOSAdminPortalLink:      NewGenerateWorkOSAdminPortalLinkHandler(e.GenerateWorkOSAdminPortalLink, mux, decoder, encoder, errhandler, formatter),
 		ListSetupTasks:                     NewListSetupTasksHandler(e.ListSetupTasks, mux, decoder, encoder, errhandler, formatter),
 		UpdateSetupTask:                    NewUpdateSetupTaskHandler(e.UpdateSetupTask, mux, decoder, encoder, errhandler, formatter),
+		SetSetupTaskSelection:              NewSetSetupTaskSelectionHandler(e.SetSetupTaskSelection, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -121,6 +124,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GenerateWorkOSAdminPortalLink = m(s.GenerateWorkOSAdminPortalLink)
 	s.ListSetupTasks = m(s.ListSetupTasks)
 	s.UpdateSetupTask = m(s.UpdateSetupTask)
+	s.SetSetupTaskSelection = m(s.SetSetupTaskSelection)
 }
 
 // MethodNames returns the methods served.
@@ -144,6 +148,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGenerateWorkOSAdminPortalLinkHandler(mux, h.GenerateWorkOSAdminPortalLink)
 	MountListSetupTasksHandler(mux, h.ListSetupTasks)
 	MountUpdateSetupTaskHandler(mux, h.UpdateSetupTask)
+	MountSetSetupTaskSelectionHandler(mux, h.SetSetupTaskSelection)
 }
 
 // Mount configures the mux to serve the organizations endpoints.
@@ -979,6 +984,60 @@ func NewUpdateSetupTaskHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateSetupTask")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetSetupTaskSelectionHandler configures the mux to serve the
+// "organizations" service "setSetupTaskSelection" endpoint.
+func MountSetSetupTaskSelectionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizations.setSetupTaskSelection", f)
+}
+
+// NewSetSetupTaskSelectionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizations" service "setSetupTaskSelection"
+// endpoint.
+func NewSetSetupTaskSelectionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetSetupTaskSelectionRequest(mux, decoder)
+		encodeResponse = EncodeSetSetupTaskSelectionResponse(encoder)
+		encodeError    = EncodeSetSetupTaskSelectionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setSetupTaskSelection")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
 		payload, err := decodeRequest(r)
 		if err != nil {

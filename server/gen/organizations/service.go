@@ -59,6 +59,9 @@ type Service interface {
 	// update: status, assignee, hidden, or clear_assignee=true. Assignee is
 	// mutually exclusive with clear_assignee=true.
 	UpdateSetupTask(context.Context, *UpdateSetupTaskPayload) (res *SetupTask, err error)
+	// Replace which setup tasks the organization sees in the setup wizard. Tasks
+	// left out are hidden; progress and assignments are kept.
+	SetSetupTaskSelection(context.Context, *SetSetupTaskSelectionPayload) (res *ListSetupTasksResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -81,7 +84,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask"}
+var MethodNames = [17]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask", "setSetupTaskSelection"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -328,6 +331,16 @@ type SendInvitePayload struct {
 	Email string
 	// Optional role ID for the invitee.
 	RoleID       *string
+	SessionToken *string
+}
+
+// SetSetupTaskSelectionPayload is the payload type of the organizations
+// service setSetupTaskSelection method.
+type SetSetupTaskSelectionPayload struct {
+	// Complete explicit selection; an empty array selects no tasks.
+	VisibleTaskKeys []string
+	// Omit to preserve the saved preset.
+	Preset       *string
 	SessionToken *string
 }
 

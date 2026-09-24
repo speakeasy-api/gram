@@ -32,6 +32,7 @@ type Endpoints struct {
 	GenerateWorkOSAdminPortalLink      goa.Endpoint
 	ListSetupTasks                     goa.Endpoint
 	UpdateSetupTask                    goa.Endpoint
+	SetSetupTaskSelection              goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "organizations" service with endpoints.
@@ -55,6 +56,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GenerateWorkOSAdminPortalLink:      NewGenerateWorkOSAdminPortalLinkEndpoint(s, a.APIKeyAuth),
 		ListSetupTasks:                     NewListSetupTasksEndpoint(s, a.APIKeyAuth),
 		UpdateSetupTask:                    NewUpdateSetupTaskEndpoint(s, a.APIKeyAuth),
+		SetSetupTaskSelection:              NewSetSetupTaskSelectionEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -77,6 +79,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GenerateWorkOSAdminPortalLink = m(e.GenerateWorkOSAdminPortalLink)
 	e.ListSetupTasks = m(e.ListSetupTasks)
 	e.UpdateSetupTask = m(e.UpdateSetupTask)
+	e.SetSetupTaskSelection = m(e.SetSetupTaskSelection)
 }
 
 // NewGetEndpoint returns an endpoint function that calls the method "get" of
@@ -445,5 +448,28 @@ func NewUpdateSetupTaskEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.UpdateSetupTask(ctx, p)
+	}
+}
+
+// NewSetSetupTaskSelectionEndpoint returns an endpoint function that calls the
+// method "setSetupTaskSelection" of service "organizations".
+func NewSetSetupTaskSelectionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetSetupTaskSelectionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetSetupTaskSelection(ctx, p)
 	}
 }

@@ -73,6 +73,15 @@ type UpdateSetupTaskRequestBody struct {
 	Hidden *bool `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
 }
 
+// SetSetupTaskSelectionRequestBody is the type of the "organizations" service
+// "setSetupTaskSelection" endpoint HTTP request body.
+type SetSetupTaskSelectionRequestBody struct {
+	// Complete explicit selection; an empty array selects no tasks.
+	VisibleTaskKeys []string `form:"visible_task_keys" json:"visible_task_keys" xml:"visible_task_keys"`
+	// Omit to preserve the saved preset.
+	Preset *string `form:"preset,omitempty" json:"preset,omitempty" xml:"preset,omitempty"`
+}
+
 // GetResponseBody is the type of the "organizations" service "get" endpoint
 // HTTP response body.
 type GetResponseBody struct {
@@ -236,6 +245,13 @@ type UpdateSetupTaskResponseBody struct {
 	BlockedBy []string `form:"blocked_by,omitempty" json:"blocked_by,omitempty" xml:"blocked_by,omitempty"`
 	// Whether a platform administrator hid the task.
 	Hidden *bool `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
+}
+
+// SetSetupTaskSelectionResponseBody is the type of the "organizations" service
+// "setSetupTaskSelection" endpoint HTTP response body.
+type SetSetupTaskSelectionResponseBody struct {
+	// Setup tasks in catalog order.
+	Tasks []*SetupTaskResponseBody `form:"tasks,omitempty" json:"tasks,omitempty" xml:"tasks,omitempty"`
 }
 
 // GetUnauthorizedResponseBody is the type of the "organizations" service "get"
@@ -3236,6 +3252,196 @@ type UpdateSetupTaskGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SetSetupTaskSelectionUnauthorizedResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetSetupTaskSelectionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupTaskSelectionForbiddenResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "forbidden" error.
+type SetSetupTaskSelectionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupTaskSelectionBadRequestResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "bad_request" error.
+type SetSetupTaskSelectionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupTaskSelectionNotFoundResponseBody is the type of the "organizations"
+// service "setSetupTaskSelection" endpoint HTTP response body for the
+// "not_found" error.
+type SetSetupTaskSelectionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupTaskSelectionConflictResponseBody is the type of the "organizations"
+// service "setSetupTaskSelection" endpoint HTTP response body for the
+// "conflict" error.
+type SetSetupTaskSelectionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupTaskSelectionUnsupportedMediaResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetSetupTaskSelectionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupTaskSelectionInvalidResponseBody is the type of the "organizations"
+// service "setSetupTaskSelection" endpoint HTTP response body for the
+// "invalid" error.
+type SetSetupTaskSelectionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupTaskSelectionInvariantViolationResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetSetupTaskSelectionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupTaskSelectionUnexpectedResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "unexpected" error.
+type SetSetupTaskSelectionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetSetupTaskSelectionGatewayErrorResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetSetupTaskSelectionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // OrganizationInvitationResponseBody is used to define fields on response body
 // types.
 type OrganizationInvitationResponseBody struct {
@@ -3442,6 +3648,24 @@ func NewUpdateSetupTaskRequestBody(p *organizations.UpdateSetupTaskPayload) *Upd
 	}
 	if p.Assignee != nil {
 		body.Assignee = marshalOrganizationsSetupTaskAssigneeInputToSetupTaskAssigneeInputRequestBody(p.Assignee)
+	}
+	return body
+}
+
+// NewSetSetupTaskSelectionRequestBody builds the HTTP request body from the
+// payload of the "setSetupTaskSelection" endpoint of the "organizations"
+// service.
+func NewSetSetupTaskSelectionRequestBody(p *organizations.SetSetupTaskSelectionPayload) *SetSetupTaskSelectionRequestBody {
+	body := &SetSetupTaskSelectionRequestBody{
+		Preset: p.Preset,
+	}
+	if p.VisibleTaskKeys != nil {
+		body.VisibleTaskKeys = make([]string, len(p.VisibleTaskKeys))
+		for i, val := range p.VisibleTaskKeys {
+			body.VisibleTaskKeys[i] = val
+		}
+	} else {
+		body.VisibleTaskKeys = []string{}
 	}
 	return body
 }
@@ -6036,6 +6260,172 @@ func NewUpdateSetupTaskGatewayError(body *UpdateSetupTaskGatewayErrorResponseBod
 	return v
 }
 
+// NewSetSetupTaskSelectionListSetupTasksResultOK builds a "organizations"
+// service "setSetupTaskSelection" endpoint result from a HTTP "OK" response.
+func NewSetSetupTaskSelectionListSetupTasksResultOK(body *SetSetupTaskSelectionResponseBody) *organizations.ListSetupTasksResult {
+	v := &organizations.ListSetupTasksResult{}
+	v.Tasks = make([]*organizations.SetupTask, len(body.Tasks))
+	for i, val := range body.Tasks {
+		if val == nil {
+			v.Tasks[i] = nil
+			continue
+		}
+		v.Tasks[i] = unmarshalSetupTaskResponseBodyToOrganizationsSetupTask(val)
+	}
+
+	return v
+}
+
+// NewSetSetupTaskSelectionUnauthorized builds a organizations service
+// setSetupTaskSelection endpoint unauthorized error.
+func NewSetSetupTaskSelectionUnauthorized(body *SetSetupTaskSelectionUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupTaskSelectionForbidden builds a organizations service
+// setSetupTaskSelection endpoint forbidden error.
+func NewSetSetupTaskSelectionForbidden(body *SetSetupTaskSelectionForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupTaskSelectionBadRequest builds a organizations service
+// setSetupTaskSelection endpoint bad_request error.
+func NewSetSetupTaskSelectionBadRequest(body *SetSetupTaskSelectionBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupTaskSelectionNotFound builds a organizations service
+// setSetupTaskSelection endpoint not_found error.
+func NewSetSetupTaskSelectionNotFound(body *SetSetupTaskSelectionNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupTaskSelectionConflict builds a organizations service
+// setSetupTaskSelection endpoint conflict error.
+func NewSetSetupTaskSelectionConflict(body *SetSetupTaskSelectionConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupTaskSelectionUnsupportedMedia builds a organizations service
+// setSetupTaskSelection endpoint unsupported_media error.
+func NewSetSetupTaskSelectionUnsupportedMedia(body *SetSetupTaskSelectionUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupTaskSelectionInvalid builds a organizations service
+// setSetupTaskSelection endpoint invalid error.
+func NewSetSetupTaskSelectionInvalid(body *SetSetupTaskSelectionInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupTaskSelectionInvariantViolation builds a organizations service
+// setSetupTaskSelection endpoint invariant_violation error.
+func NewSetSetupTaskSelectionInvariantViolation(body *SetSetupTaskSelectionInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupTaskSelectionUnexpected builds a organizations service
+// setSetupTaskSelection endpoint unexpected error.
+func NewSetSetupTaskSelectionUnexpected(body *SetSetupTaskSelectionUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetSetupTaskSelectionGatewayError builds a organizations service
+// setSetupTaskSelection endpoint gateway_error error.
+func NewSetSetupTaskSelectionGatewayError(body *SetSetupTaskSelectionGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetResponseBody runs the validations defined on GetResponseBody
 func ValidateGetResponseBody(body *GetResponseBody) (err error) {
 	if body.ID == nil {
@@ -6314,6 +6704,22 @@ func ValidateUpdateSetupTaskResponseBody(body *UpdateSetupTaskResponseBody) (err
 	if body.Assignee != nil {
 		if err2 := ValidateSetupTaskAssigneeResponseBody(body.Assignee); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateSetSetupTaskSelectionResponseBody runs the validations defined on
+// SetSetupTaskSelectionResponseBody
+func ValidateSetSetupTaskSelectionResponseBody(body *SetSetupTaskSelectionResponseBody) (err error) {
+	if body.Tasks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tasks", "body"))
+	}
+	for _, e := range body.Tasks {
+		if e != nil {
+			if err2 := ValidateSetupTaskResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	return
@@ -10155,6 +10561,247 @@ func ValidateUpdateSetupTaskUnexpectedResponseBody(body *UpdateSetupTaskUnexpect
 // ValidateUpdateSetupTaskGatewayErrorResponseBody runs the validations defined
 // on updateSetupTask_gateway_error_response_body
 func ValidateUpdateSetupTaskGatewayErrorResponseBody(body *UpdateSetupTaskGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupTaskSelectionUnauthorizedResponseBody runs the validations
+// defined on setSetupTaskSelection_unauthorized_response_body
+func ValidateSetSetupTaskSelectionUnauthorizedResponseBody(body *SetSetupTaskSelectionUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupTaskSelectionForbiddenResponseBody runs the validations
+// defined on setSetupTaskSelection_forbidden_response_body
+func ValidateSetSetupTaskSelectionForbiddenResponseBody(body *SetSetupTaskSelectionForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupTaskSelectionBadRequestResponseBody runs the validations
+// defined on setSetupTaskSelection_bad_request_response_body
+func ValidateSetSetupTaskSelectionBadRequestResponseBody(body *SetSetupTaskSelectionBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupTaskSelectionNotFoundResponseBody runs the validations
+// defined on setSetupTaskSelection_not_found_response_body
+func ValidateSetSetupTaskSelectionNotFoundResponseBody(body *SetSetupTaskSelectionNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupTaskSelectionConflictResponseBody runs the validations
+// defined on setSetupTaskSelection_conflict_response_body
+func ValidateSetSetupTaskSelectionConflictResponseBody(body *SetSetupTaskSelectionConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupTaskSelectionUnsupportedMediaResponseBody runs the
+// validations defined on setSetupTaskSelection_unsupported_media_response_body
+func ValidateSetSetupTaskSelectionUnsupportedMediaResponseBody(body *SetSetupTaskSelectionUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupTaskSelectionInvalidResponseBody runs the validations
+// defined on setSetupTaskSelection_invalid_response_body
+func ValidateSetSetupTaskSelectionInvalidResponseBody(body *SetSetupTaskSelectionInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupTaskSelectionInvariantViolationResponseBody runs the
+// validations defined on
+// setSetupTaskSelection_invariant_violation_response_body
+func ValidateSetSetupTaskSelectionInvariantViolationResponseBody(body *SetSetupTaskSelectionInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupTaskSelectionUnexpectedResponseBody runs the validations
+// defined on setSetupTaskSelection_unexpected_response_body
+func ValidateSetSetupTaskSelectionUnexpectedResponseBody(body *SetSetupTaskSelectionUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetSetupTaskSelectionGatewayErrorResponseBody runs the validations
+// defined on setSetupTaskSelection_gateway_error_response_body
+func ValidateSetSetupTaskSelectionGatewayErrorResponseBody(body *SetSetupTaskSelectionGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

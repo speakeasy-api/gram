@@ -154,12 +154,12 @@ export function ConnectIdpStep({
         {needsDomain && (
           <p className="text-muted-foreground text-sm">
             Verify a domain first.{" "}
-            <orgRoutes.setupTask.Link
-              params={[setupTaskSlug("domain-verification")]}
+            <orgRoutes.setup.Link
+              queryParams={{ task: setupTaskSlug("domain-verification") }}
               className="text-foreground underline underline-offset-2"
             >
               Go to domain verification
-            </orgRoutes.setupTask.Link>
+            </orgRoutes.setup.Link>
           </p>
         )}
         <div>

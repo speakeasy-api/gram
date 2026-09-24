@@ -70,6 +70,15 @@ type UpdateSetupTaskRequestBody struct {
 	Hidden *bool `form:"hidden,omitempty" json:"hidden,omitempty" xml:"hidden,omitempty"`
 }
 
+// SetSetupTaskSelectionRequestBody is the type of the "organizations" service
+// "setSetupTaskSelection" endpoint HTTP request body.
+type SetSetupTaskSelectionRequestBody struct {
+	// Complete explicit selection; an empty array selects no tasks.
+	VisibleTaskKeys []string `form:"visible_task_keys,omitempty" json:"visible_task_keys,omitempty" xml:"visible_task_keys,omitempty"`
+	// Omit to preserve the saved preset.
+	Preset *string `form:"preset,omitempty" json:"preset,omitempty" xml:"preset,omitempty"`
+}
+
 // GetResponseBody is the type of the "organizations" service "get" endpoint
 // HTTP response body.
 type GetResponseBody struct {
@@ -233,6 +242,13 @@ type UpdateSetupTaskResponseBody struct {
 	BlockedBy []string `form:"blocked_by" json:"blocked_by" xml:"blocked_by"`
 	// Whether a platform administrator hid the task.
 	Hidden bool `form:"hidden" json:"hidden" xml:"hidden"`
+}
+
+// SetSetupTaskSelectionResponseBody is the type of the "organizations" service
+// "setSetupTaskSelection" endpoint HTTP response body.
+type SetSetupTaskSelectionResponseBody struct {
+	// Setup tasks in catalog order.
+	Tasks []*SetupTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
 }
 
 // GetUnauthorizedResponseBody is the type of the "organizations" service "get"
@@ -3233,6 +3249,196 @@ type UpdateSetupTaskGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetSetupTaskSelectionUnauthorizedResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetSetupTaskSelectionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupTaskSelectionForbiddenResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "forbidden" error.
+type SetSetupTaskSelectionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupTaskSelectionBadRequestResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "bad_request" error.
+type SetSetupTaskSelectionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupTaskSelectionNotFoundResponseBody is the type of the "organizations"
+// service "setSetupTaskSelection" endpoint HTTP response body for the
+// "not_found" error.
+type SetSetupTaskSelectionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupTaskSelectionConflictResponseBody is the type of the "organizations"
+// service "setSetupTaskSelection" endpoint HTTP response body for the
+// "conflict" error.
+type SetSetupTaskSelectionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupTaskSelectionUnsupportedMediaResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetSetupTaskSelectionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupTaskSelectionInvalidResponseBody is the type of the "organizations"
+// service "setSetupTaskSelection" endpoint HTTP response body for the
+// "invalid" error.
+type SetSetupTaskSelectionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupTaskSelectionInvariantViolationResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetSetupTaskSelectionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupTaskSelectionUnexpectedResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "unexpected" error.
+type SetSetupTaskSelectionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetSetupTaskSelectionGatewayErrorResponseBody is the type of the
+// "organizations" service "setSetupTaskSelection" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetSetupTaskSelectionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // OrganizationInvitationResponseBody is used to define fields on response body
 // types.
 type OrganizationInvitationResponseBody struct {
@@ -3574,6 +3780,26 @@ func NewUpdateSetupTaskResponseBody(res *organizations.SetupTask) *UpdateSetupTa
 		}
 	} else {
 		body.BlockedBy = []string{}
+	}
+	return body
+}
+
+// NewSetSetupTaskSelectionResponseBody builds the HTTP response body from the
+// result of the "setSetupTaskSelection" endpoint of the "organizations"
+// service.
+func NewSetSetupTaskSelectionResponseBody(res *organizations.ListSetupTasksResult) *SetSetupTaskSelectionResponseBody {
+	body := &SetSetupTaskSelectionResponseBody{}
+	if res.Tasks != nil {
+		body.Tasks = make([]*SetupTaskResponseBody, len(res.Tasks))
+		for i, val := range res.Tasks {
+			if val == nil {
+				body.Tasks[i] = nil
+				continue
+			}
+			body.Tasks[i] = marshalOrganizationsSetupTaskToSetupTaskResponseBody(val)
+		}
+	} else {
+		body.Tasks = []*SetupTaskResponseBody{}
 	}
 	return body
 }
@@ -5886,6 +6112,156 @@ func NewUpdateSetupTaskGatewayErrorResponseBody(res *goa.ServiceError) *UpdateSe
 	return body
 }
 
+// NewSetSetupTaskSelectionUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "setSetupTaskSelection" endpoint of the
+// "organizations" service.
+func NewSetSetupTaskSelectionUnauthorizedResponseBody(res *goa.ServiceError) *SetSetupTaskSelectionUnauthorizedResponseBody {
+	body := &SetSetupTaskSelectionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupTaskSelectionForbiddenResponseBody builds the HTTP response body
+// from the result of the "setSetupTaskSelection" endpoint of the
+// "organizations" service.
+func NewSetSetupTaskSelectionForbiddenResponseBody(res *goa.ServiceError) *SetSetupTaskSelectionForbiddenResponseBody {
+	body := &SetSetupTaskSelectionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupTaskSelectionBadRequestResponseBody builds the HTTP response body
+// from the result of the "setSetupTaskSelection" endpoint of the
+// "organizations" service.
+func NewSetSetupTaskSelectionBadRequestResponseBody(res *goa.ServiceError) *SetSetupTaskSelectionBadRequestResponseBody {
+	body := &SetSetupTaskSelectionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupTaskSelectionNotFoundResponseBody builds the HTTP response body
+// from the result of the "setSetupTaskSelection" endpoint of the
+// "organizations" service.
+func NewSetSetupTaskSelectionNotFoundResponseBody(res *goa.ServiceError) *SetSetupTaskSelectionNotFoundResponseBody {
+	body := &SetSetupTaskSelectionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupTaskSelectionConflictResponseBody builds the HTTP response body
+// from the result of the "setSetupTaskSelection" endpoint of the
+// "organizations" service.
+func NewSetSetupTaskSelectionConflictResponseBody(res *goa.ServiceError) *SetSetupTaskSelectionConflictResponseBody {
+	body := &SetSetupTaskSelectionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupTaskSelectionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setSetupTaskSelection" endpoint of the
+// "organizations" service.
+func NewSetSetupTaskSelectionUnsupportedMediaResponseBody(res *goa.ServiceError) *SetSetupTaskSelectionUnsupportedMediaResponseBody {
+	body := &SetSetupTaskSelectionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupTaskSelectionInvalidResponseBody builds the HTTP response body
+// from the result of the "setSetupTaskSelection" endpoint of the
+// "organizations" service.
+func NewSetSetupTaskSelectionInvalidResponseBody(res *goa.ServiceError) *SetSetupTaskSelectionInvalidResponseBody {
+	body := &SetSetupTaskSelectionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupTaskSelectionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setSetupTaskSelection" endpoint of the
+// "organizations" service.
+func NewSetSetupTaskSelectionInvariantViolationResponseBody(res *goa.ServiceError) *SetSetupTaskSelectionInvariantViolationResponseBody {
+	body := &SetSetupTaskSelectionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupTaskSelectionUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setSetupTaskSelection" endpoint of the
+// "organizations" service.
+func NewSetSetupTaskSelectionUnexpectedResponseBody(res *goa.ServiceError) *SetSetupTaskSelectionUnexpectedResponseBody {
+	body := &SetSetupTaskSelectionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetSetupTaskSelectionGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "setSetupTaskSelection" endpoint of the
+// "organizations" service.
+func NewSetSetupTaskSelectionGatewayErrorResponseBody(res *goa.ServiceError) *SetSetupTaskSelectionGatewayErrorResponseBody {
+	body := &SetSetupTaskSelectionGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetPayload builds a organizations service get endpoint payload.
 func NewGetPayload(sessionToken *string) *organizations.GetPayload {
 	v := &organizations.GetPayload{}
@@ -6064,6 +6440,21 @@ func NewUpdateSetupTaskPayload(body *UpdateSetupTaskRequestBody, sessionToken *s
 	return v
 }
 
+// NewSetSetupTaskSelectionPayload builds a organizations service
+// setSetupTaskSelection endpoint payload.
+func NewSetSetupTaskSelectionPayload(body *SetSetupTaskSelectionRequestBody, sessionToken *string) *organizations.SetSetupTaskSelectionPayload {
+	v := &organizations.SetSetupTaskSelectionPayload{
+		Preset: body.Preset,
+	}
+	v.VisibleTaskKeys = make([]string, len(body.VisibleTaskKeys))
+	for i, val := range body.VisibleTaskKeys {
+		v.VisibleTaskKeys[i] = val
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // ValidateSendInviteRequestBody runs the validations defined on
 // SendInviteRequestBody
 func ValidateSendInviteRequestBody(body *SendInviteRequestBody) (err error) {
@@ -6134,6 +6525,20 @@ func ValidateUpdateSetupTaskRequestBody(body *UpdateSetupTaskRequestBody) (err e
 	if body.Assignee != nil {
 		if err2 := ValidateSetupTaskAssigneeInputRequestBody(body.Assignee); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateSetSetupTaskSelectionRequestBody runs the validations defined on
+// SetSetupTaskSelectionRequestBody
+func ValidateSetSetupTaskSelectionRequestBody(body *SetSetupTaskSelectionRequestBody) (err error) {
+	if body.VisibleTaskKeys == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("visible_task_keys", "body"))
+	}
+	if body.Preset != nil {
+		if !(*body.Preset == "gateway" || *body.Preset == "security") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.preset", *body.Preset, []any{"gateway", "security"}))
 		}
 	}
 	return

@@ -15,6 +15,7 @@ import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
 import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js";
 import { organizationsSendEnterpriseAdminOnboardingEmail } from "../funcs/organizationsSendEnterpriseAdminOnboardingEmail.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
+import { organizationsSetSetupTaskSelection } from "../funcs/organizationsSetSetupTaskSelection.js";
 import { organizationsUpdateInviteRole } from "../funcs/organizationsUpdateInviteRole.js";
 import { organizationsUpdateSetupTask } from "../funcs/organizationsUpdateSetupTask.js";
 import { organizationsVerifyOnboardingHooksSetup } from "../funcs/organizationsVerifyOnboardingHooksSetup.js";
@@ -82,6 +83,10 @@ import {
   SendInviteRequest,
   SendInviteSecurity,
 } from "../models/operations/sendinvite.js";
+import {
+  SetSetupTaskSelectionRequest,
+  SetSetupTaskSelectionSecurity,
+} from "../models/operations/setsetuptaskselection.js";
 import {
   UpdateInviteRoleRequest,
   UpdateInviteRoleSecurity,
@@ -337,6 +342,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<OrganizationInvitation> {
     return unwrapAsync(organizationsSendInvite(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setSetupTaskSelection organizations
+   *
+   * @remarks
+   * Replace which setup tasks the organization sees in the setup wizard. Tasks left out are hidden; progress and assignments are kept.
+   */
+  async setSetupTaskSelection(
+    request: SetSetupTaskSelectionRequest,
+    security?: SetSetupTaskSelectionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSetupTasksResult> {
+    return unwrapAsync(organizationsSetSetupTaskSelection(
       this,
       request,
       security,
