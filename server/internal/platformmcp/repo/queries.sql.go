@@ -5249,53 +5249,62 @@ func (q *Queries) ListPlatformMCPInventoryAuthorizationCandidates(ctx context.Co
 	return items, nil
 }
 
-const listPlatformMCPInventoryDistributions = `-- name: ListPlatformMCPInventoryDistributions :many
+const listPlatformMCPInventoryPluginMemberships = `-- name: ListPlatformMCPInventoryPluginMemberships :many
 SELECT
-    distribution.registration_id,
-    COALESCE(distribution.plugin_id, distribution.default_plugin_id) AS plugin_id,
+    plugin_server.mcp_server_id,
+    plugin.id AS plugin_id,
+    plugin.name AS plugin_name,
+    plugin.slug AS plugin_slug,
     distribution.state,
     distribution.publication_state
-FROM platform_mcp_distributions AS distribution
-JOIN projects AS project
-  ON project.id = distribution.project_id
- AND project.organization_id = distribution.organization_id
- AND project.deleted IS FALSE
-JOIN platform_mcp_catalog_registrations AS registration
-  ON registration.id = distribution.registration_id
- AND registration.organization_id = distribution.organization_id
- AND registration.project_id = distribution.project_id
- AND registration.deleted IS FALSE
-WHERE distribution.organization_id = $1
-  AND ($2::uuid IS NULL OR distribution.project_id = $2::uuid)
-  AND distribution.registration_id = ANY($3::uuid[])
-ORDER BY distribution.registration_id, distribution.id ASC
+FROM plugin_servers AS plugin_server
+JOIN plugins AS plugin
+  ON plugin.id = plugin_server.plugin_id
+ AND plugin.deleted IS FALSE
+LEFT JOIN platform_mcp_distributions AS distribution
+  ON distribution.plugin_server_id = plugin_server.id
+ AND distribution.organization_id = plugin.organization_id
+ AND distribution.project_id = plugin.project_id
+WHERE plugin_server.deleted IS FALSE
+  AND plugin_server.mcp_server_id = ANY($1::uuid[])
+  AND plugin.organization_id = $2
+  AND ($3::uuid IS NULL OR plugin.project_id = $3::uuid)
+ORDER BY plugin_server.mcp_server_id, plugin_server.id ASC
 `
 
-type ListPlatformMCPInventoryDistributionsParams struct {
-	OrganizationID  string
-	ProjectID       uuid.NullUUID
-	RegistrationIds []uuid.UUID
+type ListPlatformMCPInventoryPluginMembershipsParams struct {
+	McpServerIds   []uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
 }
 
-type ListPlatformMCPInventoryDistributionsRow struct {
-	RegistrationID   uuid.UUID
+type ListPlatformMCPInventoryPluginMembershipsRow struct {
+	McpServerID      uuid.NullUUID
 	PluginID         uuid.UUID
-	State            string
-	PublicationState string
+	PluginName       string
+	PluginSlug       string
+	State            pgtype.Text
+	PublicationState pgtype.Text
 }
 
-func (q *Queries) ListPlatformMCPInventoryDistributions(ctx context.Context, arg ListPlatformMCPInventoryDistributionsParams) ([]ListPlatformMCPInventoryDistributionsRow, error) {
-	rows, err := q.db.Query(ctx, listPlatformMCPInventoryDistributions, arg.OrganizationID, arg.ProjectID, arg.RegistrationIds)
+// plugin_servers is the attachment authority, so plugin membership is read from
+// it and keyed by MCP server. platform_mcp_distributions only records the
+// lifecycle of memberships this flow created, so it joins in for state and
+// leaves a dashboard-created membership with no lifecycle of its own.
+func (q *Queries) ListPlatformMCPInventoryPluginMemberships(ctx context.Context, arg ListPlatformMCPInventoryPluginMembershipsParams) ([]ListPlatformMCPInventoryPluginMembershipsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPInventoryPluginMemberships, arg.McpServerIds, arg.OrganizationID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListPlatformMCPInventoryDistributionsRow
+	var items []ListPlatformMCPInventoryPluginMembershipsRow
 	for rows.Next() {
-		var i ListPlatformMCPInventoryDistributionsRow
+		var i ListPlatformMCPInventoryPluginMembershipsRow
 		if err := rows.Scan(
-			&i.RegistrationID,
+			&i.McpServerID,
 			&i.PluginID,
+			&i.PluginName,
+			&i.PluginSlug,
 			&i.State,
 			&i.PublicationState,
 		); err != nil {

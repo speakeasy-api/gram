@@ -109,9 +109,25 @@ type MCPReadiness struct {
 }
 
 type MCPDistribution struct {
-	PluginID         string `json:"plugin_id"`
-	State            string `json:"state"`
-	PublicationState string `json:"publication_state"`
+	// PluginID identifies the plugin carrying this MCP.
+	PluginID string `json:"plugin_id"`
+
+	// PluginName is the plugin's display name, so naming the plugin needs no
+	// separate list_plugins call.
+	PluginName string `json:"plugin_name"`
+
+	// PluginSlug is the plugin's stable slug, the value to pass back to a tool
+	// that takes a plugin by slug.
+	PluginSlug string `json:"plugin_slug"`
+
+	// State is the lifecycle state of a membership this flow created. It is
+	// empty for a membership created elsewhere, which has no lifecycle record;
+	// empty means unknown, never "not attached".
+	State string `json:"state,omitempty"`
+
+	// PublicationState reports whether that membership has been published. It
+	// is empty on the same terms as State, and empty never means "unpublished".
+	PublicationState string `json:"publication_state,omitempty"`
 }
 
 type MCP struct {
