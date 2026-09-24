@@ -738,6 +738,19 @@ const (
 	TelemetryCHRowCountKey         = attribute.Key("gram.telemetry.ch.row_count")
 	InferenceInputCountKey         = attribute.Key("gram.inference.input_count")
 	InferenceAcceptedMessagesKey   = attribute.Key("gram.inference.accepted_messages")
+
+	// InferenceContentBlockTypeKey is the type of a content block an
+	// inference hook delivery carried. On a metric it is restricted to a
+	// fixed set of block types; the log line carries the provider's value.
+	InferenceContentBlockTypeKey = attribute.Key("gram.inference.content_block_type")
+
+	// InferenceContentBlockSkipReasonKey is why a content block produced no
+	// input for policy scanning.
+	InferenceContentBlockSkipReasonKey = attribute.Key("gram.inference.content_block_skip_reason")
+
+	// InferenceUnscannedBlockCountKey is how many content blocks of one type
+	// and skip reason a single delivery left unscanned.
+	InferenceUnscannedBlockCountKey = attribute.Key("gram.inference.unscanned_block_count")
 	// TelemetryLogIDKey carries the telemetry_logs row id on records relayed
 	// to a customer OTLP destination. Delivery is at-least-once, so this is
 	// the key a destination dedupes redeliveries on.
@@ -3148,4 +3161,24 @@ func SlogInferenceInputCount(v int) slog.Attr {
 
 func SlogInferenceAcceptedMessages(v int) slog.Attr {
 	return slog.Int(string(InferenceAcceptedMessagesKey), v)
+}
+
+func InferenceContentBlockType(v string) attribute.KeyValue {
+	return InferenceContentBlockTypeKey.String(v)
+}
+
+func SlogInferenceContentBlockType(v string) slog.Attr {
+	return slog.String(string(InferenceContentBlockTypeKey), v)
+}
+
+func InferenceContentBlockSkipReason(v string) attribute.KeyValue {
+	return InferenceContentBlockSkipReasonKey.String(v)
+}
+
+func SlogInferenceContentBlockSkipReason(v string) slog.Attr {
+	return slog.String(string(InferenceContentBlockSkipReasonKey), v)
+}
+
+func SlogInferenceUnscannedBlockCount(v int) slog.Attr {
+	return slog.Int(string(InferenceUnscannedBlockCountKey), v)
 }

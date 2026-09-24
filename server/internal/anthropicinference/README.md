@@ -142,6 +142,18 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   and current turn are evaluated against current policies. Unknown event types allow after signature and tenant validation;
   unknown fields, source values, and content block types are tolerated.
 
+## Scanning coverage
+
+Only `text`, `attachment`, `tool_use`, and `tool_result` blocks produce policy
+inputs. Every other block type is archived but scanned by nothing, and so is a
+decoded block that carries neither text nor a tool name. Each delivery counts
+those blocks on `risk.enforcement.inference.unscanned_content_blocks`, by block
+type and skip reason, and logs one `inference content block not scanned` line
+per type it skipped. Block content reaches neither surface, and history an
+accepted checkpoint covers is not counted again. The dashboard, the tag values,
+and how to name a type counted as `other` are in
+`docs/runbooks/inference-hook-coverage-monitors.md`.
+
 Configure a 10-second verdict timeout and select block-on-failure in Anthropic if
 network failures must not allow inference. Long transcripts
 or conservative rescans that cannot complete within the nine-second budget
