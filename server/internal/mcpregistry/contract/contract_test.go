@@ -8,6 +8,7 @@ import (
 
 func TestRecordContract(t *testing.T) {
 	t.Parallel()
+
 	raw, err := os.ReadFile("testdata/contract-cases.json")
 	if err != nil {
 		t.Fatal(err)
@@ -27,6 +28,7 @@ func TestRecordContract(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
+
 			value, err := decode(c.Record)
 			if err != nil {
 				t.Fatal(err)
@@ -37,8 +39,10 @@ func TestRecordContract(t *testing.T) {
 		})
 	}
 }
+
 func TestNumberPrecision(t *testing.T) {
 	t.Parallel()
+
 	value, err := decode([]byte(`{"server":{"name":"io.example/fixture","description":"Fixture","version":"1"},"extension":9007199254740993}`))
 	if err != nil {
 		t.Fatal(err)
