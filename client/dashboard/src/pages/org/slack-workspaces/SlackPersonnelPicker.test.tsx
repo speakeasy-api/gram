@@ -160,6 +160,17 @@ it("does nothing when the current person is picked again", () => {
   fireEvent.change(picker(), { target: { value: "user_synthetic_1" } });
   expect(mocks.mutate).not.toHaveBeenCalled();
 });
+it("reconfirms the current person to clear a review finding", () => {
+  mapped();
+  mocks.member.mappingConflictReason = "email_changed";
+  mocks.member.mappingStatus = "needs_review";
+  show();
+  fireEvent.change(picker(), { target: { value: "user_synthetic_1" } });
+  expect(body()).toMatchObject({
+    userId: "user_synthetic_1",
+    mappingRevision: 7,
+  });
+});
 it("offers only removal for a mapped bot and is disabled for an unmapped bot", () => {
   mapped();
   mocks.member.memberType = "bot";

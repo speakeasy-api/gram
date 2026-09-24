@@ -348,6 +348,42 @@ const unmappedMember = {
   mappingRevision: 0,
   observationToken: "example-evidence",
 };
+it("steps back to the last page when an edit empties the current one", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const tree = () => (
+    <QueryClientProvider client={client}>
+      <MemoryRouter
+        initialEntries={[
+          "/example/identity?tab=slack-workspaces&slack_view=members",
+        ]}
+      >
+        <TooltipProvider>
+          <SlackDirectory connections={[connection]} />
+        </TooltipProvider>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+  mocks.rows = [unmappedMember];
+  mocks.total = 51;
+  const view = render(tree());
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 2 }),
+    ),
+  );
+  // Mapping the only row on page 2 under a filter leaves 50 results.
+  mocks.rows = [];
+  mocks.total = 50;
+  view.rerender(tree());
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 1 }),
+    ),
+  );
+});
 it("renders an inline Personnel picker per row with the organization's people", () => {
   mocks.rows = [
     unmappedMember,

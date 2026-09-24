@@ -161,6 +161,11 @@ func autoMapByEmail(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, o
 // forgetMappings removes every mapping for a disconnected workspace, auditing each live one as an unmap by the admin who disconnected it.
 func forgetMappings(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, ac *contextvalues.AuthContext, team string) error {
 	q := repo.New(tx)
+	// Lock every membership first so a concurrent SetMapping either commits before this
+	// reads mappings (and is removed and audited) or waits and then finds the member gone.
+	if _, err := q.LockSlackDirectoryMembershipsForPublication(ctx, repo.LockSlackDirectoryMembershipsForPublicationParams{OrganizationID: ac.ActiveOrganizationID, SlackTeamID: team}); err != nil {
+		return fmt.Errorf("lock Slack members to forget: %w", err)
+	}
 	ids, err := q.ListMappedSlackMembershipIDs(ctx, repo.ListMappedSlackMembershipIDsParams{OrganizationID: ac.ActiveOrganizationID, SlackTeamID: team})
 	if err != nil {
 		return fmt.Errorf("list Slack mappings to forget: %w", err)

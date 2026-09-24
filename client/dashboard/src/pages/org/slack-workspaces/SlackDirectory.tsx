@@ -292,9 +292,28 @@ function MemberTable({
   const rows = query.data?.members ?? [];
   const total = query.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  // An edit under a mapping filter can shrink the result set below the current page.
+  const outOfRange = Boolean(query.data) && page > totalPages;
+  useEffect(() => {
+    if (outOfRange) setPage(totalPages);
+  }, [outOfRange, totalPages]);
   return (
     <div className="space-y-4" aria-busy={query.isFetching}>
       <ApiErrorAlert error={query.error} />
+      {people.isError && (
+        <div className="space-y-2">
+          <ApiErrorAlert error={people.error} />
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              void people.refetch();
+            }}
+          >
+            Try loading people again
+          </Button>
+        </div>
+      )}
       {query.isError && (
         <Button
           variant="secondary"
@@ -306,7 +325,7 @@ function MemberTable({
         </Button>
       )}
       {query.isPending && <SkeletonTable />}
-      {query.data && !query.isError && rows.length === 0 && (
+      {query.data && !query.isError && !outOfRange && rows.length === 0 && (
         <InlineEmptyState
           icon="users"
           heading={search ? "No matching members" : "No members to show"}

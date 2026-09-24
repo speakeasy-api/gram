@@ -40,10 +40,12 @@ export function SlackPersonnelPicker({
       invalidateAllSlackDirectoryMembers(queryClient),
       invalidateAllSlackDirectoryMember(queryClient),
     ]);
+  // Returning the refresh keeps the mutation pending until the row reloads,
+  // so a second pick cannot resend the old revision.
   const mutation = useSetSlackIdentityMappingMutation({
-    onSuccess: () => void refresh(),
+    onSuccess: () => refresh(),
     // A rejected edit means the row is stale; reload it so the next pick uses current evidence.
-    onError: () => void refresh(),
+    onError: () => refresh(),
   });
 
   const email = normalizedEmail(member.email);
@@ -85,7 +87,12 @@ export function SlackPersonnelPicker({
     disabledMessage = "Bots and apps cannot be assigned to a person";
 
   const pick = (value: string) => {
-    if (disabledMessage || value === (mapping?.userId ?? UNMAPPED)) return;
+    // Picking the current person again reconfirms it, which clears a review finding.
+    if (
+      disabledMessage ||
+      (value === (mapping?.userId ?? UNMAPPED) && !finding)
+    )
+      return;
     mutation.reset();
     mutation.mutate({
       security: SESSION_SECURITY,
