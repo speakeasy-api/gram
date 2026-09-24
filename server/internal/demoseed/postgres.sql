@@ -1096,36 +1096,61 @@ BEGIN
   -- The payments workload is admitted at both tiers, so its row shows that
   -- withdrawing one admission still leaves it able to reconnect.
   ------------------------------------------------------------------
-  INSERT INTO workload_issuers (id, organization_id, project_id, name, issuer, jwks_uri)
+  -- Two issuers, deliberately of different shapes, because wildcard admission is
+  -- only sound on one of them. 'Acme CI' mints a subject that encodes a branch
+  -- ref, where a wildcard would admit anyone able to push a branch, so it does
+  -- NOT permit one. The agent platform mints an opaque identity per resource
+  -- that the caller cannot influence, which is the case the feature exists for.
+  INSERT INTO workload_issuers
+    (id, organization_id, project_id, name, issuer, jwks_uri,
+     allow_wildcard_admission)
   VALUES
     (demo.det_uuid('gram-demo-workload-issuer-1'), demo_org, proj_a,
      'Acme CI', 'https://ci-identity.example.com',
-     'https://ci-identity.example.com/.well-known/jwks.json');
+     'https://ci-identity.example.com/.well-known/jwks.json', FALSE),
+    (demo.det_uuid('gram-demo-workload-issuer-2'), demo_org, NULL,
+     'Acme Agent Platform', 'https://agents.example.com',
+     'https://agents.example.com/.well-known/jwks.json', TRUE);
 
   INSERT INTO workload_identity_admissions
-    (id, organization_id, project_id, workload_issuer_id, subject, name)
+    (id, organization_id, project_id, workload_issuer_id, subject, match_kind,
+     name)
   VALUES
     (demo.det_uuid('gram-demo-workload-admission-1'), demo_org, proj_a,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/payments-api:ref:refs/heads/main', 'Payments deploy'),
+     'repo:acme/payments-api:ref:refs/heads/main', 'exact', 'Payments deploy'),
     (demo.det_uuid('gram-demo-workload-admission-2'), demo_org, NULL,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/docs-site:environment:production', 'Docs publish'),
+     'repo:acme/docs-site:environment:production', 'exact', 'Docs publish'),
     (demo.det_uuid('gram-demo-workload-admission-3'), demo_org, NULL,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/payments-api:ref:refs/heads/main', 'Payments deploy (all projects)');
+     'repo:acme/payments-api:ref:refs/heads/main', 'exact',
+     'Payments deploy (all projects)'),
+    -- One rule standing for a whole fleet, which is what the trailing '*' is
+    -- for: this platform's agent id is minted per resource and is not known in
+    -- advance, so admitting each one exactly is not an onboarding flow.
+    (demo.det_uuid('gram-demo-workload-admission-4'), demo_org, NULL,
+     demo.det_uuid('gram-demo-workload-issuer-2'),
+     'wimse://agents.example.com/org/acme/agent/*', 'wildcard', 'Agent fleet');
 
+  -- Keyed on (issuer, match_kind, subject) exactly as the admission is, because
+  -- that is the tuple the lookup resolves: an assignment whose match_kind
+  -- disagreed with its admission would list as having no agent.
   INSERT INTO workload_agent_assignments
-    (id, organization_id, workload_issuer_id, subject, agent_id)
+    (id, organization_id, workload_issuer_id, subject, match_kind, agent_id)
   VALUES
     (demo.det_uuid('gram-demo-workload-assignment-1'), demo_org,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/payments-api:ref:refs/heads/main',
+     'repo:acme/payments-api:ref:refs/heads/main', 'exact',
      demo.det_uuid('gram-demo-managed-agent-1')),
     (demo.det_uuid('gram-demo-workload-assignment-2'), demo_org,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/docs-site:environment:production',
-     demo.det_uuid('gram-demo-managed-agent-2'));
+     'repo:acme/docs-site:environment:production', 'exact',
+     demo.det_uuid('gram-demo-managed-agent-2')),
+    (demo.det_uuid('gram-demo-workload-assignment-3'), demo_org,
+     demo.det_uuid('gram-demo-workload-issuer-2'),
+     'wimse://agents.example.com/org/acme/agent/*', 'wildcard',
+     demo.det_uuid('gram-demo-managed-agent-3'));
 
   INSERT INTO user_sessions
     (id, project_id, organization_id, user_session_issuer_id,
@@ -3022,20 +3047,20 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- unnamed issuer with no agent, which is a real state but not the one seeded.
   SELECT count(*) INTO stray FROM workload_issuers
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 workload issuer, found %', stray;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 workload issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM workload_identity_admissions
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 3 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 3 workload admissions, found %', stray;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 workload admissions, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM workload_agent_assignments
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 workload agent assignments, found %', stray;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 workload agent assignments, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_sessions
