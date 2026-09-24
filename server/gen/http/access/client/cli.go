@@ -748,6 +748,36 @@ func BuildListEmployeeAIDetectionsPayload(accessListEmployeeAIDetectionsUserEmai
 	return v, nil
 }
 
+// BuildListAIDetectionUsersPayload builds the payload for the access
+// listAIDetectionUsers endpoint from CLI flags.
+func BuildListAIDetectionUsersPayload(accessListAIDetectionUsersTargetID string, accessListAIDetectionUsersSessionToken string) (*access.ListAIDetectionUsersPayload, error) {
+	var err error
+	var targetID string
+	{
+		targetID = accessListAIDetectionUsersTargetID
+		if utf8.RuneCountInString(targetID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("target_id", targetID, utf8.RuneCountInString(targetID), 1, true))
+		}
+		if utf8.RuneCountInString(targetID) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("target_id", targetID, utf8.RuneCountInString(targetID), 64, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListAIDetectionUsersSessionToken != "" {
+			sessionToken = &accessListAIDetectionUsersSessionToken
+		}
+	}
+	v := &access.ListAIDetectionUsersPayload{}
+	v.TargetID = targetID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildSetAIToolDecisionPayload builds the payload for the access
 // setAIToolDecision endpoint from CLI flags.
 func BuildSetAIToolDecisionPayload(accessSetAIToolDecisionBody string, accessSetAIToolDecisionSessionToken string) (*access.SetAIToolDecisionPayload, error) {
