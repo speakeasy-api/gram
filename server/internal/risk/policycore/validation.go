@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/google/uuid"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
@@ -17,6 +18,13 @@ var (
 	approvedDomainFormat = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`)
 	customRuleIDFormat   = regexp.MustCompile(`^custom\.[a-z0-9_]+$`)
 )
+
+var knownMCPToolAnnotations = []string{
+	"destructiveHint",
+	"idempotentHint",
+	"openWorldHint",
+	"readOnlyHint",
+}
 
 // ValidationError separates a stable client-facing validation message from an
 // underlying technical cause retained for logs and diagnostics.
@@ -39,6 +47,137 @@ type DetectionScopeInput struct {
 	Category     string
 	ScopeInclude *string
 	ScopeExempt  *string
+}
+
+// MCPScopeInput preserves transport strings until UUID and tool validation.
+type MCPScopeInput struct {
+	AllServers      bool
+	ToolAnnotations []string
+	Servers         []*MCPServerScopeInput
+}
+
+// MCPServerScopeInput is one server or gateway selection.
+type MCPServerScopeInput struct {
+	MCPServerID string
+	Tools       []string
+}
+
+// NormalizeMCPScope validates and canonicalizes an MCP policy scope. An
+// explicit empty scope clears the restriction and therefore returns nil.
+func NormalizeMCPScope(input *MCPScopeInput) (*MCPScope, error) {
+	if input == nil {
+		return nil, nil
+	}
+
+	annotations := make([]string, 0, len(input.ToolAnnotations))
+	seenAnnotations := make(map[string]struct{}, len(input.ToolAnnotations))
+	for _, rawAnnotation := range input.ToolAnnotations {
+		annotation := strings.TrimSpace(rawAnnotation)
+		if !isKnownMCPToolAnnotation(annotation) {
+			return nil, fmt.Errorf("MCP tool annotation %q is not recognized", rawAnnotation)
+		}
+		if _, ok := seenAnnotations[annotation]; ok {
+			continue
+		}
+		seenAnnotations[annotation] = struct{}{}
+		annotations = append(annotations, annotation)
+	}
+	slices.Sort(annotations)
+
+	if !input.AllServers && len(input.Servers) == 0 {
+		if len(annotations) == 0 {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("MCP scope must select all servers or at least one server")
+	}
+
+	scope := &MCPScope{
+		AllServers:      input.AllServers,
+		ToolAnnotations: annotations,
+		Servers:         make([]MCPServerScope, 0, len(input.Servers)),
+	}
+	seenServers := make(map[uuid.UUID]struct{}, len(input.Servers))
+	for _, server := range input.Servers {
+		if server == nil {
+			return nil, fmt.Errorf("MCP server scope must not be null")
+		}
+		serverID, err := uuid.Parse(server.MCPServerID)
+		if err != nil {
+			return nil, fmt.Errorf("MCP server id %q is not a valid UUID", server.MCPServerID)
+		}
+		if _, ok := seenServers[serverID]; ok {
+			return nil, fmt.Errorf("MCP server %q specified more than once", server.MCPServerID)
+		}
+		seenServers[serverID] = struct{}{}
+
+		var tools []string
+		if server.Tools != nil {
+			if len(server.Tools) == 0 {
+				return nil, fmt.Errorf("custom MCP tool selection must include at least one tool")
+			}
+			tools = make([]string, 0, len(server.Tools))
+			seenTools := make(map[string]struct{}, len(server.Tools))
+			for _, rawTool := range server.Tools {
+				tool := strings.TrimSpace(rawTool)
+				if tool == "" {
+					return nil, fmt.Errorf("MCP tool name must not be empty")
+				}
+				if _, ok := seenTools[tool]; ok {
+					continue
+				}
+				seenTools[tool] = struct{}{}
+				tools = append(tools, tool)
+			}
+			slices.Sort(tools)
+		}
+		if input.AllServers && tools == nil {
+			return nil, fmt.Errorf("all-servers scope entries must contain custom tools")
+		}
+		scope.Servers = append(scope.Servers, MCPServerScope{
+			MCPServerID: serverID,
+			Tools:       tools,
+		})
+	}
+	slices.SortFunc(scope.Servers, func(a, b MCPServerScope) int {
+		return strings.Compare(a.MCPServerID.String(), b.MCPServerID.String())
+	})
+	return scope, nil
+}
+
+func isKnownMCPToolAnnotation(annotation string) bool {
+	return slices.Contains(knownMCPToolAnnotations, annotation)
+}
+
+// ValidateMCPScopeOwnership requires every selected server or gateway to
+// belong to the policy's project.
+func ValidateMCPScopeOwnership(scope *MCPScope, projectServerIDs []uuid.UUID) error {
+	if scope == nil {
+		return nil
+	}
+	owned := make(map[uuid.UUID]struct{}, len(projectServerIDs))
+	for _, id := range projectServerIDs {
+		owned[id] = struct{}{}
+	}
+	for _, server := range scope.Servers {
+		if _, ok := owned[server.MCPServerID]; !ok {
+			return fmt.Errorf("MCP server %q does not belong to the project", server.MCPServerID)
+		}
+	}
+	return nil
+}
+
+// ValidateMCPScopeSources rejects sources that cannot be evaluated against
+// individual MCP calls.
+func ValidateMCPScopeSources(scope *MCPScope, sources []string) error {
+	if scope == nil {
+		return nil
+	}
+	for _, source := range []string{ra.SourceAccountIdentity, shadowmcp.SourceShadowMCP} {
+		if slices.Contains(sources, source) {
+			return fmt.Errorf("source %q cannot be used by an MCP-scoped policy", source)
+		}
+	}
+	return nil
 }
 
 func ValidateAction(action string) error {

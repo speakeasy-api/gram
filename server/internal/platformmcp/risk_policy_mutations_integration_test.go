@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -17,6 +18,7 @@ import (
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -25,6 +27,25 @@ import (
 type noopRiskPolicySignaler struct{}
 
 func (noopRiskPolicySignaler) Signal(context.Context, uuid.UUID) error { return nil }
+
+func TestRiskPolicyCreateMatchesMCPScope(t *testing.T) {
+	t.Parallel()
+
+	var row riskrepo.RiskPolicy
+	var desired riskrepo.CreateRiskPolicyParams
+	desired.PolicyType = ""
+	audience := []string{authz.AllUsersPrincipal().String()}
+	catalog := policycatalog.Catalog{}
+
+	require.True(t, riskPolicyCreateMatches(row, audience, desired, catalog))
+
+	desired.McpScope = []byte(`{"all_servers":true,"tool_annotations":["destructiveHint"],"servers":[{"mcp_server_id":"11111111-1111-4111-8111-111111111111","tools":["search"]}]}`)
+	row.McpScope = []byte(`{"servers":[{"tools":["search"],"mcp_server_id":"11111111-1111-4111-8111-111111111111"}],"tool_annotations":["destructiveHint"],"all_servers":true}`)
+	require.True(t, riskPolicyCreateMatches(row, audience, desired, catalog))
+
+	row.McpScope = []byte(`{"all_servers":true,"tool_annotations":["readOnlyHint"],"servers":[{"mcp_server_id":"11111111-1111-4111-8111-111111111111","tools":["search"]}]}`)
+	require.False(t, riskPolicyCreateMatches(row, audience, desired, catalog))
+}
 
 func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	t.Parallel()
@@ -266,4 +287,64 @@ func requireRiskMutationRefusal(t *testing.T, err error, code string) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(refusal.Payload), &payload))
 	require.Equal(t, code, payload.Code)
+}
+
+func TestRiskPolicyUpdateRejectsSessionSourceOnMCPScopedPolicy(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_risk_policy_scope_sources")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	principal.ClientID = "test-client"
+	principal.Surface = SurfacePlatformMCP
+	ctx = ContextWithPrincipal(ctx, principal)
+
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
+	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-policy-test-key")
+	require.NoError(t, err)
+	handlers, err := NewRiskPolicyMutationHandlers(conn, controls, risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil))
+	require.NoError(t, err)
+
+	_, created, err := handlers.CreatePolicy(ctx, nil, map[string]any{
+		"project_slug":    project.Slug,
+		"policy_type":     "standard",
+		"name":            "Scoped",
+		"enabled":         true,
+		"sources":         []string{"gitleaks"},
+		"idempotency_key": "create-scoped-policy-key",
+	})
+	require.NoError(t, err)
+	policyID, err := uuid.Parse(created.Policy.ID)
+	require.NoError(t, err)
+	queries := riskrepo.New(conn)
+	row, err := queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policyID, ProjectID: project.ID})
+	require.NoError(t, err)
+	_, err = queries.UpdateRiskPolicy(ctx, riskrepo.UpdateRiskPolicyParams{
+		Name: row.Name, Sources: row.Sources, PresidioEntities: row.PresidioEntities, AnalyzerConfig: row.AnalyzerConfig,
+		PromptInjectionRules: row.PromptInjectionRules, DisabledRules: row.DisabledRules, CustomRuleIds: row.CustomRuleIds,
+		McpScope: []byte(`{"all_servers":true,"servers":[]}`), Enabled: row.Enabled, Action: row.Action,
+		AudienceType: row.AudienceType, AutoName: row.AutoName, UserMessage: row.UserMessage, Prompt: row.Prompt,
+		ModelConfig: row.ModelConfig, Score: pgtype.Float8{Float64: row.Score, Valid: true}, ID: row.ID, ProjectID: row.ProjectID,
+	})
+	require.NoError(t, err)
+
+	reads, err := newRiskReadService(conn, "risk-policy-test-key")
+	require.NoError(t, err)
+	read, err := reads.GetPolicy(ctx, principal, GetRiskPolicyInput{ProjectSlug: project.Slug, PolicyID: policyID.String()})
+	require.NoError(t, err)
+
+	_, _, err = handlers.UpdatePolicy(ctx, nil, map[string]any{
+		"project_slug":     project.Slug,
+		"policy_id":        policyID.String(),
+		"expected_version": read.Policy.Version,
+		"idempotency_key":  "update-scoped-policy-key",
+		"patch":            map[string]any{"sources": []string{"account_identity"}},
+	})
+	requireRiskMutationRefusal(t, err, "invalid_request")
+
+	stored, err := queries.GetRiskPolicy(ctx, riskrepo.GetRiskPolicyParams{ID: policyID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Equal(t, []string{"gitleaks"}, stored.Sources)
 }

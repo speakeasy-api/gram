@@ -54,6 +54,9 @@ type CreateRiskPolicyRequestBody struct {
 	// Principal URNs this policy applies to. For audience_type=everyone, the
 	// server stores user:all.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Optional MCP server and tool restriction. Omit or send an empty server list
+	// to apply the policy to every MCP server.
+	McpScope *RiskMCPScopeRequestBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Complete desired canonical URL allow set for this policy. Omit or send empty
 	// to create no URL-specific allow decisions.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
@@ -122,6 +125,9 @@ type UpdateRiskPolicyRequestBody struct {
 	// Principal URNs this policy applies to. Omit to preserve the current target
 	// principals.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Optional MCP server and tool restriction. Omit to preserve; send an empty
+	// server list to clear and apply the policy to every MCP server.
+	McpScope *RiskMCPScopeRequestBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Complete desired canonical URL allow set for this policy. Omit to preserve;
 	// send empty to clear.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
@@ -465,6 +471,9 @@ type CreateRiskPolicyResponseBody struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Optional MCP server and tool restriction. Null applies the policy to every
+	// MCP server.
+	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Gram-hosted server unless allowed, allow_all permits every server unless
 	// blocked. Blocked URLs are stored as risk_policy:block grants, not on the
@@ -505,6 +514,13 @@ type CreateRiskPolicyResponseBody struct {
 // ListRiskPoliciesResponseBody is the type of the "risk" service
 // "listRiskPolicies" endpoint HTTP response body.
 type ListRiskPoliciesResponseBody struct {
+	// The list of risk policies.
+	Policies []*RiskPolicyResponseBody `form:"policies,omitempty" json:"policies,omitempty" xml:"policies,omitempty"`
+}
+
+// ListRiskPoliciesForMcpServerResponseBody is the type of the "risk" service
+// "listRiskPoliciesForMcpServer" endpoint HTTP response body.
+type ListRiskPoliciesForMcpServerResponseBody struct {
 	// The list of risk policies.
 	Policies []*RiskPolicyResponseBody `form:"policies,omitempty" json:"policies,omitempty" xml:"policies,omitempty"`
 }
@@ -567,6 +583,9 @@ type GetRiskPolicyResponseBody struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Optional MCP server and tool restriction. Null applies the policy to every
+	// MCP server.
+	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Gram-hosted server unless allowed, allow_all permits every server unless
 	// blocked. Blocked URLs are stored as risk_policy:block grants, not on the
@@ -653,6 +672,9 @@ type UpdateRiskPolicyResponseBody struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Optional MCP server and tool restriction. Null applies the policy to every
+	// MCP server.
+	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Gram-hosted server unless allowed, allow_all permits every server unless
 	// blocked. Blocked URLs are stored as risk_policy:block grants, not on the
@@ -1723,6 +1745,196 @@ type ListRiskPoliciesUnexpectedResponseBody struct {
 // ListRiskPoliciesGatewayErrorResponseBody is the type of the "risk" service
 // "listRiskPolicies" endpoint HTTP response body for the "gateway_error" error.
 type ListRiskPoliciesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPoliciesForMcpServerUnauthorizedResponseBody is the type of the
+// "risk" service "listRiskPoliciesForMcpServer" endpoint HTTP response body
+// for the "unauthorized" error.
+type ListRiskPoliciesForMcpServerUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPoliciesForMcpServerForbiddenResponseBody is the type of the "risk"
+// service "listRiskPoliciesForMcpServer" endpoint HTTP response body for the
+// "forbidden" error.
+type ListRiskPoliciesForMcpServerForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPoliciesForMcpServerBadRequestResponseBody is the type of the "risk"
+// service "listRiskPoliciesForMcpServer" endpoint HTTP response body for the
+// "bad_request" error.
+type ListRiskPoliciesForMcpServerBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPoliciesForMcpServerNotFoundResponseBody is the type of the "risk"
+// service "listRiskPoliciesForMcpServer" endpoint HTTP response body for the
+// "not_found" error.
+type ListRiskPoliciesForMcpServerNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPoliciesForMcpServerConflictResponseBody is the type of the "risk"
+// service "listRiskPoliciesForMcpServer" endpoint HTTP response body for the
+// "conflict" error.
+type ListRiskPoliciesForMcpServerConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPoliciesForMcpServerUnsupportedMediaResponseBody is the type of the
+// "risk" service "listRiskPoliciesForMcpServer" endpoint HTTP response body
+// for the "unsupported_media" error.
+type ListRiskPoliciesForMcpServerUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPoliciesForMcpServerInvalidResponseBody is the type of the "risk"
+// service "listRiskPoliciesForMcpServer" endpoint HTTP response body for the
+// "invalid" error.
+type ListRiskPoliciesForMcpServerInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPoliciesForMcpServerInvariantViolationResponseBody is the type of
+// the "risk" service "listRiskPoliciesForMcpServer" endpoint HTTP response
+// body for the "invariant_violation" error.
+type ListRiskPoliciesForMcpServerInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPoliciesForMcpServerUnexpectedResponseBody is the type of the "risk"
+// service "listRiskPoliciesForMcpServer" endpoint HTTP response body for the
+// "unexpected" error.
+type ListRiskPoliciesForMcpServerUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ListRiskPoliciesForMcpServerGatewayErrorResponseBody is the type of the
+// "risk" service "listRiskPoliciesForMcpServer" endpoint HTTP response body
+// for the "gateway_error" error.
+type ListRiskPoliciesForMcpServerGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -10712,6 +10924,26 @@ type RiskDetectionScopeRequestBody struct {
 	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
 }
 
+// RiskMCPScopeRequestBody is used to define fields on request body types.
+type RiskMCPScopeRequestBody struct {
+	// Apply to every MCP server, including servers added later.
+	AllServers bool `form:"all_servers" json:"all_servers" xml:"all_servers"`
+	// Tool annotation hints matched by the policy-level rule. Empty matches all
+	// tools.
+	ToolAnnotations []string `form:"tool_annotations,omitempty" json:"tool_annotations,omitempty" xml:"tool_annotations,omitempty"`
+	// Selected MCP servers and gateways, or custom per-server tool overrides when
+	// all_servers is true.
+	Servers []*RiskMCPServerScopeRequestBody `form:"servers" json:"servers" xml:"servers"`
+}
+
+// RiskMCPServerScopeRequestBody is used to define fields on request body types.
+type RiskMCPServerScopeRequestBody struct {
+	// The selected MCP server or gateway ID.
+	McpServerID string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	// Custom tool names for this server. Omit to follow the policy tool rule.
+	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+}
+
 // RiskPolicyModelConfigRequestBody is used to define fields on request body
 // types.
 type RiskPolicyModelConfigRequestBody struct {
@@ -10734,6 +10966,27 @@ type RiskDetectionScopeResponseBody struct {
 	// CEL exemption predicate: the category skips a message when this boolean
 	// expression is true. Empty means no exemption.
 	ScopeExempt *string `form:"scope_exempt,omitempty" json:"scope_exempt,omitempty" xml:"scope_exempt,omitempty"`
+}
+
+// RiskMCPScopeResponseBody is used to define fields on response body types.
+type RiskMCPScopeResponseBody struct {
+	// Apply to every MCP server, including servers added later.
+	AllServers *bool `form:"all_servers,omitempty" json:"all_servers,omitempty" xml:"all_servers,omitempty"`
+	// Tool annotation hints matched by the policy-level rule. Empty matches all
+	// tools.
+	ToolAnnotations []string `form:"tool_annotations,omitempty" json:"tool_annotations,omitempty" xml:"tool_annotations,omitempty"`
+	// Selected MCP servers and gateways, or custom per-server tool overrides when
+	// all_servers is true.
+	Servers []*RiskMCPServerScopeResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+}
+
+// RiskMCPServerScopeResponseBody is used to define fields on response body
+// types.
+type RiskMCPServerScopeResponseBody struct {
+	// The selected MCP server or gateway ID.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Custom tool names for this server. Omit to follow the policy tool rule.
+	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 }
 
 // RiskPolicyModelConfigResponseBody is used to define fields on response body
@@ -10795,6 +11048,9 @@ type RiskPolicyResponseBody struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string `form:"audience_principal_urns,omitempty" json:"audience_principal_urns,omitempty" xml:"audience_principal_urns,omitempty"`
+	// Optional MCP server and tool restriction. Null applies the policy to every
+	// MCP server.
+	McpScope *RiskMCPScopeResponseBody `form:"mcp_scope,omitempty" json:"mcp_scope,omitempty" xml:"mcp_scope,omitempty"`
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Gram-hosted server unless allowed, allow_all permits every server unless
 	// blocked. Blocked URLs are stored as risk_policy:block grants, not on the
@@ -11481,6 +11737,9 @@ func NewCreateRiskPolicyRequestBody(p *risk.CreateRiskPolicyPayload) *CreateRisk
 			body.AudiencePrincipalUrns[i] = val
 		}
 	}
+	if p.McpScope != nil {
+		body.McpScope = marshalTypesRiskMCPScopeToRiskMCPScopeRequestBody(p.McpScope)
+	}
 	if p.ShadowMcpAllowedUrls != nil {
 		body.ShadowMcpAllowedUrls = make([]string, len(p.ShadowMcpAllowedUrls))
 		for i, val := range p.ShadowMcpAllowedUrls {
@@ -11573,6 +11832,9 @@ func NewUpdateRiskPolicyRequestBody(p *risk.UpdateRiskPolicyPayload) *UpdateRisk
 		for i, val := range p.AudiencePrincipalUrns {
 			body.AudiencePrincipalUrns[i] = val
 		}
+	}
+	if p.McpScope != nil {
+		body.McpScope = marshalTypesRiskMCPScopeToRiskMCPScopeRequestBody(p.McpScope)
 	}
 	if p.ShadowMcpAllowedUrls != nil {
 		body.ShadowMcpAllowedUrls = make([]string, len(p.ShadowMcpAllowedUrls))
@@ -12002,6 +12264,9 @@ func NewCreateRiskPolicyRiskPolicyOK(body *CreateRiskPolicyResponseBody) *types.
 	for i, val := range body.AudiencePrincipalUrns {
 		v.AudiencePrincipalUrns[i] = val
 	}
+	if body.McpScope != nil {
+		v.McpScope = unmarshalRiskMCPScopeResponseBodyToTypesRiskMCPScope(body.McpScope)
+	}
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
 	}
@@ -12325,6 +12590,173 @@ func NewListRiskPoliciesGatewayError(body *ListRiskPoliciesGatewayErrorResponseB
 	return v
 }
 
+// NewListRiskPoliciesForMcpServerListRiskPoliciesResultOK builds a "risk"
+// service "listRiskPoliciesForMcpServer" endpoint result from a HTTP "OK"
+// response.
+func NewListRiskPoliciesForMcpServerListRiskPoliciesResultOK(body *ListRiskPoliciesForMcpServerResponseBody) *risk.ListRiskPoliciesResult {
+	v := &risk.ListRiskPoliciesResult{}
+	v.Policies = make([]*types.RiskPolicy, len(body.Policies))
+	for i, val := range body.Policies {
+		if val == nil {
+			v.Policies[i] = nil
+			continue
+		}
+		v.Policies[i] = unmarshalRiskPolicyResponseBodyToTypesRiskPolicy(val)
+	}
+
+	return v
+}
+
+// NewListRiskPoliciesForMcpServerUnauthorized builds a risk service
+// listRiskPoliciesForMcpServer endpoint unauthorized error.
+func NewListRiskPoliciesForMcpServerUnauthorized(body *ListRiskPoliciesForMcpServerUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPoliciesForMcpServerForbidden builds a risk service
+// listRiskPoliciesForMcpServer endpoint forbidden error.
+func NewListRiskPoliciesForMcpServerForbidden(body *ListRiskPoliciesForMcpServerForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPoliciesForMcpServerBadRequest builds a risk service
+// listRiskPoliciesForMcpServer endpoint bad_request error.
+func NewListRiskPoliciesForMcpServerBadRequest(body *ListRiskPoliciesForMcpServerBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPoliciesForMcpServerNotFound builds a risk service
+// listRiskPoliciesForMcpServer endpoint not_found error.
+func NewListRiskPoliciesForMcpServerNotFound(body *ListRiskPoliciesForMcpServerNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPoliciesForMcpServerConflict builds a risk service
+// listRiskPoliciesForMcpServer endpoint conflict error.
+func NewListRiskPoliciesForMcpServerConflict(body *ListRiskPoliciesForMcpServerConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPoliciesForMcpServerUnsupportedMedia builds a risk service
+// listRiskPoliciesForMcpServer endpoint unsupported_media error.
+func NewListRiskPoliciesForMcpServerUnsupportedMedia(body *ListRiskPoliciesForMcpServerUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPoliciesForMcpServerInvalid builds a risk service
+// listRiskPoliciesForMcpServer endpoint invalid error.
+func NewListRiskPoliciesForMcpServerInvalid(body *ListRiskPoliciesForMcpServerInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPoliciesForMcpServerInvariantViolation builds a risk service
+// listRiskPoliciesForMcpServer endpoint invariant_violation error.
+func NewListRiskPoliciesForMcpServerInvariantViolation(body *ListRiskPoliciesForMcpServerInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPoliciesForMcpServerUnexpected builds a risk service
+// listRiskPoliciesForMcpServer endpoint unexpected error.
+func NewListRiskPoliciesForMcpServerUnexpected(body *ListRiskPoliciesForMcpServerUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewListRiskPoliciesForMcpServerGatewayError builds a risk service
+// listRiskPoliciesForMcpServer endpoint gateway_error error.
+func NewListRiskPoliciesForMcpServerGatewayError(body *ListRiskPoliciesForMcpServerGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewListBuiltinExclusionsResultOK builds a "risk" service
 // "listBuiltinExclusions" endpoint result from a HTTP "OK" response.
 func NewListBuiltinExclusionsResultOK(body *ListBuiltinExclusionsResponseBody) *risk.ListBuiltinExclusionsResult {
@@ -12564,6 +12996,9 @@ func NewGetRiskPolicyRiskPolicyOK(body *GetRiskPolicyResponseBody) *types.RiskPo
 	for i, val := range body.AudiencePrincipalUrns {
 		v.AudiencePrincipalUrns[i] = val
 	}
+	if body.McpScope != nil {
+		v.McpScope = unmarshalRiskMCPScopeResponseBodyToTypesRiskMCPScope(body.McpScope)
+	}
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
 	}
@@ -12791,6 +13226,9 @@ func NewUpdateRiskPolicyRiskPolicyOK(body *UpdateRiskPolicyResponseBody) *types.
 	v.AudiencePrincipalUrns = make([]string, len(body.AudiencePrincipalUrns))
 	for i, val := range body.AudiencePrincipalUrns {
 		v.AudiencePrincipalUrns[i] = val
+	}
+	if body.McpScope != nil {
+		v.McpScope = unmarshalRiskMCPScopeResponseBodyToTypesRiskMCPScope(body.McpScope)
 	}
 	if body.ModelConfig != nil {
 		v.ModelConfig = unmarshalRiskPolicyModelConfigResponseBodyToTypesRiskPolicyModelConfig(body.ModelConfig)
@@ -20523,6 +20961,11 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
 		}
 	}
+	if body.McpScope != nil {
+		if err2 := ValidateRiskMCPScopeResponseBody(body.McpScope); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.ShadowMcpDisposition != nil {
 		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
@@ -20550,6 +20993,22 @@ func ValidateCreateRiskPolicyResponseBody(body *CreateRiskPolicyResponseBody) (e
 // ValidateListRiskPoliciesResponseBody runs the validations defined on
 // ListRiskPoliciesResponseBody
 func ValidateListRiskPoliciesResponseBody(body *ListRiskPoliciesResponseBody) (err error) {
+	if body.Policies == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policies", "body"))
+	}
+	for _, e := range body.Policies {
+		if e != nil {
+			if err2 := ValidateRiskPolicyResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateListRiskPoliciesForMcpServerResponseBody runs the validations
+// defined on ListRiskPoliciesForMcpServerResponseBody
+func ValidateListRiskPoliciesForMcpServerResponseBody(body *ListRiskPoliciesForMcpServerResponseBody) (err error) {
 	if body.Policies == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("policies", "body"))
 	}
@@ -20665,6 +21124,11 @@ func ValidateGetRiskPolicyResponseBody(body *GetRiskPolicyResponseBody) (err err
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
 		}
 	}
+	if body.McpScope != nil {
+		if err2 := ValidateRiskMCPScopeResponseBody(body.McpScope); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.ShadowMcpDisposition != nil {
 		if !(*body.ShadowMcpDisposition == "block_all" || *body.ShadowMcpDisposition == "allow_all") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.shadow_mcp_disposition", *body.ShadowMcpDisposition, []any{"block_all", "allow_all"}))
@@ -20770,6 +21234,11 @@ func ValidateUpdateRiskPolicyResponseBody(body *UpdateRiskPolicyResponseBody) (e
 	if body.AudienceType != nil {
 		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
+		}
+	}
+	if body.McpScope != nil {
+		if err2 := ValidateRiskMCPScopeResponseBody(body.McpScope); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.ShadowMcpDisposition != nil {
@@ -22428,6 +22897,250 @@ func ValidateListRiskPoliciesUnexpectedResponseBody(body *ListRiskPoliciesUnexpe
 // ValidateListRiskPoliciesGatewayErrorResponseBody runs the validations
 // defined on listRiskPolicies_gateway_error_response_body
 func ValidateListRiskPoliciesGatewayErrorResponseBody(body *ListRiskPoliciesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPoliciesForMcpServerUnauthorizedResponseBody runs the
+// validations defined on
+// listRiskPoliciesForMcpServer_unauthorized_response_body
+func ValidateListRiskPoliciesForMcpServerUnauthorizedResponseBody(body *ListRiskPoliciesForMcpServerUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPoliciesForMcpServerForbiddenResponseBody runs the
+// validations defined on listRiskPoliciesForMcpServer_forbidden_response_body
+func ValidateListRiskPoliciesForMcpServerForbiddenResponseBody(body *ListRiskPoliciesForMcpServerForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPoliciesForMcpServerBadRequestResponseBody runs the
+// validations defined on listRiskPoliciesForMcpServer_bad_request_response_body
+func ValidateListRiskPoliciesForMcpServerBadRequestResponseBody(body *ListRiskPoliciesForMcpServerBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPoliciesForMcpServerNotFoundResponseBody runs the
+// validations defined on listRiskPoliciesForMcpServer_not_found_response_body
+func ValidateListRiskPoliciesForMcpServerNotFoundResponseBody(body *ListRiskPoliciesForMcpServerNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPoliciesForMcpServerConflictResponseBody runs the
+// validations defined on listRiskPoliciesForMcpServer_conflict_response_body
+func ValidateListRiskPoliciesForMcpServerConflictResponseBody(body *ListRiskPoliciesForMcpServerConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPoliciesForMcpServerUnsupportedMediaResponseBody runs the
+// validations defined on
+// listRiskPoliciesForMcpServer_unsupported_media_response_body
+func ValidateListRiskPoliciesForMcpServerUnsupportedMediaResponseBody(body *ListRiskPoliciesForMcpServerUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPoliciesForMcpServerInvalidResponseBody runs the validations
+// defined on listRiskPoliciesForMcpServer_invalid_response_body
+func ValidateListRiskPoliciesForMcpServerInvalidResponseBody(body *ListRiskPoliciesForMcpServerInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPoliciesForMcpServerInvariantViolationResponseBody runs the
+// validations defined on
+// listRiskPoliciesForMcpServer_invariant_violation_response_body
+func ValidateListRiskPoliciesForMcpServerInvariantViolationResponseBody(body *ListRiskPoliciesForMcpServerInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPoliciesForMcpServerUnexpectedResponseBody runs the
+// validations defined on listRiskPoliciesForMcpServer_unexpected_response_body
+func ValidateListRiskPoliciesForMcpServerUnexpectedResponseBody(body *ListRiskPoliciesForMcpServerUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateListRiskPoliciesForMcpServerGatewayErrorResponseBody runs the
+// validations defined on
+// listRiskPoliciesForMcpServer_gateway_error_response_body
+func ValidateListRiskPoliciesForMcpServerGatewayErrorResponseBody(body *ListRiskPoliciesForMcpServerGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -34036,11 +34749,78 @@ func ValidateDeleteRiskEvalReviewGatewayErrorResponseBody(body *DeleteRiskEvalRe
 	return
 }
 
+// ValidateRiskMCPScopeRequestBody runs the validations defined on
+// RiskMCPScopeRequestBody
+func ValidateRiskMCPScopeRequestBody(body *RiskMCPScopeRequestBody) (err error) {
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	for _, e := range body.ToolAnnotations {
+		if !(e == "destructiveHint" || e == "readOnlyHint" || e == "idempotentHint" || e == "openWorldHint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tool_annotations[*]", e, []any{"destructiveHint", "readOnlyHint", "idempotentHint", "openWorldHint"}))
+		}
+	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateRiskMCPServerScopeRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateRiskMCPServerScopeRequestBody runs the validations defined on
+// RiskMCPServerScopeRequestBody
+func ValidateRiskMCPServerScopeRequestBody(body *RiskMCPServerScopeRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+	if len(body.Tools) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools", body.Tools, len(body.Tools), 1, true))
+	}
+	return
+}
+
 // ValidateRiskDetectionScopeResponseBody runs the validations defined on
 // RiskDetectionScopeResponseBody
 func ValidateRiskDetectionScopeResponseBody(body *RiskDetectionScopeResponseBody) (err error) {
 	if body.Category == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("category", "body"))
+	}
+	return
+}
+
+// ValidateRiskMCPScopeResponseBody runs the validations defined on
+// RiskMCPScopeResponseBody
+func ValidateRiskMCPScopeResponseBody(body *RiskMCPScopeResponseBody) (err error) {
+	if body.Servers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
+	}
+	for _, e := range body.ToolAnnotations {
+		if !(e == "destructiveHint" || e == "readOnlyHint" || e == "idempotentHint" || e == "openWorldHint") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tool_annotations[*]", e, []any{"destructiveHint", "readOnlyHint", "idempotentHint", "openWorldHint"}))
+		}
+	}
+	for _, e := range body.Servers {
+		if e != nil {
+			if err2 := ValidateRiskMCPServerScopeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateRiskMCPServerScopeResponseBody runs the validations defined on
+// RiskMCPServerScopeResponseBody
+func ValidateRiskMCPServerScopeResponseBody(body *RiskMCPServerScopeResponseBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if len(body.Tools) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools", body.Tools, len(body.Tools), 1, true))
 	}
 	return
 }
@@ -34126,6 +34906,11 @@ func ValidateRiskPolicyResponseBody(body *RiskPolicyResponseBody) (err error) {
 	if body.AudienceType != nil {
 		if !(*body.AudienceType == "everyone" || *body.AudienceType == "targeted") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.audience_type", *body.AudienceType, []any{"everyone", "targeted"}))
+		}
+	}
+	if body.McpScope != nil {
+		if err2 := ValidateRiskMCPScopeResponseBody(body.McpScope); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.ShadowMcpDisposition != nil {
