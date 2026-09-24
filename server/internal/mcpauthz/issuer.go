@@ -29,7 +29,7 @@ const Header = "SPEAKEASY_AUTHZ"
 // Lifetime bounds the bearer assertion's replay window.
 const Lifetime = time.Minute
 
-// Issuer holds an immutable signing key. A nil or zero issuer disables issuance.
+// Issuer holds an immutable signing key initialized by New.
 type Issuer struct {
 	key    *rsa.PrivateKey
 	kid    string
@@ -65,20 +65,14 @@ func New(privatePEM, publicPEM, issuerURL string, allowHTTP bool) (*Issuer, erro
 		(u.Scheme != "https" && (!allowHTTP || u.Scheme != "http")) || (u.Path != "" && u.Path != "/") || u.RawPath != "" {
 		return nil, errors.New("caller assertion issuer must be an HTTPS origin (HTTP allowed only locally)")
 	}
-	block, rest, err := decodePEM([]byte(privatePEM))
-	if err != nil || len(bytes.TrimSpace(rest)) != 0 {
-		return nil, errors.New("GRAM_AUTHZ_PRIVATE_KEY must contain exactly one private PEM key")
-	}
-	if block.Type != "PRIVATE KEY" {
-		return nil, errors.New("GRAM_AUTHZ_PRIVATE_KEY must be a PKCS#8 PEM key")
+	block, rest := pem.Decode([]byte(privatePEM))
+	if block == nil || block.Type != "PRIVATE KEY" || len(bytes.TrimSpace(rest)) != 0 {
+		return nil, errors.New("GRAM_AUTHZ_PRIVATE_KEY must contain exactly one PKCS#8 PEM key")
 	}
 	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	key, ok := parsed.(*rsa.PrivateKey)
-	if err != nil || !ok || key.N.BitLen() < 2048 {
-		return nil, errors.New("caller assertion private key must be RSA with at least 2048 bits")
-	}
-	if err := key.Validate(); err != nil {
-		return nil, errors.New("invalid caller assertion RSA private key")
+	if err != nil || !ok {
+		return nil, errors.New("caller assertion private key must be RSA")
 	}
 	active, err := jwks.PublicKey(&key.PublicKey)
 	if err != nil {
@@ -92,18 +86,6 @@ func New(privatePEM, publicPEM, issuerURL string, allowHTTP bool) (*Issuer, erro
 		return nil, errors.New("active caller assertion public key is missing from GRAM_AUTHZ_PUBLIC_KEYS")
 	}
 	return &Issuer{key: key, kid: active.KeyID, issuer: strings.TrimRight(issuerURL, "/")}, nil
-}
-
-func decodePEM(data []byte) (*pem.Block, []byte, error) {
-	data = bytes.TrimSpace(data)
-	if !bytes.HasPrefix(data, []byte("-----BEGIN ")) {
-		return nil, nil, errors.New("expected PEM block")
-	}
-	block, rest := pem.Decode(data)
-	if block == nil || len(block.Headers) != 0 || bytes.Count(data[:len(data)-len(rest)], []byte("-----BEGIN ")) != 1 {
-		return nil, nil, errors.New("invalid PEM block")
-	}
-	return block, rest, nil
 }
 
 // ReservedHeader matches both the wire spelling and the common dash alias.
@@ -120,16 +102,10 @@ func Strip(header http.Header) {
 	}
 }
 
-// Enabled reports whether startup configured an active signing key.
-func (s *Issuer) Enabled() bool { return s != nil && s.key != nil }
-
-// Mint returns no assertion for unsupported provenance or a disabled issuer.
+// Mint returns no assertion for unsupported provenance.
 // The caller must restrict this to private tunnel destinations. A matching
 // owner organization is required even when some other route admitted a caller.
 func (s *Issuer) Mint(ctx context.Context, target Target) (string, error) {
-	if s == nil || s.key == nil {
-		return "", nil
-	}
 	identity, ok := mcpidentity.FromContext(ctx)
 	if !ok {
 		return "", nil

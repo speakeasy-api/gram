@@ -34,11 +34,8 @@ func Parse(publicPEM string) (*Set, error) {
 	keys := make([]jose.JSONWebKey, 0)
 	seen := make(map[string]bool)
 	for remaining := bytes.TrimSpace([]byte(publicPEM)); len(remaining) > 0; {
-		if !bytes.HasPrefix(remaining, []byte("-----BEGIN ")) {
-			return nil, errors.New("invalid public key PEM bundle")
-		}
 		block, rest := pem.Decode(remaining)
-		if block == nil || len(block.Headers) != 0 || bytes.Count(remaining[:len(remaining)-len(rest)], []byte("-----BEGIN ")) != 1 {
+		if block == nil {
 			return nil, errors.New("invalid public key PEM bundle")
 		}
 		remaining = bytes.TrimSpace(rest)

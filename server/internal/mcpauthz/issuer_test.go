@@ -275,11 +275,8 @@ func TestStartupRejectsInvalidSigningConfiguration(t *testing.T) {
 	}
 	disabled, err := New("", "", "", false)
 	require.NoError(t, err)
-	require.False(t, disabled.Enabled())
+	require.Nil(t, disabled)
 	require.Empty(t, servedKeys(t, "").Keys)
-	raw, err := disabled.Mint(t.Context(), targetForTest())
-	require.NoError(t, err)
-	require.Empty(t, raw)
 }
 
 func TestStartupRequiresPKCS8PrivateAndSPKIPublicKeys(t *testing.T) {
@@ -308,9 +305,6 @@ func TestMissingSigningConfigurationDisablesAssertions(t *testing.T) {
 	} {
 		issuer, err := New(config[0], config[1], config[2], false)
 		require.NoError(t, err)
-		require.False(t, issuer.Enabled())
-		assertion, err := issuer.Mint(t.Context(), targetForTest())
-		require.NoError(t, err)
-		require.Empty(t, assertion)
+		require.Nil(t, issuer)
 	}
 }

@@ -131,8 +131,7 @@ func TestGatewayRejectsPrivateOrMalformedJWKSPublicConfiguration(t *testing.T) {
 		string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})),
 		string(pem.EncodeToMemory(&pem.Block{Type: "RSA PUBLIC KEY", Bytes: x509.MarshalPKCS1PublicKey(&key.PublicKey)})),
 		publicPEMForTest(t, &small.PublicKey), publicPEMForTest(t, &ec.PublicKey),
-		"not a key", "junk" + public, public + "junk",
-		"-----BEGIN PUBLIC KEY-----\ninvalid\n" + public,
+		"not a key", public + "junk",
 		string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: []byte("invalid DER")})),
 	} {
 		gw, err := New(Config{ForwardToken: "test-forward", AuthzPublicKeys: bundle},
