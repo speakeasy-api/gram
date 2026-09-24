@@ -1,6 +1,7 @@
 package risk_analysis_test
 
 import (
+	"github.com/jackc/pgx/v5/pgtype"
 	"testing"
 
 	"github.com/google/uuid"
@@ -92,6 +93,33 @@ func TestFetchUnanalyzed_SkipsMCPScopedPolicies(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, result.MessageIDs)
 	require.Empty(t, result.Policies)
+}
+
+func TestFetchUnanalyzed_KeepsUnscopedPoliciesBesideScopedOnes(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	scope := []byte(`{"servers":[{"mcp_server_id":"` + uuid.NewString() + `"}]}`)
+	td := seedTestDataWithScope(t, conn, true, scope)
+	unscopedID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = riskrepo.New(conn).CreateRiskPolicy(t.Context(), riskrepo.CreateRiskPolicyParams{
+		ID: unscopedID, ProjectID: td.projectID, OrganizationID: td.orgID, Name: "unscoped policy",
+		Sources: []string{"gitleaks"}, Enabled: true, McpScope: nil, Action: "flag", AudienceType: "everyone",
+		AutoName: false, UserMessage: pgtype.Text{},
+	})
+	require.NoError(t, err)
+	seedMessages(t, conn, td, 1)
+
+	activity := risk_analysis.NewFetchUnanalyzed(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn)
+	result, err := activity.Do(t.Context(), risk_analysis.FetchUnanalyzedArgs{
+		ProjectID:    td.projectID,
+		IDLowerBound: zeroLowerBound,
+		BatchLimit:   100,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.MessageIDs, 1)
+	require.Len(t, result.Policies, 1)
+	require.Equal(t, unscopedID, result.Policies[0].ID)
 }
 
 func TestFetchUnanalyzed_RespectsBatchLimit(t *testing.T) {

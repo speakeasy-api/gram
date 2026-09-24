@@ -135,6 +135,9 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 
 	blockPolicies, flagPolicies := partitionPolicies(policies)
 	defer p.scheduleFlagLane(ctx, subject, flagPolicies)
+	if len(blockPolicies) == 0 {
+		return Allow()
+	}
 	if subject.Payload.Availability() != PayloadAvailable {
 		return p.resolveIndeterminate(ctx, fmt.Errorf("MCP payload is %s", subject.Payload.Availability()))
 	}

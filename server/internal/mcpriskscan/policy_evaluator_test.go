@@ -260,6 +260,14 @@ func TestPolicyEvaluator_PayloadAvailabilityOnlyMattersWhenPoliciesApply(t *test
 	decision = evaluator.Scan(t.Context(), oversized)
 	require.True(t, decision.Denied())
 	require.True(t, decision.Indeterminate)
+
+	flagPolicy := policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Flag", Action: "flag"}
+	flagOnly := newPolicyEvaluator(t, staticPolicies(flagPolicy), policyDetectorFunc(nil), &findingPublisher{}, mcpriskscan.PolicyConfig{
+		Deadline: time.Second, FailMode: mcpriskscan.FailClosed, FlagConcurrency: 1,
+	})
+	decision = flagOnly.Scan(t.Context(), oversized)
+	require.False(t, decision.Denied())
+	require.False(t, decision.Indeterminate)
 }
 
 func TestPolicyEvaluator_DeadlineBoundsBlockDetector(t *testing.T) {
