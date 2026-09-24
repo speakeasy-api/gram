@@ -18,7 +18,7 @@ function syncFailure(code?: string): string {
     case "authorization_expired":
     case "reconnect_required":
     case "credential_unavailable":
-      return "Reconnect this workspace before syncing again.";
+      return "Connect Slack again and choose this workspace before syncing.";
     case "rate_limited":
       return "Slack limited requests. Try syncing again later.";
     case "directory_too_large":
@@ -69,7 +69,7 @@ export function SlackSyncStatus({
           Saved directory from a previous or unavailable authorization.{" "}
           {connection.status === "connected"
             ? "Sync to refresh it."
-            : "Reconnect and sync to refresh it."}
+            : "Connect Slack again and sync to refresh it."}
         </p>
       )}
       {running && (
