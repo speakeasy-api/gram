@@ -281,3 +281,15 @@ ORDER BY m.id;
 -- name: SlackDirectoryClock :one
 -- Sort snapshots use the database clock, which also stamps mappings.
 SELECT clock_timestamp()::timestamptz;
+
+-- name: ListMappedSlackMembershipIDs :many
+SELECT m.id FROM slack_directory_memberships m
+JOIN slack_identity_mappings im ON im.organization_id = m.organization_id AND im.slack_team_id = m.slack_team_id AND im.slack_user_id = m.slack_user_id AND im.revoked_at IS NULL
+WHERE m.organization_id = @organization_id AND m.slack_team_id = @slack_team_id
+ORDER BY m.id;
+
+-- name: DeleteSlackIdentityMappings :exec
+DELETE FROM slack_identity_mappings WHERE organization_id = @organization_id AND slack_team_id = @slack_team_id;
+
+-- name: CountSlackIdentityMappingsForTest :one
+SELECT count(*)::bigint FROM slack_identity_mappings WHERE organization_id = @organization_id;

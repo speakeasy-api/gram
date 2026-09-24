@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -153,6 +154,39 @@ func autoMapByEmail(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, o
 		if err := auditLogger.LogSlackIdentityMapping(ctx, tx, audit.ActionSlackIdentityMappingConfirm, audit.LogSlackIdentityMappingEvent{OrganizationID: org, Actor: urn.NewSystemPrincipal("slack-directory-email-match"), ActorDisplayName: nil, MembershipURN: urn.NewSlackDirectoryMembership(candidate.MembershipID), MembershipSnapshotBefore: before, MembershipSnapshotAfter: after}); err != nil {
 			return fmt.Errorf("audit Slack email mapping: %w", err)
 		}
+	}
+	return nil
+}
+
+// forgetMappings removes every mapping for a disconnected workspace, auditing each live one as an unmap by the admin who disconnected it.
+func forgetMappings(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, ac *contextvalues.AuthContext, team string) error {
+	q := repo.New(tx)
+	ids, err := q.ListMappedSlackMembershipIDs(ctx, repo.ListMappedSlackMembershipIDsParams{OrganizationID: ac.ActiveOrganizationID, SlackTeamID: team})
+	if err != nil {
+		return fmt.Errorf("list Slack mappings to forget: %w", err)
+	}
+	for _, id := range ids {
+		before, err := readMember(ctx, q, ac.ActiveOrganizationID, id)
+		if err != nil {
+			return err
+		}
+		member, err := q.LockSlackDirectoryMembership(ctx, repo.LockSlackDirectoryMembershipParams{OrganizationID: ac.ActiveOrganizationID, ID: id})
+		if err != nil {
+			return fmt.Errorf("lock Slack member to forget: %w", err)
+		}
+		if err := q.RevokeSlackIdentityMapping(ctx, repo.RevokeSlackIdentityMappingParams{OrganizationID: ac.ActiveOrganizationID, SlackTeamID: member.SlackTeamID, SlackUserID: member.SlackUserID}); err != nil {
+			return fmt.Errorf("revoke Slack mapping on disconnect: %w", err)
+		}
+		after, err := readMember(ctx, q, ac.ActiveOrganizationID, id)
+		if err != nil {
+			return err
+		}
+		if err := auditLogger.LogSlackIdentityMapping(ctx, tx, audit.ActionSlackIdentityMappingUnmap, audit.LogSlackIdentityMappingEvent{OrganizationID: ac.ActiveOrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, MembershipURN: urn.NewSlackDirectoryMembership(id), MembershipSnapshotBefore: before, MembershipSnapshotAfter: after}); err != nil {
+			return fmt.Errorf("audit Slack mapping removal on disconnect: %w", err)
+		}
+	}
+	if err := q.DeleteSlackIdentityMappings(ctx, repo.DeleteSlackIdentityMappingsParams{OrganizationID: ac.ActiveOrganizationID, SlackTeamID: team}); err != nil {
+		return fmt.Errorf("delete Slack mappings on disconnect: %w", err)
 	}
 	return nil
 }

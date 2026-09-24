@@ -343,6 +343,9 @@ func (s *Service) Disconnect(ctx context.Context, p *gen.DisconnectPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not count Slack members").LogError(ctx, s.logger)
 	}
+	if err := forgetMappings(ctx, tx, s.audit, ac, before.SlackTeamID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "could not remove Slack mappings").LogError(ctx, s.logger)
+	}
 	if err := queries.DeleteSlackDirectoryMemberships(ctx, repo.DeleteSlackDirectoryMembershipsParams{OrganizationID: ac.ActiveOrganizationID, SlackTeamID: before.SlackTeamID}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not forget Slack members").LogError(ctx, s.logger)
 	}

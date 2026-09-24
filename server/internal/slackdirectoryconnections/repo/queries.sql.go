@@ -167,6 +167,17 @@ func (q *Queries) CountSlackDirectorySnapshotMembers(ctx context.Context, arg Co
 	return column_1, err
 }
 
+const countSlackIdentityMappingsForTest = `-- name: CountSlackIdentityMappingsForTest :one
+SELECT count(*)::bigint FROM slack_identity_mappings WHERE organization_id = $1
+`
+
+func (q *Queries) CountSlackIdentityMappingsForTest(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countSlackIdentityMappingsForTest, organizationID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createSlackDirectoryConnection = `-- name: CreateSlackDirectoryConnection :one
 INSERT INTO slack_directory_connections (organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health)
 VALUES ($1, $2, $3, $4, $5, $6, 'connected')
@@ -293,6 +304,20 @@ type DeleteSlackDirectoryMembershipsParams struct {
 // Disconnect forgets the workspace directory; connecting again starts a fresh sync.
 func (q *Queries) DeleteSlackDirectoryMemberships(ctx context.Context, arg DeleteSlackDirectoryMembershipsParams) error {
 	_, err := q.db.Exec(ctx, deleteSlackDirectoryMemberships, arg.OrganizationID, arg.SlackTeamID)
+	return err
+}
+
+const deleteSlackIdentityMappings = `-- name: DeleteSlackIdentityMappings :exec
+DELETE FROM slack_identity_mappings WHERE organization_id = $1 AND slack_team_id = $2
+`
+
+type DeleteSlackIdentityMappingsParams struct {
+	OrganizationID string
+	SlackTeamID    string
+}
+
+func (q *Queries) DeleteSlackIdentityMappings(ctx context.Context, arg DeleteSlackIdentityMappingsParams) error {
+	_, err := q.db.Exec(ctx, deleteSlackIdentityMappings, arg.OrganizationID, arg.SlackTeamID)
 	return err
 }
 
@@ -484,6 +509,38 @@ func (q *Queries) ListDueSlackDirectorySyncs(ctx context.Context, arg ListDueSla
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMappedSlackMembershipIDs = `-- name: ListMappedSlackMembershipIDs :many
+SELECT m.id FROM slack_directory_memberships m
+JOIN slack_identity_mappings im ON im.organization_id = m.organization_id AND im.slack_team_id = m.slack_team_id AND im.slack_user_id = m.slack_user_id AND im.revoked_at IS NULL
+WHERE m.organization_id = $1 AND m.slack_team_id = $2
+ORDER BY m.id
+`
+
+type ListMappedSlackMembershipIDsParams struct {
+	OrganizationID string
+	SlackTeamID    string
+}
+
+func (q *Queries) ListMappedSlackMembershipIDs(ctx context.Context, arg ListMappedSlackMembershipIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMappedSlackMembershipIDs, arg.OrganizationID, arg.SlackTeamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

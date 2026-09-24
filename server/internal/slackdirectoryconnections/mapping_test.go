@@ -202,7 +202,7 @@ func TestMappingNormalizedEmailNoReview(t *testing.T) {
 	checkMappingReview(t, "active", "person", " EXAMPLE@demo.getgram.ai ", "")
 }
 
-func TestMappingAbsentReviewAndStaleHistory(t *testing.T) {
+func TestMappingAbsentReviewAndDisconnectForgets(t *testing.T) {
 	t.Parallel()
 	ctx, f, c, m := mappingFixture(t)
 	m, err := f.service.SetMapping(ctx, mappingRequest(m, &f.auth.UserID))
@@ -217,11 +217,24 @@ func TestMappingAbsentReviewAndStaleHistory(t *testing.T) {
 	require.Nil(t, readMapping(t, ctx, f, m.ID).MappingConflictReason, "repeated absence is not a new finding")
 	_, err = f.service.Disconnect(ctx, &gen.DisconnectPayload{SessionToken: nil, ID: c.ID, Generation: c.Generation})
 	require.NoError(t, err)
+	// Disconnect forgets members and mappings, auditing the removal.
+	_, err = f.service.GetMember(ctx, &gen.GetMemberPayload{SessionToken: nil, ID: absent.ID})
+	requireMappingCode(t, err, oops.CodeNotFound)
+	remaining, err := repo.New(f.db).CountSlackIdentityMappingsForTest(ctx, f.auth.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Zero(t, remaining)
+	unmapped, err := audittest.LatestAuditLogByAction(ctx, f.db, audit.ActionSlackIdentityMappingUnmap)
+	require.NoError(t, err)
+	require.Equal(t, f.auth.UserID, unmapped.ActorID)
+	// With no history left, connecting again lets email matching map the member afresh.
 	person := addPerson(t, ctx, f)
-	corrected, err := f.service.SetMapping(ctx, mappingRequest(absent, &person))
+	reconnected := authorize(t, ctx, f, begin(t, ctx, f, &c.ID), "TEXAMPLE01")
+	require.NoError(t, syncer(f, directory(entry("UEXAMPLE01", "Example", person+"@demo.getgram.ai", "active", "person"))).Run(ctx, syncRequest(f, reconnected), nil))
+	page, err := f.service.ListMembers(ctx, memberRequest())
 	require.NoError(t, err)
-	_, err = f.service.SetMapping(ctx, mappingRequest(corrected, nil))
-	require.NoError(t, err)
+	require.Len(t, page.Members, 1)
+	require.NotNil(t, page.Members[0].Mapping)
+	require.Equal(t, person, page.Members[0].Mapping.UserID)
 }
 
 // A fetched snapshot may finish after confirmation; publication must retain the
