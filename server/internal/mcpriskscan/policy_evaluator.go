@@ -139,24 +139,50 @@ func (p *policyEvaluator) evaluate(ctx context.Context, subject Subject) Decisio
 		return p.resolveIndeterminate(ctx, fmt.Errorf("MCP payload is %s", subject.Payload.Availability()))
 	}
 
-	request := policyScanRequest(subject, subject.Payload.Bytes())
-	var scanErr error
-	for _, policy := range blockPolicies {
-		findings, err := p.detector.ScanMCPPolicy(scanCtx, policy, request)
-		if err != nil {
-			scanErr = errors.Join(scanErr, fmt.Errorf("scan policy %s: %w", policy.ID, err))
-		}
-		if len(findings) == 0 {
-			continue
-		}
-		finding := findings[0]
-		p.publish(scanCtx, subject.Event, policy, findings, riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED)
-		return deniedDecision(policy, finding)
+	match, scanErr := p.scanBlockPolicies(scanCtx, blockPolicies, policyScanRequest(subject, subject.Payload.Bytes()))
+	if match != nil {
+		p.publish(scanCtx, subject.Event, match.policy, match.findings, riskv1.Finding_ENFORCEMENT_OUTCOME_DENIED)
+		return deniedDecision(match.policy, match.findings[0])
 	}
 	if scanErr != nil || scanCtx.Err() != nil {
 		return p.resolveIndeterminate(ctx, errors.Join(scanErr, scanCtx.Err()))
 	}
 	return Allow()
+}
+
+type blockMatch struct {
+	policy   policycore.Policy
+	findings []scanners.Finding
+}
+
+// scanBlockPolicies scans concurrently; the first match cancels the rest, and
+// one policy's error never stops another from denying.
+func (p *policyEvaluator) scanBlockPolicies(ctx context.Context, policies []policycore.Policy, request risk.MCPScanRequest) (*blockMatch, error) {
+	matchCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		mu      sync.Mutex
+		match   *blockMatch
+		scanErr error
+		wg      sync.WaitGroup
+	)
+	for _, policy := range policies {
+		wg.Go(func() {
+			findings, err := p.detector.ScanMCPPolicy(matchCtx, policy, request)
+			mu.Lock()
+			defer mu.Unlock()
+			if len(findings) > 0 && match == nil {
+				match = &blockMatch{policy: policy, findings: findings}
+				cancel()
+			}
+			if err != nil && match == nil {
+				scanErr = errors.Join(scanErr, fmt.Errorf("scan policy %s: %w", policy.ID, err))
+			}
+		})
+	}
+	wg.Wait()
+	return match, scanErr
 }
 
 func (p *policyEvaluator) scheduleFlagLane(parent context.Context, subject Subject, policies []policycore.Policy) {

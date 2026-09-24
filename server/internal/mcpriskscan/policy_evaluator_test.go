@@ -278,6 +278,37 @@ func TestPolicyEvaluator_DeadlineBoundsBlockDetector(t *testing.T) {
 	require.Less(t, time.Since(started), 250*time.Millisecond)
 }
 
+func TestPolicyEvaluator_BlockPoliciesScanConcurrently(t *testing.T) {
+	t.Parallel()
+	projectID := uuid.New()
+	serverID := uuid.New()
+	slow := policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Slow", Action: "block"}
+	failing := policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Failing", Action: "block"}
+	matching := policycore.Policy{ID: uuid.New(), ProjectID: projectID, OrganizationID: "org-test", Name: "Matching", Action: "block"}
+	slowCancelled := make(chan struct{})
+	publisher := &findingPublisher{}
+	evaluator := newPolicyEvaluator(t, staticPolicies(slow, failing, matching), policyDetectorFunc(func(ctx context.Context, policy policycore.Policy, _ risk.MCPScanRequest) ([]scanners.Finding, error) {
+		switch policy.ID {
+		case slow.ID:
+			<-ctx.Done()
+			close(slowCancelled)
+			return nil, ctx.Err()
+		case failing.ID:
+			return nil, errors.New("detector unavailable")
+		default:
+			return []scanners.Finding{{RuleID: "secret.token", Description: "Credential detected", Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
+		}
+	}), publisher, mcpriskscan.PolicyConfig{Deadline: 5 * time.Second, FailMode: mcpriskscan.FailOpen, FlagConcurrency: 1})
+
+	started := time.Now()
+	decision := evaluator.Scan(t.Context(), requestSubject(t.Context(), projectID, serverID, `{}`))
+	require.True(t, decision.Denied())
+	require.Equal(t, matching.ID.String(), decision.PolicyID)
+	require.Less(t, time.Since(started), time.Second)
+	<-slowCancelled
+	require.Len(t, publisher.snapshot(), 1)
+}
+
 func TestPolicyEvaluator_DropsFlagLaneWhenCapacityIsFull(t *testing.T) {
 	t.Parallel()
 	projectID := uuid.New()
