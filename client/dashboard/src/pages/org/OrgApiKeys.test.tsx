@@ -318,34 +318,69 @@ describe("API key scope options", () => {
     expect(screen.getByText("Purpose-built keys")).toBeTruthy();
   });
 
-  it("describes what each scope grants and excludes", async () => {
+  it("summarizes each scope in one line, with the access list behind a toggle", async () => {
     render(<OrgApiKeys />);
     await openForm();
-    const describedText = (name: RegExp) => {
-      const radio = screen.getByRole("radio", { name });
-      const described = radio.getAttribute("aria-describedby");
-      expect(described).toBeTruthy();
-      return document.getElementById(described!)?.textContent ?? "";
-    };
-    expect(describedText(/^Consumer/)).toContain(
-      "Call MCP servers and the tools they expose",
-    );
-    expect(describedText(/^Consumer/)).toContain(
-      "Deployments, configuration changes, conversation content",
-    );
-    expect(describedText(/^Producer/)).toContain(
-      "Covers everything Consumer and Chat allow",
-    );
-    expect(describedText(/^Hooks/)).toContain(
-      "Send hook events and OpenTelemetry data",
-    );
-    expect(describedText(/^Agent/)).toContain(
-      "Store it in managed.json as org_token",
-    );
+    expect(
+      screen.getByText("Use what is already set up, without changing it."),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Manage a project end to end. Covers everything Consumer and Chat allow.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("Call MCP servers and the tools they expose"),
+    ).toBeNull();
     expect(
       screen.getByText(
         "A key's scope is fixed once it is created. Pick the narrowest scope that covers the job.",
       ),
+    ).toBeTruthy();
+  });
+
+  it("reveals grants and exclusions on request without changing the selection", async () => {
+    render(<OrgApiKeys />);
+    const user = await openForm();
+    await user.click(
+      screen.getByRole("button", { name: "Access details for Producer" }),
+    );
+    expect(
+      screen.getByText("Upload OpenAPI documents and trigger deployments"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("AI traffic ingestion, device agent enrollment"),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("radio", { checked: true }).getAttribute("value"),
+    ).toBe("consumer");
+    await user.click(
+      screen.getByRole("button", { name: "Access details for Producer" }),
+    );
+    expect(
+      screen.queryByText("Upload OpenAPI documents and trigger deployments"),
+    ).toBeNull();
+  });
+
+  it("keeps each scope's access details with its own card", async () => {
+    render(<OrgApiKeys />);
+    const user = await openForm();
+    await user.click(
+      screen.getByRole("button", { name: "Access details for Agent" }),
+    );
+    expect(
+      screen.getByText(
+        "Store it in managed.json as org_token, or hand it to a developer for speakeasy enroll.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("Send hook events and OpenTelemetry data"),
+    ).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: "Access details for Hooks" }),
+    );
+    expect(
+      screen.getByText("Send hook events and OpenTelemetry data"),
     ).toBeTruthy();
   });
 

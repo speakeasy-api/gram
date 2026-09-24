@@ -1,9 +1,15 @@
 import { AnyField } from "@/components/moon/any-field";
 import { Badge } from "@/components/ui/Badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
-import { Check, X } from "lucide-react";
-import { useId } from "react";
+import { cn } from "@/lib/utils";
+import { Check, ChevronDown, X } from "lucide-react";
+import { useId, useState } from "react";
 
 const DEFAULT_API_KEY_SCOPE = "consumer";
 
@@ -98,6 +104,8 @@ function ScopeOptionCard({
 }: {
   option: ApiKeyScopeOption;
 }): JSX.Element {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
   return (
     <RadioCard
       value={option.value}
@@ -113,21 +121,38 @@ function ScopeOptionCard({
       }
     >
       <Text small>{option.tagline}</Text>
-      <ul className="mt-2 space-y-1">
-        {option.grants.map((grant) => (
-          <ScopeDetail key={grant} icon={<Check className="size-3.5" />}>
-            {grant}
-          </ScopeDetail>
-        ))}
-        <ScopeDetail icon={<X className="size-3.5" />}>
-          {option.excludes}
-        </ScopeDetail>
-      </ul>
-      {option.note ? (
-        <Text small muted className="mt-2">
-          {option.note}
-        </Text>
-      ) : null}
+      <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <CollapsibleTrigger
+          aria-label={`Access details for ${option.title}`}
+          className="text-muted-foreground hover:text-foreground mt-1 flex items-center gap-1 text-xs"
+        >
+          Access details
+          <ChevronDown
+            aria-hidden
+            className={cn(
+              "size-3 transition-transform",
+              detailsOpen && "rotate-180",
+            )}
+          />
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <ul className="mt-2 space-y-1">
+            {option.grants.map((grant) => (
+              <ScopeDetail key={grant} icon={<Check className="size-3.5" />}>
+                {grant}
+              </ScopeDetail>
+            ))}
+            <ScopeDetail icon={<X className="size-3.5" />}>
+              {option.excludes}
+            </ScopeDetail>
+          </ul>
+          {option.note ? (
+            <Text small muted className="mt-2">
+              {option.note}
+            </Text>
+          ) : null}
+        </CollapsibleContent>
+      </Collapsible>
     </RadioCard>
   );
 }
