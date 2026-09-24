@@ -160,7 +160,7 @@ it.each([
   ],
   [
     "wrong_workspace",
-    "That is a different Slack workspace. Reconnect and choose the workspace shown here.",
+    "That is a different Slack workspace. Connect Slack again and choose the workspace shown here.",
   ],
   [
     "connection_changed",
@@ -262,7 +262,7 @@ it.each([true, false])(
       ),
     ).toBeTruthy();
     expect(screen.queryByText(/Ask your deployment administrator/)).toBeNull();
-    for (const name of ["Connect Slack", "Reconnect", "Disconnect"]) {
+    for (const name of ["Connect Slack", "Disconnect"]) {
       const button = screen.getByRole("button", { name });
       expect(button.hasAttribute("disabled")).toBe(true);
       fireEvent.click(button);
@@ -271,3 +271,9 @@ it.each([true, false])(
     expect(mocks.mutate).not.toHaveBeenCalled();
   },
 );
+
+it("has no per-workspace Reconnect button", () => {
+  show();
+  expect(screen.getByText("Example workspace")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
+});

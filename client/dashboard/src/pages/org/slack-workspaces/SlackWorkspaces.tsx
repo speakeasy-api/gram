@@ -35,7 +35,7 @@ const outcomes: Record<string, string> = {
   invalid_state:
     "This authorization link expired or belongs to another session. Connect Slack again.",
   wrong_workspace:
-    "That is a different Slack workspace. Reconnect and choose the workspace shown here.",
+    "That is a different Slack workspace. Connect Slack again and choose the workspace shown here.",
   connection_changed:
     "The workspace state changed during authorization. Try connecting again.",
   authorization_failed:
@@ -46,9 +46,9 @@ const outcomes: Record<string, string> = {
 
 function connectionError(code?: string): string {
   if (code === "authorization_expired")
-    return "Slack authorization expired. Reconnect to restore access.";
+    return "Slack authorization expired. Connect Slack again and choose this workspace to restore access.";
   if (code === "credential_unavailable")
-    return "Stored credentials are unavailable. Reconnect this workspace.";
+    return "Stored credentials are unavailable. Connect Slack again and choose this workspace.";
   return "Authorize this workspace to restore access.";
 }
 function statusVariant(
@@ -61,7 +61,7 @@ function statusVariant(
 function statusLabel(status: SlackDirectoryConnection["status"]): string {
   if (status === "connected") return "Connected";
   if (status === "disconnected") return "Disconnected";
-  return "Reconnect required";
+  return "Needs authorization";
 }
 
 export function SlackWorkspaces(): JSX.Element {
@@ -106,12 +106,13 @@ function SlackWorkspacesContent(): JSX.Element {
   });
   const connections = query.data?.connections ?? [];
   const configured = query.data?.authorizationConfigured === true;
-  const start = (connectionId?: string) => {
+  // Connecting a workspace that is already listed reauthorizes it in place.
+  const start = () => {
     if (isDemo) return;
     setRedirectError(null);
     begin.mutate(
       {
-        request: { beginSlackDirectoryConnectionRequestBody: { connectionId } },
+        request: { beginSlackDirectoryConnectionRequestBody: {} },
         security: SESSION_SECURITY,
       },
       {
@@ -249,14 +250,6 @@ function SlackWorkspacesContent(): JSX.Element {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={isDemo || !configured || begin.isPending}
-                  onClick={() => start(connection.id)}
-                >
-                  Reconnect
-                </Button>
                 {connection.status !== "disconnected" && (
                   <Button
                     variant="tertiary"
