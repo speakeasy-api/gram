@@ -99,6 +99,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/memory"
@@ -340,6 +341,12 @@ func mcpRuntimeFlags() []cli.Flag {
 			Name:    "authentication-host-url",
 			Usage:   "Base URL of the alternate authentication host. It serves the per-server MCP OAuth authorization server, kept apart from MCP traffic. Issuers opt in to announcing it. Empty disables it.",
 			EnvVars: []string{"GRAM_AUTHENTICATION_HOST_URL"},
+		},
+		&cli.BoolFlag{
+			Name:    "registry-discovery-enabled",
+			Usage:   "Expose authenticated discovery-only registry preview",
+			EnvVars: []string{"GRAM_REGISTRY_DISCOVERY_ENABLED"},
+			Value:   false,
 		},
 		&cli.BoolFlag{
 			Name:    "network-ingress-enabled",
@@ -1735,6 +1742,16 @@ func newStartCommand() *cli.Command {
 			mcpapproval.Attach(mux, mcpApprovalService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine, mcpPolicyEvaluator))
 			mcpmetadata.Attach(mux, mcpMetadataService)
+			if c.Bool("registry-discovery-enabled") {
+				validator, err := mcpregistry.LoadValidator()
+				if err != nil {
+					return fmt.Errorf("registry discovery validator: %w", err)
+				}
+				registry := mcpregistry.New(db, validator)
+				if err := registry.AttachDiscovery(ctx, mux, true, auth.New(logger, db, sessionManager, authzEngine), authzEngine); err != nil {
+					return fmt.Errorf("registry discovery readiness: %w", err)
+				}
+			}
 			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, nil)
 			externalmcp.Attach(mux, externalmcp.NewService(logger, tracerProvider, db, sessionManager, mcpRegistryClient, mcpCatalog, authzEngine, serverURL))
 			riskSignaler := background.NewThrottledSignaler(
@@ -1754,54 +1771,55 @@ func newStartCommand() *cli.Command {
 				riskFindings = riskchrepo.New(chDB)
 			}
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPConfig{
-				Logger:                  logger,
-				MeterProvider:           meterProvider,
-				TracerProvider:          tracerProvider,
-				Mux:                     mux,
-				DB:                      db,
-				Redis:                   redisClient,
-				ServerURL:               serverURL,
-				DashboardURL:            siteURL,
-				Environment:             c.String("environment"),
-				JWTSigningKey:           c.String(usersessions.JWTSigningKeyFlag),
-				ProductFeatures:         productFeatures,
-				FeatureFlags:            featureFlags,
-				DistributionAdmission:   distributionAdmission,
-				Authz:                   authzEngine,
-				Encryption:              encryptionClient,
-				Identity:                identityResolver,
-				Sessions:                sessionManager,
-				Registry:                mcpRegistryClient,
-				Catalog:                 mcpCatalog,
-				GuardianPolicy:          guardianPolicy,
-				RemoteChallengeManager:  remoteChallengeManager,
-				IdentityCommitter:       identityCommitter,
-				AuditLogger:             auditLogger,
-				AccessRoles:             roleClient,
-				PluginPublisher:         pluginPublisher,
-				PluginPublishSignaler:   pluginsPublishSignaler,
-				NetworkAccessAdmission:  networkIngressAdmission,
-				PublicationRequests:     plugins.PublicationRequests{Enabled: publicationEmit},
-				TemporalEnv:             temporalEnv,
-				Skills:                  skillsService,
-				RiskPolicyApprovals:     mcpApprovalService,
-				RiskPolicySignaler:      riskSignaler,
-				RiskPolicyCache:         shadowMCPClient,
-				RiskExclusionReconciler: &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger},
-				RiskAnalysisDescriber:   riskAnalysisDescriber,
-				RiskFindings:            riskFindings,
-				Telemetry:               telemetryrepo.New(chDB),
-				TelemetryDrilldown:      telemetryrepo.New(chDB),
-				WorkflowRun:             posthogClient,
-				CanonicalIdentity:       telemSvc,
-				RecentToolCalls:         telemetryrepo.New(chDB),
-				EventFeed:               otelchrepo.New(chDB),
-				LogsEnabled:             platformmcp.FeatureChecker(logsEnabled),
-				ShadowInventory:         accessService,
-				ShadowReview:            mcpApprovalService,
-				SessionCapture:          platformmcp.FeatureChecker(sessionCaptureEnabled),
-				SessionPortability:      platformmcp.FeatureChecker(sessionPortabilityEnabled),
-				LocalFixture:            platformFixture,
+				Logger:                   logger,
+				MeterProvider:            meterProvider,
+				TracerProvider:           tracerProvider,
+				Mux:                      mux,
+				DB:                       db,
+				Redis:                    redisClient,
+				ServerURL:                serverURL,
+				DashboardURL:             siteURL,
+				Environment:              c.String("environment"),
+				JWTSigningKey:            c.String(usersessions.JWTSigningKeyFlag),
+				ProductFeatures:          productFeatures,
+				FeatureFlags:             featureFlags,
+				DistributionAdmission:    distributionAdmission,
+				Authz:                    authzEngine,
+				Encryption:               encryptionClient,
+				Identity:                 identityResolver,
+				Sessions:                 sessionManager,
+				Registry:                 mcpRegistryClient,
+				Catalog:                  mcpCatalog,
+				GuardianPolicy:           guardianPolicy,
+				RemoteChallengeManager:   remoteChallengeManager,
+				IdentityCommitter:        identityCommitter,
+				AuditLogger:              auditLogger,
+				AccessRoles:              roleClient,
+				PluginPublisher:          pluginPublisher,
+				PluginPublishSignaler:    pluginsPublishSignaler,
+				NetworkAccessAdmission:   networkIngressAdmission,
+				PublicationRequests:      plugins.PublicationRequests{Enabled: publicationEmit},
+				TemporalEnv:              temporalEnv,
+				Skills:                   skillsService,
+				RiskPolicyApprovals:      mcpApprovalService,
+				RiskPolicySignaler:       riskSignaler,
+				RiskPolicyCache:          shadowMCPClient,
+				RiskExclusionReconciler:  &background.TemporalRiskExclusionReconciler{TemporalEnv: temporalEnv, Logger: logger},
+				RiskAnalysisDescriber:    riskAnalysisDescriber,
+				RiskFindings:             riskFindings,
+				Telemetry:                telemetryrepo.New(chDB),
+				TelemetryDrilldown:       telemetryrepo.New(chDB),
+				WorkflowRun:              posthogClient,
+				CanonicalIdentity:        telemSvc,
+				RecentToolCalls:          telemetryrepo.New(chDB),
+				EventFeed:                otelchrepo.New(chDB),
+				LogsEnabled:              platformmcp.FeatureChecker(logsEnabled),
+				ShadowInventory:          accessService,
+				ShadowReview:             mcpApprovalService,
+				SessionCapture:           platformmcp.FeatureChecker(sessionCaptureEnabled),
+				SessionPortability:       platformmcp.FeatureChecker(sessionPortabilityEnabled),
+				LocalFixture:             platformFixture,
+				RegistryDiscoveryEnabled: c.Bool("registry-discovery-enabled"),
 			})
 			if err != nil {
 				return err

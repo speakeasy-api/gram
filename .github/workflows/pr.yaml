@@ -1583,6 +1583,14 @@ jobs:
       - name: Install Go deps
         run: mise run install:go
 
+      - name: Install discovery wire-test dependencies on its shard
+        shell: bash
+        run: |
+          packages=$(cd server && go run github.com/speakeasy-api/gram/ci/cmd/shard -i "${{ matrix.shard }}/${{ strategy.job-total }}" -tags=inv.debug ./...)
+          if grep -qx 'github.com/speakeasy-api/gram/server/internal/mcpregistry' <<< "$packages"; then
+            aube install --frozen-lockfile --filter . --filter 'dashboard...'
+          fi
+
       - name: Test
         # Each package can launch Postgres, Redis, and ClickHouse concurrently.
         # Bound package concurrency so eight race-enabled binaries plus their
