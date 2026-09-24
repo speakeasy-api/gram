@@ -51,12 +51,14 @@ func TestCallerAssertionStripsSpoofingWithAndWithoutSigning(t *testing.T) {
 	p.Headers = []ConfiguredHeader{{Name: "SPEAKEASY_AUTHZ", StaticValue: "configured-forgery"}, {Name: "speakeasy-authz", StaticValue: "configured-forgery"}, {Name: "X-Leaked-Assertion", ValueFromRequestHeader: "Speakeasy_authz", IsRequired: true}}
 	inbound := httptest.NewRequest(http.MethodPost, "http://gram.example/mcp", nil)
 	inbound.Header = http.Header{"SPEAKEASY_AUTHZ": {"forged"}, "Speakeasy_authz": {"forged"}, "speakeasy-authz": {"forged"}, "Authorization": {"Bearer gram-secret"}}
+	inboundHeaders := inbound.Header.Clone()
 	for _, enabled := range []bool{true, false} {
 		if !enabled {
 			p.CallerAssertion = nil
 		}
 		outbound := httptest.NewRequest(http.MethodPost, p.RemoteURL, nil)
 		require.NoError(t, p.applyRequestHeaders(ctx, inbound, outbound))
+		require.Equal(t, inboundHeaders, inbound.Header)
 		require.Equal(t, "Bearer upstream-oauth", outbound.Header.Get("Authorization"))
 		require.Empty(t, outbound.Header.Get("Speakeasy-Authz"))
 		require.Empty(t, outbound.Header.Get("X-Leaked-Assertion"))

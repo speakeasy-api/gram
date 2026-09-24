@@ -389,7 +389,7 @@ func (s *Service) serveConsentProxiedMCP(
 		// One state-derived affinity key pins the whole consent session
 		// (initialize, list pages, DELETE) to a single gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("consent", challengeState.ID)
-		p, err = s.tunnelManager.buildProxy(ctx, affinity, logger, endpoint.ProjectID, endpoint.OrganizationID, serverRow, upstreamToken, "", nil)
+		p, err = s.tunnelManager.buildProxy(ctx, affinity, logger, endpoint.ProjectID, endpoint.OrganizationID, serverRow, upstreamToken, "", nil, remotemcp.WithCallerAssertionResource(endpoint.UpstreamResource))
 		if err != nil {
 			return err
 		}

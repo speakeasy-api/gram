@@ -442,7 +442,6 @@ func mcpRuntimeFlags() []cli.Flag {
 			Required: true,
 			EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
 		},
-		&cli.BoolFlag{Name: "tunnel-gateway-enabled", Usage: "Require caller identity signing configuration for tunnel gateways", EnvVars: []string{"GRAM_TUNNEL_GATEWAY_ENABLED"}},
 		&cli.StringFlag{Name: "authz-private-key", Usage: "PKCS#8 RSA private PEM for private-tunnel caller assertions", EnvVars: []string{"GRAM_AUTHZ_PRIVATE_KEY"}},
 		&cli.StringFlag{Name: "authz-public-keys", Usage: "SubjectPublicKeyInfo RSA PEM bundle for caller assertion verification and rotation", EnvVars: []string{"GRAM_AUTHZ_PUBLIC_KEYS"}},
 		&cli.StringFlag{Name: "authz-issuer-url", Usage: "AICP issuer origin for this deployment", EnvVars: []string{"GRAM_AUTHZ_ISSUER_URL"}},
@@ -853,7 +852,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("invalid server url: %w", err)
 			}
 
-			callerAssertions, err := newCallerAssertions(c)
+			callerAssertions, err := mcpauthz.New(c.String("authz-private-key"), c.String("authz-public-keys"), c.String("authz-issuer-url"), c.String("environment") == "local")
 			if err != nil {
 				return fmt.Errorf("configure caller assertions: %w", err)
 			}
@@ -1323,7 +1322,6 @@ func newStartCommand() *cli.Command {
 			// at the outermost public-listener boundary, before short-circuit
 			// handlers, tracing, or logging.
 			mux.Use(middleware.NetworkServingPolicyVersion)
-			mux.Use(mcpauthz.StripMiddleware)
 			mux.Use(middleware.StripPrivateIngressHeaders)
 			mux.Use(func(h http.Handler) http.Handler {
 				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

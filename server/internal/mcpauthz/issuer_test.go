@@ -9,8 +9,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -260,7 +258,7 @@ func TestRotationPrepublishOverlapAndRetirement(t *testing.T) {
 	require.Equal(t, a.kid, same.kid)
 }
 
-func TestStartupRejectsPartialOrUnsafeConfiguration(t *testing.T) {
+func TestStartupRejectsInvalidSigningConfiguration(t *testing.T) {
 	t.Parallel()
 	private, public := keyPEM(t, 2048)
 	smallPrivate, smallPublic := keyPEM(t, 1024)
@@ -270,7 +268,7 @@ func TestStartupRejectsPartialOrUnsafeConfiguration(t *testing.T) {
 	ecBytes, err := x509.MarshalPKIXPublicKey(&ec.PublicKey)
 	require.NoError(t, err)
 	ecPEM := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: ecBytes}))
-	configs := [][3]string{{private, "", "https://gram.example"}, {"", public, "https://gram.example"}, {private, private + public, "https://gram.example"}, {private, other, "https://gram.example"}, {smallPrivate, smallPublic, "https://gram.example"}, {private, public + smallPublic, "https://gram.example"}, {private, public + ecPEM, "https://gram.example"}, {private + private, public, "https://gram.example"}, {private, public + "junk", "https://gram.example"}, {private, public, "http://gram.example"}, {private, public, "https://gram.example/path"}, {private, public, "https://user:pass@gram.example"}}
+	configs := [][3]string{{private, private + public, "https://gram.example"}, {private, other, "https://gram.example"}, {smallPrivate, smallPublic, "https://gram.example"}, {private, public + smallPublic, "https://gram.example"}, {private, public + ecPEM, "https://gram.example"}, {private + private, public, "https://gram.example"}, {private, public + "junk", "https://gram.example"}, {private, public, "http://gram.example"}, {private, public, "https://gram.example/path"}, {private, public, "https://user:pass@gram.example"}}
 	for i, c := range configs {
 		_, err := New(c[0], c[1], c[2], false)
 		require.Error(t, err, "case %d", i)
@@ -294,25 +292,25 @@ func TestStartupRequiresPKCS8PrivateAndSPKIPublicKeys(t *testing.T) {
 	require.ErrorContains(t, err, "PKCS#8")
 	_, err = New(private, legacyPublic, "https://tunnel.example", false)
 	require.ErrorContains(t, err, "SubjectPublicKeyInfo")
-	_, err = New(private, public, "", false)
-	require.ErrorContains(t, err, "GRAM_AUTHZ_ISSUER_URL")
-	_, err = New("", "", "https://tunnel.example", false)
-	require.ErrorContains(t, err, "GRAM_AUTHZ_PRIVATE_KEY")
 }
 
-func TestInboundAssertionStripping(t *testing.T) {
+func TestMissingSigningConfigurationDisablesAssertions(t *testing.T) {
 	t.Parallel()
-	var forwarded http.Header
-	handler := StripMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		forwarded = r.Header.Clone()
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	for _, path := range []string{"/mcp/test", "/.well-known/jwks.json"} {
-		req := httptest.NewRequest(http.MethodPost, path, nil)
-		req.Header = http.Header{"SPEAKEASY_AUTHZ": {"fake"}, "Speakeasy_authz": {"fake"}, "speakeasy-authz": {"fake"}, "Authorization": {"Bearer upstream"}}
-		w := httptest.NewRecorder()
-		handler.ServeHTTP(w, req)
-		require.Equal(t, http.StatusNoContent, w.Code, "stripping middleware must not serve a public key route")
-		require.Equal(t, http.Header{"Authorization": {"Bearer upstream"}}, forwarded)
+	private, public := keyPEM(t, 2048)
+	for _, config := range [][3]string{
+		{"", "", ""},
+		{"", public, "https://tunnel.example"},
+		{private, "", "https://tunnel.example"},
+		{private, public, ""},
+		{" ", public, "https://tunnel.example"},
+		{private, "\n", "https://tunnel.example"},
+		{private, public, "\t"},
+	} {
+		issuer, err := New(config[0], config[1], config[2], false)
+		require.NoError(t, err)
+		require.False(t, issuer.Enabled())
+		assertion, err := issuer.Mint(t.Context(), targetForTest())
+		require.NoError(t, err)
+		require.Empty(t, assertion)
 	}
 }

@@ -287,7 +287,7 @@ func TestServeConsent_OtherResourceDisplayFallsBackToIssuer(t *testing.T) {
 // another provider's grant is never judged.
 func TestServeConsent_TunneledServerAppliesRuleToOwnIssuerOnly(t *testing.T) {
 	t.Parallel()
-	const identifier = "urn:gram:tunnel:single"
+	const identifier = "https://mcp.example.test/a%2Fb/"
 	var serverID uuid.UUID
 	ctx, fx := standaloneConsent(t, "rt-tunnel", identifier, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
 		serverID = createTunneledServer(t, ctx, ti, projectID, issuerID, slug, identifier)
@@ -304,4 +304,7 @@ func TestServeConsent_TunneledServerAppliesRuleToOwnIssuerOnly(t *testing.T) {
 	grant(t, ctx, fx, own, "urn:gram:tunnel:other")
 	expect(t, fx, 1, 2, true)
 	expectRechecks(t, fx, 0)
+	grant(t, ctx, fx, own, strings.TrimRight(identifier, "/"))
+	expect(t, fx, 2, 2, false)
+	expectRechecks(t, fx, 1)
 }

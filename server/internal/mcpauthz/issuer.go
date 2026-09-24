@@ -55,14 +55,11 @@ type Target struct {
 	ResourceIdentifier string
 }
 
-// New validates configuration before serving traffic. Leaving both key settings
-// and the issuer empty disables issuance. Partial configuration is an error.
+// New returns a signer when all three settings are present. Missing settings
+// disable signing; a complete configuration must contain valid keys and issuer.
 func New(privatePEM, publicPEM, issuerURL string, allowHTTP bool) (*Issuer, error) {
-	if strings.TrimSpace(privatePEM) == "" && strings.TrimSpace(publicPEM) == "" && strings.TrimSpace(issuerURL) == "" {
-		return &Issuer{key: nil, kid: "", issuer: ""}, nil
-	}
 	if strings.TrimSpace(privatePEM) == "" || strings.TrimSpace(publicPEM) == "" || strings.TrimSpace(issuerURL) == "" {
-		return nil, errors.New("GRAM_AUTHZ_PRIVATE_KEY, GRAM_AUTHZ_PUBLIC_KEYS and GRAM_AUTHZ_ISSUER_URL are required")
+		return nil, nil
 	}
 	u, err := url.Parse(issuerURL)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" ||
@@ -122,14 +119,6 @@ func Strip(header http.Header) {
 			delete(header, name)
 		}
 	}
-}
-
-// StripMiddleware removes reserved inbound headers before authentication and instrumentation.
-func StripMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		Strip(r.Header)
-		next.ServeHTTP(w, r)
-	})
 }
 
 // Enabled reports whether startup configured an active signing key.
