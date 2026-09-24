@@ -3077,6 +3077,28 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: expected 4 workload admissions, found %', stray;
   END IF;
 
+  -- The seed writes these tables in raw SQL, so it never passes through
+  -- workloadidentity.ValidateSubjectRule the way the management API does. These
+  -- two asserts are that validation, applied to what was actually written: a
+  -- wildcard rule under an issuer that forbids wildcards is inert, and a stem
+  -- with no trailing "*" matches nothing. Either would reseed daily into the
+  -- demo organization and read as working configuration.
+  SELECT count(*) INTO stray
+  FROM workload_identity_admissions a
+  JOIN workload_issuers i ON i.id = a.workload_issuer_id
+  WHERE a.organization_id = demo_org AND a.deleted IS FALSE
+    AND a.match_kind = 'wildcard' AND i.allow_wildcard_admission IS FALSE;
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % wildcard admissions under an issuer that forbids wildcards', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM workload_identity_admissions
+  WHERE organization_id = demo_org AND deleted IS FALSE
+    AND match_kind = 'wildcard' AND subject NOT LIKE '%*';
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % wildcard admissions with no trailing star', stray;
+  END IF;
+
   SELECT count(*) INTO stray FROM workload_agent_assignments
   WHERE organization_id = demo_org AND deleted IS FALSE;
   IF stray <> 3 THEN
