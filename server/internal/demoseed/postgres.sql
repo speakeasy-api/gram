@@ -915,7 +915,7 @@ BEGIN
     INSERT INTO http_tool_definitions
       (tool_urn, project_id, deployment_id, openapiv3_document_id, name, summary,
        description, server_env_var, http_method, path, schema_version, schema,
-       read_only_hint)
+       read_only_hint, destructive_hint)
     VALUES (tool_urns[i], proj_a, deploy_id, doa_id, tool_names[i],
             'Acme ' || replace(tool_names[i], '_', ' '),
             'Calls the Acme internal API operation ' || tool_names[i] || '.',
@@ -923,7 +923,8 @@ BEGIN
             CASE WHEN tool_names[i] IN ('process_refund', 'set_env') THEN 'POST' ELSE 'GET' END,
             '/' || replace(tool_names[i], '_', '/'),
             '1.0.0', '{"type":"object","properties":{}}'::jsonb,
-            tool_names[i] <> 'process_refund');
+            tool_names[i] <> 'process_refund',
+            tool_names[i] = 'process_refund');
   END LOOP;
 
   -- Keep a metadata-based External OAuth row so the authentication page can
