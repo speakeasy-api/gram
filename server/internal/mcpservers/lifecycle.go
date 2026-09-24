@@ -208,10 +208,14 @@ func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, audit
 
 	storedMode := pgtype.Text{String: "", Valid: false}
 	if input.NetworkAccessMode != nil {
-		if _, err := networkaccess.Parse(string(*input.NetworkAccessMode)); err != nil {
+		mode, err := networkaccess.Parse(string(*input.NetworkAccessMode))
+		if err != nil {
 			return repo.McpServer{}, fmt.Errorf("validate MCP server network access mode: %w", err)
 		}
-		storedMode = networkaccess.Storage(*input.NetworkAccessMode)
+		if existing.UnproxiedMcpServerID.Valid && !mode.IsPublicOnly() {
+			return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
+		}
+		storedMode = networkaccess.Storage(mode)
 	}
 
 	updated, err := repo.New(tx).UpdateMCPServer(ctx, repo.UpdateMCPServerParams{

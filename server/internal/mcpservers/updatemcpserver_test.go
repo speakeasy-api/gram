@@ -67,6 +67,37 @@ func TestUpdateMcpServer_NetworkModeOnlyTransaction(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
+func TestUpdateMcpServer_LifecycleRejectsUnproxiedPrivateMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	unproxiedID := seedUnproxiedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	created, err := ti.service.CreateMcpServer(withStaffEmail(t, ctx), &gen.CreateMcpServerPayload{
+		Name: "unproxied lifecycle", UnproxiedMcpServerID: &unproxiedID,
+		Visibility: types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+
+	tx, err := ti.conn.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	existing, err := mcpserversrepo.New(tx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
+		ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	mode := networkaccess.ModePrivateOnly
+	_, err = mcpservers.UpdateMCPServerLifecycleInTransaction(ctx, tx, audit.NewLogger(), existing, mcpservers.LifecycleUpdateInput{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		ActorUserID: authCtx.UserID, ActorEmail: authCtx.Email,
+		ServerID: existing.ID, Visibility: existing.Visibility,
+		NetworkAccessMode:    &mode,
+		UnproxiedMcpServerID: existing.UnproxiedMcpServerID,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
 func TestUpdateMcpServer_FullReplace(t *testing.T) {
 	t.Parallel()
 
