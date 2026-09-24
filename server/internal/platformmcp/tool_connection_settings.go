@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -17,7 +18,7 @@ func registerMCPConnectionSettingsTool(reg *Registrar, service *MCPConnectionSet
 		Title:       "Get MCP Connection Settings",
 		Description: "Read one exact MCP server or gateway in an explicit project: stored network mode and visibility, endpoint IDs/slugs/domains/root markers, configured ingress state, and direct plugin memberships. Ingress DNS/status are observations, not proof of client connectivity; endpoints are not necessarily publisher-selected package URLs. No concurrency-safe mutation version is available. Never returns upstream URLs, credentials, tokens, or other secrets.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPConnectionSettingsInput) (*mcp.CallToolResult, MCPConnectionSettings, error) {
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMCPRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPConnectionSettingsInput) (*mcp.CallToolResult, MCPConnectionSettings, error) {
 		return principalToolCall(ctx, mcpConnectionSettingsToolResult, func(principal Principal) (MCPConnectionSettings, error) {
 			return service.Get(ctx, principal, input)
 		})
@@ -30,8 +31,13 @@ func registerUnavailableMCPConnectionSettingsTool(reg *Registrar) {
 		Title:       "Get MCP Connection Settings",
 		Description: "Read the current connection settings for one exact MCP server or gateway in an explicit project. Connection settings are unavailable on this server.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(_ context.Context, _ *mcp.CallToolRequest, _ GetMCPConnectionSettingsInput) (*mcp.CallToolResult, featureUnavailableResult, error) {
-		return nil, featureUnavailableResult{Code: unavailableCode, Feature: "mcp_connection_settings", Message: "MCP connection settings are unavailable on this server."}, nil
+	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMCPRead}, func(_ context.Context, _ *mcp.CallToolRequest, _ GetMCPConnectionSettingsInput) (*mcp.CallToolResult, featureUnavailableResult, error) {
+		result := featureUnavailableResult{Code: unavailableCode, Feature: "mcp_connection_settings", Message: "MCP connection settings are unavailable on this server."}
+		content, err := json.Marshal(result)
+		if err != nil {
+			return nil, featureUnavailableResult{}, fmt.Errorf("encode unavailable connection settings: %w", err)
+		}
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(content)}}, IsError: true}, result, nil
 	})
 }
 

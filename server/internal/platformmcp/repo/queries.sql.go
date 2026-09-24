@@ -3087,7 +3087,7 @@ func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg Get
 
 const getPlatformMCPPluginMembershipVersion = `-- name: GetPlatformMCPPluginMembershipVersion :one
 SELECT md5(COALESCE(jsonb_agg(
-  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
   ORDER BY ps.sort_order, ps.display_name, ps.id
 )::text, '[]'))::text AS membership_version
 FROM plugin_servers ps
@@ -5632,7 +5632,7 @@ func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPl
 const listPlatformMCPPluginMemberships = `-- name: ListPlatformMCPPluginMemberships :many
 WITH membership_version AS (
   SELECT md5(COALESCE(jsonb_agg(
-    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
     ORDER BY ps.sort_order, ps.display_name, ps.id
   )::text, '[]'))::text AS value
   FROM plugin_servers ps

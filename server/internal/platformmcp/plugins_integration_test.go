@@ -482,10 +482,11 @@ func TestGetPluginAssignmentVersionChangesAfterDashboardStyleEdit(t *testing.T) 
 
 type stubPluginPublicationEvidence struct {
 	items []plugindelivery.PublicationEvidence
+	err   error
 }
 
 func (s stubPluginPublicationEvidence) ResolvePublicationEvidence(_ context.Context, _ string, _ uuid.UUID, _ []string) ([]plugindelivery.PublicationEvidence, error) {
-	return s.items, nil
+	return s.items, s.err
 }
 
 func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
@@ -526,15 +527,21 @@ func TestGetPluginRetainsInventoryWhenPublicationEvidenceIsUnavailable(t *testin
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Existing MCPs", "existing-mcps")
-	service := testPluginTargets(conn).WithPublicationEvidence(stubPluginPublicationEvidence{items: nil})
-
-	got, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "existing-mcps"})
-	require.NoError(t, err)
-	require.Equal(t, "existing-mcps", got.Plugin.Slug)
-	require.NotNil(t, got.PublicationEvidence)
-	require.True(t, got.PublicationEvidence.Unavailable)
-	require.Nil(t, got.PublicationEvidence.Fresh)
-	require.Empty(t, got.PublicationEvidence.Packages)
+	service := testPluginTargets(conn)
+	for _, evidence := range []stubPluginPublicationEvidence{
+		{items: nil},
+		{err: errors.New("publication resolution failed")},
+		{items: []plugindelivery.PublicationEvidence{{PluginSlug: "another-plugin", Packages: []plugindelivery.PublicationPackageAddress{{ServerName: "Wrong", MCPURL: "https://private.example/mcp/wrong"}}}}},
+	} {
+		service.WithPublicationEvidence(evidence)
+		got, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "existing-mcps"})
+		require.NoError(t, err)
+		require.Equal(t, "existing-mcps", got.Plugin.Slug)
+		require.NotNil(t, got.PublicationEvidence)
+		require.True(t, got.PublicationEvidence.Unavailable)
+		require.Nil(t, got.PublicationEvidence.Fresh)
+		require.Empty(t, got.PublicationEvidence.Packages)
+	}
 }
 
 func TestGetPluginPagesTypedMembershipAndRejectsStaleCursor(t *testing.T) {

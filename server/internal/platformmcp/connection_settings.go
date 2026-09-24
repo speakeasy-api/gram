@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 )
 
@@ -102,6 +103,26 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, queries *platfor
 	targetID, err := uuid.Parse(input.TargetID)
 	if err != nil || (input.TargetKind != MCPConnectionSettingsMCPServer && input.TargetKind != MCPConnectionSettingsGateway) {
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsInvalid
+	}
+	grants, ok := authz.GrantsFromContext(ctx)
+	if !ok {
+		return MCPConnectionSettings{}, ErrUnavailable
+	}
+	admin, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil})
+	if err != nil {
+		return MCPConnectionSettings{}, fmt.Errorf("authorize MCP connection settings admin: %w", err)
+	}
+	if !admin {
+		return MCPConnectionSettings{}, ErrMCPConnectionSettingsNotFound
+	}
+	if input.TargetKind == MCPConnectionSettingsMCPServer {
+		allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, targetID.String(), projectID.String()))
+		if err != nil {
+			return MCPConnectionSettings{}, fmt.Errorf("authorize MCP connection settings target: %w", err)
+		}
+		if !allowed {
+			return MCPConnectionSettings{}, ErrMCPConnectionSettingsNotFound
+		}
 	}
 	row, err := queries.GetPlatformMCPConnectionSettings(ctx, platformrepo.GetPlatformMCPConnectionSettingsParams{
 		OrganizationID: principal.OrganizationID,
