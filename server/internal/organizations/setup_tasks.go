@@ -44,22 +44,25 @@ type setupTaskDefinition struct {
 	Title         string
 	Description   string
 	Prerequisites []string
-	// HiddenByDefault keeps a task off the board unless a platform admin asks
-	// to see hidden tasks. The guided journey is identity and observability;
-	// these are real setup work an org may never reach for, and they crowd out
-	// the ones that matter on a first run.
+	// HiddenByDefault preserves legacy selection until staff explicitly save
+	// visibility. New tasks must not expand untouched organizations' boards.
 	HiddenByDefault bool
 }
 
 var setupTaskCatalog = []setupTaskDefinition{
 	{Key: "domain-verification", Title: "Verify your domain", Description: "Prove the organization owns its email domain. Single sign-on cannot be set up until a domain is verified.", Prerequisites: nil, HiddenByDefault: false},
+	{Key: "connect-idp", Title: "Connect identity provider", Description: "Configure single sign-on for the organization.", Prerequisites: []string{"domain-verification"}, HiddenByDefault: true},
+	{Key: "directory-sync", Title: "Set up directory sync", Description: "Sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: true},
+	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil, HiddenByDefault: true},
+	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: []string{"domain-verification"}, HiddenByDefault: false},
 	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
 	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Connect Cursor, Codex, and other coding agents to Speakeasy hook telemetry and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
 	{Key: "litellm", Title: "Set up LiteLLM", Description: "Point a LiteLLM proxy at Speakeasy so its traffic is scanned by risk policies and lands in observability, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Add optional provider integrations for agent activity.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: nil, HiddenByDefault: true},
+	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}, HiddenByDefault: true},
+	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: []string{"create-marketplace"}, HiddenByDefault: true},
 	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: true},
 }
@@ -188,6 +191,8 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 		stored = row
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeUnexpected, err, "get setup task state").LogError(ctx, s.logger)
+	} else if before.Hidden {
+		stored.HiddenAt = pgtype.Timestamptz{Time: time.Now().UTC(), InfinityModifier: pgtype.Finite, Valid: true}
 	}
 
 	if payload.Status != nil {
@@ -271,7 +276,7 @@ func (s *Service) sendSetupTaskAssignmentEmail(ctx context.Context, ac *contextv
 	}
 
 	recipient := conv.NormalizeEmail(task.Assignee.Email)
-	setupLink := fmt.Sprintf("%s/%s/setup?step=%s", strings.TrimRight(s.siteURL, "/"), organizationSlug, task.Key)
+	setupLink := fmt.Sprintf("%s/%s/setup?task=%s", strings.TrimRight(s.siteURL, "/"), organizationSlug, task.Key)
 	idempotencyMaterial := fmt.Sprintf("%s\x00%s\x00%s\x00%s", ac.ActiveOrganizationID, task.Key, assignmentTime.UTC().Format(time.RFC3339Nano), recipient)
 	idempotencyKey := fmt.Sprintf("setup-task-assignment:%x", sha256.Sum256([]byte(idempotencyMaterial)))
 	tmpl := email.SetupTaskAssignment{
@@ -347,12 +352,7 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 	for _, definition := range setupTaskCatalog {
 		state, persisted := stateByKey[definition.Key]
 		status := setupTaskStatusTodo
-		// The catalog default only applies until the organization has a row of
-		// its own; from then on the row decides, in both directions, so a
-		// default-hidden task a platform admin restores stays restored. That
-		// also means a row written for a status or an assignee reveals the
-		// task, which is the trade for Restore working at all: nothing gets
-		// hidden unexpectedly, and a revealed task can be hidden again.
+		// Persisted visibility overrides the catalog default in both directions.
 		hidden := definition.HiddenByDefault
 		var assignee *gen.SetupTaskAssignee
 		if persisted {
@@ -371,6 +371,14 @@ func (s *Service) projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, 
 			completedByFact = facts.DomainVerified || facts.SsoConfigured
 		case "identity-provider":
 			completedByFact = facts.SsoConfigured && facts.DsyncConfigured
+		case "connect-idp":
+			completedByFact = facts.SsoConfigured
+		case "directory-sync":
+			completedByFact = facts.DsyncConfigured
+		case "create-marketplace":
+			completedByFact = facts.MarketplacePublished
+		case "enable-logging":
+			completedByFact = facts.LoggingEnabled
 		}
 		if completedByFact {
 			status = setupTaskStatusDone
