@@ -1,5 +1,29 @@
 # server
 
+## 2.11.0
+
+### Minor Changes
+
+- 9ca84aa: Allow authenticated staff to configure onboarding presets and task visibility atomically while preserving task progress, assignments, and audit history.
+- 3884bcb: Shadow AI tools open onto the people who run them. A new `access.listAIDetectionUsers` read expands one detected tool into the enrolled users it was found for, each with their devices, signals, versions and first and last sightings, with linked alias emails folded to one person. On the Harnesses, Assistants and Local Models tabs, opening a row now shows that list, the identity page's Shadow AI table turned around; each user links to their identity page. Access decisions move to the row's context menu and a button on the tool page.
+
+### Patch Changes
+
+- 0dd4657: Platform admins get a Support Coverage page under Platform Admin that compares integration-method capability coverage across Claude Chat, Claude Code, Cowork, Cursor, Codex, and other recognized agents. It shows 30-day aggregate telemetry and current device-agent health for the organization, and reports evidence that is loading, unavailable, or unknown as such rather than as zero coverage. The `telemetry.query` endpoint gains an optional `include_dimension_values` flag, defaulting to true, so callers that only need aggregates can omit per-row dimension values.
+- b8ed073: Share OAuth wire constants and validation primitives across issuer and downstream-client flows without changing their wire behavior.
+- ee613dc: Preserve onboarding task visibility and verified completion across guided setup, and support focused identity, marketplace, logging, and traffic tasks without changing existing task selections.
+- 718a2e9: Add staff controls for onboarding presets and explicit task selection, with confirmation before replacing a draft. Seed a customized Security selection for the demo organization.
+
+## 2.10.1
+
+### Patch Changes
+
+- 85734c6: Load delegable API key permissions for all of an agent's MCP servers in one request instead of one per server, so the create API key dialog no longer fails with lock timeouts on agents with many servers.
+- aa82c9f: Recheck live authorization before delegated credential refresh, scope claim cleanup to its issuer, and quarantine rotated credentials when identity verification is unavailable without replaying them. Clear terminal configuration secrets and preserve retryable provider dependency failures.
+- 9d3e030: Reject federated delegation retries when the trusted issuer URL has changed, even if issuer and client IDs are unchanged. Revalidate private endpoint authority before consent actions consume retry state or access credentials, preserving consent state when authority has been revoked or repointed.
+- 9847774: Hook ingestion now records a trace span for each gating and persistence step (quarantine and spend gates, risk scan, warn acknowledgement, shadow-MCP guard, idempotency claim, skill activation, event persistence, MCP inventory caching), so slow gating requests can be traced to the step that stalled instead of showing as an unexplained gap under `hooks.ingest`.
+- fce61bb: Serialize project-bound agent creation with project deletion. Show the agent creation empty state when a project has no visible agents, and align settings headings with their visible controls.
+
 ## 2.10.0
 
 ### Minor Changes

@@ -2499,9 +2499,7 @@ jobs:
     # server-build-lint, so a lint failure skips it under the default
     # success() condition while its gate is open — leaving no server tag for
     # preview-retag to have aliased either.
-    # Temporarily disabled; remove the false guard to restore automatic labelling.
     if: >-
-      false &&
       !cancelled() &&
       github.event_name == 'pull_request' &&
       !github.event.pull_request.draft &&

@@ -282,6 +282,9 @@ type QueryRequestBody struct {
 	// from the time range and is floored to 3600 (the source data is bucketed
 	// hourly).
 	GranularitySeconds *int64 `form:"granularity_seconds,omitempty" json:"granularity_seconds,omitempty" xml:"granularity_seconds,omitempty"`
+	// Whether to include distinct values for other dimensions in each table row.
+	// When omitted, defaults to true.
+	IncludeDimensionValues bool `form:"include_dimension_values" json:"include_dimension_values" xml:"include_dimension_values"`
 	// When group_by is set, keep at most this many groups (ranked by sort_by); the
 	// remainder are rolled into an 'Other' group. Defaults to 10.
 	TopN int `form:"top_n" json:"top_n" xml:"top_n"`
@@ -9262,12 +9265,13 @@ func NewGetUnproxiedMcpServerClientUsageRequestBody(p *telemetry.GetUnproxiedMcp
 // "query" endpoint of the "telemetry" service.
 func NewQueryRequestBody(p *telemetry.QueryPayload) *QueryRequestBody {
 	body := &QueryRequestBody{
-		From:               p.From,
-		To:                 p.To,
-		GroupBy:            p.GroupBy,
-		GranularitySeconds: p.GranularitySeconds,
-		TopN:               p.TopN,
-		SortBy:             p.SortBy,
+		From:                   p.From,
+		To:                     p.To,
+		GroupBy:                p.GroupBy,
+		GranularitySeconds:     p.GranularitySeconds,
+		IncludeDimensionValues: p.IncludeDimensionValues,
+		TopN:                   p.TopN,
+		SortBy:                 p.SortBy,
 	}
 	if p.Filters != nil {
 		body.Filters = make([]*QueryFilterRequestBody, len(p.Filters))
@@ -9277,6 +9281,12 @@ func NewQueryRequestBody(p *telemetry.QueryPayload) *QueryRequestBody {
 				continue
 			}
 			body.Filters[i] = marshalTelemetryQueryFilterToQueryFilterRequestBody(val)
+		}
+	}
+	{
+		var zero bool
+		if body.IncludeDimensionValues == zero {
+			body.IncludeDimensionValues = true
 		}
 	}
 	{

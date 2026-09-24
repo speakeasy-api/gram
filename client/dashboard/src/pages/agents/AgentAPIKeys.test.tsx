@@ -830,7 +830,11 @@ describe("Agent API keys", () => {
     mocks.listDelegableGrants.mockResolvedValue([
       {
         ...grant,
-        selector: { resourceKind: "mcp", resourceId: "*" },
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "server_one",
+          projectId: "project_one",
+        },
       },
     ]);
     const { client } = setup();
@@ -915,7 +919,7 @@ describe("Agent API keys", () => {
     expect(mocks.listDelegableGrants).toHaveBeenCalledWith(
       {
         agentId: agent.id,
-        toolsetId: "server_one",
+        toolsetIds: ["server_one"],
       },
       undefined,
       expect.objectContaining({ signal: expect.any(AbortSignal) }),

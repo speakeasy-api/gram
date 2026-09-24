@@ -10,7 +10,7 @@ package oktaresourceconnections
 import (
 	"slices"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
 
 // State is the derived readiness of one server, in precedence order.
