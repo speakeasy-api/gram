@@ -16,6 +16,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -1536,12 +1537,16 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	var titleContent string
 	uncorrelatedPrompt := false
 	nativePrompt := false
+	// Only the conversational turns are worth naming a session after; tool
+	// traffic describes how the agent worked, not what it was asked to do.
+	conversationalTurn := false
 	switch strings.TrimSpace(payload.Event.Type) {
 	case "prompt.submitted":
 		content := canonicalPromptText(payload)
 		if strings.TrimSpace(content) == "" {
 			return false, nil
 		}
+		conversationalTurn = true
 		msg = baseMsg("user", content)
 		if correlationID := agentPromptCorrelationID(payload); correlationID != "" {
 			msg.MessageID = conv.ToPGText(correlationID)
@@ -1570,6 +1575,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 				return false, nil
 			}
 		}
+		conversationalTurn = true
 		msg = baseMsg("assistant", content)
 		if len(outputToolCalls) > 0 {
 			toolCallsJSON, err := json.Marshal(outputToolCalls)
@@ -1631,7 +1637,38 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			return false, fmt.Errorf("set Claude Tag chat title: %w", err)
 		}
 	}
+	if stored && conversationalTurn {
+		s.scheduleCanonicalChatTitle(ctx, authCtx, msg.ChatID, hookSource)
+	}
 	return stored && msg.Role == "user", nil
+}
+
+// scheduleCanonicalChatTitle asks the title generator to name a session
+// captured through unified ingest. Without this the session keeps the
+// stand-in canonicalChatTitle derived from its opening message for good: the
+// per-platform hook endpoints schedule generation themselves, and unified
+// ingest is the path every current agent client reports on.
+//
+// Claude Tag sessions are excluded. Their title is the channel they belong to,
+// refreshed on every wake, and a generated name would be overwritten on the
+// next message anyway.
+func (s *Service) scheduleCanonicalChatTitle(ctx context.Context, authCtx *contextvalues.AuthContext, chatID uuid.UUID, hookSource string) {
+	if s.chatTitleGenerator == nil || hookSource == "claude-tag" {
+		return
+	}
+	// WithoutCancel so a client that hangs up as soon as the hook is
+	// acknowledged still gets its session named.
+	if err := s.chatTitleGenerator.ScheduleChatTitleGeneration(
+		context.WithoutCancel(ctx),
+		chatID.String(),
+		authCtx.ActiveOrganizationID,
+		authCtx.ProjectID.String(),
+	); err != nil {
+		s.logger.WarnContext(ctx, "failed to schedule chat title generation",
+			attr.SlogError(err),
+			attr.SlogChatID(chatID.String()),
+		)
+	}
 }
 
 func (s *Service) markChatLiteLLMProxied(ctx context.Context, chatID, projectID uuid.UUID) {
@@ -2185,6 +2222,10 @@ func canonicalSkillName(payload *gen.IngestPayload) string {
 // an empty string when the source is unknown. The claude-tag wake-envelope
 // rewrite is only applied to Claude-family sources to prevent non-Claude
 // adapters from being labelled as channel sessions.
+//
+// Apart from a channel label, what comes back is a stand-in derived from the
+// session's opening message, which scheduleCanonicalChatTitle then asks the
+// title generator to replace with a real name.
 func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) string {
 	title := canonicalPromptText(payload)
 	if title == "" {
@@ -2195,12 +2236,7 @@ func canonicalChatTitle(payload *gen.IngestPayload, fallback, source string) str
 			title = tagTitle
 		}
 	}
-	title = strings.TrimSpace(title)
-	runes := []rune(title)
-	if len(runes) <= 80 {
-		return title
-	}
-	return string(runes[:80])
+	return chat.DerivedTitle(title)
 }
 
 func canonicalToolCallData(payload *gen.IngestPayload) *gen.HookToolCallData {

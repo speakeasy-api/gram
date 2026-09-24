@@ -43,22 +43,28 @@ type GenerateChatTitleArgs struct {
 }
 
 const (
-	defaultChatTitle       = chat.DefaultChatTitle
-	DefaultClaudeChatTitle = "Claude Code Session"
-	DefaultCoworkChatTitle = "Cowork Session"
-	DefaultClaudeAmbiguous = "Claude Session"
-	DefaultCursorChatTitle = "Cursor Session"
-	DefaultCodexChatTitle  = "Codex Session"
-)
+	defaultChatTitle = chat.DefaultChatTitle
 
-func isDefaultChatTitle(title string) bool {
-	return title == defaultChatTitle ||
-		title == DefaultClaudeChatTitle ||
-		title == DefaultCoworkChatTitle ||
-		title == DefaultClaudeAmbiguous ||
-		title == DefaultCursorChatTitle ||
-		title == DefaultCodexChatTitle
-}
+	// titleModel is a small, fast model: a 3-6 word title needs no frontier
+	// reasoning, and the default chat model spends enough wall clock on an
+	// agent transcript to run titleCompletionTimeout out.
+	titleModel = "google/gemini-3.1-flash-lite"
+	// titleCompletionTimeout stays under the activity's StartToCloseTimeout so
+	// a slow completion surfaces as a skipped title rather than a Temporal
+	// activity timeout and two pointless retries.
+	titleCompletionTimeout = 15 * time.Second
+
+	// titleContextMessages bounds how many conversation turns are fed to the
+	// model and maxTitleMessageRunes bounds each one, which together bound the
+	// prompt. Agent transcripts carry multi-kilobyte turns; without the per-turn
+	// cut an ordinary coding session sends a prompt large enough to make naming
+	// it cost — and take — as much as the conversation itself.
+	titleContextMessages = 6
+	maxTitleMessageRunes = 600
+	// maxGeneratedTitleRunes bounds what the model hands back, matching the
+	// limit the management API enforces on a manual rename.
+	maxGeneratedTitleRunes = 200
+)
 
 func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) error {
 	chatID, err := uuid.Parse(args.ChatID)
@@ -71,7 +77,7 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return fmt.Errorf("invalid project ID: %w", err)
 	}
 
-	chat, err := g.repo.GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: projectID})
+	chatRow, err := g.repo.GetChat(ctx, repo.GetChatParams{ID: chatID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil // chat was deleted or is not in this project, nothing to do
 	}
@@ -83,21 +89,20 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	// is a fast-path check on the snapshot we just read; a rename that lands
 	// *during* generation (below) is caught by the title_manually_set guard in
 	// the final UpdateChatTitle write, which is the authoritative protection.
-	if chat.TitleManuallySet {
-		return nil
-	}
-
-	// Already has a meaningful title — nothing to do.
-	if chat.Title.Valid && !isDefaultChatTitle(chat.Title.String) {
+	if chatRow.TitleManuallySet {
 		return nil
 	}
 
 	messages, err := g.repo.ListLatestGenerationChatMessages(ctx, repo.ListLatestGenerationChatMessagesParams{
 		ChatID:    chatID,
-		ProjectID: chat.ProjectID,
+		ProjectID: chatRow.ProjectID,
 	})
 	if err != nil {
 		return fmt.Errorf("list chat messages: %w", err)
+	}
+
+	if !titleIsUpForGrabs(chatRow.Title.String, messages) {
+		return nil
 	}
 
 	contextStr := buildTitleContext(messages)
@@ -105,7 +110,7 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 		return nil // Not enough context yet — will retry on next completion.
 	}
 
-	title := g.generateTitle(ctx, args.OrgID, chat.ProjectID.String(), contextStr)
+	title := g.generateTitle(ctx, args.OrgID, chatRow.ProjectID.String(), contextStr)
 	if title == defaultChatTitle {
 		return nil
 	}
@@ -124,24 +129,50 @@ func (g *GenerateChatTitle) Do(ctx context.Context, args GenerateChatTitleArgs) 
 	return nil
 }
 
+// titleIsUpForGrabs reports whether automatic generation may name this chat.
+// Fixed placeholders are always fair game. So is the stand-in the hook ingest
+// path derives from the message that opened a session: re-deriving it from the
+// chat's own messages is what tells that stand-in apart from a title a source
+// deliberately chose (an imported conversation name, a channel label), which
+// must survive untouched. Anything else is already named.
+func titleIsUpForGrabs(title string, messages []repo.ChatMessage) bool {
+	if chat.IsPlaceholderTitle(title) {
+		return true
+	}
+	contents := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		contents = append(contents, msg.Content)
+	}
+	return chat.IsDerivedTitle(title, contents...)
+}
+
 // buildTitleContext concatenates the last few user/assistant messages into a
-// single string suitable for LLM title generation.
+// single string suitable for LLM title generation. Each turn is truncated and
+// the whole context is capped: an agent transcript's turns are unbounded, and
+// a title is not worth a frontier-sized prompt.
 func buildTitleContext(messages []repo.ChatMessage) string {
-	var b strings.Builder
-	count := 0
+	lines := make([]string, 0, titleContextMessages)
 	for _, msg := range slices.Backward(messages) { // Start from the last message and work backwards to make sure we capture the most recent messages
 
 		content := chat.StripLeadingEnvelopes(msg.Content)
 		if (msg.Role != "user" && msg.Role != "assistant") || content == "" {
 			continue
 		}
-		fmt.Fprintf(&b, "%s: %s\n", msg.Role, content)
-		count++
-		if count >= 6 {
+		lines = append(lines, fmt.Sprintf("%s: %s", msg.Role, truncateRunes(content, maxTitleMessageRunes)))
+		if len(lines) >= titleContextMessages {
 			break
 		}
 	}
-	return strings.TrimSpace(b.String())
+	slices.Reverse(lines) // Restore chronological order for the model.
+	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+func truncateRunes(s string, maxRunes int) string {
+	runes := []rune(s)
+	if len(runes) <= maxRunes {
+		return s
+	}
+	return string(runes[:maxRunes]) + "…"
 }
 
 func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID string, conversationContext string) string {
@@ -149,7 +180,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		return defaultChatTitle
 	}
 
-	titleCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	titleCtx, cancel := context.WithTimeout(ctx, titleCompletionTimeout)
 	defer cancel()
 
 	systemPrompt := "Generate a concise title (3-6 words) for this conversation based on the messages below. " +
@@ -169,7 +200,7 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		Tools:                     nil,
 		ToolChoice:                nil,
 		Temperature:               nil,
-		Model:                     "",
+		Model:                     titleModel,
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceGram,
 		KeyType:                   openrouter.KeyTypeInternal,
@@ -190,11 +221,17 @@ func (g *GenerateChatTitle) generateTitle(ctx context.Context, orgID, projectID 
 		g.logger.WarnContext(ctx, "failed to generate chat title via OpenRouter", attr.SlogError(err))
 		return defaultChatTitle
 	}
+	if response == nil || response.Message == nil {
+		g.logger.WarnContext(ctx, "chat title completion returned no message")
+		return defaultChatTitle
+	}
 
-	title := strings.TrimSpace(openrouter.GetText(*response.Message))
+	// Small models like to wrap a bare title in quotes despite the
+	// instruction, and an ignored instruction can also return a sentence.
+	title := strings.Trim(strings.TrimSpace(openrouter.GetText(*response.Message)), `"'`)
 	if title == "" {
 		return defaultChatTitle
 	}
 
-	return title
+	return truncateRunes(title, maxGeneratedTitleRunes)
 }
