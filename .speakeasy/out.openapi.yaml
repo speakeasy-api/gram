@@ -27110,6 +27110,102 @@ paths:
         name: PreviewKillswitchOverlaps
       security:
         - session_header_Gram-Session: []
+  /rpc/launcher.judge:
+    post:
+      description: Judge which of the supplied command palette candidates the typed query refers to, what kind of action it asks for, and whether the intent is settled enough to act on Enter. Returns probability distributions rather than text. When no intent service is configured the response carries disabled=true and the palette falls back to fuzzy ordering.
+      operationId: launcherJudge
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JudgeRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LauncherJudgment'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: judge launcher
+      tags:
+        - launcher
+      x-speakeasy-name-override: judge
+      x-speakeasy-react-hook:
+        name: LauncherJudge
   /rpc/litellm.createInstance:
     post:
       description: Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.
@@ -82027,6 +82123,24 @@ components:
       required:
         - client_count
         - client_ids
+    JudgeRequestBody:
+      type: object
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/LauncherCandidate'
+          description: Fuzzy-prefiltered candidates to rank.
+          maxItems: 32
+        context:
+          $ref: '#/components/schemas/LauncherContext'
+        query:
+          type: string
+          description: Text typed into the command palette so far.
+          maxLength: 200
+      required:
+        - query
+        - candidates
     Key:
       type: object
       properties:
@@ -82477,6 +82591,74 @@ components:
       required:
         - client_name
         - activity_count
+    LauncherCandidate:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Short state description, such as 'MCP server · disabled'.
+          maxLength: 160
+        id:
+          type: string
+          description: Caller-chosen stable identifier echoed back in the judgment.
+          maxLength: 200
+        kind:
+          type: string
+          description: The candidate kind, such as page, mcp_server, plugin or marketplace.
+          maxLength: 64
+        title:
+          type: string
+          description: Display title of the candidate.
+          maxLength: 120
+        verbs:
+          type: array
+          items:
+            type: string
+            maxLength: 32
+          description: Verbs the caller may run on this candidate, such as open, enable, disable or publish.
+          maxItems: 8
+      description: One item the palette could open or act on.
+      required:
+        - id
+        - kind
+        - title
+    LauncherContext:
+      type: object
+      properties:
+        route:
+          type: string
+          description: The current dashboard route path.
+          maxLength: 512
+      description: The dashboard location the palette was opened from.
+    LauncherJudgment:
+      type: object
+      properties:
+        action:
+          type: object
+          description: Probability that the query asks for each of open, enable, disable, publish or unclear.
+          additionalProperties:
+            type: number
+            format: double
+        disabled:
+          type: boolean
+          description: True when no intent service is configured; the other fields are then absent. When false, target, action, ready and latency_ms are always present.
+        latency_ms:
+          type: integer
+          description: Round trip time to the intent service in milliseconds.
+          format: int64
+        ready:
+          type: number
+          description: Probability that the query is unambiguous enough to act on the best candidate on Enter.
+          format: double
+        target:
+          type: object
+          description: Probability that each candidate id, or 'none', is the item the user means.
+          additionalProperties:
+            type: number
+            format: double
+      description: Probability distributions over the supplied candidates and verbs.
+      required:
+        - disabled
     ListAIDetectionUsersResult:
       type: object
       properties:
@@ -100666,6 +100848,8 @@ tags:
     description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
   - name: keys
     description: Managing system api keys.
+  - name: launcher
+    description: Rank command palette candidates by the intent behind the text the user typed.
   - name: litellm
     description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
   - name: mcpApproval
