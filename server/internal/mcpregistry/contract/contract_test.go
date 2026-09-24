@@ -98,6 +98,7 @@ func TestStarterBaseline(t *testing.T) {
 }
 
 func TestNumberPrecision(t *testing.T) {
+	t.Parallel()
 	value, err := decode([]byte(`{"server":{"name":"io.example/fixture","description":"Fixture","version":"1"},"extension":9007199254740993}`))
 	if err != nil {
 		t.Fatal(err)
@@ -109,7 +110,11 @@ func TestNumberPrecision(t *testing.T) {
 	if err := schema.Validate(value); err != nil {
 		t.Fatal(err)
 	}
-	if got := value.(map[string]any)["extension"]; got != json.Number("9007199254740993") {
+	record, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("record is %T, want object", value)
+	}
+	if got := record["extension"]; got != json.Number("9007199254740993") {
 		t.Fatalf("number changed: %v", got)
 	}
 }
