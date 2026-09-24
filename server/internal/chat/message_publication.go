@@ -51,8 +51,7 @@ func (w *ChatMessageWriter) enqueueMessages(ctx context.Context, tx repo.DBTX, o
 		if !ok {
 			return fmt.Errorf("unsupported persisted message role %q", p.Role)
 		}
-		msg := &conversationv1.Message{}
-		msg.SetId(p.ID.String())
+		msg := conversationv1.Message_builder{Id: new(p.ID.String())}.Build()
 		msg.SetOrganizationId(organizationID)
 		msg.SetProjectId(projectID.String())
 		msg.SetConversationId(p.ChatID.String())
@@ -143,7 +142,16 @@ func (w *ChatMessageWriter) enqueueMessages(ctx context.Context, tx repo.DBTX, o
 			} `json:"function"`
 		}
 		if len(p.ToolCalls) > 0 {
-			if err := json.Unmarshal(p.ToolCalls, &calls); err != nil {
+			toolCalls := bytes.TrimSpace(p.ToolCalls)
+			// Legacy rows can contain a JSON string wrapping the tool-call array.
+			if len(toolCalls) > 0 && toolCalls[0] == '"' {
+				var encoded string
+				if err := json.Unmarshal(toolCalls, &encoded); err != nil {
+					return fmt.Errorf("decode wrapped tool calls for publication: %w", err)
+				}
+				toolCalls = []byte(encoded)
+			}
+			if err := json.Unmarshal(toolCalls, &calls); err != nil {
 				return fmt.Errorf("decode persisted tool calls for publication: %w", err)
 			}
 		}

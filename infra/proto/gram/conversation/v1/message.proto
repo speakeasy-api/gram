@@ -134,7 +134,10 @@ message Message {
   // Source value. Absence does not imply successful completion.
   string finish_reason = 10;
 
-  // Producers must supply exactly one body representation.
+  // Producers must supply exactly one body representation. Protobuf oneof only
+  // enforces at most one: ChatMessageWriter.enqueueMessages sets an inline body
+  // (including for empty messages), replacing it with a reference when oversized.
+  // Consumers must reject snapshots with neither representation.
   oneof content {
     Body body = 11;
 
