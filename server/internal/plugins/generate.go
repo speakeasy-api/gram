@@ -3201,10 +3201,14 @@ const loadServers = (): Record<string, any> => {
 const parseSkill = (text: string): { description?: string; content: string } => {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text)
   if (!m) return { content: text }
-  const line = /^description:[ \t]*(.+)$/m.exec(m[1])?.[1]?.trim()
   const content = text.slice(m[0].length)
-  if (!line || /^[|>]/.test(line)) return { content }
-  return { description: line.replace(/^(["'])(.*)\1$/, "$2"), content }
+  const lines = m[1].split(/\r?\n/)
+  const i = lines.findIndex((l) => l.startsWith("description:"))
+  if (i < 0 || /^[ \t]/.test(lines[i + 1] ?? "")) return { content }
+  const raw = lines[i].slice("description:".length).trim()
+  const quoted = /^(["'])(.*)\1$/.exec(raw)
+  if (!raw || (!quoted && /^[|>"']/.test(raw))) return { content }
+  return { description: quoted ? quoted[2] : raw, content }
 }
 
 export default {

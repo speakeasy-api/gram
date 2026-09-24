@@ -2106,7 +2106,7 @@ func TestGenerateOpenCodeFeatureLoaderSupportsV1AndV2(t *testing.T) {
 	require.Contains(t, loader, "ctx.skill.transform(")
 	require.Contains(t, loader, "async server()")
 	require.Contains(t, loader, "config: async (cfg: any)")
-	require.NotContains(t, loader, "export const", "a named export is invoked as a second V1 plugin")
+	require.NotRegexp(t, `(?m)^export[ \t]+(const|let|var|function|class|type|interface|enum|\{|\*)`, loader, "named exports are invoked as a second V1 plugin")
 
 	_, ok := files["engineering-tools/mcp.json"]
 	require.True(t, ok, "the loader reads its servers from the sibling mcp.json")
