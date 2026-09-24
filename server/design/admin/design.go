@@ -151,6 +151,28 @@ var AdminListOrganizationProjectsResult = Type("AdminListOrganizationProjectsRes
 	Attribute("projects", ArrayOf(AdminProject), "The projects belonging to the organization.")
 })
 
+var AdminMcpServer = Type("AdminMcpServer", func() {
+	Description("MCP server surfaced to admin operators. Covers both server models: mcp_servers rows and mcp_enabled toolsets that no mcp_servers row points at.")
+	Required("id", "name", "visibility", "source", "created_at")
+
+	Attribute("id", String, "The mcp_servers row ID, or the toolset ID for a toolset-only server.")
+	Attribute("name", String, "Display name of the server.")
+	Attribute("url", String, "The URL clients connect to. Omitted when the server has no routable address.")
+	Attribute("visibility", String, "The visibility of the server.", func() {
+		Enum("disabled", "private", "public")
+	})
+	Attribute("source", String, "What backs the server. toolset_only is a toolset with no mcp_servers row.", func() {
+		Enum("toolset", "remote", "tunneled", "unproxied", "toolset_only")
+	})
+	Attribute("created_at", String, func() { Format(FormatDateTime) })
+})
+
+var AdminListProjectMcpServersResult = Type("AdminListProjectMcpServersResult", func() {
+	Required("mcp_servers")
+
+	Attribute("mcp_servers", ArrayOf(AdminMcpServer), "The project's MCP servers, oldest first.")
+})
+
 var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
 	Required("organizations", "total")
 
@@ -700,6 +722,30 @@ var _ = Service("admin", func() {
 		})
 
 		Meta("openapi:operationId", "adminListOrganizationProjects")
+	})
+
+	Method("listProjectMcpServers", func() {
+		Description("Lists the MCP servers in a project (admin view, no auth scoping).")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "project_id")
+
+			Attribute("organization_id", String, "Organization the project must belong to. A project outside it is reported as not found.")
+			Attribute("project_id", String, "Project ID.", func() { Format(FormatUUID) })
+		})
+
+		Result(AdminListProjectMcpServersResult)
+
+		HTTP(func() {
+			GET("/admin/project.mcpServers")
+
+			Param("organization_id")
+			Param("project_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminListProjectMcpServers")
 	})
 
 	Method("listOrganizationActivity", func() {

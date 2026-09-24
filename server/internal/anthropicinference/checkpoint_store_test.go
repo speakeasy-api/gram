@@ -138,14 +138,26 @@ func TestPostgresCheckpointRequiresSuccessfulEvaluation(t *testing.T) {
 	// Rollout: archived messages carry no implicit acceptance.
 	saveFrame(t, store, config, frame, "")
 	var calls atomic.Int32
-	service := NewService(testenv.NewLogger(t), db, store.writer, scannerFunc(func(_ context.Context, r risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+	var promptScanned chan struct{}
+	service := NewService(testenv.NewLogger(t), db, store.writer, scannerFunc(func(ctx context.Context, r risk.RealtimeScanRequest) (*risk.ScanResult, error) {
 		calls.Add(1)
+		if r.Text == "prompt" {
+			close(promptScanned)
+		}
 		if r.Text == "blocked reply" {
+			// Evaluate the benign prefix before denying this delivery. Concurrent
+			// scans otherwise allow the denial to cancel even the first input.
+			select {
+			case <-promptScanned:
+			case <-ctx.Done():
+				return nil, fmt.Errorf("wait for prompt scan: %w", ctx.Err())
+			}
 			return &risk.ScanResult{Action: "block"}, nil
 		}
 		return nil, nil
 	}))
 	for range 2 {
+		promptScanned = make(chan struct{})
 		verdict, err := service.Process(t.Context(), config, frame)
 		require.NoError(t, err)
 		require.Equal(t, "deny", verdict.Action)
@@ -156,12 +168,12 @@ func TestPostgresCheckpointRequiresSuccessfulEvaluation(t *testing.T) {
 		require.Empty(t, raw)
 	}
 	// Denied deliveries leave the checkpoint empty, so each pass scans the
-	// transcript again. Inputs scan concurrently and a denial cancels the
-	// ones not yet started, so a pass scans between the denied input and
-	// every input.
+	// transcript again. The barrier guarantees the prompt and denied reply
+	// both scan; the concurrent result scan may be canceled by the denial.
 	require.GreaterOrEqual(t, int(calls.Load()), 2*2)
 	require.LessOrEqual(t, int(calls.Load()), 2*len(frame.Messages))
 	frame.Messages[1] = textMessage("assistant", "safe reply")
+	promptScanned = make(chan struct{})
 	verdict, err := service.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	require.Equal(t, "allow", verdict.Action)
