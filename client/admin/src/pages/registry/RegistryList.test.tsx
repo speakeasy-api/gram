@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { renderWithApp } from "@/test/harness";
+
 const list = vi.hoisted(() => vi.fn());
 vi.mock("@gram/admin-client/react-query/adminListRegistryEntries.core", () => ({
   buildAdminListRegistryEntriesQuery: (_client: unknown, request: unknown) => ({
@@ -20,6 +21,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
+
 it("bounds pages, sends search and publication filters, resets cursor and shows invalid summaries", async () => {
   list.mockImplementation(({ cursor }) =>
     Promise.resolve({
@@ -102,6 +104,7 @@ it("retries a failed list request", async () => {
   await screen.findByText("No entries found.");
   expect(screen.queryByRole("alert")).toBeNull();
 });
+
 it("shows an alert when a refetch of a cached empty list fails", async () => {
   list
     .mockResolvedValueOnce({ entries: [] })

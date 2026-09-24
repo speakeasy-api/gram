@@ -3,6 +3,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { renderWithApp } from "@/test/harness";
 import { registryEntryQuery } from "@/lib/gramAdminClient";
+
 const mutations = vi.hoisted(() => ({
   save: vi.fn(),
   create: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock(
   }),
 );
 import { RegistryEntrySheet } from "./RegistryEntrySheet";
+
 const id = "00000000-0000-4000-8000-000000000001";
 const raw =
   '{"server":{"name":"example.test/demo"},"_meta":{"n":9007199254740993}}';
@@ -50,12 +52,14 @@ beforeEach(() => {
   });
   client.setQueryData(registryEntryQuery(id).queryKey, entry);
 });
+
 afterEach(() => {
   cleanup();
   client.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
 async function mount() {
   return renderWithApp(
     <RegistryEntrySheet
@@ -66,6 +70,7 @@ async function mount() {
     { queryClient: client },
   );
 }
+
 it("saves only explicitly, preserving raw large integers and the opaque token on unpublished rows", async () => {
   mutations.save.mockResolvedValue({ ...entry, updatedAt: token + "1" });
   await mount();
@@ -78,6 +83,7 @@ it("saves only explicitly, preserving raw large integers and the opaque token on
   });
   expect(mutations.visibility).not.toHaveBeenCalled();
 });
+
 it("keeps dirty text and base token on refetch and disables visibility", async () => {
   mutations.save.mockResolvedValue(entry);
   await mount();
@@ -100,6 +106,7 @@ it("keeps dirty text and base token on refetch and disables visibility", async (
   await waitFor(() => expect(mutations.save).toHaveBeenCalled());
   expect(mutations.save.mock.calls[0]![0].request.updatedAt).toBe(token);
 });
+
 it("retains edits after conflict and only reloads after confirmation", async () => {
   mutations.save.mockRejectedValue(
     Object.assign(new Error("Stale entry"), { statusCode: 409 }),
@@ -121,6 +128,7 @@ it("retains edits after conflict and only reloads after confirmation", async () 
   ).toBe(raw + " ");
   expect(mutations.save).toHaveBeenCalledTimes(1);
 });
+
 it("confirms dirty cancel and performs no save", async () => {
   await mount();
   fireEvent.change(await screen.findByLabelText("Record JSON"), {
@@ -163,6 +171,7 @@ it("disables duplicate submission and close while pending", async () => {
       .disabled,
   ).toBe(true);
 });
+
 it("never fetches a schema and delegates field validation on explicit Save", async () => {
   const fetch = vi.fn().mockRejectedValue(new Error("Unexpected schema fetch"));
   vi.stubGlobal("fetch", fetch);
@@ -180,6 +189,7 @@ it("never fetches a schema and delegates field validation on explicit Save", asy
   expect((textarea as HTMLTextAreaElement).value).toBe("{}");
   expect(fetch).not.toHaveBeenCalled();
 });
+
 it("checks syntax on blur and before Save, not each keystroke", async () => {
   await mount();
   const textarea = await screen.findByLabelText("Record JSON");
@@ -192,6 +202,7 @@ it("checks syntax on blur and before Save, not each keystroke", async () => {
   expect(mutations.save).not.toHaveBeenCalled();
   expect(textarea.getAttribute("aria-invalid")).toBe("true");
 });
+
 it("uses the successful response token for subsequent visibility changes", async () => {
   const latest = { ...entry, updatedAt: "2026-09-21T12:00:00.654321Z" };
   mutations.save.mockResolvedValue(latest);
@@ -217,6 +228,7 @@ it("uses the successful response token for subsequent visibility changes", async
     published: true,
   });
 });
+
 it("creates from unchanged raw text then saves rather than creating again", async () => {
   mutations.create.mockResolvedValue({ ...entry, published: true });
   mutations.save.mockResolvedValue({ ...entry, published: true });
@@ -246,6 +258,7 @@ it("creates from unchanged raw text then saves rather than creating again", asyn
   await waitFor(() => expect(mutations.save).toHaveBeenCalled());
   expect(mutations.create).toHaveBeenCalledTimes(1);
 });
+
 it("reloads only after confirmation and uses the freshly fetched token", async () => {
   mutations.save
     .mockRejectedValueOnce(
@@ -287,6 +300,7 @@ it("reloads only after confirmation and uses the freshly fetched token", async (
   await waitFor(() => expect(mutations.save).toHaveBeenCalledTimes(2));
   expect(mutations.save.mock.calls[1]![0].request.updatedAt).toBe(latestToken);
 });
+
 it("blocks navigation when dirty discard is declined", async () => {
   const { router } = await mount();
   fireEvent.change(await screen.findByLabelText("Record JSON"), {
@@ -298,6 +312,7 @@ it("blocks navigation when dirty discard is declined", async () => {
   expect(router.state.location.pathname).toBe("/");
   expect(mutations.save).not.toHaveBeenCalled();
 });
+
 it("keeps historically invalid text repairable with visible issue pointers", async () => {
   client.setQueryData(registryEntryQuery(id).queryKey, {
     ...entry,
@@ -319,6 +334,7 @@ it("keeps historically invalid text repairable with visible issue pointers", asy
       .disabled,
   ).toBe(false);
 });
+
 it("saves synthetic extension JSON verbatim with syntax validation", async () => {
   const approved =
     '{ "server": { "name": "io.example/test", "version": "1" }, "extension": 9007199254740993 }';
