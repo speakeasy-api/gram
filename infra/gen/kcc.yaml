@@ -1292,6 +1292,23 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-session-observed
+    name: gram-telemetry-v1-session-observed
+    spec:
+      definition: |
+        edition = "2024";
+        message SessionObserved {
+          string project_id = 1;
+          string message_id = 2;
+          string user_email = 3;
+          string provider = 4;
+          string hook_hostname = 5;
+          string account_type = 6;
+          string billing_mode = 7;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-event
     name: gram-webhooks-v1-event
     spec:
@@ -1776,6 +1793,24 @@ pubsub:
         name: gram-telemetry-v1-log-record
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-session-observed-ch-writer
+      topic_proto_message: gram-telemetry-v1-session-observed
+    name: gram-telemetry-v1-session-observed-ch-writer
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-telemetry-v1-session-observed-ch-writer-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-telemetry-v1-session-observed
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-telemetry-v1-tool-call-log-relay
       topic_proto_message: gram-telemetry-v1-log-record
     name: gram-telemetry-v1-tool-call-log-relay
@@ -2152,6 +2187,23 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-telemetry-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-session-observed
+    name: gram-telemetry-v1-session-observed
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-telemetry-v1-session-observed
+  - labels:
+      dlq_for: gram-telemetry-v1-session-observed-ch-writer
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-session-observed-ch-writer
+    name: gram-telemetry-v1-session-observed-ch-writer-dlq
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       dlq_for: gram-telemetry-v1-tool-call-log-relay
       managed_by: proto-pubsub-orchestrator

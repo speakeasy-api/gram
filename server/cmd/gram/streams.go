@@ -72,6 +72,7 @@ import (
 	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 	"github.com/speakeasy-api/gram/server/internal/subscribers"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/usage"
@@ -397,14 +398,15 @@ func newStreamsCommand() *cli.Command {
 				return fmt.Errorf("failed to create pubsub client: %w", err)
 			}
 			var (
-				findingsPub  gcp.Publisher[*riskv1.Finding]
-				logPub       gcp.Publisher[*otelv1.LogRecord]
-				metricPub    gcp.Publisher[*otelv1.Metric]
-				spanPub      gcp.Publisher[*otelv1.Span]
-				riskMeterPub gcp.Publisher[*meteringv1.MeterReading]
+				findingsPub   gcp.Publisher[*riskv1.Finding]
+				logPub        gcp.Publisher[*otelv1.LogRecord]
+				metricPub     gcp.Publisher[*otelv1.Metric]
+				spanPub       gcp.Publisher[*otelv1.Span]
+				riskMeterPub  gcp.Publisher[*meteringv1.MeterReading]
+				sessionLogPub gcp.Publisher[*telemetryv1.LogRecord]
 			)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
-				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub)
+				return shutdownPubSubPublishers(ctx, pubsubShutdown, findingsPub, logPub, metricPub, spanPub, riskMeterPub, sessionLogPub)
 			})
 
 			riskFingerprinter, err := risk.ParsePepperKeyRing([]byte(c.String("risk-fingerprint-pepper-keyring")))
@@ -629,6 +631,16 @@ func newStreamsCommand() *cli.Command {
 				guardianPolicy,
 			)
 
+			sessionLogPub, err = gcp.PubSubPublisherForMessage(ctx, psbroker, &telemetryv1.LogRecord{})
+			if err != nil {
+				return fmt.Errorf("create session telemetry publisher: %w", err)
+			}
+			sessionLogger, stopSessionLogger := newTelemetryLogger(ctx, logger, tracerProvider, meterProvider, db, cache.NewRedisCacheAdapter(redisClient), chConn,
+				newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs),
+				newFeatureChecker(logger, productFeatures, productfeatures.FeatureToolIOLogs),
+				telemetry.NewLogPublisher(logger, tracerProvider, meterProvider, sessionLogPub))
+			shutdownFuncs = append(shutdownFuncs, stopSessionLogger)
+
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
@@ -644,6 +656,8 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
 				mustReceive(rg, &riskv1.LLMAnalysis{}, &riskv1.LLMAnalyzer{}, llmAnalyzerHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)
+
+				mustReceiveBatch(rg, &telemetryv1.SessionObserved{}, &telemetryv1.SessionObservedCHWriter{}, telemetry.NewSessionObservedHandler(db, sessionLogger), gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second})
 
 				mustReceive(rg, &telemetryv1.LogRecord{}, &telemetryv1.Noop{}, new(subscribers.NoopHandler[*telemetryv1.LogRecord]))
 
