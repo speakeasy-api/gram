@@ -191,3 +191,27 @@ Claude Tag: Agent Sessions includes “Claude Tag in #demo-releases”. Open it 
 - `[~]` Trial end-date changes: org-scoped audit example records a shortened trial with previous/new dates; browser verification pending.
 
 The Collaborator role includes project-selected `plugin:write` for plugin references and publishing, separately from its unchanged skill authoring grants.
+
+### Identity chaining preparation (management API) — `[x]`
+
+The project has one reserved-example remote issuer advertising both ID-JAG and
+JWT-bearer, plus a separate resource registration with explicitly recorded
+JWT-bearer grants and `documents:read` scope. It contains no secret, binding,
+remote session, or claim of usable human access.
+
+Browser-verified on 2026-09-23 against the actual local demo seed at
+`8e4fa893a862edc5219adf973a80724133c1ed25`, after two successful `mise run seed`
+runs. The issuer Overview renders its JWT-bearer capability; Clients lists
+`demo-resource-client`, whose Overview renders `documents:read` and auth method
+`none`. Its Sessions tab correctly shows no active sessions, and the project
+MCP Sessions search finds no connection for it. These intentional empty session
+states are part of the inert fixture contract, not missing seed data.
+
+The client Overview does not render effective grant types, and the issuer
+Overview does not render the ID-JAG profile. Separate management API checks
+verified those fields without conflating issuer capability with client grant
+evidence. Client deletion preflight and a read-only local database check
+confirmed zero bindings/sessions and no client secret. No dedicated preparation
+dashboard, provider acceptance, or usable human access is demonstrated.
+
+[Browser evidence and supplementary checks](https://github.com/speakeasy-api/gram/pull/6438#issuecomment-5798502630).

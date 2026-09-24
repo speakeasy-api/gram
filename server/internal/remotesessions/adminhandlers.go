@@ -1178,6 +1178,19 @@ func (s *Service) UpdateGlobalClient(ctx context.Context, payload *adminrsgen.Up
 		return nil, err
 	}
 
+	// Ownership is immutable. Authorize with the global-only lookup before
+	// the EMA guard takes its ID-only row lock.
+	if _, err := repo.New(dbtx).GetGlobalRemoteSessionClientByID(ctx, clientID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "global remote session client not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session client").LogError(ctx, logger)
+	}
+
+	if err := guardEMABindingsForClient(ctx, repo.New(dbtx), "", uuid.Nil, clientID); err != nil {
+		return nil, err
+	}
+
 	updated, err := repo.New(dbtx).UpdateGlobalRemoteSessionClient(ctx, repo.UpdateGlobalRemoteSessionClientParams{
 		ClientSecretEncrypted:           clientSecretEncrypted,
 		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
@@ -1222,6 +1235,19 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	// Ownership is immutable. Authorize with the global-only lookup before
+	// the EMA guard takes its ID-only row lock.
+	if _, err := repo.New(dbtx).GetGlobalRemoteSessionClientByID(ctx, clientID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return oops.E(oops.CodeUnexpected, err, "get global remote session client").LogError(ctx, logger)
+	}
+
+	if err := guardEMABindingsForClient(ctx, txRepo, "", uuid.Nil, clientID); err != nil {
+		return err
+	}
 
 	deleted, err := txRepo.DeleteGlobalRemoteSessionClient(ctx, clientID)
 	if err != nil {

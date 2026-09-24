@@ -51258,6 +51258,312 @@ paths:
                 type: cursor
             x-speakeasy-react-hook:
                 name: RemoteSessionClients
+    /rpc/remoteSessionClients.prepareEMA:
+        post:
+            description: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.
+            operationId: prepareEMA
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/PrepareEMARequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/IdentityChainingPreparation'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: prepareEMA remoteSessionClients
+            tags:
+                - remoteSessionClients
+            x-speakeasy-name-override: prepareEMA
+    /rpc/remoteSessionClients.readEMA:
+        post:
+            description: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.
+            operationId: readEMA
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReadEMARequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/IdentityChainingPreparation'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: readEMA remoteSessionClients
+            tags:
+                - remoteSessionClients
+            x-speakeasy-name-override: readEMA
+    /rpc/remoteSessionClients.unlinkEMA:
+        post:
+            description: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.
+            operationId: unlinkEMA
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UnlinkEMARequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/IdentityChainingPreparation'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: unlinkEMA remoteSessionClients
+            tags:
+                - remoteSessionClients
+            x-speakeasy-name-override: unlinkEMA
     /rpc/remoteSessionClients.update:
         post:
             description: Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.
@@ -85888,6 +86194,74 @@ components:
                 - success_count
                 - failure_count
                 - failure_rate
+        IdentityChainingPreparation:
+            type: object
+            properties:
+                binding_id:
+                    type: string
+                client_id:
+                    type: string
+                    description: Exact selected remote_session_client row ID, when available.
+                external_client_id:
+                    type: string
+                    description: Public OAuth client identifier, never a secret.
+                generation:
+                    type: integer
+                    format: int64
+                grant_source:
+                    type: string
+                    description: Provenance of recorded grants, not provider trust.
+                grant_types:
+                    type: array
+                    items:
+                        type: string
+                    description: Null means unknown; an empty array means no recorded grants.
+                issuer:
+                    type: string
+                remediation:
+                    type: string
+                    description: Safe next action without provider bodies or credentials.
+                resource:
+                    type: string
+                retryable:
+                    type: boolean
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                stage:
+                    type: string
+                    enum:
+                        - selection
+                        - eligibility
+                        - registration
+                        - discovery
+                        - publication
+                state:
+                    type: string
+                    description: Preparation state; readiness never proves user access.
+                    enum:
+                        - unsupported_profile
+                        - incomplete_metadata
+                        - unknown_grants
+                        - manual_setup_required
+                        - configuration_required
+                        - in_progress
+                        - indeterminate
+                        - provider_rejection
+                        - transient_failure
+                        - published_acceptance_unverified
+                        - ready
+                        - unlinked
+            required:
+                - state
+                - stage
+                - remediation
+                - retryable
+                - generation
+                - resource
+                - scopes
+                - grant_source
         IdentityDirectory:
             type: object
             properties:
@@ -91373,9 +91747,14 @@ components:
                     description: Stable reason deletion is blocked. Present when can_delete is false.
                     enum:
                         - identity_provider_login
+                        - identity_chaining
                 can_delete:
                     type: boolean
                     description: Whether the client can be deleted now.
+                ema_binding_count:
+                    type: integer
+                    description: Active identity-chaining bindings that must be explicitly unlinked before deletion.
+                    format: int64
                 mcp_server_names:
                     type: array
                     items:
@@ -91396,6 +91775,7 @@ components:
                 - mcp_server_names
                 - trusted_user_session_issuers
                 - can_delete
+                - ema_binding_count
         OrganizationEntry:
             type: object
             properties:
@@ -92573,6 +92953,73 @@ components:
                 - kind
                 - id
                 - status
+        PrepareEMARequestBody:
+            type: object
+            properties:
+                client_id:
+                    type: string
+                    description: Explicit selected client row ID; never inferred.
+                    format: uuid
+                confirm_grants:
+                    type: array
+                    items:
+                        type: string
+                    description: Administrator-declared grants, not provider verification.
+                expected_generation:
+                    type: integer
+                    description: Optimistic binding generation.
+                    format: int64
+                    minimum: 0
+                mechanism:
+                    type: string
+                    default: manual
+                    enum:
+                        - manual
+                        - cimd
+                        - dcr
+                remote_session_issuer_id:
+                    type: string
+                    format: uuid
+                resource:
+                    type: string
+                    description: Canonical intended resource URI.
+                    format: uri
+                    minLength: 1
+                    maxLength: 2048
+                resource_metadata:
+                    type: object
+                    properties:
+                        authorization_servers:
+                            type: array
+                            items:
+                                type: string
+                        resource:
+                            type: string
+                    description: Optional caller-declared resource/authorization-server consistency hints, not provider-verified RFC 9728 discovery evidence. May be omitted for explicit manual configuration. Matching values do not establish trust, consent, or user access.
+                    required:
+                        - resource
+                        - authorization_servers
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                        pattern: ^[!#-[\]-~]+$
+                        maxLength: 128
+                    description: Requested scope tokens.
+                token_endpoint_auth_method:
+                    type: string
+                    description: Explicit DCR authentication method.
+                    enum:
+                        - client_secret_basic
+                        - client_secret_post
+                user_session_issuer_id:
+                    type: string
+                    format: uuid
+            required:
+                - expected_generation
+                - user_session_issuer_id
+                - remote_session_issuer_id
+                - resource
         PreviewSpendRuleRequestBody:
             type: object
             properties:
@@ -93660,6 +94107,25 @@ components:
             required:
                 - group_value
                 - points
+        ReadEMARequestBody:
+            type: object
+            properties:
+                remote_session_issuer_id:
+                    type: string
+                    format: uuid
+                resource:
+                    type: string
+                    description: Canonical intended resource URI.
+                    format: uri
+                    minLength: 1
+                    maxLength: 2048
+                user_session_issuer_id:
+                    type: string
+                    format: uuid
+            required:
+                - user_session_issuer_id
+                - remote_session_issuer_id
+                - resource
         RearmTrialRequestBody:
             type: object
             properties:
@@ -93993,6 +94459,11 @@ components:
                 created_at:
                     type: string
                     format: date-time
+                grant_types:
+                    type: array
+                    items:
+                        type: string
+                    description: Recorded effective registration grants. Null means unknown; an empty array means no recorded grants.
                 id:
                     type: string
                     description: The remote_session_client id.
@@ -102925,6 +103396,31 @@ components:
                 - provider
                 - seen_at
                 - reason
+        UnlinkEMARequestBody:
+            type: object
+            properties:
+                expected_generation:
+                    type: integer
+                    description: Optimistic binding generation.
+                    format: int64
+                    minimum: 0
+                remote_session_issuer_id:
+                    type: string
+                    format: uuid
+                resource:
+                    type: string
+                    description: Canonical intended resource URI.
+                    format: uri
+                    minLength: 1
+                    maxLength: 2048
+                user_session_issuer_id:
+                    type: string
+                    format: uuid
+            required:
+                - expected_generation
+                - user_session_issuer_id
+                - remote_session_issuer_id
+                - resource
         UnmarkRiskResultsFalsePositiveRequestBody:
             type: object
             properties:

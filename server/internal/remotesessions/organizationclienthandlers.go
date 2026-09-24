@@ -195,12 +195,24 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 		blockingReason = &reason
 	}
 
+	emaCount, err := r.CountActiveEMABindingsForClient(ctx, repo.CountActiveEMABindingsForClientParams{ClientID: conv.ToNullUUID(clientID), OrganizationID: authCtx.ActiveOrganizationID, ProjectID: uuid.Nil})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count identity-chaining bindings")
+	}
+
+	if canDelete && emaCount > 0 {
+		canDelete = false
+		reason := "identity_chaining"
+		blockingReason = &reason
+	}
+
 	return &orgclientsgen.OrganizationClientDeletePreflight{
 		SessionCount:              int(sessionCount),
 		McpServerNames:            names,
 		TrustedUserSessionIssuers: trustedIssuers,
 		CanDelete:                 canDelete,
 		BlockingReason:            blockingReason,
+		EmaBindingCount:           emaCount,
 	}, nil
 }
 
@@ -631,6 +643,10 @@ func (s *Service) UpdateClient(ctx context.Context, payload *orgclientsgen.Updat
 		return nil, err
 	}
 
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.ProjectID.UUID, clientID); err != nil {
+		return nil, err
+	}
+
 	updated, err := txRepo.UpdateOrganizationRemoteSessionClient(ctx, repo.UpdateOrganizationRemoteSessionClientParams{
 		ClientSecretEncrypted:           clientSecretEncrypted,
 		TokenEndpointAuthMethod:         conv.PtrToPGText(payload.TokenEndpointAuthMethod),
@@ -742,8 +758,13 @@ func (s *Service) RotateClient(ctx context.Context, payload *orgclientsgen.Rotat
 		OrganizationID:           authCtx.ActiveOrganizationID,
 	})
 	if err != nil {
+		if conflict, ok := errors.AsType[*oops.ShareableError](err); ok && conflict.Code == oops.CodeConflict {
+			return nil, conflict.LogWarn(ctx, logger)
+		}
 		var registrationErr *DynamicClientRegistrationError
 		switch {
+		case errors.Is(err, ErrRotationSnapshotChanged):
+			return nil, oops.E(oops.CodeConflict, err, "client or issuer changed during rotation; reload before retrying").LogWarn(ctx, logger)
 		case errors.Is(err, ErrClientNotRotatable):
 			return nil, oops.E(oops.CodeBadRequest, err, "only dynamically registered clients using a client secret or no client authentication can be rotated").LogWarn(ctx, logger)
 		case errors.Is(err, ErrIssuerHasNoRegistrationEndpoint):
@@ -828,6 +849,10 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	}
 
 	if err := managedrows.RequireDeletable(ctx, dbtx, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.IdentityProviderConnectionID, "this remote session client"); err != nil {
+		return err
+	}
+
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.RemoteSessionClient.ProjectID.UUID, clientID); err != nil {
 		return err
 	}
 
@@ -933,7 +958,20 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
 	}
 
-	affected, err := txRepo.DetachRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachRemoteSessionClientFromUserSessionIssuerParams{
+	// Match preparation's user-issuer-before-client lock order, rechecking each
+	// tenant after waits. The server lock also stabilizes its issuer association.
+	if _, err := txRepo.LockOrganizationUserIssuerForDetach(ctx, repo.LockOrganizationUserIssuerForDetachParams{ID: server.UserSessionIssuerID.UUID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		return lifecycleLockError(err)
+	}
+	if _, err := txRepo.LockOrganizationMCPServerForDetach(ctx, repo.LockOrganizationMCPServerForDetachParams{ID: server.ID, ProjectID: server.ProjectID, UserSessionIssuerID: server.UserSessionIssuerID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		return lifecycleLockError(err)
+	}
+	if _, err := txRepo.LockEMAClientForLifecycle(ctx, repo.LockEMAClientForLifecycleParams{ID: clientID, ProjectID: client.ProjectID.UUID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
+		return lifecycleLockError(err)
+	}
+
+	affected, err := txRepo.DetachOrganizationRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams{
+		OrganizationID:        authCtx.ActiveOrganizationID,
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   server.UserSessionIssuerID.UUID,
 	})
@@ -942,6 +980,10 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	}
 	if affected == 0 {
 		return oops.E(oops.CodeNotFound, nil, "mcp server is not attached to this client").LogError(ctx, logger)
+	}
+
+	if err := guardEMABindingsForClientUserIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, uuid.Nil, clientID, server.UserSessionIssuerID.UUID); err != nil {
+		return err
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{
