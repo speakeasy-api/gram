@@ -64,6 +64,7 @@ export function SlackSyncStatus({
       ) : (
         <p>Never synced</p>
       )}
+      {connection.status === "connected" && <p>Syncs every 30 minutes</p>}
       {connection.directoryStatus === "stale" && (
         <p>
           Saved directory from a previous or unavailable authorization.{" "}
@@ -138,7 +139,7 @@ export function SlackSyncButton({
           })
         }
       >
-        <Button.Text>{running ? "Syncing…" : "Sync members"}</Button.Text>
+        <Button.Text>{running ? "Syncing…" : "Sync now"}</Button.Text>
       </Button>
       <ApiErrorAlert error={sync.error} />
     </div>

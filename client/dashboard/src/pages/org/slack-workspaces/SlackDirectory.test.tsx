@@ -199,7 +199,7 @@ it("distinguishes never-synced, stale, unknown progress and failed states", () =
 });
 it("manual sync sends the selected connection generation and blocks reconnect-required", () => {
   const view = show(<SlackSyncButton connection={connection} />);
-  fireEvent.click(screen.getByRole("button", { name: "Sync members" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
   expect(mocks.mutate).toHaveBeenCalledWith(
     expect.objectContaining({
       request: {
@@ -217,9 +217,7 @@ it("manual sync sends the selected connection generation and blocks reconnect-re
     />,
   );
   expect(
-    screen
-      .getByRole("button", { name: "Sync members" })
-      .hasAttribute("disabled"),
+    screen.getByRole("button", { name: "Sync now" }).hasAttribute("disabled"),
   ).toBe(true);
 });
 
@@ -228,9 +226,7 @@ it("prevents shared demo sync even with a connected workspace", () => {
   try {
     show(<SlackSyncButton connection={connection} />);
     expect(
-      screen
-        .getByRole("button", { name: "Sync members" })
-        .hasAttribute("disabled"),
+      screen.getByRole("button", { name: "Sync now" }).hasAttribute("disabled"),
     ).toBe(true);
   } finally {
     mocks.orgSlug = "example";

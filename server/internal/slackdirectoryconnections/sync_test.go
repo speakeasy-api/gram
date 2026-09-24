@@ -38,7 +38,7 @@ func syncRequest(f *fixture, c *gen.SlackDirectoryConnection) slackdirectoryconn
 	return slackdirectoryconnections.SyncInput{OrganizationID: f.auth.ActiveOrganizationID, ConnectionID: uuid.MustParse(c.ID), Generation: uuid.MustParse(c.Generation), ActorID: f.auth.UserID, StartedAt: time.Now().UTC().Truncate(time.Microsecond)}
 }
 func syncer(f *fixture, provider slackdirectoryconnections.DirectoryProvider) *slackdirectoryconnections.DirectorySync {
-	return slackdirectoryconnections.NewDirectorySync(f.db, f.enc, provider, audit.NewLogger())
+	return slackdirectoryconnections.NewDirectorySync(f.db, f.enc, provider, audit.NewLogger(), nil)
 }
 func members(t *testing.T, ctx context.Context, f *fixture) []repo.ListSlackDirectoryMembersRow {
 	t.Helper()

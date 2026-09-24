@@ -47,11 +47,16 @@ type DirectorySync struct {
 	encryption *encryption.Client
 	provider   DirectoryProvider
 	audit      *audit.Logger
+	refresher  TokenRefresher
 }
 
-func NewDirectorySync(db *pgxpool.Pool, enc *encryption.Client, provider DirectoryProvider, auditLogger *audit.Logger) *DirectorySync {
-	return &DirectorySync{db: db, encryption: enc, provider: provider, audit: auditLogger}
+// NewDirectorySync takes an optional refresher; without one, expired tokens require reconnecting.
+func NewDirectorySync(db *pgxpool.Pool, enc *encryption.Client, provider DirectoryProvider, auditLogger *audit.Logger, refresher TokenRefresher) *DirectorySync {
+	return &DirectorySync{db: db, encryption: enc, provider: provider, audit: auditLogger, refresher: refresher}
 }
+
+// Refresh this long before expiry so a slow directory fetch cannot outlive the token.
+const tokenRefreshMargin = 30 * time.Minute
 
 func usableTokens(enc *encryption.Client, row repo.SlackDirectoryConnection) (*TokenBundle, error) {
 	if row.DisconnectedAt.Valid || !row.CredentialsEncrypted.Valid || row.Health != "connected" {
@@ -62,11 +67,59 @@ func usableTokens(enc *encryption.Client, row repo.SlackDirectoryConnection) (*T
 	if err != nil || json.Unmarshal([]byte(plaintext), &tokens) != nil || tokens.Version != 1 || tokens.AccessToken == "" {
 		return nil, &SyncError{Code: "credential_unavailable", Retryable: false, Reconnect: true, RetryAfter: 0}
 	}
-	if tokens.ExpiresAt != nil && !time.Now().Before(*tokens.ExpiresAt) {
+	// A rotating token past expiry stays usable while its refresh token can renew it.
+	if tokens.ExpiresAt != nil && !time.Now().Before(*tokens.ExpiresAt) && tokens.RefreshToken == "" {
 		return nil, &SyncError{Code: "authorization_expired", Retryable: false, Reconnect: true, RetryAfter: 0}
 	}
 	return &tokens, nil
 }
+
+// freshTokens refreshes a rotating token close to expiry and persists the new bundle
+// before use, because Slack invalidates the old refresh token once it is exchanged.
+func (s *DirectorySync) freshTokens(ctx context.Context, queries *repo.Queries, row repo.SlackDirectoryConnection) (*TokenBundle, error) {
+	tokens, err := usableTokens(s.encryption, row)
+	if err != nil {
+		return nil, err
+	}
+	if tokens.ExpiresAt == nil || time.Until(*tokens.ExpiresAt) > tokenRefreshMargin {
+		return tokens, nil
+	}
+	if s.refresher == nil || tokens.RefreshToken == "" {
+		if time.Now().Before(*tokens.ExpiresAt) {
+			return tokens, nil
+		}
+		return nil, &SyncError{Code: "authorization_expired", Retryable: false, Reconnect: true, RetryAfter: 0}
+	}
+	refreshed, err := s.refresher.Refresh(ctx, tokens.RefreshToken)
+	if err != nil {
+		if providerErr, ok := errors.AsType[*ProviderError](err); ok {
+			switch providerErr.Code {
+			case "transport", "http_status", "decode", "internal_error", "ratelimited", "rate_limited":
+				return nil, &SyncError{Code: "refresh_unavailable", Retryable: true, Reconnect: false, RetryAfter: 0}
+			}
+		}
+		return nil, &SyncError{Code: "authorization_expired", Retryable: false, Reconnect: true, RetryAfter: 0}
+	}
+	plaintext, err := json.Marshal(refreshed)
+	if err != nil {
+		return nil, fmt.Errorf("encode refreshed Slack credentials: %w", err)
+	}
+	ciphertext, err := s.encryption.Encrypt(plaintext)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt refreshed Slack credentials: %w", err)
+	}
+	updated, err := queries.UpdateSlackDirectoryCredentials(ctx, repo.UpdateSlackDirectoryCredentialsParams{CredentialsEncrypted: conv.ToPGText(ciphertext), OrganizationID: row.OrganizationID, ID: row.ID, Generation: row.Generation})
+	if err != nil {
+		return nil, fmt.Errorf("store refreshed Slack credentials: %w", err)
+	}
+	if updated == 0 {
+		// Disconnected or reauthorized meanwhile; the newer generation owns the credentials.
+		return nil, errSyncSuperseded
+	}
+	return refreshed, nil
+}
+
+var errSyncSuperseded = errors.New("slack directory sync superseded")
 
 // Run holds one database session lock across fetches, provider waits and publication.
 // Temporal retries use the same lock. Publication uses that very session, so an
@@ -121,7 +174,10 @@ func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(Sy
 	} else if affected == 0 {
 		return nil
 	}
-	tokens, err := usableTokens(s.encryption, row)
+	tokens, err := s.freshTokens(ctx, queries, row)
+	if errors.Is(err, errSyncSuperseded) {
+		return nil
+	}
 	if err != nil {
 		return s.recordFailure(ctx, queries, input, started, err)
 	}
@@ -190,7 +246,7 @@ func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(Sy
 	beforeView.MemberCount = previousCount
 	afterView := mv.BuildSlackDirectoryConnectionView(after)
 	afterView.MemberCount = int64(len(members))
-	if err := s.audit.LogSlackDirectoryConnectionSync(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: input.OrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorID), ActorDisplayName: nil, ConnectionURN: urn.NewSlackDirectoryConnection(current.ID), ConnectionSnapshotBefore: beforeView, ConnectionSnapshotAfter: afterView}, audit.SlackDirectorySyncSummary{Observed: len(members), ExcludedExternal: progress.ExcludedExternal, Bots: progress.Bots}); err != nil {
+	if err := s.audit.LogSlackDirectoryConnectionSync(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: input.OrganizationID, Actor: syncActor(input), ActorDisplayName: nil, ConnectionURN: urn.NewSlackDirectoryConnection(current.ID), ConnectionSnapshotBefore: beforeView, ConnectionSnapshotAfter: afterView}, audit.SlackDirectorySyncSummary{Observed: len(members), ExcludedExternal: progress.ExcludedExternal, Bots: progress.Bots}); err != nil {
 		return fmt.Errorf("audit Slack snapshot: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -210,4 +266,12 @@ func (s *DirectorySync) recordFailure(ctx context.Context, queries *repo.Queries
 		return nil
 	}
 	return failure
+}
+
+// Scheduled syncs have no requesting user.
+func syncActor(input SyncInput) urn.Principal {
+	if input.ActorID == "" {
+		return urn.NewSystemPrincipal("slack-directory-schedule")
+	}
+	return urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorID)
 }

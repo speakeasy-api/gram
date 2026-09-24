@@ -342,6 +342,48 @@ func (q *Queries) GetSlackMappingForTest(ctx context.Context, arg GetSlackMappin
 	return i, err
 }
 
+const listDueSlackDirectorySyncs = `-- name: ListDueSlackDirectorySyncs :many
+SELECT organization_id, id, generation FROM slack_directory_connections
+WHERE disconnected_at IS NULL AND health = 'connected' AND credentials_encrypted IS NOT NULL
+  AND organization_id <> $1
+  AND (last_sync_started_at IS NULL OR last_sync_started_at < $2)
+ORDER BY last_sync_started_at ASC NULLS FIRST, id
+LIMIT $3
+`
+
+type ListDueSlackDirectorySyncsParams struct {
+	ExcludedOrganizationID string
+	StartedBefore          pgtype.Timestamptz
+	MaxRows                int32
+}
+
+type ListDueSlackDirectorySyncsRow struct {
+	OrganizationID string
+	ID             uuid.UUID
+	Generation     uuid.UUID
+}
+
+// Connected workspaces whose last sync started before the cutoff, oldest first.
+func (q *Queries) ListDueSlackDirectorySyncs(ctx context.Context, arg ListDueSlackDirectorySyncsParams) ([]ListDueSlackDirectorySyncsRow, error) {
+	rows, err := q.db.Query(ctx, listDueSlackDirectorySyncs, arg.ExcludedOrganizationID, arg.StartedBefore, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDueSlackDirectorySyncsRow
+	for rows.Next() {
+		var i ListDueSlackDirectorySyncsRow
+		if err := rows.Scan(&i.OrganizationID, &i.ID, &i.Generation); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSlackDirectoryConnectionSummaries = `-- name: ListSlackDirectoryConnectionSummaries :many
 SELECT c.id, c.organization_id, c.slack_team_id, c.slack_team_name, c.credentials_encrypted, c.granted_scopes, c.generation, c.health, c.disconnected_at, c.last_sync_started_at, c.last_full_sync_generation, c.last_full_sync_succeeded_at, c.last_sync_failed_at, c.last_error_code, c.created_at, c.updated_at,
   (SELECT count(*) FROM slack_directory_memberships m WHERE m.organization_id = c.organization_id
@@ -735,6 +777,31 @@ func (q *Queries) UnlockSlackDirectorySync(ctx context.Context, lockKey string) 
 	var released bool
 	err := row.Scan(&released)
 	return released, err
+}
+
+const updateSlackDirectoryCredentials = `-- name: UpdateSlackDirectoryCredentials :execrows
+UPDATE slack_directory_connections SET credentials_encrypted = $1, updated_at = clock_timestamp()
+WHERE organization_id = $2 AND id = $3 AND generation = $4 AND disconnected_at IS NULL
+`
+
+type UpdateSlackDirectoryCredentialsParams struct {
+	CredentialsEncrypted pgtype.Text
+	OrganizationID       string
+	ID                   uuid.UUID
+	Generation           uuid.UUID
+}
+
+func (q *Queries) UpdateSlackDirectoryCredentials(ctx context.Context, arg UpdateSlackDirectoryCredentialsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateSlackDirectoryCredentials,
+		arg.CredentialsEncrypted,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Generation,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertSlackDirectoryMembershipBatch = `-- name: UpsertSlackDirectoryMembershipBatch :exec

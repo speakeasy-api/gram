@@ -142,3 +142,16 @@ DELETE FROM slack_directory_memberships WHERE organization_id = @organization_id
 -- name: ResetSlackDirectorySnapshot :exec
 UPDATE slack_directory_connections SET last_full_sync_generation = NULL, last_full_sync_succeeded_at = NULL, updated_at = clock_timestamp()
 WHERE organization_id = @organization_id AND id = @id;
+
+-- name: UpdateSlackDirectoryCredentials :execrows
+UPDATE slack_directory_connections SET credentials_encrypted = @credentials_encrypted, updated_at = clock_timestamp()
+WHERE organization_id = @organization_id AND id = @id AND generation = @generation AND disconnected_at IS NULL;
+
+-- name: ListDueSlackDirectorySyncs :many
+-- Connected workspaces whose last sync started before the cutoff, oldest first.
+SELECT organization_id, id, generation FROM slack_directory_connections
+WHERE disconnected_at IS NULL AND health = 'connected' AND credentials_encrypted IS NOT NULL
+  AND organization_id <> @excluded_organization_id
+  AND (last_sync_started_at IS NULL OR last_sync_started_at < @started_before)
+ORDER BY last_sync_started_at ASC NULLS FIRST, id
+LIMIT @max_rows;

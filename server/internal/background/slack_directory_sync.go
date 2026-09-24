@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"sync"
 	"time"
 
@@ -24,8 +27,11 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// Temporal actions/month = 2N + R, where N is connects, reconnects and manual
-// syncs and R is activity retries, per namespace. No schedules, timers or signals.
+// Temporal actions/month ≈ 2N + R + 2,880 + 2,880·W, per namespace, where N is
+// connects and manual syncs, R is activity retries and W is connected workspaces.
+// The 30-minute sweep costs one start and one activity per tick (2,880) and
+// starts one sync workflow plus one activity per due workspace. Scales with
+// connected workspaces; at 50 workspaces that is ~150k actions/month.
 // Directory pages and profiles stay in the activity, never in workflow history.
 func SlackDirectorySyncWorkflow(ctx workflow.Context, input slackdirectoryconnections.SyncInput) error {
 	input.StartedAt = workflow.Now(ctx)
@@ -43,10 +49,88 @@ func SlackDirectorySyncWorkflow(ctx workflow.Context, input slackdirectoryconnec
 
 type slackDirectoryActivities struct {
 	sync *slackdirectoryconnections.DirectorySync
+	db   *pgxpool.Pool
 }
 
-func newSlackDirectoryActivities(db *pgxpool.Pool, enc *encryption.Client, httpClient *guardian.HTTPClient) *slackDirectoryActivities {
-	return &slackDirectoryActivities{sync: slackdirectoryconnections.NewDirectorySync(db, enc, slackdirectoryconnections.NewDirectoryProvider(slackapi.NewClient("", httpClient)), audit.NewLogger())}
+func newSlackDirectoryActivities(db *pgxpool.Pool, enc *encryption.Client, httpClient *guardian.HTTPClient, refresher slackdirectoryconnections.TokenRefresher) *slackDirectoryActivities {
+	return &slackDirectoryActivities{db: db, sync: slackdirectoryconnections.NewDirectorySync(db, enc, slackdirectoryconnections.NewDirectoryProvider(slackapi.NewClient("", httpClient)), audit.NewLogger(), refresher)}
+}
+
+const (
+	slackDirectorySweepInterval = 30 * time.Minute
+	// Skip workspaces synced recently, manually or by the previous tick.
+	slackDirectorySweepDueAfter = 25 * time.Minute
+	// Bounds child starts per tick; later workspaces are picked up by the next tick.
+	slackDirectorySweepMaxWorkspaces = 100
+)
+
+func slackDirectorySweepScheduleID(queue tenv.TaskQueueName) string {
+	return "v1:slack-directory-sweep:" + string(queue)
+}
+
+// SlackDirectorySweepWorkflow starts a sync for every connected workspace that is due.
+func SlackDirectorySweepWorkflow(ctx workflow.Context) error {
+	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy:         &temporal.RetryPolicy{InitialInterval: 5 * time.Second, BackoffCoefficient: 2, MaximumAttempts: 3},
+	})
+	var a *slackDirectoryActivities
+	var due []slackdirectoryconnections.SyncInput
+	if err := workflow.ExecuteActivity(activityCtx, a.ListDueSlackDirectories).Get(activityCtx, &due); err != nil {
+		return fmt.Errorf("list due Slack directories: %w", err)
+	}
+	queue := tenv.TaskQueueName(workflow.GetInfo(ctx).TaskQueueName)
+	for _, input := range due {
+		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			// Same ID as a manual sync, so a sync already running for this generation is left alone.
+			WorkflowID:               slackDirectoryWorkflowID(queue, input.ConnectionID, input.Generation),
+			WorkflowIDReusePolicy:    enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			WorkflowExecutionTimeout: 2*time.Hour + time.Minute,
+			ParentClosePolicy:        enums.PARENT_CLOSE_POLICY_ABANDON,
+		})
+		child := workflow.ExecuteChildWorkflow(childCtx, SlackDirectorySyncWorkflow, input)
+		if err := child.GetChildWorkflowExecution().Get(ctx, nil); err != nil && !temporal.IsWorkflowExecutionAlreadyStartedError(err) {
+			workflow.GetLogger(ctx).Warn("start scheduled Slack directory sync failed", "connection_id", input.ConnectionID.String(), "error", err.Error())
+		}
+	}
+	return nil
+}
+
+func (a *slackDirectoryActivities) ListDueSlackDirectories(ctx context.Context) ([]slackdirectoryconnections.SyncInput, error) {
+	rows, err := slackrepo.New(a.db).ListDueSlackDirectorySyncs(ctx, slackrepo.ListDueSlackDirectorySyncsParams{
+		ExcludedOrganizationID: constants.DemoOrganizationID,
+		StartedBefore:          pgtype.Timestamptz{Time: time.Now().Add(-slackDirectorySweepDueAfter), Valid: true, InfinityModifier: pgtype.Finite},
+		MaxRows:                slackDirectorySweepMaxWorkspaces,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list due Slack directories: %w", err)
+	}
+	due := make([]slackdirectoryconnections.SyncInput, 0, len(rows))
+	for _, row := range rows {
+		due = append(due, slackdirectoryconnections.SyncInput{OrganizationID: row.OrganizationID, ConnectionID: row.ID, Generation: row.Generation, ActorID: "", StartedAt: time.Time{}})
+	}
+	return due, nil
+}
+
+// AddSlackDirectorySweepSchedule creates the queue-scoped schedule; an existing one keeps its spec and any pause.
+func AddSlackDirectorySweepSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
+	queue := temporalEnv.Queue()
+	_, err := createScheduleWithCatchup(ctx, temporalEnv.Client().ScheduleClient(), client.ScheduleOptions{
+		ID:            slackDirectorySweepScheduleID(queue),
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		CatchupWindow: slackDirectorySweepInterval - time.Second,
+		Spec:          client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: slackDirectorySweepInterval}}},
+		Action: &client.ScheduleWorkflowAction{
+			ID:                 "v1:slack-directory-sweep-run:" + string(queue),
+			Workflow:           SlackDirectorySweepWorkflow,
+			TaskQueue:          string(queue),
+			WorkflowRunTimeout: 10 * time.Minute,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("create Slack directory sweep schedule: %w", err)
+	}
+	return nil
 }
 
 func (a *slackDirectoryActivities) SyncSlackDirectory(ctx context.Context, input slackdirectoryconnections.SyncInput) error {
