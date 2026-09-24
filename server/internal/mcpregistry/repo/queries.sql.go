@@ -12,6 +12,44 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countRegistryEntries = `-- name: CountRegistryEntries :one
+SELECT count(*) FROM mcp_registry_entries
+`
+
+func (q *Queries) CountRegistryEntries(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countRegistryEntries)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createEntry = `-- name: CreateEntry :one
+INSERT INTO mcp_registry_entries(data, published)
+SELECT
+    $1::jsonb,
+    true
+WHERE octet_length($1::jsonb::text) <= $2::bigint
+RETURNING id, data, published, created_at, updated_at
+`
+
+type CreateEntryParams struct {
+	Data              []byte
+	StoredRecordLimit int64
+}
+
+func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (McpRegistryEntry, error) {
+	row := q.db.QueryRow(ctx, createEntry, arg.Data, arg.StoredRecordLimit)
+	var i McpRegistryEntry
+	err := row.Scan(
+		&i.ID,
+		&i.Data,
+		&i.Published,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getEntry = `-- name: GetEntry :one
 SELECT id, data, published, created_at, updated_at
 FROM mcp_registry_entries
@@ -206,6 +244,26 @@ func (q *Queries) ListEntries(ctx context.Context, arg ListEntriesParams) ([]Lis
 	return items, nil
 }
 
+const lockEntry = `-- name: LockEntry :one
+SELECT id, data, published, created_at, updated_at
+FROM mcp_registry_entries
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockEntry(ctx context.Context, id uuid.UUID) (McpRegistryEntry, error) {
+	row := q.db.QueryRow(ctx, lockEntry, id)
+	var i McpRegistryEntry
+	err := row.Scan(
+		&i.ID,
+		&i.Data,
+		&i.Published,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const registryReady = `-- name: RegistryReady :one
 SELECT EXISTS (SELECT 1 FROM mcp_registry_entries LIMIT 1)
 `
@@ -215,4 +273,71 @@ func (q *Queries) RegistryReady(ctx context.Context) (bool, error) {
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const serializedRegistryRecordBytes = `-- name: SerializedRegistryRecordBytes :one
+SELECT octet_length($1::jsonb::text)
+`
+
+func (q *Queries) SerializedRegistryRecordBytes(ctx context.Context, data []byte) (int32, error) {
+	row := q.db.QueryRow(ctx, serializedRegistryRecordBytes, data)
+	var octet_length int32
+	err := row.Scan(&octet_length)
+	return octet_length, err
+}
+
+const setEntryPublished = `-- name: SetEntryPublished :one
+UPDATE mcp_registry_entries
+SET
+    published = $1,
+    updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
+WHERE id = $2
+RETURNING id, data, published, created_at, updated_at
+`
+
+type SetEntryPublishedParams struct {
+	Published bool
+	ID        uuid.UUID
+}
+
+func (q *Queries) SetEntryPublished(ctx context.Context, arg SetEntryPublishedParams) (McpRegistryEntry, error) {
+	row := q.db.QueryRow(ctx, setEntryPublished, arg.Published, arg.ID)
+	var i McpRegistryEntry
+	err := row.Scan(
+		&i.ID,
+		&i.Data,
+		&i.Published,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateEntry = `-- name: UpdateEntry :one
+UPDATE mcp_registry_entries
+SET
+    data = $1,
+    updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
+WHERE id = $2
+AND octet_length($1::jsonb::text) <= $3::bigint
+RETURNING id, data, published, created_at, updated_at
+`
+
+type UpdateEntryParams struct {
+	Data              []byte
+	ID                uuid.UUID
+	StoredRecordLimit int64
+}
+
+func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) (McpRegistryEntry, error) {
+	row := q.db.QueryRow(ctx, updateEntry, arg.Data, arg.ID, arg.StoredRecordLimit)
+	var i McpRegistryEntry
+	err := row.Scan(
+		&i.ID,
+		&i.Data,
+		&i.Published,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

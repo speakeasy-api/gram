@@ -86,3 +86,39 @@ SELECT
     n%2=0
 FROM generate_series(1,60) n;
 
+-- name: CreateEntry :one
+INSERT INTO mcp_registry_entries(data, published)
+SELECT
+    sqlc.arg(data)::jsonb,
+    true
+WHERE octet_length(sqlc.arg(data)::jsonb::text) <= sqlc.arg(stored_record_limit)::bigint
+RETURNING *;
+
+-- name: LockEntry :one
+SELECT *
+FROM mcp_registry_entries
+WHERE id = @id
+FOR UPDATE;
+
+-- name: UpdateEntry :one
+UPDATE mcp_registry_entries
+SET
+    data = @data,
+    updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
+WHERE id = @id
+AND octet_length(sqlc.arg(data)::jsonb::text) <= sqlc.arg(stored_record_limit)::bigint
+RETURNING *;
+
+-- name: SetEntryPublished :one
+UPDATE mcp_registry_entries
+SET
+    published = @published,
+    updated_at = GREATEST(clock_timestamp(), updated_at + interval '1 microsecond')
+WHERE id = @id
+RETURNING *;
+
+-- name: SerializedRegistryRecordBytes :one
+SELECT octet_length(sqlc.arg(data)::jsonb::text);
+
+-- name: CountRegistryEntries :one
+SELECT count(*) FROM mcp_registry_entries;
