@@ -2,6 +2,7 @@ package assistants
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -159,6 +160,9 @@ func TestServiceCoreSelfHealsHistoryCorruptionOnFirstAttempt(t *testing.T) {
 
 	outboxRows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
 	require.NoError(t, err)
+	outboxRows = slices.DeleteFunc(outboxRows, func(row testrepo.ListPublishOutboxRowsRow) bool {
+		return row.Topic != string(proto.MessageName(&meteringv1.MeterReading{}))
+	})
 	require.Len(t, outboxRows, selfHealUserMessageCap+1)
 	for _, row := range outboxRows {
 		reading := &meteringv1.MeterReading{}

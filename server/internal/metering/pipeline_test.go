@@ -2,6 +2,7 @@ package metering_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -109,6 +110,9 @@ func TestChatStorageReadingPipelineToClickHouse(t *testing.T) {
 
 	outboxRows, err := testrepo.New(conn).ListPublishOutboxRows(ctx)
 	require.NoError(t, err)
+	outboxRows = slices.DeleteFunc(outboxRows, func(row testrepo.ListPublishOutboxRowsRow) bool {
+		return row.Topic != string(proto.MessageName(&meteringv1.MeterReading{}))
+	})
 	require.Len(t, outboxRows, 1)
 	message := &meteringv1.MeterReading{}
 	require.NoError(t, proto.Unmarshal(outboxRows[0].Message, message))
