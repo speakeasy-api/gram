@@ -86,10 +86,17 @@ function WorkloadIdentitiesOverview(): JSX.Element {
   const admissions = useMemo(() => data?.admissions ?? [], [data]);
   const agents = useMemo(
     () =>
-      (agentsQuery.data ?? []).map((agent) => ({
-        id: agent.id,
-        name: agent.name,
-      })),
+      (agentsQuery.data ?? [])
+        // A suspended or revoked agent contributes no policy until it is active
+        // again, so admitting a workload against one produces a machine that
+        // authenticates and can reach nothing. Offer only agents that can back
+        // the assignment. Project-bound agents stay: the assignment's foreign
+        // key is organization-scoped, so they are assignable.
+        .filter((agent) => agent.lifecycle === "active")
+        .map((agent) => ({
+          id: agent.id,
+          name: agent.name,
+        })),
     [agentsQuery.data],
   );
 

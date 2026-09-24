@@ -12,8 +12,8 @@ import {
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
-import { useMemo, useState } from "react";
-import { type MatchKind, subjectRuleWarning } from "./subjectRule";
+import { useEffect, useMemo, useState } from "react";
+import { canAdmit, type MatchKind, subjectRuleWarning } from "./subjectRule";
 
 export interface AdmitSubjectValues {
   issuer: string;
@@ -50,6 +50,16 @@ export function AdmitSubjectDialog({
 }: AdmitSubjectDialogProps): JSX.Element {
   const [values, setValues] = useState<AdmitSubjectValues>(EMPTY);
 
+  // A successful admission closes the dialog through the parent's own state,
+  // which never reaches handleOpenChange — so without this the next admission
+  // opens prefilled with the previous workload. The dialog stays mounted, so
+  // there is no unmount to do it for us.
+  useEffect(() => {
+    if (!open) {
+      setValues(EMPTY);
+    }
+  }, [open]);
+
   const handleOpenChange = (next: boolean) => {
     if (!next) {
       setValues(EMPTY);
@@ -77,11 +87,12 @@ export function AdmitSubjectDialog({
   const wildcardAvailable = selectedIssuer?.allowWildcardAdmission ?? false;
   const warning = subjectRuleWarning(values.matchKind, values.subject);
 
-  const canSubmit =
-    selectedIssuerUrl.length > 0 &&
-    values.subject.trim().length > 0 &&
-    values.agentId.length > 0 &&
-    warning === null;
+  const canSubmit = canAdmit({
+    issuer: selectedIssuerUrl,
+    subject: values.subject,
+    agentId: values.agentId,
+    warning,
+  });
 
   const handleIssuerChange = (issuer: string) => {
     const next = issuers.find((candidate) => candidate.issuer === issuer);

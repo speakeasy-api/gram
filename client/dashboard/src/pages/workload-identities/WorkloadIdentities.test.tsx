@@ -80,11 +80,13 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
   }),
   invalidateAllWorkloadIdentities: vi.fn(),
 }));
-const agentsState: { data?: { id: string; name: string }[]; isError: boolean } =
-  {
-    data: [{ id: "agent-1", name: "poc-agent" }],
-    isError: false,
-  };
+const agentsState = vi.hoisted<{
+  data?: { id: string; name: string }[];
+  isError: boolean;
+}>(() => ({
+  data: [{ id: "agent-1", name: "poc-agent" }],
+  isError: false,
+}));
 vi.mock("@gram/client/react-query/agents.js", () => ({
   useAgents: () => agentsState,
 }));

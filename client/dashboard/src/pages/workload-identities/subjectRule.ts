@@ -41,6 +41,30 @@ export function subjectRuleWarning(
   if (stem.includes(WILDCARD_SUFFIX)) {
     return 'Only a trailing "*" is allowed. An interior one would leave the middle of the subject open.';
   }
+  // Trailing whitespace before the "*" is stored verbatim and matches nothing —
+  // the same silent failure this function exists to catch, and invisible in the
+  // field. Only the outer whitespace is trimmed, so this has to be checked.
+  if (stem !== stem.trimEnd()) {
+    return 'This rule ends in whitespace before its "*", which is stored as part of the subject and would match nothing.';
+  }
 
   return null;
+}
+
+// Exported so the gate can be tested directly. Asserting it through the rendered
+// button cannot distinguish "blocked by the warning" from "blocked because no
+// agent is selected yet", so a test driven through the UI stays green even if
+// the warning stops blocking the submit.
+export function canAdmit(input: {
+  issuer: string;
+  subject: string;
+  agentId: string;
+  warning: string | null;
+}): boolean {
+  return (
+    input.issuer.length > 0 &&
+    input.subject.trim().length > 0 &&
+    input.agentId.length > 0 &&
+    input.warning === null
+  );
 }

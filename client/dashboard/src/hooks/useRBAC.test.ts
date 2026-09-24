@@ -68,8 +68,8 @@ describe("resourceKindForScope", () => {
   });
 
   it("matches a wildcard workload grant against an unscoped check", () => {
-    const grant = { resource_kind: "workload", resource_id: "*" };
-    const check = { resource_kind: resourceKindForScope("workload:read") };
+    const grant = { resourceKind: "workload", resourceId: "*" };
+    const check = { resourceKind: resourceKindForScope("workload:read") };
     expect(selectorMatches(grant, check)).toBe(true);
   });
 

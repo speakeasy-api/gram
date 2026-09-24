@@ -28,6 +28,36 @@ const EMPTY: RegisterIssuerValues = {
   allowWildcardAdmission: false,
 };
 
+// Mirrors what the server refuses on the write path, so the reason appears next
+// to the field instead of arriving as a toast after submit. Deliberately not a
+// full URL validator: the server stays the authority, this is the early warning.
+function httpsUrlProblem(raw: string, isIssuer: boolean): string | null {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return "Enter a complete URL, including https://.";
+  }
+
+  if (parsed.protocol !== "https:") {
+    return "Must use https. Gram fetches the signing keys over this URL, so http would put key retrieval in the clear.";
+  }
+  const host = parsed.hostname.replace(/\.$/, "");
+  if (!host.includes(".") || /^[\d.]+$/.test(host)) {
+    return "Must name a fully qualified domain, not an IP address or a single-label host.";
+  }
+  if (isIssuer && (parsed.search !== "" || parsed.hash !== "")) {
+    return "An issuer identifier carries no query string or fragment.";
+  }
+
+  return null;
+}
+
 export function RegisterIssuerDialog({
   open,
   onOpenChange,
@@ -43,10 +73,15 @@ export function RegisterIssuerDialog({
     onOpenChange(next);
   };
 
+  const issuerProblem = httpsUrlProblem(values.issuer, true);
+  const jwksProblem = httpsUrlProblem(values.jwksUri, false);
+
   const canSubmit =
     values.name.trim().length > 0 &&
     values.issuer.trim().length > 0 &&
-    values.jwksUri.trim().length > 0;
+    values.jwksUri.trim().length > 0 &&
+    issuerProblem === null &&
+    jwksProblem === null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -82,11 +117,17 @@ export function RegisterIssuerDialog({
               placeholder="https://identity.example.com"
               onChange={(value) => setValues({ ...values, issuer: value })}
             />
-            <Text muted small>
-              The value an assertion&apos;s <code>iss</code> claim must carry.
-              An https URL on a fully qualified domain, with no query or
-              fragment.
-            </Text>
+            {issuerProblem !== null ? (
+              <Text role="alert" small destructive>
+                {issuerProblem}
+              </Text>
+            ) : (
+              <Text muted small>
+                The value an assertion&apos;s <code>iss</code> claim must carry.
+                An https URL on a fully qualified domain, with no query or
+                fragment.
+              </Text>
+            )}
           </Stack>
 
           <Stack gap={2}>
@@ -97,10 +138,16 @@ export function RegisterIssuerDialog({
               placeholder="https://identity.example.com/.well-known/jwks.json"
               onChange={(value) => setValues({ ...values, jwksUri: value })}
             />
-            <Text muted small>
-              Where the issuer publishes its signing keys. This is the only
-              field Gram reads when verifying an assertion.
-            </Text>
+            {jwksProblem !== null ? (
+              <Text role="alert" small destructive>
+                {jwksProblem}
+              </Text>
+            ) : (
+              <Text muted small>
+                Where the issuer publishes its signing keys. This is the only
+                field Gram reads when verifying an assertion.
+              </Text>
+            )}
           </Stack>
 
           <Stack gap={2}>
@@ -112,7 +159,16 @@ export function RegisterIssuerDialog({
                   setValues({ ...values, allowWildcardAdmission: checked })
                 }
               />
-              <Label id="workload-issuer-wildcard-label">
+              <Label
+                id="workload-issuer-wildcard-label"
+                className="cursor-pointer"
+                onClick={() =>
+                  setValues({
+                    ...values,
+                    allowWildcardAdmission: !values.allowWildcardAdmission,
+                  })
+                }
+              >
                 Allow wildcard admission
               </Label>
             </Stack>

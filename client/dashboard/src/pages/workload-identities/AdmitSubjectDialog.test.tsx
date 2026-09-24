@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { AdmitSubjectDialog } from "./AdmitSubjectDialog";
+import { canAdmit } from "./subjectRule";
 
 afterEach(cleanup);
 
@@ -64,6 +65,22 @@ it("warns when an exact subject contains a star, and blocks the submit", () => {
   expect(warning.textContent).toContain("in full, literally");
   expect(admitButton().disabled).toBe(true);
   expect(onSubmit).not.toHaveBeenCalled();
+});
+
+it("blocks the submit on the warning alone, with everything else filled in", () => {
+  // Driven through the button this could not fail: canAdmit also requires an
+  // agent, which the dialog's Radix select makes awkward to choose in jsdom, so
+  // the button is disabled either way. Asserting the gate directly is what
+  // catches the warning being dropped from it.
+  const complete = {
+    issuer: "https://identity.example.com",
+    subject: "wimse://identity.example.com/org/acme/agent/a-1",
+    agentId: "22222222-2222-2222-2222-222222222222",
+    warning: null,
+  };
+
+  expect(canAdmit(complete)).toBe(true);
+  expect(canAdmit({ ...complete, warning: "would admit nothing" })).toBe(false);
 });
 
 it("does not warn about an exact subject with no star", () => {
