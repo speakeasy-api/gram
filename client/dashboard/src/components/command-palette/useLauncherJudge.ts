@@ -1,7 +1,8 @@
 import type { LauncherCandidate as JudgeCandidate } from "@gram/client/models/components/launchercandidate.js";
 import type { LauncherJudgment } from "@gram/client/models/components/launcherjudgment.js";
-import { useLauncherJudgeMutation } from "@gram/client/react-query/launcherJudge.js";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useGramContext } from "@gram/client/react-query/_context.js";
+import { buildLauncherJudgeMutation } from "@gram/client/react-query/launcherJudge.js";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   isSendable,
   type Judgment,
@@ -90,7 +91,15 @@ export function useLauncherJudge(scopeKey: string): {
   judge: (query: string, sent: LauncherCandidate[], route?: string) => void;
   reset: () => void;
 } {
-  const { mutateAsync } = useLauncherJudgeMutation();
+  // Called directly rather than through react-query's mutation cache: the
+  // palette aborts the previous request on every keystroke, and the
+  // dashboard's global mutation handler would toast each cancellation as a
+  // failed request. Judging is a read, not a mutation.
+  const client = useGramContext();
+  const mutateAsync = useMemo(
+    () => buildLauncherJudgeMutation(client).mutationFn,
+    [client],
+  );
   const [stored, setState] = useState<ScopedState>(() => idleFor(scopeKey));
   // Derived, not effect-driven: the reset effect below runs after paint, so
   // the very first render for a new tenant would otherwise still rank rows

@@ -8,8 +8,11 @@ const mocks = vi.hoisted(() => ({
   mutateAsync: vi.fn(),
 }));
 
+vi.mock("@gram/client/react-query/_context.js", () => ({
+  useGramContext: () => ({}),
+}));
 vi.mock("@gram/client/react-query/launcherJudge.js", () => ({
-  useLauncherJudgeMutation: () => ({ mutateAsync: mocks.mutateAsync }),
+  buildLauncherJudgeMutation: () => ({ mutationFn: mocks.mutateAsync }),
 }));
 
 interface Deferred {
