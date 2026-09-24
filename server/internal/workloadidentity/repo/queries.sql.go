@@ -94,9 +94,18 @@ JOIN workload_issuers i
   AND i.id = a.workload_issuer_id
 WHERE a.organization_id = $1
   AND a.workload_issuer_id = $2
-  AND a.subject = $3
   AND a.deleted IS FALSE
   AND i.deleted IS FALSE
+  AND (
+    (a.match_kind = 'exact' AND a.subject = $3)
+    OR (
+      a.match_kind = 'wildcard'
+      AND i.allow_wildcard_admission
+      AND starts_with($3, left(a.subject, length(a.subject) - 1))
+    )
+  )
+ORDER BY (a.match_kind = 'exact') DESC, length(a.subject) DESC
+LIMIT 1
 `
 
 type ResolveWorkloadAgentAssignmentParams struct {
@@ -113,10 +122,24 @@ type ResolveWorkloadAgentAssignmentParams struct {
 // admission must not change what the workload may do under another. That is
 // also why no project arm appears here, unlike WorkloadIdentityIsAdmitted.
 //
-// At most one row can match: workload_agent_assignments_workload_key is unique
-// on these three columns for live rows, which is where "one agent per workload"
-// is enforced. Unassigning is a soft delete, so deleted rows are excluded or the
-// workload would keep the authority an administrator believes they removed.
+// More than one row can match, so "one agent per workload" is RESOLVED here
+// rather than enforced by uniqueness. A wildcard assignment covering an issuer's
+// whole fleet and an exact assignment naming one principal can both cover the
+// same subject, which is the point: a default for everything, with individual
+// principals pinned elsewhere. The ORDER BY picks the most specific — exact
+// before wildcard, and a longer stem before a shorter one — and LIMIT 1 makes
+// the answer deterministic. workload_agent_assignments_workload_key still stops
+// the same rule being written twice.
+//
+// Unassigning is a soft delete, so deleted rows are excluded or the workload
+// would keep the authority an administrator believes they removed.
+//
+// The wildcard arm requires the issuer to permit wildcard matching, checked here
+// for the same reason as in WorkloadIdentityIsAdmitted: clearing
+// allow_wildcard_admission must revoke wildcard rules already written, not just
+// stop new ones. Admission and assignment have to agree on this, or a subject
+// admitted by wildcard would resolve to no agent and be refused for the wrong
+// reason.
 //
 // The issuer must be live too. Deleting an issuer soft-deletes only its own
 // row, so without the join a session minted before the delete would keep the
@@ -131,20 +154,31 @@ func (q *Queries) ResolveWorkloadAgentAssignment(ctx context.Context, arg Resolv
 const workloadIdentityIsAdmitted = `-- name: WorkloadIdentityIsAdmitted :one
 SELECT EXISTS (
   SELECT 1
-  FROM workload_identity_admissions
-  WHERE organization_id = $1
-    AND workload_issuer_id = $2
-    AND subject = $3
-    AND (project_id = $4 OR project_id IS NULL)
-    AND deleted IS FALSE
+  FROM workload_identity_admissions a
+  JOIN workload_issuers i
+    ON i.organization_id = a.organization_id
+    AND i.id = a.workload_issuer_id
+  WHERE a.organization_id = $1
+    AND a.workload_issuer_id = $2
+    AND (a.project_id = $3 OR a.project_id IS NULL)
+    AND a.deleted IS FALSE
+    AND i.deleted IS FALSE
+    AND (
+      (a.match_kind = 'exact' AND a.subject = $4)
+      OR (
+        a.match_kind = 'wildcard'
+        AND i.allow_wildcard_admission
+        AND starts_with($4, left(a.subject, length(a.subject) - 1))
+      )
+    )
 )
 `
 
 type WorkloadIdentityIsAdmittedParams struct {
 	OrganizationID   string
 	WorkloadIssuerID uuid.UUID
-	Subject          string
 	ProjectID        uuid.NullUUID
+	Subject          string
 }
 
 // Whether this tenant recognises one workload: a subject vouched for by one
@@ -158,14 +192,37 @@ type WorkloadIdentityIsAdmittedParams struct {
 // organization, and the project arm is not true for a NULL @project_id, so an
 // organization-scoped caller sees only organization-tier rows.
 //
-// Exact equality on subject, compared as the platform minted it. No expression
-// around the column, which would make the lookup index unusable.
+// Two ways to match, chosen per row by match_kind. The exact arm compares the
+// subject as the platform minted it, with no expression around the column, so it
+// still rides workload_identity_admissions_lookup_idx. The wildcard arm strips
+// the stored value's trailing `*` and asks whether the remaining stem leads the
+// presented subject, which is the opposite of what a btree on subject answers, so
+// it scans instead — bounded by the (organization, issuer) columns above and by
+// how few admissions an issuer has.
+//
+// The `*` is always the last character of a wildcard row, enforced on write, so
+// left(subject, length(subject) - 1) is the stem. Storing the `*` rather than
+// stripping it before the insert is deliberate: a row then states its own breadth
+// to anyone reading the table, which a bare stem does not.
+//
+// The wildcard arm additionally requires the issuer to permit wildcard matching,
+// and that is checked HERE rather than trusted from write time. A write-side gate
+// alone would be advisory: any future writer, a seed or a hand-run statement
+// could leave a wildcard row behind, and turning the issuer's permission off
+// would not revoke rows already written. Enforced on read, clearing
+// allow_wildcard_admission is an immediate and complete kill switch for every
+// wildcard rule under that issuer.
+//
+// The join also pins the issuer live. Resolution upstream already excludes a
+// soft-deleted issuer, so this changes no outcome today; it means a caller that
+// ever reaches admission another way cannot be admitted by an issuer the
+// organization has stopped trusting.
 func (q *Queries) WorkloadIdentityIsAdmitted(ctx context.Context, arg WorkloadIdentityIsAdmittedParams) (bool, error) {
 	row := q.db.QueryRow(ctx, workloadIdentityIsAdmitted,
 		arg.OrganizationID,
 		arg.WorkloadIssuerID,
-		arg.Subject,
 		arg.ProjectID,
+		arg.Subject,
 	)
 	var exists bool
 	err := row.Scan(&exists)

@@ -71381,6 +71381,531 @@ paths:
       x-speakeasy-name-override: upsertGlobal
       x-speakeasy-react-hook:
         name: UpsertGlobalVariation
+  /rpc/workloadIdentities.admitSubject:
+    post:
+      description: 'Admit a subject one of the trusted issuers asserts, and assign the agent it inherits its policy from. Both happen in one transaction: a subject admitted without an agent is refused at the token endpoint, so that half-configured state is not reachable. Requires workload:write.'
+      operationId: admitWorkloadSubject
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdmitWorkloadSubjectForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: admitSubject workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: admitSubject
+      x-speakeasy-react-hook:
+        name: AdmitWorkloadSubject
+  /rpc/workloadIdentities.list:
+    get:
+      description: 'Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.'
+      operationId: listWorkloadIdentities
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: list workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: WorkloadIdentities
+  /rpc/workloadIdentities.registerIssuer:
+    post:
+      description: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+      operationId: registerWorkloadIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterWorkloadIssuerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: registerIssuer workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: registerIssuer
+      x-speakeasy-react-hook:
+        name: RegisterWorkloadIssuer
+  /rpc/workloadIdentities.withdrawIssuer:
+    delete:
+      description: Stop trusting an issuer. Every subject admitted under it is withdrawn in the same transaction, so no admission can outlive the issuer it names. Requires workload:write.
+      operationId: withdrawWorkloadIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: The workload issuer id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The workload issuer id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: withdrawIssuer workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: withdrawIssuer
+      x-speakeasy-react-hook:
+        name: WithdrawWorkloadIssuer
+  /rpc/workloadIdentities.withdrawSubject:
+    delete:
+      description: Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.
+      operationId: withdrawWorkloadSubject
+      parameters:
+        - allowEmptyValue: true
+          description: The admission id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The admission id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: withdrawSubject workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: withdrawSubject
+      x-speakeasy-react-hook:
+        name: WithdrawWorkloadSubject
 components:
   schemas:
     AIDetection:
@@ -72102,6 +72627,38 @@ components:
         - disabled
         - created_at
         - updated_at
+    AdmitWorkloadSubjectForm:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent whose policy the admitted workload inherits.
+          format: uuid
+        issuer:
+          type: string
+          description: The issuer identifier of an already-trusted issuer, resolved within the caller's organization. Naming one the caller cannot see is a not-found, not a permission error.
+          format: uri
+        match_kind:
+          type: string
+          description: 'How the subject is compared: exact compares the whole value; wildcard requires a trailing * and matches anything beginning with the value before it. Wildcard additionally requires the issuer to permit it. Defaults to exact.'
+          enum:
+            - exact
+            - wildcard
+        name:
+          type: string
+          description: Optional label, for platforms whose subjects are not self-describing.
+          minLength: 1
+        project_scoped:
+          type: boolean
+          description: Admit the subject for the selected project alone rather than the whole organization. Defaults to false.
+        subject:
+          type: string
+          description: The sub claim the issuer must assert, stored and compared exactly as supplied.
+      description: Form for admitting a workload subject and assigning its agent.
+      required:
+        - issuer
+        - subject
+        - agent_id
     AgentDelegatedGrant:
       type: object
       properties:
@@ -83536,6 +84093,10 @@ components:
             - agent:write
             - agent:authorize
             - agent:transfer
+            - workload:read
+            - workload:blocked_read
+            - workload:write
+            - workload:blocked_write
             - org:device_agent_sync
             - org:hooks_ingest
         selectors:
@@ -83581,6 +84142,10 @@ components:
               - agent:write
               - agent:authorize
               - agent:transfer
+              - workload:read
+              - workload:blocked_read
+              - workload:write
+              - workload:blocked_write
               - org:device_agent_sync
               - org:hooks_ingest
           description: The inherited scopes the primary scope grants.
@@ -88878,6 +89443,33 @@ components:
           description: The name of the org to register
       required:
         - org_name
+    RegisterWorkloadIssuerForm:
+      type: object
+      properties:
+        allow_wildcard_admission:
+          type: boolean
+          description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to false, and is re-checked on every lookup, so clearing it revokes wildcard rules already written.
+        issuer:
+          type: string
+          description: The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name, with no query or fragment.
+          format: uri
+        jwks_uri:
+          type: string
+          description: Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.
+          format: uri
+        name:
+          type: string
+          description: The label an operator works with. Unique within its tier.
+          minLength: 1
+          maxLength: 100
+        project_scoped:
+          type: boolean
+          description: Register the issuer for the selected project alone rather than the whole organization. Defaults to false.
+      description: Form for trusting an external workload issuer.
+      required:
+        - name
+        - issuer
+        - jwks_uri
     RemoteMcpServer:
       type: object
       properties:
@@ -89610,6 +90202,8 @@ components:
             - agent:write
             - agent:authorize
             - agent:transfer
+            - workload:read
+            - workload:write
             - org:device_agent_sync
             - org:hooks_ingest
       description: Form for requesting access to a scope.
@@ -91457,6 +92051,10 @@ components:
             - agent:write
             - agent:authorize
             - agent:transfer
+            - workload:read
+            - workload:blocked_read
+            - workload:write
+            - workload:blocked_write
             - org:device_agent_sync
             - org:hooks_ingest
         selectors:
@@ -91664,6 +92262,8 @@ components:
             - skill:blocked_write
             - plugin:blocked_write
             - risk_policy:bypass
+            - workload:blocked_read
+            - workload:blocked_write
         resource_type:
           type: string
           description: The type of resource this scope applies to.
@@ -91676,6 +92276,7 @@ components:
             - risk_policy
             - chat
             - agent
+            - workload
         slug:
           type: string
           description: Unique scope identifier.
@@ -91713,6 +92314,10 @@ components:
             - agent:write
             - agent:authorize
             - agent:transfer
+            - workload:read
+            - workload:blocked_read
+            - workload:write
+            - workload:blocked_write
             - org:device_agent_sync
             - org:hooks_ingest
         visibility:
@@ -92201,6 +92806,7 @@ components:
             - risk_policy
             - chat
             - agent
+            - workload
             - '*'
         server_url:
           type: string
@@ -100307,6 +100913,132 @@ components:
       required:
         - scores_available
         - buckets
+    WorkloadAdmission:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent whose policy this workload inherits. Empty when the assignment is missing, which the token endpoint refuses.
+          format: uuid
+        agent_name:
+          type: string
+          description: The assigned agent's name; empty when the assignment is missing.
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          description: The admission id.
+          format: uuid
+        issuer:
+          type: string
+          description: The issuer identifier, denormalized so a list does not need a second lookup.
+        issuer_name:
+          type: string
+          description: The issuer's operator-facing label.
+        match_kind:
+          type: string
+          description: 'How the subject is compared: exact | wildcard.'
+          enum:
+            - exact
+            - wildcard
+        name:
+          type: string
+          description: Optional label; empty when none was supplied.
+        organization_id:
+          type: string
+          description: The owning organization id.
+        project_id:
+          type: string
+          description: The owning project id; empty for an organization-tier admission.
+        subject:
+          type: string
+          description: The sub claim, exactly as stored.
+        updated_at:
+          type: string
+          format: date-time
+        wildcard_active:
+          type: boolean
+          description: 'False when this is a wildcard rule under an issuer that no longer permits wildcard matching. Such a rule is inert: it is stored, listed, and matches nothing.'
+        workload_issuer_id:
+          type: string
+          description: The issuer that must assert this subject.
+          format: uuid
+      description: A subject an organization admits, with the agent it inherits its policy from.
+      required:
+        - id
+        - organization_id
+        - project_id
+        - workload_issuer_id
+        - issuer
+        - issuer_name
+        - subject
+        - match_kind
+        - name
+        - agent_id
+        - agent_name
+        - wildcard_active
+        - created_at
+        - updated_at
+    WorkloadIdentityPolicy:
+      type: object
+      properties:
+        admissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadAdmission'
+          description: Admitted subjects.
+        issuers:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadIssuer'
+          description: Trusted issuers, organization tier first.
+      description: The whole trust policy visible to the caller. Every write returns this, so a client replaces its view rather than merging into it and cannot show a stale list after a mutation.
+      required:
+        - issuers
+        - admissions
+    WorkloadIssuer:
+      type: object
+      properties:
+        allow_wildcard_admission:
+          type: boolean
+          description: Whether subjects under this issuer may be admitted by a wildcard rule.
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          description: The workload issuer id.
+          format: uuid
+        issuer:
+          type: string
+          description: The issuer identifier the assertion's iss claim must carry.
+        jwks_uri:
+          type: string
+          description: Where the issuer publishes its signing keys.
+        name:
+          type: string
+          description: The label an operator works with.
+        organization_id:
+          type: string
+          description: The owning organization id.
+        project_id:
+          type: string
+          description: The owning project id; empty for an organization-tier issuer.
+        updated_at:
+          type: string
+          format: date-time
+      description: An external issuer an organization trusts to vouch for its workloads.
+      required:
+        - id
+        - organization_id
+        - project_id
+        - name
+        - issuer
+        - jwks_uri
+        - allow_wildcard_admission
+        - created_at
+        - updated_at
     KillswitchCapabilityKey: {type: string, enum: [mcp_tool_calls]}
     KillswitchStatus: {type: string, enum: [active, scheduled, expired, lifted]}
     KillswitchListStatus: {type: string, enum: [active, scheduled, expired, lifted]}
@@ -100573,6 +101305,8 @@ tags:
     description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
+  - name: workloadIdentities
+    description: 'Configure which workloads an organization recognises as its own: the issuers it trusts, the subjects those issuers may present, and the agent each admitted workload inherits its policy from.'
   - name: variations
     description: Manage variations of tools.
   - name: external

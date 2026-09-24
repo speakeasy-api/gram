@@ -27,16 +27,20 @@ export type ResourceType =
   | "skill"
   | "risk_policy"
   | "chat"
-  | "agent";
+  | "agent"
+  | "workload";
 
 export function isUnrestrictedResourceType(
   resourceType: ResourceType,
-): resourceType is "org" | "environment" | "chat" | "agent" {
+): resourceType is "org" | "environment" | "chat" | "agent" | "workload" {
   return (
     resourceType === "org" ||
     resourceType === "environment" ||
     resourceType === "chat" ||
-    resourceType === "agent"
+    resourceType === "agent" ||
+    // The trust policy is configured for the organization as a whole; there is
+    // no per-workload resource a grant could name.
+    resourceType === "workload"
   );
 }
 
