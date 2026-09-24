@@ -39,6 +39,10 @@ const (
 	// (RFC 7636 §4.2).
 	CodeChallengeMethodS256 = "S256"
 
+	// MetadataAuthorizationGrantProfilesSupported names the authorization-server
+	// metadata member that advertises supported authorization grant profiles.
+	MetadataAuthorizationGrantProfilesSupported = "authorization_grant_profiles_supported"
+
 	// GrantProfileIDJAG identifies support for identity assertion JWT
 	// authorization grants in authorization-server metadata.
 	GrantProfileIDJAG = "urn:ietf:params:oauth:grant-profile:id-jag"

@@ -177,6 +177,35 @@ func (s *RefreshService) FallbackResourceForClient(ctx context.Context, clientID
 	return clientUpstreamResource(rows), nil
 }
 
+// ResourceForClientAtUpstream derives the RFC 8707 resource for a client
+// connected through upstream, weighed against the other clients bound to the
+// same endpoint; see claimableUpstream. Siblings are only consulted when the
+// client's own attachments leave the claim open.
+func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
+	q := remotesessions_repo.New(s.db)
+	own, err := q.ListOrganizationMcpServersForClient(ctx, clientID)
+	if err != nil {
+		return "", fmt.Errorf("list mcp servers for client: %w", err)
+	}
+	resource, claimable := claimableUpstream(own, upstream)
+	if !claimable {
+		return resource, nil
+	}
+	for _, id := range siblingIDs {
+		if id == clientID {
+			continue
+		}
+		rows, err := q.ListOrganizationMcpServersForClient(ctx, id)
+		if err != nil {
+			return "", fmt.Errorf("list mcp servers for sibling client: %w", err)
+		}
+		if rowsServeUpstream(rows, resource) {
+			return "", nil
+		}
+	}
+	return resource, nil
+}
+
 var errRefreshNotApplied = errors.New("remotesessions: refreshed tokens matched no active session")
 
 // Ordering is the invariant, guarded by TestRefreshTimingInvariant. Invert it

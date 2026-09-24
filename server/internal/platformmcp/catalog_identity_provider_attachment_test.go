@@ -2,13 +2,18 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestValidDynamicClientRegistrationEndpoint(t *testing.T) {
@@ -67,4 +72,32 @@ func TestValidBrowserCatalogDynamicClientRequiresConfidentialClient(t *testing.T
 	require.False(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client"}))
 	require.False(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client", ClientSecret: "secret", TokenEndpointAuthMethod: string(remotesessions.TokenEndpointAuthMethodNone)}))
 	require.False(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client", ClientSecret: "secret", TokenEndpointAuthMethod: "private_key_jwt"}))
+}
+
+func TestCatalogIssuerIdentityIsExact(t *testing.T) {
+	t.Parallel()
+	require.True(t, sameIssuerURL("https://issuer.example/tenant/", "https://issuer.example/tenant/"))
+	require.False(t, sameIssuerURL("https://issuer.example/tenant/", "https://issuer.example/tenant"))
+	require.False(t, sameIssuerURL("https://issuer.example/tenant", "https://issuer.example/tenant/"))
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{
+			"issuer":                 server.URL + "/tenant/",
+			"authorization_endpoint": server.URL + "/authorize",
+			"token_endpoint":         server.URL + "/token",
+			"registration_endpoint":  "https://issuer.example/register",
+		}))
+	}))
+	defer server.Close()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	service := &CatalogIdentityProviderAttachmentService{policy: policy}
+	metadata, err := service.discoverSupportedIssuerMetadata(t.Context(), []string{server.URL + "/tenant/"})
+	require.NoError(t, err)
+	require.Equal(t, server.URL+"/tenant/", metadata.Issuer)
+	for _, issuer := range []string{server.URL + "/tenant", " " + server.URL + "/tenant/ "} {
+		_, err := service.discoverSupportedIssuerMetadata(t.Context(), []string{issuer})
+		require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
+	}
 }
