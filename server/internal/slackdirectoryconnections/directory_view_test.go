@@ -120,7 +120,10 @@ func TestDirectoryOrderStaysStableAfterMappingUntilRefreshed(t *testing.T) {
 		entry("UEXAMPLE01", "Ada", "ada@example.com", "active", "person"),
 		entry("UEXAMPLE02", "Ben", "ben@example.com", "active", "person"),
 	)).Run(ctx, syncRequest(f, c), nil))
-	loaded := time.Now().UTC().Format(time.RFC3339Nano)
+	// Mapping timestamps come from the database clock, so read "now" from it too.
+	var now time.Time
+	require.NoError(t, f.db.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&now))
+	loaded := now.UTC().Format(time.RFC3339Nano)
 	page, err := f.service.ListMembers(ctx, memberRequest())
 	require.NoError(t, err)
 	require.Equal(t, []string{"Ada", "Ben"}, names(page))
