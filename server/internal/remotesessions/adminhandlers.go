@@ -253,6 +253,7 @@ func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.Lis
 	items := make([]*adminrsgen.GlobalRemoteSessionIssuer, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, &adminrsgen.GlobalRemoteSessionIssuer{
+			EmaBindingCount:               nil, // Counts are available on the detail response only.
 			Issuer:                        mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
 			GlobalClientCount:             int(row.GlobalClientCount),
 			TenantClientCount:             int(row.TenantClientCount),
@@ -273,8 +274,8 @@ func (s *Service) ListGlobalIssuers(ctx context.Context, payload *adminrsgen.Lis
 }
 
 // GetGlobalIssuer resolves a global remote_session_issuer by id, with the same
-// client counts the listing carries so the detail view can describe a delete
-// without a second round trip.
+// client counts the listing carries and the active identity-chaining binding
+// count, so the detail view can describe a delete without a second round trip.
 func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGlobalIssuerPayload) (*adminrsgen.GlobalRemoteSessionIssuer, error) {
 	_, logger, err := authorizeGlobalOperation(ctx, s.logger)
 	if err != nil {
@@ -294,7 +295,13 @@ func (s *Service) GetGlobalIssuer(ctx context.Context, payload *adminrsgen.GetGl
 		return nil, oops.E(oops.CodeUnexpected, err, "get global remote session issuer").LogError(ctx, logger)
 	}
 
+	emaCount, err := repo.New(s.db).CountActiveEMABindingsForIssuer(ctx, repo.CountActiveEMABindingsForIssuerParams{IssuerID: issuerID, OrganizationID: "", ProjectID: uuid.Nil})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count global issuer identity-chaining bindings").LogError(ctx, logger)
+	}
+
 	return &adminrsgen.GlobalRemoteSessionIssuer{
+		EmaBindingCount:               new(int(emaCount)),
 		Issuer:                        mv.BuildRemoteSessionIssuerView(row.RemoteSessionIssuer),
 		GlobalClientCount:             int(row.GlobalClientCount),
 		TenantClientCount:             int(row.TenantClientCount),
@@ -379,6 +386,15 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer configuration").LogError(ctx, logger)
 	}
 
+	// Resolve and lock only the global partition before inspecting EMA bindings.
+	existing, err := txRepo.GetGlobalRemoteSessionIssuerByIDForUpdate(ctx, issuerID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "global remote session issuer not found").LogError(ctx, logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "lock global remote session issuer").LogError(ctx, logger)
+	}
+
 	updated, err := txRepo.UpdateGlobalRemoteSessionIssuer(ctx, repo.UpdateGlobalRemoteSessionIssuerParams{
 		// Trimmed so the stored slug/issuer match what the emptiness validation
 		// above saw; whitespace-only never reaches here, so the trimmed-empty →
@@ -424,6 +440,12 @@ func (s *Service) UpdateGlobalIssuer(ctx context.Context, payload *adminrsgen.Up
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update global remote session issuer").LogError(ctx, logger)
 	}
+	if issuerBindingConfigurationChanged(existing, updated) {
+		if err := guardEMABindingsForIssuer(ctx, repo.New(dbtx), "", uuid.Nil, issuerID); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
 		if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
 			return nil, oops.E(oops.CodeBadRequest, err, "update would make a client ineligible for identity-provider login: %v", err).LogError(ctx, logger)
@@ -493,6 +515,10 @@ func (s *Service) DeleteGlobalIssuer(ctx context.Context, payload *adminrsgen.De
 	// first" would point a platform admin at clients they cannot see or remove.
 	// Reporting the two counts distinctly tells them which blockers are theirs
 	// (the global clients) and which belong to tenants.
+	if err := guardEMABindingsForIssuer(ctx, txRepo, "", uuid.Nil, issuerID); err != nil {
+		return err
+	}
+
 	clientCount, err := txRepo.CountRemoteSessionClientsByIssuerID(ctx, issuerID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "count remote session clients").LogError(ctx, logger)
@@ -622,6 +648,10 @@ func (s *Service) RefreshGlobalIssuerMetadata(ctx context.Context, payload *admi
 	}
 	if !sameMetadataRefreshSnapshot(locked, existing) {
 		return nil, oops.E(oops.CodeConflict, nil, "%s", refreshConflictMessage).LogError(ctx, logger)
+	}
+
+	if err := guardEMAEndpointRefresh(ctx, txRepo, locked, params); err != nil {
+		return nil, err
 	}
 
 	updated, err := txRepo.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
@@ -833,6 +863,7 @@ func (s *Service) GetGlobalIssuerMigratePreflight(ctx context.Context, payload *
 	}
 
 	return &adminrsgen.IssuerMigratePreflight{
+		EmaBindingCount:               int(preflight.emaBindingCount),
 		ClientCount:                   int(preflight.clientCount),
 		McpServerNames:                preflight.mcpServerNames,
 		EndpointMismatches:            issuerFieldMismatchViews(preflight.endpointMismatches),

@@ -487,7 +487,7 @@ examples:
           target_id: "6e6e7d42-1a46-4050-9c7d-d0b99fa8ace3"
       responses:
         "200":
-          application/json: {"can_migrate": false, "client_count": 589058, "conflicting_mcp_server_names": ["<value 1>"], "endpoint_mismatches": [], "mcp_server_names": ["<value 1>"], "target_tenant_client_count": 373762, "trusted_user_session_issuer_count": 444688, "warnings": [{"field": "<value>"}]}
+          application/json: {"can_migrate": false, "client_count": 589058, "conflicting_mcp_server_names": ["<value 1>"], "ema_binding_count": 444688, "endpoint_mismatches": [], "mcp_server_names": ["<value 1>"], "target_tenant_client_count": 373762, "trusted_user_session_issuer_count": 444688, "warnings": [{"field": "<value>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

@@ -80110,6 +80110,10 @@ components:
     GlobalRemoteSessionIssuer:
       type: object
       properties:
+        ema_binding_count:
+          type: integer
+          description: Number of active identity-chaining bindings that block deletion and must be explicitly unlinked by their owning organizations. Included in the detail response; omitted from listings.
+          format: int64
         global_client_count:
           type: integer
           description: Number of non-deleted global remote_session_clients (project_id NULL, organization_id NULL) registered with this issuer. These block a delete and the platform admin can remove them here.
@@ -81354,7 +81358,7 @@ components:
       properties:
         can_migrate:
           type: boolean
-          description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
+          description: 'TRUE when the migration would succeed: no active identity-chaining bindings, endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
         client_count:
           type: integer
           description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -81364,6 +81368,10 @@ components:
           items:
             type: string
           description: Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
+        ema_binding_count:
+          type: integer
+          description: Number of active identity-chaining bindings on the source. Non-zero blocks migration; explicitly unlink these bindings before migration, then prepare new bindings for the target.
+          format: int64
         endpoint_mismatches:
           type: array
           items:
@@ -81389,6 +81397,7 @@ components:
           description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
       description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.'
       required:
+        - ema_binding_count
         - client_count
         - mcp_server_names
         - endpoint_mismatches
@@ -86083,6 +86092,10 @@ components:
           type: integer
           description: Number of non-deleted remote_session_clients registered with this issuer.
           format: int64
+        ema_binding_count:
+          type: integer
+          description: Active identity-chaining bindings that must be explicitly unlinked before deletion.
+          format: int64
         mcp_server_names:
           type: array
           items:
@@ -86093,17 +86106,18 @@ components:
           items:
             $ref: '#/components/schemas/TrustedUserSessionIssuerReference'
           description: Organization-owned user_session_issuers that trust this issuer and block deletion.
-      description: 'Authoritative impact summary for deleting a remote_session_issuer: its client and trusted user-session-issuer references.'
+      description: 'Authoritative impact summary for deleting a remote_session_issuer: its client, trusted user-session-issuer, and active identity-chaining binding references.'
       required:
         - client_count
         - mcp_server_names
         - trusted_user_session_issuers
+        - ema_binding_count
     OrganizationIssuerMigratePreflight:
       type: object
       properties:
         can_migrate:
           type: boolean
-          description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
+          description: 'TRUE when the migration would succeed: no active identity-chaining bindings, endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
         client_count:
           type: integer
           description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -86113,6 +86127,10 @@ components:
           items:
             type: string
           description: Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
+        ema_binding_count:
+          type: integer
+          description: Number of active identity-chaining bindings on the source. Non-zero blocks migration; explicitly unlink these bindings before migration, then prepare new bindings for the target.
+          format: int64
         endpoint_mismatches:
           type: array
           items:
@@ -86135,6 +86153,7 @@ components:
           description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
       description: 'Authoritative impact summary for migrating a remote_session_issuer''s clients onto another issuer: how many clients move, which MCP servers are affected, and every blocker that would make the migration fail.'
       required:
+        - ema_binding_count
         - client_count
         - mcp_server_names
         - endpoint_mismatches
@@ -86250,10 +86269,14 @@ components:
       properties:
         can_delete:
           type: boolean
-          description: True when no live MCP server or toolset references the issuer.
+          description: True when no live MCP server, toolset, or active identity-chaining binding references the issuer.
         client_count:
           type: integer
           description: Number of non-deleted user_session_clients registered with the issuer.
+          format: int64
+        ema_binding_count:
+          type: integer
+          description: Active identity-chaining bindings that must be explicitly unlinked before deletion.
           format: int64
         live_session_count:
           type: integer
@@ -86276,6 +86299,7 @@ components:
         - mcp_servers
         - toolsets
         - can_delete
+        - ema_binding_count
     OrganizationUserSessionIssuerMigratePreflight:
       type: object
       properties:

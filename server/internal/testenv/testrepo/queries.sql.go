@@ -285,6 +285,22 @@ func (q *Queries) CountPlatformMCPSetupMilestoneFixture(ctx context.Context, arg
 	return count, err
 }
 
+const countPreparationFixtureBindingByID = `-- name: CountPreparationFixtureBindingByID :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE id = $1 AND project_id = $2
+`
+
+type CountPreparationFixtureBindingByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) CountPreparationFixtureBindingByID(ctx context.Context, arg CountPreparationFixtureBindingByIDParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPreparationFixtureBindingByID, arg.ID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPublishOutboxRows = `-- name: CountPublishOutboxRows :one
 SELECT COUNT(*) FROM publish_outbox
 `
@@ -2180,6 +2196,18 @@ func (q *Queries) InstallRemoteSessionIdentityWriteMarkerFixture(ctx context.Con
 	return err
 }
 
+const isLifecycleBackendBlockedFixture = `-- name: IsLifecycleBackendBlockedFixture :one
+SELECT cardinality(pg_blocking_pids($1::integer)) > 0 AS blocked
+`
+
+// Observe a specific writer's lock wait instead of relying on a scheduling delay.
+func (q *Queries) IsLifecycleBackendBlockedFixture(ctx context.Context, pid int32) (bool, error) {
+	row := q.db.QueryRow(ctx, isLifecycleBackendBlockedFixture, pid)
+	var blocked bool
+	err := row.Scan(&blocked)
+	return blocked, err
+}
+
 const isQueryBlockedOnLockFixture = `-- name: IsQueryBlockedOnLockFixture :one
 SELECT EXISTS (
     SELECT 1
@@ -3554,6 +3582,33 @@ func (q *Queries) SeedJsonWebKeySetFixture(ctx context.Context, arg SeedJsonWebK
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const seedLifecycleBindingClientFixture = `-- name: SeedLifecycleBindingClientFixture :exec
+INSERT INTO remote_session_clients (id, project_id, organization_id, remote_session_issuer_id, client_id, deleted_at)
+VALUES ($1, $2::uuid, $3::text, $4, $5, CASE WHEN $6::boolean THEN clock_timestamp() ELSE NULL END)
+`
+
+type SeedLifecycleBindingClientFixtureParams struct {
+	ID                    uuid.UUID
+	ProjectID             uuid.NullUUID
+	OrganizationID        pgtype.Text
+	RemoteSessionIssuerID uuid.UUID
+	ClientID              string
+	Deleted               bool
+}
+
+// Include cross-tenant and deleted clients to exercise binding ownership guards.
+func (q *Queries) SeedLifecycleBindingClientFixture(ctx context.Context, arg SeedLifecycleBindingClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedLifecycleBindingClientFixture,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RemoteSessionIssuerID,
+		arg.ClientID,
+		arg.Deleted,
+	)
+	return err
 }
 
 const seedOpenRouterSpendPrivacyFixture = `-- name: SeedOpenRouterSpendPrivacyFixture :exec

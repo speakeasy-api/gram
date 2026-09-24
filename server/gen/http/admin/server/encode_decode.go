@@ -12051,6 +12051,7 @@ func marshalAdminGlobalRemoteSessionIssuerToGlobalRemoteSessionIssuerResponseBod
 		GlobalClientCount:             v.GlobalClientCount,
 		TenantClientCount:             v.TenantClientCount,
 		TrustedUserSessionIssuerCount: v.TrustedUserSessionIssuerCount,
+		EmaBindingCount:               v.EmaBindingCount,
 	}
 	if v.Issuer != nil {
 		res.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(v.Issuer)
