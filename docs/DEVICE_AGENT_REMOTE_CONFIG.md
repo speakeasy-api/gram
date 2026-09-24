@@ -34,8 +34,8 @@ The configuration document supports these keys:
   clamp when the key is absent or out of range.
 - `disable_ai_scan`: optional boolean. `true` turns the Shadow AI scan off
   across the fleet. Omit the key (the dashboard deletes it when the switch is
-  turned back on) to let each device's local or MDM setting apply. Agents read
-  the document at startup, so a change takes effect on their next start.
+  turned back on) to let each device's local or MDM setting apply. Agents pick
+  up a change on their next configuration sync, without a restart.
 
 Every key is optional. The organization's document must stay under 64 KiB;
 server-injected keys (below) are bounded separately. The envelope
