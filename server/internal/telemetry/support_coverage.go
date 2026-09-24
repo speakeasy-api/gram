@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/agentsurface"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -77,6 +79,14 @@ func (s *Service) GetSupportCoverage(ctx context.Context, payload *telem_gen.Get
 	if payload != nil && payload.WindowDays > 0 {
 		windowDays = payload.WindowDays
 	}
+	// Gated on the platform-admin flag, not just org membership: this is a
+	// Speakeasy support view of one organization at a time, and the page in
+	// front of it (PlatformAdminGate) is presentation only. Routing through
+	// the shared helper keeps it with every other platform-tier handler.
+	if _, _, err := auth.RequirePlatformAdmin(ctx, s.logger); err != nil {
+		return nil, err
+	}
+
 	to := time.Now().UTC()
 	from := to.AddDate(0, 0, -windowDays)
 
@@ -234,7 +244,9 @@ func (s *Service) collectBlockEvidence(ctx context.Context, scope orgQueryScope,
 			// as silently as the client-side hook_source map used to lose
 			// sessions, so it is reported alongside the unmapped sources
 			// instead.
-			unmapped[block.Provider] += 0
+			if provider := strings.TrimSpace(block.Provider); provider != "" {
+				unmapped[provider] += 0
+			}
 			continue
 		}
 		for _, candidate := range candidates {

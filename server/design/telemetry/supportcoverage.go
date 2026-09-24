@@ -60,16 +60,19 @@ var SupportCoverageResult = Type("SupportCoverageResult", func() {
 //
 //   - Outcome: "which agent surfaces is this organization's telemetry actually
 //     covering, and which integration would close the biggest gap".
-//   - Actor: a Speakeasy platform admin. The page that renders this sits
-//     behind PlatformAdminGate and exists for support and onboarding
-//     conversations, not for the organization's own administrators.
+//   - Actor: a Speakeasy platform admin, enforced in the handler via
+//     auth.RequirePlatformAdmin rather than left to the dashboard's
+//     PlatformAdminGate, which is presentation only. The view exists for
+//     support and onboarding conversations, not for the organization's own
+//     administrators.
 //   - Existing tools: the underlying evidence is already reachable through
 //     query_mcp_metrics, list_shadow_mcp_inventory, query_skill_usage and
 //     get_project_overview. What this endpoint adds is the framing — a fixed
 //     capability-by-surface matrix and a gap ranking — rather than new facts.
-//   - Rationale for omitting: admitting it would put an internal support view
-//     in front of org members and external agents, which is an audience change
-//     the product has not decided. Half the payload is also static product
+//   - Rationale for omitting: Platform MCP serves an organization's own
+//     administrators and members, and this endpoint deliberately refuses them.
+//     Admitting it would either contradict that gate or require widening the
+//     audience, which is a product decision that has not been made. Half the payload is also static product
 //     capability rather than organization state, so an agent would be liable
 //     to present integration advice as if it were grounded in this org's data.
 //   - Revisit when: the coverage view is promoted out of platform-admin to a
@@ -79,9 +82,12 @@ func supportCoverageMethods() {
 	Method("getSupportCoverage", func() {
 		Description("Observed support coverage for the caller's organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure. Every cell distinguishes evidence found from evidence absent from evidence not yet answerable, so an empty cell is never rendered as unsupported.")
 
-		// Org-scoped like telemetry.query: coverage spans every project in
-		// the caller's organization, and the page that renders it is a
-		// platform-admin view of one organization at a time.
+		// Session security carries the scheme; the handler additionally
+		// enforces the platform-admin flag through auth.RequirePlatformAdmin,
+		// because this is a Speakeasy support view rather than something an
+		// organization's own members should read. Coverage is org-scoped like
+		// telemetry.query: it spans every project in the caller's active
+		// organization.
 		Security(security.Session)
 
 		Payload(func() {

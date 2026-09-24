@@ -11,7 +11,21 @@ import (
 	"github.com/stretchr/testify/require"
 
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
+
+// platformAdminCtx marks the caller as Speakeasy staff. Coverage is a support
+// view, so every read below goes through the platform-admin gate the handler
+// enforces.
+func platformAdminCtx(t *testing.T, ctx context.Context) context.Context {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	platformAuth := *authCtx
+	platformAuth.IsAdmin = true
+	return contextvalues.SetAuthContext(ctx, &platformAuth)
+}
 
 // waitForSupportCoverage polls until the seeded rows have propagated through
 // the session-summary materialized view, which is eventually consistent.
@@ -52,10 +66,25 @@ func cellFor(t *testing.T, result *telem_gen.SupportCoverageResult, capability, 
 	return nil
 }
 
+func TestGetSupportCoverage_RefusesNonPlatformAdmins(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	// Org membership is not enough: this is a Speakeasy support view, and the
+	// dashboard's PlatformAdminGate in front of it is presentation only.
+	_, err := ti.service.GetSupportCoverage(ctx, &telem_gen.GetSupportCoveragePayload{
+		SessionToken: nil, WindowDays: 30,
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "platform admin")
+}
+
 func TestGetSupportCoverage_EmptyOrganization(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+	ctx = platformAdminCtx(t, ctx)
 
 	result, err := ti.service.GetSupportCoverage(ctx, &telem_gen.GetSupportCoveragePayload{
 		SessionToken: nil, WindowDays: 30,
@@ -78,6 +107,7 @@ func TestGetSupportCoverage_SessionAndIdentityEvidence(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+	ctx = platformAdminCtx(t, ctx)
 	projectID := uuid.MustParse(ti.projectID)
 	now := time.Now().UTC().Add(-time.Hour)
 
@@ -131,6 +161,7 @@ func TestGetSupportCoverage_ReportsUnmappedHookSources(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+	ctx = platformAdminCtx(t, ctx)
 	now := time.Now().UTC().Add(-time.Hour)
 
 	// Shadow capture records whatever hook_source the session reported, so a
@@ -159,6 +190,7 @@ func TestGetSupportCoverage_ShadowExposurePerSurface(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+	ctx = platformAdminCtx(t, ctx)
 	now := time.Now().UTC().Add(-time.Hour)
 
 	insertShadowSurfaceSighting(t, ctx, ti.projectID, "https://evil.example.com/mcp", "cursor", now)
@@ -184,6 +216,7 @@ func TestGetSupportCoverage_FoldsShadowAliasesToOneServer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+	ctx = platformAdminCtx(t, ctx)
 	now := time.Now().UTC().Add(-time.Hour)
 
 	// Two spellings of one surface reaching the same server is one server.
