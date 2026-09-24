@@ -46,8 +46,13 @@ export function IdentityProviderStep({
   } = useOnboardingStatus(undefined, undefined, { throwOnError: false });
 
   // Only a status response can say the domain is unverified; while loading or
-  // after an error, WorkOS still enforces the rule.
-  const domainVerified = onboardingStatus?.domainVerified !== false;
+  // after an error, WorkOS still enforces the rule. An active SSO connection
+  // proves a domain was verified, even for orgs set up before verified domains
+  // were tracked — the server completes the domain setup task the same way.
+  const domainVerified =
+    onboardingStatus === undefined ||
+    !!onboardingStatus.domainVerified ||
+    !!onboardingStatus.ssoConfigured;
 
   return (
     <StepContainer
@@ -479,8 +484,8 @@ function DirectorySyncSection({
   domainVerified,
   isLoading,
 }: SectionProps): JSX.Element {
-  // WorkOS refuses a directory connection for an organization with no verified
-  // domain, the same rule single sign-on is held to.
+  // WorkOS needs a verified domain before a directory connection can be set
+  // up, the same rule single sign-on is held to.
   const needsDomain = !domainVerified && !configured;
   const { connect, verify, verifying, portalOpened, isPending } =
     usePortalSetup("dsync");

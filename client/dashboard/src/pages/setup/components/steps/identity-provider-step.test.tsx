@@ -221,6 +221,28 @@ describe("verified domain gate", () => {
     ).toBe(true);
     expect(portal.calls).toHaveLength(0);
   });
+
+  // Matches the server: an active SSO connection proves a domain was verified,
+  // even for orgs set up before verified domains were tracked.
+  it("treats an active SSO connection as a verified domain", () => {
+    onboardingStatus.current = {
+      ...onboardingStatus.current,
+      data: {
+        ssoConfigured: true,
+        dsyncConfigured: false,
+        domainVerified: false,
+      },
+    };
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+
+    expect(screen.queryByText(/Verify a domain first/)).toBeNull();
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", {
+        name: "Connect directory",
+      }).disabled,
+    ).toBe(false);
+  });
 });
 
 describe("directory sync failure feedback", () => {
