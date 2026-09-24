@@ -356,7 +356,6 @@ function SetupWizardInner(): JSX.Element {
         />
         <SetupTaskContent
           taskKey={current.key}
-          projectSlug="default"
           onComplete={() => void complete()}
           onSupport={() => void requestSupport()}
           onClose={() => {

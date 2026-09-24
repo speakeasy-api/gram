@@ -366,11 +366,11 @@ var _ = Service("organizations", func() {
 	})
 
 	Method("submitOnboardingSurvey", func() {
-		Description("Record the onboarding survey result. The server derives which setup tasks the wizard walks from it; progress and assignments are kept.")
+		Description("Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.")
 
 		Payload(func() {
-			Attribute("preset", String, "Onboarding preset key the survey answers resolved to.")
-			Required("preset")
+			Attribute("use_case", String, "Use case the survey answers resolved to.")
+			Required("use_case")
 			security.SessionPayload()
 		})
 

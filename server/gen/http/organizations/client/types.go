@@ -76,8 +76,8 @@ type UpdateSetupTaskRequestBody struct {
 // SubmitOnboardingSurveyRequestBody is the type of the "organizations" service
 // "submitOnboardingSurvey" endpoint HTTP request body.
 type SubmitOnboardingSurveyRequestBody struct {
-	// Onboarding preset key the survey answers resolved to.
-	Preset string `form:"preset" json:"preset" xml:"preset"`
+	// Use case the survey answers resolved to.
+	UseCase string `form:"use_case" json:"use_case" xml:"use_case"`
 }
 
 // GetResponseBody is the type of the "organizations" service "get" endpoint
@@ -3655,7 +3655,7 @@ func NewUpdateSetupTaskRequestBody(p *organizations.UpdateSetupTaskPayload) *Upd
 // service.
 func NewSubmitOnboardingSurveyRequestBody(p *organizations.SubmitOnboardingSurveyPayload) *SubmitOnboardingSurveyRequestBody {
 	body := &SubmitOnboardingSurveyRequestBody{
-		Preset: p.Preset,
+		UseCase: p.UseCase,
 	}
 	return body
 }

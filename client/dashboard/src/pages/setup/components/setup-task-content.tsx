@@ -16,7 +16,7 @@ export function SetupTaskContent({
   taskKey,
   onSupport,
   ...props
-}: SetupCardProps & {
+}: Omit<SetupCardProps, "projectSlug"> & {
   taskKey: string;
   onSupport: () => void;
 }): JSX.Element | null {
@@ -25,7 +25,7 @@ export function SetupTaskContent({
   const card = setupCard(taskKey);
   if (!card) return null;
 
-  let content = <card.Step {...props} />;
+  let content = <card.Step {...props} projectSlug={requestProjectSlug} />;
   if (card.projectScopes) {
     const project = organization.projects.find(
       (candidate) => candidate.slug === requestProjectSlug,

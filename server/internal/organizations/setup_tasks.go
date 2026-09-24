@@ -488,8 +488,9 @@ func setupTaskAuditSnapshot(task *gen.SetupTask) *audit.OrganizationSetupTaskSna
 	}
 }
 
-// SubmitOnboardingSurvey maps the survey result to a task selection through
-// the same path staff use in the admin dashboard. Callers never pick tasks.
+// SubmitOnboardingSurvey applies the default playbook for the survey's use
+// case through the same path staff use in the admin dashboard. Callers never
+// pick tasks.
 func (s *Service) SubmitOnboardingSurvey(ctx context.Context, payload *gen.SubmitOnboardingSurveyPayload) (*gen.ListSetupTasksResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -498,17 +499,14 @@ func (s *Service) SubmitOnboardingSurvey(ctx context.Context, payload *gen.Submi
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	preset := onboardingPresetByKey(payload.Preset)
+	preset := defaultPlaybookForUseCase(payload.UseCase)
 	if preset == nil {
-		return nil, oops.E(oops.CodeBadRequest, nil, "invalid onboarding preset").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeBadRequest, nil, "unknown onboarding use case").LogError(ctx, s.logger)
 	}
+	presetKey := preset.Key
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)
-	if _, err := SaveOnboardingConfiguration(ctx, s.db, s.audit, ac.ActiveOrganizationID, preset.TaskKeys, &payload.Preset, actor, ac.Email); err != nil {
+	if _, err := SaveOnboardingConfiguration(ctx, s.db, s.audit, ac.ActiveOrganizationID, preset.TaskKeys, &presetKey, actor, ac.Email); err != nil {
 		return nil, fmt.Errorf("save onboarding survey result: %w", err)
 	}
-	tasks, err := projectSetupTasks(ctx, orgrepo.New(s.db), ac.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "project setup tasks").LogError(ctx, s.logger)
-	}
-	return &gen.ListSetupTasksResult{Tasks: slices.DeleteFunc(tasks, func(task *gen.SetupTask) bool { return task.Hidden })}, nil
+	return s.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{IncludeHidden: nil, SessionToken: payload.SessionToken})
 }

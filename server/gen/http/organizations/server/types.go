@@ -73,8 +73,8 @@ type UpdateSetupTaskRequestBody struct {
 // SubmitOnboardingSurveyRequestBody is the type of the "organizations" service
 // "submitOnboardingSurvey" endpoint HTTP request body.
 type SubmitOnboardingSurveyRequestBody struct {
-	// Onboarding preset key the survey answers resolved to.
-	Preset *string `form:"preset,omitempty" json:"preset,omitempty" xml:"preset,omitempty"`
+	// Use case the survey answers resolved to.
+	UseCase *string `form:"use_case,omitempty" json:"use_case,omitempty" xml:"use_case,omitempty"`
 }
 
 // GetResponseBody is the type of the "organizations" service "get" endpoint
@@ -6442,7 +6442,7 @@ func NewUpdateSetupTaskPayload(body *UpdateSetupTaskRequestBody, sessionToken *s
 // submitOnboardingSurvey endpoint payload.
 func NewSubmitOnboardingSurveyPayload(body *SubmitOnboardingSurveyRequestBody, sessionToken *string) *organizations.SubmitOnboardingSurveyPayload {
 	v := &organizations.SubmitOnboardingSurveyPayload{
-		Preset: *body.Preset,
+		UseCase: *body.UseCase,
 	}
 	v.SessionToken = sessionToken
 
@@ -6527,8 +6527,8 @@ func ValidateUpdateSetupTaskRequestBody(body *UpdateSetupTaskRequestBody) (err e
 // ValidateSubmitOnboardingSurveyRequestBody runs the validations defined on
 // SubmitOnboardingSurveyRequestBody
 func ValidateSubmitOnboardingSurveyRequestBody(body *SubmitOnboardingSurveyRequestBody) (err error) {
-	if body.Preset == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("preset", "body"))
+	if body.UseCase == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("use_case", "body"))
 	}
 	return
 }

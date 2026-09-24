@@ -406,7 +406,7 @@ func BuildSubmitOnboardingSurveyPayload(organizationsSubmitOnboardingSurveyBody 
 	{
 		err = json.Unmarshal([]byte(organizationsSubmitOnboardingSurveyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"preset\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"use_case\": \"abc123\"\n   }'")
 		}
 	}
 	var sessionToken *string
@@ -416,7 +416,7 @@ func BuildSubmitOnboardingSurveyPayload(organizationsSubmitOnboardingSurveyBody 
 		}
 	}
 	v := &organizations.SubmitOnboardingSurveyPayload{
-		Preset: body.Preset,
+		UseCase: body.UseCase,
 	}
 	v.SessionToken = sessionToken
 

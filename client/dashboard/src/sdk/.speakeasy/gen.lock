@@ -11047,7 +11047,7 @@ examples:
   submitOnboardingSurvey:
     speakeasy-default-submit-onboarding-survey:
       requestBody:
-        application/json: {"preset": "security"}
+        application/json: {"use_case": "<value>"}
       responses:
         "200":
           application/json: {"tasks": [{"blocked_by": [], "completed_by_fact": true, "description": "and hence the", "hidden": false, "key": "<key>", "status": "todo", "title": "<value>"}]}

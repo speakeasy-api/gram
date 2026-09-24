@@ -54,7 +54,7 @@ export type SubmitOnboardingSurveyMutationError =
  * submitOnboardingSurvey organizations
  *
  * @remarks
- * Record the onboarding survey result. The server derives which setup tasks the wizard walks from it; progress and assignments are kept.
+ * Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.
  */
 export function useSubmitOnboardingSurveyMutation(
   options?: MutationHookOptions<

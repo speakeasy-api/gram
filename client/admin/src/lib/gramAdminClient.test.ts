@@ -185,7 +185,11 @@ describe("generated admin boundary", () => {
       organizationId: "org_explicit",
       preset: "gateway",
       presets: [
-        { visibleTaskKeys: ["create-marketplace", "distribute-servers"] },
+        {
+          key: "gateway",
+          title: "Gateway",
+          visibleTaskKeys: ["create-marketplace", "distribute-servers"],
+        },
       ],
     });
     const read = fetch.mock.calls[0]![0] as Request;

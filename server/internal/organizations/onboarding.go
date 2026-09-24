@@ -41,6 +41,14 @@ func onboardingPresetByKey(key string) *onboardingPreset {
 	return nil
 }
 
+// defaultPlaybookForUseCase returns the preset an onboarding survey use case
+// starts from.
+// ponytail: use cases are 1:1 with preset keys until use cases get their own
+// catalog; then this becomes that catalog's default-playbook lookup.
+func defaultPlaybookForUseCase(useCase string) *onboardingPreset {
+	return onboardingPresetByKey(useCase)
+}
+
 // IsOnboardingPreset reports whether key names a preset.
 func IsOnboardingPreset(key string) bool {
 	return onboardingPresetByKey(key) != nil

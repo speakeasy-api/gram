@@ -59,8 +59,9 @@ type Service interface {
 	// update: status, assignee, hidden, or clear_assignee=true. Assignee is
 	// mutually exclusive with clear_assignee=true.
 	UpdateSetupTask(context.Context, *UpdateSetupTaskPayload) (res *SetupTask, err error)
-	// Record the onboarding survey result. The server derives which setup tasks
-	// the wizard walks from it; progress and assignments are kept.
+	// Record the onboarding survey result. The server picks the use case's default
+	// playbook, which decides the setup tasks the wizard walks; progress and
+	// assignments are kept.
 	SubmitOnboardingSurvey(context.Context, *SubmitOnboardingSurveyPayload) (res *ListSetupTasksResult, err error)
 }
 
@@ -380,8 +381,8 @@ type SetupTaskAssigneeInput struct {
 // SubmitOnboardingSurveyPayload is the payload type of the organizations
 // service submitOnboardingSurvey method.
 type SubmitOnboardingSurveyPayload struct {
-	// Onboarding preset key the survey answers resolved to.
-	Preset       string
+	// Use case the survey answers resolved to.
+	UseCase      string
 	SessionToken *string
 }
 

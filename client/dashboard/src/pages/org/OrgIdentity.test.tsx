@@ -65,7 +65,7 @@ vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     setup: {
       Link: ({ children }: { children: ReactNode }) => (
-        <a href="/example/setup?task=idp">{children}</a>
+        <a href="/example/setup?task=identity-provider">{children}</a>
       ),
     },
   }),

@@ -18655,7 +18655,7 @@ func organizationsUsage() {
 	fmt.Fprintln(os.Stderr, `    generate-work-os-admin-portal-link: Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).`)
 	fmt.Fprintln(os.Stderr, `    list-setup-tasks: List the fixed setup task catalog projected with organization state and completion evidence.`)
 	fmt.Fprintln(os.Stderr, `    update-setup-task: Update one fixed setup task. The request must include at least one effective update: status, assignee, hidden, or clear_assignee=true. Assignee is mutually exclusive with clear_assignee=true.`)
-	fmt.Fprintln(os.Stderr, `    submit-onboarding-survey: Record the onboarding survey result. The server derives which setup tasks the wizard walks from it; progress and assignments are kept.`)
+	fmt.Fprintln(os.Stderr, `    submit-onboarding-survey: Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s organizations COMMAND --help\n", os.Args[0])
@@ -18975,7 +18975,7 @@ func organizationsSubmitOnboardingSurveyUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Record the onboarding survey result. The server derives which setup tasks the wizard walks from it; progress and assignments are kept.`)
+	fmt.Fprintln(os.Stderr, `Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -18983,7 +18983,7 @@ func organizationsSubmitOnboardingSurveyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations submit-onboarding-survey --body '{\n      \"preset\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations submit-onboarding-survey --body '{\n      \"use_case\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 // otelUsage displays the usage of the otel command and its subcommands.

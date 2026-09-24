@@ -3,26 +3,34 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type SubmitOnboardingSurveyRequestBody = {
   /**
-   * Onboarding preset key the survey answers resolved to.
+   * Use case the survey answers resolved to.
    */
-  preset: string;
+  useCase: string;
 };
 
 /** @internal */
 export type SubmitOnboardingSurveyRequestBody$Outbound = {
-  preset: string;
+  use_case: string;
 };
 
 /** @internal */
 export const SubmitOnboardingSurveyRequestBody$outboundSchema: z.ZodMiniType<
   SubmitOnboardingSurveyRequestBody$Outbound,
   SubmitOnboardingSurveyRequestBody
-> = z.object({
-  preset: z.string(),
-});
+> = z.pipe(
+  z.object({
+    useCase: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      useCase: "use_case",
+    });
+  }),
+);
 
 export function submitOnboardingSurveyRequestBodyToJSON(
   submitOnboardingSurveyRequestBody: SubmitOnboardingSurveyRequestBody,
