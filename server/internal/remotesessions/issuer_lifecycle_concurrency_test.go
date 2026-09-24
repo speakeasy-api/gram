@@ -102,6 +102,8 @@ func TestIssuerLifecycle_ProjectUserIssuerMutationHidesSiblingBindings(t *testin
 	siblingCtx := contextvalues.SetAuthContext(ctx, &siblingAuth)
 	var update usergen.UpdateUserSessionIssuerPayload
 	update.ID = in.UserSessionIssuerID.String()
+	// Change the fixture's one-hour duration: no-op patches do not affect bindings.
+	update.SessionDurationHours = conv.PtrEmpty(2)
 	_, err = service.UpdateUserSessionIssuer(siblingCtx, &update)
 	requireOopsCode(t, err, oops.CodeNotFound)
 	var deletion usergen.DeleteUserSessionIssuerPayload
