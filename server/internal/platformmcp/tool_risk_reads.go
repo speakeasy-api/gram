@@ -359,8 +359,8 @@ func riskGetPolicySchema() *jsonschema.Schema {
 func createRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	standard := riskPolicyCreateCommonProperties(catalog)
 	standard["policy_type"] = describedConstSchema("standard", policycatalog.PolicyTypeDescriptions["standard"])
-	standard["sources"] = arraySchema(describedCatalogEnumSchema(catalog, catalog.Sources, "Detector sources to enable. One of:", func(value string) string { return policycatalog.SourceDescriptions[value] }), 1, true)
-	standard["presidio_entities"] = arraySchema(describedCatalogEnumSchema(catalog, catalog.PresidioEntities, "Personal-data entities to detect; required when sources include presidio. One of:", policycatalog.PresidioEntityDescription), 0, true)
+	standard["sources"] = describedArraySchema(describedCatalogEnumSchema(catalog, catalog.Sources, "Detector sources to enable. One of:", func(value string) string { return policycatalog.SourceDescriptions[value] }), 1)
+	standard["presidio_entities"] = describedArraySchema(describedCatalogEnumSchema(catalog, catalog.PresidioEntities, "Personal-data entities to detect; required when sources include presidio. One of:", policycatalog.PresidioEntityDescription), 0)
 	standard["presidio_score_threshold"] = &jsonschema.Schema{Type: "number", Minimum: new(float64(0)), Maximum: new(float64(1)), Description: "Minimum Presidio confidence (0-1) a personal-data match must clear; default 0.5."}
 	standard["prompt_injection_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.PromptInjectionRules), 0, true)
 	standard["disabled_rules"] = arraySchema(catalogEnumSchema(catalog, catalog.DisabledRules), 0, true)
@@ -376,7 +376,7 @@ func createRiskPolicySchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	preset := riskPolicyCreateCommonProperties(catalog)
 	preset["preset"] = describedEnumSchema(presets.IDs(), "Use-case preset to expand into a complete policy; see list_risk_presets. One of:", riskPresetDescription)
 	preset["name"] = stringSchema("Policy name; defaults to the preset label.", 1, 100)
-	preset["presidio_entities"] = arraySchema(describedCatalogEnumSchema(catalog, catalog.PresidioEntities, "Replaces the preset's personal-data entities. One of:", policycatalog.PresidioEntityDescription), 1, true)
+	preset["presidio_entities"] = describedArraySchema(describedCatalogEnumSchema(catalog, catalog.PresidioEntities, "Replaces the preset's personal-data entities. One of:", policycatalog.PresidioEntityDescription), 1)
 	preset["approved_email_domains"] = boundedArraySchema(stringSchema("Canonical email domain.", 1, 253), 0, 50, true)
 	preset["approved_email_domains"].Description = "Email domains treated as corporate; required for the non_corporate_accounts preset to detect anything."
 	preset["prompt"] = stringSchema("Replaces the preset's judge instruction; only for prompt-based presets.", 1, 4000)
@@ -479,6 +479,12 @@ func detectionScopesSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
 	}, []string{"category", "message_types"})
 	schema := arraySchema(scope, 0, true)
 	schema.Description = "Optional per-category override of which message surfaces are scanned. Omit to use the recommended scope for each category."
+	return schema
+}
+
+func describedArraySchema(items *jsonschema.Schema, minItems int) *jsonschema.Schema {
+	schema := arraySchema(items, minItems, true)
+	schema.Description = items.Description
 	return schema
 }
 
