@@ -641,8 +641,9 @@ func (s *Service) contextForSessionSubject(
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
 		authCtx.UserID = subject.ID
-		// Load the authenticated user's email. An inherited context may contain
-		// the credential creator's or principal owner's email.
+		// Resolve the validated Gram subject through the session manager's
+		// cached database profile. Request-authentication profile values may
+		// belong to a different user.
 		needsProfile, err := s.endpointNeedsCallerProfile(ctx, endpoint)
 		if err != nil {
 			return nil, err
