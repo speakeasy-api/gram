@@ -732,9 +732,9 @@ func TestBuildAuthorizationUrl_LegacyRegistrationCallback(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
-			ctx, env := newSyntheticExpiryEnv(t, "legacy-callback", upstream.handler())
-			_, err := env.db.Exec(ctx, "UPDATE remote_session_clients SET legacy_callback_url = TRUE WHERE id = $1", env.clientID)
-			require.NoError(t, err)
+			ctx, env := newSyntheticExpiryEnv(t, "legacy-callback", upstream.handler(), func(options *syntheticLoginOptions) {
+				options.legacyCallbackURL = true
+			})
 			if tc.endpointPath != "" {
 				rejectedAt := time.Now().Add(-time.Hour)
 				stageRegistration(t, env, issuerTokenEndpoint(t, env)+tc.endpointPath, &rejectedAt, nil)
