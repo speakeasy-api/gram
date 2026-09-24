@@ -74,10 +74,15 @@ type Client struct {
 	GetSupportMatrixEndpoint                      goa.Endpoint
 	UpdateSupportMatrixEndpoint                   goa.Endpoint
 	GetSupportCoverageEndpoint                    goa.Endpoint
+	ListRegistryEntriesEndpoint                   goa.Endpoint
+	GetRegistryEntryEndpoint                      goa.Endpoint
+	CreateRegistryEntryEndpoint                   goa.Endpoint
+	SaveRegistryEntryEndpoint                     goa.Endpoint
+	SetRegistryEntryPublishedEndpoint             goa.Endpoint
 }
 
 // NewClient initializes a "admin" service client given the endpoints.
-func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, getOrganizationOnboarding, setOrganizationOnboarding, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage goa.Endpoint) *Client {
+func NewClient(login, callback, logout, getSession, getOrganizationFeatures, setOrganizationFeature, getOrganizationChatAnalysisSettings, setOrganizationChatAnalysisSettings, triggerOrganizationChatAnalysis, openOrganizationInDashboard, getProject, updateOrganization, bulkUpdateAccountType, disableOrganization, enableOrganization, getOrganization, listOrganizationMembers, listOrganizationProjects, listProjectMcpServers, listOrganizationActivity, listOrganizations, extendTrial, createOrganization, rearmTrial, getOrganizationStats, getInferenceKeys, setInferenceKeyMonthlyLimit, getInferenceSpendHistory, getPaygBillingSummary, getStripeCustomer, setStripeCustomer, getStripeSubscription, cancelStripeSubscription, resumeStripeSubscription, markEnterpriseTrialConverted, getOrganizationOnboarding, setOrganizationOnboarding, createGlobalIssuer, getGlobalIssuerDuplicatePreflight, listGlobalIssuers, getGlobalIssuer, updateGlobalIssuer, deleteGlobalIssuer, fetchGlobalIssuerMetadata, refreshGlobalIssuerMetadata, listGlobalIssuerConvergenceCandidates, getGlobalIssuerMigratePreflight, migrateToGlobalIssuer, uploadPlatformImage, serveImage, startTrial, changeTrialEndDate, getMeterUsage, getSpendBreakdown, getSupportMatrix, updateSupportMatrix, getSupportCoverage, listRegistryEntries, getRegistryEntry, createRegistryEntry, saveRegistryEntry, setRegistryEntryPublished goa.Endpoint) *Client {
 	return &Client{
 		LoginEndpoint:                                 login,
 		CallbackEndpoint:                              callback,
@@ -136,6 +141,11 @@ func NewClient(login, callback, logout, getSession, getOrganizationFeatures, set
 		GetSupportMatrixEndpoint:                      getSupportMatrix,
 		UpdateSupportMatrixEndpoint:                   updateSupportMatrix,
 		GetSupportCoverageEndpoint:                    getSupportCoverage,
+		ListRegistryEntriesEndpoint:                   listRegistryEntries,
+		GetRegistryEntryEndpoint:                      getRegistryEntry,
+		CreateRegistryEntryEndpoint:                   createRegistryEntry,
+		SaveRegistryEntryEndpoint:                     saveRegistryEntry,
+		SetRegistryEntryPublishedEndpoint:             setRegistryEntryPublished,
 	}
 }
 
@@ -1450,4 +1460,119 @@ func (c *Client) GetSupportCoverage(ctx context.Context, p *GetSupportCoveragePa
 		return
 	}
 	return ires.(*SupportCoverageResult), nil
+}
+
+// ListRegistryEntries calls the "listRegistryEntries" endpoint of the "admin"
+// service.
+// ListRegistryEntries may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListRegistryEntries(ctx context.Context, p *ListRegistryEntriesPayload) (res *AdminRegistryPage, err error) {
+	var ires any
+	ires, err = c.ListRegistryEntriesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryPage), nil
+}
+
+// GetRegistryEntry calls the "getRegistryEntry" endpoint of the "admin"
+// service.
+// GetRegistryEntry may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetRegistryEntry(ctx context.Context, p *GetRegistryEntryPayload) (res *AdminRegistryEntry, err error) {
+	var ires any
+	ires, err = c.GetRegistryEntryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryEntry), nil
+}
+
+// CreateRegistryEntry calls the "createRegistryEntry" endpoint of the "admin"
+// service.
+// CreateRegistryEntry may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CreateRegistryEntry(ctx context.Context, p *CreateRegistryEntryPayload) (res *AdminRegistryEntry, err error) {
+	var ires any
+	ires, err = c.CreateRegistryEntryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryEntry), nil
+}
+
+// SaveRegistryEntry calls the "saveRegistryEntry" endpoint of the "admin"
+// service.
+// SaveRegistryEntry may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SaveRegistryEntry(ctx context.Context, p *SaveRegistryEntryPayload) (res *AdminRegistryEntry, err error) {
+	var ires any
+	ires, err = c.SaveRegistryEntryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryEntry), nil
+}
+
+// SetRegistryEntryPublished calls the "setRegistryEntryPublished" endpoint of
+// the "admin" service.
+// SetRegistryEntryPublished may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetRegistryEntryPublished(ctx context.Context, p *SetRegistryEntryPublishedPayload) (res *AdminRegistryEntry, err error) {
+	var ires any
+	ires, err = c.SetRegistryEntryPublishedEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*AdminRegistryEntry), nil
 }

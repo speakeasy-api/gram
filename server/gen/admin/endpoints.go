@@ -74,6 +74,11 @@ type Endpoints struct {
 	GetSupportMatrix                      goa.Endpoint
 	UpdateSupportMatrix                   goa.Endpoint
 	GetSupportCoverage                    goa.Endpoint
+	ListRegistryEntries                   goa.Endpoint
+	GetRegistryEntry                      goa.Endpoint
+	CreateRegistryEntry                   goa.Endpoint
+	SaveRegistryEntry                     goa.Endpoint
+	SetRegistryEntryPublished             goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -156,6 +161,11 @@ func NewEndpoints(s Service) *Endpoints {
 		GetSupportMatrix:                      NewGetSupportMatrixEndpoint(s, a.APIKeyAuth),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
 		GetSupportCoverage:                    NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
+		ListRegistryEntries:                   NewListRegistryEntriesEndpoint(s, a.APIKeyAuth),
+		GetRegistryEntry:                      NewGetRegistryEntryEndpoint(s, a.APIKeyAuth),
+		CreateRegistryEntry:                   NewCreateRegistryEntryEndpoint(s, a.APIKeyAuth),
+		SaveRegistryEntry:                     NewSaveRegistryEntryEndpoint(s, a.APIKeyAuth),
+		SetRegistryEntryPublished:             NewSetRegistryEntryPublishedEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -218,6 +228,11 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetSupportMatrix = m(e.GetSupportMatrix)
 	e.UpdateSupportMatrix = m(e.UpdateSupportMatrix)
 	e.GetSupportCoverage = m(e.GetSupportCoverage)
+	e.ListRegistryEntries = m(e.ListRegistryEntries)
+	e.GetRegistryEntry = m(e.GetRegistryEntry)
+	e.CreateRegistryEntry = m(e.CreateRegistryEntry)
+	e.SaveRegistryEntry = m(e.SaveRegistryEntry)
+	e.SetRegistryEntryPublished = m(e.SetRegistryEntryPublished)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -1489,5 +1504,120 @@ func NewGetSupportCoverageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.GetSupportCoverage(ctx, p)
+	}
+}
+
+// NewListRegistryEntriesEndpoint returns an endpoint function that calls the
+// method "listRegistryEntries" of service "admin".
+func NewListRegistryEntriesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListRegistryEntriesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListRegistryEntries(ctx, p)
+	}
+}
+
+// NewGetRegistryEntryEndpoint returns an endpoint function that calls the
+// method "getRegistryEntry" of service "admin".
+func NewGetRegistryEntryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRegistryEntryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRegistryEntry(ctx, p)
+	}
+}
+
+// NewCreateRegistryEntryEndpoint returns an endpoint function that calls the
+// method "createRegistryEntry" of service "admin".
+func NewCreateRegistryEntryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateRegistryEntryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateRegistryEntry(ctx, p)
+	}
+}
+
+// NewSaveRegistryEntryEndpoint returns an endpoint function that calls the
+// method "saveRegistryEntry" of service "admin".
+func NewSaveRegistryEntryEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SaveRegistryEntryPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SaveRegistryEntry(ctx, p)
+	}
+}
+
+// NewSetRegistryEntryPublishedEndpoint returns an endpoint function that calls
+// the method "setRegistryEntryPublished" of service "admin".
+func NewSetRegistryEntryPublishedEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetRegistryEntryPublishedPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetRegistryEntryPublished(ctx, p)
 	}
 }
