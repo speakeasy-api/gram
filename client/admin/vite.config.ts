@@ -1,7 +1,6 @@
+import { defineConfig } from "vite";
 import fs from "node:fs";
 import path from "node:path";
-
-import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
@@ -109,6 +108,21 @@ export default defineConfig(({ command }) => {
               target: adminBackendUrl,
               changeOrigin: true,
               // The local admin API uses a self-signed certificate.
+              secure: false,
+            },
+            "/admin-mcp": {
+              target: adminBackendUrl,
+              changeOrigin: true,
+              secure: false,
+            },
+            "/.well-known/oauth-protected-resource/admin-mcp": {
+              target: adminBackendUrl,
+              changeOrigin: true,
+              secure: false,
+            },
+            "/.well-known/oauth-authorization-server/admin-mcp/oauth": {
+              target: adminBackendUrl,
+              changeOrigin: true,
               secure: false,
             },
           }
