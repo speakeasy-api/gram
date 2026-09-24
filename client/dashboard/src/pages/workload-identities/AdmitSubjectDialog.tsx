@@ -167,12 +167,7 @@ export function AdmitSubjectDialog({
               onChange={(value) => setValues({ ...values, subject: value })}
             />
             {warning !== null ? (
-              <Text
-                id="admit-subject-warning"
-                role="alert"
-                small
-                className="text-destructive"
-              >
+              <Text id="admit-subject-warning" role="alert" small destructive>
                 {warning}
               </Text>
             ) : (
