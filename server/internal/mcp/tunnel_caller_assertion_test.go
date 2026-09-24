@@ -266,26 +266,30 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 
 }
 
-func TestPrivateTunnelKeepaliveSkipsWithoutChangingVerdict(t *testing.T) {
+func TestPrivateTunnelKeepaliveProbesWithoutCallerAssertion(t *testing.T) {
 	t.Parallel()
 	issuer, _ := callerIssuerForTest(t)
 	ctx, fx, tunnelID := seedTunneledRecheckFixture(t, "assertion-keepalive", "urn:example:private-mcp", issuer)
-	var attempts atomic.Int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		attempts.Add(1)
-		http.Error(w, "caller assertion required", http.StatusUnauthorized)
-	}))
+	_, err := usersrepo.New(fx.ti.conn).UpsertUser(ctx, usersrepo.UpsertUserParams{
+		ID: fx.subject.ID, Email: "caller@example.test", DisplayName: "Test caller",
+	})
+	require.NoError(t, err)
+	gateway := &fakeTunnelGateway{t: t, agentSessionID: "test-agent", backendSessionID: "backend-secret-session", mu: sync.Mutex{}}
+	upstream := httptest.NewServer(gateway)
 	t.Cleanup(upstream.Close)
 	require.NoError(t, fx.ti.tunnelRoutes.Publish(ctx, tunnelID.String(), upstream.URL, time.Hour))
-	before := storedSession(t, ctx, fx)
+
 	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
 	require.NoError(t, err)
-	require.Zero(t, checked)
-	require.Zero(t, attempts.Load())
+	require.Equal(t, 1, checked)
+	headers, bodies := tunnelForwards(gateway)
+	requireTunnelProbe(t, headers, bodies, "token-assertion-keepalive")
+	for _, header := range headers {
+		require.Empty(t, header.Get(mcpauthz.Header), "a background probe has no authenticated caller")
+	}
 	after := storedSession(t, ctx, fx)
-	require.Equal(t, before.ValidationStatus, after.ValidationStatus)
-	require.Equal(t, before.LastValidatedAt, after.LastValidatedAt)
-	require.True(t, after.LastRefreshAttemptAt.Valid, "the claim lease still paces skipped probes")
+	require.Equal(t, "valid", after.ValidationStatus.String)
+	require.True(t, after.LastValidatedAt.Valid)
 }
 
 func TestPublicTunnelPinnedSessionNeverReceivesCallerAssertion(t *testing.T) {

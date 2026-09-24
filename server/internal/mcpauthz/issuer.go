@@ -1,6 +1,5 @@
 // Package mcpauthz issues short-lived caller assertions for private MCP tunnels.
-// The destination verifies the authenticated principal, issuer, resource, tenant,
-// and expiry, then applies its own authorization rules.
+// Destinations can verify assertions to use caller claims in their access policy.
 package mcpauthz
 
 import (

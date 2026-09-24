@@ -1,8 +1,10 @@
 # Signed caller identity for MCP tunnels
 
-Gram can send a signed caller assertion through a tunnel to your private MCP
-server. Your server verifies it against Gram's public JWKS and applies its own
-access policy. The assertion contains no Gram credentials.
+Gram can add signed caller identity to requests sent through a tunnel to your
+private MCP server. Existing MCP servers can ignore the header and keep their
+current authentication. If your server uses these claims for access decisions,
+verify the JWT against Gram's public JWKS. The assertion contains no Gram
+credentials. Gram enforces its consent and tool-access rules before forwarding.
 
 AICP issues the assertions. Pin these values in your verifier:
 
@@ -74,15 +76,17 @@ their human creator or owner. Human assertions also carry `email`; use the
 stable `sub` as the identity key because an email can change. The assertion does
 not make an `email_verified` claim.
 
-A human authenticated into a live OAuth consent challenge can receive a
-discovery assertion before granting tool access. It has `purpose=mcp_discovery`
-and `allowed_methods=["server/discover", "initialize", "notifications/initialized", "ping", "tools/list"]`.
-Gram enforces this method list and blocks tool calls during consent. The server's
-discovery policy still determines which tools that user may see. Discovery is
-limited to ten minutes from the challenge's creation; restart login if that
-window expires. Impersonated or unknown authorizers and agent-selected consent
-flows do not receive a discovery assertion. HTTP `DELETE` used to close the
-discovery session also carries it.
+During OAuth consent, Gram can include the authenticated human's identity with
+`purpose=mcp_discovery` and
+`allowed_methods=["server/discover", "initialize", "notifications/initialized", "ping", "tools/list"]`.
+These claims describe the discovery request. Gram enforces the method list and
+blocks tool calls before forwarding; upstreams can ignore these claims. An
+upstream's own access policy still determines the tools it exposes.
+
+Gram issues discovery assertions only within ten minutes of the challenge's
+creation, with each assertion valid for at most 60 seconds. Impersonated or
+unknown authorizers and agent-selected consent flows receive no discovery
+assertion. HTTP `DELETE` used to close the discovery session also carries it.
 
 Runtime user assertions identify the effective user of the validated Gram
 session. Session credentials do not record whether support impersonation
@@ -91,10 +95,10 @@ occurred, so the assertion cannot rule it out.
 Issuance is limited to private tunneled destinations. Public destinations,
 anonymous callers, embedded chat sessions, assistant credentials, workload
 sessions and background probes do not receive an assertion in this version.
-Servers that require the header must account for those unsupported callers.
-While signing is enabled, Gram skips synthetic OAuth keepalive probes for
-private tunnels and keeps their prior connection verdict. Interactive consent
-validation uses the authenticated discovery assertion.
+Background connection probes continue using the upstream's existing credentials.
+Servers that choose to require the identity header must account for callers
+without an assertion. Interactive consent validation includes the authenticated
+human's discovery assertion when available.
 
 Gram rejects a request before forwarding if the caller's authenticated
 organization or bound project differs from the destination. Use an API key
@@ -107,7 +111,7 @@ Cache them for up to five minutes. On an unknown `kid`, refresh from that URL
 once before rejecting the assertion. The endpoint supports GET, HEAD, ETag and
 conditional GET.
 
-Your server must:
+If your server uses the caller claims:
 
 1. Read exactly one assertion and select an RSA signing key by `kid` from the
    AICP JWKS above. Do not follow a token-provided key URL or issuer.
@@ -123,14 +127,14 @@ verified caller claims for your server's own access policy.
 For policies that restrict access to a specific Gram organization, project or
 server, also check the corresponding ID claims.
 
-Treat a missing assertion as unauthenticated. A captured bearer token can be
-reused until it expires, even with a unique `jti`, unless your server adds replay
-protection. Keep assertions out of tool arguments, ordinary application logs,
-and error responses.
+If your access policy requires these claims, reject a missing or invalid
+assertion. A captured assertion can be reused until it expires, even with a
+unique `jti`, unless your server adds replay protection. Keep assertions out of
+tool arguments, ordinary application logs, and error responses.
 
-Validate each HTTP request. Accepting an assertion during initialization does
-not authorize later requests on the same MCP session. A response admitted while
-the token was valid may continue streaming after its expiry.
+Verify the assertion on each request where you use its claims. An assertion
+received during initialization does not cover later requests on the MCP session.
+A response admitted while the token was valid may continue streaming after its expiry.
 
 ## Key rotation
 
