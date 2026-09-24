@@ -1,0 +1,35 @@
+server/internal/plugins/publication_evidence_authorization_test.go
+  h_9630b74bdac540 1-26
+server/internal/platformmcp/connection_settings.go
+  h_9630b74bdac540 11,107-125
+  h_9630b74bdac540 126
+server/internal/platformmcp/connection_settings_test.go
+  h_9630b74bdac540 10,12,23-45,62-66,76-80,85-88,96-114
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 3216,3233
+server/internal/platformmcp/descriptor_test.go
+  h_9630b74bdac540 289,291,307-311,314
+server/internal/platformmcp/plugins_integration_test.go
+  h_9630b74bdac540 485,489,531-536,544
+  h_9630b74bdac540 530,537-543
+server/internal/platformmcp/tool_connection_settings.go
+  h_9630b74bdac540 8,21,34-40
+server/internal/platformmcp/descriptor.go
+  h_9630b74bdac540 253-257
+  h_9630b74bdac540 258
+server/internal/plugins/publication_evidence.go
+  h_9630b74bdac540 10,34-39
+server/internal/platformmcp/repo/queries.sql.go
+  h_9630b74bdac540 3090,5635
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "41d7e677f146059da185bfee64564dbf2b115c54",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
