@@ -55,7 +55,9 @@ type Service struct {
 }
 
 var ErrNotFound = errors.New("registry entry not found")
+
 var ErrInvalidCursor = errors.New("invalid registry cursor")
+
 var ErrInvalidListOptions = errors.New("invalid registry list options")
 
 func New(db *pgxpool.Pool, v *Validator) *Service {
@@ -101,6 +103,7 @@ type listCursor struct {
 }
 
 func samePublished(a, b *bool) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
+
 func (s *Service) List(ctx context.Context, opts ListOptions) (Page, error) {
 	if s.validator == nil || s.validator.schema == nil {
 		return Page{}, errors.New("registry validator unavailable")
