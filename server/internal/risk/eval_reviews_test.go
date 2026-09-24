@@ -10,7 +10,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/risk"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
@@ -18,8 +17,6 @@ import (
 // newPromptPolicy creates an enabled prompt_based policy and returns its id.
 func newPromptPolicy(t *testing.T, ctx context.Context, ti *testInstance) string {
 	t.Helper()
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.flags.SetFlag(feature.FlagPromptPolicies, authCtx.ActiveOrganizationID, true)
 
 	name := "Prompt Policy"
 	prompt := "Flag destructive production changes."

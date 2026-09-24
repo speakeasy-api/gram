@@ -101,13 +101,6 @@ func insertPromptBasedBlockPolicyWithConfig(t *testing.T, ti *testInstance, ctx 
 	}))
 }
 
-func promptPoliciesFlag(ctx context.Context) *feature.InMemory {
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagPromptPolicies, authCtx.ActiveOrganizationID, true)
-	return flags
-}
-
 // TestScanner_PromptBasedPolicyBlocksToolRequest verifies a matching judge
 // verdict on a tool-call message produces a block ScanResult sourced to the
 // llm_judge.
@@ -118,7 +111,7 @@ func TestScanner_PromptBasedPolicyBlocksToolRequest(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes")
 	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(0.9, "destructive delete")}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), &feature.InMemory{}, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -141,7 +134,7 @@ func TestScanner_PromptBasedPolicyAttributesMCPTool(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-github-writes", "Block writes to the github MCP server")
 	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), &feature.InMemory{}, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -166,7 +159,7 @@ func TestScanner_PromptBasedPolicyJudgesNonToolMessages(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes")
 	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), &feature.InMemory{}, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -185,7 +178,7 @@ func TestScanner_PromptBasedPolicyNoMatch(t *testing.T) {
 	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes")
 	judge := &fakePromptJudge{verdict: nil}
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), &feature.InMemory{}, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -193,23 +186,6 @@ func TestScanner_PromptBasedPolicyNoMatch(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, res)
 	require.Equal(t, int32(1), judge.calls.Load())
-}
-
-func TestScanner_PromptBasedPolicyDisabledWhenFlagOff(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	insertPromptBasedBlockPolicy(t, ti, ctx, "no-deletes", "Block destructive deletes")
-	judge := &fakePromptJudge{verdict: matchedJudgeVerdict(1, "x")}
-
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, promptpolicy.NewScanner(testenv.NewLogger(t), judge.Evaluate), &feature.InMemory{}, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
-	require.NoError(t, err)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	res, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "rm -rf /data", message.ToolRequest, ""))
-	require.NoError(t, err)
-	require.Nil(t, res)
-	require.Equal(t, int32(0), judge.calls.Load(), "judge must not run while gram-prompt-policies is disabled")
 }
 
 func TestScanner_PromptBasedPolicyFailClosedWhenJudgeUnavailable(t *testing.T) {
@@ -221,7 +197,7 @@ func TestScanner_PromptBasedPolicyFailClosedWhenJudgeUnavailable(t *testing.T) {
 	require.NoError(t, err)
 	insertPromptBasedBlockPolicyWithConfig(t, ti, ctx, "no-deletes", "Block destructive deletes", modelConfig)
 
-	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, nil, promptPoliciesFlag(ctx), testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
+	scanner, err := risk.NewScanner(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), ti.conn, newTestCustomRuleAnalyzer(t, ti.conn), nil, nil, nil, &feature.InMemory{}, testCELEngine(t), metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()))
 	require.NoError(t, err)
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)

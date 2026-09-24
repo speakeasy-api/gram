@@ -39,7 +39,6 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPRiskMutations, principal.OrganizationID, true)
-	flags.SetFlag(feature.FlagPromptPolicies, principal.OrganizationID, true)
 	controls, err := NewRiskMutationControls(conn, flags, NewPostgresOrganizationSlugResolver(conn), testOperationBudget(), "risk-policy-test-key")
 	require.NoError(t, err)
 	policies := risk.NewPolicyMutationCore(conn, audit.NewLogger(), nil, noopRiskPolicySignaler{}, nil)
@@ -191,11 +190,11 @@ func TestRiskPolicyMutationHandlersCreateUpdateReplayAndRedact(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, candidates, 1)
 	require.Equal(t, policyID, candidates[0].ID, "create convergence narrows by project, name, and policy type")
-	flags.SetFlag(feature.FlagPromptPolicies, principal.OrganizationID, false)
 	promptReplay := cloneRiskMutationInput(promptInput)
-	_, _, err = handlers.CreatePolicy(ctx, nil, promptReplay)
-	requireRiskMutationRefusal(t, err, unavailableCode)
-	flags.SetFlag(feature.FlagPromptPolicies, principal.OrganizationID, true)
+	_, promptReplayed, err := handlers.CreatePolicy(ctx, nil, promptReplay)
+	require.NoError(t, err)
+	require.True(t, promptReplayed.Receipt.Replayed)
+	require.Equal(t, promptCreated.Policy.ID, promptReplayed.Policy.ID)
 
 	promptReceiptID, err := uuid.Parse(promptCreated.Receipt.ID)
 	require.NoError(t, err)

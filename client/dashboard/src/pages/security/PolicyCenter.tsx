@@ -88,7 +88,6 @@ import {
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
 import { useDetectionRulesStore } from "./detection-rules-data";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { Outlet } from "react-router";
 import { ACTION_OPTIONS, categoriesToPayload } from "./policy-form";
@@ -586,7 +585,6 @@ function PolicyCenterContent() {
   const mode = useDetectorMode();
   const queryClient = useQueryClient();
   const routes = useRoutes();
-  const telemetry = useTelemetry();
   const { data, isLoading } = useRiskListPolicies();
   const {
     data: quarantinesData,
@@ -594,12 +592,9 @@ function PolicyCenterContent() {
     isError: quarantinesError,
     refetch: refetchQuarantines,
   } = useRiskListSessionQuarantines();
-  const nlEnabled = telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
-
   const policyRows = useMemo(
     (): PolicyRow[] =>
       (data?.policies ?? [])
-        .filter((policy) => nlEnabled || !isPromptPolicy(policy))
         .map((policy) => {
           const kind: PolicyKind = isPromptPolicy(policy) ? "prompt" : "risk";
           return { kind, policy };
@@ -607,7 +602,7 @@ function PolicyCenterContent() {
         .sort(
           (a, b) => b.policy.createdAt.getTime() - a.policy.createdAt.getTime(),
         ),
-    [data?.policies, nlEnabled],
+    [data?.policies],
   );
 
   const [runPanelPolicy, setRunPanelPolicy] = useState<RiskPolicy | null>(null);

@@ -123,8 +123,9 @@ type Service struct {
 	// approval workflow instead of a bypass request. Optional: nil keeps the
 	// legacy bypass flow.
 	approvalIntake ShadowMCPApprovalIntake
-	// flags gates the nl/LLM-judge policy MVP (FlagPromptPolicies). Optional:
-	// when nil the feature is treated as disabled.
+	// flags gates the ClickHouse read paths for the risk overview, event
+	// listing and Watchdog signals. Optional: when nil those gates read as
+	// disabled and the endpoints stay on Postgres.
 	flags feature.Provider
 	// Scanners reused by the rule-playground endpoint (testDetectionRule)
 	// so the dashboard sees the exact same matcher output the worker
@@ -360,14 +361,10 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 	}
 
 	// prompt_based (LLM-judge) policies carry a prompt + optional model config
-	// instead of detection sources, and are gated behind FlagPromptPolicies
-	// during the MVP.
+	// instead of detection sources.
 	var prompt pgtype.Text
 	var modelConfig []byte
 	if policyType == ra.PolicyTypePromptBased {
-		if !s.promptPoliciesEnabled(ctx, authCtx) {
-			return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
-		}
 		if payloadHasCreatePromptPolicyDetectionConfig(payload) {
 			return nil, oops.E(oops.CodeInvalid, nil, "prompt-based policies do not support detection source configuration")
 		}
@@ -760,10 +757,8 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 
-	// policy_type is immutable; gate edits to prompt_based policies behind the flag.
-	if current.PolicyType == ra.PolicyTypePromptBased && !s.promptPoliciesEnabled(ctx, authCtx) {
-		return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
-	}
+	// policy_type is immutable, so the stored type decides which of the
+	// prompt-based and standard field sets the payload may carry.
 	if current.PolicyType == ra.PolicyTypeStandard && (payload.Prompt != nil || payload.ModelConfig != nil) {
 		return nil, oops.E(oops.CodeInvalid, nil, "prompt and model_config are only supported for prompt-based policies")
 	}
@@ -4029,26 +4024,6 @@ func promptPolicyNameFromBase(base string, existing []string) string {
 			return candidate
 		}
 	}
-}
-
-// promptPoliciesEnabled reports whether the prompt-based policy MVP is enabled
-// for the org. The flag is targeted by PostHog group (org/project slug) the
-// same way the dashboard evaluates it, so we forward the groups built from the
-// auth context. A nil provider or a failed lookup degrades to disabled.
-func (s *Service) promptPoliciesEnabled(ctx context.Context, authCtx *contextvalues.AuthContext) bool {
-	if s.flags == nil {
-		return false
-	}
-	groups := feature.OrgProjectGroups(authCtx.OrganizationSlug, conv.PtrValOr(authCtx.ProjectSlug, ""))
-	on, err := s.flags.IsFlagEnabled(ctx, feature.FlagPromptPolicies, authCtx.ActiveOrganizationID, groups)
-	if err != nil {
-		s.logger.WarnContext(ctx, "prompt-policies flag check failed; treating as disabled",
-			attr.SlogError(err),
-			attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
-		)
-		return false
-	}
-	return on
 }
 
 func foundRowToResult(
