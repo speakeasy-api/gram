@@ -1,12 +1,8 @@
-import { AnyField } from "@/components/moon/any-field";
-import { InputField } from "@/components/moon/input-field";
 import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
-import { assert } from "@/lib/utils";
 import { Key } from "@gram/client/models/components/key.js";
-import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import {
   invalidateListAPIKeys,
   useListAPIKeysSuspense,
@@ -16,18 +12,11 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Column, Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Copy } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useOrganization } from "@/contexts/Auth";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/Select";
 import { RequireScope } from "@/components/require-scope";
-import { ApiKeyScopeField } from "./ApiKeyScopeField";
+import { CreateApiKeySheet } from "./CreateApiKeySheet";
+import { projectBindingLabel } from "./api-key-project-binding";
 
 export default function OrgApiKeys(): JSX.Element {
   const organization = useOrganization();
@@ -43,21 +32,10 @@ export default function OrgApiKeys(): JSX.Element {
 
 function OrgApiKeysInner() {
   const organization = useOrganization();
-  const [projectId, setProjectId] = useState("organization-wide");
-  const projectSelectionValid =
-    projectId === "organization-wide" ||
-    organization.projects.some((project) => project.id === projectId);
-  const projectLabel = (id?: string) => {
-    if (!id) return "Organization-wide";
-    return (
-      organization.projects.find((project) => project.id === id)?.name ??
-      "Unavailable project"
-    );
-  };
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const projectLabel = (id?: string) =>
+    projectBindingLabel(organization.projects, id);
+  const [isCreateSheetOpen, setIsCreateSheetOpen] = useState(false);
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
-  const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);
-  const [isCopied, setIsCopied] = useState(false);
   const queryClient = useQueryClient();
   const [apiKeySearch, setApiKeySearch] = useState("");
 
@@ -70,16 +48,6 @@ function OrgApiKeysInner() {
     return keys.filter((key) => key.name.toLowerCase().includes(search));
   }, [keysData?.keys, apiKeySearch]);
 
-  const createKeyMutation = useCreateAPIKeyMutation({
-    onSuccess: async (data) => {
-      setNewlyCreatedKey(data);
-      await invalidateListAPIKeys(queryClient, [{ gramSession: "" }]);
-      await queryClient.refetchQueries({
-        queryKey: ["@gram/client", "keys", "list"],
-      });
-    },
-  });
-
   const revokeKeyMutation = useRevokeAPIKeyMutation({
     onSuccess: async () => {
       setKeyToRevoke(null);
@@ -90,36 +58,6 @@ function OrgApiKeysInner() {
     },
   });
 
-  const handleCreateKey: React.FormEventHandler<HTMLFormElement> = (e) => {
-    e.preventDefault();
-    if (!projectSelectionValid || createKeyMutation.isPending) return;
-    const formEl = e.currentTarget;
-    const formData = new FormData(formEl);
-    const newKeyName = formData.get("name");
-    assert(typeof newKeyName === "string", "Key name must be a string");
-    const scope = formData.get("scope");
-    assert(typeof scope === "string", "Scope must be a string");
-
-    createKeyMutation.mutate(
-      {
-        security: { sessionHeaderGramSession: "" },
-        request: {
-          createKeyForm: {
-            name: newKeyName,
-            projectId:
-              projectId === "organization-wide" ? undefined : projectId,
-            scopes: [scope],
-          },
-        },
-      },
-      {
-        onSuccess: () => {
-          formEl.reset();
-        },
-      },
-    );
-  };
-
   const handleRevokeKey = () => {
     if (!keyToRevoke) return;
 
@@ -129,21 +67,6 @@ function OrgApiKeysInner() {
         id: keyToRevoke.id,
       },
     });
-  };
-
-  const handleCopyToken = async () => {
-    if (newlyCreatedKey?.key) {
-      await navigator.clipboard.writeText(newlyCreatedKey.key);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
-    }
-  };
-
-  const handleCloseCreateDialog = () => {
-    setIsCreateDialogOpen(false);
-    setNewlyCreatedKey(null);
-    setIsCopied(false);
-    setProjectId("organization-wide");
   };
 
   const apiKeyColumns: Column<Key>[] = [
@@ -212,7 +135,7 @@ function OrgApiKeysInner() {
 
   const newApiKeyButton = (
     <RequireScope scope="org:admin" level="component">
-      <Button onClick={() => setIsCreateDialogOpen(true)}>New API Key</Button>
+      <Button onClick={() => setIsCreateSheetOpen(true)}>New API Key</Button>
     </RequireScope>
   );
 
@@ -221,7 +144,7 @@ function OrgApiKeysInner() {
       <Button
         size="sm"
         variant="secondary"
-        onClick={() => setIsCreateDialogOpen(true)}
+        onClick={() => setIsCreateSheetOpen(true)}
       >
         <Button.LeftIcon>
           <Icon name="key-round" className="h-4 w-4" />
@@ -268,113 +191,10 @@ function OrgApiKeysInner() {
         )}
       </ResourceListPage>
 
-      <Dialog open={isCreateDialogOpen} onOpenChange={handleCloseCreateDialog}>
-        <Dialog.Content className="max-h-[90vh] overflow-y-auto">
-          <Dialog.Header>
-            <Dialog.Title>
-              {newlyCreatedKey ? "API Key Created" : "Create New API Key"}
-            </Dialog.Title>
-          </Dialog.Header>
-          {newlyCreatedKey ? (
-            <div className="space-y-4 py-4">
-              <div className="text-foreground border border-yellow-500/50 bg-yellow-600/50 p-4 text-sm">
-                You will not be able to see this token value again once you
-                close this dialog. Copy it now and store it securely.
-              </div>
-              <Text variant="body">
-                Project binding: {projectLabel(newlyCreatedKey.projectId)}
-              </Text>
-              <div className="bg-muted flex items-center space-x-2 p-3">
-                <code className="flex-1 break-all">{newlyCreatedKey.key}</code>
-                <Button
-                  aria-label={isCopied ? "API key copied" : "Copy API key"}
-                  variant="tertiary"
-                  size="sm"
-                  onClick={() => void handleCopyToken()}
-                  className="shrink-0"
-                >
-                  <Button.Icon>
-                    {isCopied ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button.Icon>
-                </Button>
-              </div>
-              <div className="flex justify-end">
-                <Button onClick={handleCloseCreateDialog}>Close</Button>
-              </div>
-            </div>
-          ) : (
-            <form className="space-y-4 py-4" onSubmit={handleCreateKey}>
-              <InputField
-                label="Key name"
-                name="name"
-                required
-                autoFocus
-                autoCapitalize="off"
-                autoComplete="off"
-                autoCorrect="off"
-              />
-
-              <AnyField
-                label="Project"
-                hint="Restrict this key to a project without changing its scope."
-                error={
-                  !projectSelectionValid &&
-                  "This project is no longer available. Select a project or Organization-wide."
-                }
-                render={(props) => (
-                  <Select value={projectId} onValueChange={setProjectId}>
-                    <SelectTrigger
-                      {...props}
-                      aria-invalid={!projectSelectionValid}
-                      className="w-full"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="organization-wide">
-                        Organization-wide
-                      </SelectItem>
-                      {organization.projects.map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                      {!projectSelectionValid && (
-                        <SelectItem value={projectId} disabled>
-                          Unavailable project
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-
-              <ApiKeyScopeField />
-              <div className="flex justify-end space-x-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={handleCloseCreateDialog}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={
-                    createKeyMutation.isPending || !projectSelectionValid
-                  }
-                >
-                  Create
-                </Button>
-              </div>
-            </form>
-          )}
-        </Dialog.Content>
-      </Dialog>
+      <CreateApiKeySheet
+        open={isCreateSheetOpen}
+        onOpenChange={setIsCreateSheetOpen}
+      />
 
       <Dialog
         open={!!keyToRevoke}

@@ -285,7 +285,7 @@ describe("API key project binding", () => {
     );
     expect(screen.getByText("Project binding: Test project")).toBeTruthy();
     expect(screen.getByText("synthetic-test-secret")).toBeTruthy();
-    await user.click(screen.getAllByRole("button", { name: "Close" })[0]!);
+    await user.click(screen.getByRole("button", { name: "Done" }));
     await openForm();
     expect(screen.queryByText("synthetic-test-secret")).toBeNull();
     expect(screen.getByRole("combobox").textContent).toContain(
