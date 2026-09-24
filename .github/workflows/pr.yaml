@@ -58,7 +58,7 @@ jobs:
           filters: .github/filters.yaml
       - id: stacked
         name: Compare preview image components against main
-        if: github.event_name == 'pull_request' && github.base_ref != 'main' && !github.event.pull_request.head.repo.fork
+        if: github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
         run: |
           set -euo pipefail
           git fetch --quiet --depth=1 origin main
