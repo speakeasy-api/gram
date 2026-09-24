@@ -58,11 +58,19 @@ func TestPrivateTunnelAssertionAudienceTracksSavedResource(t *testing.T) {
 	ctx, ti := newTestMCPServiceWithCallerAssertions(t, issuer)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	profile, err := usersrepo.New(ti.conn).GetUser(ctx, auth.UserID)
+	require.NoError(t, err)
+	require.NotEmpty(t, profile.Email)
+	inheritedAuth := *auth
+	inheritedAuth.UserID = "other-user"
+	inheritedAuth.Email = new("other-user@example.test")
+	requestCtx := contextvalues.WithAuthenticatedActor(t.Context(), &inheritedAuth,
+		urn.NewPrincipal(urn.PrincipalTypeUser, inheritedAuth.UserID))
 	projectID := *auth.ProjectID
 	sessionIssuer := createUserSessionIssuer(t, ctx, ti.conn, projectID)
 	slug := "assertion-direct-" + uuid.NewString()
 	serverID, tunnelID := createPrivateTunneledServer(t, ctx, ti, projectID, sessionIssuer, slug, "")
-	_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+	_, err = mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID: projectID, McpServerID: conv.ToNullUUID(serverID), Slug: slug,
 	})
 	require.NoError(t, err)
@@ -99,7 +107,7 @@ func TestPrivateTunnelAssertionAudienceTracksSavedResource(t *testing.T) {
 		request.Header.Set("X-Forwarded-Host", "client.example")
 		route := chi.NewRouteContext()
 		route.URLParams.Add("mcpSlug", slug)
-		request = request.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, route))
+		request = request.WithContext(context.WithValue(requestCtx, chi.RouteCtxKey, route))
 		response := httptest.NewRecorder()
 		require.NoError(t, ti.service.ServePublic(response, request))
 		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
@@ -112,6 +120,8 @@ func TestPrivateTunnelAssertionAudienceTracksSavedResource(t *testing.T) {
 		claims, ok := token.Claims.(jwt.MapClaims)
 		require.True(t, ok)
 		require.Equal(t, expected, claims["aud"])
+		require.Equal(t, subject.String(), claims["sub"])
+		require.Equal(t, profile.Email, claims["email"])
 		require.Equal(t, tunnelID.String(), claims["tunneled_mcp_server_id"])
 		require.Equal(t, auth.ActiveOrganizationID, claims["organization_id"])
 		require.Equal(t, projectID.String(), claims["project_id"])
