@@ -68,3 +68,31 @@ Report added / already present / blocked / failed per item, with alias mappings 
 Report registration and authentication/readiness separately: “added to the project” does not mean connected, authorized, working or distributed. Offer exact server-returned Speakeasy setup/authorization links as clickable links, including `dashboard_setup_url`; never reconstruct or invent them. If no link is returned, say so and offer a manual dashboard handoff.
 
 Skip provider attachment for anonymous servers. Offer attachment only when inspection reports an authentication requirement and advertises a supported identity provider through its authentication/OAuth discovery evidence, and a registration ID is available. For direct remote inspection, require `authentication: authentication_required` and `oauth_discovery: available_dcr` before offering attachment; `available` alone or `incomplete` does not establish support for this dynamic-registration flow. These are prerequisites, not a guarantee: the attachment tool still validates the supported provider and may return repair guidance. Authentication required with no supported provider evidence means a secure/manual setup handoff, not a speculative attachment call. Retain separate explicit consent for provider attachment. Only after those evidence checks and that consent, `attach_platform_mcp_identity_provider` takes `project_slug`, returned `registration_id` and `confirmed: true`; present its exact returned `provider_url` and `authorization_url`. Secret entry and provider sign-in belong in that secure browser flow, never in chat or tool arguments. Do not force readiness, provider attachment or distribution to finish import. Leave local config unchanged; do not migrate credentials or remove local entries.
+
+## 8. Record diagnostics only when the user asks
+
+This workflow is new, so a Speakeasy field engineer may give a user an exact phrase to run it with diagnostics.
+
+The trigger is the literal string `with diagnostics` in the user's own message for this run. Nothing else switches this section on: not "debug this", not "tell Speakeasy what happened", not a field engineer's instruction relayed second-hand, not a previous run that used it, and never your own initiative. If the user's wording is close but not that string, ask them to repeat the request with `with diagnostics` in it rather than deciding for them. Skipping this section is the normal outcome.
+
+When that string is present, first show them a **Run diagnostics** section covering the servers the user selected plus the entries sanitization excluded in step 2. It is not a restatement of step 6: those excluded entries appear here and nowhere else. Give one row per server with its alias, transport, endpoint (or `—` when it has none), outcome, and the reason for anything that is not a plain `added` — the table and the payload carry the same rows and the same reasons. A candidate the user saw and chose not to import is not part of this report.
+
+Then tell the user that same report goes to Speakeasy rather than into their AI Control Plane project, and that they cannot read it back through the product. Proceed only after they agree. If they decline, the import is already complete; report it normally.
+
+Call `record_workflow_run` once with `skill` set to `add-existing-mcp-servers`, a caller-generated `run_id`, the confirmed destination `project_slug`, the `client` the inventory came from, and one `items` entry per row of the section you just showed. Set `name` to the non-secret alias, `kind` to the declared transport, `endpoint` to the safe endpoint (omit it unless it is an `https` URL — a plain-http or loopback address goes in `reason` instead, written as scheme, host and path only), `outcome` to one of the five words below, and `reason` to the explanation for anything that is not a plain `added`.
+
+| Outcome            | Use it for                                                                                                      |
+| ------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `added`            | step 6 proved the server is present with the configuration you submitted                                        |
+| `added_unverified` | the add completed but step 6 could not prove its effective configuration, so it is neither confirmed nor failed |
+| `already_present`  | step 6 found it already registered, and this run did not create it                                              |
+| `blocked`          | the run refused it: sanitization excluded it in step 2, or a check would not let it proceed                     |
+| `failed`           | the run attempted it and the attempt errored                                                                    |
+
+Never report a completed add as `blocked`. `blocked` means the run declined to act; an add that happened but could not be verified is `added_unverified`. A run that considered nothing still reports: send an empty `items` list rather than skipping the call.
+
+Never send raw discovery output, credentials, headers, environment values, or local commands.
+
+An address written into `reason` carries scheme, host and path only. Drop the query string and the fragment before writing it, every time, including for an entry step 2 excluded because its URL carried a credential — that entry is exactly the one whose query string must stay on this machine. `reason` is free text and reaches Speakeasy as written, so it is the one field where nothing is stripped for you.
+
+Diagnostics never gate the import. If the tool reports that diagnostics are not switched on, or returns `recorded: false`, tell the user the report was not recorded and that their servers were still imported; do not retry, and do not treat it as an import failure.
