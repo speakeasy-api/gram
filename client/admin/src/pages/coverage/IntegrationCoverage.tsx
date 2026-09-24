@@ -92,6 +92,7 @@ function SupportMatrixPage({ snapshot }: { snapshot: Snapshot }): JSX.Element {
     const merged: Draft = {
       mappings: { ...draft.mappings },
       references: { ...draft.references },
+      accounts: { ...draft.accounts, ...legacy.accounts },
     };
     for (const [key, mapping] of Object.entries(legacy.mappings))
       merged.mappings[key] = {

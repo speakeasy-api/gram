@@ -4,11 +4,20 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { SupportFact, SupportFact$inboundSchema } from "./supportfact.js";
 
+export const SupportMethodAccounts = {
+  Supported: "supported",
+  Unsupported: "unsupported",
+  Unknown: "unknown",
+} as const;
+export type SupportMethodAccounts = ClosedEnum<typeof SupportMethodAccounts>;
+
 export type SupportMethod = {
+  accounts: { [k: string]: SupportMethodAccounts };
   facts: { [k: string]: SupportFact };
   id: string;
   name: string;
@@ -17,10 +26,16 @@ export type SupportMethod = {
 };
 
 /** @internal */
+export const SupportMethodAccounts$inboundSchema: z.ZodMiniEnum<
+  typeof SupportMethodAccounts
+> = z.enum(SupportMethodAccounts);
+
+/** @internal */
 export const SupportMethod$inboundSchema: z.ZodMiniType<
   SupportMethod,
   unknown
 > = z.object({
+  accounts: z.record(z.string(), SupportMethodAccounts$inboundSchema),
   facts: z.record(z.string(), SupportFact$inboundSchema),
   id: z.string(),
   name: z.string(),

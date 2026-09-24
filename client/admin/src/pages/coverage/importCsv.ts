@@ -1,6 +1,8 @@
+import { isAccountType, isEligibility } from "./accounts";
 import {
   mappingKey,
   statusLabels,
+  type Accounts,
   type Draft,
   type Fact,
   type Mapping,
@@ -22,6 +24,7 @@ const columns = [
   "verify",
   "applicability",
   "conditions",
+  "accounts",
 ];
 export const importCsvHeader = columns.join(",");
 export const maxImportBytes = 2 * 1024 * 1024;
@@ -34,18 +37,21 @@ export function importPrompt(catalog: ImportCatalog): string {
 Use this exact header:
 ${importCsvHeader}
 
-Each row has one of three types:
-- reference: a method-level capability claim. Fill method_id, capability_id, status, note, verify. Leave platform_id, applicability, conditions empty.
-- mapping: whether a method applies to a platform. Fill method_id, platform_id, applicability, conditions. Leave capability_id, status, note, verify empty.
-- coverage: an EXPLICIT capability claim for a particular method AND platform. Fill method_id, platform_id, capability_id, status, note, verify. Leave applicability and conditions empty. Include an applicable mapping row for it.
+Each row has one of four types:
+- reference: a method-level capability claim. Fill method_id, capability_id, status, note, verify. Leave platform_id, applicability, conditions, accounts empty.
+- method: which account types can use a method at all. Fill method_id and accounts. Leave every other column empty.
+- mapping: whether a method applies to a platform. Fill method_id, platform_id, applicability, conditions, and accounts only where the platform differs from the method. Leave capability_id, status, note, verify empty.
+- coverage: an EXPLICIT capability claim for a particular method AND platform. Fill method_id, platform_id, capability_id, status, note, verify. Leave applicability, conditions and accounts empty. Include an applicable mapping row for it.
 
 status must be supported, partial, unimplemented, impossible, na, or unknown. Map ✅ to supported, ❌ to unimplemented, ☠️ to impossible, -- to na, and ? or blank to unknown. WIP means partial and needs verification. Partial requires a note. verify must be true or false; set true for VERIFY, WIP, uncertain or ambiguous claims. Keep qualifications and original wording in note.
 
-applicability must be applicable, na, or unknown. Use applicable for ✅, na for -- or a definite ☠️, and unknown for ❌, ?, blanks, or uncertain/VERIFY negatives. For mapping rows, preserve the original symbol and all qualifiers in conditions (including WIP, VERIFY, cost only, no hooks). Preserve plan eligibility and OS restrictions in the method's mapping conditions. The app derives platform-feature coverage from reference claims whenever a mapping is applicable. Do not emit redundant coverage rows for that combination. Explicit coverage rows override the derived result, including unknown overrides. Use the phrases cost only, session tracking only, no hooks, VERIFY, and WIP in conditions when the source states these restrictions; the app uses them to qualify derived coverage. Keep plan and OS restrictions in conditions too. Encode account eligibility in mapping conditions with these exact labels: Personal accounts: supported; Team plans: supported; Enterprise plans: supported. Each value must be supported, unsupported, or unknown. Use unsupported for explicit exclusions, unknown for missing/uncertain eligibility, and preserve qualifiers elsewhere in conditions. Include all three labels when the source provides account eligibility. Team eligibility includes Enterprise unless explicitly restricted; Enterprise only means Personal accounts: unsupported; Team plans: unsupported; Enterprise plans: supported. Platform-specific eligibility takes precedence over the method catalog. If the source gives only method-level eligibility, repeat it in that method's mapping rows; do not infer eligibility from capability support. If the source has no eligibility information, omit these labels to retain the catalog defaults. For an explicit platform-specific exception not represented by these qualifiers, emit a coverage row with its status, note, and verify flag.
+applicability must be applicable, na, or unknown. Use applicable for ✅, na for -- or a definite ☠️, and unknown for ❌, ?, blanks, or uncertain/VERIFY negatives. For mapping rows, preserve the original symbol and all qualifiers in conditions (including WIP, VERIFY, cost only, no hooks). Preserve OS restrictions in the method's mapping conditions. The app derives platform-feature coverage from reference claims whenever a mapping is applicable. Do not emit redundant coverage rows for that combination. Explicit coverage rows override the derived result, including unknown overrides. Use the phrases cost only, session tracking only, no hooks, VERIFY, and WIP in conditions when the source states these restrictions; the app uses them to qualify derived coverage.
 
-Use ONLY the IDs below. Do not create new IDs. If an item cannot be matched, ask me to resolve it before producing the file. Include each reference, mapping, or coverage key at most once. Omitted entries stay unchanged in the database; included entries replace their matching values. Do not include rows from examples unless present in my source.
+accounts is a semicolon-separated list of account:eligibility pairs, for example "personal:unsupported;team:supported;enterprise:supported". account must be personal, team, or enterprise; eligibility must be supported, unsupported, or unknown. Use unsupported for explicit exclusions and unknown for uncertain eligibility. Team eligibility includes Enterprise unless explicitly restricted; enterprise only means personal:unsupported;team:unsupported;enterprise:supported. Put method-wide eligibility on a method row. A mapping row lists only the account types that platform differs on; account types it omits follow the method row. Do not infer eligibility from capability support, and omit accounts entirely when the source says nothing about it.
 
-Quote fields containing commas, double quotes, or newlines; escape a double quote as two double quotes. Always include all nine columns, including empty trailing fields. Do not use spreadsheet formulas.
+Use ONLY the IDs below. Do not create new IDs. If an item cannot be matched, ask me to resolve it before producing the file. Include each reference, method, mapping, or coverage key at most once. Omitted entries stay unchanged in the database; included entries replace their matching values. Do not include rows from examples unless present in my source.
+
+Quote fields containing commas, double quotes, or newlines; escape a double quote as two double quotes. Always include all ten columns, including empty trailing fields. Do not use spreadsheet formulas.
 
 Methods:
 ${list(catalog.methods)}
@@ -104,8 +110,34 @@ function readCsv(text: string): string[][] {
 
 export type CsvImport = {
   draft: Draft;
-  counts: { reference: number; mapping: number; coverage: number };
+  counts: {
+    reference: number;
+    method: number;
+    mapping: number;
+    coverage: number;
+  };
 };
+
+function parseAccounts(value: string, fail: (message: string) => never) {
+  const accounts: Accounts = {};
+  for (const entry of value.split(";")) {
+    const text = entry.trim();
+    if (!text) continue;
+    const [account = "", eligibility = ""] = text
+      .split(":")
+      .map((part) => part.trim().toLowerCase());
+    if (!isAccountType(account))
+      fail(`unknown account type "${account}" in accounts.`);
+    if (!isEligibility(eligibility))
+      fail(
+        `account eligibility must be supported, unsupported, or unknown, not "${eligibility}".`,
+      );
+    if (Object.hasOwn(accounts, account))
+      fail(`account type "${account}" appears twice in accounts.`);
+    accounts[account] = eligibility;
+  }
+  return accounts;
+}
 
 export function parseMatrixImport(
   text: string,
@@ -126,7 +158,7 @@ export function parseMatrixImport(
   const capabilities = new Set(catalog.capabilities.map((item) => item.id));
   const draft = structuredClone(current);
   const seen = new Set<string>();
-  const counts = { reference: 0, mapping: 0, coverage: 0 };
+  const counts = { reference: 0, method: 0, mapping: 0, coverage: 0 };
   const coverageMappings = new Set<string>();
   rows.forEach((row, index) => {
     const fail = (message: string): never => {
@@ -144,7 +176,9 @@ export function parseMatrixImport(
       verify,
       applicability,
       conditions,
+      accounts,
     ] = row.map((cell, i) => (i === 5 || i === 8 ? cell : cell.trim())) as [
+      string,
       string,
       string,
       string,
@@ -156,12 +190,27 @@ export function parseMatrixImport(
       string,
     ];
     if (!methods.has(method)) fail(`unknown method_id "${method}".`);
-    if (!["reference", "mapping", "coverage"].includes(type))
+    if (!["reference", "method", "mapping", "coverage"].includes(type))
       fail(`unknown type "${type}".`);
     const key = JSON.stringify([type, method, platform, capability]);
     if (seen.has(key)) fail("duplicate entry; include each key only once.");
     seen.add(key);
     const mapKey = mappingKey(method, platform);
+    if (type === "method") {
+      if (
+        platform ||
+        capability ||
+        status ||
+        note ||
+        verify ||
+        applicability ||
+        conditions
+      )
+        fail("method rows must fill only method_id and accounts.");
+      draft.accounts[method] = parseAccounts(accounts, fail);
+      counts.method++;
+      return;
+    }
     if (type !== "reference" && !platforms.has(platform))
       fail(`unknown platform_id "${platform}".`);
     if (type === "mapping") {
@@ -177,14 +226,15 @@ export function parseMatrixImport(
         ...draft.mappings[mapKey],
         applicability: applicability as Mapping["applicability"],
         conditions,
+        accounts: parseAccounts(accounts, fail),
         facts: draft.mappings[mapKey]?.facts ?? {},
       };
       counts.mapping++;
       return;
     }
-    if (applicability || conditions)
+    if (applicability || conditions || accounts)
       fail(
-        "reference and coverage rows must leave applicability and conditions empty.",
+        "reference and coverage rows must leave applicability, conditions, and accounts empty.",
       );
     if (type === "reference" && platform)
       fail("reference rows must leave platform_id empty.");
@@ -209,12 +259,13 @@ export function parseMatrixImport(
       };
       counts.reference++;
     } else {
-      draft.mappings[mapKey] ??= {
+      const mapping = (draft.mappings[mapKey] ??= {
         applicability: "unknown",
         conditions: "",
+        accounts: {},
         facts: {},
-      };
-      draft.mappings[mapKey].facts[capability] = fact;
+      });
+      mapping.facts[capability] = fact;
       coverageMappings.add(mapKey);
       counts.coverage++;
     }

@@ -15,7 +15,7 @@ const catalog = {
   products: [{ id: "claude-code-cli", name: "Claude Code CLI" }],
   capabilities: [{ id: "session", name: "Session tracking" }],
 };
-const validCsv = `${importCsvHeader}\nreference,device,,session,supported,via hooks,false,,`;
+const validCsv = `${importCsvHeader}\nreference,device,,session,supported,via hooks,false,,,`;
 afterEach(cleanup);
 
 async function upload(text: string) {
@@ -40,7 +40,7 @@ describe("ImportCsvDialog", () => {
       <ImportCsvDialog
         revision="revision-1"
         catalog={catalog}
-        draft={{ mappings: {}, references: {} }}
+        draft={{ mappings: {}, references: {}, accounts: {} }}
         onImport={onImport}
       />,
     );
@@ -64,6 +64,7 @@ describe("ImportCsvDialog", () => {
     );
     expect(onImport).toHaveBeenCalledWith({
       mappings: {},
+      accounts: {},
       references: {
         device: {
           session: { status: "supported", note: "via hooks", verify: false },
@@ -97,7 +98,7 @@ describe("ImportCsvDialog", () => {
       <ImportCsvDialog
         revision="revision-1"
         catalog={catalog}
-        draft={{ mappings: {}, references }}
+        draft={{ mappings: {}, references, accounts: {} }}
         onImport={onImport}
       />,
     );
@@ -123,7 +124,7 @@ describe("ImportCsvDialog", () => {
       <ImportCsvDialog
         revision="revision-1"
         catalog={catalog}
-        draft={{ mappings: {}, references: {} }}
+        draft={{ mappings: {}, references: {}, accounts: {} }}
         onImport={onImport}
       />,
     );

@@ -16,12 +16,13 @@ const targets = [
   { platformId: "p2", capabilityId: "c1" },
 ];
 function fixture(entries: [number, string, Status, boolean?][]): Draft {
-  const draft: Draft = { mappings: {}, references: {} };
+  const draft: Draft = { mappings: {}, references: {}, accounts: {} };
   for (const [index, platform, status, verify = false] of entries) {
     const fact: Fact = { status, verify, note: "" };
     draft.mappings[mappingKey(candidates[index]!.id, platform)] = {
       applicability: "applicable",
       conditions: "",
+      accounts: {},
       facts: { c1: fact },
     };
   }

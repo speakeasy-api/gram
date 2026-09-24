@@ -22,7 +22,8 @@
   --platform-hue: 34;
   --platform-lightness: 82%;
 }
-.support-platform-header[data-family="Other Claudes"] {
+.support-platform-header[data-family="Claude Mobile"],
+.support-platform-header[data-family="Claude Tag"] {
   --platform-lightness: 92%;
 }
 .support-platform-header[data-vendor="OpenAI"] {

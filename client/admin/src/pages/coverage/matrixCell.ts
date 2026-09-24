@@ -51,12 +51,7 @@ export function resolveMatrixCell(
         : reference;
       contributions.push({
         method: candidate,
-        fact: accountFact(
-          candidate,
-          claim,
-          account,
-          candidateMapping.conditions,
-        ),
+        fact: accountFact(draft, candidate, candidateMapping, claim, account),
       });
     }
   }

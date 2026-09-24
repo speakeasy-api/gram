@@ -1143,6 +1143,44 @@ func (q *Queries) GetProjectBySlug(ctx context.Context, slug string) (GetProject
 	return i, err
 }
 
+const listSupportMappingsWithLabelledConditions = `-- name: ListSupportMappingsWithLabelledConditions :many
+SELECT id, conditions
+FROM support_matrix_method_platforms
+WHERE deleted_at IS NULL
+  AND account_eligibility = '{}'::jsonb
+  AND conditions ~* '(^|[;[:space:]])(personal accounts?|team plans?|enterprise( accounts?| plans?)?)[[:space:]]*:'
+ORDER BY id
+`
+
+type ListSupportMappingsWithLabelledConditionsRow struct {
+	ID         uuid.UUID
+	Conditions string
+}
+
+// Before account eligibility had a column of its own it was written into the
+// free-text conditions as "Team plans: supported" claims. Only rows that still
+// carry such a claim and have no structured value are returned, so the lift
+// runs once per row and never overwrites a later edit.
+func (q *Queries) ListSupportMappingsWithLabelledConditions(ctx context.Context) ([]ListSupportMappingsWithLabelledConditionsRow, error) {
+	rows, err := q.db.Query(ctx, listSupportMappingsWithLabelledConditions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSupportMappingsWithLabelledConditionsRow
+	for rows.Next() {
+		var i ListSupportMappingsWithLabelledConditionsRow
+		if err := rows.Scan(&i.ID, &i.Conditions); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockEnterpriseTrialInOrganizations = `-- name: LockEnterpriseTrialInOrganizations :one
 SELECT organization_id
 FROM trials
@@ -1199,7 +1237,7 @@ WITH reference_facts AS (
   WHERE f.deleted_at IS NULL GROUP BY f.method_platform_id
 ), mappings AS (
   SELECT m.slug || '/' || p.slug AS key,
-    jsonb_build_object('applicability', mp.applicability, 'conditions', mp.conditions, 'facts', coalesce(cf.facts, '{}'::jsonb)) AS value
+    jsonb_build_object('applicability', mp.applicability, 'conditions', mp.conditions, 'accounts', mp.account_eligibility, 'facts', coalesce(cf.facts, '{}'::jsonb)) AS value
   FROM support_matrix_method_platforms mp
   JOIN support_matrix_integration_methods m ON m.id = mp.integration_method_id AND m.deleted_at IS NULL
   JOIN support_matrix_platforms p ON p.id = mp.platform_id AND p.deleted_at IS NULL
@@ -1207,10 +1245,14 @@ WITH reference_facts AS (
   WHERE mp.deleted_at IS NULL
 )
 SELECT jsonb_build_object(
- 'methods', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', m.slug, 'name', m.name, 'vendor', m.vendor, 'plans', m.plan_notes, 'facts', coalesce(r.facts, '{}'::jsonb)) ORDER BY m.sort_order, m.slug), '[]'::jsonb) FROM support_matrix_integration_methods m LEFT JOIN reference_facts r ON r.method_slug = m.slug WHERE m.deleted_at IS NULL),
+ 'methods', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', m.slug, 'name', m.name, 'vendor', m.vendor, 'plans', m.plan_notes, 'accounts', m.account_eligibility, 'facts', coalesce(r.facts, '{}'::jsonb)) ORDER BY m.sort_order, m.slug), '[]'::jsonb) FROM support_matrix_integration_methods m LEFT JOIN reference_facts r ON r.method_slug = m.slug WHERE m.deleted_at IS NULL),
  'products', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', p.slug, 'name', p.name, 'vendor', p.vendor, 'family', p.family, 'surface', p.surface) ORDER BY p.sort_order, p.slug), '[]'::jsonb) FROM support_matrix_platforms p WHERE p.deleted_at IS NULL),
  'capabilities', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', c.slug, 'name', c.name, 'group', c.category) ORDER BY c.sort_order, c.slug), '[]'::jsonb) FROM support_matrix_capabilities c WHERE c.deleted_at IS NULL),
- 'draft', jsonb_build_object('mappings', (SELECT coalesce(jsonb_object_agg(key, value), '{}'::jsonb) FROM mappings), 'references', (SELECT coalesce(jsonb_object_agg(method_slug, facts), '{}'::jsonb) FROM reference_facts))
+ 'draft', jsonb_build_object(
+   'mappings', (SELECT coalesce(jsonb_object_agg(key, value), '{}'::jsonb) FROM mappings),
+   'references', (SELECT coalesce(jsonb_object_agg(method_slug, facts), '{}'::jsonb) FROM reference_facts),
+   'accounts', (SELECT coalesce(jsonb_object_agg(m.slug, m.account_eligibility), '{}'::jsonb) FROM support_matrix_integration_methods m WHERE m.deleted_at IS NULL)
+ )
 )::jsonb AS snapshot
 `
 
@@ -1225,7 +1267,13 @@ const seedSupportCapabilities = `-- name: SeedSupportCapabilities :exec
 INSERT INTO support_matrix_capabilities (slug, name, category, sort_order)
 SELECT value->>'id', value->>'name', value->>'group', ordinality::integer
 FROM jsonb_array_elements($1::jsonb->'capabilities') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    category = EXCLUDED.category,
+    sort_order = EXCLUDED.sort_order,
+    updated_at = clock_timestamp()
+WHERE (support_matrix_capabilities.name, support_matrix_capabilities.category, support_matrix_capabilities.sort_order)
+    IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.category, EXCLUDED.sort_order)
 `
 
 func (q *Queries) SeedSupportCapabilities(ctx context.Context, catalog []byte) error {
@@ -1234,12 +1282,26 @@ func (q *Queries) SeedSupportCapabilities(ctx context.Context, catalog []byte) e
 }
 
 const seedSupportMethods = `-- name: SeedSupportMethods :exec
-INSERT INTO support_matrix_integration_methods (slug, name, vendor, plan_notes, sort_order)
-SELECT value->>'id', value->>'name', value->>'vendor', value->>'plans', ordinality::integer
+INSERT INTO support_matrix_integration_methods (slug, name, vendor, plan_notes, account_eligibility, sort_order)
+SELECT value->>'id', value->>'name', value->>'vendor', value->>'plans', coalesce(value->'accounts', '{}'::jsonb), ordinality::integer
 FROM jsonb_array_elements($1::jsonb->'methods') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    vendor = EXCLUDED.vendor,
+    plan_notes = EXCLUDED.plan_notes,
+    sort_order = EXCLUDED.sort_order,
+    account_eligibility = CASE
+        WHEN support_matrix_integration_methods.account_eligibility = '{}'::jsonb THEN EXCLUDED.account_eligibility
+        ELSE support_matrix_integration_methods.account_eligibility
+    END,
+    updated_at = clock_timestamp()
+WHERE (support_matrix_integration_methods.name, support_matrix_integration_methods.vendor, support_matrix_integration_methods.plan_notes, support_matrix_integration_methods.sort_order)
+        IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.vendor, EXCLUDED.plan_notes, EXCLUDED.sort_order)
+    OR (support_matrix_integration_methods.account_eligibility = '{}'::jsonb AND EXCLUDED.account_eligibility <> '{}'::jsonb)
 `
 
+// account_eligibility is the one column here an operator can edit, so the
+// catalog only supplies it while the row still holds the empty default.
 func (q *Queries) SeedSupportMethods(ctx context.Context, catalog []byte) error {
 	_, err := q.db.Exec(ctx, seedSupportMethods, catalog)
 	return err
@@ -1249,9 +1311,21 @@ const seedSupportPlatforms = `-- name: SeedSupportPlatforms :exec
 INSERT INTO support_matrix_platforms (slug, name, vendor, family, surface, sort_order)
 SELECT value->>'id', value->>'name', value->>'vendor', value->>'family', value->>'surface', ordinality::integer
 FROM jsonb_array_elements($1::jsonb->'products') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    vendor = EXCLUDED.vendor,
+    family = EXCLUDED.family,
+    surface = EXCLUDED.surface,
+    sort_order = EXCLUDED.sort_order,
+    updated_at = clock_timestamp()
+WHERE (support_matrix_platforms.name, support_matrix_platforms.vendor, support_matrix_platforms.family, support_matrix_platforms.surface, support_matrix_platforms.sort_order)
+    IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.vendor, EXCLUDED.family, EXCLUDED.surface, EXCLUDED.sort_order)
 `
 
+// Presentation columns follow the catalog on every boot: they are not editable
+// in the admin UI, so the bundled file is their only source and a correction to
+// a name or grouping would otherwise never reach an already-seeded database.
+// The DO UPDATE is guarded so an unchanged catalog leaves updated_at alone.
 func (q *Queries) SeedSupportPlatforms(ctx context.Context, catalog []byte) error {
 	_, err := q.db.Exec(ctx, seedSupportPlatforms, catalog)
 	return err
@@ -1269,6 +1343,23 @@ ON CONFLICT (integration_method_id, capability_id) DO NOTHING
 
 func (q *Queries) SeedSupportReferences(ctx context.Context, catalog []byte) error {
 	_, err := q.db.Exec(ctx, seedSupportReferences, catalog)
+	return err
+}
+
+const setSupportMappingAccounts = `-- name: SetSupportMappingAccounts :exec
+UPDATE support_matrix_method_platforms
+SET account_eligibility = $1::jsonb, conditions = $2::text, updated_at = clock_timestamp()
+WHERE id = $3::uuid
+`
+
+type SetSupportMappingAccountsParams struct {
+	Accounts   []byte
+	Conditions string
+	ID         uuid.UUID
+}
+
+func (q *Queries) SetSupportMappingAccounts(ctx context.Context, arg SetSupportMappingAccountsParams) error {
+	_, err := q.db.Exec(ctx, setSupportMappingAccounts, arg.Accounts, arg.Conditions, arg.ID)
 	return err
 }
 
@@ -1299,17 +1390,18 @@ func (q *Queries) UpsertSupportCoverage(ctx context.Context, arg UpsertSupportCo
 }
 
 const upsertSupportMapping = `-- name: UpsertSupportMapping :one
-INSERT INTO support_matrix_method_platforms (integration_method_id, platform_id, applicability, conditions)
-SELECT m.id, p.id, $1::text, $2::text
+INSERT INTO support_matrix_method_platforms (integration_method_id, platform_id, applicability, conditions, account_eligibility)
+SELECT m.id, p.id, $1::text, $2::text, $3::jsonb
 FROM support_matrix_integration_methods m, support_matrix_platforms p
-WHERE m.slug = $3::text AND p.slug = $4::text AND m.deleted_at IS NULL AND p.deleted_at IS NULL
-ON CONFLICT (integration_method_id, platform_id) DO UPDATE SET applicability = EXCLUDED.applicability, conditions = EXCLUDED.conditions, updated_at = clock_timestamp(), deleted_at = NULL
+WHERE m.slug = $4::text AND p.slug = $5::text AND m.deleted_at IS NULL AND p.deleted_at IS NULL
+ON CONFLICT (integration_method_id, platform_id) DO UPDATE SET applicability = EXCLUDED.applicability, conditions = EXCLUDED.conditions, account_eligibility = EXCLUDED.account_eligibility, updated_at = clock_timestamp(), deleted_at = NULL
 RETURNING id
 `
 
 type UpsertSupportMappingParams struct {
 	Applicability string
 	Conditions    string
+	Accounts      []byte
 	MethodSlug    string
 	PlatformSlug  string
 }
@@ -1318,12 +1410,29 @@ func (q *Queries) UpsertSupportMapping(ctx context.Context, arg UpsertSupportMap
 	row := q.db.QueryRow(ctx, upsertSupportMapping,
 		arg.Applicability,
 		arg.Conditions,
+		arg.Accounts,
 		arg.MethodSlug,
 		arg.PlatformSlug,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const upsertSupportMethodAccounts = `-- name: UpsertSupportMethodAccounts :exec
+UPDATE support_matrix_integration_methods
+SET account_eligibility = $1::jsonb, updated_at = clock_timestamp()
+WHERE slug = $2::text AND deleted_at IS NULL
+`
+
+type UpsertSupportMethodAccountsParams struct {
+	Accounts   []byte
+	MethodSlug string
+}
+
+func (q *Queries) UpsertSupportMethodAccounts(ctx context.Context, arg UpsertSupportMethodAccountsParams) error {
+	_, err := q.db.Exec(ctx, upsertSupportMethodAccounts, arg.Accounts, arg.MethodSlug)
+	return err
 }
 
 const upsertSupportReference = `-- name: UpsertSupportReference :exec

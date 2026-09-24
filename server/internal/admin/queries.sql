@@ -597,22 +597,54 @@ RETURNING organization_id;
 SELECT pg_advisory_xact_lock(719438201);
 
 -- name: SeedSupportPlatforms :exec
+-- Presentation columns follow the catalog on every boot: they are not editable
+-- in the admin UI, so the bundled file is their only source and a correction to
+-- a name or grouping would otherwise never reach an already-seeded database.
+-- The DO UPDATE is guarded so an unchanged catalog leaves updated_at alone.
 INSERT INTO support_matrix_platforms (slug, name, vendor, family, surface, sort_order)
 SELECT value->>'id', value->>'name', value->>'vendor', value->>'family', value->>'surface', ordinality::integer
 FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'products') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    vendor = EXCLUDED.vendor,
+    family = EXCLUDED.family,
+    surface = EXCLUDED.surface,
+    sort_order = EXCLUDED.sort_order,
+    updated_at = clock_timestamp()
+WHERE (support_matrix_platforms.name, support_matrix_platforms.vendor, support_matrix_platforms.family, support_matrix_platforms.surface, support_matrix_platforms.sort_order)
+    IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.vendor, EXCLUDED.family, EXCLUDED.surface, EXCLUDED.sort_order);
 
 -- name: SeedSupportMethods :exec
-INSERT INTO support_matrix_integration_methods (slug, name, vendor, plan_notes, sort_order)
-SELECT value->>'id', value->>'name', value->>'vendor', value->>'plans', ordinality::integer
+-- account_eligibility is the one column here an operator can edit, so the
+-- catalog only supplies it while the row still holds the empty default.
+INSERT INTO support_matrix_integration_methods (slug, name, vendor, plan_notes, account_eligibility, sort_order)
+SELECT value->>'id', value->>'name', value->>'vendor', value->>'plans', coalesce(value->'accounts', '{}'::jsonb), ordinality::integer
 FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'methods') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    vendor = EXCLUDED.vendor,
+    plan_notes = EXCLUDED.plan_notes,
+    sort_order = EXCLUDED.sort_order,
+    account_eligibility = CASE
+        WHEN support_matrix_integration_methods.account_eligibility = '{}'::jsonb THEN EXCLUDED.account_eligibility
+        ELSE support_matrix_integration_methods.account_eligibility
+    END,
+    updated_at = clock_timestamp()
+WHERE (support_matrix_integration_methods.name, support_matrix_integration_methods.vendor, support_matrix_integration_methods.plan_notes, support_matrix_integration_methods.sort_order)
+        IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.vendor, EXCLUDED.plan_notes, EXCLUDED.sort_order)
+    OR (support_matrix_integration_methods.account_eligibility = '{}'::jsonb AND EXCLUDED.account_eligibility <> '{}'::jsonb);
 
 -- name: SeedSupportCapabilities :exec
 INSERT INTO support_matrix_capabilities (slug, name, category, sort_order)
 SELECT value->>'id', value->>'name', value->>'group', ordinality::integer
 FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'capabilities') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    category = EXCLUDED.category,
+    sort_order = EXCLUDED.sort_order,
+    updated_at = clock_timestamp()
+WHERE (support_matrix_capabilities.name, support_matrix_capabilities.category, support_matrix_capabilities.sort_order)
+    IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.category, EXCLUDED.sort_order);
 
 -- name: SeedSupportReferences :exec
 INSERT INTO support_matrix_method_capabilities (integration_method_id, capability_id, status, notes, needs_verification)
@@ -637,7 +669,7 @@ WITH reference_facts AS (
   WHERE f.deleted_at IS NULL GROUP BY f.method_platform_id
 ), mappings AS (
   SELECT m.slug || '/' || p.slug AS key,
-    jsonb_build_object('applicability', mp.applicability, 'conditions', mp.conditions, 'facts', coalesce(cf.facts, '{}'::jsonb)) AS value
+    jsonb_build_object('applicability', mp.applicability, 'conditions', mp.conditions, 'accounts', mp.account_eligibility, 'facts', coalesce(cf.facts, '{}'::jsonb)) AS value
   FROM support_matrix_method_platforms mp
   JOIN support_matrix_integration_methods m ON m.id = mp.integration_method_id AND m.deleted_at IS NULL
   JOIN support_matrix_platforms p ON p.id = mp.platform_id AND p.deleted_at IS NULL
@@ -645,19 +677,45 @@ WITH reference_facts AS (
   WHERE mp.deleted_at IS NULL
 )
 SELECT jsonb_build_object(
- 'methods', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', m.slug, 'name', m.name, 'vendor', m.vendor, 'plans', m.plan_notes, 'facts', coalesce(r.facts, '{}'::jsonb)) ORDER BY m.sort_order, m.slug), '[]'::jsonb) FROM support_matrix_integration_methods m LEFT JOIN reference_facts r ON r.method_slug = m.slug WHERE m.deleted_at IS NULL),
+ 'methods', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', m.slug, 'name', m.name, 'vendor', m.vendor, 'plans', m.plan_notes, 'accounts', m.account_eligibility, 'facts', coalesce(r.facts, '{}'::jsonb)) ORDER BY m.sort_order, m.slug), '[]'::jsonb) FROM support_matrix_integration_methods m LEFT JOIN reference_facts r ON r.method_slug = m.slug WHERE m.deleted_at IS NULL),
  'products', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', p.slug, 'name', p.name, 'vendor', p.vendor, 'family', p.family, 'surface', p.surface) ORDER BY p.sort_order, p.slug), '[]'::jsonb) FROM support_matrix_platforms p WHERE p.deleted_at IS NULL),
  'capabilities', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', c.slug, 'name', c.name, 'group', c.category) ORDER BY c.sort_order, c.slug), '[]'::jsonb) FROM support_matrix_capabilities c WHERE c.deleted_at IS NULL),
- 'draft', jsonb_build_object('mappings', (SELECT coalesce(jsonb_object_agg(key, value), '{}'::jsonb) FROM mappings), 'references', (SELECT coalesce(jsonb_object_agg(method_slug, facts), '{}'::jsonb) FROM reference_facts))
+ 'draft', jsonb_build_object(
+   'mappings', (SELECT coalesce(jsonb_object_agg(key, value), '{}'::jsonb) FROM mappings),
+   'references', (SELECT coalesce(jsonb_object_agg(method_slug, facts), '{}'::jsonb) FROM reference_facts),
+   'accounts', (SELECT coalesce(jsonb_object_agg(m.slug, m.account_eligibility), '{}'::jsonb) FROM support_matrix_integration_methods m WHERE m.deleted_at IS NULL)
+ )
 )::jsonb AS snapshot;
 
 -- name: UpsertSupportMapping :one
-INSERT INTO support_matrix_method_platforms (integration_method_id, platform_id, applicability, conditions)
-SELECT m.id, p.id, sqlc.arg(applicability)::text, sqlc.arg(conditions)::text
+INSERT INTO support_matrix_method_platforms (integration_method_id, platform_id, applicability, conditions, account_eligibility)
+SELECT m.id, p.id, sqlc.arg(applicability)::text, sqlc.arg(conditions)::text, sqlc.arg(accounts)::jsonb
 FROM support_matrix_integration_methods m, support_matrix_platforms p
 WHERE m.slug = sqlc.arg(method_slug)::text AND p.slug = sqlc.arg(platform_slug)::text AND m.deleted_at IS NULL AND p.deleted_at IS NULL
-ON CONFLICT (integration_method_id, platform_id) DO UPDATE SET applicability = EXCLUDED.applicability, conditions = EXCLUDED.conditions, updated_at = clock_timestamp(), deleted_at = NULL
+ON CONFLICT (integration_method_id, platform_id) DO UPDATE SET applicability = EXCLUDED.applicability, conditions = EXCLUDED.conditions, account_eligibility = EXCLUDED.account_eligibility, updated_at = clock_timestamp(), deleted_at = NULL
 RETURNING id;
+
+-- name: UpsertSupportMethodAccounts :exec
+UPDATE support_matrix_integration_methods
+SET account_eligibility = sqlc.arg(accounts)::jsonb, updated_at = clock_timestamp()
+WHERE slug = sqlc.arg(method_slug)::text AND deleted_at IS NULL;
+
+-- name: ListSupportMappingsWithLabelledConditions :many
+-- Before account eligibility had a column of its own it was written into the
+-- free-text conditions as "Team plans: supported" claims. Only rows that still
+-- carry such a claim and have no structured value are returned, so the lift
+-- runs once per row and never overwrites a later edit.
+SELECT id, conditions
+FROM support_matrix_method_platforms
+WHERE deleted_at IS NULL
+  AND account_eligibility = '{}'::jsonb
+  AND conditions ~* '(^|[;[:space:]])(personal accounts?|team plans?|enterprise( accounts?| plans?)?)[[:space:]]*:'
+ORDER BY id;
+
+-- name: SetSupportMappingAccounts :exec
+UPDATE support_matrix_method_platforms
+SET account_eligibility = sqlc.arg(accounts)::jsonb, conditions = sqlc.arg(conditions)::text, updated_at = clock_timestamp()
+WHERE id = sqlc.arg(id)::uuid;
 
 -- name: UpsertSupportCoverage :exec
 INSERT INTO support_matrix_coverage (method_platform_id, capability_id, status, notes, needs_verification)

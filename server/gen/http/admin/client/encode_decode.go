@@ -14050,6 +14050,12 @@ func unmarshalSupportMethodResponseBodyToAdminSupportMethod(v *SupportMethodResp
 		Vendor: *v.Vendor,
 		Plans:  *v.Plans,
 	}
+	res.Accounts = make(map[string]string, len(v.Accounts))
+	for key, val := range v.Accounts {
+		tk := key
+		tv := val
+		res.Accounts[tk] = tv
+	}
 	res.Facts = make(map[string]*admin.SupportFact, len(v.Facts))
 	for key, val := range v.Facts {
 		tk := key
@@ -14130,6 +14136,17 @@ func unmarshalSupportDraftResponseBodyToAdminSupportDraft(v *SupportDraftRespons
 		}
 		res.References[tk] = tvb
 	}
+	res.Accounts = make(map[string]map[string]string, len(v.Accounts))
+	for key, val := range v.Accounts {
+		tk := key
+		tvb := make(map[string]string, len(val))
+		for key, val := range val {
+			tk := key
+			tv := val
+			tvb[tk] = tv
+		}
+		res.Accounts[tk] = tvb
+	}
 
 	return res
 }
@@ -14140,6 +14157,12 @@ func unmarshalSupportMappingResponseBodyToAdminSupportMapping(v *SupportMappingR
 	res := &admin.SupportMapping{
 		Applicability: *v.Applicability,
 		Conditions:    *v.Conditions,
+	}
+	res.Accounts = make(map[string]string, len(v.Accounts))
+	for key, val := range v.Accounts {
+		tk := key
+		tv := val
+		res.Accounts[tk] = tv
 	}
 	res.Facts = make(map[string]*admin.SupportFact, len(v.Facts))
 	for key, val := range v.Facts {
@@ -14185,6 +14208,19 @@ func marshalAdminSupportDraftToSupportDraftRequestBody(v *admin.SupportDraft) *S
 			res.References[tk] = tvb
 		}
 	}
+	if v.Accounts != nil {
+		res.Accounts = make(map[string]map[string]string, len(v.Accounts))
+		for key, val := range v.Accounts {
+			tk := key
+			tvb := make(map[string]string, len(val))
+			for key, val := range val {
+				tk := key
+				tv := val
+				tvb[tk] = tv
+			}
+			res.Accounts[tk] = tvb
+		}
+	}
 
 	return res
 }
@@ -14195,6 +14231,14 @@ func marshalAdminSupportMappingToSupportMappingRequestBody(v *admin.SupportMappi
 	res := &SupportMappingRequestBody{
 		Applicability: v.Applicability,
 		Conditions:    v.Conditions,
+	}
+	if v.Accounts != nil {
+		res.Accounts = make(map[string]string, len(v.Accounts))
+		for key, val := range v.Accounts {
+			tk := key
+			tv := val
+			res.Accounts[tk] = tv
+		}
 	}
 	if v.Facts != nil {
 		res.Facts = make(map[string]*SupportFactRequestBody, len(v.Facts))
@@ -14254,6 +14298,19 @@ func marshalSupportDraftRequestBodyToAdminSupportDraft(v *SupportDraftRequestBod
 			res.References[tk] = tvb
 		}
 	}
+	if v.Accounts != nil {
+		res.Accounts = make(map[string]map[string]string, len(v.Accounts))
+		for key, val := range v.Accounts {
+			tk := key
+			tvb := make(map[string]string, len(val))
+			for key, val := range val {
+				tk := key
+				tv := val
+				tvb[tk] = tv
+			}
+			res.Accounts[tk] = tvb
+		}
+	}
 
 	return res
 }
@@ -14264,6 +14321,14 @@ func marshalSupportMappingRequestBodyToAdminSupportMapping(v *SupportMappingRequ
 	res := &admin.SupportMapping{
 		Applicability: v.Applicability,
 		Conditions:    v.Conditions,
+	}
+	if v.Accounts != nil {
+		res.Accounts = make(map[string]string, len(v.Accounts))
+		for key, val := range v.Accounts {
+			tk := key
+			tv := val
+			res.Accounts[tk] = tv
+		}
 	}
 	if v.Facts != nil {
 		res.Facts = make(map[string]*admin.SupportFact, len(v.Facts))

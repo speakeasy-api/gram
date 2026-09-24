@@ -4,7 +4,12 @@
       "id": "device",
       "name": "Device Agent",
       "vendor": "Cross-platform",
-      "plans": "Team and personal accounts",
+      "plans": "Any account type; the agent runs on the device rather than in the vendor's account.",
+      "accounts": {
+        "personal": "supported",
+        "team": "supported",
+        "enterprise": "supported"
+      },
       "facts": {
         "org": {
           "status": "supported",
@@ -72,7 +77,12 @@
       "id": "hooks",
       "name": "Anthropic Hooks",
       "vendor": "Anthropic",
-      "plans": "Plan eligibility not applicable in source",
+      "plans": "Any account type; hooks are configured in the agent's own settings.",
+      "accounts": {
+        "personal": "supported",
+        "team": "supported",
+        "enterprise": "supported"
+      },
       "facts": {
         "org": {
           "status": "na",
@@ -140,7 +150,12 @@
       "id": "settings",
       "name": "Managed settings file",
       "vendor": "Anthropic",
-      "plans": "Team plans; personal accounts not possible",
+      "plans": "Managed settings are deployed to the device; the source records it under team plans.",
+      "accounts": {
+        "personal": "unsupported",
+        "team": "supported",
+        "enterprise": "supported"
+      },
       "facts": {
         "org": {
           "status": "supported",
@@ -208,7 +223,12 @@
       "id": "plugins",
       "name": "Anthropic Admin Plugin Dist",
       "vendor": "Anthropic",
-      "plans": "Team plans; personal accounts not possible",
+      "plans": "Distributed from the Anthropic admin console, which team plans provide.",
+      "accounts": {
+        "personal": "unsupported",
+        "team": "supported",
+        "enterprise": "supported"
+      },
       "facts": {
         "org": {
           "status": "supported",
@@ -276,7 +296,12 @@
       "id": "anthropic-api",
       "name": "Anthropic Compliance API",
       "vendor": "Anthropic",
-      "plans": "Team plans; personal accounts not possible",
+      "plans": "Issued against an Anthropic organization, which team plans provide.",
+      "accounts": {
+        "personal": "unsupported",
+        "team": "supported",
+        "enterprise": "supported"
+      },
       "facts": {
         "org": {
           "status": "na",
@@ -344,7 +369,12 @@
       "id": "inference",
       "name": "Inference hooks",
       "vendor": "Anthropic",
-      "plans": "Team plans; personal accounts not possible",
+      "plans": "Configured on an Anthropic organization, which team plans provide.",
+      "accounts": {
+        "personal": "unsupported",
+        "team": "supported",
+        "enterprise": "supported"
+      },
       "facts": {
         "org": {
           "status": "na",
@@ -412,7 +442,12 @@
       "id": "otel",
       "name": "OTEL export",
       "vendor": "Anthropic",
-      "plans": "Team plans; personal accounts not possible",
+      "plans": "Exported from an Anthropic organization, which team plans provide.",
+      "accounts": {
+        "personal": "unsupported",
+        "team": "supported",
+        "enterprise": "supported"
+      },
       "facts": {
         "org": {
           "status": "na",
@@ -480,7 +515,12 @@
       "id": "litellm",
       "name": "LiteLLM",
       "vendor": "Others",
-      "plans": "Source lists MDM under team plans; eligibility needs clarification",
+      "plans": "Any account type; LiteLLM is self-hosted and sits in front of the provider.",
+      "accounts": {
+        "personal": "supported",
+        "team": "supported",
+        "enterprise": "supported"
+      },
       "facts": {
         "org": {
           "status": "na",
@@ -548,7 +588,12 @@
       "id": "cursor-api",
       "name": "Cursor API",
       "vendor": "Cursor",
-      "plans": "Team plans; personal accounts not possible",
+      "plans": "Issued against a Cursor team, which team plans provide.",
+      "accounts": {
+        "personal": "unsupported",
+        "team": "supported",
+        "enterprise": "supported"
+      },
       "facts": {
         "org": {
           "status": "na",
@@ -613,10 +658,88 @@
       }
     },
     {
+      "id": "cursor-plugins",
+      "name": "Cursor Admin Plugin Dist",
+      "vendor": "Cursor",
+      "plans": "Distributed from the Cursor admin console, which team plans provide.",
+      "accounts": {
+        "personal": "unsupported",
+        "team": "supported",
+        "enterprise": "supported"
+      },
+      "facts": {
+        "org": {
+          "status": "supported",
+          "note": "plugin distribution",
+          "verify": true
+        },
+        "role": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "session": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "session-cost": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "session-tokens": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "cost": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "tokens": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "blocking": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "mcp-redaction": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "prompt-redaction": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "shadow-mcp": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "shadow-ai": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        }
+      }
+    },
+    {
       "id": "openai-api",
       "name": "OpenAI Compliance API",
       "vendor": "OpenAI",
-      "plans": "Enterprise only; personal accounts not possible",
+      "plans": "Enterprise only.",
+      "accounts": {
+        "personal": "unsupported",
+        "team": "unsupported",
+        "enterprise": "supported"
+      },
       "facts": {
         "org": {
           "status": "na",
@@ -681,10 +804,88 @@
       }
     },
     {
+      "id": "openai-plugins",
+      "name": "OpenAI Admin Plugin Dist",
+      "vendor": "OpenAI",
+      "plans": "Distributed from the OpenAI admin console, which team plans provide.",
+      "accounts": {
+        "personal": "unsupported",
+        "team": "supported",
+        "enterprise": "supported"
+      },
+      "facts": {
+        "org": {
+          "status": "supported",
+          "note": "plugin distribution",
+          "verify": true
+        },
+        "role": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "session": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "session-cost": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "session-tokens": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "cost": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "tokens": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "blocking": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "mcp-redaction": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "prompt-redaction": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "shadow-mcp": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        },
+        "shadow-ai": {
+          "status": "unknown",
+          "note": "not yet assessed",
+          "verify": true
+        }
+      }
+    },
+    {
       "id": "conversations",
       "name": "ChatGPT Conversations",
       "vendor": "OpenAI",
-      "plans": "Enterprise only; personal accounts not possible",
+      "plans": "Enterprise only.",
+      "accounts": {
+        "personal": "unsupported",
+        "team": "unsupported",
+        "enterprise": "supported"
+      },
       "facts": {
         "org": {
           "status": "na",
@@ -755,25 +956,25 @@
       "vendor": "Anthropic",
       "family": "Claude Code",
       "surface": "CLI",
-      "name": "Claude Code · CLI"
+      "name": "Claude Code \u00b7 CLI"
     },
     {
       "id": "claude-code-web",
       "vendor": "Anthropic",
       "family": "Claude Code",
       "surface": "Web",
-      "name": "Claude Code · Web"
+      "name": "Claude Code \u00b7 Web"
     },
     {
       "id": "claude-code-desktop",
       "vendor": "Anthropic",
       "family": "Claude Code",
       "surface": "Desktop",
-      "name": "Claude Code · Desktop"
+      "name": "Claude Code \u00b7 Desktop"
     },
     {
       "id": "claude-code-vscode",
-      "name": "Claude Code · VSCode",
+      "name": "Claude Code \u00b7 VSCode",
       "vendor": "Anthropic",
       "family": "Claude Code",
       "surface": "VSCode"
@@ -783,112 +984,112 @@
       "vendor": "Anthropic",
       "family": "Claude Code",
       "surface": "Cloud",
-      "name": "Claude Code · Cloud"
+      "name": "Claude Code \u00b7 Cloud"
     },
     {
       "id": "claude-chat-web",
       "vendor": "Anthropic",
       "family": "Claude Chat",
       "surface": "Web",
-      "name": "Claude Chat · Web"
+      "name": "Claude Chat \u00b7 Web"
     },
     {
       "id": "claude-chat-desktop",
       "vendor": "Anthropic",
       "family": "Claude Chat",
       "surface": "Desktop",
-      "name": "Claude Chat · Desktop"
+      "name": "Claude Chat \u00b7 Desktop"
     },
     {
       "id": "cowork-desktop",
       "vendor": "Anthropic",
       "family": "Cowork",
       "surface": "Desktop",
-      "name": "Cowork · Desktop"
+      "name": "Cowork \u00b7 Desktop"
     },
     {
       "id": "cowork-cloud",
       "vendor": "Anthropic",
       "family": "Cowork",
       "surface": "Cloud",
-      "name": "Cowork · Cloud"
+      "name": "Cowork \u00b7 Cloud"
     },
     {
       "id": "cowork-web",
       "vendor": "Anthropic",
       "family": "Cowork",
       "surface": "Web",
-      "name": "Cowork · Web"
+      "name": "Cowork \u00b7 Web"
     },
     {
       "id": "other-claudes-claude-tag",
       "vendor": "Anthropic",
-      "family": "Other Claudes",
-      "surface": "Claude Tag",
-      "name": "Other Claudes · Claude Tag"
+      "family": "Claude Tag",
+      "surface": "Tag",
+      "name": "Claude Tag"
     },
     {
       "id": "other-claudes-claude-mobile",
       "vendor": "Anthropic",
-      "family": "Other Claudes",
-      "surface": "Claude Mobile",
-      "name": "Other Claudes · Claude Mobile"
+      "family": "Claude Mobile",
+      "surface": "Mobile",
+      "name": "Claude Mobile"
     },
     {
       "id": "codex-cli",
       "vendor": "OpenAI",
       "family": "Codex",
       "surface": "CLI",
-      "name": "Codex · CLI"
+      "name": "Codex \u00b7 CLI"
     },
     {
       "id": "codex-desktop",
       "vendor": "OpenAI",
       "family": "Codex",
       "surface": "Desktop",
-      "name": "Codex · Desktop"
+      "name": "Codex \u00b7 Desktop"
     },
     {
       "id": "codex-cloud-web",
       "vendor": "OpenAI",
       "family": "Codex",
       "surface": "Cloud/web",
-      "name": "Codex · Cloud/web"
+      "name": "Codex \u00b7 Cloud/web"
     },
     {
       "id": "chatgpt-desktop",
       "vendor": "OpenAI",
       "family": "ChatGPT",
       "surface": "Desktop",
-      "name": "ChatGPT · Desktop"
+      "name": "ChatGPT \u00b7 Desktop"
     },
     {
       "id": "chatgpt-web",
       "vendor": "OpenAI",
       "family": "ChatGPT",
       "surface": "Web",
-      "name": "ChatGPT · Web"
+      "name": "ChatGPT \u00b7 Web"
     },
     {
       "id": "cursor-ide",
       "vendor": "Cursor",
       "family": "Cursor",
       "surface": "IDE",
-      "name": "Cursor · IDE"
+      "name": "Cursor \u00b7 IDE"
     },
     {
       "id": "cursor-cli",
       "vendor": "Cursor",
       "family": "Cursor",
       "surface": "CLI",
-      "name": "Cursor · CLI"
+      "name": "Cursor \u00b7 CLI"
     },
     {
       "id": "cursor-cloud",
       "vendor": "Cursor",
       "family": "Cursor",
       "surface": "Cloud",
-      "name": "Cursor · Cloud"
+      "name": "Cursor \u00b7 Cloud"
     },
     {
       "id": "opencode-app",
@@ -902,7 +1103,7 @@
       "vendor": "Others",
       "family": "Gemini CLI",
       "surface": "CLI",
-      "name": "Gemini CLI · CLI"
+      "name": "Gemini CLI \u00b7 CLI"
     },
     {
       "id": "openclaw-app",
@@ -917,6 +1118,13 @@
       "family": "GitHub Copilot",
       "surface": "App",
       "name": "GitHub Copilot"
+    },
+    {
+      "id": "microsoft-copilot-app",
+      "vendor": "Others",
+      "family": "Microsoft Copilot",
+      "surface": "App",
+      "name": "Microsoft Copilot"
     }
   ],
   "capabilities": [

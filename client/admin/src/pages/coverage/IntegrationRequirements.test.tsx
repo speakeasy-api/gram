@@ -14,6 +14,7 @@ it("shows required integrations and named gaps together", () => {
         name: "Device Agent",
         vendor: "Cross-platform",
         plans: "",
+        accounts: {},
         facts: {},
       },
     ],
@@ -34,10 +35,12 @@ it("shows required integrations and named gaps together", () => {
   };
   const draft: Draft = {
     references: {},
+    accounts: {},
     mappings: {
       "device/cli": {
         applicability: "applicable",
         conditions: "",
+        accounts: {},
         facts: { session: { status: "supported", note: "", verify: false } },
       },
     },

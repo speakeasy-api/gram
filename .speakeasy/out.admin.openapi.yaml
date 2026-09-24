@@ -6629,6 +6629,16 @@ components:
     SupportDraft:
       type: object
       properties:
+        accounts:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: string
+              enum:
+                - supported
+                - unsupported
+                - unknown
         mappings:
           type: object
           additionalProperties:
@@ -6642,6 +6652,7 @@ components:
       required:
         - mappings
         - references
+        - accounts
     SupportFact:
       type: object
       properties:
@@ -6666,6 +6677,14 @@ components:
     SupportMapping:
       type: object
       properties:
+        accounts:
+          type: object
+          additionalProperties:
+            type: string
+            enum:
+              - supported
+              - unsupported
+              - unknown
         applicability:
           type: string
           enum:
@@ -6682,6 +6701,7 @@ components:
       required:
         - applicability
         - conditions
+        - accounts
         - facts
     SupportMatrix:
       type: object
@@ -6711,6 +6731,14 @@ components:
     SupportMethod:
       type: object
       properties:
+        accounts:
+          type: object
+          additionalProperties:
+            type: string
+            enum:
+              - supported
+              - unsupported
+              - unknown
         facts:
           type: object
           additionalProperties:
@@ -6728,6 +6756,7 @@ components:
         - name
         - vendor
         - plans
+        - accounts
         - facts
     SupportPlatform:
       type: object

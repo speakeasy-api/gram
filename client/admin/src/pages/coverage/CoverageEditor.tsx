@@ -3,9 +3,8 @@ import {
   accountTypes,
   accountLabels,
   accountEligibility,
-  updateAccountEligibility,
-  withoutAccountConditions,
-  updateAccountNotes,
+  eligibilityLabels,
+  withEligibility,
   type AccountEligibility,
   type AccountFilter,
 } from "./accounts";
@@ -23,10 +22,12 @@ import {
   emptyMapping,
   getFact,
   mappingKey,
+  methodAccounts,
   methodReference,
   statusLabels,
   symbols,
   unknown,
+  type Accounts,
   type Capability,
   type Draft,
   type Fact,
@@ -127,6 +128,63 @@ export function FactEditor({
   );
 }
 
+/** Eligibility is a property of the method and of each platform it is applied
+ * to, so the same control serves both. Passing the method's answers switches
+ * it to the platform form, where leaving an account type unset defers. */
+function AccountEligibilityEditor({
+  legend,
+  description,
+  accounts,
+  inherited,
+  onChange,
+}: {
+  legend: string;
+  description: string;
+  accounts: Accounts;
+  inherited?: Accounts;
+  onChange: (accounts: Accounts) => void;
+}): JSX.Element {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">{legend}</legend>
+      <p className="text-muted-foreground text-xs">{description}</p>
+      <div className="grid grid-cols-3 gap-2">
+        {accountTypes.map((type) => (
+          <div key={type} className="space-y-1">
+            <span className="text-xs font-medium">{accountLabels[type]}</span>
+            <Choice
+              label={`${accountLabels[type]} account eligibility`}
+              value={accounts[type] ?? (inherited ? "inherit" : "unknown")}
+              options={[
+                ...(inherited
+                  ? [
+                      {
+                        value: "inherit",
+                        label: `Same as method (${eligibilityLabels[accountEligibility(inherited, undefined, type)]})`,
+                      },
+                    ]
+                  : []),
+                { value: "supported", label: eligibilityLabels.supported },
+                { value: "unsupported", label: eligibilityLabels.unsupported },
+                { value: "unknown", label: eligibilityLabels.unknown },
+              ]}
+              onChange={(value) =>
+                onChange(
+                  withEligibility(
+                    accounts,
+                    type,
+                    value as AccountEligibility | "inherit",
+                  ),
+                )
+              }
+            />
+          </div>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 export function MethodEditor({
   method,
   product,
@@ -145,6 +203,9 @@ export function MethodEditor({
   const key = product ? mappingKey(method.id, product.id) : "";
   const [mapping, setMapping] = useState<Mapping>(
     draft.mappings[key] ?? emptyMapping,
+  );
+  const [accounts, setAccounts] = useState<Accounts>(
+    methodAccounts(draft, method),
   );
   const [reference, setReference] = useState(
     draft.references[method.id]?.[capability.id] ??
@@ -165,6 +226,7 @@ export function MethodEditor({
       ? { ...draft, mappings: { ...draft.mappings, [key]: mapping } }
       : {
           ...draft,
+          accounts: { ...draft.accounts, [method.id]: accounts },
           references: {
             ...draft.references,
             [method.id]: {
@@ -189,6 +251,17 @@ export function MethodEditor({
           <p className="text-muted-foreground mt-1 text-xs">{method.plans}</p>
         )}
       </div>
+      {!product && (
+        <AccountEligibilityEditor
+          legend="Account eligibility"
+          description={`Which accounts can use ${method.name} at all. Every platform follows this unless it states otherwise.`}
+          accounts={accounts}
+          onChange={(next) => {
+            setAccounts(next);
+            setSaved(false);
+          }}
+        />
+      )}
       {product && (
         <>
           <Choice
@@ -206,57 +279,20 @@ export function MethodEditor({
               })
             }
           />
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Account eligibility</legend>
-            <p className="text-muted-foreground text-xs">
-              Which accounts can use {method.name} on {product.name}. Applies
-              across this method’s capabilities on this platform.
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {accountTypes.map((type) => (
-                <div key={type} className="space-y-1">
-                  <span className="text-xs font-medium">
-                    {accountLabels[type]}
-                  </span>
-                  <Choice
-                    label={`${accountLabels[type]} account eligibility`}
-                    value={accountEligibility(method, mapping.conditions, type)}
-                    options={[
-                      { value: "supported", label: "Eligible" },
-                      { value: "unsupported", label: "Ineligible" },
-                      { value: "unknown", label: "Unknown" },
-                    ]}
-                    onChange={(value) =>
-                      updateMapping({
-                        ...mapping,
-                        conditions: updateAccountEligibility(
-                          method,
-                          mapping.conditions,
-                          type,
-                          value as AccountEligibility,
-                        ),
-                      })
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-          </fieldset>
+          <AccountEligibilityEditor
+            legend="Account eligibility"
+            description={`Which accounts can use ${method.name} on ${product.name}. Set an account type only where this platform differs from the method.`}
+            accounts={mapping.accounts}
+            inherited={methodAccounts(draft, method)}
+            onChange={(next) => updateMapping({ ...mapping, accounts: next })}
+          />
           <Textarea
             aria-label="OS and plan conditions"
             rows={3}
-            placeholder="OS / plan conditions, e.g. macOS, Enterprise only"
-            value={withoutSourceAnnotation(
-              withoutAccountConditions(mapping.conditions),
-            )}
+            placeholder="OS / plan conditions, e.g. macOS only"
+            value={withoutSourceAnnotation(mapping.conditions)}
             onChange={(event) =>
-              updateMapping({
-                ...mapping,
-                conditions: updateAccountNotes(
-                  mapping.conditions,
-                  event.target.value,
-                ),
-              })
+              updateMapping({ ...mapping, conditions: event.target.value })
             }
           />
         </>
@@ -330,19 +366,24 @@ export function MethodList({
   onSave: (draft: Draft) => Promise<boolean>;
 }): JSX.Element {
   const entries = methods
-    .map((method) => ({
-      method,
-      fact: accountFact(
+    .map((method) => {
+      const mapping =
+        draft.mappings[mappingKey(method.id, product.id)] ?? emptyMapping;
+      return {
         method,
-        getFact(
-          draft.mappings[mappingKey(method.id, product.id)] ?? emptyMapping,
-          capability.id,
-          methodReference(draft, method, capability.id),
+        fact: accountFact(
+          draft,
+          method,
+          mapping,
+          getFact(
+            mapping,
+            capability.id,
+            methodReference(draft, method, capability.id),
+          ),
+          account,
         ),
-        account,
-        draft.mappings[mappingKey(method.id, product.id)]?.conditions,
-      ),
-    }))
+      };
+    })
     .sort((a, b) => supportOrder[a.fact.status] - supportOrder[b.fact.status]);
   return (
     <div className="space-y-3">

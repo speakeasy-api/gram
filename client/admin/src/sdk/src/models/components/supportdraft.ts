@@ -4,6 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -19,14 +20,34 @@ import {
   SupportMapping$outboundSchema,
 } from "./supportmapping.js";
 
+export const Accounts = {
+  Supported: "supported",
+  Unsupported: "unsupported",
+  Unknown: "unknown",
+} as const;
+export type Accounts = ClosedEnum<typeof Accounts>;
+
 export type SupportDraft = {
+  accounts: { [k: string]: { [k: string]: Accounts } };
   mappings: { [k: string]: SupportMapping };
   references: { [k: string]: { [k: string]: SupportFact } };
 };
 
 /** @internal */
+export const Accounts$inboundSchema: z.ZodMiniEnum<typeof Accounts> = z.enum(
+  Accounts,
+);
+/** @internal */
+export const Accounts$outboundSchema: z.ZodMiniEnum<typeof Accounts> =
+  Accounts$inboundSchema;
+
+/** @internal */
 export const SupportDraft$inboundSchema: z.ZodMiniType<SupportDraft, unknown> =
   z.object({
+    accounts: z.record(
+      z.string(),
+      z.record(z.string(), Accounts$inboundSchema),
+    ),
     mappings: z.record(z.string(), SupportMapping$inboundSchema),
     references: z.record(
       z.string(),
@@ -35,6 +56,7 @@ export const SupportDraft$inboundSchema: z.ZodMiniType<SupportDraft, unknown> =
   });
 /** @internal */
 export type SupportDraft$Outbound = {
+  accounts: { [k: string]: { [k: string]: string } };
   mappings: { [k: string]: SupportMapping$Outbound };
   references: { [k: string]: { [k: string]: SupportFact$Outbound } };
 };
@@ -44,6 +66,7 @@ export const SupportDraft$outboundSchema: z.ZodMiniType<
   SupportDraft$Outbound,
   SupportDraft
 > = z.object({
+  accounts: z.record(z.string(), z.record(z.string(), Accounts$outboundSchema)),
   mappings: z.record(z.string(), SupportMapping$outboundSchema),
   references: z.record(
     z.string(),

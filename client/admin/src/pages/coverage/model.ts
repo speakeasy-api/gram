@@ -39,27 +39,39 @@ const factSchema = z.object({
 });
 export type Fact = z.infer<typeof factSchema>;
 export const unknown: Fact = { status: "unknown", note: "", verify: false };
+/** Which account types can use a method, keyed by account type. On a method an
+ * absent account type is unknown; on a platform mapping it defers to the
+ * method, so a mapping only carries the account types it differs on. */
+export const accountsSchema = z.record(
+  z.string(),
+  z.enum(["supported", "unsupported", "unknown"]),
+);
+export type Accounts = z.infer<typeof accountsSchema>;
 export type Method = {
   id: string;
   name: string;
   vendor: string;
   plans: string;
+  accounts: Accounts;
   facts: Record<string, Fact>;
 };
 export const mappingSchema = z.object({
   applicability: z.enum(["unknown", "applicable", "na"]),
   conditions: z.string(),
+  accounts: accountsSchema,
   facts: z.record(z.string(), factSchema),
 });
 export type Mapping = z.infer<typeof mappingSchema>;
 export const emptyMapping: Mapping = {
   applicability: "unknown",
   conditions: "",
+  accounts: {},
   facts: {},
 };
 export const draftSchema = z.object({
   mappings: z.record(z.string(), mappingSchema),
   references: z.record(z.string(), z.record(z.string(), factSchema)),
+  accounts: z.record(z.string(), accountsSchema),
 });
 export type Draft = z.infer<typeof draftSchema>;
 export const storageKey = "gram-integration-coverage-v1";
@@ -114,6 +126,9 @@ export function methodReference(
     unknown
   );
 }
+export function methodAccounts(draft: Draft, method: Method): Accounts {
+  return draft.accounts[method.id] ?? method.accounts;
+}
 export function summarize(facts: Fact[]): Fact {
   // A known positive is useful, but unknown methods must not yield a negative claim.
   const supported = facts.filter((fact) => fact.status === "supported");
@@ -146,6 +161,7 @@ export const catalogSchema = z.object({
       name: z.string(),
       vendor: z.string(),
       plans: z.string(),
+      accounts: accountsSchema,
       facts: z.record(z.string(), factSchema),
     }),
   ),

@@ -14,24 +14,36 @@ var SupportFact = Type("SupportFact", func() {
 	Attribute("verify", Boolean, func() { Meta("struct:tag:json", "verify") })
 	Required("status", "note", "verify")
 })
+
+// SupportAccounts answers which account types can use an integration method,
+// keyed by account type. A method-level map treats an absent account type as
+// unknown; a mapping-level map treats it as "same as the method".
+var SupportAccounts = MapOf(String, String, func() {
+	Key(func() { Enum("personal", "team", "enterprise") })
+	Elem(func() { Enum("supported", "unsupported", "unknown") })
+})
+
 var SupportMapping = Type("SupportMapping", func() {
 	Attribute("applicability", String, func() { Meta("struct:tag:json", "applicability"); Enum("unknown", "applicable", "na") })
 	Attribute("conditions", String, func() { Meta("struct:tag:json", "conditions"); MaxLength(10000) })
+	Attribute("accounts", SupportAccounts, func() { Meta("struct:tag:json", "accounts") })
 	Attribute("facts", MapOf(String, SupportFact), func() { Meta("struct:tag:json", "facts") })
-	Required("applicability", "conditions", "facts")
+	Required("applicability", "conditions", "accounts", "facts")
 })
 var SupportDraft = Type("SupportDraft", func() {
 	Attribute("mappings", MapOf(String, SupportMapping), func() { Meta("struct:tag:json", "mappings") })
 	Attribute("references", MapOf(String, MapOf(String, SupportFact)), func() { Meta("struct:tag:json", "references") })
-	Required("mappings", "references")
+	Attribute("accounts", MapOf(String, SupportAccounts), func() { Meta("struct:tag:json", "accounts") })
+	Required("mappings", "references", "accounts")
 })
 var SupportMethod = Type("SupportMethod", func() {
 	Attribute("id", String, func() { Meta("struct:tag:json", "id") })
 	Attribute("name", String, func() { Meta("struct:tag:json", "name") })
 	Attribute("vendor", String, func() { Meta("struct:tag:json", "vendor") })
 	Attribute("plans", String, func() { Meta("struct:tag:json", "plans") })
+	Attribute("accounts", SupportAccounts, func() { Meta("struct:tag:json", "accounts") })
 	Attribute("facts", MapOf(String, SupportFact), func() { Meta("struct:tag:json", "facts") })
-	Required("id", "name", "vendor", "plans", "facts")
+	Required("id", "name", "vendor", "plans", "accounts", "facts")
 })
 var SupportPlatform = Type("SupportPlatform", func() {
 	Attribute("id", String, func() { Meta("struct:tag:json", "id") })
