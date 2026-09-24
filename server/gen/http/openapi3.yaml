@@ -96603,6 +96603,8 @@ components:
                         - skill:blocked_write
                         - plugin:blocked_write
                         - risk_policy:bypass
+                        - workload:blocked_read
+                        - workload:blocked_write
                 resource_type:
                     type: string
                     description: The type of resource this scope applies to.

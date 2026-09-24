@@ -26,6 +26,8 @@ export const ExclusionScope = {
   SkillBlockedWrite: "skill:blocked_write",
   PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyBypass: "risk_policy:bypass",
+  WorkloadBlockedRead: "workload:blocked_read",
+  WorkloadBlockedWrite: "workload:blocked_write",
 } as const;
 /**
  * The scope used to store exception rules for this scope.
