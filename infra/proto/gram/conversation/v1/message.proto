@@ -7,9 +7,11 @@ import "gcp/pubsub/v1/options.proto";
 option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1;conversationv1";
 
 // Message is a snapshot of one persisted conversation message.
-// Producers publish atomically with initial persistence through the outbox.
-// Delivery is at-least-once; id and the snapshot remain stable across redelivery.
-// This contract represents initial persistence, not streaming chunks or updates.
+// Producers publish atomically with persistence through the outbox, including
+// successful correlated provenance promotions. Exact conflict no-ops emit nothing.
+// Delivery is at-least-once; each publication's snapshot survives redelivery.
+// Multiple publications can share id: downstream consumers decide whether a
+// changed snapshot requires processing. This is not a streaming chunk contract.
 message Message {
   enum Role {
     ROLE_UNSPECIFIED = 0;
@@ -22,6 +24,7 @@ message Message {
 
   // Only values observed by ingestion are populated; absence means unknown.
   message Provenance {
+    // Canonical normalized ingestion source.
     string source = 1;
     string external_message_id = 2;
     string user_id = 3;
@@ -32,11 +35,49 @@ message Message {
 
     // Source replay marker, not Pub/Sub redelivery.
     bool replayed = 8;
+
+    // Adapter slug reported by ingestion; distinct from the hook source.
+    string adapter = 9;
+    // Original hook source before normalization, when applicable.
+    string hook_source = 10;
+    // Device hostname and client user agent observed by ingestion.
+    string hostname = 11;
+    string user_agent = 12;
+    // Observed actor email; not inferred from the provider account.
+    string user_email = 13;
+    Account account = 14;
+  }
+
+  // Observed provider-account attribution. Classification may be known even
+  // when ingestion could not resolve a persisted account identity.
+  message Account {
+    // Gram user_accounts UUID, not a provider-issued account identifier.
+    string user_account_id = 1;
+    string account_type = 2;
+    // Billing mode resolved at ingestion, not a downstream billing decision.
+    string billing_mode = 3;
+  }
+
+  // Conversation context captured with the snapshot, not persistence routing.
+  message ConversationContext {
+    // Source session/conversation identifier, not the Gram conversation UUID.
+    // Interpret in the namespace of the tenant and source provenance.
+    string external_conversation_id = 1;
+    // Session working directory reported by the source adapter.
+    string working_directory = 2;
   }
 
   // Ordered content of this message, never the full conversation.
   message Body {
     repeated Part parts = 1;
+
+    // Original structured content, when available, in its stored JSON format.
+    // This is an alternative representation of the projected text in parts,
+    // not additional text to concatenate. Tool calls remain in parts.
+    oneof original_content {
+      ContentReference source_content = 2;
+      bytes source_content_json = 3;
+    }
   }
 
   message Part {
@@ -69,7 +110,7 @@ message Message {
     bytes sha256 = 4;
   }
 
-  // Persisted Gram message UUID; consumers use this for deduplication.
+  // Persisted Gram message UUID; identifies the logical message across snapshots.
   string id = 1;
   string organization_id = 2;
   string project_id = 3;
@@ -100,6 +141,12 @@ message Message {
     // Protobuf-encoded gram.conversation.v1.Message.Body.
     ContentReference body_reference = 12;
   }
+
+  // Source prompt correlation identifier (the persisted message_id field).
+  // Distinct from both the Gram row id and provenance.external_message_id.
+  string correlation_id = 13;
+
+  ConversationContext conversation_context = 14;
 
   option (gcp.pubsub.v1.topic) = {
     retention_hint: { seconds: 604800 /* 7 days */ }

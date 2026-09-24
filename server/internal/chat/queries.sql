@@ -241,6 +241,15 @@ VALUES (
   , @created_at
 );
 
+-- name: GetMessagesForPublication :many
+-- Read the durable rows and their tenant-pinned conversation context in the
+-- write transaction so publication always uses the authoritative identity.
+SELECT sqlc.embed(m), c.external_chat_id, c.cwd, c.user_account_id
+FROM chat_messages m
+JOIN chats c ON c.id = m.chat_id AND c.project_id = m.project_id
+WHERE m.project_id = @project_id::uuid AND m.id = ANY(@ids::uuid[])
+ORDER BY m.seq;
+
 -- name: UpsertCorrelatedChatMessage :one
 -- Returns persisted metering fields and distinguishes initial inserts from
 -- native-hook promotions, which must not emit another storage reading.

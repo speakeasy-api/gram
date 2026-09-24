@@ -89,8 +89,8 @@ type ExternalMessageWrite struct {
 }
 
 // ChatMessageWriter is the only sanctioned way to persist chat messages.
-// It wraps repo.CreateChatMessage and notifies observers after a successful
-// write that stored at least one message. External packages must use Write,
+// It atomically enqueues conversation snapshots with persistence and notifies
+// observers after a successful write. External packages must use Write,
 // WriteCorrelated, WriteExternal, WriteTurn, or WriteWithAssets.
 type ChatMessageWriter struct {
 	db           *pgxpool.Pool
@@ -492,6 +492,9 @@ func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UU
 	if err := metering.Enqueue(ctx, tx, readings); err != nil {
 		return 0, nil, fmt.Errorf("enqueue chat message readings: %w", err)
 	}
+	if err := w.enqueueMessages(ctx, tx, organizationID, projectID, writes, nil, occurredAt); err != nil {
+		return 0, nil, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, nil, fmt.Errorf("commit chat message transaction: %w", err)
 	}
@@ -514,6 +517,7 @@ func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, writ
 // WriteCorrelated atomically inserts a message or promotes an earlier LiteLLM
 // observation of the same turn to the authoritative native-hook source.
 // Only initial storage emits usage. Promotion preserves the original usage fact.
+// Both insertion and promotion enqueue a snapshot with the persisted message ID.
 func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.UUID, write MessageWrite, externalMessageID string) (int64, error) {
 	if write.Params.ProjectID != projectID {
 		return 0, fmt.Errorf("chat message project id does not match writer project")
@@ -592,6 +596,10 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		if err := metering.Enqueue(ctx, tx, readings); err != nil {
 			return 0, fmt.Errorf("enqueue correlated chat message reading: %w", err)
 		}
+	}
+	writes[0].Params.ID = stored.ID
+	if err := w.enqueueMessages(ctx, tx, organizationID, projectID, writes, nil, occurredAt); err != nil {
+		return 0, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("commit correlated chat message transaction: %w", err)
@@ -708,6 +716,9 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 			if err := metering.Enqueue(ctx, tx, readings); err != nil {
 				return false, fmt.Errorf("enqueue external chat message readings: %w", err)
 			}
+			if err := w.enqueueMessages(ctx, tx, organizationID, projectID, []MessageWrite{externalPublication(*write)}, parts, occurredAt); err != nil {
+				return false, err
+			}
 			if err := tx.Commit(ctx); err != nil {
 				return false, fmt.Errorf("commit external chat message transaction: %w", err)
 			}
@@ -756,6 +767,9 @@ func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, writes 
 	}
 	if err := metering.Enqueue(ctx, tx, readings); err != nil {
 		return 0, fmt.Errorf("enqueue chat message readings: %w", err)
+	}
+	if err := w.enqueueMessages(ctx, tx, organizationID, projectID, writes, nil, occurredAt); err != nil {
+		return 0, err
 	}
 	return n, nil
 }
@@ -826,6 +840,9 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	}
 	if err := metering.Enqueue(ctx, tx, readings); err != nil {
 		return fmt.Errorf("enqueue chat turn readings: %w", err)
+	}
+	if err := w.enqueueMessages(ctx, tx, organizationID, projectID, append(pendingWrites, assistants...), nil, occurredAt); err != nil {
+		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)

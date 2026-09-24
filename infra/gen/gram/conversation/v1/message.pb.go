@@ -75,26 +75,30 @@ func (x Message_Role) Number() protoreflect.EnumNumber {
 }
 
 // Message is a snapshot of one persisted conversation message.
-// Producers publish atomically with initial persistence through the outbox.
-// Delivery is at-least-once; id and the snapshot remain stable across redelivery.
-// This contract represents initial persistence, not streaming chunks or updates.
+// Producers publish atomically with persistence through the outbox, including
+// successful correlated provenance promotions. Exact conflict no-ops emit nothing.
+// Delivery is at-least-once; each publication's snapshot survives redelivery.
+// Multiple publications can share id: downstream consumers decide whether a
+// changed snapshot requires processing. This is not a streaming chunk contract.
 type Message struct {
-	state                     protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_Id             *string                `protobuf:"bytes,1,opt,name=id"`
-	xxx_hidden_OrganizationId *string                `protobuf:"bytes,2,opt,name=organization_id,json=organizationId"`
-	xxx_hidden_ProjectId      *string                `protobuf:"bytes,3,opt,name=project_id,json=projectId"`
-	xxx_hidden_ConversationId *string                `protobuf:"bytes,4,opt,name=conversation_id,json=conversationId"`
-	xxx_hidden_Role           Message_Role           `protobuf:"varint,5,opt,name=role,enum=gram.conversation.v1.Message_Role"`
-	xxx_hidden_CreatedAt      *string                `protobuf:"bytes,6,opt,name=created_at,json=createdAt"`
-	xxx_hidden_ProducedAt     *string                `protobuf:"bytes,7,opt,name=produced_at,json=producedAt"`
-	xxx_hidden_Provenance     *Message_Provenance    `protobuf:"bytes,8,opt,name=provenance"`
-	xxx_hidden_ToolCallId     *string                `protobuf:"bytes,9,opt,name=tool_call_id,json=toolCallId"`
-	xxx_hidden_FinishReason   *string                `protobuf:"bytes,10,opt,name=finish_reason,json=finishReason"`
-	xxx_hidden_Content        isMessage_Content      `protobuf_oneof:"content"`
-	XXX_raceDetectHookData    protoimpl.RaceDetectHookData
-	XXX_presence              [1]uint32
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	state                          protoimpl.MessageState       `protogen:"opaque.v1"`
+	xxx_hidden_Id                  *string                      `protobuf:"bytes,1,opt,name=id"`
+	xxx_hidden_OrganizationId      *string                      `protobuf:"bytes,2,opt,name=organization_id,json=organizationId"`
+	xxx_hidden_ProjectId           *string                      `protobuf:"bytes,3,opt,name=project_id,json=projectId"`
+	xxx_hidden_ConversationId      *string                      `protobuf:"bytes,4,opt,name=conversation_id,json=conversationId"`
+	xxx_hidden_Role                Message_Role                 `protobuf:"varint,5,opt,name=role,enum=gram.conversation.v1.Message_Role"`
+	xxx_hidden_CreatedAt           *string                      `protobuf:"bytes,6,opt,name=created_at,json=createdAt"`
+	xxx_hidden_ProducedAt          *string                      `protobuf:"bytes,7,opt,name=produced_at,json=producedAt"`
+	xxx_hidden_Provenance          *Message_Provenance          `protobuf:"bytes,8,opt,name=provenance"`
+	xxx_hidden_ToolCallId          *string                      `protobuf:"bytes,9,opt,name=tool_call_id,json=toolCallId"`
+	xxx_hidden_FinishReason        *string                      `protobuf:"bytes,10,opt,name=finish_reason,json=finishReason"`
+	xxx_hidden_Content             isMessage_Content            `protobuf_oneof:"content"`
+	xxx_hidden_CorrelationId       *string                      `protobuf:"bytes,13,opt,name=correlation_id,json=correlationId"`
+	xxx_hidden_ConversationContext *Message_ConversationContext `protobuf:"bytes,14,opt,name=conversation_context,json=conversationContext"`
+	XXX_raceDetectHookData         protoimpl.RaceDetectHookData
+	XXX_presence                   [1]uint32
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *Message) Reset() {
@@ -236,39 +240,56 @@ func (x *Message) GetBodyReference() *Message_ContentReference {
 	return nil
 }
 
+func (x *Message) GetCorrelationId() string {
+	if x != nil {
+		if x.xxx_hidden_CorrelationId != nil {
+			return *x.xxx_hidden_CorrelationId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Message) GetConversationContext() *Message_ConversationContext {
+	if x != nil {
+		return x.xxx_hidden_ConversationContext
+	}
+	return nil
+}
+
 func (x *Message) SetId(v string) {
 	x.xxx_hidden_Id = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 13)
 }
 
 func (x *Message) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 13)
 }
 
 func (x *Message) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 13)
 }
 
 func (x *Message) SetConversationId(v string) {
 	x.xxx_hidden_ConversationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 13)
 }
 
 func (x *Message) SetRole(v Message_Role) {
 	x.xxx_hidden_Role = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 13)
 }
 
 func (x *Message) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 13)
 }
 
 func (x *Message) SetProducedAt(v string) {
 	x.xxx_hidden_ProducedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 13)
 }
 
 func (x *Message) SetProvenance(v *Message_Provenance) {
@@ -277,12 +298,12 @@ func (x *Message) SetProvenance(v *Message_Provenance) {
 
 func (x *Message) SetToolCallId(v string) {
 	x.xxx_hidden_ToolCallId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 13)
 }
 
 func (x *Message) SetFinishReason(v string) {
 	x.xxx_hidden_FinishReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 11)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 13)
 }
 
 func (x *Message) SetBody(v *Message_Body) {
@@ -299,6 +320,15 @@ func (x *Message) SetBodyReference(v *Message_ContentReference) {
 		return
 	}
 	x.xxx_hidden_Content = &message_BodyReference{v}
+}
+
+func (x *Message) SetCorrelationId(v string) {
+	x.xxx_hidden_CorrelationId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 13)
+}
+
+func (x *Message) SetConversationContext(v *Message_ConversationContext) {
+	x.xxx_hidden_ConversationContext = v
 }
 
 func (x *Message) HasId() bool {
@@ -394,6 +424,20 @@ func (x *Message) HasBodyReference() bool {
 	return ok
 }
 
+func (x *Message) HasCorrelationId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
+}
+
+func (x *Message) HasConversationContext() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_ConversationContext != nil
+}
+
 func (x *Message) ClearId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Id = nil
@@ -459,6 +503,15 @@ func (x *Message) ClearBodyReference() {
 	}
 }
 
+func (x *Message) ClearCorrelationId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
+	x.xxx_hidden_CorrelationId = nil
+}
+
+func (x *Message) ClearConversationContext() {
+	x.xxx_hidden_ConversationContext = nil
+}
+
 const Message_Content_not_set_case case_Message_Content = 0
 const Message_Body_case case_Message_Content = 11
 const Message_BodyReference_case case_Message_Content = 12
@@ -480,7 +533,7 @@ func (x *Message) WhichContent() case_Message_Content {
 type Message_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
-	// Persisted Gram message UUID; consumers use this for deduplication.
+	// Persisted Gram message UUID; identifies the logical message across snapshots.
 	Id             *string
 	OrganizationId *string
 	ProjectId      *string
@@ -503,6 +556,10 @@ type Message_builder struct {
 	// Protobuf-encoded gram.conversation.v1.Message.Body.
 	BodyReference *Message_ContentReference
 	// -- end of xxx_hidden_Content
+	// Source prompt correlation identifier (the persisted message_id field).
+	// Distinct from both the Gram row id and provenance.external_message_id.
+	CorrelationId       *string
+	ConversationContext *Message_ConversationContext
 }
 
 func (b0 Message_builder) Build() *Message {
@@ -510,40 +567,40 @@ func (b0 Message_builder) Build() *Message {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Id != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 13)
 		x.xxx_hidden_Id = b.Id
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 13)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 13)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.ConversationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 13)
 		x.xxx_hidden_ConversationId = b.ConversationId
 	}
 	if b.Role != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 13)
 		x.xxx_hidden_Role = *b.Role
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 13)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.ProducedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 13)
 		x.xxx_hidden_ProducedAt = b.ProducedAt
 	}
 	x.xxx_hidden_Provenance = b.Provenance
 	if b.ToolCallId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 13)
 		x.xxx_hidden_ToolCallId = b.ToolCallId
 	}
 	if b.FinishReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 11)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 13)
 		x.xxx_hidden_FinishReason = b.FinishReason
 	}
 	if b.Body != nil {
@@ -552,6 +609,11 @@ func (b0 Message_builder) Build() *Message {
 	if b.BodyReference != nil {
 		x.xxx_hidden_Content = &message_BodyReference{b.BodyReference}
 	}
+	if b.CorrelationId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 13)
+		x.xxx_hidden_CorrelationId = b.CorrelationId
+	}
+	x.xxx_hidden_ConversationContext = b.ConversationContext
 	return m0
 }
 
@@ -593,6 +655,12 @@ type Message_Provenance struct {
 	xxx_hidden_Provider          *string                `protobuf:"bytes,6,opt,name=provider"`
 	xxx_hidden_Model             *string                `protobuf:"bytes,7,opt,name=model"`
 	xxx_hidden_Replayed          bool                   `protobuf:"varint,8,opt,name=replayed"`
+	xxx_hidden_Adapter           *string                `protobuf:"bytes,9,opt,name=adapter"`
+	xxx_hidden_HookSource        *string                `protobuf:"bytes,10,opt,name=hook_source,json=hookSource"`
+	xxx_hidden_Hostname          *string                `protobuf:"bytes,11,opt,name=hostname"`
+	xxx_hidden_UserAgent         *string                `protobuf:"bytes,12,opt,name=user_agent,json=userAgent"`
+	xxx_hidden_UserEmail         *string                `protobuf:"bytes,13,opt,name=user_email,json=userEmail"`
+	xxx_hidden_Account           *Message_Account       `protobuf:"bytes,14,opt,name=account"`
 	XXX_raceDetectHookData       protoimpl.RaceDetectHookData
 	XXX_presence                 [1]uint32
 	unknownFields                protoimpl.UnknownFields
@@ -701,44 +769,130 @@ func (x *Message_Provenance) GetReplayed() bool {
 	return false
 }
 
+func (x *Message_Provenance) GetAdapter() string {
+	if x != nil {
+		if x.xxx_hidden_Adapter != nil {
+			return *x.xxx_hidden_Adapter
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Message_Provenance) GetHookSource() string {
+	if x != nil {
+		if x.xxx_hidden_HookSource != nil {
+			return *x.xxx_hidden_HookSource
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Message_Provenance) GetHostname() string {
+	if x != nil {
+		if x.xxx_hidden_Hostname != nil {
+			return *x.xxx_hidden_Hostname
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Message_Provenance) GetUserAgent() string {
+	if x != nil {
+		if x.xxx_hidden_UserAgent != nil {
+			return *x.xxx_hidden_UserAgent
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Message_Provenance) GetUserEmail() string {
+	if x != nil {
+		if x.xxx_hidden_UserEmail != nil {
+			return *x.xxx_hidden_UserEmail
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Message_Provenance) GetAccount() *Message_Account {
+	if x != nil {
+		return x.xxx_hidden_Account
+	}
+	return nil
+}
+
 func (x *Message_Provenance) SetSource(v string) {
 	x.xxx_hidden_Source = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 8)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 14)
 }
 
 func (x *Message_Provenance) SetExternalMessageId(v string) {
 	x.xxx_hidden_ExternalMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 8)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 14)
 }
 
 func (x *Message_Provenance) SetUserId(v string) {
 	x.xxx_hidden_UserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 8)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 14)
 }
 
 func (x *Message_Provenance) SetExternalUserId(v string) {
 	x.xxx_hidden_ExternalUserId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 8)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 14)
 }
 
 func (x *Message_Provenance) SetAssistantId(v string) {
 	x.xxx_hidden_AssistantId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 8)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 14)
 }
 
 func (x *Message_Provenance) SetProvider(v string) {
 	x.xxx_hidden_Provider = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 8)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 14)
 }
 
 func (x *Message_Provenance) SetModel(v string) {
 	x.xxx_hidden_Model = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 8)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 14)
 }
 
 func (x *Message_Provenance) SetReplayed(v bool) {
 	x.xxx_hidden_Replayed = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 8)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 14)
+}
+
+func (x *Message_Provenance) SetAdapter(v string) {
+	x.xxx_hidden_Adapter = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 14)
+}
+
+func (x *Message_Provenance) SetHookSource(v string) {
+	x.xxx_hidden_HookSource = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 14)
+}
+
+func (x *Message_Provenance) SetHostname(v string) {
+	x.xxx_hidden_Hostname = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 14)
+}
+
+func (x *Message_Provenance) SetUserAgent(v string) {
+	x.xxx_hidden_UserAgent = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 14)
+}
+
+func (x *Message_Provenance) SetUserEmail(v string) {
+	x.xxx_hidden_UserEmail = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 14)
+}
+
+func (x *Message_Provenance) SetAccount(v *Message_Account) {
+	x.xxx_hidden_Account = v
 }
 
 func (x *Message_Provenance) HasSource() bool {
@@ -797,6 +951,48 @@ func (x *Message_Provenance) HasReplayed() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 7)
 }
 
+func (x *Message_Provenance) HasAdapter() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 8)
+}
+
+func (x *Message_Provenance) HasHookSource() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 9)
+}
+
+func (x *Message_Provenance) HasHostname() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 10)
+}
+
+func (x *Message_Provenance) HasUserAgent() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
+}
+
+func (x *Message_Provenance) HasUserEmail() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 12)
+}
+
+func (x *Message_Provenance) HasAccount() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_Account != nil
+}
+
 func (x *Message_Provenance) ClearSource() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Source = nil
@@ -837,9 +1033,39 @@ func (x *Message_Provenance) ClearReplayed() {
 	x.xxx_hidden_Replayed = false
 }
 
+func (x *Message_Provenance) ClearAdapter() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 8)
+	x.xxx_hidden_Adapter = nil
+}
+
+func (x *Message_Provenance) ClearHookSource() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 9)
+	x.xxx_hidden_HookSource = nil
+}
+
+func (x *Message_Provenance) ClearHostname() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 10)
+	x.xxx_hidden_Hostname = nil
+}
+
+func (x *Message_Provenance) ClearUserAgent() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
+	x.xxx_hidden_UserAgent = nil
+}
+
+func (x *Message_Provenance) ClearUserEmail() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 12)
+	x.xxx_hidden_UserEmail = nil
+}
+
+func (x *Message_Provenance) ClearAccount() {
+	x.xxx_hidden_Account = nil
+}
+
 type Message_Provenance_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
+	// Canonical normalized ingestion source.
 	Source            *string
 	ExternalMessageId *string
 	UserId            *string
@@ -849,6 +1075,16 @@ type Message_Provenance_builder struct {
 	Model             *string
 	// Source replay marker, not Pub/Sub redelivery.
 	Replayed *bool
+	// Adapter slug reported by ingestion; distinct from the hook source.
+	Adapter *string
+	// Original hook source before normalization, when applicable.
+	HookSource *string
+	// Device hostname and client user agent observed by ingestion.
+	Hostname  *string
+	UserAgent *string
+	// Observed actor email; not inferred from the provider account.
+	UserEmail *string
+	Account   *Message_Account
 }
 
 func (b0 Message_Provenance_builder) Build() *Message_Provenance {
@@ -856,51 +1092,336 @@ func (b0 Message_Provenance_builder) Build() *Message_Provenance {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Source != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 8)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 14)
 		x.xxx_hidden_Source = b.Source
 	}
 	if b.ExternalMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 8)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 14)
 		x.xxx_hidden_ExternalMessageId = b.ExternalMessageId
 	}
 	if b.UserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 8)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 14)
 		x.xxx_hidden_UserId = b.UserId
 	}
 	if b.ExternalUserId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 8)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 14)
 		x.xxx_hidden_ExternalUserId = b.ExternalUserId
 	}
 	if b.AssistantId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 8)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 14)
 		x.xxx_hidden_AssistantId = b.AssistantId
 	}
 	if b.Provider != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 8)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 14)
 		x.xxx_hidden_Provider = b.Provider
 	}
 	if b.Model != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 8)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 14)
 		x.xxx_hidden_Model = b.Model
 	}
 	if b.Replayed != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 8)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 14)
 		x.xxx_hidden_Replayed = *b.Replayed
+	}
+	if b.Adapter != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 14)
+		x.xxx_hidden_Adapter = b.Adapter
+	}
+	if b.HookSource != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 14)
+		x.xxx_hidden_HookSource = b.HookSource
+	}
+	if b.Hostname != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 14)
+		x.xxx_hidden_Hostname = b.Hostname
+	}
+	if b.UserAgent != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 14)
+		x.xxx_hidden_UserAgent = b.UserAgent
+	}
+	if b.UserEmail != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 14)
+		x.xxx_hidden_UserEmail = b.UserEmail
+	}
+	x.xxx_hidden_Account = b.Account
+	return m0
+}
+
+// Observed provider-account attribution. Classification may be known even
+// when ingestion could not resolve a persisted account identity.
+type Message_Account struct {
+	state                    protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_UserAccountId *string                `protobuf:"bytes,1,opt,name=user_account_id,json=userAccountId"`
+	xxx_hidden_AccountType   *string                `protobuf:"bytes,2,opt,name=account_type,json=accountType"`
+	xxx_hidden_BillingMode   *string                `protobuf:"bytes,3,opt,name=billing_mode,json=billingMode"`
+	XXX_raceDetectHookData   protoimpl.RaceDetectHookData
+	XXX_presence             [1]uint32
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
+}
+
+func (x *Message_Account) Reset() {
+	*x = Message_Account{}
+	mi := &file_gram_conversation_v1_message_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Message_Account) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Message_Account) ProtoMessage() {}
+
+func (x *Message_Account) ProtoReflect() protoreflect.Message {
+	mi := &file_gram_conversation_v1_message_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *Message_Account) GetUserAccountId() string {
+	if x != nil {
+		if x.xxx_hidden_UserAccountId != nil {
+			return *x.xxx_hidden_UserAccountId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Message_Account) GetAccountType() string {
+	if x != nil {
+		if x.xxx_hidden_AccountType != nil {
+			return *x.xxx_hidden_AccountType
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Message_Account) GetBillingMode() string {
+	if x != nil {
+		if x.xxx_hidden_BillingMode != nil {
+			return *x.xxx_hidden_BillingMode
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Message_Account) SetUserAccountId(v string) {
+	x.xxx_hidden_UserAccountId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 3)
+}
+
+func (x *Message_Account) SetAccountType(v string) {
+	x.xxx_hidden_AccountType = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 3)
+}
+
+func (x *Message_Account) SetBillingMode(v string) {
+	x.xxx_hidden_BillingMode = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 3)
+}
+
+func (x *Message_Account) HasUserAccountId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *Message_Account) HasAccountType() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *Message_Account) HasBillingMode() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
+func (x *Message_Account) ClearUserAccountId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_UserAccountId = nil
+}
+
+func (x *Message_Account) ClearAccountType() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_AccountType = nil
+}
+
+func (x *Message_Account) ClearBillingMode() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_BillingMode = nil
+}
+
+type Message_Account_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Gram user_accounts UUID, not a provider-issued account identifier.
+	UserAccountId *string
+	AccountType   *string
+	// Billing mode resolved at ingestion, not a downstream billing decision.
+	BillingMode *string
+}
+
+func (b0 Message_Account_builder) Build() *Message_Account {
+	m0 := &Message_Account{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.UserAccountId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 3)
+		x.xxx_hidden_UserAccountId = b.UserAccountId
+	}
+	if b.AccountType != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 3)
+		x.xxx_hidden_AccountType = b.AccountType
+	}
+	if b.BillingMode != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 3)
+		x.xxx_hidden_BillingMode = b.BillingMode
+	}
+	return m0
+}
+
+// Conversation context captured with the snapshot, not persistence routing.
+type Message_ConversationContext struct {
+	state                             protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_ExternalConversationId *string                `protobuf:"bytes,1,opt,name=external_conversation_id,json=externalConversationId"`
+	xxx_hidden_WorkingDirectory       *string                `protobuf:"bytes,2,opt,name=working_directory,json=workingDirectory"`
+	XXX_raceDetectHookData            protoimpl.RaceDetectHookData
+	XXX_presence                      [1]uint32
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
+}
+
+func (x *Message_ConversationContext) Reset() {
+	*x = Message_ConversationContext{}
+	mi := &file_gram_conversation_v1_message_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Message_ConversationContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Message_ConversationContext) ProtoMessage() {}
+
+func (x *Message_ConversationContext) ProtoReflect() protoreflect.Message {
+	mi := &file_gram_conversation_v1_message_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *Message_ConversationContext) GetExternalConversationId() string {
+	if x != nil {
+		if x.xxx_hidden_ExternalConversationId != nil {
+			return *x.xxx_hidden_ExternalConversationId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Message_ConversationContext) GetWorkingDirectory() string {
+	if x != nil {
+		if x.xxx_hidden_WorkingDirectory != nil {
+			return *x.xxx_hidden_WorkingDirectory
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Message_ConversationContext) SetExternalConversationId(v string) {
+	x.xxx_hidden_ExternalConversationId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 2)
+}
+
+func (x *Message_ConversationContext) SetWorkingDirectory(v string) {
+	x.xxx_hidden_WorkingDirectory = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 2)
+}
+
+func (x *Message_ConversationContext) HasExternalConversationId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *Message_ConversationContext) HasWorkingDirectory() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *Message_ConversationContext) ClearExternalConversationId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_ExternalConversationId = nil
+}
+
+func (x *Message_ConversationContext) ClearWorkingDirectory() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_WorkingDirectory = nil
+}
+
+type Message_ConversationContext_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	// Source session/conversation identifier, not the Gram conversation UUID.
+	// Interpret in the namespace of the tenant and source provenance.
+	ExternalConversationId *string
+	// Session working directory reported by the source adapter.
+	WorkingDirectory *string
+}
+
+func (b0 Message_ConversationContext_builder) Build() *Message_ConversationContext {
+	m0 := &Message_ConversationContext{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.ExternalConversationId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 2)
+		x.xxx_hidden_ExternalConversationId = b.ExternalConversationId
+	}
+	if b.WorkingDirectory != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 2)
+		x.xxx_hidden_WorkingDirectory = b.WorkingDirectory
 	}
 	return m0
 }
 
 // Ordered content of this message, never the full conversation.
 type Message_Body struct {
-	state            protoimpl.MessageState `protogen:"opaque.v1"`
-	xxx_hidden_Parts *[]*Message_Part       `protobuf:"bytes,1,rep,name=parts"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state                      protoimpl.MessageState         `protogen:"opaque.v1"`
+	xxx_hidden_Parts           *[]*Message_Part               `protobuf:"bytes,1,rep,name=parts"`
+	xxx_hidden_OriginalContent isMessage_Body_OriginalContent `protobuf_oneof:"original_content"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *Message_Body) Reset() {
 	*x = Message_Body{}
-	mi := &file_gram_conversation_v1_message_proto_msgTypes[2]
+	mi := &file_gram_conversation_v1_message_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -912,7 +1433,7 @@ func (x *Message_Body) String() string {
 func (*Message_Body) ProtoMessage() {}
 
 func (x *Message_Body) ProtoReflect() protoreflect.Message {
-	mi := &file_gram_conversation_v1_message_proto_msgTypes[2]
+	mi := &file_gram_conversation_v1_message_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -932,14 +1453,112 @@ func (x *Message_Body) GetParts() []*Message_Part {
 	return nil
 }
 
+func (x *Message_Body) GetSourceContent() *Message_ContentReference {
+	if x != nil {
+		if x, ok := x.xxx_hidden_OriginalContent.(*message_Body_SourceContent); ok {
+			return x.SourceContent
+		}
+	}
+	return nil
+}
+
+func (x *Message_Body) GetSourceContentJson() []byte {
+	if x != nil {
+		if x, ok := x.xxx_hidden_OriginalContent.(*message_Body_SourceContentJson); ok {
+			return x.SourceContentJson
+		}
+	}
+	return nil
+}
+
 func (x *Message_Body) SetParts(v []*Message_Part) {
 	x.xxx_hidden_Parts = &v
+}
+
+func (x *Message_Body) SetSourceContent(v *Message_ContentReference) {
+	if v == nil {
+		x.xxx_hidden_OriginalContent = nil
+		return
+	}
+	x.xxx_hidden_OriginalContent = &message_Body_SourceContent{v}
+}
+
+func (x *Message_Body) SetSourceContentJson(v []byte) {
+	if v == nil {
+		v = []byte{}
+	}
+	x.xxx_hidden_OriginalContent = &message_Body_SourceContentJson{v}
+}
+
+func (x *Message_Body) HasOriginalContent() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_OriginalContent != nil
+}
+
+func (x *Message_Body) HasSourceContent() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_OriginalContent.(*message_Body_SourceContent)
+	return ok
+}
+
+func (x *Message_Body) HasSourceContentJson() bool {
+	if x == nil {
+		return false
+	}
+	_, ok := x.xxx_hidden_OriginalContent.(*message_Body_SourceContentJson)
+	return ok
+}
+
+func (x *Message_Body) ClearOriginalContent() {
+	x.xxx_hidden_OriginalContent = nil
+}
+
+func (x *Message_Body) ClearSourceContent() {
+	if _, ok := x.xxx_hidden_OriginalContent.(*message_Body_SourceContent); ok {
+		x.xxx_hidden_OriginalContent = nil
+	}
+}
+
+func (x *Message_Body) ClearSourceContentJson() {
+	if _, ok := x.xxx_hidden_OriginalContent.(*message_Body_SourceContentJson); ok {
+		x.xxx_hidden_OriginalContent = nil
+	}
+}
+
+const Message_Body_OriginalContent_not_set_case case_Message_Body_OriginalContent = 0
+const Message_Body_SourceContent_case case_Message_Body_OriginalContent = 2
+const Message_Body_SourceContentJson_case case_Message_Body_OriginalContent = 3
+
+func (x *Message_Body) WhichOriginalContent() case_Message_Body_OriginalContent {
+	if x == nil {
+		return Message_Body_OriginalContent_not_set_case
+	}
+	switch x.xxx_hidden_OriginalContent.(type) {
+	case *message_Body_SourceContent:
+		return Message_Body_SourceContent_case
+	case *message_Body_SourceContentJson:
+		return Message_Body_SourceContentJson_case
+	default:
+		return Message_Body_OriginalContent_not_set_case
+	}
 }
 
 type Message_Body_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
 	Parts []*Message_Part
+	// Original structured content, when available, in its stored JSON format.
+	// This is an alternative representation of the projected text in parts,
+	// not additional text to concatenate. Tool calls remain in parts.
+
+	// Fields of oneof xxx_hidden_OriginalContent:
+	SourceContent     *Message_ContentReference
+	SourceContentJson []byte
+	// -- end of xxx_hidden_OriginalContent
 }
 
 func (b0 Message_Body_builder) Build() *Message_Body {
@@ -947,8 +1566,40 @@ func (b0 Message_Body_builder) Build() *Message_Body {
 	b, x := &b0, m0
 	_, _ = b, x
 	x.xxx_hidden_Parts = &b.Parts
+	if b.SourceContent != nil {
+		x.xxx_hidden_OriginalContent = &message_Body_SourceContent{b.SourceContent}
+	}
+	if b.SourceContentJson != nil {
+		x.xxx_hidden_OriginalContent = &message_Body_SourceContentJson{b.SourceContentJson}
+	}
 	return m0
 }
+
+type case_Message_Body_OriginalContent protoreflect.FieldNumber
+
+func (x case_Message_Body_OriginalContent) String() string {
+	md := file_gram_conversation_v1_message_proto_msgTypes[4].Descriptor()
+	if x == 0 {
+		return "not set"
+	}
+	return protoimpl.X.MessageFieldStringOf(md, protoreflect.FieldNumber(x))
+}
+
+type isMessage_Body_OriginalContent interface {
+	isMessage_Body_OriginalContent()
+}
+
+type message_Body_SourceContent struct {
+	SourceContent *Message_ContentReference `protobuf:"bytes,2,opt,name=source_content,json=sourceContent,oneof"`
+}
+
+type message_Body_SourceContentJson struct {
+	SourceContentJson []byte `protobuf:"bytes,3,opt,name=source_content_json,json=sourceContentJson,oneof"`
+}
+
+func (*message_Body_SourceContent) isMessage_Body_OriginalContent() {}
+
+func (*message_Body_SourceContentJson) isMessage_Body_OriginalContent() {}
 
 type Message_Part struct {
 	state            protoimpl.MessageState `protogen:"opaque.v1"`
@@ -959,7 +1610,7 @@ type Message_Part struct {
 
 func (x *Message_Part) Reset() {
 	*x = Message_Part{}
-	mi := &file_gram_conversation_v1_message_proto_msgTypes[3]
+	mi := &file_gram_conversation_v1_message_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -971,7 +1622,7 @@ func (x *Message_Part) String() string {
 func (*Message_Part) ProtoMessage() {}
 
 func (x *Message_Part) ProtoReflect() protoreflect.Message {
-	mi := &file_gram_conversation_v1_message_proto_msgTypes[3]
+	mi := &file_gram_conversation_v1_message_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1133,7 +1784,7 @@ func (b0 Message_Part_builder) Build() *Message_Part {
 type case_Message_Part_Value protoreflect.FieldNumber
 
 func (x case_Message_Part_Value) String() string {
-	md := file_gram_conversation_v1_message_proto_msgTypes[3].Descriptor()
+	md := file_gram_conversation_v1_message_proto_msgTypes[5].Descriptor()
 	if x == 0 {
 		return "not set"
 	}
@@ -1176,7 +1827,7 @@ type Message_ToolCall struct {
 
 func (x *Message_ToolCall) Reset() {
 	*x = Message_ToolCall{}
-	mi := &file_gram_conversation_v1_message_proto_msgTypes[4]
+	mi := &file_gram_conversation_v1_message_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1188,7 +1839,7 @@ func (x *Message_ToolCall) String() string {
 func (*Message_ToolCall) ProtoMessage() {}
 
 func (x *Message_ToolCall) ProtoReflect() protoreflect.Message {
-	mi := &file_gram_conversation_v1_message_proto_msgTypes[4]
+	mi := &file_gram_conversation_v1_message_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1322,7 +1973,7 @@ type Message_ContentReference struct {
 
 func (x *Message_ContentReference) Reset() {
 	*x = Message_ContentReference{}
-	mi := &file_gram_conversation_v1_message_proto_msgTypes[5]
+	mi := &file_gram_conversation_v1_message_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1334,7 +1985,7 @@ func (x *Message_ContentReference) String() string {
 func (*Message_ContentReference) ProtoMessage() {}
 
 func (x *Message_ContentReference) ProtoReflect() protoreflect.Message {
-	mi := &file_gram_conversation_v1_message_proto_msgTypes[5]
+	mi := &file_gram_conversation_v1_message_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1489,7 +2140,7 @@ var File_gram_conversation_v1_message_proto protoreflect.FileDescriptor
 
 const file_gram_conversation_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"\"gram/conversation/v1/message.proto\x12\x14gram.conversation.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xa0\v\n" +
+	"\"gram/conversation/v1/message.proto\x12\x14gram.conversation.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\x9a\x11\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0forganization_id\x18\x02 \x01(\tR\x0eorganizationId\x12\x1d\n" +
@@ -1509,7 +2160,9 @@ const file_gram_conversation_v1_message_proto_rawDesc = "" +
 	"\rfinish_reason\x18\n" +
 	" \x01(\tR\ffinishReason\x128\n" +
 	"\x04body\x18\v \x01(\v2\".gram.conversation.v1.Message.BodyH\x00R\x04body\x12W\n" +
-	"\x0ebody_reference\x18\f \x01(\v2..gram.conversation.v1.Message.ContentReferenceH\x00R\rbodyReference\x1a\x88\x02\n" +
+	"\x0ebody_reference\x18\f \x01(\v2..gram.conversation.v1.Message.ContentReferenceH\x00R\rbodyReference\x12%\n" +
+	"\x0ecorrelation_id\x18\r \x01(\tR\rcorrelationId\x12d\n" +
+	"\x14conversation_context\x18\x0e \x01(\v21.gram.conversation.v1.Message.ConversationContextR\x13conversationContext\x1a\xde\x03\n" +
 	"\n" +
 	"Provenance\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12.\n" +
@@ -1519,9 +2172,29 @@ const file_gram_conversation_v1_message_proto_rawDesc = "" +
 	"\fassistant_id\x18\x05 \x01(\tR\vassistantId\x12\x1a\n" +
 	"\bprovider\x18\x06 \x01(\tR\bprovider\x12\x14\n" +
 	"\x05model\x18\a \x01(\tR\x05model\x12\x1a\n" +
-	"\breplayed\x18\b \x01(\bR\breplayed\x1a@\n" +
+	"\breplayed\x18\b \x01(\bR\breplayed\x12\x18\n" +
+	"\aadapter\x18\t \x01(\tR\aadapter\x12\x1f\n" +
+	"\vhook_source\x18\n" +
+	" \x01(\tR\n" +
+	"hookSource\x12\x1a\n" +
+	"\bhostname\x18\v \x01(\tR\bhostname\x12\x1d\n" +
+	"\n" +
+	"user_agent\x18\f \x01(\tR\tuserAgent\x12\x1d\n" +
+	"\n" +
+	"user_email\x18\r \x01(\tR\tuserEmail\x12?\n" +
+	"\aaccount\x18\x0e \x01(\v2%.gram.conversation.v1.Message.AccountR\aaccount\x1aw\n" +
+	"\aAccount\x12&\n" +
+	"\x0fuser_account_id\x18\x01 \x01(\tR\ruserAccountId\x12!\n" +
+	"\faccount_type\x18\x02 \x01(\tR\vaccountType\x12!\n" +
+	"\fbilling_mode\x18\x03 \x01(\tR\vbillingMode\x1a|\n" +
+	"\x13ConversationContext\x128\n" +
+	"\x18external_conversation_id\x18\x01 \x01(\tR\x16externalConversationId\x12+\n" +
+	"\x11working_directory\x18\x02 \x01(\tR\x10workingDirectory\x1a\xdf\x01\n" +
 	"\x04Body\x128\n" +
-	"\x05parts\x18\x01 \x03(\v2\".gram.conversation.v1.Message.PartR\x05parts\x1a\xcb\x01\n" +
+	"\x05parts\x18\x01 \x03(\v2\".gram.conversation.v1.Message.PartR\x05parts\x12W\n" +
+	"\x0esource_content\x18\x02 \x01(\v2..gram.conversation.v1.Message.ContentReferenceH\x00R\rsourceContent\x120\n" +
+	"\x13source_content_json\x18\x03 \x01(\fH\x00R\x11sourceContentJsonB\x12\n" +
+	"\x10original_content\x1a\xcb\x01\n" +
 	"\x04Part\x12\x14\n" +
 	"\x04text\x18\x01 \x01(\tH\x00R\x04text\x12E\n" +
 	"\ttool_call\x18\x02 \x01(\v2&.gram.conversation.v1.Message.ToolCallH\x00R\btoolCall\x12]\n" +
@@ -1549,29 +2222,34 @@ const file_gram_conversation_v1_message_proto_rawDesc = "" +
 	"\acontentBMZKgithub.com/speakeasy-api/gram/infra/gen/gram/conversation/v1;conversationv1b\beditionsp\xe9\a"
 
 var file_gram_conversation_v1_message_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_gram_conversation_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_gram_conversation_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_gram_conversation_v1_message_proto_goTypes = []any{
-	(Message_Role)(0),                // 0: gram.conversation.v1.Message.Role
-	(*Message)(nil),                  // 1: gram.conversation.v1.Message
-	(*Message_Provenance)(nil),       // 2: gram.conversation.v1.Message.Provenance
-	(*Message_Body)(nil),             // 3: gram.conversation.v1.Message.Body
-	(*Message_Part)(nil),             // 4: gram.conversation.v1.Message.Part
-	(*Message_ToolCall)(nil),         // 5: gram.conversation.v1.Message.ToolCall
-	(*Message_ContentReference)(nil), // 6: gram.conversation.v1.Message.ContentReference
+	(Message_Role)(0),                   // 0: gram.conversation.v1.Message.Role
+	(*Message)(nil),                     // 1: gram.conversation.v1.Message
+	(*Message_Provenance)(nil),          // 2: gram.conversation.v1.Message.Provenance
+	(*Message_Account)(nil),             // 3: gram.conversation.v1.Message.Account
+	(*Message_ConversationContext)(nil), // 4: gram.conversation.v1.Message.ConversationContext
+	(*Message_Body)(nil),                // 5: gram.conversation.v1.Message.Body
+	(*Message_Part)(nil),                // 6: gram.conversation.v1.Message.Part
+	(*Message_ToolCall)(nil),            // 7: gram.conversation.v1.Message.ToolCall
+	(*Message_ContentReference)(nil),    // 8: gram.conversation.v1.Message.ContentReference
 }
 var file_gram_conversation_v1_message_proto_depIdxs = []int32{
-	0, // 0: gram.conversation.v1.Message.role:type_name -> gram.conversation.v1.Message.Role
-	2, // 1: gram.conversation.v1.Message.provenance:type_name -> gram.conversation.v1.Message.Provenance
-	3, // 2: gram.conversation.v1.Message.body:type_name -> gram.conversation.v1.Message.Body
-	6, // 3: gram.conversation.v1.Message.body_reference:type_name -> gram.conversation.v1.Message.ContentReference
-	4, // 4: gram.conversation.v1.Message.Body.parts:type_name -> gram.conversation.v1.Message.Part
-	5, // 5: gram.conversation.v1.Message.Part.tool_call:type_name -> gram.conversation.v1.Message.ToolCall
-	6, // 6: gram.conversation.v1.Message.Part.content_reference:type_name -> gram.conversation.v1.Message.ContentReference
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	0,  // 0: gram.conversation.v1.Message.role:type_name -> gram.conversation.v1.Message.Role
+	2,  // 1: gram.conversation.v1.Message.provenance:type_name -> gram.conversation.v1.Message.Provenance
+	5,  // 2: gram.conversation.v1.Message.body:type_name -> gram.conversation.v1.Message.Body
+	8,  // 3: gram.conversation.v1.Message.body_reference:type_name -> gram.conversation.v1.Message.ContentReference
+	4,  // 4: gram.conversation.v1.Message.conversation_context:type_name -> gram.conversation.v1.Message.ConversationContext
+	3,  // 5: gram.conversation.v1.Message.Provenance.account:type_name -> gram.conversation.v1.Message.Account
+	6,  // 6: gram.conversation.v1.Message.Body.parts:type_name -> gram.conversation.v1.Message.Part
+	8,  // 7: gram.conversation.v1.Message.Body.source_content:type_name -> gram.conversation.v1.Message.ContentReference
+	7,  // 8: gram.conversation.v1.Message.Part.tool_call:type_name -> gram.conversation.v1.Message.ToolCall
+	8,  // 9: gram.conversation.v1.Message.Part.content_reference:type_name -> gram.conversation.v1.Message.ContentReference
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_gram_conversation_v1_message_proto_init() }
@@ -1583,7 +2261,11 @@ func file_gram_conversation_v1_message_proto_init() {
 		(*message_Body_)(nil),
 		(*message_BodyReference)(nil),
 	}
-	file_gram_conversation_v1_message_proto_msgTypes[3].OneofWrappers = []any{
+	file_gram_conversation_v1_message_proto_msgTypes[4].OneofWrappers = []any{
+		(*message_Body_SourceContent)(nil),
+		(*message_Body_SourceContentJson)(nil),
+	}
+	file_gram_conversation_v1_message_proto_msgTypes[5].OneofWrappers = []any{
 		(*message_Part_Text)(nil),
 		(*message_Part_ToolCall)(nil),
 		(*message_Part_ContentReference)(nil),
@@ -1594,7 +2276,7 @@ func file_gram_conversation_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gram_conversation_v1_message_proto_rawDesc), len(file_gram_conversation_v1_message_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   6,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
