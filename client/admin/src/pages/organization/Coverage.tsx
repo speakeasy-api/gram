@@ -1,6 +1,6 @@
 import { useMemo, useState, type JSX } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -109,6 +109,15 @@ export function Coverage({ org }: { org: AdminOrganization }): JSX.Element {
         {catalog.isError ? (
           <p className="text-muted-foreground text-sm">
             The support matrix could not be loaded.
+          </p>
+        ) : methods.length === 0 && !catalog.isPending ? (
+          <p className="text-muted-foreground text-sm">
+            No integration in the support matrix claims any of these
+            capabilities yet.{" "}
+            <Link to="/integration-coverage" className="underline">
+              Fill it in
+            </Link>{" "}
+            to get recommendations here.
           </p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
