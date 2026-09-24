@@ -1306,14 +1306,79 @@ func (s *Service) GenerateWorkOSAdminPortalLink(ctx context.Context, payload *ge
 		IntentOptions:   iopts,
 	}
 
-	link, err := s.orgs.GenerateAdminPortalLink(ctx, workosOrgID, workos.PortalIntent(payload.Intent), opts)
+	intent := workos.PortalIntent(payload.Intent)
+	link, err := s.orgs.GenerateAdminPortalLink(ctx, workosOrgID, intent, opts)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate WorkOS admin portal link").LogError(ctx, s.logger)
+		return nil, portalLinkError(intent, err).LogError(ctx, s.logger, attr.SlogWorkOSOrganizationID(workosOrgID))
+	}
+	if strings.TrimSpace(link) == "" {
+		return nil, oops.E(oops.CodeGatewayError, nil, "WorkOS did not return a %s setup link. Try again in a few minutes.", portalIntentLabel(intent)).LogError(ctx, s.logger, attr.SlogWorkOSOrganizationID(workosOrgID))
 	}
 
 	return &gen.GenerateWorkOSAdminPortalLinkResult{
 		URL: link,
 	}, nil
+}
+
+// portalIntentLabel names an Admin Portal intent the way the dashboard does, so
+// a failure message reads as the thing the admin was trying to set up.
+func portalIntentLabel(intent workos.PortalIntent) string {
+	switch intent {
+	case workos.PortalIntentDSync:
+		return "Directory Sync"
+	case workos.PortalIntentSSO:
+		return "Single Sign-On"
+	case workos.PortalIntentDomainVerification:
+		return "domain verification"
+	case workos.PortalIntentAuditLogs:
+		return "audit log export"
+	case workos.PortalIntentLogStreams:
+		return "log streaming"
+	default:
+		return string(intent)
+	}
+}
+
+// portalLinkError turns a failed Admin Portal link request into something the
+// admin can act on. WorkOS's response body is never forwarded — it carries
+// organization identifiers and request detail that belong in our logs, not in
+// a toast — so each outcome is mapped to the next step that unblocks the admin,
+// and an unrecognized one still names a step instead of failing silently.
+//
+// Only error codes declared in the shared Goa error responses are used: an
+// undeclared code encodes as a bare status the SDK cannot parse, which would
+// put the caller right back at an opaque failure.
+func portalLinkError(intent workos.PortalIntent, cause error) *oops.ShareableError {
+	label := portalIntentLabel(intent)
+
+	var apiErr *workos.APIError
+	if !errors.As(cause, &apiErr) {
+		return oops.E(oops.CodeGatewayError, cause, "could not reach WorkOS to start %s setup. Try again in a few minutes.", label)
+	}
+
+	switch {
+	case apiErr.StatusCode == http.StatusNotFound:
+		return oops.E(oops.CodeBadRequest, cause, "this organization no longer exists in WorkOS, so %s setup cannot start. Contact Speakeasy support to relink it.", label)
+	case apiErr.StatusCode == http.StatusUnauthorized, apiErr.StatusCode == http.StatusForbidden:
+		return oops.E(oops.CodeUnexpected, cause, "Speakeasy is not authorized to start %s setup in WorkOS. Contact Speakeasy support.", label)
+	case apiErr.StatusCode == http.StatusTooManyRequests:
+		return oops.E(oops.CodeGatewayError, cause, "WorkOS is rate limiting %s setup. Wait a moment and try again.", label)
+	case apiErr.StatusCode >= http.StatusInternalServerError:
+		return oops.E(oops.CodeGatewayError, cause, "WorkOS could not start %s setup right now. Try again in a few minutes.", label)
+	case apiErr.StatusCode >= http.StatusBadRequest && portalIntentNeedsVerifiedDomain(intent):
+		// WorkOS refuses an SSO or Directory Sync portal session for an
+		// organization with no verified domain, which is the one precondition
+		// an admin can clear without support.
+		return oops.E(oops.CodeBadRequest, cause, "WorkOS rejected the %s setup request. Verify a domain for this organization, then try again.", label)
+	case apiErr.StatusCode >= http.StatusBadRequest:
+		return oops.E(oops.CodeBadRequest, cause, "WorkOS rejected the %s setup request. Contact Speakeasy support if it keeps failing.", label)
+	default:
+		return oops.E(oops.CodeGatewayError, cause, "could not start %s setup. Try again, and contact Speakeasy support if it keeps failing.", label)
+	}
+}
+
+func portalIntentNeedsVerifiedDomain(intent workos.PortalIntent) bool {
+	return intent == workos.PortalIntentSSO || intent == workos.PortalIntentDSync
 }
 
 // requirePortalIntentEntitlement fails closed: an intent without an explicit

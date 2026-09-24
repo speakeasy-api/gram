@@ -10,6 +10,7 @@ import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { toast } from "sonner";
+import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -37,11 +38,21 @@ interface IdentityProviderStepProps {
 export function IdentityProviderStep({
   onComplete,
 }: IdentityProviderStepProps): JSX.Element {
-  const { data: onboardingStatus, isLoading } = useOnboardingStatus(
-    undefined,
-    undefined,
-    { throwOnError: false },
-  );
+  const {
+    data: onboardingStatus,
+    isLoading,
+    isError,
+    refetch,
+  } = useOnboardingStatus(undefined, undefined, { throwOnError: false });
+
+  // Only a status response can say the domain is unverified; while loading or
+  // after an error, WorkOS still enforces the rule. An active SSO connection
+  // proves a domain was verified, even for orgs set up before verified domains
+  // were tracked — the server completes the domain setup task the same way.
+  const domainVerified =
+    onboardingStatus === undefined ||
+    !!onboardingStatus.domainVerified ||
+    !!onboardingStatus.ssoConfigured;
 
   return (
     <StepContainer
@@ -50,22 +61,159 @@ export function IdentityProviderStep({
       onContinue={onComplete}
     >
       <div className="space-y-8">
+        {isError && <StatusUnavailableAlert onRetry={() => void refetch()} />}
         <SingleSignOnSection
           index={1}
           configured={!!onboardingStatus?.ssoConfigured}
-          // Only a status response can say the domain is unverified; while
-          // loading or after an error, WorkOS still enforces the rule.
-          domainVerified={onboardingStatus?.domainVerified !== false}
+          domainVerified={domainVerified}
           isLoading={isLoading}
         />
         <DirectorySyncSection
           index={2}
           configured={!!onboardingStatus?.dsyncConfigured}
+          domainVerified={domainVerified}
           isLoading={isLoading}
         />
       </div>
     </StepContainer>
   );
+}
+
+/**
+ * Both sub-steps read Connected off one onboarding status call, which reaches
+ * WorkOS for the SSO connections and the directory. When that call fails the
+ * card would otherwise render a confident "not connected" for setup that may
+ * already exist, so say the state is unknown and offer the retry.
+ */
+function StatusUnavailableAlert({
+  onRetry,
+}: {
+  onRetry: () => void;
+}): JSX.Element {
+  return (
+    <Alert variant="warning" alignTop>
+      <div className="text-sm">
+        <p className="font-medium">Setup status unavailable</p>
+        <p className="mt-1">
+          We could not read your identity provider setup from WorkOS, so the
+          states below may be out of date.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onRetry}
+          className="mt-3"
+        >
+          Try again
+        </Button>
+      </div>
+    </Alert>
+  );
+}
+
+type PortalIntent = "sso" | "dsync";
+
+// Names the thing being set up in the middle of a sentence, so one message
+// shape covers both portal round trips.
+const PORTAL_NOUN: Record<PortalIntent, string> = {
+  sso: "single sign-on",
+  dsync: "directory sync",
+};
+
+const CONFIGURED_KEY: Record<
+  PortalIntent,
+  "ssoConfigured" | "dsyncConfigured"
+> = {
+  sso: "ssoConfigured",
+  dsync: "dsyncConfigured",
+};
+
+/**
+ * Drives one WorkOS admin portal round trip: mint the link, hand the admin a
+ * tab, then re-check onboarding status when they come back. Every step reports
+ * its own failure, because an admin looking at an unchanged card cannot tell a
+ * refused portal link from one they have yet to finish — and a status check
+ * that never completed is not the same as a connection WorkOS says is missing.
+ */
+function usePortalSetup(intent: PortalIntent) {
+  const noun = PORTAL_NOUN[intent];
+  const [portalOpened, setPortalOpened] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const { refetch: refetchOnboardingStatus } = useOnboardingStatus(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
+
+  const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
+    onError: (error) => {
+      // The server explains the WorkOS failures it can classify; anything it
+      // cannot still needs copy, or the click reads as a no-op.
+      const detail = error instanceof Error ? error.message.trim() : "";
+      toast.error(
+        detail ||
+          `Could not start ${noun} setup. Try again, and contact support if it keeps failing.`,
+      );
+    },
+  });
+
+  const connect = () => {
+    generatePortalLink.mutate(
+      {
+        request: {
+          generateWorkOSAdminPortalLinkRequestBody: {
+            intent,
+            successUrl: `${getServerURL()}/v1/setup/callback?intent=${intent}`,
+            returnUrl: window.location.href,
+            // NOTE: intent_options.sso.provider_type is intentionally omitted.
+            // WorkOS currently only accepts "GoogleSAML" here and 422s on every
+            // other provider, breaking non-Google onboarding. Omitting it lets
+            // WorkOS open its own provider picker so all providers work. Restore
+            // the selected provider type once WorkOS supports the full set:
+            // https://speakeasyapi.slack.com/archives/C079KDQDY9X/p1781722173272439
+          },
+        },
+      },
+      {
+        onSuccess: (data) => {
+          if (openSafeExternalUrl(data.url)) {
+            setPortalOpened(true);
+            return;
+          }
+          toast.error(
+            `Could not open the WorkOS portal for ${noun}. Allow pop-ups for this site, then try again.`,
+          );
+        },
+      },
+    );
+  };
+
+  const verify = async () => {
+    setVerifying(true);
+    try {
+      const result = await refetchOnboardingStatus();
+      if (result.data?.[CONFIGURED_KEY[intent]]) return;
+      if (result.data === undefined) {
+        toast.error(
+          `Could not check the ${noun} connection. Try again in a moment.`,
+        );
+        return;
+      }
+      toast.error(
+        `No ${noun} connection detected yet. Finish setup in the WorkOS tab, then try again.`,
+      );
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  return {
+    connect,
+    verify,
+    verifying,
+    portalOpened,
+    isPending: generatePortalLink.isPending,
+  };
 }
 
 function ConnectedBadge(): JSX.Element {
@@ -141,7 +289,25 @@ function ProviderIcon({
 interface SectionProps {
   index: number;
   configured: boolean;
+  domainVerified: boolean;
   isLoading: boolean;
+}
+
+/** Points an admin at the step that unblocks the portal they just tried. */
+function DomainRequiredNote(): JSX.Element {
+  const orgRoutes = useOrgRoutes();
+
+  return (
+    <p className="text-muted-foreground text-sm">
+      Verify a domain first.{" "}
+      <orgRoutes.setupTask.Link
+        params={[setupTaskSlug("domain-verification")]}
+        className="text-foreground underline underline-offset-2"
+      >
+        Go to domain verification
+      </orgRoutes.setupTask.Link>
+    </p>
+  );
 }
 
 function SingleSignOnSection({
@@ -149,20 +315,14 @@ function SingleSignOnSection({
   configured,
   domainVerified,
   isLoading,
-}: SectionProps & { domainVerified: boolean }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
+}: SectionProps): JSX.Element {
   // WorkOS rejects a new SSO connection until the org has a verified domain.
   const needsDomain = !domainVerified && !configured;
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [query, setQuery] = useState("");
-  const [portalOpened, setPortalOpened] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const { refetch: refetchOnboardingStatus } = useOnboardingStatus(
-    undefined,
-    undefined,
-    { throwOnError: false },
-  );
+  const { connect, verify, verifying, portalOpened, isPending } =
+    usePortalSetup("sso");
 
   const filteredProviders = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -179,62 +339,12 @@ function SingleSignOnSection({
   if (isSearching) visibleProviders = filteredProviders;
   else if (showAll) visibleProviders = IDP_PROVIDERS;
 
-  const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
-    onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to launch SSO setup portal",
-      );
-    },
-  });
-
   const provider = IDP_PROVIDERS.find((p) => p.id === selectedProvider);
 
   const handleConnect = () => {
     if (!provider) return;
-
-    generatePortalLink.mutate(
-      {
-        request: {
-          generateWorkOSAdminPortalLinkRequestBody: {
-            intent: "sso",
-            successUrl: `${getServerURL()}/v1/setup/callback?intent=sso`,
-            returnUrl: window.location.href,
-            // NOTE: intent_options.sso.provider_type is intentionally omitted.
-            // WorkOS currently only accepts "GoogleSAML" here and 422s on every
-            // other provider, breaking non-Google onboarding. Omitting it lets
-            // WorkOS open its own provider picker so all providers work. Restore
-            // provider.providerType once WorkOS supports the full set:
-            // https://speakeasyapi.slack.com/archives/C079KDQDY9X/p1781722173272439
-          },
-        },
-      },
-      {
-        onSuccess: (data) => {
-          if (openSafeExternalUrl(data.url)) setPortalOpened(true);
-        },
-      },
-    );
+    connect();
   };
-
-  // Verifying refetches the shared onboarding status, so a successful check
-  // flips this section to Connected through the parent's query data.
-  const handleVerify = async () => {
-    setVerifying(true);
-    try {
-      const result = await refetchOnboardingStatus();
-      if (!result.data?.ssoConfigured) {
-        toast.error(
-          "SSO connection not detected yet. Finish setup in the WorkOS tab, then try again.",
-        );
-      }
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const isPending = generatePortalLink.isPending;
 
   let body: JSX.Element;
   if (isLoading) {
@@ -327,24 +437,14 @@ function SingleSignOnSection({
           </PortalNote>
         )}
 
-        {needsDomain && (
-          <p className="text-muted-foreground text-sm">
-            Verify a domain first.{" "}
-            <orgRoutes.setupTask.Link
-              params={[setupTaskSlug("domain-verification")]}
-              className="text-foreground underline underline-offset-2"
-            >
-              Go to domain verification
-            </orgRoutes.setupTask.Link>
-          </p>
-        )}
+        {needsDomain && <DomainRequiredNote />}
 
         <div className="flex justify-end">
           {portalOpened ? (
             <Button
               variant="primary"
               size="sm"
-              onClick={() => void handleVerify()}
+              onClick={() => void verify()}
               disabled={verifying}
             >
               {verifying ? "Verifying..." : "Verify connection"}
@@ -381,60 +481,14 @@ function SingleSignOnSection({
 function DirectorySyncSection({
   index,
   configured,
+  domainVerified,
   isLoading,
 }: SectionProps): JSX.Element {
-  const [portalOpened, setPortalOpened] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const { refetch: refetchOnboardingStatus } = useOnboardingStatus(
-    undefined,
-    undefined,
-    { throwOnError: false },
-  );
-
-  const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
-    onError: (error) => {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to launch directory sync portal",
-      );
-    },
-  });
-
-  const handleConnect = () => {
-    generatePortalLink.mutate(
-      {
-        request: {
-          generateWorkOSAdminPortalLinkRequestBody: {
-            intent: "dsync",
-            successUrl: `${getServerURL()}/v1/setup/callback?intent=dsync`,
-            returnUrl: window.location.href,
-          },
-        },
-      },
-      {
-        onSuccess: (data) => {
-          if (openSafeExternalUrl(data.url)) setPortalOpened(true);
-        },
-      },
-    );
-  };
-
-  const handleVerify = async () => {
-    setVerifying(true);
-    try {
-      const result = await refetchOnboardingStatus();
-      if (!result.data?.dsyncConfigured) {
-        toast.error(
-          "Directory sync not detected yet. Finish setup in the WorkOS tab, then try again.",
-        );
-      }
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const isPending = generatePortalLink.isPending;
+  // WorkOS needs a verified domain before a directory connection can be set
+  // up, the same rule single sign-on is held to.
+  const needsDomain = !domainVerified && !configured;
+  const { connect, verify, verifying, portalOpened, isPending } =
+    usePortalSetup("dsync");
 
   let body: JSX.Element;
   if (isLoading) {
@@ -454,12 +508,15 @@ function DirectorySyncSection({
             ? "Finish configuring the directory connection in the WorkOS tab, then verify it here."
             : "After clicking Connect directory, the WorkOS portal opens in a new browser tab. Finish configuring the connection there, then come back and verify."}
         </PortalNote>
+
+        {needsDomain && <DomainRequiredNote />}
+
         <div className="flex justify-end">
           {portalOpened ? (
             <Button
               variant="primary"
               size="sm"
-              onClick={() => void handleVerify()}
+              onClick={() => void verify()}
               disabled={verifying}
             >
               {verifying ? "Verifying..." : "Verify connection"}
@@ -468,8 +525,8 @@ function DirectorySyncSection({
             <Button
               variant="primary"
               size="sm"
-              onClick={handleConnect}
-              disabled={isPending}
+              onClick={connect}
+              disabled={isPending || needsDomain}
             >
               {isPending ? "Opening..." : "Connect directory"}
             </Button>
