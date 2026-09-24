@@ -1,6 +1,7 @@
 package organizations_test
 
 import (
+	"errors"
 	"testing"
 
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
@@ -290,6 +291,161 @@ func TestService_GenerateWorkOSAdminPortalLink_LogStreamsNonEnterpriseDenied(t *
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 
 	ti.orgs.AssertNotCalled(t, "GenerateAdminPortalLink", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+}
+
+// A WorkOS response body carries the organization id and the request path. It
+// belongs in the logs, never in the message the admin reads.
+const testWorkOSErrorBody = `{"code":"organization_domain_not_verified","message":"Organization org_01SECRET has no verified domain","organization_id":"org_01SECRET"}`
+
+func workosAPIError(status int) *thirdpartyworkos.APIError {
+	return &thirdpartyworkos.APIError{
+		Method:     "POST",
+		Path:       "/portal/generate_link",
+		StatusCode: status,
+		Body:       testWorkOSErrorBody,
+	}
+}
+
+func requirePortalLinkFailure(t *testing.T, err error, code oops.Code, wantMessage string) {
+	t.Helper()
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, code, oopsErr.Code)
+	require.Equal(t, wantMessage, oopsErr.Error())
+	require.NotContains(t, oopsErr.Error(), "org_01SECRET", "the WorkOS response body must not reach the client")
+}
+
+func TestService_GenerateWorkOSAdminPortalLink_DSyncRejectedNeedsVerifiedDomain(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceWithFeatures(t, enabledFeatures(productfeatures.FeatureSCIM))
+
+	ti.orgs.On("GenerateAdminPortalLink", mock.Anything, mock.Anything, thirdpartyworkos.PortalIntentDSync, mock.Anything).
+		Return("", workosAPIError(422)).Once()
+
+	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
+		Intent: "dsync",
+	})
+	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "WorkOS rejected the Directory Sync setup request. Verify a domain for this organization, then try again.")
+
+	ti.orgs.AssertExpectations(t)
+}
+
+func TestService_GenerateWorkOSAdminPortalLink_DomainVerificationRejectedKeepsGenericNextStep(t *testing.T) {
+	t.Parallel()
+
+	// Telling an admin to verify a domain is no help when verifying a domain is
+	// what WorkOS just refused.
+	ctx, ti := newTestOrganizationsService(t)
+
+	ti.orgs.On("GenerateAdminPortalLink", mock.Anything, mock.Anything, thirdpartyworkos.PortalIntentDomainVerification, mock.Anything).
+		Return("", workosAPIError(400)).Once()
+
+	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
+		Intent: "domain_verification",
+	})
+	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "WorkOS rejected the domain verification setup request. Contact Speakeasy support if it keeps failing.")
+
+	ti.orgs.AssertExpectations(t)
+}
+
+func TestService_GenerateWorkOSAdminPortalLink_DSyncOrganizationMissingInWorkOS(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceWithFeatures(t, enabledFeatures(productfeatures.FeatureSCIM))
+
+	ti.orgs.On("GenerateAdminPortalLink", mock.Anything, mock.Anything, thirdpartyworkos.PortalIntentDSync, mock.Anything).
+		Return("", workosAPIError(404)).Once()
+
+	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
+		Intent: "dsync",
+	})
+	requirePortalLinkFailure(t, err, oops.CodeBadRequest, "this organization no longer exists in WorkOS, so Directory Sync setup cannot start. Contact Speakeasy support to relink it.")
+
+	ti.orgs.AssertExpectations(t)
+}
+
+func TestService_GenerateWorkOSAdminPortalLink_DSyncCredentialsRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceWithFeatures(t, enabledFeatures(productfeatures.FeatureSCIM))
+
+	ti.orgs.On("GenerateAdminPortalLink", mock.Anything, mock.Anything, thirdpartyworkos.PortalIntentDSync, mock.Anything).
+		Return("", workosAPIError(401)).Once()
+
+	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
+		Intent: "dsync",
+	})
+	requirePortalLinkFailure(t, err, oops.CodeUnexpected, "Speakeasy is not authorized to start Directory Sync setup in WorkOS. Contact Speakeasy support.")
+
+	ti.orgs.AssertExpectations(t)
+}
+
+func TestService_GenerateWorkOSAdminPortalLink_DSyncRateLimited(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceWithFeatures(t, enabledFeatures(productfeatures.FeatureSCIM))
+
+	ti.orgs.On("GenerateAdminPortalLink", mock.Anything, mock.Anything, thirdpartyworkos.PortalIntentDSync, mock.Anything).
+		Return("", workosAPIError(429)).Once()
+
+	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
+		Intent: "dsync",
+	})
+	requirePortalLinkFailure(t, err, oops.CodeGatewayError, "WorkOS is rate limiting Directory Sync setup. Wait a moment and try again.")
+
+	ti.orgs.AssertExpectations(t)
+}
+
+func TestService_GenerateWorkOSAdminPortalLink_DSyncUpstreamFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceWithFeatures(t, enabledFeatures(productfeatures.FeatureSCIM))
+
+	ti.orgs.On("GenerateAdminPortalLink", mock.Anything, mock.Anything, thirdpartyworkos.PortalIntentDSync, mock.Anything).
+		Return("", workosAPIError(503)).Once()
+
+	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
+		Intent: "dsync",
+	})
+	requirePortalLinkFailure(t, err, oops.CodeGatewayError, "WorkOS could not start Directory Sync setup right now. Try again in a few minutes.")
+
+	ti.orgs.AssertExpectations(t)
+}
+
+func TestService_GenerateWorkOSAdminPortalLink_DSyncUnreachable(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsServiceWithFeatures(t, enabledFeatures(productfeatures.FeatureSCIM))
+
+	ti.orgs.On("GenerateAdminPortalLink", mock.Anything, mock.Anything, thirdpartyworkos.PortalIntentDSync, mock.Anything).
+		Return("", errors.New("dial tcp 1.2.3.4:443: connect: connection refused")).Once()
+
+	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
+		Intent: "dsync",
+	})
+	requirePortalLinkFailure(t, err, oops.CodeGatewayError, "could not reach WorkOS to start Directory Sync setup. Try again in a few minutes.")
+
+	ti.orgs.AssertExpectations(t)
+}
+
+func TestService_GenerateWorkOSAdminPortalLink_DSyncBlankLink(t *testing.T) {
+	t.Parallel()
+
+	// A blank link leaves the dashboard with nothing to open and no reason why,
+	// which is the silent failure this path exists to avoid.
+	ctx, ti := newTestOrganizationsServiceWithFeatures(t, enabledFeatures(productfeatures.FeatureSCIM))
+
+	ti.orgs.On("GenerateAdminPortalLink", mock.Anything, mock.Anything, thirdpartyworkos.PortalIntentDSync, mock.Anything).
+		Return("  ", nil).Once()
+
+	_, err := ti.service.GenerateWorkOSAdminPortalLink(ctx, &gen.GenerateWorkOSAdminPortalLinkPayload{
+		Intent: "dsync",
+	})
+	requirePortalLinkFailure(t, err, oops.CodeGatewayError, "WorkOS did not return a Directory Sync setup link. Try again in a few minutes.")
+
+	ti.orgs.AssertExpectations(t)
 }
 
 func TestService_GenerateWorkOSAdminPortalLink_UnknownIntentDenied(t *testing.T) {
