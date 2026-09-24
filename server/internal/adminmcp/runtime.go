@@ -59,6 +59,12 @@ type ProjectReader interface {
 	GetProject(context.Context, *gen.GetProjectPayload) (*gen.AdminProjectDetail, error)
 }
 
+// ConfigurationReader exposes the dashboard's organization configuration reads.
+type ConfigurationReader interface {
+	GetOrganizationFeaturesStrict(context.Context, string) (*gen.ProductFeatures, error)
+	GetOrganizationChatAnalysisSettings(context.Context, *gen.GetOrganizationChatAnalysisSettingsPayload) (*gen.AdminChatAnalysisSettings, error)
+}
+
 func NewRuntime(authenticator Authenticator, resourceURL string, reads ...OrganizationReader) *Runtime {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "admin-mcp",
@@ -73,9 +79,11 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 		reader = reads[0]
 	}
 	projectReader, _ := reader.(ProjectReader)
-	registerContextTool(server, reader != nil, projectReader != nil)
+	configurationReader, _ := reader.(ConfigurationReader)
+	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil)
 	registerOrganizationTools(server, reader)
 	registerProjectTools(server, reader, projectReader)
+	registerConfigurationTools(server, reader, configurationReader)
 	return &Runtime{authenticator: authenticator, server: server, resourceURL: resourceURL}
 }
 
