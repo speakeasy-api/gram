@@ -1,0 +1,107 @@
+edition = "2024";
+
+package gram.conversation.v1;
+
+import "gcp/pubsub/v1/options.proto";
+
+option go_package = "github.com/speakeasy-api/gram/infra/gen/gram/conversation/v1;conversationv1";
+
+// Message is a snapshot of one persisted conversation message.
+// Producers publish atomically with initial persistence through the outbox.
+// Delivery is at-least-once; id and the snapshot remain stable across redelivery.
+// This contract represents initial persistence, not streaming chunks or updates.
+message Message {
+  enum Role {
+    ROLE_UNSPECIFIED = 0;
+    ROLE_SYSTEM = 1;
+    ROLE_DEVELOPER = 2;
+    ROLE_USER = 3;
+    ROLE_ASSISTANT = 4;
+    ROLE_TOOL = 5;
+  }
+
+  // Only values observed by ingestion are populated; absence means unknown.
+  message Provenance {
+    string source = 1;
+    string external_message_id = 2;
+    string user_id = 3;
+    string external_user_id = 4;
+    string assistant_id = 5;
+    string provider = 6;
+    string model = 7;
+
+    // Source replay marker, not Pub/Sub redelivery.
+    bool replayed = 8;
+  }
+
+  // Ordered content of this message, never the full conversation.
+  message Body {
+    repeated Part parts = 1;
+  }
+
+  message Part {
+    oneof value {
+      string text = 1;
+      ToolCall tool_call = 2;
+
+      // Asset-backed text, image, audio, or other recorded content.
+      ContentReference content_reference = 3;
+    }
+  }
+
+  message ToolCall {
+    string id = 1;
+    string name = 2;
+
+    // Exact recorded argument string, potentially incomplete or invalid JSON.
+    string arguments_json = 3;
+  }
+
+  message ContentReference {
+    // Durable authenticated locator identifying immutable bytes.
+    // Never an expiring signed URL.
+    string uri = 1;
+
+    string media_type = 2;
+    uint64 size_bytes = 3;
+
+    // SHA-256 of the referenced bytes, when known; exactly 32 bytes.
+    bytes sha256 = 4;
+  }
+
+  // Persisted Gram message UUID; consumers use this for deduplication.
+  string id = 1;
+  string organization_id = 2;
+  string project_id = 3;
+
+  // Gram conversation UUID, mapped from the existing storage identifier.
+  string conversation_id = 4;
+
+  Role role = 5;
+
+  // Source message time, falling back to writer-assigned time.
+  string created_at = 6; // UTC RFC3339Nano.
+
+  // Time this snapshot was produced, preserved across publication retries.
+  string produced_at = 7; // UTC RFC3339Nano.
+
+  Provenance provenance = 8;
+
+  // For a tool response, identifies the invocation it answers.
+  string tool_call_id = 9;
+
+  // Source value. Absence does not imply successful completion.
+  string finish_reason = 10;
+
+  // Producers must supply exactly one body representation.
+  oneof content {
+    Body body = 11;
+
+    // Protobuf-encoded gram.conversation.v1.Message.Body.
+    ContentReference body_reference = 12;
+  }
+
+  option (gcp.pubsub.v1.topic) = {
+    retention_hint: { seconds: 604800 /* 7 days */ }
+  };
+}
