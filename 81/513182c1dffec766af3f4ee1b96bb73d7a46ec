@@ -1,0 +1,38 @@
+client/dashboard/src/pages/plugins/PluginAssignmentsSheet.tsx
+  s_5987dba16de244::t_5e7a785c872336 204-206
+  s_5987dba16de244::t_faae31ac82e79b 19-22,28-31,33-34,66-68,70-76,85-89,92-93,153-154,171,173,187-188,190-191,194-195,199,207-213,285,287-296,301-321
+  s_5987dba16de244::t_991a0141fbf9c3 32,50-62,90-91,94-96,192-193,196-198
+  s_5987dba16de244::t_1f8083b85a54ac 172
+  s_5987dba16de244::t_85377a8b92b82b 63,65,69,77-84,174-181,185-186
+  s_5987dba16de244::t_83c5a3408f2153 64
+client/dashboard/src/components/ui/MultiSelect/index.tsx
+  s_5987dba16de244::t_faae31ac82e79b 765-776,1075,1084
+client/dashboard/src/pages/plugins/principals.test.ts
+  s_5987dba16de244::t_faae31ac82e79b 6,122-131
+  s_5987dba16de244::t_2144e47b62619e 132
+client/dashboard/src/pages/plugins/principals.ts
+  s_5987dba16de244::t_991a0141fbf9c3 137-143,155
+  s_5987dba16de244::t_faae31ac82e79b 71-82,144-154
+  s_5987dba16de244::t_9311de1cc89d15 156
+client/dashboard/src/components/ui/MultiSelect/index.test.tsx
+  s_5987dba16de244::t_faae31ac82e79b 184-189,193-206
+  s_5987dba16de244::t_1f8083b85a54ac 190-192
+client/dashboard/src/pages/plugins/PluginAssignmentRow.tsx
+  s_5987dba16de244::t_991a0141fbf9c3 7,30,36,40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "81513182c1dffec766af3f4ee1b96bb73d7a46ec",
+  "prompts": {},
+  "sessions": {
+    "s_5987dba16de244": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01959-19dd-7eb1-8706-1fa16b5d07e0",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

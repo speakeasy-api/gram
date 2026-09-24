@@ -1,0 +1,26 @@
+server/internal/risk/policycatalog/catalog_test.go
+  s_b31b5e95980b21::t_fe311c16a0e99f 34,36-38
+  s_b31b5e95980b21::t_a74409222c5b68 79
+.changeset/presidio-supported-entities.md
+  s_b31b5e95980b21::t_fe311c16a0e99f 1-5
+client/dashboard/src/pages/security/policy-form.ts
+  s_b31b5e95980b21::t_e0b88f02f2aedc 31,35
+client/dashboard/src/pages/security/policy-form.test.ts
+  s_b31b5e95980b21::t_e0b88f02f2aedc 1-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "adff77cdf7b6baba2cb947b3cf541a45209e72e5",
+  "prompts": {},
+  "sessions": {
+    "s_b31b5e95980b21": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04801-df23-7151-ac93-a7d98b4c5479",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

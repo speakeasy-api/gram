@@ -1,0 +1,33 @@
+server/database/schema.sql
+  s_06bf1e574073ef::t_1f1c9d85c17f1f 4069-4070,4077,4099-4100
+server/internal/database/models.go
+  s_06bf1e574073ef::t_b7ddf93db32d32 1557
+server/migrations/20260826155659_data_export_routes.sql
+  s_64b55ef15d1041::t_6b7c173219ffca 8
+server/migrations/atlas.sum
+  s_64b55ef15d1041::t_fdcab6828196eb 1,370
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "d68f03f82d60f9f1a3eb3b06b2df1cd1ea4a8385",
+  "prompts": {},
+  "sessions": {
+    "s_06bf1e574073ef": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03986-81cb-7d02-822b-2a3781869f76",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_64b55ef15d1041": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c012fb07-c08f-482a-8f8e-b6b18f18ebc3",
+        "model": "unknown"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

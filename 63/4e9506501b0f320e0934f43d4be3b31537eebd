@@ -1,0 +1,29 @@
+server/internal/otel/metric_test.go
+  s_06bf1e574073ef::t_a3ed0609321cd9 9,19,22,49,65
+server/internal/otel/metric.go
+  s_06bf1e574073ef::t_5bc0c4888b93bb 35,44-48,72
+  s_06bf1e574073ef::t_a3ed0609321cd9 13
+server/internal/otel/handler_imetric_transforms_test.go
+  s_06bf1e574073ef::t_a3ed0609321cd9 9,57,71-104,140,145-146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "634e9506501b0f320e0934f43d4be3b31537eebd",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_06bf1e574073ef": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03986-81cb-7d02-822b-2a3781869f76",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

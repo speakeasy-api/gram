@@ -1,0 +1,21 @@
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_2f42666f5475a4::t_15c61ad6ad30f8 2238,2380,2439,2471
+.changeset/eval-transcript-drawer-scroll.md
+  s_2f42666f5475a4::t_44682b82a36f4a 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9c769231a50e4d3f4d826409a92394060ac96624",
+  "prompts": {},
+  "sessions": {
+    "s_2f42666f5475a4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f29fc-487a-7ee3-90a3-cadb1fec725f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

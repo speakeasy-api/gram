@@ -1,0 +1,54 @@
+server/internal/mcpmetadata/impl.go
+  h_9630b74bdac540 54,57-58,63,920,935,976-983,1038-1040,1052-1077,1080,1082-1083,1087-1100,1124,1141,1362-1390,1592-1596,1599-1602,1607-1610,1612,1614,1616
+server/internal/networkingress/authority_test.go
+  h_9630b74bdac540 1-211
+server/internal/mcpmetadata/serve_install_page_test.go
+  h_9630b74bdac540 30,34-35,624-628,640-641,710-715,718-719,726-728,1886-1889,1908-1938,1941,1955,1995-1997
+server/internal/mcp/authnchallenge_consent.go
+  h_9630b74bdac540 332,511,634,659-663,674,708-709
+server/internal/networkingress/queries.sql
+  h_9630b74bdac540 1-11
+server/internal/remotesessions/challenge.go
+  h_9630b74bdac540 37,52,93-95,130,163-166,198-199,245-258,567,617-619,665-676,827-829,831
+server/internal/platformmcp/remotesessionprovider/adapter.go
+  h_9630b74bdac540 21,166-173
+server/internal/mcp/impl.go
+  h_9630b74bdac540 25,364,451-453,662,766,842
+server/internal/mcp/authnchallenge_token.go
+  h_9630b74bdac540 304-310,312-314
+server/internal/mcp/private_oauth_authority.go
+  h_9630b74bdac540 1-42
+server/database/sqlc.yaml
+  h_9630b74bdac540 404-411
+server/internal/mcp/authnchallenge.go
+  h_9630b74bdac540 41,44,61-66,90-100,205-208,434-436,438,450-452,454
+server/internal/mcp/authnchallenge_authorize.go
+  h_9630b74bdac540 182-185,190
+server/internal/networkingress/authority.go
+  h_9630b74bdac540 1-259
+server/internal/testenv/queries.sql
+  h_9630b74bdac540 1-33,674-691
+server/internal/mcp/authnchallenge_consent_action.go
+  h_9630b74bdac540 68,160
+server/internal/mcp/resolved_mcp_endpoint.go
+  h_9630b74bdac540 19,24,30-31,204-217,219,227-228,296-322,324-329,336,343,345-347,351,507,510-517,531-533,546-550,642-651
+server/internal/mcp/authnchallenge_consent_mcp_endpoint.go
+  h_9630b74bdac540 142
+server/internal/mcp/resolved_mcp_endpoint_internal_test.go
+  h_9630b74bdac540 10-49,67-93,112-127
+server/internal/mcp/authnchallenge_idp_callback.go
+  h_9630b74bdac540 76-78,88,90
+server/internal/mcp/authnchallenge_firstparty.go
+  h_9630b74bdac540 64-67,72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "00849893e535ef222400c323fe06d9ebc3611928",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

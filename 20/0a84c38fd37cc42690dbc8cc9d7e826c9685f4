@@ -1,0 +1,75 @@
+server/internal/hooks/ingest_hooks.go
+  s_d91d1a4a046c46::t_d0cef8affb270d 1165
+  s_d91d1a4a046c46::t_77266024a6f465 1081,1103,1122,1127,1132-1133,1159,1164,1166-1170
+  s_d6640a57723ec2::t_d7016e00066fdc 1160-1163
+  s_d91d1a4a046c46::t_6ad261bbef0838 1075-1076,1123-1126,1158
+  s_d6640a57723ec2::t_fa6918138bd5b3 1134,1171-1174
+server/internal/chat/queries.sql
+  s_d91d1a4a046c46::t_ba1679ccbe1cb7 695,698-701,709,717-718
+  s_d6640a57723ec2::t_d5dd3dd8f53942 696-697,710-716
+  s_d91d1a4a046c46::t_7a25c50d9d6192 702-708
+client/dashboard/src/pages/chatLogs/transcript.test.ts
+  s_d91d1a4a046c46::t_5fd0bba5811d42 46
+server/internal/chat/impl.go
+  s_d91d1a4a046c46::t_e40f69c06df228 815-826,832-833,864-875,881-882,1955-1966,1972-1973
+  s_d91d1a4a046c46::t_10141e2b7d39ae 827-831,876-880,1967-1971
+server/internal/hooks/ingest_hooks_test.go
+  s_d91d1a4a046c46::t_78fe6908142693 1035-1043,1060,1069,1083
+  s_d6640a57723ec2::t_2ee8cd4bda3509 1094-1121
+  s_d91d1a4a046c46::t_39c7285bd03ec5 1070-1082,1084-1093
+client/dashboard/src/pages/chatLogs/transcript.ts
+  s_d91d1a4a046c46::t_86f0fcad6ef3a6 87,91-97,110-113,118-147,151-181,217,220,230,253,282,293-295,317-322,329,354-363,366-371
+  s_d91d1a4a046c46::t_40d4b1da09219c 114-117,148-150,364-365
+client/dashboard/src/pages/chatLogs/ChatTranscript.tsx
+  s_d91d1a4a046c46::t_0aa8f7acee9dc3 728,733,742,1135-1136
+  s_d91d1a4a046c46::t_820e0e41421cfc 462-465,517-518,522-526
+  s_d91d1a4a046c46::t_5d191f2f67e900 24,64,448,455,458-461,469-470,473,487,490-491,507-509,519-521,527-538,543,546-547,549,560-627
+  s_d91d1a4a046c46::t_ddaba6acad0ad2 61,471
+  s_d91d1a4a046c46::t_32dd9b7aeb593d 510-516
+  s_d91d1a4a046c46::t_f314ca55700851 628-629
+  s_d91d1a4a046c46::t_ef1edb156d402b 1137
+server/design/chat/design.go
+  s_d91d1a4a046c46::t_b91486ed2a2e0b 479-483
+.speakeasy/out.openapi.yaml
+  s_d91d1a4a046c46::t_a954d282f2ea8c 48377-48378,48401-48403,48407-48409
+client/dashboard/src/sdk/src/models/components/chatmessage.ts
+  s_d91d1a4a046c46::t_d3b0a2f1c1f3eb 12-15,44-47,52-55,86,97,99,109,114-115
+server/gen/chat/service.go
+  s_d91d1a4a046c46::t_5561933e4dd025 196-201
+server/gen/http/chat/client/encode_decode.go
+  s_d91d1a4a046c46::t_5d5307a6643d01 2254-2270
+server/gen/http/chat/client/types.go
+  s_d91d1a4a046c46::t_292d6331b947d5 1907-1912
+server/gen/http/chat/server/encode_decode.go
+  s_d91d1a4a046c46::t_a3c72ab4e699eb 2331-2347
+server/gen/http/chat/server/types.go
+  s_d91d1a4a046c46::t_394bd35f365123 1908-1913
+server/gen/http/openapi3.yaml
+  s_d91d1a4a046c46::t_18f2752905143d 48686-48687,48710-48712,48716-48718
+server/internal/chat/repo/queries.sql.go
+  s_d6640a57723ec2::t_e4c320c6965b34 58-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "200a84c38fd37cc42690dbc8cc9d7e826c9685f4",
+  "prompts": {},
+  "sessions": {
+    "s_d6640a57723ec2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "810056d0-e1a2-422d-a2f9-5b0394666020",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_d91d1a4a046c46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa265-7139-7c02-9009-a76952cd8302",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

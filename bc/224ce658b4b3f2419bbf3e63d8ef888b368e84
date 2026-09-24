@@ -1,0 +1,63 @@
+server/gen/access/service.go
+  s_4a531679a50c6b::t_cb9d23362f36f8 591-593
+server/gen/http/access/client/encode_decode.go
+  s_4a531679a50c6b::t_cb9d23362f36f8 5580
+server/gen/http/access/server/encode_decode.go
+  s_4a531679a50c6b::t_cb9d23362f36f8 5170
+server/gen/http/openapi3.json
+  s_4a531679a50c6b::t_cb9d23362f36f8 1
+server/design/access/design.go
+  s_95d069cf52f7b4::t_528e2d833cdc9a 714,748,752,759-761
+server/gen/http/openapi3.yaml
+  s_4a531679a50c6b::t_cb9d23362f36f8 40108,40110,40112,40114,40116,40118,40120,40122,40124,44340,44342,44344,44346,44348,44350,44352,44354,44356,44359-44364,44369
+.speakeasy/out.openapi.yaml
+  s_4a531679a50c6b::t_cb9d23362f36f8 39672,39674,39676,39678,39680,39682,39684,39686,39688,43904,43906,43908,43910,43912,43914,43916,43918,43920,43923-43928,43933
+client/sdk/src/models/components/scopedefinition.ts
+  s_4a531679a50c6b::t_cb9d23362f36f8 52,54,56,58,60,62,64,66,68,77-88,106-109,124-127,138
+server/internal/access/listscopes_test.go
+  s_95d069cf52f7b4::t_a88ee5f21587e7 20,35-36,39,42
+server/internal/access/rbac_test.go
+  s_95d069cf52f7b4::t_c9f33409b4ff63 92
+server/internal/access/impl.go
+  s_95d069cf52f7b4::t_ed8b133d003203 225-227,241-268,271-277,279,283-286,289-292
+server/internal/authz/scopes.go
+  s_95d069cf52f7b4::t_c33c6cbc16252f 48-52,109-122
+server/gen/http/access/client/types.go
+  s_4a531679a50c6b::t_cb9d23362f36f8 4710-4712,15179-15181,15183-15184,15192-15196,15244-15245
+server/gen/http/access/server/types.go
+  s_4a531679a50c6b::t_cb9d23362f36f8 4684-4686
+client/sdk/src/models/components/listrolegrant.ts
+  s_4a531679a50c6b::t_cb9d23362f36f8 45,47,49,51,53,55,57,59,61
+client/sdk/src/models/components/mcpcollection.ts
+  s_4a531679a50c6b::t_cb9d23362f36f8 15,22-24,53,57-59,72
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  s_95d069cf52f7b4::t_9ad93d2b705504 156-163,179-181,183,253-269,448-449
+client/sdk/.speakeasy/gen.lock
+  s_4a531679a50c6b::t_cb9d23362f36f8 4,618-620,934,1044,1062,1354,4627,4687,4942
+client/dashboard/src/pages/access/roundtrip.test.ts
+  s_95d069cf52f7b4::t_0fe0c81e45c70b 17,24,31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "bc224ce658b4b3f2419bbf3e63d8ef888b368e84",
+  "prompts": {},
+  "sessions": {
+    "s_4a531679a50c6b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed537-fcd8-7f42-a023-a9ad2ac74fd5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_95d069cf52f7b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfff-79bd-7ac0-8355-76dbf61e503f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+server/internal/telemetry/repo/skill_version_metrics.go
+  s_664ae7d369889a::t_fdfbd277cd66aa 212-214,220-221,223-227,229,237,240-242,255-257
+  s_664ae7d369889a::t_8d8b74b3d32a6b 222,238-239,244
+  s_664ae7d369889a::t_096befd37cbc42 228
+  s_664ae7d369889a::t_cc75e2dfc82f1b 230-236,251
+  s_664ae7d369889a::t_0b949a11703f63 160-170,172-180,183-186,189-191,193-199,201-202
+  s_664ae7d369889a::t_8581f3461b4634 209-211
+  s_664ae7d369889a::t_2221232bff3b69 204-208
+server/internal/telemetry/repo/skill_efficacy_scores.go
+  s_664ae7d369889a::t_8ca07b6a0dd7f2 221-229,231-232,234-235
+  s_664ae7d369889a::t_2e571d7a566f62 237-238,247-248,250,252-265,267-268,288-290,292-293,297,320-333,335-351,359,362
+  s_664ae7d369889a::t_47e0f1e3738907 168-171
+  s_664ae7d369889a::t_096befd37cbc42 251
+  s_664ae7d369889a::t_1895f4ec5506d1 361
+  s_664ae7d369889a::t_177dad19c260ed 352-354,356-358
+  s_664ae7d369889a::t_8bf3b39ab0c691 360
+  s_664ae7d369889a::t_0f4b702a4067fa 363
+  s_664ae7d369889a::t_388faffc79154a 355
+server/internal/telemetry/repo/skill_version_metrics_test.go
+  s_664ae7d369889a::t_fcf4d3df8bf779 1-25,27
+  s_664ae7d369889a::t_391fd2de680fb8 26
+  s_664ae7d369889a::t_5136a9045efbe6 28-44
+server/internal/telemetry/repo/skill_efficacy_scores_test.go
+  s_664ae7d369889a::t_321a03823cd943 137,139-146
+  s_664ae7d369889a::t_6db829aee894bc 151-154,162
+  s_664ae7d369889a::t_fcb0cba9f19ea0 7,129-136,138,147-150,155-161,163-173
+  s_664ae7d369889a::t_a5629f29666874 174-175
+.changeset/faster-skill-insights.md
+  s_664ae7d369889a::t_e8a19f7dc6edae 1-4
+  s_664ae7d369889a::t_fcf4d3df8bf779 5
+server/internal/telemetry/repo/skill_mapped_sessions.go
+  s_664ae7d369889a::t_98c277f75deb20 3
+  s_664ae7d369889a::t_096befd37cbc42 5
+  s_664ae7d369889a::t_8877633a38d10e 1-2,4,6-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "9246b8673e24fbb78af64cee6cb0a8c4d4076b57",
+  "prompts": {},
+  "sessions": {
+    "s_664ae7d369889a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0237f-0bfe-7680-a351-49299ea5f43e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

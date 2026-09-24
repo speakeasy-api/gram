@@ -1,0 +1,23 @@
+server/internal/authz/provisioner_test.go
+  s_34233f620b8dad::t_183957a41f277f 1-6,9-10,12-13,21-23,39,42
+  s_34233f620b8dad::t_ef8c2b51f108b9 7-8,11,14-19,24-38,40-41
+  s_34233f620b8dad::t_5a3b337f64b5a9 20
+server/internal/authz/provisioner.go
+  s_34233f620b8dad::t_ef8c2b51f108b9 43-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "90fd3ac6d1a662e0be96345430c3bbb2cdc9b932",
+  "prompts": {},
+  "sessions": {
+    "s_34233f620b8dad": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb3af-21fb-7e50-b84d-eb4bdbafa9cc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 23-24,140-141,270-271,569,582-593,775
+  h_9630b74bdac540 594-595
+server/internal/mcpendpoints/plugin_publish.go
+  h_9630b74bdac540 30
+server/internal/plugins/private_package_test.go
+  h_9630b74bdac540 5,64
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 300-301,519-520,528-529,555-559,561-562
+server/internal/plugins/queries.sql
+  h_9630b74bdac540 342,346-357,551,563
+server/internal/mcpendpoints/unifiedslugavailability_test.go
+  h_9630b74bdac540 21,228-259
+  h_9630b74bdac540 260-261
+server/internal/database/models.go
+  h_9630b74bdac540 2194
+server/internal/plugins/repo/models.go
+  h_9630b74bdac540 54
+server/internal/plugins/repo/queries.sql.go
+  h_9630b74bdac540 61,89,490,514,690-701,707,710,836,848,1174,1193,1216,1246,1810,1826,2020,2031,2064,2188,2211
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c27b8c21214042ed6a0c2606352b0c33fc404624",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+server/internal/platformmcp/shadow_policy_summary.go
+  h_9630b74bdac540 86
+server/internal/platformmcp/risk_reads_test.go
+  h_9630b74bdac540 17,158-161,179-180
+server/internal/platformmcp/shadow_policy_summary_test.go
+  h_9630b74bdac540 22
+server/internal/platformmcp/risk_reads.go
+  h_9630b74bdac540 168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e3a829674b5ec25a120d3fd2794255cf1258ea5d",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+server/internal/otel/sensitive_data.go
+  h_2620cc60cfd1e9 19-27,29-32,35-39,41-48,50-54,57-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "0903549caf1234eb6bf4a2d68708caf8069b854e",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

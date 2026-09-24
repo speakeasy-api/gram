@@ -1,0 +1,14 @@
+server/internal/mcpmetadata/serve_install_page_test.go
+  h_9630b74bdac540 31,1989-1991,2042
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "409136f6d976e1cb925903a34a1b29ef948bae58",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

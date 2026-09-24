@@ -1,0 +1,21 @@
+client/dashboard/src/pages/security/cel-monaco-editor.tsx
+  s_5e8039f9d96e02::t_2f9b91016fc1e3 30
+client/dashboard/package.json
+  s_5e8039f9d96e02::t_e73911b996624d 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "c44a668b55f3f4c7f86c5b141f85e6eb77a17aa2",
+  "prompts": {},
+  "sessions": {
+    "s_5e8039f9d96e02": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7204e23b-9892-40b9-9abd-f538d9fb898d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

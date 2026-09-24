@@ -1,0 +1,1371 @@
+server/cmd/gram/start.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 65,118,287-291,797-798,888-895,1106,1112,1186
+server/internal/background/activities/risk_analysis/scan_tool_calls.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 24-25,37-40,42
+.speakeasy/workflow.yaml
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 26
+server/internal/deviceintegrations/repo/db.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-32
+server/internal/deviceintegrations/repo/models.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-48
+server/internal/hooks/setup_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 22-23,73,179-180,213,227
+client/dashboard/src/pages/skills/SkillsList.page.test.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 2,8,15,24-40,53-55,85-125,134,137-148,153-157,159-161,174,195,199-203,211-213,237-246,258-275,281-286,323-342,348,372-610
+server/internal/remotesessions/setup_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 334-355,600-629
+client/dashboard/src/pages/skills/RestoreSkillVersionDialog.test.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-167
+hooks/sdk/docs/models/components/skillfeedbackpayload.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-13
+hooks/sdk/docs/sdks/hooks/README.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 10,81-140,168
+server/internal/remotemcp/proxy/proxy.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 228-241,354-359,410-415,571-576,750-756
+client/dashboard/src/pages/skills/SkillDetail.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 33,47-48,70-79,240-246,357-358,426-427,434,444-449,467-492,536-540,596,602,710-714
+  s_fc571f39c642e8::t_c831b28004b42c 715
+server/internal/chat/message_store.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 4,6-7,9,11,16,59-128
+  s_fc571f39c642e8::t_3ed042847b84c2 129
+server/internal/remotesessions/organizationsessionhandlers_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 121-161
+client/dashboard/src/pages/sources/remote-mcp/autoConfigureAuth.test.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 142-212,355,424,468
+server/clickhouse/schema.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 585-589,650-663,665-666,673,783-785,787,986-987,1028-1036,1038,1044,1058-1062,1122,1232,1282
+server/internal/plugins/generate_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1840,1843-1845,1854,1895-1900,1925-2071
+server/internal/risk/policy_bypass_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 19,283-375
+  s_fc571f39c642e8::t_66bfdedf95f5dc 376
+hooks/sdk/docs/models/operations/skillfeedbackresponse.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-10
+server/design/shared/risk.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 65-77,167-169
+client/dashboard/src/pages/skills/SkillRegressionWarning.test.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-48
+server/internal/mcp/tunnel_manager.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 88-89
+hooks/sdk/docs/models/components/hookpromptattachmententry.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-20
+server/internal/mcpservers/updatemcpserver_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 755-794
+.changeset/ais-289-refresh-issuer-discoverable-metadata.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-6
+client/dashboard/src/pages/sources/remote-mcp/autoConfigureAuth.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 18-20,98,100,121,298-303,310,319-320,325
+  s_fc571f39c642e8::t_6d131575d2623e 17
+server/clickhouse/local/golang_migrate/20260727130630_opencode-usage-rows.up.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-4
+server/design/remotesessionissuers/design.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 18-19,22,32,39-69,471-520,650-658
+  s_fc571f39c642e8::t_d606d4c65c7585 659-660
+server/internal/platformtools/skills/setup_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 44-50,122-139,141,144-145,151,154-162
+client/dashboard/src/pages/remote-identity-providers/migrationCandidates.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 2,9-10,27
+server/internal/background/skill_suggestions.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-234
+client/dashboard/src/App.css
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 232-315
+server/internal/plugins/impl_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 28,50-100,933,1154,1165,1170,1173,1176-1177,1191-1203,1280,2052,2067-2069,2089-2090
+mise.toml
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 19-20,26,28,30,32-33,35-37,40,42-43,297-301
+server/clickhouse/local/golang_migrate/atlas.sum
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1,80-81
+server/internal/mv/skill_suggestion.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-93
+server/database/schema.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 290,305,316,345-454,667-670,2144-2188,4111-4118,4239-4240,4281-4283,4308-4309
+  s_fc571f39c642e8::t_60f929cfd76b35 4310
+.github/workflows/pr.yaml
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 287
+client/dashboard/src/pages/org/device-integrations/MdmIntegrationDetail.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-259
+hooks/sdk/docs/models/components/uploadskillcontentpayloadschemaversion.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-20
+server/internal/testenv/testrepo/models.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 105-106
+server/internal/mcpservers/setup_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 10,157-173
+  s_fc571f39c642e8::t_d868b89d0d1ce2 174
+server/internal/skills/decoder_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 11-12,15-23
+  s_fc571f39c642e8::t_0a1e3701d08134 24
+client/dashboard/src/lib/chat-owner.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 70,73
+server/migrations/20260728192241_dno_573_suggestion_list_index.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-4
+client/dashboard/src/pages/mcp/x/MCPServerDetails.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 17-18,181,187-189,206-216,282-297,307,314-347,349-362
+server/cmd/riskjudgebench/main.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 110-118,122-129,189,214,248
+server/internal/mcp/tunnelsessions/store.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-338
+server/internal/outbox/events/audit_log.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 34
+server/internal/chat/setup_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 15-16,60,132-133,141
+client/dashboard/src/pages/toolBuilder/ToolBuilder.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 54-60,159,199,353
+server/cmd/skillefficacybench/main.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 93,96-103,139,165,189,196,211,243,281
+server/internal/deviceintegrations/providers/iru/iru.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-334
+server/internal/oops/codes.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 8-23,50,85-86,96
+server/internal/skillefficacy/insights_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 181-262
+server/clickhouse/migrations/atlas.sum
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1,85-86
+server/internal/remotesessions/issuerrefresh.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-209
+server/cmd/tools/migrations/riskfindings/sink.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 24,26,28
+client/dashboard/src/pages/sources/tunneled-mcp/TunneledMCPDetails.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 4,648-652,655-659,669-854,857,860
+.changeset/rbac-gate-required-scopes.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-5
+server/internal/telemetry/repo/sessions.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 63-79,81,104-108,112,163-166,169
+server/internal/skills/feedback_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-500
+.changeset/shadow-mcp-policy-disposition.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-5
+client/dashboard/src/pages/remote-identity-providers/CreateRemoteIdentityProviderSheet.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 98-101
+client/dashboard/src/pages/remote-identity-providers/RemoteSessionClientDetail.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 97-102
+hooks/relay/prompt_attachments.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-458
+server/internal/deviceintegrations/views_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-61
+server/internal/plugins/hooks_release_pins.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 15,20-25,81-96
+hooks/sdk/README.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 168-172,174,195
+client/dashboard/src/components/app-layout.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 15,119-121
+.changeset/prompt-attachment-capture.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-5
+hooks/relay/prompt_attachments_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-135
+server/internal/middleware/cors.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 36-37
+server/internal/skills/feedback/recorder.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-108
+server/internal/background/activities/risk_analysis/scan_account_identity_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 150,207,233,267,358,433
+server/migrations/20260728180048_shadow-mcp-policy-gates.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-2
+client/dashboard/src/lib/dates.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 32-48
+server/cmd/risk-pi-report/main.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 176,183,190-196,218,226,563-567,583-596,641-646,681,687,691,698
+ts-framework/create-function/package.json
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 34
+server/internal/skills/queries.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 7-684,1100-1111,1216,1241,1265,1404,1468,1505,1546,1642,2104-2142,2466,2479,2482,2487-2497
+client/dashboard/src/pages/device-agent/DeviceAgent.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 2,4-9,11,13,16-18,31-34,42,48-105,107
+  s_fc571f39c642e8::t_8fb846f8da0bd2 106
+client/dashboard/src/pages/playground/playgroundToolQueries.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-17
+server/internal/skills/capture_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 9,214-222,226-228
+client/dashboard/src/pages/mcp/oauth-wizard/services.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 183,185
+server/internal/remotesessions/token_refresh_error.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 17,34-38,46-51
+.changeset/skill-feedback-restore.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-5
+server/internal/hooks/session_capture_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 362
+server/internal/skills/suggestion_base.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-111
+server/internal/thirdparty/polar/client_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 29
+server/internal/deviceintegrations/sync.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-540
+tunnel/gateway/gateway_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 134,136,151,154,169,171,184,191,194,198,211,337-410
+go.mod
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 36,61
+server/internal/risk/repo/models.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 63
+server/clickhouse/migrations/20260727130929_chat-content-parts.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-2
+client/dashboard/src/components/org-sidebar.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1,3,28-29,46,165,168-185,188,191-195,197-198,201,204-214
+  s_fc571f39c642e8::t_3d9e5d4e664bfe 196
+server/internal/remotesessions/clienthandlers.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 282-285,287-291,451-456,458-462
+server/internal/remotesessions/organizationissuerhandlers.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 189,237-238,242,275-279,283,371-374,378,444-595,623-634,637-639,643,739-741,745,821-826,837
+server/internal/hooks/skill_feedback.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-60
+server/internal/outbox/events/catalog_gen.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 27
+server/internal/remotemcp/proxy/proxy_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 74,125-162,2599-2656
+hooks/sdk/hooks.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 247-248,253-256,258,260,262-267,269-272,277-280,282,285-287,291-293,297-299,301,307-499
+  s_fc571f39c642e8::t_f7a8ea4169213d 249-252,257,259,261,268,273-276,281,283-284,288-290,294-296,300,302-306
+overlays/goa.yaml
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 23-25
+client/dashboard/src/pages/playground/playgroundToolQueries.test.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-28
+hooks/sdk/docs/models/components/outcome.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-24
+server/cmd/skillsuggestbench/cases.json
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-188
+server/internal/background/activities/skill_suggestions.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-118
+client/dashboard/src/pages/remote-identity-providers/RemoteIdentityProviderDetail.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 12,41-45,56-61,73-78,96-100,113-118
+.changeset/iru-inventory-provider.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-8
+hooks/sdk/models/operations/skillfeedback.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-86
+server/internal/assistants/skill_attachments_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 206-244,270,352,362,535
+server/internal/chat/list_chats_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 90,131
+server/internal/remotesessions/tokenservice_revoke_during_refresh_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-82
+server/migrations/20260728192302_dno_574_skill_version_promotion.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-8
+server/internal/tunneledmcp/setup_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 70
+server/migrations/atlas.sum
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1,303-308
+.changeset/device-integrations-instant-sync-ux.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-12
+server/design/platformadmin/remotesessions/design.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 139-184
+server/internal/remotesessions/token_error_response.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 7-12
+hooks/relay/client.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 136
+server/internal/tunneledmcp/impl.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 9,17,32-33,50-53,67,79,287-289,303-306,335-338,342-356,427,485
+client/dashboard/src/components/page-header.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 80
+server/internal/skills/suggest/changes_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-64
+.config/wt.toml
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-63
+server/internal/audit/skills.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 18,26-27,153-215,231,261-282
+  s_fc571f39c642e8::t_0ed8233ede4aeb 283
+server/internal/background/shadow_mcp_bypass_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-75
+server/migrations/20260727233742_chat-content-parts.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-40
+client/dashboard/src/pages/playground/EditToolDialog.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 74,96,108-131,189-190,210-211,213,219-220,224-228,230,243,374-384
+client/dashboard/src/pages/org/ai-integration-streams-table.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 18
+server/internal/plugins/impl.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1925-1928,2021,2038-2046,2067-2073
+.gitignore
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 86-87,102-104
+client/dashboard/src/pages/org/device-integrations/device-integration-configure-sheet.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-281
+client/dashboard/src/pages/skills/SkillManifestDialog.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 7,10,14,24,40-45,54-55,63-64,76-77,89-94,104-105,115,119,131-169,288,300,307,329-336,343,350-356,358
+client/dashboard/src/pages/playground/ManageToolsDialog.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 16,25,36,253-261,264-272
+client/dashboard/src/pages/skills/SkillSuggestionReviewDialog.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-73
+server/design/gram.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 22
+server/internal/remotesessions/adminhandlers_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 6,10,385-421
+  s_fc571f39c642e8::t_7f027ea0c346a1 422
+server/design/deviceintegrations/design.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-466
+server/internal/deviceintegrations/providers/providers.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-367
+server/internal/skills/suggest/judge.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-300
+server/cmd/skillefficacybench/main_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 53,56-58
+server/internal/billing/tracking.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 64-66,107
+client/dashboard/src/pages/skills/invalidate-skill-queries.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 3-5,18-20
+server/internal/remotesessions/clienthandlers_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1407-1431
+docs/skills/improving-skills-with-agent-feedback.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-47
+server/internal/remotesessions/tokenservice.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 281-308,314-416,418-463,468,526-531,583-586,595,598-600
+client/dashboard/src/pages/skills/SkillFeedbackSection.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-138
+client/dashboard/src/pages/org/device-integrations/use-device-integration-schedules.test.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-40
+hooks/sdk/docs/models/components/skillfeedbackpayloadschemaversion.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-20
+server/cmd/tools/migrations/riskfindings/transform_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 50-53,78-129
+  s_fc571f39c642e8::t_8bcac78e98c137 130
+server/internal/background/activities/risk_analysis/risk_result_writer.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 85,210,228,250
+client/dashboard/src/lib/sources.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 85-134
+server/internal/remotesessions/tokenservice_resolve_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 167-201
+server/design/skillefficacy/design.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 62-76,82
+.changeset/four-nails-shout.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-2
+server/internal/skills/rbac_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 59,68-75
+server/internal/xmcp/setup_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 49,160-166
+client/dashboard/src/pages/remote-identity-providers/RemoteIdentityProviders.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 21,27,49,83-86,88-96,124-164,196-197,219-220,225-253,290,296-297,302-304,310-311,315,321,323,373-385,398-399,406-407,429-435
+.changeset/device-integrations-dashboard.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-13
+client/dashboard/src/components/chat-launch-overlay.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-76
+client/dashboard/src/pages/org/device-integrations/device-integration-connection-row.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-167
+server/internal/deviceintegrations/queries.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-544
+server/internal/mcp/serve_platform_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 96,142-172,204-234
+  s_fc571f39c642e8::t_68f02a9126b73b 235-236
+server/internal/remotesessions/issuerhandlers_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 9,21-22,655-700,715,754,760,776,787,799,804,816,830,836,843,848,854,861,866,893,908,936,952,981,998,1015,1028,1039,1056,1063,1078,1089,1247-1382
+server/internal/deviceintegrations/providers/providers_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-109
+server/internal/skills/suggest_engine_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-842
+client/dashboard/src/components/project/ActivityTimelineCard.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 10,226-232,290
+server/cmd/tools/migrations/riskfindings/transform.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 15,39-42,50,117-121,139-142,153
+.changeset/device-integrations-framework.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-8
+server/internal/deviceintegrations/setup_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-217
+server/design/skills/design.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 76-103,167-352,678-707,820,869-991,1100,1103
+client/dashboard/src/pages/mcp/wire-user-session-issuer/WireUserSessionIssuerModal.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 15,194-197,199-202
+server/internal/skillefficacy/impl.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 34,153-155,173-239,331
+server/internal/skills/suggest/engine_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-347
+server/internal/assistants/queries.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 159-162,166,197-200,204,233,250-272,487-490,494
+server/internal/background/device_integration_sync_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-144
+server/internal/background/worker.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 356-357,434-442,464-465,530-535,604-608
+  s_fc571f39c642e8::t_1ba20a1f440441 609
+server/internal/hooks/impl.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 34,65-70,208,232
+client/dashboard/src/components/app-sidebar.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-2,201,204-217,220,224-234,237,240-253,256,259-268
+client/dashboard/src/pages/org/device-integrations/DeviceIntegrations.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-50
+client/dashboard/src/pages/skills/skill-diff-anchors.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-56
+server/internal/background/activities/risk_analysis/batch_messages.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 26-28
+hooks/sdk/models/components/skillfeedbackpayload.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-108
+server/internal/mcp/serveendpoint.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 114-122,268-272,438,475
+hk.pkl
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 2
+server/internal/plugins/generate.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 17,74-76,79-80,349,362,366,390-391,396-397,576,902,909-910,934-950,1677,1696-1697,1702-1713,1733,1740-1753,1756-1757,1764-1796,1816,1834-1835,1840-1850,1916-1918,1944-1946,2051-2053
+server/internal/outbox/events/catalog_gen.yaml
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 979-982
+  s_fc571f39c642e8::t_00f2f92efc25ca 929-978
+server/internal/risk/shadow_mcp_offline_bypass_integration_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-170
+server/internal/skills/suggest/signal.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-12
+server/internal/remotesessions/tokenservice_invalid_grant_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-166
+hooks/sdk/models/components/hookingestdata.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 23-24,86-90
+  s_fc571f39c642e8::t_3a9972e5daf3fe 91-92
+client/dashboard/src/pages/org/external-services/CreateExternalCredentialSheet.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 137,187-188
+client/dashboard/src/routes.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 24-25,982-995
+server/internal/background/activities/chat_resolutions/analyze_segment.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 334
+server/internal/risk/shadow_mcp_policy_setup.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 5,9,14,17-72
+  s_fc571f39c642e8::t_234ce386f9b069 73
+server/internal/chat/load_chat_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 96
+client/dashboard/src/pages/skills/ApproveAllSkillSuggestions.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-163
+server/internal/skills/suggestion_management_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-663
+ts-framework/functions/package.json
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 30
+server/internal/skills/list_feedback_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-130
+.changeset/device-integration-sync-scheduling.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-5
+tunnel/gateway/gateway.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 374-375,393-398
+pnpm-workspace.yaml
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 20
+.changeset/hooks-pin-0-3-9.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-5
+hooks/relay/skillfeedback.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-149
+server/internal/background/activities.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 36-37,49,57,81-82,141,216-218,236-244,250-251,320,440-450
+  s_fc571f39c642e8::t_2844433df76ce5 451
+client/dashboard/src/pages/skills/UnknownSkillActivationsSection.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 17,24-27,34
+.changeset/skill-suggestion-management.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-5
+client/dashboard/src/elements/components/assistant-ui/thread.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 124
+server/internal/deviceintegrations/providers/iru/iru_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-384
+client/dashboard/src/pages/org/device-integrations/provider-ui.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-55
+server/cmd/skillsuggestbench/main.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-681
+server/internal/chat/repo/copyfrom.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 12-53
+server/internal/mcp/servepublic_mcpendpoint_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 150-152,200,203
+hooks/cmd/speakeasy-hooks/main.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 52-62
+hooks/relay/skillfeedback_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-84
+server/design/risk/design.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 57-59,204-206
+server/internal/chat/analysis/judge.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 197
+.changeset/ais-385-single-flight-remote-session-refresh.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-5
+server/internal/mcp/setup_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 20,49,97,133-144,220-221,224,228-229,246
+server/internal/mcpservers/impl.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 156-159,513-519,865-885
+server/internal/remotesessions/tokenservice_timing_internal_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-23
+server/internal/memory/contradiction.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 109
+server/internal/remotesessions/organizationissuerhandlers_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 5,19,148-184,538-686
+server/internal/risk/scanner.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 120-126,371-382,567-586,595,600-611,626,631-638,640-666,672,677-688,695-706,709-711,753-756
+client/dashboard/src/pages/skills/SkillFeedbackSection.test.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-109
+tunnel/wire/key.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 28-37
+server/internal/risk/queries.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 20,46
+server/internal/plugins/queries.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 556,597
+examples/openai-apps-sdk/package.json
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 18
+hooks/sdk/models/components/hookpromptattachmententry.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-106
+server/internal/mcpservers/createmcpserver_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 262-287
+server/internal/skills/restore_version_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-323
+server/internal/testenv/queries.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 152-220
+server/internal/risk/shadow_mcp_disposition_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-302
+server/internal/background/debounced.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 45-52,67
+hooks/sdk/docs/models/operations/skillfeedbacksecurity.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-9
+server/internal/remotesessions/challenge.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 129,156
+server/internal/telemetry/repo/mcp_match_lookup.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 23-26,31-34,89,111-112,121-124
+server/internal/risk/results_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 71,487
+client/dashboard/src/pages/org/device-integrations/use-device-integration-config.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-312
+client/dashboard/src/pages/skills/skill-diff-anchors.test.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-78
+hooks/relay/runner.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 183-189,242-244
+server/internal/background/shadow_mcp_bypass.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-57
+hooks/sdk/docs/models/operations/skillfeedbackrequest.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-10
+server/internal/chat/queries.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 213-276,757-764
+  s_fc571f39c642e8::t_5b4dcfd6f245b6 765
+server/internal/deviceintegrations/sync_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-416
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 152,215,288,357,400,433,488,543,648,807,1290
+server/internal/hooks/skill_feedback_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-139
+client/dashboard/src/pages/skills/SkillSuggestionComment.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-197
+server/.golangci.yaml
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 68,76
+server/internal/mcp/tunnelpublic.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-572
+server/internal/scanners/gitleaks/aws_rules.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 67
+client/dashboard/src/pages/org/device-integrations/device-integration-schedules-table.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-176
+server/internal/platformtools/skills/feedback.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-144
+server/internal/skills/feedback.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-44
+server/internal/skills/suggestion_management.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-636
+server/internal/background/activities/device_integration_sync.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-88
+server/internal/skills/manifest.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 23-24,36-40,61-108,672,742-743
+hooks/sdk/models/components/uploadskillcontentpayload.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 10-11,14,17,20,27,30,41,58,60
+server/internal/tunneledmcp/queries.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 37-45,50
+server/migrations/20260728103328_dno_569_skill_feedback_schema.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-82
+server/internal/mcp/servepublic_tunneled_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-515
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 91-95
+server/internal/background/device_integration_sync.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-266
+.changeset/device-integrations-data-error-handling.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-9
+client/dashboard/src/pages/mcp/MCPDetails.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 535-538
+client/dashboard/src/components/scope-gated-nav-group.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-61
+client/dashboard/src/pages/chat/Chat.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 51-55,110-114,312,745-751,765
+.speakeasy/openapi-hooks.yaml
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 115-204,351-355,487-530,666-697,779-780
+client/dashboard/src/pages/skills/EditSkillDetailsDialog.test.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 19-21,42-50,77-79,132-140
+hooks/sdk/docs/models/components/hookingestdata.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 16
+server/internal/hooks/ingest_hooks_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 5-6,9-10,23,1017-1145
+  s_fc571f39c642e8::t_4d7616d9859536 1146
+server/internal/mcp/tunnelsessions/setup_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-28
+client/dashboard/src/pages/toolBuilder/ToolBuilder.test.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-26
+server/internal/remotesessions/issuerhandlers.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 61-66,89-132,134-198,372-375,377-381,464-469,519-523,578-608
+  s_fc571f39c642e8::t_214f155d48771f 609
+.changeset/age-3031-playground-tool-edits.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-5
+client/dashboard/src/components/require-scope.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 6-10,82-84,170-171,175-176,178-179,188-236
+client/dashboard/src/pages/org/device-integrations/use-device-integration-schedules.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-121
+hooks/relay/mcp_inventory.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 109-118
+server/design/hooks/design.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 239-257,273-288,300,476-500
+  s_fc571f39c642e8::t_b70051bed5c570 501
+server/internal/background/activities/risk_analysis/batch_scanners.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 108
+server/internal/deviceintegrations/coverage_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-201
+server/cmd/skillsuggestbench/.gitignore
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1
+server/internal/platformtools/types.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 43-47
+server/internal/deviceintegrations/register.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-9
+server/internal/skills/suggest/config.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-75
+server/internal/platformtools/skills/load_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 33,36
+server/internal/skills/suggest/engine.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-607
+server/internal/telemetry/repo/sessions_schema_sync_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 30
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/useIssuerDiscovery.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 26-36,45-47,61,105-112
+server/internal/attr/conventions.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 491-494,1383-1388
+  s_fc571f39c642e8::t_af838c1e409fb8 1389
+server/internal/deviceintegrations/impl.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-679
+server/internal/background/skill_suggestions_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-165
+server/internal/hooks/ingest_hooks.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 5,13,22,435-444,457-469,480-489,500-509,715-724,1100-1281
+  s_fc571f39c642e8::t_38c51b03de9e5f 1282
+server/internal/remotesessions/issuerrefreshmetadata_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-943
+server/internal/thirdparty/openrouter/openrouter.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 107
+server/internal/thirdparty/openrouter/unified_client.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 528-532,552
+server/internal/thirdparty/openrouter/completion_client.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 125-131
+client/dashboard/src/components/observe/InsightsEmployees.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 66-76,275,577,596,603,610,806
+server/internal/message/message_types.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 10-12,20,24-28,39-62
+  s_fc571f39c642e8::t_5a900f5bf683a3 63
+client/dashboard/src/pages/skills/SkillsList.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 15,21,37,105,170-174,373-379,385,390-391,403-425
+  s_fc571f39c642e8::t_9d8d0bb6c69023 426
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 83,108-115
+tunnel/gateway/registry.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 116-122,155-165
+  s_fc571f39c642e8::t_19e5e7875b1c68 166-167
+client/dashboard/src/components/schedule-status-badge.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-145
+server/internal/mcp/impl.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 22,141-142,268-269,346,1004-1008,1029-1030
+  s_fc571f39c642e8::t_9fb2c0a3ec3a6f 1031
+hooks/sdk/docs/models/components/uploadskillcontentpayload.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 8-12
+server/internal/background/activities/chat_resolutions/segment_chat.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 195
+server/internal/remotesessions/tokenservice_concurrent_refresh_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-209
+server/internal/database/models.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 354-371,1647,1729-1730,1779-1810,1843-1858,1925
+server/internal/skills/repo/models.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 42-66,99-114,168
+.changeset/ais-382-evict-invalid-refresh-grant.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-5
+client/dashboard/src/pages/remote-identity-providers/ScopeBadge.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 2-18,21-22,24-25,27-29
+client/dashboard/src/lib/chat-launch.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-431
+client/dashboard/src/lib/audit-log-format.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 218-219
+client/dashboard/src/pages/skills/use-skill-suggestion.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-156
+server/database/sqlc.yaml
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 673-681
+  s_fc571f39c642e8::t_d1f704760dca36 672
+server/internal/platformtools/skills/feedback_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-316
+client/dashboard/src/pages/org/OtelForwardingSection.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 111
+client/dashboard/src/pages/security/builtin-library.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 22-25
+server/internal/mcp/servepublic_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 322-359
+server/internal/risk/policy_bypass_evaluator.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 7,81-100,103-111,114,117-123,127-129,134,138-140,144-165,185-188
+server/internal/urn/device_integration_config.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-156
+server/internal/skills/skilldiff/skilldiff.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-190
+server/internal/skills/impl.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 10,98-100,331-333,383-385,580-676,799-855
+  s_fc571f39c642e8::t_95d09ad2602af1 856-857
+client/dashboard/src/pages/mcp/wire-user-session-issuer/services.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 10,155-156,174
+server/internal/mcp/resolved_mcp_endpoint.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 325-328
+server/internal/thirdparty/polar/client.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 269
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 5-9,89-95,106-114,121-125
+client/dashboard/src/pages/org/device-integrations/coverage-widgets.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-435
+server/internal/skills/suggestions_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-315
+server/internal/deviceintegrations/store.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-450
+server/migrations/20260728192204_dno_572_suggestion_analysis_indexes.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-6
+server/cmd/tools/migrations/riskfindings/source.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 57-65,85-94,96-117,200-201
+server/internal/scanners/shadowmcpscan/scanner.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 97-114,129-140,149-159,164-165,171,173-176,182,209-221,224-236,243,246-247,282,300,320-360
+client/dashboard/src/pages/org/SkillContentUploadSetting.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 44-47
+client/dashboard/src/lib/dates.test.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-40
+server/internal/deviceintegrations/client.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-50
+server/internal/audit/events.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 16
+server/internal/skills/skilldiff/skilldiff_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-198
+server/internal/urn/device_integration_config_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-64
+server/internal/mcp/serve_platform.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 8,37-38,78-79,81,85-86,413-416
+server/internal/hooks/claude_hooks.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1339
+.changeset/shadow-mcp-bypass-scans.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-5
+server/internal/skills/capture.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 126-127
+  s_fc571f39c642e8::t_273362d6a3805c 128
+server/internal/skills/manifest_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 824-882
+server/internal/platformtools/runtime/service.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 30,121-122,125
+server/internal/mcpmetadata/impl.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1701-1704
+client/dashboard/src/pages/skills/SkillTextDiff.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 3-7,10,12,17-28,35,38-44,51-53,58-59
+server/clickhouse/local/golang_migrate/20260727130935_chat-content-parts.down.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-2
+.changeset/hooks-pin-0-3-7.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-5
+server/internal/mv/skill.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 11,17-35
+  s_fc571f39c642e8::t_91cc056f220454 36
+dev-idp-dashboard/package.json
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 17,19-20
+server/internal/platformtools/runtime/service_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 123-130
+client/dashboard/src/pages/skills/SkillManifestDialog.test.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1,3,10,27-31,36-38,51-53,66-74,99-114,122-131,167-175,208-324
+  s_fc571f39c642e8::t_0b13ddfd16bb37 325
+client/dashboard/src/pages/playground/ManageToolsDialog.test.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-233
+client/dashboard/src/pages/skills/use-open-skill-suggestions.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-33
+client/dashboard/src/pages/remote-identity-providers/tabs/issuer/SettingsTab.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 2,9-10,77-78,121-124,139-188,255,273-282,293-318
+package.json
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 22
+client/dashboard/src/pages/org/external-services/ExternalServices.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 117-119
+server/clickhouse/migrations/20260727130626_opencode-usage-rows.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-6
+server/cmd/gram/worker.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 65,697-698,752-760
+client/dashboard/src/pages/org/external-services/tabs/SettingsTab.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 117
+server/internal/remotemcp/proxymanager.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 189-204
+client/dashboard/src/pages/playground/Playground.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 49,509,523,595
+server/internal/remotesessions/organizationclienthandlers_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 478-569
+server/clickhouse/local/golang_migrate/20260727130935_chat-content-parts.up.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-2
+server/internal/skills/suggest/changes.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-58
+server/cmd/tools/migrations/RISK_RESULTS_MIGRATION.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 29,31-37,52-60
+server/internal/audit/deviceintegrations.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-226
+hooks/relay/envelope.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 74-83,403-404
+server/cmd/skillsuggestbench/README.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-74
+server/internal/deviceintegrations/views.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-191
+client/dashboard/src/pages/toolBuilder/toolBuilderState.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-50
+client/dashboard/src/components/observe/InsightsTools.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 176-194,213,1139,2114
+client/dashboard/src/pages/skills/RestoreSkillVersionDialog.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-104
+.changeset/public-tunneled-mcp.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-6
+server/clickhouse/local/golang_migrate/20260727130630_opencode-usage-rows.down.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-5
+.mise-tasks/seed.mts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 2628-2636,2646-2652,2658-2665,4644-4649,4655,4665,4708
+client/dashboard/src/pages/skills/SkillDetail.test.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 22-24,80-88,142-150,242-244,323-353
+  s_fc571f39c642e8::t_d858962dc0173c 354-355
+client/dashboard/src/lib/insights-suggestions.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 78
+server/internal/platformtools/skills/load.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 115
+client/dashboard/src/pages/org/OrgDomains.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 92
+server/internal/remotemcp/proxy/headers.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 81-84
+server/internal/remotesessions/adminhandlers.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 49-53,339-351,354-355,363-369,375-380,400-489
+  s_fc571f39c642e8::t_20f032c0a597b9 490
+server/internal/mv/tunneledmcpserver.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 32
+server/internal/remotesessions/organizationclienthandlers.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 279-290,292-294,298,363-366,423-428,430-432,436
+server/internal/skills/efficacy/judge.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 208
+client/dashboard/src/pages/skills/SkillSuggestionComment.test.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-172
+client/dashboard/src/pages/skills/SuggestedSkillEditSection.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-193
+.changeset/ais-332-platform-issuer-inheritance.md
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-6
+server/internal/oauth/impl.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 221-224,244-246
+  s_fc571f39c642e8::t_1df9956a04be37 247
+server/internal/risk/impl.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 367-371,384-385,459,788-806,865-866,1744,1776,2606,2742,3351,3389
+client/dashboard/package.json
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 57
+server/internal/risk/overview_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 54
+server/internal/skills/setup_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 33,175-202,265-328
+client/dashboard/src/lib/chat-gradient.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-18
+server/internal/deviceintegrations/store_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-300
+functions/package.json
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 15
+server/internal/risk/scanner_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 5,626-904
+server/internal/scanners/shadowmcpscan/scanner_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 14,97-119,132,141-142,156,165-166,180-303,311,319-320,328-360,371,380-381,396-398,422,431-432,448-449,464,472-473,487,495-496,510-511,515,530-532,541-544,567-569,581-582,615-620,690-691,700-702,718,727-728,745,753-754,768-769,783,792-793,808,816-817,829,837-838
+server/design/tunneledmcp/design.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 224,290,307
+client/dashboard/src/pages/skills/SkillInsightsSection.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 4-10,21,27,171,192,198,219-224,323-352
+  s_fc571f39c642e8::t_e890b98058a352 353-355
+server/internal/billing/tracking_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 14-15
+server/internal/scanners/promptpolicy/openrouter/judge.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 225
+client/dashboard/src/components/project/ProjectDashboard.tsx
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 40,67-88,573-577,612,658,661,667-668,728,748,766
+server/internal/mcp/authnchallenge_well_known.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 210-215,258-260
+  s_fc571f39c642e8::t_bb15b6046b373c 261
+client/dashboard/src/pages/org/use-ai-integration-schedules.ts
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 149
+server/internal/hooks/warn_challenge_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 20,30,261-447
+server/internal/mcp/tunnelsessions/store_test.go
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 1-277
+server/package.json
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 13
+server/internal/remotesessions/queries.sql
+  s_fc571f39c642e8::t_4bd32ff7d2bfcb 57-63,67-83,86-110,120-132,135-139,204-264,272-274,279-292,588-606,617-630,799-815,822-824,828-831,838-847,851-854,958-976,1003,1011-1013,1024,1029-1033,1047,1053-1056,1062,1182-1183,1192,1201-1204,1211,1218-1223,1233
+.speakeasy/out.openapi.yaml
+  s_fc571f39c642e8::t_230d41565e5413 4069-4156,4558,4560-4561,4574,4581,4640,4643,4645-4646,4648-4649,4662,4669,4728,4731,4733-4737,4746-4751,4757,4816,4818-4819,4821-4825,4828-4832,4834-4835,4838,4840,4842,4845-5023,11833,11835-11836,11839,11841,11843,11852-11857,11859-11860,11916,11919,11921-11922,11924-11925,11927-11928,11930-11944,11957,12014,12017,12019-12020,12022-12023,12025-12026,12028-12041,12054,12111,12114,12116-12117,12119-12123,12125-12170,12180-12183,12240,12243,12245-12254,12256-12260,12262-12268,12281,12338,12341,12343-12344,12346-12350,12353,12355,12358-12365,12374-12449,12451,12453,12455-12462,12468,12475,12532-12533,12535,12537-12538,12540-12541,12543-12544,12547,12549,12551,12554,12556,12558,12564,12571,12628-12629,12631,12633-12634,12636-12640,12643-12645,12647,12656-12661,12664-12667,12724-12725,12727,12729-12730,12732-12736,12739-12741,12743,12752-12757,12760-12763,12820-12821,12823,12825-12826,12828-12832,12843-12846,12903,12905,12907-12908,12910-12914,12981,12983,12985-12986,12988-12989,12991-12992,13006,13063,13065,13067-13068,13070-13071,13073-13074,13088,13145,13147,13149-13150,13152-13156,13169,13229,13231,13233-13234,13236-13240,13253,13260,13317,13319,13321-13322,13324-13325,13327-13328,13331,13358,13425,13428,13430-13431,13433-13434,13437,13439,13441,13444,13446,13448,13454,13461,13518-13519,13521,13523-13524,13526-13530,13532-13541,13549-13555,13614-13615,13617,13619-13620,13622-13623,13625-13626,13629,13631,13634-13645,13654-13660,13662-13663,13719-13720,13722,13724-13725,13727-13728,13730-13731,13734,13736,13739,13749-13755,13757-13758,13814-13815,13817,13819-13820,13822-13823,13825-13826,13829,13831,13834-13845,13854-13860,13866,13923-13924,13926,13928-13929,13931-13932,13934-13935,13938,13940,13943,13953-13959,13965,14022-14023,14025,14027-14028,14030-14031,14033-14034,14043-14049,14055,14112-14113,14115,14117,14120-14124,14133-14145,14151,14208-14209,14211,14213-14214,14216-14220,14229-14241,14247,14304-14305,14307,14309-14310,14312-14313,14315-14316,14318-14327,14335-14341,14346,14353,14410-14411,14413,14415-14416,14418-14419,14421-14443,14456,14463,14522,14525,14527-14528,14530-14531,14544,14551,14610,14612-14613,14615-14619,14621-14629,14638-14639,14697,14699-14700,14702-14703,14705-14706,14709,14714,14784,14786-14787,14789-14793,14796,14801,14812-14817,14875,14877-14878,14880-14881,14883-14884,14887,14892,14907,14966,14968-14969,14971-14972,14974-14975,14978,14980,14982-14985,14999,15058,15060-15061,15063-15064,15066-15067,15070-15072,15074,15076-15150,15163,15222,15224-15225,15227-15231,15240-15245,15251,15310,15312-15313,15315-15319,15328-15333,15339,15398,15400-15401,15403-15404,15406-15407,15420,15486,15489,15491-15492,15494-15495,15508,15574,15577,15579-15583,15585-15589,15591-15592,15594-15595,15597,15599,15602-15603,15609,15615,15621,15627,15633,15639,15645,15651,15657-15661,15663-15670,15672-15676,15678-15679,15681-15682,15684,15686,15689-15690,15696,15702,15708,15714,15720,15726,15732,15738,15744,15746,15748,15750-15757,15759-15763,15765-15766,15768-15769,15771,15773,15780-15781,15787,15793,15799,15805,15811,15817,15823,15829,15835,15837,15839,15841-15848,15850-15854,15856-15857,15859,15862,15864,15867-15872,15878,15884,15890,15896,15902,15908,15914,15920,15926,15928,15930-15939,15942-15944,15946-15949,15952,15954,15956,15963,16019-16022,16024-16025,16027-16028,16030-16031,16033,16036,16038,16045-16046,16052,16058,16064,16070,16076,16082,16088,16094,16100,16102,16104,16106-16113,16115-16116,16118,16120,16123-16128,16134,16140,16142-16533,16578-16685,16688-18558,18560-18569,18571,18573,18575-18576,18578,18580,18582-18586,18588,18590-18595,18601,18607,18613,18619,18625,18631,18637,18643,18649,18651-18652,18656-18662,18664-18665,18667-18673,18692,18695-18700,18756-18757,18761,18763-18767,18769-18770,18772,18774-18775,18778-18779,18781-18782,18785-18786,18788-18789,18792,18797-18798,18804-18805,18811,18817,18823,18829,18835,18841,18847,18853,18859,18863-18864,18866-18872,18874-18875,18878,18887-18889,18891-18892,18895,18897,18899,18902,18904,18906,18909,18911,18913,18920,18979-18980,18982,18984-18985,18987-18991,18993-18996,18998,19000,19002-19003,19006-19007,19009-19010,19013-19019,19025-19026,19032,19038,19044,19050,19056,19062,19068,19074,19080,19082-19083,19087-19094,19097,19099-19100,19102-19104,19112-19118,19127-19128,19186-19187,19189,19191-19196,19198-19214,19222-19235,19241,19298-19301,19303,19305-19307,19309-19310,19312-19333,19341-19354,19360,19417-19420,19422,19424-19425,19427-19431,19440-19453,19456-19459,19516-19519,19521,19523-19524,19526-19530,19532-19538,19546-19558,19564,19621-19622,19624,19626,19628-19629,19631-19635,19658-19663,19669,19731,19733-19734,19736-19740,19742-19750,19835,19837-19838,19840-19841,19843-19844,19847,19849,19852,19855-19862,19947,19949-19950,19952-19953,19955-19956,19959,19963,19967,19971,19999,20061,20063,20066-20067,20069-20070,20073,20075,20077-20093,20122,20184,20186,20189-20193,20207,20264,20266,20268-20269,20271-20275,20278-20280,20282-20290,20299-20305,20318,20377-20378,20380,20382-20383,20385-20386,20388-20389,20392,20395,20397,20401-20403,20405-20406,20414-20420,20433,20492-20493,20495,20497-20498,20500-20504,20507,20509,20511,20514,20516,20518,20531,20538,20597-20598,20600,20602-20609,20632-20637,20639-20644,20705,20707-20714,20737-20742,20748,20810,20812-20819,20822,20824-20825,20827,20852-20853,20914,20916-20917,20919-20920,20922-20923,20951,21013,21015-21016,21018-21019,21021-21022,21049,21056,21118,21120-21121,21123-21124,21126-21127,21154,21161,21223,21225-21226,21228-21232,21248-21336,21338,21340,21342,21344-21349,21352-21355,21412,21415,21417-21418,21420-21421,21423-21424,21427,21429,21432,21507,21510,21512-21513,21515-21516,21518-21519,21522,21525,21527,21549,21606,21609,21611,21614-21615,21617-21618,21621,21623-21624,21626,21648,21705,21708,21710-21711,21713-21714,21716-21717,21719-21742,21750-21756,21762,21820,21822,21824-21833,21835-21836,21838-21839,21842,21844-21845,21847,21869,21926,21929,21931-21932,21934-21938,21954-21959,22018,22021,22023-22024,22026-22030,22050,22057,22114,22117,22119-22120,22122-22126,22146,22153,22210,22213,22215-22216,22218-22222,22224-22232,22305,22308,22310-22311,22313-22317,22333-22338,22340-22345,22401,22404,22406-22407,22409-22410,22412-22413,22415-22423,22443,22500,22503,22505-22506,22508-22512,22514-22522,22542,22599,22602,22604-22605,22607-22611,22613-22630,22650,22707,22710,22712-22713,22715-22719,22721-22735,22755,22815,22817-22826,22828-22829,22831-22832,22852,22859,22919,22921-22922,22924-22928,22944-22949,22952-22955,23015,23017-23018,23020-23024,23040-23045,23051,23111,23113-23114,23116-23120,23136-23141,23147,23207,23209-23210,23212-23213,23215-23216,23219,23221,23224,23261,23321,23323,23334-23338,23341,23343,23346,23368,23428,23430-23431,23433-23434,23436-23437,23439-23447,23523,23525-23526,23528-23529,23531-23532,23534-23542,23562,23622,23624-23625,23627-23628,23630-23631,23645,23704,23706-23707,23709-23713,23723-23724,23782,23784-23785,23787-23791,23801-23802,23860,23862-23863,23865-23869,23878-23883,23889,23948,23950-23951,23953-23954,23956-23957,23971,24030,24032-24033,24035-24036,24038-24039,24053,24112,24114-24115,24117-24121,24135,24194,24196-24197,24199-24203,24217,24276,24278-24279,24281-24285,24288-24291,24293,24296,24298,24300,24303-24304,24362,24364-24365,24367-24371,24374,24376,24379,24389-24390,24448,24450-24451,24453-24454,24456-24457,24466-24471,24477,24536,24538-24539,24541-24542,24544-24545,24554-24559,24562-24565,24624,24626-24627,24629-24633,24642-24647,24653,24712,24714-24715,24717-24721,24723-24729,24742,24801,24804,24806-24807,24809-24810,24812-24818,24884,24887,24889-24890,24892-24896,24898-24904,24913-24918,24974,24977,24979-24980,24982-24983,24985-24986,24988-24994,25006,25013,25070,25073,25075-25076,25078-25082,25084-25090,25098-25110,25116,25173-25176,25178,25180-25181,25183-25184,25186-25187,25189-25195,25203-25209,25215,25272-25275,25277,25279-25280,25282-25283,25285-25286,25288-25302,25310-25316,25322,25379-25382,25384,25386-25387,25389-25393,25395-25401,25409-25421,25427,25484-25487,25489,25491-25492,25494-25498,25501-25503,25505,25514-25526,25528-25539,25595-25598,25600,25602-25603,25605-25609,25618-25630,25632-25637,25693-25694,25696,25698-25699,25701-25702,25704-25705,25714-25720,25725,25728,25732-25733,25789-25790,25792,25794-25795,25797-25801,25803-25809,25817-25823,25825-25826,25882-25883,25885,25887-25888,25890-25894,25903-25909,25913,25915-25916,25918-25924,25980-25981,25983,25985-25987,25989-25990,25993,25995-25996,25998-26002,26011-26017,26021,26023-26024,26026-26032,26088-26089,26091,26093-26098,26101-26104,26106-26119,26128-26134,26136-26149,26205-26206,26208,26210-26212,26214-26215,26218,26220,26222,26225,26227,26229,26236,26293-26294,26296,26298-26299,26301-26305,26308-26310,26312,26321-26327,26333,26390-26391,26393,26395-26396,26398-26402,26423,26483,26485-26486,26488-26489,26491-26492,26513,26573,26575-26576,26578-26582,26598-26603,26609,26669,26671-26672,26674-26678,26681-26684,26686-26694,26711-26712,26771,26773-26774,26776-26777,26779-26780,26800,26807,26867,26869-26870,26872-26873,26875-26876,26896,26899,26903-26904,26963,26966,26968-26972,26992,26995,27000,27059,27062,27064-27068,27084-27089,27091-27096,27155,27158,27160-27161,27163-27164,27176,27178,27235,27237,27239-27246,27255-27260,27319,27321,27323-27328,27331-27333,27335,27344-27349,27353,27355,27412-27413,27415,27417-27424,27427-27436,27438,27440,27443,27445,27447,27450-27451,27507-27508,27510,27512-27513,27515-27516,27518-27519,27522,27524,27527-27529,27532,27534,27536,27539,27541,27543,27550,27607-27608,27610,27612-27613,27615-27616,27618-27619,27622-27630,27632,27634,27637,27639,27641,27648,27705-27706,27708,27710-27711,27713-27714,27716-27717,27719-27725,27745,27802-27803,27807,27809-27810,27812-27813,27815-27816,27818-27824,27843,27850,27907-27908,27912,27914-27915,27917-27921,27924,27926,27928,27930-27935,27994,27996,27998-28003,28005-28011,28030,28037,28094-28095,28099,28101-28102,28104-28105,28107-28108,28117-28123,28135,28142,28201-28202,28204,28206-28207,28209-28213,28222-28228,28240,28247,28306-28307,28309,28311-28312,28314-28318,28320-28327,28336,28338,28340,28343,28345,28347,28407-28410,28412,28414-28415,28417-28421,28423-28431,28439-28452,28511-28514,28516,28518-28522,28524-28525,28527-28533,28542,28544,28546,28552,28559,28616-28617,28619,28621,28623-28624,28626-28630,28633,28637,28640-28653,28662,28664,28666,28669-28674,28730-28731,28733,28735,28737-28738,28740-28741,28743-28744,28747,28749,28752-28760,28770,28772,28774,28781,28838-28839,28841,28843,28845-28846,28848-28849,28851-28852,28855,28857,28860-28868,28878,28880,28882,28889,28946-28947,28949,28951,28953-28954,28956-28957,28959-28960,28963,28965,28967,28970,28972,28974,28988,29047-29048,29050,29052-29053,29055-29056,29058-29059,29062,29064,29066,29069,29071,29073,29086,29093,29152-29153,29155,29157-29158,29160-29161,29163-29164,29167,29169,29171,29191,29198,29257-29258,29260,29262-29263,29265-29266,29268-29269,29296,29303,29365,29368,29370-29371,29373-29374,29401,29408,29470,29472-29473,29475-29479,29502-29507,29510-29513,29575,29577-29578,29580-29584,29607-29612,29615-29618,29680,29682-29683,29685-29686,29688-29689,29716,29723,29785,29787-29788,29790-29794,29797,29800,29802,29889,29891-29892,29894-29898,29921-29926,29932,29994,29996-29997,29999-30000,30002-30003,30006,30008,30011,30040,30102,30104-30105,30107-30108,30110-30111,30113-30143,30170,30232,30234-30243,30245-30246,30248-30249,30276,30283,30345,30347-30348,30350-30351,30353-30354,30381,30388,30450,30452-30453,30455-30459,30461-30469,30554,30556-30557,30559-30560,30562-30563,30590,30597,30659,30661-30662,30664-30668,30670-30684,30711,30773,30775-30776,30778-30782,30784-30798,30825,30887,30889-30898,30900-30901,30903-30904,30931,30938,31000,31002-31003,31005-31009,31032-31037,31040-31043,31105,31107-31108,31110-31114,31116-31145,31172,31234,31236-31245,31247-31251,31254,31259,31346,31348-31349,31351-31352,31354-31355,31358,31360,31362,31365,31367,31369-31371,31373,31375,31377,31398,31458,31460,31463-31464,31466-31467,31480,31487,31544,31546,31548-31550,31552-31554,31556-31557,31560,31562,31564,31567,31569,31571,31584,31591,31650-31651,31653,31655-31657,31659-31664,31667,31669,31671-31672,31675,31677,31679,31682,31684,31686,31697-31700,31759-31760,31762,31764-31766,31768-31769,31771-31772,31775,31777,31779,31782,31784,31786,31799,31806,31865-31866,31868,31870-31872,31874-31879,31882-31884,31886,31902-31907,31913,31972-31973,31975,31977-31979,31981-31986,31989-31991,31993,32009-32014,32020,32079-32080,32082,32084-32086,32088-32090,32092-32093,32106,32109,32113-32114,32170,32172,32174-32176,32178-32183,32192-32197,32203,32260,32262,32264-32266,32268-32270,32272-32273,32276-32278,32280,32296-32301,32362-32363,32365,32367-32369,32371-32376,32379,32381-32382,32384-32385,32388-32390,32392,32466-32467,32471,32473-32475,32477-32482,32484-32499,32507-32513,32572-32575,32577,32580-32582,32584-32585,32612,32681,32685,32687,32689,32691-32692,32695,32697-32698,32700-32701,32715,32772,32774,32777-32778,32780-32785,32787-32795,32884,32888,32890-32895,32897-32912,32939,33001,33004-33005,33007-33011,33013-33021,33105-33108,33110,33113-33115,33117-33118,33138,33197,33201,33203,33205-33208,33210-33218,33242-33245,33307,33310-33315,33318,33320,33323-33339,33364-33367,33429,33432-33433,33435-33439,33442,33444,33447,33450-33452,33454-33455,33458-33460,33462-33463,33491,33553,33556-33557,33559-33560,33562-33563,33566-33568,33570,33579-33585,33591,33648-33651,33653,33656-33657,33659-33660,33662-33663,33691,33753,33756-33757,33759-33760,33762-33763,33791,33853,33856-33857,33859-33861,33863-33864,33867,33869,33871,33900,33962,33965-33973,33975-33981,33989-33995,34001,34058-34061,34063,34066-34067,34069-34070,34072-34073,34076,34078,34080,34083-34094,34121,34183,34186-34190,34192-34193,34196-34212,34216,34219-34255,34259,34263,34267,34270-34286,34313,34375,34378-34379,34381-34382,34384-34385,34388,34390,34392,34395,34397,34399-34403,34430,34492,34495-34496,34498-34499,34501-34502,34504-34595,34622,34684,34687-34688,34690-34694,34717-34722,34728,34790,34793-34794,34796-34801,34810-34815,34821,34878,34880,34883-34884,34886-34891,34914-34919,34925,34987,34990-34991,34993-34998,35021-35026,35032,35094,35097-35098,35100-35105,35128-35133,35139,35201,35204-35205,35207-35212,35235-35240,35304,35307-35312,35335-35340,35346,35408,35412,35414-35419,35442-35447,35453,35515,35518-35519,35521-35526,35553,35560,35622,35625-35626,35628,35630,35632-35633,35660,35667,35729,35732-35737,35739-35756,35841,35844-35845,35847,35849,35851-35852,35879,35886,35948,35951-35952,35954-35959,35961-35969,35993-35996,36058,36061-36066,36068-36069,36096,36103,36165,36168-36169,36171,36173-36176,36197,36255,36257,36259-36260,36262-36266,36269-36271,36273-36291,36293-36306,36326,36386,36388-36389,36391-36396,36416,36423,36481,36483,36485-36492,36495-36497,36499,36515-36520,36523-36526,36585-36586,36588,36590-36591,36593-36594,36596-36597,36600,36602,36604,36607,36609,36611,36624-36625,36631,36690-36691,36693,36695-36696,36698-36702,36705-36707,36709,36725-36730,36736,36795-36796,36798,36800-36801,36803-36804,36806-36807,36810,36812,36814,36817,36819,36821,36834,36896-36897,36899,36901-36902,36904-36908,36910-36916,36925,36927,36929,36931-36936,36942,36999-37000,37002,37004,37006-37007,37009-37013,37022-37028,37036-37041,37047,37106-37107,37109,37111-37112,37114-37115,37117-37118,37120-37126,37135,37137,37139,37144-37146,37148,37155,37212-37213,37215,37217,37219-37220,37222-37226,37228-37236,37263,37325,37328,37330-37334,37337-37340,37342-37344,37348-37351,37353-37368,37423,37426,37428-37432,37434-37451,37478,37540,37543-37551,37553-37557,37559-37592,37619,37681,37684-37692,37694-37695,37697-37698,37709-37726,37753,37815,37818-37826,37828-37829,37831-37832,37835,37837,37840-37873,37880,37936-37942,37945,37947-37948,37950-37951,37954-37962,37966,37969,37973-37974,37976,38005,38067,38070,38080-38081,38083-38084,38087,38091,38094,38098-38099,38101,38130,38192,38195,38205-38206,38208-38209,38212-38221,38225,38228,38232-38233,38235,38264,38326,38329,38339-38343,38366-38371,38377,38439,38442,38444,50347-50366,50406-50439,53197-53202,54161-54384,54394,54397,54399-54400,54402,55203-55210,56275,56670-56674,56806-56849,57669-57697,57879-57891,58424-58469,58970-59035,62153-62166,62344-62357,62855-62860,65178,65386-65514,65520-65521,65608-65649,65745-65845,65927-65965,68563-68565,68614,69503-69508,69887-69889,70093-70114,70857-70858
+.speakeasy/workflow.lock
+  s_fc571f39c642e8::t_5e3f70e18ed5b9 34
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_fc571f39c642e8::t_05b07aaed89313 77,82,153-162,214,263,270,345,348,400-401,404,410-412,415,560-561,563-564,668-674,676,701,759,796-797,809,847,849-850,879,988,999,1091-1092,1096,1099-1101,1106,1234,1273,1276,1349,1392,1403,1405-1406,1420-1421,1522-1523,1537,1579,1581-1582,1621,1623-1624,1635,1638,1667,1681,1689,1743,1769,1771,1862,1900-1907,1911,1919,1921-1922,2015,2108-2109,2175,2177-2178,2205,2208,2305,2336-2341,2373,2432,2480,2622-2632,2666-2676,3364,3478-3486,3923-3933,4035-4045,4057-4078,4227-4247,5009,5363-5383,5526-5537,5942-5979,6152,6407-6417,6432-6453,6561-6571,6595-6605,6730,6926-6936,7082-7090,7164-7174,7669,7781-7791
+client/dashboard/src/sdk/src/funcs/adminRemoteSessionsFetchGlobalIssuerMetadata.ts
+  s_fc571f39c642e8::t_75477ca7b9cbb4 1-205
+client/dashboard/src/sdk/src/funcs/adminRemoteSessionsRefreshGlobalIssuerMetadata.ts
+  s_fc571f39c642e8::t_298c84d087f2ea 1-203
+client/dashboard/src/sdk/src/funcs/deviceIntegrationsDeleteConfig.ts
+  s_fc571f39c642e8::t_74b39f6b782c44 1-207
+client/dashboard/src/sdk/src/funcs/deviceIntegrationsGetConfig.ts
+  s_fc571f39c642e8::t_4b43f507835abf 1-212
+client/dashboard/src/sdk/src/funcs/deviceIntegrationsGetCoverage.ts
+  s_fc571f39c642e8::t_952b2f71306fad 1-216
+client/dashboard/src/sdk/src/funcs/deviceIntegrationsListManagedDevices.ts
+  s_fc571f39c642e8::t_20d27201269367 1-276
+client/dashboard/src/sdk/src/funcs/deviceIntegrationsListProviders.ts
+  s_fc571f39c642e8::t_c282ec29eac50a 1-211
+client/dashboard/src/sdk/src/funcs/deviceIntegrationsListSchedules.ts
+  s_fc571f39c642e8::t_3de2027540507f 1-213
+client/dashboard/src/sdk/src/funcs/deviceIntegrationsRetrySchedule.ts
+  s_fc571f39c642e8::t_fc55ace027723c 1-211
+client/dashboard/src/sdk/src/funcs/deviceIntegrationsSetScheduleEnabled.ts
+  s_fc571f39c642e8::t_30f83ebb7e2a66 1-211
+client/dashboard/src/sdk/src/funcs/deviceIntegrationsTestConnection.ts
+  s_fc571f39c642e8::t_2e24f18d9fda00 1-211
+client/dashboard/src/sdk/src/funcs/deviceIntegrationsUpsertConfig.ts
+  s_fc571f39c642e8::t_261f1c89183aac 1-211
+client/dashboard/src/sdk/src/funcs/hooksSkillFeedback.ts
+  s_fc571f39c642e8::t_1a774a15b72490 1-204
+client/dashboard/src/sdk/src/funcs/organizationRemoteSessionIssuersFetchMetadata.ts
+  s_fc571f39c642e8::t_589c0d565b654e 1-216
+client/dashboard/src/sdk/src/funcs/organizationRemoteSessionIssuersRefreshMetadata.ts
+  s_fc571f39c642e8::t_4e70fa8f4cd571 1-214
+client/dashboard/src/sdk/src/funcs/otelForwardingUpsertConfig.ts
+  s_fc571f39c642e8::t_8fd316388b3464 105
+client/dashboard/src/sdk/src/funcs/remoteSessionIssuersFetchMetadata.ts
+  s_fc571f39c642e8::t_6247a0beb23360 34-37,42,45,47,49-50,76-77,99,106-108,110,159
+client/dashboard/src/sdk/src/funcs/remoteSessionIssuersRefreshMetadata.ts
+  s_fc571f39c642e8::t_c8300ac1c9f3d3 1-223
+client/dashboard/src/sdk/src/funcs/skillsApproveAllSuggestions.ts
+  s_fc571f39c642e8::t_ca3c831ef26f29 1-230
+client/dashboard/src/sdk/src/funcs/skillsApproveSuggestion.ts
+  s_fc571f39c642e8::t_a2f4aece13bf92 1-224
+client/dashboard/src/sdk/src/funcs/skillsDismissSuggestion.ts
+  s_fc571f39c642e8::t_eb93e896bd2a8d 1-224
+client/dashboard/src/sdk/src/funcs/skillsListFeedback.ts
+  s_fc571f39c642e8::t_d494aebf5ee2cf 1-288
+client/dashboard/src/sdk/src/funcs/skillsListSuggestionFeedback.ts
+  s_fc571f39c642e8::t_2d2063335fbecd 1-228
+client/dashboard/src/sdk/src/funcs/skillsListSuggestions.ts
+  s_fc571f39c642e8::t_dd1e3362f23a32 1-289
+client/dashboard/src/sdk/src/funcs/skillsRestoreVersion.ts
+  s_fc571f39c642e8::t_44f8ca3a040ca2 1-224
+client/dashboard/src/sdk/src/models/components/approveallskillsuggestionsrequestbody.ts
+  s_fc571f39c642e8::t_c3c79567db5695 1-44
+client/dashboard/src/sdk/src/models/components/approveallskillsuggestionsresult.ts
+  s_fc571f39c642e8::t_88ac768b2f4afc 1-40
+client/dashboard/src/sdk/src/models/components/approveskillsuggestionrequestbody.ts
+  s_fc571f39c642e8::t_b1e169a97d39b8 1-55
+client/dashboard/src/sdk/src/models/components/approveskillsuggestionresult.ts
+  s_fc571f39c642e8::t_1c621c5c89a558 1-72
+client/dashboard/src/sdk/src/models/components/createriskpolicyrequestbody.ts
+  s_fc571f39c642e8::t_2167aa9b879757 56-67,150-153,177-181,205,237,259
+client/dashboard/src/sdk/src/models/components/deviceintegrationconfig.ts
+  s_fc571f39c642e8::t_9948669fa76e00 1-86
+client/dashboard/src/sdk/src/models/components/deviceintegrationcoverage.ts
+  s_fc571f39c642e8::t_7e23a7dc7b2787 1-97
+client/dashboard/src/sdk/src/models/components/deviceintegrationprovider.ts
+  s_fc571f39c642e8::t_5b1456cdd167f4 1-72
+client/dashboard/src/sdk/src/models/components/deviceintegrationproviderfield.ts
+  s_fc571f39c642e8::t_1dcfb507d59099 1-76
+client/dashboard/src/sdk/src/models/components/deviceintegrationproviderschedule.ts
+  s_fc571f39c642e8::t_dace1c140ebf5f 1-49
+client/dashboard/src/sdk/src/models/components/deviceintegrationschedulestate.ts
+  s_fc571f39c642e8::t_e8a040623682b9 1-120
+client/dashboard/src/sdk/src/models/components/deviceintegrationtestconnectionresult.ts
+  s_fc571f39c642e8::t_2b2ec29b4b3121 1-42
+client/dashboard/src/sdk/src/models/components/dismissskillsuggestionrequestbody.ts
+  s_fc571f39c642e8::t_5d06851f439e58 1-35
+client/dashboard/src/sdk/src/models/components/fetchissuermetadatarequestbody.ts
+  s_fc571f39c642e8::t_6ec82bcf79a1ba 7,9,15,20-25,27-28,31-32
+client/dashboard/src/sdk/src/models/components/getskillresult.ts
+  s_fc571f39c642e8::t_3ff727f40f5fb5 20
+client/dashboard/src/sdk/src/models/components/hookingestdata.ts
+  s_fc571f39c642e8::t_6a40f3f4c7c8a2 27-31,81-84,107,125-127,136
+client/dashboard/src/sdk/src/models/components/hookpromptattachmententry.ts
+  s_fc571f39c642e8::t_12b34be543b4dd 1-112
+client/dashboard/src/sdk/src/models/components/listdeviceintegrationprovidersresult.ts
+  s_fc571f39c642e8::t_547d53ff373cba 1-38
+client/dashboard/src/sdk/src/models/components/listdeviceintegrationschedulesresult.ts
+  s_fc571f39c642e8::t_ceada5c7b3936d 1-59
+client/dashboard/src/sdk/src/models/components/listmanageddevicesresult.ts
+  s_fc571f39c642e8::t_b7b4ea66a621a6 1-47
+client/dashboard/src/sdk/src/models/components/listskillfeedbackresult.ts
+  s_fc571f39c642e8::t_d739b677ceef11 1-56
+client/dashboard/src/sdk/src/models/components/listskillsuggestionfeedbackresult.ts
+  s_fc571f39c642e8::t_fd76881a929750 1-37
+client/dashboard/src/sdk/src/models/components/listskillsuggestionsresult.ts
+  s_fc571f39c642e8::t_db3a8437b4da4a 1-59
+client/dashboard/src/sdk/src/models/components/manageddevice.ts
+  s_fc571f39c642e8::t_0cd8dfe0a50d45 1-153
+client/dashboard/src/sdk/src/models/components/remotesessionissuerrefresh.ts
+  s_fc571f39c642e8::t_6a3414b55e56a4 1-53
+client/dashboard/src/sdk/src/models/components/restoreskillversionrequestbody.ts
+  s_fc571f39c642e8::t_aca67b46b35fd7 1-49
+client/dashboard/src/sdk/src/models/components/riskpolicy.ts
+  s_fc571f39c642e8::t_e502a07ef2f459 57-70,165-168,206-210,245-247,277
+client/dashboard/src/sdk/src/models/components/skill.ts
+  s_fc571f39c642e8::t_fd31eb4c8fe085 44
+client/dashboard/src/sdk/src/models/components/skilleditsuggestion.ts
+  s_fc571f39c642e8::t_1b81cf43beec30 1-170
+client/dashboard/src/sdk/src/models/components/skilleditsuggestionchange.ts
+  s_fc571f39c642e8::t_0227825373c912 1-87
+client/dashboard/src/sdk/src/models/components/skillefficacyinsight.ts
+  s_fc571f39c642e8::t_a283d7412c4014 10-13,25-28,40,46
+client/dashboard/src/sdk/src/models/components/skillefficacyregressionsignal.ts
+  s_fc571f39c642e8::t_033934c5c5844c 1-72
+client/dashboard/src/sdk/src/models/components/skillfeedback.ts
+  s_fc571f39c642e8::t_9d30218d1b5c42 1-102
+client/dashboard/src/sdk/src/models/components/skillfeedbackcounts.ts
+  s_fc571f39c642e8::t_51a4b9c628672b 1-52
+client/dashboard/src/sdk/src/models/components/skillfeedbackpayload.ts
+  s_fc571f39c642e8::t_701953049b28d9 1-100
+client/dashboard/src/sdk/src/models/components/skillsuggestionapprovalitem.ts
+  s_fc571f39c642e8::t_4a24058b3ff887 1-100
+client/dashboard/src/sdk/src/models/components/tunneledmcpserver.ts
+  s_fc571f39c642e8::t_f61f6ecbcd212c 56-59,117,141
+client/dashboard/src/sdk/src/models/components/updateriskpolicyrequestbody.ts
+  s_fc571f39c642e8::t_128977f0cc4866 48-61,144-149,171-175,199,233-235,256
+client/dashboard/src/sdk/src/models/components/updatetunneledmcpserverform.ts
+  s_fc571f39c642e8::t_61c638fd15bc97 6,12-15,28,37-48
+client/dashboard/src/sdk/src/models/components/uploadskillcontentpayload.ts
+  s_fc571f39c642e8::t_61e1717201dcb9 12,18-20,37,41-44,61
+client/dashboard/src/sdk/src/models/components/upsertconfigrequestbody2.ts
+  s_fc571f39c642e8::t_3116bc64e19dc8 9-13,17,19,21,23,28,30-31,38-43
+client/dashboard/src/sdk/src/models/components/upsertconfigrequestbody3.ts
+  s_fc571f39c642e8::t_f6ecf2175ac627 1-58
+client/dashboard/src/sdk/src/models/operations/approveallskillsuggestions.ts
+  s_fc571f39c642e8::t_67cf3990ace922 1-195
+client/dashboard/src/sdk/src/models/operations/approveskillsuggestion.ts
+  s_fc571f39c642e8::t_dd245418deacc8 1-187
+client/dashboard/src/sdk/src/models/operations/deletedeviceintegrationconfig.ts
+  s_fc571f39c642e8::t_429092ddd9c668 1-98
+client/dashboard/src/sdk/src/models/operations/dismissskillsuggestion.ts
+  s_fc571f39c642e8::t_2fb55da2338d14 1-187
+client/dashboard/src/sdk/src/models/operations/fetchglobalremotesessionissuermetadata.ts
+  s_fc571f39c642e8::t_92a0da57e47796 1-91
+client/dashboard/src/sdk/src/models/operations/fetchorganizationremotesessionissuermetadata.ts
+  s_fc571f39c642e8::t_3db5d9af0f24ef 1-102
+client/dashboard/src/sdk/src/models/operations/fetchremotesessionissuermetadata.ts
+  s_fc571f39c642e8::t_dc5dfe3a8e4f0a 1-197
+client/dashboard/src/sdk/src/models/operations/getdeviceintegrationconfig.ts
+  s_fc571f39c642e8::t_e35ef04598558d 1-94
+client/dashboard/src/sdk/src/models/operations/getdeviceintegrationcoverage.ts
+  s_fc571f39c642e8::t_2c8516151fbc5a 1-94
+client/dashboard/src/sdk/src/models/operations/listdeviceintegrationproviders.ts
+  s_fc571f39c642e8::t_027adc29472574 1-91
+client/dashboard/src/sdk/src/models/operations/listdeviceintegrationschedules.ts
+  s_fc571f39c642e8::t_768190a440ea7d 1-97
+client/dashboard/src/sdk/src/models/operations/listmanageddevices.ts
+  s_fc571f39c642e8::t_fde83f17492523 1-167
+client/dashboard/src/sdk/src/models/operations/listskillfeedback.ts
+  s_fc571f39c642e8::t_a1cb2d968ef1ec 1-225
+client/dashboard/src/sdk/src/models/operations/listskillsuggestionfeedback.ts
+  s_fc571f39c642e8::t_569eb692da882e 8,13,18-20,23-31,47,53,55-56,70-72,75-76,82,88,90-91,105-107,110-111,117-119,123-125,129,132,143-144,147-148,154-156,163-165,168-169,183-184,187-188
+client/dashboard/src/sdk/src/models/operations/listskillsuggestions.ts
+  s_fc571f39c642e8::t_45fc6fc457a927 1-230
+client/dashboard/src/sdk/src/models/operations/refreshglobalremotesessionissuermetadata.ts
+  s_fc571f39c642e8::t_4e53dc9e79c4b6 1-90
+client/dashboard/src/sdk/src/models/operations/refreshorganizationremotesessionissuermetadata.ts
+  s_fc571f39c642e8::t_e5d13fe5bc5ad1 1-101
+client/dashboard/src/sdk/src/models/operations/refreshremotesessionissuermetadata.ts
+  s_fc571f39c642e8::t_20e0dd380cfe82 1-196
+client/dashboard/src/sdk/src/models/operations/restoreskillversion.ts
+  s_fc571f39c642e8::t_08de400690182a 1-183
+client/dashboard/src/sdk/src/models/operations/retrydeviceintegrationschedule.ts
+  s_fc571f39c642e8::t_6ba02700ac2a51 1-100
+client/dashboard/src/sdk/src/models/operations/setdeviceintegrationscheduleenabled.ts
+  s_fc571f39c642e8::t_5781e1c31529f0 1-102
+client/dashboard/src/sdk/src/models/operations/skillfeedback.ts
+  s_fc571f39c642e8::t_3be6c85d2d3054 1-93
+client/dashboard/src/sdk/src/models/operations/testdeviceintegrationconnection.ts
+  s_fc571f39c642e8::t_0c9a9f4f246011 1-101
+client/dashboard/src/sdk/src/models/operations/upsertdeviceintegrationconfig.ts
+  s_fc571f39c642e8::t_9e610476d67060 1-98
+client/dashboard/src/sdk/src/models/operations/upsertotelforwardingconfig.ts
+  s_fc571f39c642e8::t_0fd36a739afc98 8-11,27,67,78,84
+client/dashboard/src/sdk/src/react-query/approveAllSkillSuggestions.ts
+  s_fc571f39c642e8::t_1ca6038b58c324 1-118
+client/dashboard/src/sdk/src/react-query/approveSkillSuggestion.ts
+  s_fc571f39c642e8::t_63ef0a97ec8f79 1-117
+client/dashboard/src/sdk/src/react-query/deleteDeviceIntegrationConfig.ts
+  s_fc571f39c642e8::t_571323a0d009ef 1-116
+client/dashboard/src/sdk/src/react-query/deviceIntegrationConfig.core.ts
+  s_fc571f39c642e8::t_04a5671a184ccc 1-88
+client/dashboard/src/sdk/src/react-query/deviceIntegrationConfig.ts
+  s_fc571f39c642e8::t_24a308ce205087 1-162
+client/dashboard/src/sdk/src/react-query/deviceIntegrationCoverage.core.ts
+  s_fc571f39c642e8::t_6ab47e498e5eb2 1-88
+client/dashboard/src/sdk/src/react-query/deviceIntegrationCoverage.ts
+  s_fc571f39c642e8::t_7f84dad3a3fc5f 1-162
+client/dashboard/src/sdk/src/react-query/deviceIntegrationProviders.core.ts
+  s_fc571f39c642e8::t_6845b4c6b36620 1-87
+client/dashboard/src/sdk/src/react-query/deviceIntegrationProviders.ts
+  s_fc571f39c642e8::t_7af91efe740670 1-160
+client/dashboard/src/sdk/src/react-query/deviceIntegrationSchedules.core.ts
+  s_fc571f39c642e8::t_49f37c75a9f30c 1-89
+client/dashboard/src/sdk/src/react-query/deviceIntegrationSchedules.ts
+  s_fc571f39c642e8::t_5e82dc0ef5fda7 1-162
+client/dashboard/src/sdk/src/react-query/dismissSkillSuggestion.ts
+  s_fc571f39c642e8::t_4ec9d05431e341 1-117
+client/dashboard/src/sdk/src/react-query/fetchGlobalRemoteSessionIssuerMetadata.ts
+  s_fc571f39c642e8::t_57c6d0f1a02f0f 1-118
+client/dashboard/src/sdk/src/react-query/fetchOrganizationRemoteSessionIssuerMetadata.ts
+  s_fc571f39c642e8::t_e1ab1113e847b0 1-123
+client/dashboard/src/sdk/src/react-query/fetchRemoteSessionIssuerMetadata.ts
+  s_fc571f39c642e8::t_474473abd01130 11,27-29,34-36,40-41,43,55,58,60,62-64,67-69,73,78-79,82,88-89,92-93,97,110
+client/dashboard/src/sdk/src/react-query/hooksSkillFeedback.ts
+  s_fc571f39c642e8::t_4b1bcebe729b67 1-116
+client/dashboard/src/sdk/src/react-query/managedDevices.core.ts
+  s_fc571f39c642e8::t_096a565d82f808 1-205
+client/dashboard/src/sdk/src/react-query/managedDevices.ts
+  s_fc571f39c642e8::t_de50c53745b5ff 1-252
+client/dashboard/src/sdk/src/react-query/refreshGlobalRemoteSessionIssuerMetadata.ts
+  s_fc571f39c642e8::t_b93a6230e295bf 1-118
+client/dashboard/src/sdk/src/react-query/refreshOrganizationRemoteSessionIssuerMetadata.ts
+  s_fc571f39c642e8::t_f09dda5c8985ca 1-126
+client/dashboard/src/sdk/src/react-query/refreshRemoteSessionIssuerMetadata.ts
+  s_fc571f39c642e8::t_b47ff39bb6bf3e 1-118
+client/dashboard/src/sdk/src/react-query/restoreSkillVersion.ts
+  s_fc571f39c642e8::t_57094ca636e333 1-117
+client/dashboard/src/sdk/src/react-query/retryDeviceIntegrationSchedule.ts
+  s_fc571f39c642e8::t_9f383a7eda3382 1-118
+client/dashboard/src/sdk/src/react-query/setDeviceIntegrationScheduleEnabled.ts
+  s_fc571f39c642e8::t_bd1d57e4fe1e52 1-118
+client/dashboard/src/sdk/src/react-query/skillFeedback.core.ts
+  s_fc571f39c642e8::t_6841ef8c55879e 1-189
+client/dashboard/src/sdk/src/react-query/skillFeedback.ts
+  s_fc571f39c642e8::t_5455e78387c5aa 1-246
+client/dashboard/src/sdk/src/react-query/skillSuggestionFeedback.core.ts
+  s_fc571f39c642e8::t_d3a4e56ab71b68 1-93
+client/dashboard/src/sdk/src/react-query/skillSuggestionFeedback.ts
+  s_fc571f39c642e8::t_2ffd4f79c06903 1-166
+client/dashboard/src/sdk/src/react-query/skillSuggestions.core.ts
+  s_fc571f39c642e8::t_d0c1bec52a3ca5 1-191
+client/dashboard/src/sdk/src/react-query/skillSuggestions.ts
+  s_fc571f39c642e8::t_d655ccc58374f5 1-252
+client/dashboard/src/sdk/src/react-query/testDeviceIntegrationConnection.ts
+  s_fc571f39c642e8::t_cbe67b8ed09e02 1-118
+client/dashboard/src/sdk/src/react-query/upsertDeviceIntegrationConfig.ts
+  s_fc571f39c642e8::t_57bf672517f72c 1-117
+client/dashboard/src/sdk/src/sdk/adminremotesessions.ts
+  s_fc571f39c642e8::t_ff9cdbc40488d0 9,14,20-21,38-41,60-63,152-170,251-269
+client/dashboard/src/sdk/src/sdk/deviceintegrations.ts
+  s_fc571f39c642e8::t_47d9e61558e825 1-256
+client/dashboard/src/sdk/src/sdk/hooks.ts
+  s_fc571f39c642e8::t_2980162c5540cc 11,36-39,157-175
+client/dashboard/src/sdk/src/sdk/organizationremotesessionissuers.ts
+  s_fc571f39c642e8::t_d05cfe6ae06603 7,14,21-22,31-34,60-63,110-128,252-272
+client/dashboard/src/sdk/src/sdk/remotesessionissuers.ts
+  s_fc571f39c642e8::t_f3c989e521c619 7,10,15,25-27,37-40,88,91,93-95,98,146-164
+client/dashboard/src/sdk/src/sdk/sdk.ts
+  s_fc571f39c642e8::t_3b121e58be3042 22,155-159
+client/dashboard/src/sdk/src/sdk/skills.ts
+  s_fc571f39c642e8::t_f3fd80832af5a5 6-7,10,16-18,21,27-28,30,34,40-47,56-59,77-81,87-95,106-109,149-186,225-243,337-393,434-452
+hooks/sdk/.speakeasy/gen.lock
+  s_fc571f39c642e8::t_e530f6a6b905c4 9-11,42-43,72-75,100-103,108-115,122-127,140-151,166-167,170-171,242-243,272-275,304-307,310-311,320-323,372-380
+mise.lock
+  s_fc571f39c642e8::t_73549fa5b2f160 4,8-10,13-15,18-20,23-25,28-30,33-35,70,74-76,80-82,86-88,92-94,98-100,104-106,110-112,116,120-122,125-127,130-132,135-137,140-142,145-147,150-152,187,191-193,196-198,201-203,206-208,211-213,216-218,221-223,265,269-271,274-276,279-281,284-286,289-291,294-296,299-301,304,308-310,312,315-317,321-323,327-329,333-335,339-341,345-347,468,472-474,477-479,482-484,487-489,492-494,497-499,502-504,743,747-749,752-754,757-759,762-764,767-769,772-774,813,817-819,822-824,827-829,832-834,837,841-843,846-848,851-853,856-858,861-863,866-868,871-873,922,926-928,932-934,938-940,944-946,950-952,956-958,962-964,1035-1037
+pnpm-lock.yaml
+  s_fc571f39c642e8::t_c45db54bb8fded 22-23,194,196-197,251,392-393,396,398-399,401-402,3922-3923,3937-3938,3940-3941,3949-3950,3954-3955,3961-3962,3968-3969,3985-3986,3992-3993,4021-4022,4027-4028,4031-4032,4035-4036,4040,4060-4061,4068-4069,4080-4081,4084-4085,4094-4095,6577-6578,6970-6971,7071-7072,11095,11109,11111,11113,11117,11121,11123,11126,11130,11135,11137-11139,11143,11145-11146,11148,11150-11152,11170,11172-11174,11180,11182-11185,11187-11189,11223,11225,11229,11233-11234,11236,11239,11244,11249,11254-11255,11261,11286,11288,11290-11291,11295,11300-11302,11304,11309,11311,11333,11336-11338,11341,11345,11347,11353,12808,13808,13813,14147,14713,14715,14717,14884
+server/gen/admin_remote_sessions/client.go
+  s_fc571f39c642e8::t_b2d460d013ae38 19-30,35,37-48,163-208
+server/gen/admin_remote_sessions/endpoints.go
+  s_fc571f39c642e8::t_ff1f0e3574f1a9 19-30,39-50,62-63,186-232
+server/gen/admin_remote_sessions/service.go
+  s_fc571f39c642e8::t_af4841aa81bfe0 35-45,83,175-182,237-244
+server/gen/device_integrations/client.go
+  s_fc571f39c642e8::t_1a56cb529f6e07 1-270
+server/gen/device_integrations/endpoints.go
+  s_fc571f39c642e8::t_366631d6d6d837 1-413
+server/gen/device_integrations/service.go
+  s_fc571f39c642e8::t_c6b74a2e164425 1-426
+server/gen/hooks/client.go
+  s_fc571f39c642e8::t_5b12a52d44bb32 23,29,36,149-166
+server/gen/hooks/endpoints.go
+  s_fc571f39c642e8::t_4f5345fb66610b 24,39,52,180-214
+server/gen/hooks/service.go
+  s_fc571f39c642e8::t_2702d5ca67e85a 34-35,64,289-291,379-407,669-683
+server/gen/http/admin_remote_sessions/client/cli.go
+  s_fc571f39c642e8::t_a1c4845aea6da1 246-299
+server/gen/http/admin_remote_sessions/client/client.go
+  s_fc571f39c642e8::t_075c9259337f97 40-47,89-105,229-276
+server/gen/http/admin_remote_sessions/client/encode_decode.go
+  s_fc571f39c642e8::t_1d41ba7b1d23d2 1187-1658
+server/gen/http/admin_remote_sessions/client/paths.go
+  s_fc571f39c642e8::t_94bd078ee317b6 35-44
+server/gen/http/admin_remote_sessions/client/types.go
+  s_fc571f39c642e8::t_d0ad69446436a7 113-128,327-378,1451-1454,1470-1473,1489-1492,1508-1511,1527-1530,1546-1549,1565-1568,1584-1587,1603-1606,1622-1625,1641-1644,1660-1663,1679-1682,1698-1701,1717-1720,1736-1739,1755-1758,1774-1777,1793-1796,1812-1815,1831-1834,1850-1853,1869-1872,1888-1891,1907-1910,1926-1929,1945-1948,1964-1967,1983-1986,2002-2005,2021-2022,2024,2040-2041,2043,2059-2060,2062,2078-2079,2081,2097-2098,2100,2116-2117,2119,2135-2136,2138,2154-2155,2157,2173-2174,2176,2192-2193,2195,2211-2402,2404,2420-2421,2423,2439-2440,2442,2458-2459,2461,2477-2478,2480,2496-2497,2499,2515-2516,2518,2534-2535,2537,2553-2554,2556,2572-2573,2575,2591-2787,2967-2986,3954-3969,3971-3975,3977-3980,3983-4006,4018-4020,4033-4035,4048-4050,4063-4065,4078-4080,4093-4095,4108-4110,4123-4125,4138-4140,4153-4161,4167-4169,4182-4184,4197-4199,4212-4214,4227-4229,4242-4244,4257-4259,4272-4275,4288-4290,4303-4305,4318-4320,4349-4351,4364-4366,4379-4381,4394-4396,4409-4411,4424-4426,4439-4441,4454-4456,4469-4471,4484-4486,4499-4504,4506-4510,4512,4518-4520,4533-4535,4548-4550,4563-4565,4578-4580,4593-4595,4608-4610,4623-4625,4638-4640,4653-4655,4668-4703,4714-4716,4729-4731,4744-4746,4759-4761,4774-4776,4789-4791,4804-4806,4819-4821,4834-4836,4849-4864,4866-4868,4870-4874,4876-4889,4891-4904,4906-4907,4910-4919,4921-4934,4936-4937,4940-4949,4951-4964,4966-5190,5228-5246,5292-5294,5304-5392,5557-6040,6042-6043,6045-6046,6051-6053,6075-6077,6099-6101,6123-6125,6147-6149,6171-6173,6195-6197,6219-6221,6243-6245,6267-6269,6291-6293,6315-6317,6339-6341,6363-6365,6387-6389,6411-6413,6435-6437,6459-6461,6483-6485,6507-6509,6531-6533,6555-6557,6579-6581,6603-6605,6627-6629,6651-6653,6675-6677,6699-6701,6723-6725,6747-6749,6771-6773,6795-6797,6819-6821,6843-6845,6867-6869,6891-6894,6916-6918,6940-6943,6965-6967,6989-6991,7013-7015,7037-7039,7061-7063,7085-7087,7109-7111,7133-7136,7158-7160,7182-7185,7207-7209,7231-7234
+server/gen/http/admin_remote_sessions/server/encode_decode.go
+  s_fc571f39c642e8::t_960dfa5fd983db 1064-1489
+server/gen/http/admin_remote_sessions/server/paths.go
+  s_fc571f39c642e8::t_ced1dc3ec927c4 35-44
+server/gen/http/admin_remote_sessions/server/server.go
+  s_fc571f39c642e8::t_1282829dd886f1 21-33,68-69,76-87,101-102,120-121,404-511
+server/gen/http/admin_remote_sessions/server/types.go
+  s_fc571f39c642e8::t_0bcee3bd40935b 115-130,329-380,1453-1832,3009-3057,3093-3119,3999-4298,5179-5200,5304-5324
+server/gen/http/cli/gram/cli.go
+  s_fc571f39c642e8::t_8e797548cb283e 34,106,115,134-136,142,759-812,1107-1111,1822-1831,1834-1844,1901-1908,2289-2294,2308-2348,3167-3178,3255,3424-3425,3428-3429,3442-3443,3516,3519-3524,3712-3713,4195-4228,4440-4442,4909-4914,4919-4923,4959-4964,5169-5171,5178-5195,5993-6026,6239-6241,6708-6713,6718-6723,6758-6763,6968-6970,6977-6994,9964-10207,11485,11593,11618-11639,14651-14652,14859-14902,14909-14910,14920,14922,14931,14941-14965,15103-15104,15216-15255,15642,15734,16773,16776-16781,16844-16867,16918-17071,19224
+server/gen/http/device_integrations/client/cli.go
+  s_fc571f39c642e8::t_8bac249a9f0c92 1-373
+server/gen/http/device_integrations/client/client.go
+  s_fc571f39c642e8::t_cf776d5997f8b0 1-337
+server/gen/http/device_integrations/client/encode_decode.go
+  s_fc571f39c642e8::t_66025e69478994 1-2496
+server/gen/http/device_integrations/client/paths.go
+  s_fc571f39c642e8::t_ce0587e9f9bcc7 1-58
+server/gen/http/device_integrations/client/types.go
+  s_fc571f39c642e8::t_b860eaba15c13c 1-6715
+server/gen/http/device_integrations/server/encode_decode.go
+  s_fc571f39c642e8::t_5186580e9895ca 1-2350
+server/gen/http/device_integrations/server/paths.go
+  s_fc571f39c642e8::t_094fa6fe1cd468 1-58
+server/gen/http/device_integrations/server/server.go
+  s_fc571f39c642e8::t_f97c9135c9cf62 1-654
+server/gen/http/device_integrations/server/types.go
+  s_fc571f39c642e8::t_b69a764c203d42 1-4028
+server/gen/http/hooks/client/cli.go
+  s_fc571f39c642e8::t_923973e6a058a8 14,259,375-430
+server/gen/http/hooks/client/client.go
+  s_fc571f39c642e8::t_294570c974a341 36-39,72,203-226
+server/gen/http/hooks/client/encode_decode.go
+  s_fc571f39c642e8::t_f355fad1f83003 1220-1444,1986-1995,2135-2158,2250-2259,2399-2422
+server/gen/http/hooks/client/paths.go
+  s_fc571f39c642e8::t_f7668e82829a97 35-39
+server/gen/http/hooks/client/types.go
+  s_fc571f39c642e8::t_ecf5fd66ad2e75 191-203,1178-1359,1770-1772,1882-1910,2205-2216,3037-3186,4688-4927
+server/gen/http/hooks/server/encode_decode.go
+  s_fc571f39c642e8::t_9a6546093d2ac2 1166-1387,1923-1932,2072-2095
+server/gen/http/hooks/server/paths.go
+  s_fc571f39c642e8::t_b2931a3a923b99 35-39
+server/gen/http/hooks/server/server.go
+  s_fc571f39c642e8::t_cd0927eb5f5883 27,64,73,89,104,379-431
+server/gen/http/hooks/server/types.go
+  s_fc571f39c642e8::t_6ae0e544317ac8 191-203,1178-1359,1770-1772,1882-1910,2822-2961,3398-3412,3537-3579,3645-3651,3698-3712
+server/gen/http/openapi3.yaml
+  s_fc571f39c642e8::t_ef76ab1d2705c4 4804-4890,5288,5290-5291,5304,5311,5369,5372,5374-5375,5377-5378,5391,5398,5456,5459,5461-5465,5474-5479,5485,5543,5545-5546,5548-5552,5555-5559,5561-5562,5565,5567,5569,5572-5748,12476,12478-12479,12482,12484,12486,12495-12500,12502-12503,12559,12561,12563-12564,12566-12567,12569-12570,12572-12586,12599,12656,12658,12660-12661,12663-12664,12666-12667,12669-12682,12695,12752,12754,12756-12757,12759-12763,12765-12810,12820-12823,12880,12882,12884-12893,12895-12899,12901-12907,12920,12977,12979,12981-12982,12984-12988,12991,12993,12996-13003,13012-13093,13095,13097,13099,13105,13112,13169-13171,13173-13174,13176-13177,13179-13180,13183,13185,13187,13190,13192,13194,13200,13207,13264-13266,13268-13269,13271-13275,13278-13280,13282,13291-13296,13299-13302,13359-13361,13363-13364,13366-13370,13373-13375,13377,13386-13391,13394-13397,13454-13456,13458-13459,13461-13465,13476-13479,13536-13537,13539-13540,13542-13546,13613-13614,13616-13617,13619-13620,13622-13623,13637,13694-13695,13697-13698,13700-13701,13703-13704,13718,13775-13776,13778-13779,13781-13785,13798,13858-13859,13861-13862,13864-13868,13881,13888,13945-13946,13948-13949,13951-13952,13954-13955,13958,13985,14051,14054,14056-14057,14059-14060,14063,14065,14067,14070,14072,14074,14080,14087,14144-14146,14148-14149,14151-14155,14157-14166,14174-14180,14239-14241,14243-14244,14246-14247,14249-14250,14253,14255,14258-14269,14278-14284,14286-14287,14343-14345,14347-14348,14350-14351,14353-14354,14357,14359,14362,14372-14378,14380-14381,14437-14439,14441-14442,14444-14445,14447-14448,14451,14453,14456-14467,14476-14482,14488,14545-14547,14549-14550,14552-14553,14555-14556,14559,14561,14564,14574-14580,14586,14643-14645,14647-14648,14650-14651,14653-14654,14663-14669,14675,14732-14734,14736,14739-14743,14752-14764,14770,14827-14829,14831-14832,14834-14838,14847-14859,14865,14922-14924,14926-14927,14929-14930,14932-14933,14935-14944,14952-14958,14963,14970,15027-15029,15031-15032,15034-15035,15037-15059,15072,15079,15137,15140,15142-15143,15145-15146,15159,15166,15224,15226-15227,15229-15233,15235-15243,15252-15253,15310,15312-15313,15315-15316,15318-15319,15322,15327,15396,15398-15399,15401-15405,15408,15413,15424-15429,15486,15488-15489,15491-15492,15494-15495,15498,15503,15518,15576,15578-15579,15581-15582,15584-15585,15588,15590,15592-15595,15609,15667,15669-15670,15672-15673,15675-15676,15679-15681,15683,15685-15758,15771,15829,15831-15832,15834-15838,15847-15852,15858,15916,15918-15919,15921-15925,15934-15939,15945,16003,16005-16006,16008-16009,16011-16012,16025,16090,16093,16095-16096,16098-16538,16540-16549,16555-17957,17959,17961,17965,17968,17972,17974,17980,17986,17992,17998,18004,18010,18016,18022,18028-18035,18037-18048,18050,18052,18054-18055,18057,18059,18061-18062,18064,18066,18068-18069,18071,18073,18080-18081,18087,18093,18099,18105,18111,18117,18123,18129,18135-18144,18146-18156,18158-18160,18164-18167,18171-18172,18174,18178-18179,18181,18185,18192,18248-18253,18255-18258,18260-18266,18268,18270,18272-18273,18275,18277,18284-18285,18291,18297,18303,18309,18315,18321,18327,18333,18339,18341-18343,18345-18352,18354,18357,18359,18365-18366,18368-18373,18379,18385,18391,18397,18403,18409,18415,18421,18427,18429-18439,18442,18444,18446,18453,18509-18511,18513-18514,18516-18520,18522-18526,18528,18530,18533,18535,18545,18551,18557,18563,18569,18575,18581,18587,18593,18595-18596,18598-18605,18607,18610,18612,18615-18620,18626,18632,18638,18644,18650,18656,18662,18668,18674,18677,18679-18686,18688-18707,18709,18711,18713-18714,18716,18718,18720-18724,18726,18728-18733,18739,18745,18751,18757,18763,18769,18775,18781,18787,18789-18790,18793-18799,18801-18802,18804-18810,18829,18832-18837,18893-18894,18897,18899-18906,18908-18912,18914-18915,18917,18919-18920,18923-18925,18927,18929,18931-18935,18937,18946,18952,18958,18964,18970,18976,18982,18988,18994,19000-19006,19008-19009,19012,19014,19016-19033,19051,19053,19055,19062,19123,19125-19126,19128-19129,19131-19132,19134-19135,19137,19139-19140,19142-19145,19147,19149-19150,19152,19154,19156,19158-19159,19162,19168-19169,19175,19181,19187,19193,19199,19205,19211,19217,19223,19227-19238,19247-19253,19261-19266,19272,19331-19333,19335-19336,19338-19339,19341-19342,19344-19350,19358-19364,19369,19376,19433-19437,19439-19440,19442-19443,19445-19446,19448-19471,19479-19485,19491,19548-19552,19554-19555,19557-19561,19564-19566,19568,19577-19589,19592-19595,19652-19656,19658-19663,19665-19680,19688-19694,19696-19697,19753-19754,19756-19757,19759-19761,19763-19764,19767,19769,19772-19773,19776,19778-19779,19781,19809,19870,19872-19877,19879-19900,19927,19988,19990-19991,19993-19997,20022-20025,20086,20088-20089,20091-20095,20118-20123,20129,20190,20192-20193,20195-20199,20222-20227,20233,20294,20296-20297,20299-20303,20305-20313,20397,20399-20400,20402-20406,20409-20412,20414-20423,20432-20438,20506-20508,20510-20511,20513-20514,20516-20517,20520,20522,20524-20525,20528,20530,20532,20535,20537,20539,20542,20544,20546,20560,20619-20621,20623,20626-20630,20633-20635,20637-20654,20663-20669,20682,20741-20743,20745-20752,20762-20767,20823-20824,20826-20830,20832-20833,20836,20838,20840,20844,20846,20848,20876,20937,20939-20943,20945-20946,20949,20951-20952,20954,20958,20960,20962-20963,20990,21051,21053-21054,21056-21060,21083-21088,21094,21155,21157-21158,21160-21164,21198,21259,21262,21264-21265,21267-21268,21295,21363,21366,21368-21369,21371-21372,21375,21380,21405-21406,21466,21468-21469,21471-21475,21500-21503,21564,21566-21567,21569-21573,21596-21601,21607,21668,21670-21671,21673-21677,21700-21705,21711,21768-21772,21774-21775,21777-21781,21797-21802,21808,21865,21867,21869-21870,21872-21876,21892-21897,21903,21960,21962,21964-21965,21967-21971,21973-21981,22054,22056,22058-22059,22061-22065,22067-22075,22095,22152,22154,22156-22157,22159-22163,22165-22173,22193,22250,22252,22254-22255,22257-22261,22264,22266,22269,22272-22286,22302-22307,22363,22365,22367-22376,22378-22379,22381-22382,22384-22392,22412,22469,22471,22473-22474,22476-22477,22479-22480,22500,22560,22562,22564-22565,22567-22568,22570-22571,22591,22598,22655,22657,22659-22660,22662-22663,22665-22666,22686,22693,22752,22754,22757-22852,22854-22855,22875,22882,22941,22943-22944,22946-22950,22953,22958,22977-22980,23039,23041-23042,23044-23045,23047-23048,23051,23056,23078,23137,23139-23140,23142-23143,23145-23146,23149,23151,23154-23163,23185,23244,23246-23247,23249-23250,23252-23253,23289,23348,23350,23361-23365,23381-23386,23392,23451,23453-23454,23456-23457,23459-23460,23480,23484-23487,23546,23548-23549,23551-23552,23554-23555,23575,23582,23641,23643-23644,23646-23647,23649-23650,23670,23736,23739,23741-23745,23748,23750,23753,23756-23770,23787-23790,23849,23851-23860,23862-23866,23869,23874,23896,23955,23957-23958,23960-23964,23967,23972,24049,24051-24052,24054-24058,24061,24063,24066,24088,24147,24149-24150,24152-24156,24170,24228,24230-24231,24233-24234,24236-24237,24247-24248,24305,24307-24308,24310-24311,24313-24314,24324-24325,24382,24384-24385,24387-24388,24390-24391,24404,24411,24469,24471-24472,24474-24475,24477-24478,24492,24550,24552-24553,24555-24559,24573,24631,24633-24634,24636-24640,24651-24654,24712,24714-24715,24717-24721,24735,24793,24795-24796,24798-24802,24804-24811,24820-24821,24878,24881,24883-24887,24889-24896,24963,24966,24968-24969,24971-24972,24981-24986,24988-24993,25050,25053,25055-25056,25058-25059,25072,25079,25137,25140,25142-25146,25155-25160,25166,25224,25227,25229-25230,25232-25233,25235-25241,25254,25312-25397,25399-25400,25402-25403,25405-25406,25408-25414,25427,25484,25486,25488-25489,25491-25495,25497-25503,25511-25516,25522,25579,25581,25583-25584,25586-25590,25593-25595,25597,25606-25618,25620-25625,25681-25685,25687-25688,25690-25694,25697-25699,25701,25710-25716,25718-25723,25779-25783,25785-25786,25788-25792,25794-25808,25816-25822,25828,25885-25889,25891-25892,25894-25895,25897-25898,25900-25906,25914-25920,25925,25932,25989-25993,25995-25996,25998-25999,26001-26002,26004-26010,26018-26024,26029,26036,26038-26043,26099-26103,26105-26106,26108-26112,26121-26133,26135,26139-26140,26196-26198,26200-26201,26203-26204,26206-26207,26210,26212,26214,26217,26219,26221,26223-26228,26230-26235,26291-26293,26295-26296,26298-26302,26305-26307,26309,26318-26324,26326-26327,26383-26385,26387-26388,26390-26394,26397,26399,26401,26404,26406,26408,26413,26415-26416,26418-26424,26480-26482,26484-26489,26492-26495,26497-26501,26520,26522-26523,26525-26531,26589,26591-26593,26595-26596,26599-26602,26604-26617,26636,26638-26639,26641-26647,26705,26707-26709,26711-26712,26733,26792,26794-26795,26797-26801,26804-26806,26808,26829,26888,26890-26891,26893-26897,26918,26977,26979-26980,26982-26986,27003,27007-27008,27066,27069,27071-27072,27074-27075,27095,27098,27102-27103,27161,27164,27166-27167,27169-27170,27173,27177-27184,27262,27265,27267-27271,27287-27292,27296,27298,27357,27360-27366,27382-27387,27391,27393,27452,27455-27461,27477-27482,27486,27488,27547,27550-27556,27572-27577,27583-27665,27722-27723,27725-27726,27728-27732,27741-27746,27805-27806,27808-27813,27816,27818,27820,27823,27825,27827,27829-27834,27840,27897-27899,27901-27902,27904-27908,27911-27920,27922,27924,27927,27929,27931,27934-27935,27991-27993,27995-27996,27998-28002,28005-28015,28017,28019,28022,28024,28026,28033,28090-28092,28094-28095,28097-28101,28104,28106,28109,28112-28114,28116,28126-28131,28187-28189,28191-28192,28194-28198,28200-28206,28226,28283-28284,28287,28289-28290,28292-28293,28295-28296,28298-28304,28323,28330,28387-28388,28391,28393-28394,28396-28400,28403,28405,28407,28413,28416-28417,28473-28474,28476-28481,28483-28489,28508,28515,28572-28573,28576,28578-28579,28581-28585,28594-28613,28619,28676-28680,28682-28683,28685-28686,28688-28689,28698-28711,28716,28720-28723,28780-28784,28786-28793,28795-28809,28818,28820,28822,28882-28883,28885-28886,28888-28889,28891-28892,28894-28895,28898,28903,28906-28912,28921,28923,28925,28928-28929,28985-28986,28988-28989,28991-28992,28994-28998,29001-29003,29005,29015,29017,29019,29021-29026,29032,29089-29090,29092-29093,29095-29096,29098-29099,29101-29102,29105,29107,29109-29124,29134,29136,29138,29145,29202-29203,29205-29206,29208-29209,29211-29212,29214-29215,29218-29221,29223-29224,29233-29239,29252,29311-29313,29315-29316,29318-29322,29325-29328,29330-29331,29340-29346,29359,29418-29420,29422-29423,29425-29429,29431-29437,29445-29451,29453-29458,29514-29515,29517-29518,29520-29524,29526-29527,29530,29532,29534,29537,29539,29541,29554,29561,29620-29622,29624-29625,29627-29628,29630-29631,29658,29665,29726,29729,29731-29732,29734-29735,29762,29769,29830,29833,29835-29839,29862-29867,29873,29934,29936-29937,29939-29940,29942-29943,29970,29977,30038,30040-30041,30043-30047,30070-30075,30081,30142,30144-30145,30147-30151,30174-30179,30185,30246,30248-30249,30251-30255,30258,30260,30263,30349,30351-30352,30354-30358,30381-30386,30392,30453,30455-30456,30458-30462,30464-30472,30499,30560,30562-30563,30565-30569,30572-30574,30576-30577,30580-30582,30584-30585,30588-30590,30592,30594-30601,30628,30689,30691-30700,30702-30703,30705-30706,30733,30801,30804,30806-30807,30809-30810,30837,30844,30905,30907-30908,30910-30914,30916-30924,31008,31010-31011,31013-31014,31016-31017,31044,31051,31112,31114-31115,31117-31121,31124,31128,31132-31134,31136,31164,31225,31227-31228,31230-31231,31233-31234,31237,31239,31241,31243-31250,31277,31338,31340-31349,31351-31355,31378-31383,31389,31450,31452-31453,31455-31456,31458-31459,31486,31493,31554,31556,31559-31563,31565-31594,31621,31682,31684-31693,31695-31699,31702,31707,31793,31795-31796,31798-31802,31805-31807,31809,31812-31827,31829,31831,31845,31904,31906-31907,31909-31913,31922-31927,31933,31990-31991,31993-31995,31997-32002,32005-32007,32009,32025-32030,32036,32095-32097,32099-32101,32103-32108,32111-32113,32115-32116,32125-32131,32144,32203-32205,32207-32209,32211-32215,32218-32220,32222,32238-32243,32249,32308-32310,32312-32314,32316-32318,32320-32321,32324-32326,32328,32344-32349,32352-32355,32414-32416,32418-32420,32422-32427,32430-32432,32434,32450-32455,32461,32518-32519,32522,32524-32526,32528-32530,32532-32533,32546,32549,32553-32554,32611,32614-32615,32617,32619,32621-32622,32635,32642,32699-32700,32703-32704,32706,32708-32711,32734-32739,32802,32805-32806,32808-32813,32815-32823,32907,32910-32911,32913,32915-32918,32920-32928,33012,33015-33017,33019-33020,33047,33054,33115,33118-33119,33121,33123-33126,33129-33132,33134-33135,33149,33207,33210-33211,33213-33218,33220-33228,33252-33255,33316,33320,33322-33327,33330,33332,33334-33343,33368-33371,33432,33435-33436,33438-33442,33476-33479,33540,33544-33545,33547-33548,33561,33568,33625-33626,33629-33630,33632,33634,33636-33637,33640,33645,33648-33654,33662-33668,33674,33731-33735,33738-33740,33742-33743,33746,33748,33751-33767,33795,33856,33859-33860,33862-33863,33865-33866,33869-33877,33881,33885,33889,33918-34017,34078,34081-34082,34084-34085,34087-34088,34116,34177,34180-34187,34189-34195,34203-34209,34215,34272-34276,34279-34280,34282-34284,34286-34287,34290,34292,34294,34323,34384,34387-34392,34394-34395,34423,34484,34487-34488,34490-34491,34493-34494,34497,34499,34501-34502,34505,34507,34509-34514,34542,34603,34606-34607,34609-34610,34612-34613,34615-34706,34733,34794,34797-34798,34800-34801,34803-34804,34806-34822,34849,34910,34913-34914,34916-34917,34919-34920,34922-35013,35040,35101,35104-35105,35107-35111,35134-35139,35145,35206,35209-35210,35212-35217,35226-35231,35237,35294-35295,35298-35299,35301-35306,35329-35334,35340,35401,35404-35405,35407-35412,35435-35440,35446,35507,35510-35511,35513-35518,35541-35546,35552,35613,35616-35617,35619-35624,35647-35652,35715,35718-35720,35722-35723,35757,35818,35821-35822,35824,35826-35829,35831-35837,35845-35851,35856,35863,35920-35924,35927-35928,35930,35932-35935,35962,35969,36030,36033-36034,36036,36038-36041,36068,36075,36136,36139-36144,36147-36150,36152-36153,36156-36159,36161-36162,36247,36250-36255,36257-36258,36285,36292,36353,36356-36357,36359-36364,36366-36374,36401,36462,36465-36466,36468-36473,36500,36507,36568,36571-36572,36574,36576-36579,36600,36658-36659,36661-36668,36671,36673,36675-36678,36680,36682,36684-36685,36688-36690,36692-36693,36695-36708,36725-36728,36787,36789-36790,36792-36794,36796-36797,36817,36824,36882-36883,36885-36886,36888-36892,36895-36897,36899,36915-36920,36926,36985-36987,36989-36990,36992-36993,36995-36996,36999,37001,37003,37006,37008,37010,37023,37030,37089-37091,37093-37094,37096-37100,37102-37108,37117,37119,37121,37123-37128,37134,37191-37192,37194-37195,37197-37198,37200-37204,37213-37219,37227-37232,37293-37295,37297-37298,37300-37301,37303-37304,37306-37312,37321,37323,37325,37331,37338,37395-37396,37398-37399,37401-37402,37404-37405,37407-37408,37435,37442,37503,37506,37508-37509,37511-37512,37538-37540,37542,37546-37549,37610,37613,37615-37619,37621-37629,37656,37717,37720,37722-37726,37729-37732,37734-37736,37743,37745-37760,37815,37818,37820-37821,37823-37824,37827,37829,37831,37833-37843,37870,37931,37934-37942,37944-37945,37947-37948,37951,37953,37955-38003,38010,38066-38071,38074-38082,38084-38085,38087-38088,38091-38100,38104,38107,38111-38112,38114,38143,38204,38207,38217-38218,38220-38221,38224,38226-38227,38229,38233,38235,38237-38346,38350,38354,38357,38362,38393,38454,38457,38467,38725-38828,50625-50644,50684-50717,53475-53480,54439-54662,54672,54675,54677-54678,54680,55480-55487,56552,56947-56951,57083-57126,57946-57974,58156-58168,58701-58746,59247-59312,62430-62443,62621-62634,63132-63137,65455,65663-65791,65797-65798,65885-65926,66022-66122,66204-66242,68840-68842,68891,69780-69785,70164-70166,70370-70391,71134-71135
+server/gen/http/organization_remote_session_issuers/client/cli.go
+  s_fc571f39c642e8::t_c1c778f800be3f 436-504
+server/gen/http/organization_remote_session_issuers/client/client.go
+  s_fc571f39c642e8::t_c632a978833fca 57-64,95-96,321-368
+server/gen/http/organization_remote_session_issuers/client/encode_decode.go
+  s_fc571f39c642e8::t_4f092edba3ba13 2160-2639
+server/gen/http/organization_remote_session_issuers/client/paths.go
+  s_fc571f39c642e8::t_9d19d0f464a2db 54-63
+server/gen/http/organization_remote_session_issuers/client/types.go
+  s_fc571f39c642e8::t_c18a57ab1c828f 139-154,418-469,2180-2196,2199-2205,2207-2222,2224-2234,2237-2253,2256-2272,2275-2724,2728-3012,3015-3024,3026-3027,3030-3138,3189-3191,3204-3311,3324-3326,3339-3357,3370-3373,3386-3389,3402-3405,3418-3421,3434-3437,3450-3452,3465-3475,3481-3484,3497-3500,3513-3569,3582-3584,3597-3599,3612-3614,3627-3629,3642-3644,3657-3659,3672-3674,3687-3696,3698-3711,3717-3719,3732-3734,3747-3749,3762-3764,3777-3779,3792-3794,3807-3809,3822-3824,3837-3839,3852-3854,3867-3891,3893-3915,3921-3923,3936-3938,3951-3953,3966-3968,3981-3983,3996-3998,4011-4013,4026-4028,4041-4043,4056-4058,4071-4077,4079-4081,4083-4085,4087-4093,4099-4102,4115-4118,4131-4134,4147-4150,4163-4166,4179-4182,4195-4198,4211-4214,4227-4230,4243-4246,4259-4274,4287-4289,4302-4304,4317-4319,4332-4334,4347-4349,4362-4364,4377-4379,4392-4394,4407-4409,4422-4426,4463-4466,4471-4473,4486-4488,4501-4503,4516-4518,4531-4533,4546-4549,4562-4564,4577-4580,4593-4595,4608-4610,4623-4631,4633-4647,4649-4662,4668-4670,4683-4685,4698-4700,4713-4716,4729-4731,4744-4747,4760-4778,4787-5000,5002-5003,5005-5006,5008,5011-5015,5017-5032,5035-5039,5041-5052,5055-5059,5061-5073,5076-5080,5082-5090,5093-5097,5099-5114,5117-5121,5123-5138,5141-5160,5162,5165-5169,5171-5186,5189-5193,5195-5210,5213-5217,5219-5234,5237-5241,5243-5258,5261-5266,5270-5271,5273-5274,5276-5277,5279-5280,5282-5289,5291-5292,5294-5295,5297-5298,5300-5301,5303-5304,5306-5313,5315-5316,5318-5328,5333-5337,5339-5361,5366-5367,5369-5370,5372-5373,5375-5376,5378-5385,5387-5388,5390-5391,5393-5394,5396-5397,5399-5400,5405-5409,5411-5424,5429-5434,5438-5439,5441-5442,5444-5445,5447-5448,5450-5457,5459-5460,5462-5463,5465-5466,5468-5469,5471-5472,5477-5482,5486-5487,5489-5490,5492-5493,5495-5496,5498-5505,5507-5508,5510-5511,5513-5514,5516-5517,5519-5520,5525-5529,5531-5532,5534-5535,5537-5538,5540-5541,5543-5544,5549-5556,5558-5559,5561-5562,5564-5568,5573-5575,5597-5599,5621-5623,5645-5647,5669-5671,5693-5695,5717-5719,5741-5743,5765-5767,5789-5791,5813-5815,5837-5839,5861-5863,5885-5887,5909-5911,5933-5936,5958-5960,5982-5985,6007-6009,6031-6033,6055-6057,6079-6081,6103-6105,6127-6129,6151-6153,6175-6177,6199-6201,6223-6225,6247-6249,6271-6273,6295-6297,6319-6321,6343-6345,6367-6369,6391-6393,6415-6417,6439-6441,6463-6465,6485-6489,6511-6513,6535-6537,6559-6561,6583-6585,6607-6609,6631-6633,6655-6657,6679-6681,6703-6705,6727-6729,6751-6753,6775-6777,6799-6801,6823-6825,6847-6849,6871-6873,6895-6898,6920-6922,6944-6947,6969-6971,6993-6995,7017-7019,7041-7043,7065-7067,7089-7091,7113-7115,7137-7139,7161-7163,7185-7187,7209-7211,7233-7235,7257-7259,7281-7283,7305-7307,7329-7331,7353-7355,7377-7379,7401-7403,7425-7427,7449-7451,7473-7475,7497-7499,7521-7523,7545-7547,7569-7571,7593-7595,7617-7619,7641-7643,7665-7668,7690-7692,7714-7716
+server/gen/http/organization_remote_session_issuers/server/encode_decode.go
+  s_fc571f39c642e8::t_6367f7830656fc 2013-2463
+server/gen/http/organization_remote_session_issuers/server/paths.go
+  s_fc571f39c642e8::t_1a450a18729f0c 54-63
+server/gen/http/organization_remote_session_issuers/server/server.go
+  s_fc571f39c642e8::t_2f0aa38e555681 32-33,72-73,84-85,103-104,122-123,617-724
+server/gen/http/organization_remote_session_issuers/server/types.go
+  s_fc571f39c642e8::t_4269a1df7397ed 139-154,418-469,2180-2196,2199-2205,2207-2215,2218-2234,2237-2253,2256-2740,2929-2999,4350-4649,4836-4859,4925-4945
+server/gen/http/remote_session_issuers/client/cli.go
+  s_fc571f39c642e8::t_592b5617694f55 19-22,24,26,33-34,39-40,45-46,49,59-102
+server/gen/http/remote_session_issuers/client/client.go
+  s_fc571f39c642e8::t_3b32c58c7d6e50 20-26,69-105,109-112,114-115,118,126,128
+server/gen/http/remote_session_issuers/client/encode_decode.go
+  s_fc571f39c642e8::t_e0295199ddb015 23-273,276,285-288,290,292,306,308,314-319,331,348,353,355,357,359,363,368,370,372,374,377,382,384,386,388,391,396,398,400,402,405,410,412,414,416,419,424,426,428,430,433,438,440,442,444,447,452,454,456,458,464,469,471,473,475,478,483,485,487,489,492,496,501,503,505,507,510
+server/gen/http/remote_session_issuers/client/paths.go
+  s_fc571f39c642e8::t_c756b9520d9dc5 10-17
+server/gen/http/remote_session_issuers/client/types.go
+  s_fc571f39c642e8::t_5dce00557a19b7 16-20,24-31,131-134,170-182,347-350,366-369,385-388,404-407,423-426,442-445,461-464,480-483,499-502,518-711,1728-1729,1731-1732,1738-1747,1845-1848,1894-1897,1910-1912,1925-1927,1940-1942,1955-1957,1970-1973,1986-1988,2001-2002,2004,2017-2019,2032-2035,2048-2056,2062-2065,2078-2080,2093-2096,2109-2111,2124-2126,2139-2142,2155-2157,2170-2173,2186-2189,2202-2408,3148-3150,3169-3185,3346-3498,3520-3523,3545-3548,3570-3573,3595-3598,3620,3622-3623,3645-3648,3670,3672-3673,3695-3798,3820,3822-3823
+server/gen/http/remote_session_issuers/server/encode_decode.go
+  s_fc571f39c642e8::t_0158e4e8c6cc92 24-27,31,37-41,43,57,79,106-109,126,140,154,168,182,196,210,224,238,252-492
+server/gen/http/remote_session_issuers/server/paths.go
+  s_fc571f39c642e8::t_8658132937ee55 10-17
+server/gen/http/remote_session_issuers/server/server.go
+  s_fc571f39c642e8::t_451778935d443c 21-28,58-59,66-72,81-82,95-96,109-111,118,121-124,133-135,139-194
+server/gen/http/remote_session_issuers/server/types.go
+  s_fc571f39c642e8::t_583ac85c686a9b 16-20,24-31,131-134,170-182,347-350,366-369,385-388,404-407,423-426,442-445,461-464,480-483,499-502,518-711,1728-1732,1780-1798,1980-1984,1995-1999,2010-2014,2025-2029,2040-2044,2055-2059,2070-2165,2176-2180,2191-2195,2206-2273,3034-3037,3047-3059,3201-3203,3210-3221
+server/gen/http/risk/client/cli.go
+  s_fc571f39c642e8::t_6047916a4b5746 29,59,268,291-295,337
+server/gen/http/risk/client/encode_decode.go
+  s_fc571f39c642e8::t_8ee1170028f139 10515
+server/gen/http/risk/client/types.go
+  s_fc571f39c642e8::t_3b6b56c4f19c6e 69-73,141-144,448-452,559-563,654-658,9404-9408,9859,9971,10350,10920,11156,17814-17818,17956-17960,18063-18067,29582-29586
+server/gen/http/risk/server/encode_decode.go
+  s_fc571f39c642e8::t_3047942e55b343 10164
+server/gen/http/risk/server/types.go
+  s_fc571f39c642e8::t_6f53f98dd78d35 71-75,143-146,450-454,561-565,656-660,9380-9384,9863,9996,10089,17145,17293,17990-17994,18047-18051
+server/gen/http/skill_efficacy/client/encode_decode.go
+  s_fc571f39c642e8::t_189abd77f97954 761-763,855-877
+server/gen/http/skill_efficacy/client/types.go
+  s_fc571f39c642e8::t_76eba0f1cfd7d2 644-645,694-708,2147-2151,2262-2306
+server/gen/http/skill_efficacy/server/encode_decode.go
+  s_fc571f39c642e8::t_17945cf1f18b6c 725-727,829-851
+server/gen/http/skill_efficacy/server/types.go
+  s_fc571f39c642e8::t_145d70dec22835 644-645,694-708
+server/gen/http/skills/client/cli.go
+  s_fc571f39c642e8::t_b2a44752194c03 107-151,267-596
+server/gen/http/skills/client/client.go
+  s_fc571f39c642e8::t_7f65ab48b74813 27-30,37-60,121,124-129,196-219,268-411
+server/gen/http/skills/client/encode_decode.go
+  s_fc571f39c642e8::t_9900efd1aa3103 507-748,755-2218,2227-2229,2231,2233,2247-2250,2255-2258,2270,2287,2292,2294,2296,2298,2302,2307,2309,2311,2313,2316,2321,2323,2325,2327,2330,2335,2337,2339,2341,2344,2349,2351,2353,2355,2358,2363,2365,2367,2369,2372,2377,2379,2381,2383,2386,2391,2393,2395,2397,2403,2408,2410,2412,2414,2417,2422,2424,2426,2428,2431,2435,2440,2442,2444,2446,2449,2454-2459,2461,2470-2472,2474,2476,2490-2492,2498-2501,2513,2530,2535,2537,2539,2541,2545,2550,2552,2554,2556,2559,2564,2566,2568,2570,2573,2578,2580,2582,2584,2587,2592,2594,2596,2598,2601,2606,2608,2610,2612,2615,2620,2622,2624,2626,2629,2634,2636,2638,2640,2646,2651,2653,2655,2657,2660,2665,2667,2669,2671,2674,2678,2683,2685,2687,2689,2692,5175-5275
+server/gen/http/skills/client/paths.go
+  s_fc571f39c642e8::t_4597c7f20d177d 20-24,35-64
+server/gen/http/skills/client/types.go
+  s_fc571f39c642e8::t_ab13b601a20990 36-44,58-85,160-173,191,220-304,310,768-770,786-788,804-806,822-824,840-842,858-861,877-879,895-898,914-916,932-934,950,952,968,970,986,988,1004-1006,1022-1024,1040-1042,1058-1060,1076-1078,1094,1096,1112,1114,1130,1132,1148-1150,1166-1168,1184,1186,1202,1204,1220,1222,1238,1240,1256-1258,1274-1276,1292,1294,1310-1312,1328-1330,1346-1348,1364-1366,1382-1384,1400-1403,1419-1421,1437-1440,1456-1458,1474-1476,1492-1494,1510-1512,1528-1530,1546-1548,1564-1566,1582-1584,1600-1602,1618-1619,1621,1637-1639,1655-1657,1673-1676,1692-1694,1710-1712,1728-1730,1746-1748,1764-1767,1783-1785,1801-1804,1820-1822,1838-1841,1857-1860,1876-1878,1894-1896,1912-1914,1930-1932,1948-1951,1967-1969,1985-1988,2004-2006,2022-2025,2041-2044,2060-2063,2079-2082,2098-2101,2117-2120,2136-2139,2155-2158,2174-2177,2193-2196,2212-2215,2231-2234,2250-2253,2269-2272,2288-2291,2307-2310,2326-2329,2345-2347,2363-2366,2382-2385,2401-2404,2420-2422,2438-2440,2456-2458,2474-2476,2492-2494,2510-2512,2528-2530,2546-2548,2564-2566,2582-2584,2600-2603,2619-2622,2638-2641,2657-2660,2676-2679,2695-2698,2714-2717,2733-2736,2752-2755,2771-2774,2790-2792,2808-2810,2826-2828,2844-2846,2862-2864,2880-2882,2898-2900,2916-2917,2919,2935-2937,2953-2955,2971-2974,2976-2986,2989-2994,2996-3004,3007-3015,3017-3022,3025-3040,3043-3058,3061-3076,3079-3084,3086-3094,3097-3102,3104-6736,6739-6748,6750-6751,6754-6763,6765-6766,6769-6778,6780-6781,6784-6793,6795-6796,6799-6808,6810-6811,6814-6818,6820-6829,6832-6841,6843-6844,6847-6856,6858-6859,6862-6871,6877-6879,6892-6894,6907-6909,6922-6924,6937-6939,6952-6954,6967-6969,6982-6984,6997-6998,7011,7013,7026-7034,7040-7041,7054-7056,7069-7070,7083-7085,7098,7100,7113-7115,7128-7154,7167-7169,7182-7184,7197-7199,7212,7214,7227-7229,7242,7244,7257-7259,7272-7274,7287-7289,7302-7304,7317-7319,7332-7334,7347-7349,7362-7364,7377-7379,7392-7394,7407-7409,7422-7424,7437-7439,7452-7465,7478-7479,7492-7493,7506-7507,7520-7528,7534-7536,7549-7550,7563-7565,7578-7579,7592-7594,7607-7609,7622-7623,7636-7638,7651-7652,7665-7666,7679-7688,7694-7695,7708-7710,7723-7725,7738-7740,7753-7772,7785-7787,7800-7802,7815-7817,7830-7832,7845-7847,7860-7868,7874-7876,7889-7891,7904-7906,7919-7939,7952-7954,7967-7969,7982-7984,7997-7999,8012-8014,8027-8029,8042-8044,8057-8059,8072-8074,8087-8387,8389-8390,8392,8395-8399,8401-8406,8408,8411-8415,8417-8422,8424,8427-8430,8432-8471,8474-8478,8480-8487,8490-8494,8496-8503,8506-8558,8560-8571,8574-8577,8579-8585,8588-8592,8594-8606,8609-8613,8615-8622,8625-8629,8631-8646,8649-8653,8655-8670,8673-8677,8679-8694,8697-8701,8703-8718,8721-8725,8727-8742,8745-8749,8751-8766,8769-8773,8775-8790,8793-8797,8799-8814,8817-8821,8823-8838,8841-8845,8847-8862,8865-8869,8871-8886,8889-8893,8895-8910,8913-8926,8928-8934,8937-8941,8943-8958,8961-8965,8967-8982,8985-8989,8991-9006,9009-9013,9015-9030,9033-9037,9039-9054,9057-9061,9063-9078,9081-9085,9087-9102,9105-9121,9123-9124,9126,9129-9133,9135-9150,9153-9157,9159-9174,9177-9181,9183-9198,9201-9205,9207-9222,9225-9229,9231-9246,9249-9253,9255-9270,9273-9277,9279-9294,9297-9301,9303-9318,9321-9325,9327-9342,9345-9349,9351-9366,9369-9373,9375-9390,9393-9397,9399-9414,9417-9421,9423-9438,9441-9445,9447-9462,9465-9469,9471-9486,9489-9508,9510,9513-9517,9519-9520,9522-9523,9525-9534,9537-9541,9543-9558,9561-9565,9567-9582,9585-9589,9591-9606,9609-9613,9615-9630,9633-9637,9639-9654,9657-9676,9678,9681-9685,9687-9688,9690-9702,9705-9709,9711-9726,9729-9733,9735-9750,9753-9757,9759-9774,9777-9781,9783-9798,9801-9805,9807-9822,9825-9829,9831-9846,9849-9865,9867-9868,9870,9873-9877,9879-9894,9897-9901,9903-9918,9921-9925,9927-9928,9930-9931,9933-9934,9936-9937,9939-9940,9945-9949,9951-9952,9954-9955,9957-9958,9960-9961,9963-9964,9969-9974,9978-9988,9990-9995,9999-10000,10002-10003,10005-10006,10008-10009,10011-10012,10014-10021,10023-10024,10026-10027,10029-10030,10032-10033,10035-10036,10038-10045,10047-10048,10050-10051,10053-10060,10065-10069,10071-10084,10089-10093,10095-10096,10098-10099,10101-10102,10104-10105,10107-10108,10110-10117,10119-10120,10122-10123,10125-10126,10128-10129,10131-10132,10137-10141,10143-10156,10161-10166,10170-10171,10173-10174,10176-10177,10179-10180,10182-10189,10191-10192,10194-10195,10197-10198,10200-10201,10203-10204,10206-10213,10215-10216,10218-10219,10221-10222,10224-10225,10227-10228,10233-10237,10239-10240,10242-10252,10257-10259,10263-10264,10266-10267,10269-10270,10272-10276,10281-10297,10299-10300,10305-10307,10329-10331,10353-10355,10377-10379,10401-10403,10425-10427,10449-10451,10473-10475,10497-10499,10521-10523,10545-10547,10569-10571,10593-10595,10617-10619,10641-10643,10665-10667,10689-10691,10713-10715,10737-10739,10761-10763,10785-10787,10809-10811,10833-10835,10857-10859,10881-10883,10905-10907,10929-10931,10953-10956,10978-10980,11002-11004,11026-11028,11050-11052,11074-11076,11098-11100,11122-11124,11146-11148,11170-11172,11194-11197,11219-11221,11243-11245,13809-14022
+server/gen/http/skills/server/encode_decode.go
+  s_fc571f39c642e8::t_16a16bfaa5e857 499-735,740-2203,2205,2211-2215,2217-2218,2222,2224-2247,2260-2263,2290-2292,2309,2323,2337,2351,2365,2379,2393,2407,2421,2435,2446-2448,2450,2452,2458-2462,2464-2465,2467-2470,2472-2476,2478-2480,2482-2487,2500,2527-2529,2546,2560,2574,2588,2602,2616,2630,2644,2658,2672,5139-5243
+server/gen/http/skills/server/paths.go
+  s_fc571f39c642e8::t_2a2fa026a5859d 20-24,35-64
+server/gen/http/skills/server/server.go
+  s_fc571f39c642e8::t_fbedee3025c1bb 24,27-32,74,77-82,96,99-104,125,128-133,153,156-161,285-337,439-756
+server/gen/http/skills/server/types.go
+  s_fc571f39c642e8::t_2749148a340910 38-46,60-87,162-175,193,222-306,312,770-772,788-790,806-808,824-826,842-844,860-863,879-881,897-900,916-918,934-936,952,954,970,972,988,990,1006-1008,1024-1026,1042-1044,1060-1062,1078-1080,1096,1098,1114,1116,1132,1134,1150-1152,1168-1170,1186,1188,1204,1206,1222,1224,1240,1242,1258-1260,1276-1278,1294,1296,1312-1314,1330-1332,1348-1350,1366-1368,1384-1386,1402-1405,1421-1423,1439-1442,1458-1460,1476-1478,1494-1496,1512-1514,1530-1532,1548-1550,1566-1568,1584-1586,1602-1604,1620-1621,1623,1639-1641,1657-1659,1675-1678,1694-1696,1712-1714,1730-1732,1748-1750,1766-1769,1785-1787,1803-1806,1822-1824,1840-1843,1859-1862,1878-1880,1896-1898,1914-1916,1932-1934,1950-1953,1969-1971,1987-1990,2006-2008,2024-2027,2043-2046,2062-2065,2081-2084,2100-2103,2119-2122,2138-2141,2157-2160,2176-2179,2195-2198,2214-2217,2233-2236,2252-2255,2271-2274,2290-2293,2309-2312,2328-2331,2347-2349,2365-2368,2384-2387,2403-2406,2422-2424,2440-2442,2458-2460,2476-2478,2494-2496,2512-2514,2530-2532,2548-2550,2566-2568,2584-2586,2602-2605,2621-2624,2640-2643,2659-2662,2678-2681,2697-2700,2716-2719,2735-2739,2754-2757,2773-2776,2792-2794,2810-2812,2828-2830,2846-2848,2864-2866,2882-2884,2900-2902,2918-2919,2921,2937-2939,2955-2957,2973-2976,2978-2988,2991-2996,2998-3006,3009-3017,3019-3024,3027-3042,3045-3060,3063-4457,4473-5507,5510-5521,5524-5533,5535-5547,5549-5730,5735-5744,5749-5758,5763-5772,5777-5786,5791-5800,5805-5814,5819-5828,5833-5842,5847-5856,5861-5870,5875-5878,5889-5892,5903-5906,5917-5920,5931-5934,5945-5949,5958-5963,5974-5978,5989-5992,6003-6006,6017-6020,6031-6034,6045-6048,6059-6062,6073-6076,6087-6091,6102-6105,6116-6120,6131-6134,6145-6148,6159-6163,6174-6178,6189-6193,6204-6208,6219-6223,6234-6238,6249-6253,6264-6268,6279-6283,6294-6298,6309-6313,6324-6328,6339-6343,6354-6358,6369-6373,6384-6388,6399-6403,6414-6418,6429-6433,6444-6448,7897-7910,7938-8022,8174-8191,8224-8259
+server/gen/http/tunneled_mcp/client/cli.go
+  s_fc571f39c642e8::t_4129fc700aca0e 172,198-200
+server/gen/http/tunneled_mcp/client/encode_decode.go
+  s_fc571f39c642e8::t_e812fe85e3c9ee 1708
+server/gen/http/tunneled_mcp/client/types.go
+  s_fc571f39c642e8::t_468b3606f029ef 30-32,71-73,114-116,1447-1449,1500-1502,1853,2195,2722-2724,2808-2810,4570-4572
+server/gen/http/tunneled_mcp/server/encode_decode.go
+  s_fc571f39c642e8::t_6e4c237c689dc9 1640
+server/gen/http/tunneled_mcp/server/types.go
+  s_fc571f39c642e8::t_0f40e1b63a9b9f 30-32,71-73,114-116,1447-1449,1528,1571,2639-2641
+server/gen/organization_remote_session_issuers/client.go
+  s_fc571f39c642e8::t_0d41b7725f2a52 28-29,34,45-46,252-297
+server/gen/organization_remote_session_issuers/endpoints.go
+  s_fc571f39c642e8::t_6bce842c2de547 28-29,47-48,64-65,384-453
+server/gen/organization_remote_session_issuers/service.go
+  s_fc571f39c642e8::t_20e52b5730d777 66-80,103,171-179,310-318
+server/gen/remote_session_issuers/client.go
+  s_fc571f39c642e8::t_7e6d035af7828c 19-25,30,32-38,42-45,57,59,66-89
+server/gen/remote_session_issuers/endpoints.go
+  s_fc571f39c642e8::t_5b0abd39205e05 19-25,34-40,47-48,56-57,59,61,112-172
+server/gen/remote_session_issuers/service.go
+  s_fc571f39c642e8::t_075667b52344b1 22-32,66,133-136,175-184
+server/gen/risk/service.go
+  s_fc571f39c642e8::t_16cc28ef2a0d68 351-355,1314-1317
+server/gen/skill_efficacy/service.go
+  s_fc571f39c642e8::t_8d887178f39270 80-81,106-120
+server/gen/skills/client.go
+  s_fc571f39c642e8::t_77d3935daa9cd7 21,24-29,43,47,50-55,113-134,179-314
+server/gen/skills/endpoints.go
+  s_fc571f39c642e8::t_02356450aa0870 21,24-29,49,52-57,75,78-83,214-272,391-744
+server/gen/skills/service.go
+  s_fc571f39c642e8::t_519f1d0be9cb03 29-31,38-57,111,128-173,193-202,239,267-280,301-327,345-370,419-430,494-527,536-553
+server/gen/tunneled_mcp/service.go
+  s_fc571f39c642e8::t_dec9afc657fc69 148-150
+server/gen/types/remote_session_issuer_draft.go
+  s_fc571f39c642e8::t_f48cfbd93a5730 10-11
+server/gen/types/remote_session_issuer_refresh.go
+  s_fc571f39c642e8::t_834b6822c253c4 1-20
+server/gen/types/risk_policy.go
+  s_fc571f39c642e8::t_d3684a3f374b91 68-72
+server/gen/types/skill.go
+  s_fc571f39c642e8::t_0867d1bad39965 26
+server/gen/types/skill_edit_suggestion.go
+  s_fc571f39c642e8::t_a150ba41a58348 1-47
+server/gen/types/skill_edit_suggestion_change.go
+  s_fc571f39c642e8::t_6cff1db0959f00 1-30
+server/gen/types/tunneled_mcp_server.go
+  s_fc571f39c642e8::t_75dc1ec518bbdd 25-27
+server/internal/assistants/repo/queries.sql.go
+  s_fc571f39c642e8::t_5226e70ef5e953 975-1028,1936-1939,1943,2161-2164,2168,2637,2639,2649,2651-2652,2654,2658,2667,3075-3078,3082
+server/internal/chat/repo/queries.sql.go
+  s_fc571f39c642e8::t_e97042e217ccc9 333-346,1226-1323,2211-2250,2916
+server/internal/deviceintegrations/repo/queries.sql.go
+  s_fc571f39c642e8::t_c7d87a0acbf140 1-1265
+server/internal/hooks/repo/queries.sql.go
+  s_fc571f39c642e8::t_4c0e05ee1f9ec2 301
+server/internal/plugins/repo/queries.sql.go
+  s_fc571f39c642e8::t_5f9a0edc19576f 839,1283
+server/internal/remotesessions/repo/queries.sql.go
+  s_fc571f39c642e8::t_5f62e632af209c 75-77,85-106,481,492-495,904,922-927,963,978-980,1011-1014,1021,1024-1033,1035,1318-1322,1327-1331,1334-1340,1342-1465,1940,1969-1987,2042-2044,2048-2051,2053,2055,2060,2077-2093,2095-2100,2157,2179-2180,2487-2491,2493,2495,2499-2504,2507-2519,2523,2525,2838,2867-2870,2936-2985,3283,3298-3302,3699-3893
+server/internal/risk/repo/queries.sql.go
+  s_fc571f39c642e8::t_65eeedc80cb54d 260,289,646,672,674-677,680,701,728,754,1414,1447,1503,1537,1696,1754,1791,1865,1899,1922,1958,1981,2020,2327,2361,2495,2532-2533,2580,2615,2652-2653,2704,2868,3871,3939
+server/internal/skills/repo/queries.sql.go
+  s_fc571f39c642e8::t_7b999649588fd4 15-62,362-440,554-614,717-801,922-1159,1188,1229,1266-1267,1269,1272-1274,1277-1278,1282-1359,1512-1545,1561,1672-1708,1721,1737-1772,1802,1828,1847,1850,1867,2018,2069-2230,2522,2549,2578,2586,2642,2775-2804,2888,3002,3004-3040,3042-3046,3048-3049,3052-3057,3060-3229,3734-3928,3942,3977-4102,4214-4277,4330-4377,4380,4458,4492,4632-4681,4851-4873,4955-5058,5273-5431,5521,5652-5731,5769-5873
+server/internal/testenv/testrepo/queries.sql.go
+  s_fc571f39c642e8::t_995b4e347dc1ad 15-25,130-178,239-279,356-397,418-433,592,623,651-664,690-707
+server/internal/tunneledmcp/repo/queries.sql.go
+  s_fc571f39c642e8::t_92de888dfcbcb9 140-175,293,295,300-303,307-312
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "dc8d822ad81dac8444f837dd566d42f26d66e912",
+  "prompts": {},
+  "sessions": {
+    "s_fc571f39c642e8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa7d1-17b5-7831-ad39-8403c6daa46c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,60 @@
+infra/gen_py/gram/risk/v1/prompt_injection_analysis_pb2.pyi
+  s_e5952da15582a2::t_ef8477e550f2f3 11,33-34,49-51
+server/internal/scanners/promptinjection/scanner.go
+  s_e5952da15582a2::t_9542ce5e7b6ded 24-27,38-41,49,70,75-79,97,106-110,144-153,160
+server/internal/judgemessage/payload.go
+  s_e5952da15582a2::t_b8758a0ddf95d3 22-24,27-43
+  s_e5952da15582a2::t_f548dbd267de65 44
+server/internal/scanners/promptinjection/scanner_test.go
+  s_e5952da15582a2::t_7b1bec2bbb79e6 103-127
+  s_e5952da15582a2::t_1dd44dfe797a3c 144-145,181-183
+  s_e5952da15582a2::t_f370cf8e017e41 39,73,92,222,240,256
+infra/proto/gram/risk/v1/prompt_injection_analysis.proto
+  s_e5952da15582a2::t_b8758a0ddf95d3 26-30
+server/internal/scanners/promptinjection/handler.go
+  s_e5952da15582a2::t_d62b29927f7953 60-63
+server/internal/risk/queries.sql
+  s_e5952da15582a2::t_0507a19cf3263b 862-865
+  s_e5952da15582a2::t_45deb8c7fd5b3d 867-869,872-892
+server/internal/judgemessage/message.go
+  s_e5952da15582a2::t_b8758a0ddf95d3 34-46
+server/internal/scanners/promptinjection/handler_test.go
+  s_e5952da15582a2::t_44c5de51b56525 106-135
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_e5952da15582a2::t_8cdb3fd7520ced 7,295-361
+  s_e5952da15582a2::t_b7729355a556de 362-363
+server/internal/background/activities/risk_analysis/batch_messages.go
+  s_e5952da15582a2::t_d62b29927f7953 19-25,72-73,91-98,106-110
+  s_e5952da15582a2::t_1726ad5d4a7fae 111-112
+infra/gen/kcc.yaml
+  s_e5952da15582a2::t_ef8477e550f2f3 135-136
+server/internal/background/activities/risk_analysis/scan_prompt_injection.go
+  s_e5952da15582a2::t_d62b29927f7953 20,24,29,76-84
+server/internal/judgemessage/message_test.go
+  s_e5952da15582a2::t_8cdb3fd7520ced 118-133
+  s_e5952da15582a2::t_c8dd10209d16ff 5
+server/internal/risk/scanner_test.go
+  s_e5952da15582a2::t_1dd44dfe797a3c 63-66
+infra/gen/gram/risk/v1/prompt_injection_analysis.pb.go
+  s_e5952da15582a2::t_fb3da4576b2bf1 25-45,206-225,228,233,238,243,248,253,258,263,268,273,278,283,288,295-304,396-409,475-484,502-505,513,517,521,525,529,533,537,541,545,549,553,557,561,565-572,691,712-714
+infra/gen_py/gram/risk/v1/prompt_injection_analysis_pb2.py
+  s_e5952da15582a2::t_ac0d91f374cea6 28,39-41
+server/internal/risk/repo/queries.sql.go
+  s_e5952da15582a2::t_fa488e20c47f46 1112-1114,1117-1137,1148-1154,1162-1165,1181-1182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ae4e32731590edc901788cb8efd68900dedab5f5",
+  "prompts": {},
+  "sessions": {
+    "s_e5952da15582a2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8b4a-b218-76f0-becc-8d70e94d8075",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

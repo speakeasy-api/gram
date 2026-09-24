@@ -1,0 +1,32 @@
+server/internal/temporalreply/broker_test.go
+  s_47ed2c4cd1302b::t_f7daf475ff2b30 1-126
+server/internal/temporalreply/workflow_test.go
+  s_47ed2c4cd1302b::t_f7daf475ff2b30 1-4,6-36,38-46
+  s_47ed2c4cd1302b::t_e5b629c3979f4a 5,37
+server/cmd/tools/temporalreply/main.go
+  s_47ed2c4cd1302b::t_1bfe8aaa7b3e2b 168,211,225
+  s_47ed2c4cd1302b::t_24623dd72fb954 201
+  s_47ed2c4cd1302b::t_31553912adc827 1-167,169-200,202-210,212-224,226-235
+server/internal/temporalreply/workflow.go
+  s_47ed2c4cd1302b::t_f7daf475ff2b30 1-25
+server/internal/temporalreply/broker.go
+  s_47ed2c4cd1302b::t_f5f971d0817c63 63
+  s_47ed2c4cd1302b::t_1bfe8aaa7b3e2b 108,117,126,168
+  s_47ed2c4cd1302b::t_f7daf475ff2b30 1-62,64-107,109-116,118-125,127-167,169-193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "ca692ee8c07c13cbdb6655748deb3a9362af714c",
+  "prompts": {},
+  "sessions": {
+    "s_47ed2c4cd1302b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a04322-456a-7520-8083-d67e7374af2f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

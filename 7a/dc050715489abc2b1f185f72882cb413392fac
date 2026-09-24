@@ -1,0 +1,49 @@
+client/dashboard/src/pages/org/HeadlessContent.test.tsx
+  h_9630b74bdac540 44
+server/internal/platformmcp/tool_plugins.go
+  h_9630b74bdac540 47,49,51-54,61,63,65-68,71-79,95,101-105
+  h_9630b74bdac540 69-70
+server/internal/platformmcp/management.go
+  h_9630b74bdac540 99,114-116,125,140-142,150,175,183-184,190,198-200,320,330,332,336-343,345-352,354-360,362,364-368,370,373-384,386,388,411-436
+  h_9630b74bdac540 185,344,363,369,385,437-438
+server/internal/platformmcp/plugin_audience_mutation.go
+  h_9630b74bdac540 227-229,234
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 2778-2849
+client/dashboard/src/pages/org/HeadlessContent.tsx
+  h_9630b74bdac540 61,118-120
+server/internal/plugins/delivery_principals.go
+  h_9630b74bdac540 1-70
+server/internal/agent/impl.go
+  h_9630b74bdac540 262,336-341,343-345
+  h_9630b74bdac540 342
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 340-341,759-760
+server/internal/platformmcp/plugins_integration_test.go
+  h_9630b74bdac540 22,31,33,117,142-236,280,293,296-297,338-341,393-394,413-414,428-429,728-729
+client/dashboard/src/pages/org/PlatformMCP.tsx
+  h_9630b74bdac540 20,171-172,288-290,453,489,597,673,676,678-680,694,794,800,810-812,814,824,1267,1282,1294-1295,1298,1307,1311-1317,1381-1383,1585,1615,1659
+  h_9630b74bdac540 488,815-823,1296-1297,1299-1306,1308-1310,1318-1319
+server/internal/platformmcp/plugins_test.go
+  h_9630b74bdac540 34,50-76,103-104,114,135-136
+server/internal/platformmcp/plugins.go
+  h_9630b74bdac540 11,21,25,28,132-135,228,231-233,237,241,255-257,289-291,306-323,325,403-531,534-545,639-640,649-652,872-873,892
+  h_9630b74bdac540 324,326-327,532-533,546-547,874-875
+server/internal/platformmcp/install_instructions.go
+  h_9630b74bdac540 1-127
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 172-198
+server/internal/platformmcp/repo/queries.sql.go
+  h_9630b74bdac540 4350-4440,6496-6576
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7adc050715489abc2b1f185f72882cb413392fac",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

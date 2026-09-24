@@ -1,0 +1,33 @@
+client/dashboard/src/pages/security/policy-evals/EvalsTab.tsx
+  s_1fd25e6450fcc7::t_91cad7715caed5 152
+  s_1fd25e6450fcc7::t_348e4d07e9a6d0 522-525
+  s_1fd25e6450fcc7::t_6d9e5859439245 352,364
+  s_1fd25e6450fcc7::t_ef70570303435d 124-125
+  s_1fd25e6450fcc7::t_8e98c198c55f3e 105
+  s_1fd25e6450fcc7::t_fa894500b4708d 55,526
+  s_1fd25e6450fcc7::t_8c86624874ecab 66
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_1fd25e6450fcc7::t_d74e473c1a1ea1 194
+client/dashboard/src/pages/security/policy-evals/RunInsights.tsx
+  s_1fd25e6450fcc7::t_f1c4d955ff393b 1-25,27-142,144-194,199-223,225-238,240-337
+  s_1fd25e6450fcc7::t_810f8f81b95448 195-198
+  s_1fd25e6450fcc7::t_fa894500b4708d 143,224
+  s_1fd25e6450fcc7::t_d3806577fcf06d 239
+  s_1fd25e6450fcc7::t_03b2267dd066ca 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "2c196882ac6fef4059bc741fd759a79fd8563781",
+  "prompts": {},
+  "sessions": {
+    "s_1fd25e6450fcc7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7ea42380-1a11-45cd-902e-a44d16cbae01",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

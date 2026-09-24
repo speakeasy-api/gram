@@ -1,0 +1,14 @@
+server/internal/platformmcp/skills_integration_test.go
+  h_9630b74bdac540 255-273,285,292-315,336-347,430-435,437
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "46a0f59d3e39b0068b839b9274ac3ce1db3169bf",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

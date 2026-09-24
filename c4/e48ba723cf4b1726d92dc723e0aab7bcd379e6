@@ -1,0 +1,64 @@
+server/internal/directory/queries.sql
+  s_5d8cca81d02447::t_8ff20749fdc07e 242
+  s_5d8cca81d02447::t_cfe06bcc25016b 243
+  s_5d8cca81d02447::t_40e4fc38898f94 1-203
+  s_5d8cca81d02447::t_071fa94a716ff9 204-205,226-241
+  s_5d8cca81d02447::t_3a3615288d175e 206-225
+server/internal/directory/repo/models.go
+  s_5d8cca81d02447::t_cb52bcabfbe804 1-28
+server/internal/background/activities/process_workos_directory_attributes_events.go
+  s_5d8cca81d02447::t_10c9f128364260 18,74,89,146,164,187,218,252,281,290,350,368,376,384,395,406,417,430,441
+server/internal/telemetry/logger_hydrate_test.go
+  s_5d8cca81d02447::t_6cd0c5c85e825c 17,64,79,90,217
+server/internal/background/activities/process_workos_user_events_test.go
+  s_5d8cca81d02447::t_10c9f128364260 18,146
+server/internal/directory/repo/db.go
+  s_5d8cca81d02447::t_cb52bcabfbe804 1-32
+server/internal/directory/directory_test.go
+  s_5d8cca81d02447::t_9385559f1993cc 123-125
+  s_5d8cca81d02447::t_e1fd114e6d4796 1-48,50-62,64-94,96-97,99-122,126-127,129-191,193
+  s_5d8cca81d02447::t_2048a43d1c7afd 49,63,95,98,128,192
+  s_5d8cca81d02447::t_523967309c9ea0 194-221
+server/database/sqlc.yaml
+  s_5d8cca81d02447::t_40e4fc38898f94 630-635
+  s_5d8cca81d02447::t_ac23835592c892 626-629
+server/internal/directory/setup_test.go
+  s_5d8cca81d02447::t_e1fd114e6d4796 1-41
+server/internal/background/activities/process_workos_user_events.go
+  s_5d8cca81d02447::t_10c9f128364260 19,364
+server/internal/background/activities/process_workos_directory_attributes_events_test.go
+  s_5d8cca81d02447::t_22e870d1e09f85 17,52,55,60,63,172,182,208,244,254,294,304,316,393,448,483
+server/internal/directory/directory.go
+  s_5d8cca81d02447::t_d6d2a29dff6d0f 1-9,11,13-16,19-23,25-26,28-55,57-64,67-68,72-76,78-80,84-85,94
+  s_5d8cca81d02447::t_dba59d0c52313f 12,66
+  s_5d8cca81d02447::t_3a3615288d175e 17-18,56
+  s_5d8cca81d02447::t_071fa94a716ff9 10,24,27,65,69-71,77,81,83,86-93
+  s_5d8cca81d02447::t_dac20148a8cfc7 82
+server/cmd/workos-backfill/backfill_test.go
+  s_5d8cca81d02447::t_6cd0c5c85e825c 1253,1318,1420
+  s_5d8cca81d02447::t_300d20a566dea2 18
+server/internal/telemetry/user_info_resolver.go
+  s_5d8cca81d02447::t_3a3615288d175e 17,172,174,178,186-190,192-193
+  s_5d8cca81d02447::t_9ed531ca120562 191
+server/cmd/workos-backfill/directory_sync.go
+  s_5d8cca81d02447::t_6cd0c5c85e825c 79,114,139,146,313,371
+  s_5d8cca81d02447::t_300d20a566dea2 18
+server/internal/directory/repo/queries.sql.go
+  s_5d8cca81d02447::t_94b66a806ba4f6 1-578
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c4e48ba723cf4b1726d92dc723e0aab7bcd379e6",
+  "prompts": {},
+  "sessions": {
+    "s_5d8cca81d02447": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01a67-b971-77b3-9c1f-897b58a5a5ba",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

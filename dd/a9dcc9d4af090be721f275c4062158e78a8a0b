@@ -1,0 +1,27 @@
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 30-33,59-66,69,71,75,88,90,98,100,104-106,114,119-120,223-226,236-239,241-245,247,249,261-262,264-268,270-274,280-287,290,302,325,362,390,410,414-415,436,439-440,445-446,451,455-457,489,496,499,527-528
+  h_9630b74bdac540 76,263,275-279,435,437,452,458-459,526
+client/dashboard/src/hooks/usePrivateMcpServerUrls.ts
+  h_9630b74bdac540 4,118
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/ServerUrlSection.tsx
+  h_9630b74bdac540 39,91
+client/dashboard/src/pages/mcp/gateway/GatewaySettingsTab.test.tsx
+  h_9630b74bdac540 2-4,13-16,55-56,61-63,103-131
+  h_9630b74bdac540 1,57,132-133
+client/dashboard/src/pages/mcp/gateway/GatewaySettingsTab.tsx
+  h_9630b74bdac540 1,7-15,21-26,31,33-36,90,92-97
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 6,33,157-168,209-214,220,259,624-672,674-734
+  h_9630b74bdac540 215-219,673,735
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "dda9dcc9d4af090be721f275c4062158e78a8a0b",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

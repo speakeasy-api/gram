@@ -1,0 +1,14 @@
+server/internal/mcp/mcpmetrics/metrics.go
+  h_9630b74bdac540 206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9f2ea01c3615aabb21b0214fc6f237e4ece3dcac",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

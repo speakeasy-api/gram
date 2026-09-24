@@ -1,0 +1,25 @@
+server/cmd/pi-judge-eval/main.go
+  s_be9b75eed3b34d::t_134dbc68046c2f 215-219,230
+  s_be9b75eed3b34d::t_ebf7769d9dbf52 828
+  s_be9b75eed3b34d::t_8d24dfd90963c9 39-44,56-57,135-140,173,182-183,208,257,273,331-350,365-378,384-389,459-477,488-497
+  s_be9b75eed3b34d::t_baa0a5b11e9cbb 175,821,833,841,844,852
+  s_be9b75eed3b34d::t_707c3753e94d58 498,781-803,815-816,818,822-825,831-832,834-840,842-843,845-849,856,892-906,908-910,912-1018,1032-1039,1076,1085-1094
+  s_be9b75eed3b34d::t_d8a6638086fb8f 499
+  s_be9b75eed3b34d::t_b77258c7cacb00 1095
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "dafeb7690a0cabbb0548245353c8a477e6ea7844",
+  "prompts": {},
+  "sessions": {
+    "s_be9b75eed3b34d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fccbd-003a-7e53-9c6c-22b0d5b26f0c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

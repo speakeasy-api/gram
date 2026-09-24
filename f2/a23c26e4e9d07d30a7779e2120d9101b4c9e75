@@ -1,0 +1,156 @@
+server/internal/chatanalysis/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 87
+server/internal/mcpmetadata/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 99
+server/internal/organizations/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 136,189,240
+server/internal/authz/engine.go
+  s_6cd0b3509a4ad1::t_01f2f4b74a54a9 198,214,235,251,284,303,321,343,430,447,481,535,552,587
+server/internal/collections/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 83
+server/internal/functions/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 116
+server/internal/assistantmemories/impl_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 66,137,306,377
+server/internal/mcp/rpc_tools_list_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 283,318,346,369,412,447
+server/internal/plugins/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 103,164
+server/internal/productfeatures/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 106
+server/internal/usage/impl_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 153
+server/internal/mcp/handle_get_server_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 33
+server/internal/usage/tum_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 77
+server/internal/testenv/queries.sql
+  s_6cd0b3509a4ad1::t_3003966b38b8f2 130-135
+server/internal/mcp/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 206
+server/internal/triggers/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 119
+server/internal/modelkeys/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 139
+server/internal/hooks/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 175
+server/internal/auditapi/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 67
+server/internal/toolsets/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 126,227
+server/internal/authz/load_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 32,165
+server/internal/remotemcp/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 115
+server/internal/authz/demo_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 30,64
+server/internal/resources/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 69
+server/internal/authz/challenge_logger.go
+  s_6cd0b3509a4ad1::t_d20e172bdf69be 11,20-21,48,50-51,54,154-155,196-226
+server/internal/mcpendpoints/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 92,181
+server/internal/usersessions/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 95
+server/internal/agent/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 86
+server/internal/variations/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 70
+server/internal/xmcp/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 135
+server/internal/mcp/handle_get_server_proxy_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 159
+server/internal/mcpservers/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 87
+server/internal/tools/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 115
+server/internal/authz/integration_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 31,63,100
+server/internal/projects/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 99
+server/internal/litellm/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 124
+server/internal/skillefficacy/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 70
+server/internal/authz/context_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 24,47,66,86,106,134,157,179
+server/internal/assistants/impl_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 483
+server/internal/customdomains/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 133
+server/internal/authz/engine_test.go
+  s_6cd0b3509a4ad1::t_5e8ca739392700 9,16,120-122,132-136,149-153,162-166,176-180,186-188,518-522,528-530,561-565,577-582,629-633,639-641
+  s_6cd0b3509a4ad1::t_be84469e4d5134 28,38,50,61,90,104,195,217,238,261,284,300,323,354,379,405,417,429,453,482,499,535,548,593,603,613,699,735,747,760,774,801,811,821,831
+server/internal/packages/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 70
+server/internal/authz/challenge_logger_test.go
+  s_6cd0b3509a4ad1::t_adb6f476b2394b 8,14,20,28,30-32,45-46,55,57-59,79-80,91-99,127-128,137,139-143,153,155,163-164,173,175-179,188,190,195-196,205-212,218,220,224-225,246,248-252,271,273,277-278,289,291-295
+server/internal/chat/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 114
+server/internal/auth/e2e_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 174
+server/internal/externalkeys/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 105
+server/internal/tunneledmcp/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 69
+server/internal/assets/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 96
+server/internal/remotesessions/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 110
+server/internal/environments/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 75
+server/internal/access/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 114
+server/internal/auth/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 170,234
+server/internal/keys/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 78
+server/internal/remotemcp/tools_call_authz_interceptor_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 38
+server/internal/skills/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 132
+server/internal/risk/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 206
+server/internal/externalmcp/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 77
+server/internal/templates/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 81
+server/internal/mcp/rbac_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 27,42,57,70,101,126,153,174,201,223,248
+server/internal/telemetry/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 126
+server/internal/deployments/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 106
+server/internal/spendrules/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 87
+server/internal/externalcredentials/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 120
+server/internal/unproxiedmcp/setup_test.go
+  s_6cd0b3509a4ad1::t_f4dae711d9bd35 91
+server/internal/testenv/testrepo/queries.sql.go
+  s_0562d5ccc0eaab::t_d24e2bed2a4a2f 896-950
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "f2a23c26e4e9d07d30a7779e2120d9101b4c9e75",
+  "prompts": {},
+  "sessions": {
+    "s_0562d5ccc0eaab": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019feac9-55de-7990-9a61-dcfe038b3137",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_6cd0b3509a4ad1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd754-8571-7ca3-9b80-f41a12ff308a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

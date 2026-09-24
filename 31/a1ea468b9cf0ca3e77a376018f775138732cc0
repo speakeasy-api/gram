@@ -1,0 +1,52 @@
+server/internal/mcp/mcpmetrics/surface.go
+  h_9630b74bdac540 3-8,35-40,42-49
+server/internal/mcp/mcpmetrics/metrics.go
+  h_9630b74bdac540 289
+server/internal/mcp/issuergate_rejected_metric_test.go
+  h_9630b74bdac540 67,73
+server/internal/netingress/telemetry_test.go
+  h_9630b74bdac540 1-139
+server/cmd/gram/start.go
+  h_9630b74bdac540 1735,1756,1759
+server/internal/netingress/telemetry.go
+  h_9630b74bdac540 1-46
+server/internal/mcp/mcpmetrics/metrics_test.go
+  h_9630b74bdac540 8,17,206,227-249
+server/cmd/gram/netingress_attestor.go
+  h_9630b74bdac540 16,68,87
+server/internal/mcp/impl.go
+  h_9630b74bdac540 26,108,371
+server/internal/mcp/serveendpoint.go
+  h_9630b74bdac540 11,381-384,387,391,397,409,412-414,416-417,420
+server/internal/mcp/private_oauth_authority.go
+  h_9630b74bdac540 5,7,11,15-27
+server/internal/mcp/authnchallenge_consent.go
+  h_9630b74bdac540 628,631,638
+server/internal/networkingress/telemetry.go
+  h_9630b74bdac540 1-162
+server/internal/attr/conventions.go
+  h_9630b74bdac540 286-289,1379-1406,1536
+server/internal/netingress/middleware.go
+  h_9630b74bdac540 9,21-25,28-31,35,40,47,54,57,65,74,77,83,91,95
+server/internal/netingress/attestor.go
+  h_9630b74bdac540 15,53,92-100,104-109,120,126,133-134,163
+server/internal/mcp/authnchallenge_idp_callback.go
+  h_9630b74bdac540 12,84,86,93
+server/internal/netingress/attestation.go
+  h_9630b74bdac540 64,67,74-77,90,94-105,107,111,119,123-131,133,138,149,153,160,166,173,178,186
+server/internal/mcp/authnchallenge_token.go
+  h_9630b74bdac540 314,316,323
+server/internal/mcp/mcpmetrics/requestcounter.go
+  h_9630b74bdac540 34,83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "31a1ea468b9cf0ca3e77a376018f775138732cc0",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

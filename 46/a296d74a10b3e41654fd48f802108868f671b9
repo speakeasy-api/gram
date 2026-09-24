@@ -1,0 +1,193 @@
+infra/proto/gram/otel/v1/inbound_log_record_transformer.proto
+  s_a45598db4a4df7::t_3173b460bfb11d 1-23
+server/internal/otel/metrics.go
+  s_a45598db4a4df7::t_3173b460bfb11d 13-14,21-30,42-43,47-61,63,67
+server/internal/otel/signal_relay.go
+  s_a45598db4a4df7::t_3173b460bfb11d 293-296,305-309
+  s_a45598db4a4df7::t_d3ed8ca1aced1b 310-311
+server/internal/usersessions/cimd/admission/catalog.go
+  s_a45598db4a4df7::t_3173b460bfb11d 256-267
+server/internal/otel/handler_ilog_transforms_test.go
+  s_a45598db4a4df7::t_6ce806218e94b6 9,43,143
+  s_a45598db4a4df7::t_3173b460bfb11d 1-8,10-42,44-142,144-188
+server/internal/otel/dialect/log_semconv_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-57
+server/internal/otlp/compat_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 113-137,336-354
+server/internal/otel/dialect/log_fallback.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-73
+docs/pubsub-topology.md
+  s_a45598db4a4df7::t_3173b460bfb11d 20-21,25,41,43,82-83,86-87,105-132,141-142,146,167,169,184
+server/internal/otel/dialect/log_shared.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-12
+server/internal/otel/enrich_logs.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-78
+server/internal/otel/dialect/log_shared_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-10
+server/internal/otel/dialect/log_nil.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-28
+server/internal/otel/dialect/span_semconv.go
+  s_a45598db4a4df7::t_3173b460bfb11d 6,66-67,93
+server/internal/otel/handler_ispan_transforms.go
+  s_a45598db4a4df7::t_3173b460bfb11d 187-188,190
+server/internal/otel/handler_ispan_transforms_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 104-112,118-123,154,164,167-170
+server/internal/otel/metrics_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 13-16,21-30
+  s_a45598db4a4df7::t_ce62fb4b1519a8 31-32
+server/internal/otel/dialect/log_semconv.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-113
+server/internal/attr/conventions.go
+  s_a45598db4a4df7::t_3173b460bfb11d 539,820
+  s_a45598db4a4df7::t_e16ffb6e21417f 821
+infra/pkg/topics/topics_gen.go
+  s_a45598db4a4df7::t_3173b460bfb11d 29-30,61,82-83,121-122
+server/internal/otel/impl.go
+  s_a45598db4a4df7::t_3173b460bfb11d 23-24,30,44,50
+server/internal/otel/proto_batch_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-89
+server/cmd/gram/streams.go
+  s_a45598db4a4df7::t_3173b460bfb11d 412,416,518-522,528-534,573
+  s_a45598db4a4df7::t_0c5346207e41f4 559-565
+  s_a45598db4a4df7::t_8f7ef2ca93cce0 535
+server/internal/otel/dialect/log_nil_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-13
+infra/gen_py/gram/otel/v1/inbound_log_record_transformer_pb2.pyi
+  s_a45598db4a4df7::t_3173b460bfb11d 1-10
+infra/gen_py/gram/otel/v1/log_relay_pb2.pyi
+  s_a45598db4a4df7::t_3173b460bfb11d 1-10
+server/internal/otel/dialect/log_claude_code.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-52
+server/internal/otel/impl_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 66
+infra/gen_py/gram/otel/v1/inbound_log_record_pb2.pyi
+  s_a45598db4a4df7::t_3173b460bfb11d 1-160
+server/internal/otel/handler_log_relay.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-394
+server/internal/otel/impl_ingest.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-109
+server/internal/otlp/drift_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 59-70,197-200,202-203
+infra/gen/kcc.yaml
+  s_a45598db4a4df7::t_3173b460bfb11d 57-150,696-713,732-749,937-951,977-982
+server/cmd/gram/deps.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1200-1215,1218,1266
+server/internal/otel/impl_logs_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-214
+infra/proto/gram/otel/v1/inbound_log_record.proto
+  s_a45598db4a4df7::t_3173b460bfb11d 1-119
+server/internal/background/activities.go
+  s_a45598db4a4df7::t_3173b460bfb11d 93
+server/internal/otel/dialect/log_claude_code_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-56
+server/internal/otel/dialect/log.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-34
+server/internal/otel/impl_ingest_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-80
+server/internal/otel/handler_ilog_transforms.go
+  s_a45598db4a4df7::t_22c622b337d0db 16-17,34-35,46
+  s_a45598db4a4df7::t_3173b460bfb11d 1-15,18-33,36-45,47-204
+server/internal/otel/impl_logs.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-116
+server/internal/otel/proto_batch.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-100
+server/cmd/gram/start.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1563
+server/internal/otel/dialect/log_fallback_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-28
+server/internal/otel/impl_traces.go
+  s_a45598db4a4df7::t_3173b460bfb11d 15-30
+server/internal/otel/handler_log_relay_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-390
+server/design/otel/design.go
+  s_a45598db4a4df7::t_3173b460bfb11d 14-43
+server/internal/background/worker.go
+  s_a45598db4a4df7::t_3173b460bfb11d 198
+server/internal/otel/log.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-87
+server/internal/otel/log_shared_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-10
+server/internal/otel/enrich_directory.go
+  s_a45598db4a4df7::t_25b25cc7faef6b 28,33,42-43,57-59,62-63,83-87,90,97,99,102,109,112,116,148-149,160,167,169,175,183,250,253,256,258-259,262-263,266-267
+  s_a45598db4a4df7::t_a87716181ed54d 65-75,77,80-82
+server/internal/otel/enrich_directory_test.go
+  s_a45598db4a4df7::t_6ce806218e94b6 18,45
+  s_a45598db4a4df7::t_49eaabafc0b665 4-5,49-83
+  s_a45598db4a4df7::t_2011b6857a9e47 84-85
+server/internal/otlp/log_copies_test.go
+  s_a45598db4a4df7::t_3173b460bfb11d 1-48
+infra/proto/gram/otel/v1/log_relay.proto
+  s_a45598db4a4df7::t_3173b460bfb11d 1-21
+.speakeasy/out.openapi.yaml
+  s_a45598db4a4df7::t_9e54928db085f7 9-101
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_a45598db4a4df7::t_c979a7a4775af6 328,2009,2816,9248-9254
+client/dashboard/src/sdk/FUNCTIONS.md
+  s_a45598db4a4df7::t_e1e2d35e79aa86 23,30,35
+client/dashboard/src/sdk/REACT_QUERY.md
+  s_a45598db4a4df7::t_78bf53f3c00a36 113,116,141,144
+client/dashboard/src/sdk/src/funcs/otelUploadLogs.ts
+  s_a45598db4a4df7::t_d86ab1a6bd5f0f 1-206
+client/dashboard/src/sdk/src/models/operations/uploadlogs.ts
+  s_a45598db4a4df7::t_ac07169415488e 1-91
+client/dashboard/src/sdk/src/react-query/uploadOpenTelemetryLogs.ts
+  s_a45598db4a4df7::t_770f2144790af2 1-116
+client/dashboard/src/sdk/src/sdk/otel.ts
+  s_a45598db4a4df7::t_9464c036963e4d 5,8-11,19-37
+infra/gen/gram/otel/v1/inbound_log_record.pb.go
+  s_a45598db4a4df7::t_4c62f29c05170f 1-1835
+infra/gen/gram/otel/v1/inbound_log_record_transformer.pb.go
+  s_a45598db4a4df7::t_75c6eb9c7e93aa 1-113
+infra/gen/gram/otel/v1/log_relay.pb.go
+  s_a45598db4a4df7::t_a6afefd2789a9d 1-111
+infra/gen_py/gram/otel/v1/inbound_log_record_pb2.py
+  s_a45598db4a4df7::t_a4e0f98a527ed9 1-56
+infra/gen_py/gram/otel/v1/inbound_log_record_transformer_pb2.py
+  s_a45598db4a4df7::t_ab71781d49e1ac 1-40
+infra/gen_py/gram/otel/v1/log_relay_pb2.py
+  s_a45598db4a4df7::t_ee5bd904691b4c 1-40
+server/gen/http/cli/gram/cli.go
+  s_a45598db4a4df7::t_266e63e066aa16 138,1600-1605,3893,5407-5409,7534-7539,15049,15055-15078
+server/gen/http/openapi3.yaml
+  s_a45598db4a4df7::t_9e4437cf052da3 1754-1845
+server/gen/http/otel/client/cli.go
+  s_a45598db4a4df7::t_eb92d644376907 14-42
+server/gen/http/otel/client/client.go
+  s_a45598db4a4df7::t_615adbb88a63ef 20-22,46,56-79
+server/gen/http/otel/client/encode_decode.go
+  s_a45598db4a4df7::t_a2979073cd98fd 22-268
+server/gen/http/otel/client/paths.go
+  s_a45598db4a4df7::t_9317442321a8bf 10-14
+server/gen/http/otel/client/types.go
+  s_a45598db4a4df7::t_4f15b25dde6612 14-193,374-515,660-899
+server/gen/http/otel/server/encode_decode.go
+  s_a45598db4a4df7::t_3dcfcc5374415e 21-227
+server/gen/http/otel/server/paths.go
+  s_a45598db4a4df7::t_6e103a1e0d5834 10-14
+server/gen/http/otel/server/server.go
+  s_a45598db4a4df7::t_1ae635376b76bf 22,53,56,66,75,84-137
+server/gen/http/otel/server/types.go
+  s_a45598db4a4df7::t_1a26e90fa535e6 15-194,375-514,655-664
+server/gen/otel/client.go
+  s_a45598db4a4df7::t_475b7c05a86d2f 19,24,26,31-48
+server/gen/otel/endpoints.go
+  s_a45598db4a4df7::t_5bc89d47f2c920 20,24-32,47,54,58-92
+server/gen/otel/service.go
+  s_a45598db4a4df7::t_92d16c12693262 20-21,46-55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "46a296d74a10b3e41654fd48f802108868f671b9",
+  "prompts": {},
+  "sessions": {
+    "s_a45598db4a4df7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02004-6932-7dc0-8650-7782e08db883",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

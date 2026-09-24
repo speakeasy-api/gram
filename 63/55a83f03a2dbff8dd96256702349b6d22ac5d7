@@ -1,0 +1,33 @@
+server/internal/permissions/scope.go
+  s_a5f37a1929f11b::t_b8e32e05b6137a 3-4,7-46
+server/internal/permissions/visibility.go
+  s_a5f37a1929f11b::t_b8e32e05b6137a 1-19
+docs/permissions-rewrite.md
+  s_a5f37a1929f11b::t_b8e32e05b6137a 13-14,80
+server/internal/permissions/catalog.go
+  s_a5f37a1929f11b::t_3ab0c0133448d6 126-127
+  s_a5f37a1929f11b::t_16dfdec7e6a8c3 10-14,17-18,26,46,91,99,118-122,125,128,133-135,144-145,147,149-169,171-173,176-198,201-210
+  s_a5f37a1929f11b::t_b8e32e05b6137a 1-9,15-16,123-124,129-132,136-143,146,148,170,174-175,199-200,211-215
+  s_a5f37a1929f11b::t_345286a5c893df 19-25,27-45,47-90,92-98,100-117
+server/internal/permissions/resource_kind.go
+  s_a5f37a1929f11b::t_b8e32e05b6137a 1-22
+server/internal/permissions/scope_test.go
+  s_a5f37a1929f11b::t_b8e32e05b6137a 1-43,46-54
+  s_a5f37a1929f11b::t_81473e1de8d340 44-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "6355a83f03a2dbff8dd96256702349b6d22ac5d7",
+  "prompts": {},
+  "sessions": {
+    "s_a5f37a1929f11b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ee04b-25b9-7e42-9e18-fe6de7ddd0f2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,67 @@
+server/internal/background/activities.go
+  s_a1e983049864ec::t_905943bcc6348e 165-186,218
+server/internal/background/activities/risk_analysis/celadapter.go
+  s_a1e983049864ec::t_320b11349ebbb8 85-89,98-99
+  s_a1e983049864ec::t_f06360cc35b6bb 102,109,116
+server/internal/background/activities/risk_analysis/scan_account_identity_test.go
+  s_a1e983049864ec::t_7d05a8be2fe1ca 131,149-150
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_a1e983049864ec::t_320b11349ebbb8 25,58,78,87-90,111-112,138-141,196,242-244,248,250
+server/internal/feature/flags.go
+  s_a1e983049864ec::t_bc6ae98018cc3e 22-24
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_a1e983049864ec::t_7d05a8be2fe1ca 937,955
+  s_a1e983049864ec::t_86697cf177c04a 94-95,138,156,233,251,340,358,427,445
+server/internal/background/activities/risk_analysis/category_scopes.go
+  s_a1e983049864ec::t_f06360cc35b6bb 45,54
+  s_a1e983049864ec::t_184b8542d9cc51 175-198
+  s_a1e983049864ec::t_bc6ae98018cc3e 1-18,23,27-44,46-53,55-71,73-174,199-215
+  s_a1e983049864ec::t_ab310fe75b0b35 19-22,24-26,72
+server/internal/background/activities/risk_analysis/category_scopes_test.go
+  s_a1e983049864ec::t_f06360cc35b6bb 71,113
+  s_a1e983049864ec::t_52f59050c23807 89,206,302
+  s_a1e983049864ec::t_0349c317794f19 1-70,72-88,90-112,114-188,191-205,207-301,303-304
+  s_a1e983049864ec::t_ee4feb2b53e01e 189-190
+server/internal/background/risk_analysis_coordinator.go
+  s_a1e983049864ec::t_52f59050c23807 108-109
+server/internal/background/activities/risk_analysis/analyzer_config.go
+  s_a1e983049864ec::t_bc6ae98018cc3e 12-15,42-47,101-110,132-144,151
+  s_7ab086c5bb6fe8::t_6aa1787a39205a 145-150,152
+server/internal/background/activities/risk_analysis/metrics.go
+  s_a1e983049864ec::t_878caac6a3cefa 8
+  s_a1e983049864ec::t_07f5678844cb27 13-14,23,27-32,77-94,96-101,131-152
+  s_a1e983049864ec::t_ab310fe75b0b35 18-22
+server/internal/background/activities/risk_analysis/batch_scanners.go
+  s_a1e983049864ec::t_52f59050c23807 138,157,169
+  s_a1e983049864ec::t_320b11349ebbb8 18,58,60-61,70,72-73,125-127,142-144,181-196
+  s_a1e983049864ec::t_184b8542d9cc51 59,71
+  s_7ab086c5bb6fe8::t_1b53fe1f60bf99 197-198
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_a1e983049864ec::t_52f59050c23807 74
+  s_a1e983049864ec::t_8416228e186a14 13
+  s_a1e983049864ec::t_07f5678844cb27 65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "646679fd4bbdcf58782a3d365f213e62d17cbd9a",
+  "prompts": {},
+  "sessions": {
+    "s_7ab086c5bb6fe8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "77cda2a5-8012-48fb-8853-f9dbae5594dc",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_a1e983049864ec": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4a4c-8a3b-73d2-8970-e371e2d28932",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

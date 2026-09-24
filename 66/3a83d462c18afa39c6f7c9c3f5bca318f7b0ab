@@ -1,0 +1,25 @@
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_2f42666f5475a4::t_3c5bfdbedd7152 118-121
+  s_2f42666f5475a4::t_de6a55bc19024e 39
+  s_2f42666f5475a4::t_ba3b3fc71df8f3 2031-2043,2119-2122,2124
+.changeset/unify-transcript-finding-card.md
+  s_2f42666f5475a4::t_c463af59b2b67e 1-5
+client/dashboard/src/pages/chatLogs/chatRisk.tsx
+  s_2f42666f5475a4::t_f2ba1ceb66e408 11,127-143,163-306,364-366
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "663a83d462c18afa39c6f7c9c3f5bca318f7b0ab",
+  "prompts": {},
+  "sessions": {
+    "s_2f42666f5475a4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f29fc-487a-7ee3-90a3-cadb1fec725f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

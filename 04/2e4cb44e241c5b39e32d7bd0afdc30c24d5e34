@@ -1,0 +1,21 @@
+server/internal/adminmcp/tool_context.go
+  h_9630b74bdac540 19,40-41
+  h_9630b74bdac540 42
+server/internal/adminmcp/tool_activity_test.go
+  h_9630b74bdac540 1-132
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 68-72,88-89,93
+server/internal/adminmcp/tool_activity.go
+  h_9630b74bdac540 1-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "042e4cb44e241c5b39e32d7bd0afdc30c24d5e34",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

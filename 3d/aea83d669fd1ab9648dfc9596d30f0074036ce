@@ -1,0 +1,58 @@
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_e5952da15582a2::t_2c8c29857a77ee 144-145
+  s_e5952da15582a2::t_85b3b2003c3f65 129
+  s_e5952da15582a2::t_5feb7ab66d918e 139,146
+  s_e5952da15582a2::t_a744049029e165 131,147-148
+  s_e5952da15582a2::t_1761b69df91123 119
+  s_e5952da15582a2::t_4e5a2dee3c400a 142-143
+  s_e5952da15582a2::t_814b9d0d967223 135,140-141
+  s_e5952da15582a2::t_266b45cecae002 130
+  s_e5952da15582a2::t_cb64ea234ac968 149
+server/internal/scanners/promptinjection/testdata/prompt_injection/corpus_notes.md
+  s_e5952da15582a2::t_aec91774c2fd63 30
+  s_e5952da15582a2::t_23733a317573a4 17,19
+server/cmd/risk-pi-report/main_test.go
+  s_e5952da15582a2::t_aec91774c2fd63 172
+  s_e5952da15582a2::t_162e19f6cc4a83 22
+server/internal/scanners/promptinjection/openrouter/judge_v2_test.go
+  s_e5952da15582a2::t_5feb7ab66d918e 79-80
+  s_e5952da15582a2::t_a744049029e165 81-82
+  s_e5952da15582a2::t_2c8c29857a77ee 74-75
+  s_e5952da15582a2::t_65a70366865131 68,71-73
+  s_e5952da15582a2::t_c8a42f34a45d30 76
+  s_e5952da15582a2::t_663a7a88064796 77
+  s_e5952da15582a2::t_8ff6420a07b4b5 78
+  s_e5952da15582a2::t_a9b2fb3c41ee2a 69-70
+  s_e5952da15582a2::t_56ee52f35739b8 83
+server/internal/scanners/promptinjection/testdata/prompt_injection/trajectory_twins.jsonl
+  s_e5952da15582a2::t_be6037f9fb00b9 41-42
+server/internal/scanners/promptinjection/testdata/prompt_injection/litellm_extended.jsonl
+  s_e5952da15582a2::t_6ed05375d4325f 37,39
+server/internal/judgemessage/decode.go
+  s_e5952da15582a2::t_c7741dbf586921 1-113,116,118-220
+  s_e5952da15582a2::t_efef949c761120 114-115,117
+server/internal/judgemessage/message_test.go
+  s_e5952da15582a2::t_2fc2f596a8ce68 4,135-158,171-178,180-199
+  s_e5952da15582a2::t_1ce09af8d0742d 159-169
+  s_e5952da15582a2::t_ff5857c60f306f 170,179
+server/internal/judgemessage/payload.go
+  s_e5952da15582a2::t_efef949c761120 54,70
+  s_e5952da15582a2::t_2e7dfff7407d9f 50-53,68-69,71-72
+  s_e5952da15582a2::t_8a8b7442e82872 29,32,41,44,55,98,107,121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "3daea83d669fd1ab9648dfc9596d30f0074036ce",
+  "prompts": {},
+  "sessions": {
+    "s_e5952da15582a2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8b4a-b218-76f0-becc-8d70e94d8075",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,89 @@
+server/internal/background/activities/risk_analysis/eval_guardrail.go
+  s_8860283851235f::t_baab60a17d303e 1-60,62-123
+  s_8860283851235f::t_d5bf436c9fee87 61
+server/cmd/gram/start.go
+  s_8860283851235f::t_3efde1763571fb 1155
+server/internal/risk/setup_test.go
+  s_8860283851235f::t_e5e7df613e949f 89-102,111
+  s_8860283851235f::t_6932a847e8ebe5 146-148,158
+  s_8860283851235f::t_238a72bfb47aba 20
+server/internal/risk/impl.go
+  s_8860283851235f::t_c417250d14fb44 109-113
+  s_8860283851235f::t_b2b0eb240591f0 41
+  s_8860283851235f::t_e46bd7568c8761 170
+  s_8860283851235f::t_f09ab67ee3f97c 2273
+  s_8860283851235f::t_132ec983e3c5f6 193
+  s_8860283851235f::t_7e94e9a54e3e51 21
+  s_8860283851235f::t_a9c6bcd792b7a0 148
+  s_8860283851235f::t_f7263d58c11a10 2198-2272,2274-2288
+server/internal/risk/eval_guardrail_test.go
+  s_8860283851235f::t_452be7484864e7 102-106
+  s_8860283851235f::t_7b5d3b65dd26d8 160-167
+  s_8860283851235f::t_a0df58d2bea6e1 195-197,202
+  s_8860283851235f::t_9be21648c2ac67 94
+  s_8860283851235f::t_75879b726b42bc 132,137-139
+  s_8860283851235f::t_f33f69e746b407 191-192
+  s_8860283851235f::t_8a321eca0ab7f5 120
+  s_8860283851235f::t_a67b54f2b33c2e 1-93,95-101,107-119,121-131,133-136,140-159,168-190,193-194,198-201,203
+server/internal/background/activities/risk_analysis/batch_messages.go
+  s_8860283851235f::t_46a5da74a76216 54-55
+  s_8860283851235f::t_8dd5f39d831f85 69,99-103,109
+  s_8860283851235f::t_770422903ad597 38,47-53,56-68
+  s_8860283851235f::t_be64f758a213ed 70
+.changeset/risk-eval-prompt-guardrail.md
+  s_8860283851235f::t_d517e195d3c2d9 1-5
+server/design/risk/design.go
+  s_8860283851235f::t_aa17ceb88f4b74 1128-1143,1145-1171,1173-1191
+  s_8860283851235f::t_adf65464149af9 1144
+  s_8860283851235f::t_0e0a4392a89465 1172
+server/gen/http/cli/gram/cli.go
+  s_8860283851235f::t_014d562e6cb5d1 115,1704-1709,2524,3722-3724,5002-5004,11290,12119-12142
+server/gen/http/openapi3.json
+  s_8860283851235f::t_d50054c6f1c621 1
+server/gen/http/openapi3.yaml
+  s_8860283851235f::t_fbf245377710f6 24433-24538,38616-38637,43692-43751
+server/gen/http/risk/client/cli.go
+  s_8860283851235f::t_72f4434d1470f5 1816-1874
+server/gen/http/risk/client/client.go
+  s_8860283851235f::t_a3860dcee63cca 152-155,209,1009-1032
+server/gen/http/risk/client/encode_decode.go
+  s_8860283851235f::t_c235bf7ed7aa35 8009-8251,8661-8677
+server/gen/http/risk/client/paths.go
+  s_8860283851235f::t_06ca702d16fdd3 174-178
+server/gen/http/risk/client/types.go
+  s_8860283851235f::t_a803dd4f202ee6 276-291,1003-1015,7157-7346,7756-7775,8124-8142,13846-13852,13854-13860,13862-13875,13877-13890,13892-13905,13907-13920,13922-14043,15132-15159,23119-23360,23839-23865
+server/gen/http/risk/server/encode_decode.go
+  s_8860283851235f::t_08a23e696de68f 7786-8022,8434-8450
+server/gen/http/risk/server/paths.go
+  s_8860283851235f::t_891faebc2002a9 174-178
+server/gen/http/risk/server/server.go
+  s_8860283851235f::t_dd3ba40fdac2b5 55,118,153,195,236,2002-2054
+server/gen/http/risk/server/types.go
+  s_8860283851235f::t_a3edb80036205a 278-293,1005-1017,7159-7348,7744-7763,8614-8636,13429-13578,14198-14220,14497-14521
+server/gen/risk/client.go
+  s_8860283851235f::t_8f1385bf056e70 52,56,91,828-850
+server/gen/risk/endpoints.go
+  s_8860283851235f::t_67f26ff4ede87a 52,93,132,1973-2031
+server/gen/risk/service.go
+  s_8860283851235f::t_bfdd1596f60cf9 113-121,144,314-332,604-635
+.speakeasy/out.openapi.yaml
+  s_8860283851235f::t_12efc46946beb9 23908-24014,38189-38210,43265-43324
+client/sdk/.speakeasy/gen.lock
+  s_8860283851235f::t_6319952c23dee5 4,315-316,789-792,1971-1978,3519-3520,4087-4088,4534-4535,4654,4952-4955,5583-5584,5719,6413,6759-6760,7075-7076,7136,10823-10833
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.9",
+  "base_commit_sha": "c9c84c4dceeb7f793cf38abd5340fb325eece4c6",
+  "prompts": {},
+  "sessions": {
+    "s_8860283851235f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a60586c7-5b1b-4e8e-952b-236346010fe1",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

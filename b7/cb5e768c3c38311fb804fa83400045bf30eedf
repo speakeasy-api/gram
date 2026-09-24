@@ -1,0 +1,82 @@
+server/internal/plugins/impl.go
+  s_146664733c831b::t_4bac15d438ccf0 1093-1136
+  s_146664733c831b::t_8fa799516cd234 1187
+  s_146664733c831b::t_5412c7a20d4db5 1186
+server/design/plugins/design.go
+  s_146664733c831b::t_4bac15d438ccf0 240-261,596-616,723-728
+  s_146664733c831b::t_e6beba3bd92c5a 729
+server/internal/plugins/list_directory_audiences_test.go
+  s_146664733c831b::t_8182fd272e204d 1-36,47-53,66-82,91-94,96-99,101-110
+  s_146664733c831b::t_bf0dc0bd5af78f 38-46,54-65,83,90,95,100
+  s_146664733c831b::t_eaf95d36da24d5 37,84-89
+.changeset/expose-directory-plugin-audiences.md
+  s_146664733c831b::t_9268d9fc983f83 1-5
+server/internal/thirdparty/workos/queries.sql
+  s_146664733c831b::t_4bac15d438ccf0 309-341
+.speakeasy/out.openapi.yaml
+  s_146664733c831b::t_6f1d7ba32c722d 30582-30671,61750-61792,65627-65642
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_146664733c831b::t_fd9e8bae8588e1 351,759-760,909,1720,2154-2155,6258-6266
+client/dashboard/src/sdk/src/funcs/pluginsListDirectoryAudiences.ts
+  s_146664733c831b::t_28219d3641447f 1-206
+client/dashboard/src/sdk/src/models/components/directoryattributeaudience.ts
+  s_146664733c831b::t_7a9e488dba80de 1-57
+client/dashboard/src/sdk/src/models/components/directorygroupaudience.ts
+  s_146664733c831b::t_75f76c88824843 1-57
+client/dashboard/src/sdk/src/models/components/listdirectoryaudiencesresult.ts
+  s_146664733c831b::t_42eb78fe1ca527 1-46
+client/dashboard/src/sdk/src/models/operations/listdirectoryaudiences.ts
+  s_146664733c831b::t_fb14a5b0bdd205 1-88
+client/dashboard/src/sdk/src/react-query/directoryAudiences.core.ts
+  s_146664733c831b::t_604f69a7c8729f 1-86
+client/dashboard/src/sdk/src/react-query/directoryAudiences.ts
+  s_146664733c831b::t_6df710a981814f 1-157
+client/dashboard/src/sdk/src/sdk/plugins.ts
+  s_146664733c831b::t_eabac205fc002b 16,26,84-87,332-350
+server/gen/http/cli/gram/cli.go
+  s_146664733c831b::t_86e71195755f82 144,1750-1753,3844,5417-5419,7486-7488,15390,15603-15622
+server/gen/http/openapi3.yaml
+  s_146664733c831b::t_269f7c90513554 31616-31704,62541-62583,66414-66429
+server/gen/http/plugins/client/cli.go
+  s_146664733c831b::t_c9891aa6dc8c68 383-404
+server/gen/http/plugins/client/client.go
+  s_146664733c831b::t_902b5a5e8e4f75 57-60,130,365-388
+server/gen/http/plugins/client/encode_decode.go
+  s_146664733c831b::t_7f871a309f6640 2135-2369,4868-4895
+server/gen/http/plugins/client/paths.go
+  s_146664733c831b::t_1c71798ad98bb7 55-59
+server/gen/http/plugins/client/types.go
+  s_146664733c831b::t_3466963d0f2aef 233-241,2045-2234,4235-4260,5907-6083,8033-8058,10364-10604,13201-13239
+server/gen/http/plugins/server/encode_decode.go
+  s_146664733c831b::t_6ca6a8c9426700 1998-2202,4437-4464
+server/gen/http/plugins/server/paths.go
+  s_146664733c831b::t_d29127f31b1117 55-59
+server/gen/http/plugins/server/server.go
+  s_146664733c831b::t_f5d076baffd1f0 33,82,103,131,158,653-705
+server/gen/http/plugins/server/types.go
+  s_146664733c831b::t_73b5d85806c1f2 233-241,2045-2234,4235-4260,4459-4489,5875-6024,7693-7702
+server/gen/plugins/client.go
+  s_146664733c831b::t_2e01611c38bf61 28,42,53,261-283
+server/gen/plugins/endpoints.go
+  s_146664733c831b::t_6878a16de19aa2 29,92,117,445-479
+server/gen/plugins/service.go
+  s_146664733c831b::t_2c44cb1d7290a3 38-40,110,152-173,265-280
+server/internal/thirdparty/workos/repo/queries.sql.go
+  s_146664733c831b::t_677d026bfaa8ef 428-467,519-565
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "b7cb5e768c3c38311fb804fa83400045bf30eedf",
+  "prompts": {},
+  "sessions": {
+    "s_146664733c831b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a00edd-cfd5-79c0-8f97-21f359bc9f3e",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

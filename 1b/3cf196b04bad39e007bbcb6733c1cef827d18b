@@ -1,0 +1,25 @@
+server/internal/remotesessions/token_error_response.go
+  s_0b50c404cd701e::t_cfe2b483d14d5c 5,28-31,48-65,69-89,99-103,126-130,141-147,163-164,166,177-179,193,228-230,239-243
+server/internal/remotesessions/token_refresh_error.go
+  s_0b50c404cd701e::t_49bd1aec9efbe8 60-62,64-65
+server/internal/remotesessions/token_error_response_test.go
+  s_0b50c404cd701e::t_2f4c1a9296b5b4 13,22,31,40,49,57,63-70,74,82,87-103,151-184
+server/internal/remotesessions/refreshservice_invalid_grant_test.go
+  s_0b50c404cd701e::t_148faf88efbe9e 108-119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "1b3cf196b04bad39e007bbcb6733c1cef827d18b",
+  "prompts": {},
+  "sessions": {
+    "s_0b50c404cd701e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0962877c-1f5a-4286-b492-d7d7f88cef72",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

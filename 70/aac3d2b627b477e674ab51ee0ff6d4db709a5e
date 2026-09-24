@@ -1,0 +1,85 @@
+server/internal/hooks/quarantine_gate.go
+  s_d8569503ddf9c1::t_8cfddaff0ea8b2 166-167,171-185,187-231
+  s_d8569503ddf9c1::t_6cccd908f1a99c 46,186
+  s_d8569503ddf9c1::t_e75bfc14563b67 168-170
+  s_d8569503ddf9c1::t_3744d9db763484 40
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_d8569503ddf9c1::t_3aa6460727071c 663-672,721-724
+  s_d8569503ddf9c1::t_a8f3442caadb3a 82,571-618,1068-1075,1164-1171
+  s_d8569503ddf9c1::t_19bc277c87b65b 1160-1161
+  s_d8569503ddf9c1::t_61b47c5164d45e 68-73,646-647,707,710-719,1044-1054,1064-1067,1076-1077,1087-1094,1096-1097,1182-1189,1207
+  s_d8569503ddf9c1::t_2e1ec6315c1180 720
+  s_d8569503ddf9c1::t_31cc616548ae60 1095
+  s_d8569503ddf9c1::t_4e31570a9892d3 1098
+server/internal/risk/policy_bypass_test.go
+  s_d8569503ddf9c1::t_4cdd39ff25271f 637-639,674-676,697-699,723-725,747-749
+server/internal/risk/policy_bypass_intake_test.go
+  s_d8569503ddf9c1::t_4cdd39ff25271f 53-55
+server/internal/risk/session_quarantine_approval_test.go
+  s_d8569503ddf9c1::t_5e8d43a2bcf7da 4,13,160
+  s_d8569503ddf9c1::t_59307a3352591b 152,154,156
+  s_d8569503ddf9c1::t_1f66b5b3b422ea 1-3,5-12,14-151,153,155,157-159,161-201
+server/internal/demoseed/postgres.sql
+  s_d8569503ddf9c1::t_f2be4c0291377d 797-811,1297-1298,1311-1315
+  s_d8569503ddf9c1::t_dbdd26aadf6b64 1316-1317
+server/internal/hooks/session_quarantine_test.go
+  s_d8569503ddf9c1::t_a6d1d40ae091a4 8,17,25-41,45,72-77,82-95
+server/internal/sessionquarantine/request_state.go
+  s_d8569503ddf9c1::t_1c56d4da3095ab 1-61
+server/internal/risk/impl.go
+  s_d8569503ddf9c1::t_1e7c09bf50daf1 702
+  s_d8569503ddf9c1::t_7c33d18a7631d9 672-694,725,728
+server/internal/risk/policy_bypass.go
+  s_d8569503ddf9c1::t_5c0f218b3b4b83 333,482,554
+  s_d8569503ddf9c1::t_c42ee12af5e5a4 285,563,773-792,841-845,856-872
+  s_d8569503ddf9c1::t_d6d70b53fb858a 47
+  s_d8569503ddf9c1::t_de446195b87dd2 348,350-370,449-456,492-498,524-528,561-562
+  s_d8569503ddf9c1::t_ffcbb1633ce0d2 14
+  s_d8569503ddf9c1::t_099e6a2b78da3e 18,29,42-43,46,48,229-247,274-284
+  s_d8569503ddf9c1::t_0aa4c4b5ef6806 873-874
+server/internal/background/activities/session_quarantine.go
+  s_d8569503ddf9c1::t_c7aeab78e8a814 38-43,45-57
+  s_d8569503ddf9c1::t_aeedc6a00516e8 5,33-34,44,58-59,66-73
+server/internal/risk/policy_bypass_token_internal_test.go
+  s_d8569503ddf9c1::t_ddf09b200c78a6 74-76
+server/internal/risk/queries.sql
+  s_d8569503ddf9c1::t_c7aeab78e8a814 1427,1430-1431
+  s_d8569503ddf9c1::t_2d4272884a853b 1404-1409,1412,1428-1429,1432-1434
+  s_d8569503ddf9c1::t_6c2f45182d43c2 412-419
+  s_d8569503ddf9c1::t_85fa8e6a072c15 1410-1411
+  s_d8569503ddf9c1::t_8d19ad8dfbd822 1435
+server/internal/sessionquarantine/quarantine.go
+  s_d8569503ddf9c1::t_1c56d4da3095ab 18,39
+  s_d8569503ddf9c1::t_6cccd908f1a99c 24,45
+server/internal/hooks/ingest_hooks.go
+  s_d8569503ddf9c1::t_8cfddaff0ea8b2 549
+server/internal/risk/policy_bypass_token.go
+  s_d8569503ddf9c1::t_df4f4f23024262 56-58,74-76,97-99,161-163,175,238-240,283,286,296-309
+server/internal/hooks/shadow_mcp_request_link.go
+  s_d8569503ddf9c1::t_36aa81ba62e8e2 86-88
+server/internal/background/activities/session_quarantine_test.go
+  s_d8569503ddf9c1::t_925ab7b5ecc1a7 95-98
+  s_d8569503ddf9c1::t_6435fb345bdd6e 5,14,46-60,64,70-90,112-115
+seed/demo/PAGES.md
+  s_d8569503ddf9c1::t_f2be4c0291377d 19
+server/internal/risk/shadow_mcp_offline_bypass_integration_test.go
+  s_d8569503ddf9c1::t_4cdd39ff25271f 118-120
+server/internal/risk/repo/queries.sql.go
+  s_d8569503ddf9c1::t_7cd8c5eaec3698 1259-1294,2164-2204,3129-3178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "70aac3d2b627b477e674ab51ee0ff6d4db709a5e",
+  "prompts": {},
+  "sessions": {
+    "s_d8569503ddf9c1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02009-cbbe-7523-85e3-7aa83e894e4c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

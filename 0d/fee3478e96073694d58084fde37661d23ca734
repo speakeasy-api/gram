@@ -1,0 +1,34 @@
+server/internal/platformmcp/tool_review_requests_test.go
+  h_9630b74bdac540 1-112
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 367,777
+server/internal/mcpapproval/queries.sql
+  h_9630b74bdac540 59-95
+server/internal/mcpapproval/platform_request.go
+  h_9630b74bdac540 1-92
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 204-208,234
+server/internal/platformmcp/descriptor_test.go
+  h_9630b74bdac540 238
+server/internal/mcpapproval/platform_request_test.go
+  h_9630b74bdac540 1-81
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 351,372,383-417
+server/internal/platformmcp/tool_review_requests.go
+  h_9630b74bdac540 1-171
+server/internal/mcpapproval/impl.go
+  h_9630b74bdac540 637-659,668,696,705-706,711-712,714-715
+server/internal/mcpapproval/repo/queries.sql.go
+  h_9630b74bdac540 708-784
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0dfee3478e96073694d58084fde37661d23ca734",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

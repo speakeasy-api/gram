@@ -1,0 +1,28 @@
+server/internal/authz/principal.go
+  s_37eadf6510f36e::t_42aa8adc0e133e 17-18,21
+  s_37eadf6510f36e::t_eaaed1501fa6ae 122
+  s_37eadf6510f36e::t_eeb43443efaa77 10,115,118,129-131,135,138
+server/internal/plugins/impl.go
+  s_37eadf6510f36e::t_eeb43443efaa77 1133-1136
+server/internal/authz/principal_test.go
+  s_37eadf6510f36e::t_eeb43443efaa77 8,149-158
+server/internal/plugins/impl_test.go
+  s_37eadf6510f36e::t_eeb43443efaa77 829-842
+  s_37eadf6510f36e::t_bb5ed162113c6b 824-828
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ad6a0c7e22a097b177883eaee0d001bc5807aa61",
+  "prompts": {},
+  "sessions": {
+    "s_37eadf6510f36e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff651-c145-7c40-824b-af8fc4942e2a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

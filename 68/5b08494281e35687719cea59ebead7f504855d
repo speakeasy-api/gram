@@ -1,0 +1,19 @@
+server/internal/scanners/gitleaks/scanner.go
+  s_0725e0f346a38c::t_6bd60bc22006ac 249-253,261
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "685b08494281e35687719cea59ebead7f504855d",
+  "prompts": {},
+  "sessions": {
+    "s_0725e0f346a38c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "80b695be-e9c8-4814-97c8-0523a1fd73dd",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

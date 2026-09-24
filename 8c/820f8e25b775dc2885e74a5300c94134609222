@@ -1,0 +1,37 @@
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_3001b313c83f0b::t_780eb216e20f6f 99-109
+  s_3001b313c83f0b::t_384321127c1f37 7,20-61
+  s_3001b313c83f0b::t_a6363e0ce36b38 62
+server/internal/background/activities/risk_analysis/eval_guardrail.go
+  s_3001b313c83f0b::t_f73e6c535ffe7c 26-28,30-34
+  s_3001b313c83f0b::t_08aca3873780d2 102-114
+  s_3001b313c83f0b::t_8c53202c70beed 79-90
+client/dashboard/src/pages/chatLogs/ChatTranscript.tsx
+  s_3001b313c83f0b::t_e4da4eac79ed81 386
+  s_3001b313c83f0b::t_a080f59cb8d297 352,357
+  s_3001b313c83f0b::t_e0fe54e529915e 740-755
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_3001b313c83f0b::t_08e9796293e20e 1429
+  s_3001b313c83f0b::t_3e5e951deb1b2b 1461-1465
+  s_3001b313c83f0b::t_112e09c9a48292 2705-2709
+  s_3001b313c83f0b::t_756215a7abb57d 2755-2784
+  s_3001b313c83f0b::t_1c22dce633a2ee 2816-2831
+  s_3001b313c83f0b::t_f749babbfeb605 2745-2749
+  s_3001b313c83f0b::t_0737fb8c64b6db 2832
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8c820f8e25b775dc2885e74a5300c94134609222",
+  "prompts": {},
+  "sessions": {
+    "s_3001b313c83f0b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f919a833-9f9b-4a4e-b4d5-533312be72bf",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

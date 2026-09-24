@@ -1,0 +1,32 @@
+server/internal/otel/dialect/log_claude_code.go
+  h_2620cc60cfd1e9 15,40,45
+server/internal/otel/dialect/log_codex.go
+  h_2620cc60cfd1e9 23,51,56
+server/internal/otel/dialect/log_semconv.go
+  h_2620cc60cfd1e9 16,20,29,34
+server/internal/otel/dialect/metric_claude_code.go
+  h_2620cc60cfd1e9 21,26
+server/internal/otel/dialect/metric_codex.go
+  h_2620cc60cfd1e9 23,28
+server/internal/otel/dialect/metric_semconv.go
+  h_2620cc60cfd1e9 15,20
+server/internal/otel/dialect/sensitivity.go
+  h_2620cc60cfd1e9 5-15,17-23
+server/internal/otel/dialect/sensitivity_test.go
+  h_2620cc60cfd1e9 30
+server/internal/otel/dialect/span_claude_code.go
+  h_2620cc60cfd1e9 15,44,49
+server/internal/otel/dialect/span_semconv.go
+  h_2620cc60cfd1e9 18,22,102,107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "06a6f29be32d1155152717e8c68765d18666ce7f",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

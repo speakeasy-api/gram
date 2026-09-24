@@ -1,0 +1,37 @@
+server/internal/directory/queries.sql
+  s_5d8cca81d02447::t_235ba42df51f9c 44-45
+  s_5d8cca81d02447::t_4ff365fca365d7 46-47
+server/internal/directory/directory.go
+  s_5d8cca81d02447::t_4ff365fca365d7 4,48-54
+server/internal/directory/directory_test.go
+  s_5d8cca81d02447::t_235ba42df51f9c 225-250
+server/internal/background/activities/process_workos_directory_attributes_events_test.go
+  s_5d8cca81d02447::t_235ba42df51f9c 279,338-345
+  s_5987dba16de244::t_70afde89e3ab57 346
+server/internal/directory/repo/queries.sql.go
+  s_5d8cca81d02447::t_09e292092269fd 239-241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "18c842e064438b46acdfd30c6568c20878504564",
+  "prompts": {},
+  "sessions": {
+    "s_5987dba16de244": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01959-19dd-7eb1-8706-1fa16b5d07e0",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_5d8cca81d02447": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01a67-b971-77b3-9c1f-897b58a5a5ba",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,60 @@
+.speakeasy/out.openapi.yaml
+  h_2620cc60cfd1e9 65236-65237,65249-65261,74615-74616
+client/dashboard/src/lib/audit-actions.test.ts
+  h_2620cc60cfd1e9 58-79
+client/dashboard/src/lib/audit-actions.ts
+  h_2620cc60cfd1e9 42-44,116-118,344-350,479-485
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_2620cc60cfd1e9 756,3813
+client/dashboard/src/sdk/src/models/components/createoteldestinationform.ts
+  h_2620cc60cfd1e9 9-12,35,37,51,62
+client/dashboard/src/sdk/src/models/components/createoteldestinationheaderinput.ts
+  h_2620cc60cfd1e9 1-44
+client/dashboard/src/sdk/src/models/components/oteldestinationheaderinput.ts
+  h_2620cc60cfd1e9 8,16
+server/design/dataexports/design.go
+  h_2620cc60cfd1e9 194-200,202,204,243
+server/gen/data_exports/service.go
+  h_2620cc60cfd1e9 59-66,77-78,191,196-197
+server/gen/http/data_exports/client/cli.go
+  h_2620cc60cfd1e9 97,103,106
+server/gen/http/data_exports/client/encode_decode.go
+  h_2620cc60cfd1e9 1967-1990
+server/gen/http/data_exports/client/types.go
+  h_2620cc60cfd1e9 22-23,1664-1672,1678-1679,1715,1721,1724
+server/gen/http/data_exports/server/encode_decode.go
+  h_2620cc60cfd1e9 1910-1921
+server/gen/http/data_exports/server/types.go
+  h_2620cc60cfd1e9 22-23,1682-1690,1696-1697,3004,3010,3132,3207-3218
+server/gen/http/openapi3.yaml
+  h_2620cc60cfd1e9 66611-66612,66624-66636,75986-75987
+server/internal/audit/oteldestinations.go
+  h_2620cc60cfd1e9 21-25,27-29
+server/internal/dataexports/authorization_test.go
+  h_2620cc60cfd1e9 45,53,61
+server/internal/dataexports/destinations.go
+  h_2620cc60cfd1e9 54,63-65,70-77,85,89,99-103,154-159,161-163,167
+server/internal/dataexports/destinations_test.go
+  h_2620cc60cfd1e9 22,28-31,34-37,44,51-54,57-60,78,84-85,90-97,121,125,129,133-174,199,214
+server/internal/dataexports/impl.go
+  h_2620cc60cfd1e9 130-141,236-248
+server/internal/dataexports/setup_test.go
+  h_2620cc60cfd1e9 82
+server/internal/urn/data_export_route.go
+  h_2620cc60cfd1e9 17,132,134
+server/internal/urn/data_exports_test.go
+  h_2620cc60cfd1e9 30-43,60-73
+server/internal/urn/otel_destination.go
+  h_2620cc60cfd1e9 17,132,134
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "d4ee24b0f2f2e55d4fa67ff35e3661cf951af1f2",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

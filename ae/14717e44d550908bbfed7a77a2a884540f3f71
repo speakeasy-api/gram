@@ -1,0 +1,24 @@
+server/internal/permissions/types.go
+  s_a5f37a1929f11b::t_7eec1376d1ee29 1-77
+docs/permissions-rewrite.md
+  s_a5f37a1929f11b::t_3d4e909ba7f83f 12-14
+  s_a5f37a1929f11b::t_7eec1376d1ee29 78
+server/internal/permissions/doc.go
+  s_a5f37a1929f11b::t_7eec1376d1ee29 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "ae14717e44d550908bbfed7a77a2a884540f3f71",
+  "prompts": {},
+  "sessions": {
+    "s_a5f37a1929f11b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ee04b-25b9-7e42-9e18-fe6de7ddd0f2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

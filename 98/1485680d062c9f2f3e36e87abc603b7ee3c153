@@ -1,0 +1,19 @@
+server/internal/scanners/promptinjection/testdata/prompt_injection/notinject.jsonl
+  s_be9b75eed3b34d::t_8b7a331123d4a7 1-339
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "981485680d062c9f2f3e36e87abc603b7ee3c153",
+  "prompts": {},
+  "sessions": {
+    "s_be9b75eed3b34d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fccbd-003a-7e53-9c6c-22b0d5b26f0c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

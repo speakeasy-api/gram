@@ -1,0 +1,24 @@
+client/dashboard/src/pages/data-exports/ConfigureDestinationSheet.tsx
+  h_2620cc60cfd1e9 1-266
+client/dashboard/src/pages/data-exports/DataExports.test.tsx
+  h_2620cc60cfd1e9 1-31,34,38-42,45-143,148-185
+  h_2620cc60cfd1e9 32-33,35-37,43-44,144-147
+client/dashboard/src/pages/data-exports/ConfigureDestinationSheet.test.tsx
+  h_2620cc60cfd1e9 1-90
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  h_2620cc60cfd1e9 16,33,37-40,127-130,235,244-245,268,352-381,489-491,552-560,595-627,631-634,641-650,652,663-727,729-752,754-907,909-911,913-928
+  h_2620cc60cfd1e9 728,753
+client/dashboard/src/pages/data-exports/ConfigureExportSheet.tsx
+  h_2620cc60cfd1e9 68,103,474
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "5b682bae0ec4ae437eebe0137bb2440b4c661490",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+.mise-tasks/risk/report.py
+  s_be9b75eed3b34d::t_44b611a4bfabe0 120,146,181,191,271,326,347,379,429-435
+CORPUS_CHANGES.md
+  s_be9b75eed3b34d::t_6fdc39a1b180db 82-85
+server/cmd/risk-pi-report/main.go
+  s_be9b75eed3b34d::t_217bcad8aa3232 78,217-222,852-853,1488,1541-1542,1546,1565-1567,1574,1591-1674,1821-1826
+server/cmd/risk-pi-report/main_test.go
+  s_be9b75eed3b34d::t_d2564366581064 63-84,121,134
+server/internal/scanners/promptinjection/testdata/prompt_injection/corpus_notes.md
+  s_be9b75eed3b34d::t_88e0bb440c6b00 47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "30a86e3363de3d950a1ee65b617122f06d79945f",
+  "prompts": {},
+  "sessions": {
+    "s_be9b75eed3b34d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fccbd-003a-7e53-9c6c-22b0d5b26f0c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

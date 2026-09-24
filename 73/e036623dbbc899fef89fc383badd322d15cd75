@@ -1,0 +1,19 @@
+server/internal/database/models.go
+  s_06bf1e574073ef::t_658f7897ca3233 20,23-24,27,30,32,34,39-41,45,47,51,55,59,577,584
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "73e036623dbbc899fef89fc383badd322d15cd75",
+  "prompts": {},
+  "sessions": {
+    "s_06bf1e574073ef": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03986-81cb-7d02-822b-2a3781869f76",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

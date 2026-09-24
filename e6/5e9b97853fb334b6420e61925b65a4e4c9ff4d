@@ -1,0 +1,24 @@
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_7f981529db6c42::t_002993bde133dc 2021-2026
+  s_7f981529db6c42::t_ff2d315c06dcfd 1836-1841
+  s_7f981529db6c42::t_dc3403f610d58d 2041,2047-2048
+  s_7f981529db6c42::t_c0057b6594dca3 2141-2169,2171-2179,2183-2214,2216-2232
+  s_7f981529db6c42::t_72d8ba461721ab 2180-2182
+  s_7f981529db6c42::t_d54eab7570d71f 1993-1998
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "e65e9b97853fb334b6420e61925b65a4e4c9ff4d",
+  "prompts": {},
+  "sessions": {
+    "s_7f981529db6c42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e55236aa-ffd1-49e1-890c-a87981639827",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+.changeset/fast-challenge-logs.md
+  s_62bf807f9fa23e::t_a48ec90bf22418 1-6
+server/internal/access/impl.go
+  s_62bf807f9fa23e::t_50791c63c0e63c 764-774,973-975,977,979,984-1000,1006-1009,1127
+server/internal/access/list_challenge_buckets_test.go
+  s_62bf807f9fa23e::t_a2b376a1b69a3b 190,194,233,245,252-253
+server/internal/access/queries.sql
+  s_62bf807f9fa23e::t_0c730349ab818a 121-125
+server/internal/access/repo/queries.sql.go
+  s_62bf807f9fa23e::t_853f2ce2ddfe88 1550-1575
+server/internal/authz/repo/queries.go
+  s_62bf807f9fa23e::t_0ab481c9f7b0d3 138-143,187-229,433-434,438-441,443,447-453,459,461,463-465,470,475,480,504,506,511,513-523,529,531-532
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "197f307709f96cf0b169502565704e73d573d871",
+  "prompts": {},
+  "sessions": {
+    "s_62bf807f9fa23e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff163-7dd5-7302-81f9-6276dfd2ce9f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,53 @@
+server/cmd/tools/migrations/LEGACY_POLICY_SCOPE_MIGRATION.md
+  s_d57c903c3bc12c::t_b85ffcf2f1ab02 191
+  s_d57c903c3bc12c::t_8a1c448b591481 48-75,88-98,111,121-122,149,158-161,165,173-190
+server/cmd/tools/migrations/legacypolicyscope/runner.go
+  s_d57c903c3bc12c::t_4dbb33dbffa05c 184-187
+  s_d57c903c3bc12c::t_6a4685795e521c 145
+  s_d57c903c3bc12c::t_e29fc861bdfb29 52-53,90-91
+  s_d57c903c3bc12c::t_8247c8b377cb6b 31-44,49-51,54,66,87-89,92,99-102,107,123-144,146-161,167,169,172,179,181-183,188-195,278
+server/cmd/tools/migrations/legacypolicyscope/analyzer_config.go
+  s_d57c903c3bc12c::t_11c7658851a27c 32-35
+  s_d57c903c3bc12c::t_d848e6ecaa9994 1-31,36-52
+server/cmd/tools/migrations/legacy_policy_scope_cmd.go
+  s_d57c903c3bc12c::t_ff01e48f8404eb 12,61-64,71-74,77-78,80,91,100-137
+  s_d57c903c3bc12c::t_4dbb33dbffa05c 163-164
+  s_d57c903c3bc12c::t_162436299f620c 138
+server/cmd/tools/migrations/legacypolicyscope/runner_test.go
+  s_d57c903c3bc12c::t_b85ffcf2f1ab02 316
+  s_d57c903c3bc12c::t_39b742241407ff 238,276-279
+  s_d57c903c3bc12c::t_047e6eabfc5606 5,217-233,235-237,239-275,280-315
+  s_d57c903c3bc12c::t_223adb516e972f 234
+server/internal/testenv/queries.sql
+  s_d57c903c3bc12c::t_b7dcc3e76becda 809-823
+server/cmd/tools/migrations/legacy_policy_scope_cmd_test.go
+  s_d57c903c3bc12c::t_bca17c22253c59 1-90
+server/cmd/tools/migrations/legacypolicyscope/fold_test.go
+  s_d57c903c3bc12c::t_e6e4fcba540bff 291
+  s_d57c903c3bc12c::t_5a7db3995c9961 260-290,292-298
+server/cmd/tools/migrations/legacypolicyscope/fold.go
+  s_d57c903c3bc12c::t_2d385ec9ce2153 23,77-92,95,228,241
+server/internal/attr/conventions.go
+  s_d57c903c3bc12c::t_6a4685795e521c 491-551,2113-2127
+  s_d57c903c3bc12c::t_d04fb166d8fd5c 2128
+server/cmd/tools/migrations/legacypolicyscope/analyzer_config_test.go
+  s_d57c903c3bc12c::t_6872a6b3594e08 1-55
+server/internal/testenv/testrepo/queries.sql.go
+  s_d57c903c3bc12c::t_fb913097dfe2ca 1808-1823,2720-2737
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "f003253631786c2647af412bb8a131507a0c8213",
+  "prompts": {},
+  "sessions": {
+    "s_d57c903c3bc12c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db8bb333-57c1-4f55-9089-77952e65a646",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

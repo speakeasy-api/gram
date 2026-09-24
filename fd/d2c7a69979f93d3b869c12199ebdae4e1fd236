@@ -1,0 +1,19 @@
+client/dashboard/src/pages/security/policy-evals/EvalsTab.tsx
+  s_1fd25e6450fcc7::t_2c237d931731ca 3,5-6,9,33-39,41-42,44-59,94-97,100,102,105-106,108,119-121,132-136,139,187-189,211,246,258,262-267,270-281,303,320-324,327-333,346-347,351-352,356-376,392,394,397-409,412-429,439-440,466,470,473-482,486-487,489-521,550-551,553-555,596,626
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "fdd2c7a69979f93d3b869c12199ebdae4e1fd236",
+  "prompts": {},
+  "sessions": {
+    "s_1fd25e6450fcc7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7ea42380-1a11-45cd-902e-a44d16cbae01",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

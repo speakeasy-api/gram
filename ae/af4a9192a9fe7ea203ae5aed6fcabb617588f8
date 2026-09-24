@@ -1,0 +1,26 @@
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_58b4c7f65edfc1::t_888f7dc8560f5a 690,702,720
+  s_58b4c7f65edfc1::t_5fc9fb7033e127 734,755,778,786,799
+.changeset/policy-create-review-live.md
+  s_58b4c7f65edfc1::t_61d72d2ee579aa 1-5
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_58b4c7f65edfc1::t_991b61c3cae52f 162,449,525,528,546,549,553,556-558,562-563,595-596,680,721,728,744,750,789,833-834,839-865
+  s_58b4c7f65edfc1::t_a7e63a98dc2417 506,1352-1353,1357-1358,1389-1473,2397,2429,2451,2481,2579-2587
+  s_58b4c7f65edfc1::t_c78cb0f793ff71 31,136-140,2588-2590,2652
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "aeaf4a9192a9fe7ea203ae5aed6fcabb617588f8",
+  "prompts": {},
+  "sessions": {
+    "s_58b4c7f65edfc1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f29e7-f43a-75b1-9ea3-825b64f28aa0",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+server/internal/plugins/impl.go
+  s_5d8cca81d02447::t_108ee74ebcd9d9 1187,1190,1218,1221,1223,1230,1233,1236,1238,1245,1259,1268
+server/internal/directory/profile_test.go
+  s_5d8cca81d02447::t_108ee74ebcd9d9 11
+server/internal/plugins/principal.go
+  s_5d8cca81d02447::t_108ee74ebcd9d9 28,52,58,65-66,78,86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "badb20980629a8a9e397c297814229c4651d77d2",
+  "prompts": {},
+  "sessions": {
+    "s_5d8cca81d02447": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01a67-b971-77b3-9c1f-897b58a5a5ba",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

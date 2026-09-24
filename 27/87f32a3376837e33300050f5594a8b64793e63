@@ -1,0 +1,37 @@
+.changeset/eval-transcript-reuse.md
+  s_a91391a812c908::t_09973f4fa83301 1-5
+.changeset/risk-event-transcript-header.md
+  s_a91391a812c908::t_09973f4fa83301 1-5
+client/dashboard/src/pages/chatLogs/chatRisk.tsx
+  s_a91391a812c908::t_09973f4fa83301 11,127-143,163-306,364-366
+.changeset/eval-transcript-drawer.md
+  s_a91391a812c908::t_09973f4fa83301 1-5
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_a91391a812c908::t_09973f4fa83301 15-22,39,49-50,109-119,1757-1759,1763,1786,1824,1853-1864,1947,1983-2053,2060,2069,2073,2086-2134,2148-2190,2192-2211,2213-2215,2217-2225,2258,2821-2832
+client/dashboard/src/pages/chatLogs/ChatDetailPanel.tsx
+  s_a91391a812c908::t_09973f4fa83301 234,249,265-268,270-283,287,335-391,598,616,647-656,665,1180
+.changeset/eval-cost-latency-display.md
+  s_a91391a812c908::t_09973f4fa83301 1-5
+.changeset/unify-transcript-finding-card.md
+  s_a91391a812c908::t_09973f4fa83301 1-5
+.changeset/eval-verdict-inline-block.md
+  s_a91391a812c908::t_09973f4fa83301 1-5
+client/dashboard/src/pages/chatLogs/ChatTranscript.tsx
+  s_a91391a812c908::t_09973f4fa83301 5,78-82,84-87,99-146,335,342,361-365,370-376,405-411,441,453,462-468,489-492,518,529,533-539,560-563,579-585,612,639,685,760,769-794,901,946,962,1014,1023
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "2787f32a3376837e33300050f5594a8b64793e63",
+  "prompts": {},
+  "sessions": {
+    "s_a91391a812c908": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2b83-2044-7ea2-9004-601b23879900",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

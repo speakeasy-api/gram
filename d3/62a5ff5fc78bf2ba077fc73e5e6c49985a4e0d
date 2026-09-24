@@ -1,0 +1,120 @@
+server/internal/risk/results_test.go
+  s_3d388cbf35fcf4::t_8e715d1ee95374 71,487
+server/internal/risk/impl.go
+  s_3d388cbf35fcf4::t_19ba10249ffff7 1715,1747
+server/database/schema.sql
+  s_3d388cbf35fcf4::t_1eb563cb10dc63 2027-2031,2035,2036-2071,4114-4115,4156-4158,4183-4185
+server/internal/testenv/testrepo/models.go
+  s_3d388cbf35fcf4::t_840ea7803a2801 105-106
+server/internal/hooks/repo/queries.sql.go
+  s_3d388cbf35fcf4::t_611ca94d9b3eb0 301
+server/internal/background/activities/risk_analysis/risk_result_writer.go
+  s_3d388cbf35fcf4::t_e36b824a8d494f 85,210,228,250
+server/clickhouse/schema.sql
+  s_3d388cbf35fcf4::t_75dec5227971f0 1206,1256
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_3d388cbf35fcf4::t_b7e80a24243d0e 397,484
+server/internal/hooks/claude_hooks.go
+  s_3d388cbf35fcf4::t_f62a477453da9a 1339
+server/clickhouse/local/golang_migrate/atlas.sum
+  s_3d388cbf35fcf4::t_ff470a8cc01109 1,80
+server/clickhouse/migrations/atlas.sum
+  s_3d388cbf35fcf4::t_cc30be77b4df7f 1,85
+server/clickhouse/migrations/20260727130929_chat-content-parts.sql
+  s_3d388cbf35fcf4::t_77a47fd1db1643 1-2
+server/clickhouse/local/golang_migrate/20260727130935_chat-content-parts.up.sql
+  s_3d388cbf35fcf4::t_ae3cc2291e58ad 1-2
+server/internal/database/models.go
+  s_3d388cbf35fcf4::t_dbe5c09c633b11 354-358,359-371,1728-1729
+server/internal/chat/list_chats_test.go
+  s_3d388cbf35fcf4::t_c0ace900c97ee6 90,131
+server/internal/testenv/testrepo/queries.sql.go
+  s_3d388cbf35fcf4::t_23130657f731e2 433,464
+server/clickhouse/local/golang_migrate/20260727130935_chat-content-parts.down.sql
+  s_3d388cbf35fcf4::t_3c6f64dc070ff7 1-2
+server/internal/background/activities/risk_analysis/scan_account_identity_test.go
+  s_3d388cbf35fcf4::t_30e8551aac0283 206,232,266,357,432
+server/internal/chat/repo/queries.sql.go
+  s_3d388cbf35fcf4::t_8a4a984f83ce78 2920
+  s_3d388cbf35fcf4::t_5657bfadff8bf3 333-347,1227-1327,2215-2254
+server/internal/chat/load_chat_test.go
+  s_3d388cbf35fcf4::t_d67598f27ddd17 96
+server/internal/risk/overview_test.go
+  s_3d388cbf35fcf4::t_e777e855391e56 54
+server/internal/risk/repo/queries.sql.go
+  s_3d388cbf35fcf4::t_b8dc784d5c1bb1 1688,2482,2519-2520,2567,2602,2639-2640,2691,2855
+server/migrations/20260727233742_chat-content-parts.sql
+  s_3d388cbf35fcf4::t_8a96fcaee9fa07 1-8,9-40
+.changeset/prompt-attachment-capture.md
+  s_3d388cbf35fcf4::t_c3cf2467620981 1-5
+.speakeasy/openapi-hooks.yaml
+  s_3d388cbf35fcf4::t_d4be6086a5b6b0 261-265,397-440
+hooks/relay/envelope.go
+  s_3d388cbf35fcf4::t_423c4f483bc1ee 74-83,403-404
+hooks/relay/mcp_inventory.go
+  s_3d388cbf35fcf4::t_0d9943c013fc40 109-118
+hooks/relay/prompt_attachments.go
+  s_3d388cbf35fcf4::t_81329eef1db682 1-458
+hooks/relay/prompt_attachments_test.go
+  s_3d388cbf35fcf4::t_03b07fceebe67a 1-135
+hooks/relay/runner.go
+  s_3d388cbf35fcf4::t_d7a9851a2044af 183-191,244-246
+hooks/sdk/.speakeasy/gen.lock
+  s_3d388cbf35fcf4::t_6ee66ebba88038 9-11,42-43,72-75,218-219,248-251
+hooks/sdk/docs/models/components/hookingestdata.md
+  s_3d388cbf35fcf4::t_285d4a749a91b2 16
+hooks/sdk/docs/models/components/hookpromptattachmententry.md
+  s_3d388cbf35fcf4::t_2075e483a8ed98 1-20
+hooks/sdk/models/components/hookingestdata.go
+  s_3d388cbf35fcf4::t_8f7f147a15dc98 23-24,86-92
+hooks/sdk/models/components/hookpromptattachmententry.go
+  s_3d388cbf35fcf4::t_a675240580d6f0 1-106
+server/design/hooks/design.go
+  s_3d388cbf35fcf4::t_a202b6a97e9d83 254-269,281
+server/gen/hooks/service.go
+  s_3d388cbf35fcf4::t_1545ab8125481e 287-289,377-405
+server/gen/http/hooks/client/cli.go
+  s_3d388cbf35fcf4::t_22b8bd03347035 258
+server/gen/http/hooks/client/encode_decode.go
+  s_3d388cbf35fcf4::t_60e77752d3e8d9 1761-1770,1910-1933,2025-2034,2174-2197
+server/gen/http/hooks/client/types.go
+  s_3d388cbf35fcf4::t_373abc48366f98 1575-1577,1687-1715
+server/gen/http/hooks/server/encode_decode.go
+  s_3d388cbf35fcf4::t_b18bdb695f32e6 1701-1710,1850-1873
+server/gen/http/hooks/server/types.go
+  s_3d388cbf35fcf4::t_05a431cf959c4a 1575-1577,1687-1715,3252-3258,3305-3319
+server/internal/chat/message_store.go
+  s_3d388cbf35fcf4::t_557b3a2b216e8a 4,6-7,9,11,16,59-129
+server/internal/chat/queries.sql
+  s_3d388cbf35fcf4::t_9430e993e7ef36 213-279,760-768
+server/internal/chat/repo/copyfrom.go
+  s_3d388cbf35fcf4::t_a74c2db5d4b904 12-54
+server/internal/chat/setup_test.go
+  s_3d388cbf35fcf4::t_4021e3afcfd893 15-16,60,132-133,141
+server/internal/hooks/ingest_hooks.go
+  s_3d388cbf35fcf4::t_625357e6bb53b7 5,13,22,681-690,1066-1242
+server/internal/hooks/ingest_hooks_test.go
+  s_3d388cbf35fcf4::t_fcb82a398e026e 5-6,9-10,23,25,45-53,1027-1157
+server/internal/hooks/session_capture_test.go
+  s_3d388cbf35fcf4::t_9817374486a5a2 362
+server/internal/hooks/setup_test.go
+  s_3d388cbf35fcf4::t_08ecb142ea1007 22-23,73,179-180,226
+server/internal/message/message_types.go
+  s_3d388cbf35fcf4::t_612f775a1240b0 10-12,20,24-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "d362a5ff5fc78bf2ba077fc73e5e6c49985a4e0d",
+  "prompts": {},
+  "sessions": {
+    "s_3d388cbf35fcf4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "acec37c7-b1cc-4ee7-82c8-afd405d96140",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

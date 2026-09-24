@@ -1,0 +1,22 @@
+server/internal/remotesessions/token_error_response_test.go
+  s_0b50c404cd701e::t_1fe6c6a8215983 81-94
+server/internal/remotesessions/token_error_response.go
+  s_0b50c404cd701e::t_041320be8c2b82 232
+  s_0b50c404cd701e::t_972378ee0b3fb5 255-261
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "5ef75502d75bef491e81d8f80bae6755013d1c0a",
+  "prompts": {},
+  "sessions": {
+    "s_0b50c404cd701e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0962877c-1f5a-4286-b492-d7d7f88cef72",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

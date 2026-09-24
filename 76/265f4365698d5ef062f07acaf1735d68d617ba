@@ -1,0 +1,90 @@
+server/internal/remotemcp/impl.go
+  h_9630b74bdac540 38,52,257-259,268-270,297-301
+server/internal/plugins/assignments/subset_test.go
+  h_9630b74bdac540 1-27
+server/internal/shadowmcp/admission/guard_integration_test.go
+  h_9630b74bdac540 1-84
+server/internal/plugins/distribution_admission.go
+  h_9630b74bdac540 1-10,13-38,40-48,50,54-64
+server/design/platformmcp/design.go
+  h_9630b74bdac540 8,67-74
+server/internal/mcpservers/distribution_admission_test.go
+  h_9630b74bdac540 1-33
+server/cmd/gram/start.go
+  h_9630b74bdac540 149,1618-1619,1674,1676-1677,1684-1685,1742
+server/internal/platformmcp/tool_distribution.go
+  h_9630b74bdac540 150-153
+server/internal/plugins/distribution_admission_test.go
+  h_9630b74bdac540 1-41
+server/internal/plugins/queries.sql
+  h_9630b74bdac540 28-37
+server/internal/shadowmcp/admission/guard_test.go
+  h_9630b74bdac540 1-33,35-47
+server/internal/shadowmcp/admission/report_test.go
+  h_9630b74bdac540 1-91
+server/internal/remotemcp/distribution_admission_test.go
+  h_9630b74bdac540 1-33
+server/internal/plugins/assignments/command.go
+  h_9630b74bdac540 97-103,106-109,111-121,185-186,188-189
+server/internal/mcpendpoints/impl.go
+  h_9630b74bdac540 42,56,87-93,134-136,145-147,237-243,262-264,268,273
+server/internal/shadowmcp/admission/guard.go
+  h_9630b74bdac540 1-36,39-40,43-116,118-229,256-270,272-284,289-290,292-303,305-376
+server/internal/platformmcp/distribution_error_mapping_test.go
+  h_9630b74bdac540 1-61
+server/internal/platformmcp/plugins_integration_test.go
+  h_9630b74bdac540 560-562,567
+server/internal/platformmcp/management.go
+  h_9630b74bdac540 509,515-517
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 54,78,645-647,659-661,708,717-729,820,855,867-872
+server/internal/mcpservers/setup_test.go
+  h_9630b74bdac540 25,30,34,111-132
+server/internal/platformmcp/plugins.go
+  h_9630b74bdac540 23,258,287
+server/internal/mcpservers/distribution_admission.go
+  h_9630b74bdac540 1-34,40-48
+server/internal/mcpendpoints/distribution_admission_test.go
+  h_9630b74bdac540 1-66
+server/internal/mcpservers/distribution_enable_test.go
+  h_9630b74bdac540 1-66
+server/internal/platformmcp/plugin_audience_mutation.go
+  h_9630b74bdac540 19,99-105,107,143-145,158-160,184-185,187,190-191,205,208,258-260
+server/internal/shadowmcp/admission/report.go
+  h_9630b74bdac540 1-66
+server/internal/shadowmcp/admission/rollout.go
+  h_9630b74bdac540 1-116,128,137-143,145,147-149,151-156
+server/internal/mcpendpoints/setup_test.go
+  h_9630b74bdac540 34,39,193-213
+server/internal/shadowmcp/admission/rollout_strict_test.go
+  h_9630b74bdac540 1-36
+server/design/plugins/design.go
+  h_9630b74bdac540 17-26
+server/internal/mcpservers/distribution_visibility_test.go
+  h_9630b74bdac540 1-86
+server/internal/plugins/impl.go
+  h_9630b74bdac540 56,171,786-788,853-857,860-863,1164-1166,1172-1174,1191,1198-1199
+server/internal/plugins/distribution_lock_test.go
+  h_9630b74bdac540 1-35
+server/internal/platformmcp/plugin_audience_mutation_test.go
+  h_9630b74bdac540 5,11-12,15-39
+server/internal/remotemcp/distribution_admission.go
+  h_9630b74bdac540 1-22,28-36
+server/internal/shadowmcp/admission/setup_test.go
+  h_9630b74bdac540 14-15,17,19,69-95
+server/internal/platformmcp/lifecycle_visibility.go
+  h_9630b74bdac540 19,84-85,95-100,136-146,190-194,202-203
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 454-456
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "76265f4365698d5ef062f07acaf1735d68d617ba",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

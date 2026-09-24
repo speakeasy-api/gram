@@ -1,0 +1,14 @@
+server/internal/platformmcp/tool_data_exports.go
+  h_2620cc60cfd1e9 13,114,122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "0886b650d0f746e1d912f7f1330ca42ab21b1503",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

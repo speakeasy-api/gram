@@ -1,0 +1,19 @@
+server/internal/risk/scanner.go
+  s_29b0461c94a5c4::t_96285a57bcb3c4 432-433,435,439,446-447
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "3008c33e96f4189e861ac92471ed47ef0498904d",
+  "prompts": {},
+  "sessions": {
+    "s_29b0461c94a5c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1038a49d-c381-4c3d-9a4a-36e639255f83",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

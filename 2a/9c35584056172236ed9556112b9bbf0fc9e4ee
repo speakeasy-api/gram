@@ -1,0 +1,33 @@
+docs/permissions-rewrite.md
+  s_a5f37a1929f11b::t_9477d404a610c2 54-55
+  s_a5f37a1929f11b::t_f44f67976f4de8 13-14,45-49,71-73,90-96,98,100-102,104,106
+server/internal/permissions/fact_test.go
+  s_a5f37a1929f11b::t_963a73ff432d14 1-110
+server/internal/permissions/object.go
+  s_a5f37a1929f11b::t_a7f16929adad3a 1-14
+server/internal/permissions/relation.go
+  s_a5f37a1929f11b::t_f21bedb9c59678 1-22,24-48
+  s_a5f37a1929f11b::t_6f4283d0860be4 23
+server/internal/permissions/caveat.go
+  s_a5f37a1929f11b::t_c86836f0f73bfb 1-24
+server/internal/permissions/fact.go
+  s_a5f37a1929f11b::t_98c216f5ee2d3f 1-47
+server/internal/permissions/check.go
+  s_a5f37a1929f11b::t_cf072b8155eb9b 10-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "2a9c35584056172236ed9556112b9bbf0fc9e4ee",
+  "prompts": {},
+  "sessions": {
+    "s_a5f37a1929f11b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ee04b-25b9-7e42-9e18-fe6de7ddd0f2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

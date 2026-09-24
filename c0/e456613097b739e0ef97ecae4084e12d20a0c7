@@ -1,0 +1,20 @@
+.changeset/cross-org-mcp-links.md
+  h_9630b74bdac540 1-5
+client/dashboard/src/contexts/AuthProvider.tsx
+  h_9630b74bdac540 21,26,58,95-99,102-121,144-156,314-339,370-429
+  h_9630b74bdac540 100-101,157,343,430
+client/dashboard/src/contexts/AuthProvider.test.tsx
+  h_9630b74bdac540 2,4-8,13,32-34,71-75,80,320-362,364-368,370-420
+  h_9630b74bdac540 363,369,421-422
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c0e456613097b739e0ef97ecae4084e12d20a0c7",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

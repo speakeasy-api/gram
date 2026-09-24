@@ -1,0 +1,36 @@
+server/internal/plugins/private_package_test.go
+  h_9630b74bdac540 1-64
+server/internal/plugins/network_address.go
+  h_9630b74bdac540 1-29
+server/internal/plugins/impl.go
+  h_9630b74bdac540 50,3070-3071,3073-3079,3083,3117-3123,3126-3128,3133-3135
+  h_9630b74bdac540 3072,3136
+server/internal/mcpendpoints/impl.go
+  h_9630b74bdac540 254-256,604,735
+server/internal/mcpendpoints/plugin_publish.go
+  h_9630b74bdac540 1-41
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 869-878,1245-1252
+server/internal/plugins/network_address_test.go
+  h_9630b74bdac540 1-41
+server/internal/plugins/queries.sql
+  h_9630b74bdac540 336-348,400-410,450-452,469-472,476,478-485,499,508,534-540,551,578,586-594
+  h_9630b74bdac540 477
+server/internal/database/models.go
+  h_9630b74bdac540 2192-2193,2195-2204
+server/internal/plugins/repo/models.go
+  h_9630b74bdac540 52-53,55-64
+server/internal/plugins/repo/queries.sql.go
+  h_9630b74bdac540 92,517,673-705,819-825,836,863,871-879,1184,1237,1443-1446,1450-1459,1473,1482,1513-1515,1528-1530,1557-1559,1585-1595,1612-1628,1656-1659,1817,2017-2018,2020-2031,2055,2202
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "415739383bac342f3e92c4d18bf6ed52fdd6c047",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

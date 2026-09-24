@@ -1,0 +1,30 @@
+server/internal/risk/impl.go
+  s_e1c8905d8aee27::t_b1dceb1ccdca08 2356-2379,2417,2422-2424
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_e1c8905d8aee27::t_5ba178c5dc87fc 1408-1420,1422-1428,1431,1433-1439,1442,1444-1450,1469-1470,1480
+  s_e1c8905d8aee27::t_c7af65f3d11b5c 1429-1430,1432,1440-1441,1443,1605-1619
+  s_e1c8905d8aee27::t_6310d4569bf486 1421
+  s_e1c8905d8aee27::t_15df69136f4ada 2444
+  s_e1c8905d8aee27::t_02b040631074d4 40
+  s_e1c8905d8aee27::t_c8ffb4e8bc9c1c 108
+  s_e1c8905d8aee27::t_eef7f32a6afa60 1995,2001,2102,2135,2235-2319,2407
+  s_e1c8905d8aee27::t_582de49c17b16d 1620-1622,1637,1640-1644,1820-1821,1828-1829,1860-1861,1875-1876,1883-1884,1931-1940,1948-1950,1958,2132-2134
+  s_e1c8905d8aee27::t_1d557853d58c3f 2127-2131
+  s_e1c8905d8aee27::t_babd5e6a4ca126 1481-1482,1589-1590,1595-1596,1601,1959-1960,1982-1983,2020-2021,2042,2055,2087,2095,2101,2136,2320-2322,2347-2348,2352,2354,2406,2447-2448,2452,2469-2470
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f5f6bf8973fccd0efc790d18ae6f31e21d847756",
+  "prompts": {},
+  "sessions": {
+    "s_e1c8905d8aee27": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2ea6-167b-7023-8157-1cc24ffad2f8",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+client/dashboard/src/components/ui/MultiSelect/index.tsx
+  s_5987dba16de244::t_54291bf47b674d 229-236,418,873-877,1023-1024,1120-1121,1141
+  s_5987dba16de244::t_0ded61599d038a 1142
+  s_5987dba16de244::t_d36b7282118da8 228
+client/dashboard/src/components/ui/MultiSelect/index.test.tsx
+  s_5987dba16de244::t_2b13c9c6f61e8e 184,188-190,230,231,232-234,238-239
+client/dashboard/src/pages/plugins/PluginAssignmentsSheet.tsx
+  s_5987dba16de244::t_e90868f78f59e2 47,95-96
+client/dashboard/src/components/member-facepile.tsx
+  s_5987dba16de244::t_6806e87151110e 56-91,176-182
+  s_5987dba16de244::t_4349cae37c8d19 104-107,119-175,183-185,189
+  s_5987dba16de244::t_54291bf47b674d 100
+client/dashboard/src/pages/plugins/principals.ts
+  s_5987dba16de244::t_e90868f78f59e2 106-119,121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "30c0cf10d364fea37b177882a6df2a58255e8e60",
+  "prompts": {},
+  "sessions": {
+    "s_5987dba16de244": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01959-19dd-7eb1-8706-1fa16b5d07e0",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

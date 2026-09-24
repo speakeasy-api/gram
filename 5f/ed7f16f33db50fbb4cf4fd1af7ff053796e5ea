@@ -1,0 +1,54 @@
+server/internal/mcp/impl.go
+  h_9630b74bdac540 349,433-436
+server/internal/mcpmetadata/serve_install_page_test.go
+  h_9630b74bdac540 1937,1951,1991-1993
+server/internal/mcp/authnchallenge_firstparty.go
+  h_9630b74bdac540 64-67,72
+server/internal/networkingress/queries.sql
+  h_9630b74bdac540 1-11
+server/internal/mcp/authnchallenge_token.go
+  h_9630b74bdac540 307
+server/internal/remotesessions/challenge.go
+  h_9630b74bdac540 37,52,93-95,130,163-166,198-199,245-258,567,617-619,665-676,827-829,831
+server/internal/mcpmetadata/impl.go
+  h_9630b74bdac540 54,57-58,920,935,976-983,1038-1040,1052-1077,1087-1100,1124,1141,1362-1390
+server/internal/mcp/authnchallenge_consent_action.go
+  h_9630b74bdac540 68,160
+server/internal/mcp/private_oauth_authority.go
+  h_9630b74bdac540 1-42
+server/internal/mcp/authnchallenge_idp_callback.go
+  h_9630b74bdac540 76-78,87,89
+server/internal/mcp/resolved_mcp_endpoint.go
+  h_9630b74bdac540 19,31,204,210-221,223,232,300,304-306,310-311,314-321,328-333,516-520,536-538,551-555,648-655
+server/internal/networkingress/authority.go
+  h_9630b74bdac540 1-259
+server/internal/mcp/authnchallenge_consent.go
+  h_9630b74bdac540 332,511,634,658-663,708-709
+server/internal/mcp/resolved_mcp_endpoint_internal_test.go
+  h_9630b74bdac540 19,35,46
+server/internal/networkingress/authority_test.go
+  h_9630b74bdac540 1-211
+server/internal/mcp/authnchallenge_authorize.go
+  h_9630b74bdac540 182-185,190
+server/internal/testenv/queries.sql
+  h_9630b74bdac540 1-33
+server/internal/platformmcp/remotesessionprovider/adapter.go
+  h_9630b74bdac540 21,166-173
+server/internal/mcp/authnchallenge.go
+  h_9630b74bdac540 41,61-66,96-98
+server/database/sqlc.yaml
+  h_9630b74bdac540 404-411
+server/internal/mcp/authnchallenge_consent_mcp_endpoint.go
+  h_9630b74bdac540 142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5fed7f16f33db50fbb4cf4fd1af7ff053796e5ea",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

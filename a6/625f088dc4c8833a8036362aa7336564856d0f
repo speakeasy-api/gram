@@ -1,0 +1,41 @@
+server/internal/risk/replyinbox/writer.go
+  s_b390d6ce53b276::t_e92a373dbe8bbf 61
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_b390d6ce53b276::t_fdde196a28dd29 106,109-111,113-120
+  s_b390d6ce53b276::t_73d1f3d8653d2d 59-61
+docs/research/2026-08-20-enforcement-reply-load-test.md
+  s_b390d6ce53b276::t_d4a6c3e8171331 94
+server/internal/risk/replyinbox/inbox.go
+  s_b390d6ce53b276::t_929e671fb64b71 210-211
+  s_b390d6ce53b276::t_91c3c65c8cd6e2 191
+  s_b390d6ce53b276::t_637efa99522d0b 10
+  s_b390d6ce53b276::t_89e68fda24fe3b 400-406
+  s_b390d6ce53b276::t_78d8d5df58604d 600-601,603
+  s_b390d6ce53b276::t_d7d63e3dc21c3a 130-133
+  s_b390d6ce53b276::t_2aa57259d2d0cf 414
+server/cmd/tools/enforceproto/main.go
+  s_b390d6ce53b276::t_519dd8e72886d8 105
+  s_b390d6ce53b276::t_a638fad273f986 110-115,119
+  s_b390d6ce53b276::t_e6c954ba5cd2b5 138,143,147-148,153
+  s_b390d6ce53b276::t_e0e0bee4aa548f 13
+server/internal/risk/replyinbox/dispatch.go
+  s_b390d6ce53b276::t_b18da7cb211a49 53-55
+server/cmd/tools/enforceload/main.go
+  s_b390d6ce53b276::t_32526771600583 228-236
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "a6625f088dc4c8833a8036362aa7336564856d0f",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

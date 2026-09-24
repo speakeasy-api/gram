@@ -1,0 +1,19 @@
+server/internal/risk/overview_ch_test.go
+  s_fc571f39c642e8::t_f60dbfd2966021 86-87,189-195,213-214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "400e1f0aecba46e1963da425a69589d785261538",
+  "prompts": {},
+  "sessions": {
+    "s_fc571f39c642e8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa7d1-17b5-7831-ad39-8403c6daa46c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

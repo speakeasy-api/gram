@@ -1,0 +1,32 @@
+server/internal/plugins/platform_mcp_skills/review-shadow-mcp/SKILL.md
+  h_9630b74bdac540 1-21,23-24,31-32
+server/internal/platformmcp/shadow_inventory_test.go
+  h_9630b74bdac540 16,65,87-89
+server/internal/platformmcp/shadow_distribution_read.go
+  h_9630b74bdac540 1-19,27-100,103,105,108,114-115,117-118,138,140-254
+server/internal/platformmcp/shadow_distribution_read_test.go
+  h_9630b74bdac540 1-35,41-43,47-50,54-57,61-62
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 1931-1950,1955
+server/internal/platformmcp/shadow_inventory.go
+  h_9630b74bdac540 115,138,155,159-165,285-286,288-289,292-293
+server/internal/platformmcp/shadow_distribution_read_integration_test.go
+  h_9630b74bdac540 1-32,34-85
+server/internal/plugins/generate_test.go
+  h_9630b74bdac540 2927-2948,2951-2963,2967-2968,2971-2990,2993-2997
+server/internal/shadowmcp/admission/admission_test.go
+  h_9630b74bdac540 9,62-83,100
+server/internal/shadowmcp/admission/admission.go
+  h_9630b74bdac540 36-44,48-49,83,100,109-112,126,128-129,133-134,138,161-162,167-203,205-207,210
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1581070ce26edd3e18de72556de7eba3d6f58ba4",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_2f42666f5475a4::t_b16021c210b8d9 2129
+  s_2f42666f5475a4::t_f0d446e75d0fa5 2011
+  s_2f42666f5475a4::t_0f566b752fb6cf 50
+  s_2f42666f5475a4::t_2980b063313dea 2020,2030-2051,2069
+  s_2f42666f5475a4::t_f403a79b4cc479 2149
+  s_2f42666f5475a4::t_e8fd50fee59e13 2060
+  s_2f42666f5475a4::t_3bbd55095586f3 2157-2180,2182-2189
+  s_2f42666f5475a4::t_10c6234346d4d5 2192-2214
+  s_2f42666f5475a4::t_e37f6aafa951fd 2821-2824
+  s_2f42666f5475a4::t_8925fc08f966b2 49
+  s_2f42666f5475a4::t_481915ba2e8759 2150-2156
+.changeset/eval-verdict-inline-block.md
+  s_2f42666f5475a4::t_14d8f1c100f2b9 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1d7d6774a4acff0d74d3a18824bea53017d4f391",
+  "prompts": {},
+  "sessions": {
+    "s_2f42666f5475a4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f29fc-487a-7ee3-90a3-cadb1fec725f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

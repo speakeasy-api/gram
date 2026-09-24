@@ -1,0 +1,23 @@
+server/internal/thirdparty/openrouter/completion_client.go
+  s_d1db77e925f400::t_7eb0f9bbff055f 105-110
+server/internal/thirdparty/openrouter/unified_client.go
+  s_d1db77e925f400::t_42decace8fb27a 495-506,509
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_d1db77e925f400::t_625484a4898fbc 266-270
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "52e0a96b81744d7e5af79eba91734ff3d6691441",
+  "prompts": {},
+  "sessions": {
+    "s_d1db77e925f400": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a5c9969-94ed-4486-a952-4a000a607815",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

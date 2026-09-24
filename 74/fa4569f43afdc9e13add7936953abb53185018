@@ -1,0 +1,32 @@
+server/internal/adminmcp/authenticator_test.go
+  h_9630b74bdac540 100,108-115,152
+server/internal/adminmcp/oauth_token.go
+  h_9630b74bdac540 68,102-103
+server/internal/adminmcp/oauth_clients.go
+  h_9630b74bdac540 23,107-110,127,128-134,135,137
+  h_9630b74bdac540 128-134
+server/internal/adminmcp/oauth_authorize_test.go
+  h_9630b74bdac540 49-63,81,83-84,86,91-92,109,130-175,176-177,178-207,232,235,249,251,264,278,289
+  h_9630b74bdac540 176-177
+server/internal/adminmcp/runtime_test.go
+  h_9630b74bdac540 19,22,24,139
+server/internal/adminmcp/oauth_clients_test.go
+  h_9630b74bdac540 13,41-43,45-46,69-72,80
+server/internal/adminmcp/oauth_token_test.go
+  h_9630b74bdac540 16,59-61,69,72,145,148-150,159-184,185
+  h_9630b74bdac540 185
+server/internal/adminmcp/oauth_authorize.go
+  h_9630b74bdac540 28,39,129-134,139,170-171,172-173,218-219,220-221,283-286,287-288
+  h_9630b74bdac540 172-173,220-221,287-288
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "74fa4569f43afdc9e13add7936953abb53185018",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

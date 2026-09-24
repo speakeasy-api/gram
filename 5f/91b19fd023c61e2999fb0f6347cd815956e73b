@@ -1,0 +1,136 @@
+docs/rbac.md
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 526
+server/design/agent/design.go
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 20,100-145,152,155-170
+.github/workflows/litellm-e2e.yml
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 18
+server/internal/agent/configuration_test.go
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 1-211
+server/internal/agent/impl.go
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 6,17,23,32,45,61,72,252-267,269-283,291-300,337-481
+server/internal/agent/setup_test.go
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 17,90,100-109
+  s_34233f620b8dad::t_f0a56304b126ff 110-111
+server/internal/audit/organizations.go
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 24-25,265-323
+.github/workflows/release-hooks.yaml
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 51
+.github/workflows/pr.yaml
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 225,265,425,487,613,650,754,786,853,1000,1062,1158,1224,1279,1333,1376,1440,1480,1636,1689,1731,1776,1876,1957,2022,2081
+server/internal/outbox/events/audit_log.go
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 20-74
+client/dashboard/src/routes.tsx
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 1015-1019
+docs/DEVICE_AGENT_REMOTE_CONFIG.md
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 1-63
+server/internal/outbox/events/catalog_gen.yaml
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 1465-1468
+  s_34233f620b8dad::t_29e8ba549269a5 1415-1464
+server/internal/outbox/events/catalog_gen.go
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 36
+.github/workflows/release.yaml
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 33,148
+.github/workflows/hygiene.yaml
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 156
+server/internal/mv/agent.go
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 117-120
+client/dashboard/src/pages/device-agent/DeviceAgent.tsx
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 14,65,67-72,74-77,95-100,116-117
+  s_34233f620b8dad::t_7ce9e08d46c179 118-119
+server/internal/agent/repo/models.go
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 6-17
+.changeset/device-agent-remote-config-api.md
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 1-7
+server/cmd/gram/start.go
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 1133
+server/internal/agent/queries.sql
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 139-185
+.changeset/device-agent-remote-config-dashboard.md
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 1-6
+client/dashboard/src/pages/device-agent/device-agent-configuration.tsx
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 1-477
+pnpm-workspace.yaml
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 24
+.github/workflows/composite/build-push/action.yaml
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 50
+server/internal/agent/configuration.go
+  s_34233f620b8dad::t_a5a3ee4fcad2a8 1-284
+.speakeasy/out.openapi.yaml
+  s_34233f620b8dad::t_525d3d3ca1b684 4101-4182,4185,4375-4462,55263-55290,57215-57216,57219,70266-70274
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_34233f620b8dad::t_cd7ae092245f28 77,80,678,1218,1443,1737,1934-1935,2442,4303-4311,7538-7548
+client/dashboard/src/sdk/src/funcs/agentGetConfiguration.ts
+  s_34233f620b8dad::t_6cc0dea1ed3915 1-200
+client/dashboard/src/sdk/src/funcs/agentGetPlugins.ts
+  s_34233f620b8dad::t_b4ecf72eba1ac4 45
+client/dashboard/src/sdk/src/funcs/agentUpdateConfiguration.ts
+  s_34233f620b8dad::t_ebde31523f1b2b 1-200
+client/dashboard/src/sdk/src/models/components/deviceagentconfiguration.ts
+  s_34233f620b8dad::t_7d34b4a765cafa 1-68
+client/dashboard/src/sdk/src/models/components/getpluginsresult.ts
+  s_34233f620b8dad::t_19edff20441d0f 14-17,21-25,43
+client/dashboard/src/sdk/src/models/components/updateconfigurationrequestbody.ts
+  s_34233f620b8dad::t_3fff4804aa29ee 1-35
+client/dashboard/src/sdk/src/models/operations/getdeviceagentconfiguration.ts
+  s_34233f620b8dad::t_885772436634b7 1-77
+client/dashboard/src/sdk/src/models/operations/updatedeviceagentconfiguration.ts
+  s_34233f620b8dad::t_8eca73d50ef5e4 1-90
+client/dashboard/src/sdk/src/react-query/agentPlugins.ts
+  s_34233f620b8dad::t_191be84282cfbf 62,85
+client/dashboard/src/sdk/src/react-query/deviceAgentConfiguration.core.ts
+  s_34233f620b8dad::t_d9680968ffe98c 1-82
+client/dashboard/src/sdk/src/react-query/deviceAgentConfiguration.ts
+  s_34233f620b8dad::t_8b6f2e73b8365e 1-147
+client/dashboard/src/sdk/src/react-query/updateDeviceAgentConfiguration.ts
+  s_34233f620b8dad::t_e5c5f6b0cd285e 1-118
+client/dashboard/src/sdk/src/sdk/agent.ts
+  s_34233f620b8dad::t_ca1bbac8dbdf6c 5,8,10,17-20,25-28,32-50,55,88-106
+pnpm-lock.yaml
+  s_34233f620b8dad::t_45e6e4064dfbec 31-32,343,446,4678-4679,12314
+server/gen/agent/client.go
+  s_34233f620b8dad::t_342b450163f4ca 18-21,25,27-30,77-122
+server/gen/agent/endpoints.go
+  s_34233f620b8dad::t_6a0b7b28c0875c 19-22,30-33,41-42,90-135
+server/gen/agent/service.go
+  s_34233f620b8dad::t_690d183865ac29 23-26,32-42,65,87-110,128-130,138-141,167-178
+server/gen/http/agent/client/cli.go
+  s_34233f620b8dad::t_909fce41581f77 11-13,15,66-117
+server/gen/http/agent/client/client.go
+  s_34233f620b8dad::t_83dcc395c6b623 28-35,56-64,115-162
+server/gen/http/agent/client/encode_decode.go
+  s_34233f620b8dad::t_3b94f769b2d4a7 492-956,980-1002
+server/gen/http/agent/client/paths.go
+  s_34233f620b8dad::t_8eed04dae002a4 19-28
+server/gen/http/agent/client/types.go
+  s_34233f620b8dad::t_681f24f641cbbb 15-25,29-31,39-42,52-87,450-453,455-465,468-483,486-501,504-519,522-537,540-556,559-574,577-593,596-612,614-629,632-914,927,929,942-944,957-959,972-974,987-1072,1164-2025,2028-2032,2034-2035,2037-2049,2052-2056,2058-2073,2076-2080,2082-2097,2100-2104,2106-2107,2109-2110,2112-2113,2115-2119,2124-2128,2130-2143,2148-2150,2172-2174,2196-2198,2220-2222,2244-2246,2268-2270,2292-2294,2316-2318,2340-2342,2364-2366,2388-2390,2412-2414,2436-2438,2460-2462,2484-2486,2508-2510,2532-2534,2556-2558,2580-2582,2604-2606,2652-2677
+server/gen/http/agent/server/encode_decode.go
+  s_34233f620b8dad::t_6fe4c7b435b670 13,427-832,856-880
+server/gen/http/agent/server/paths.go
+  s_34233f620b8dad::t_d39f1427518fdd 19-28
+server/gen/http/agent/server/server.go
+  s_34233f620b8dad::t_0da0062a0223f1 21-25,57-58,60-63,74-75,85-86,199-304
+server/gen/http/agent/server/types.go
+  s_34233f620b8dad::t_24a37cdc6759af 15-25,29-31,39-42,52-87,322-690,706-708,724-725,727,743-745,761-762,764,780-782,798-801,839-856,898-900,923-962,1244-1527,1547-1579
+server/gen/http/cli/gram/cli.go
+  s_34233f620b8dad::t_761dcc88e5abc8 97,365-371,3158-3159,4048-4053,5876-5881,8361,8363-8364,8380,8411-8448
+server/gen/http/openapi3.yaml
+  s_34233f620b8dad::t_dc024ec73548fa 4836-4916,4919,5107-5193,55532-55559,57483-57484,57487,70534-70542
+server/internal/agent/repo/queries.sql.go
+  s_34233f620b8dad::t_383028425dcea0 15-29,177-219,261-303
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "5f91b19fd023c61e2999fb0f6347cd815956e73b",
+  "prompts": {},
+  "sessions": {
+    "s_34233f620b8dad": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb3af-21fb-7e50-b84d-eb4bdbafa9cc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

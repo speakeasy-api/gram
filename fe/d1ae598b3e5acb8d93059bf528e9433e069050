@@ -1,0 +1,22 @@
+client/dashboard/src/components/ui/MultiSelect/index.test.tsx
+  s_5987dba16de244::t_e11110fa903132 191-200
+client/dashboard/src/pages/plugins/PluginAssignmentsSheet.tsx
+  s_5987dba16de244::t_4b781015b4d540 29,31,33-36,57,66,158-160,162-170,172-182,185-195,211-213,218-220,247-248,251-254,272-273
+  s_5987dba16de244::t_8cfb0671efd2ab 214-217
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "fed1ae598b3e5acb8d93059bf528e9433e069050",
+  "prompts": {},
+  "sessions": {
+    "s_5987dba16de244": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01959-19dd-7eb1-8706-1fa16b5d07e0",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

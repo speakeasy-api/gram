@@ -1,0 +1,21 @@
+docs/research/2026-08-20-enforcement-reply-load-test.md
+  s_b390d6ce53b276::t_2cbd63ca221828 25-38,47-61,70-77,86-90,102-105,115-123
+docs/research/2026-08-18-request-reply-recipes.md
+  s_b390d6ce53b276::t_2cbd63ca221828 65,84-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "73f593698fa0099bf5f0be6200675097e39cb255",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,45 @@
+server/cmd/risk-pi-report/main.go
+  s_d1db77e925f400::t_f5fc41fb038603 414-416
+  s_d1db77e925f400::t_2c4b801244532c 405-413
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_d1db77e925f400::t_625484a4898fbc 266-270
+server/internal/thirdparty/openrouter/completion_client.go
+  s_d1db77e925f400::t_7eb0f9bbff055f 105-110
+server/internal/memory/contradiction.go
+  s_d1db77e925f400::t_fa806bc51e9768 103-106
+  s_d1db77e925f400::t_f57687742c8cc6 95-102
+server/internal/riskjudge/judge.go
+  s_d1db77e925f400::t_886e42b1e20a74 259-261
+  s_d1db77e925f400::t_57f5914b0255a0 250-258
+server/internal/thirdparty/openrouter/unified_client.go
+  s_d1db77e925f400::t_e0a2a4b7393f89 504
+  s_d1db77e925f400::t_42decace8fb27a 495-503,505-506,509
+server/internal/background/activities/chat_resolutions/segment_chat.go
+  s_d1db77e925f400::t_f7b82b4694f8f4 189-192
+  s_d1db77e925f400::t_4b7bdc4f5f4113 181-188
+server/internal/background/activities/chat_resolutions/analyze_segment.go
+  s_d1db77e925f400::t_9d659608d29d96 328-331
+  s_d1db77e925f400::t_6afbc4da603e34 320-327
+server/internal/risk/impl.go
+  s_d1db77e925f400::t_58ee668e9f5384 2283-2285
+  s_d1db77e925f400::t_fc5ebba94d5682 2274-2282
+server/cmd/riskjudgebench/main.go
+  s_d1db77e925f400::t_6521dc5da659fe 237-239
+  s_d1db77e925f400::t_3ec980b4fd2611 228-236
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c84e14e437dce4309fec1be4de829ab621811028",
+  "prompts": {},
+  "sessions": {
+    "s_d1db77e925f400": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a5c9969-94ed-4486-a952-4a000a607815",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}

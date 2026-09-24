@@ -1,0 +1,19 @@
+client/dashboard/package.json
+  s_a055bcac4d74be::t_bfc19724eb799d 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "9fdc8b8d628cfbc3a5680e9bf549a47e8f6d4407",
+  "prompts": {},
+  "sessions": {
+    "s_a055bcac4d74be": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "69bcf3bb-f175-4c6d-ac4b-495f87c4360a",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

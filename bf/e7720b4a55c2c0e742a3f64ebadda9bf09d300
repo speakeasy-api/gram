@@ -1,0 +1,70 @@
+server/cmd/risk-pi-report/main_test.go
+  s_be9b75eed3b34d::t_930efce08e5b10 204
+  s_be9b75eed3b34d::t_392fcf54db74f4 34,36-38,68-72,74,79,103,107,114,120-124,176-178,183,186-188,193-195,201-202,206-207,209-210
+server/internal/scanners/promptinjection/testdata/prompt_injection/floors.json
+  s_be9b75eed3b34d::t_9495f9368d0385 2,5,12
+server/cmd/risk-pi-report/main.go
+  s_be9b75eed3b34d::t_df2d0af52451f2 690,703-718,758,764,767,771,774,792-795,797-821
+  s_be9b75eed3b34d::t_149bdeac711a05 866-869,874-888
+  s_be9b75eed3b34d::t_6c39857121a27a 1564
+  s_be9b75eed3b34d::t_c7f16c4882ce0c 58-68,71-76,90,93-108,229-231,302-303,314-319
+  s_be9b75eed3b34d::t_d6908b95aca5e3 515,518,521,535-536,551-554,557,565-566,604-611
+  s_be9b75eed3b34d::t_3067452c1e2422 531,638,641,649,653,662,670-673
+  s_be9b75eed3b34d::t_3c46351d44f3e0 166-169
+  s_be9b75eed3b34d::t_1a563b13c7e42b 149-165,170-180,188-198,206-207
+  s_be9b75eed3b34d::t_49da200466c1c8 234,320,615-616,674,1170,1215-1216,1482-1485,1490-1492,1503,1506-1508,1512,1515-1518,1521-1523,1527,1530-1532,1583-1618,1620,1623,1651
+  s_be9b75eed3b34d::t_4ccefb51e0dd2c 181-187,199-205,258-261,1111,1568-1571
+  s_be9b75eed3b34d::t_95de2c39955c2f 892-895,899,916-925,930-934,954-957,959,963-968,970,983-1050,1088-1090
+  s_be9b75eed3b34d::t_e95b7514cbce60 232-233
+  s_be9b75eed3b34d::t_cdc3216708c7ad 235
+  s_be9b75eed3b34d::t_709dd051dec148 321
+  s_be9b75eed3b34d::t_6263d6be30371f 612-614
+server/internal/scanners/promptinjection/testdata/prompt_injection/scripts/migrate_taxonomy_v2.py
+  s_be9b75eed3b34d::t_5a867b0b778de7 74,86-87,95-96,100-104,245,255-256
+  s_be9b75eed3b34d::t_7dcfde4e2f1f0c 81
+  s_be9b75eed3b34d::t_13aff7ffe880be 248-253
+  s_be9b75eed3b34d::t_98f81081f59aeb 144-148
+  s_be9b75eed3b34d::t_7c4cc147d9c9d3 1-7,9-19,22,28,30-31,33-48,52-73,88-94,109-112,123,126-140,175-242,244,246-247,257-258,261-271,286-292,294-383,386-389,392-435,440-441,457-465,471-474
+  s_be9b75eed3b34d::t_3cd56bec33b26d 20-21,23-27,29,32,49-51,113-122,141-143,149-174,243,254,272-285,293,384-385,390-391,436-439,442,444-449,451-456,466-470
+  s_be9b75eed3b34d::t_431c3331b34a6c 443,450
+  s_be9b75eed3b34d::t_6085dd8ca2beee 8,75-80,82-85
+  s_be9b75eed3b34d::t_efe017a008a816 97-99
+  s_be9b75eed3b34d::t_ac689de0e99665 105-108,124-125,259-260
+server/internal/scanners/promptinjection/testdata/prompt_injection/corpus_notes.md
+  s_be9b75eed3b34d::t_f932a1cba2b94f 3-4,6,8,10-12,14-15,17,19,21,23-35,37,39,41-43,45,47,49,51-53,55,57-73
+.mise-tasks/risk/report.py
+  s_be9b75eed3b34d::t_c6900a2689acb8 22,76-78,208,211-245,247,249-256,271-304,502
+  s_be9b75eed3b34d::t_c2f396bf3469ba 154-156,206-207,209-210,246,248
+server/internal/scanners/promptinjection/testdata/prompt_injection/curated_adversarial.jsonl
+  s_be9b75eed3b34d::t_731819d526c33d 1-100
+server/internal/scanners/promptinjection/testdata/prompt_injection/curated_benigns.jsonl
+  s_be9b75eed3b34d::t_963507d045ced3 1-233
+server/internal/scanners/promptinjection/testdata/prompt_injection/deepset.jsonl
+  s_be9b75eed3b34d::t_1892ccabe20d18 1-662
+server/internal/scanners/promptinjection/testdata/prompt_injection/discarded_rows.md
+  s_be9b75eed3b34d::t_54d3ff7bf882af 1
+server/internal/scanners/promptinjection/testdata/prompt_injection/litellm_extended.jsonl
+  s_be9b75eed3b34d::t_497f0bc8d21575 1-51
+server/internal/scanners/promptinjection/testdata/prompt_injection/manifest.json
+  s_be9b75eed3b34d::t_f530b2a5ff6820 1-77
+server/internal/scanners/promptinjection/testdata/prompt_injection/mutations.jsonl
+  s_be9b75eed3b34d::t_bb6dee1b74be46 1-70
+server/internal/scanners/promptinjection/testdata/prompt_injection/trajectory_twins.jsonl
+  s_be9b75eed3b34d::t_d87c2bd9e3e326 1-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "bfe7720b4a55c2c0e742a3f64ebadda9bf09d300",
+  "prompts": {},
+  "sessions": {
+    "s_be9b75eed3b34d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fccbd-003a-7e53-9c6c-22b0d5b26f0c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

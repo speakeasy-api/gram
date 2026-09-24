@@ -1,0 +1,19 @@
+docs/rbac.md
+  s_95d069cf52f7b4::t_c5aa4a9885c648 223-347
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "d3c4635e16e2485a34ea33fb845cd14145babbd2",
+  "prompts": {},
+  "sessions": {
+    "s_95d069cf52f7b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfff-79bd-7ac0-8355-76dbf61e503f",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}

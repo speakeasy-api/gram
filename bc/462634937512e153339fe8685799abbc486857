@@ -1,0 +1,42 @@
+server/internal/platformmcp/remotesessionprovider/adapter.go
+  h_9630b74bdac540 21,168-175
+server/internal/mcp/authnchallenge_idp_callback.go
+  h_9630b74bdac540 87,91-98
+server/internal/networkingress/authority.go
+  h_9630b74bdac540 1-23,29-167,171-174,176-188,190-205,209-212,214,219-255,259-265,267-268,274-278
+server/internal/mcp/authnchallenge_consent_action.go
+  h_9630b74bdac540 68,162
+server/internal/remotesessions/challenge.go
+  h_9630b74bdac540 37,53,97-99,136,169-172,204-205,251-264,575,625-627,673-684,835-837,846
+server/internal/mcp/resolved_mcp_endpoint.go
+  h_9630b74bdac540 19,24,30-31,204-222,226-228,230-231,297-299,310-312,333-334,336-343,346-358,362,365-382,533,536-543,545-548,557-559,572-576,668-677,680-682
+server/internal/mcp/private_oauth_authority.go
+  h_9630b74bdac540 1-30,35-36,41-46
+server/internal/networkingress/authority_test.go
+  h_9630b74bdac540 1-171,175-204,216-222
+server/internal/mcp/authnchallenge_consent.go
+  h_9630b74bdac540 333,672,683,718-719
+server/internal/mcp/authnchallenge_consent_mcp_endpoint.go
+  h_9630b74bdac540 142-143
+server/internal/mcp/authnchallenge_token.go
+  h_9630b74bdac540 284-287,289,304-308,310-313,321-330,332-334,378
+server/internal/mcp/resolved_mcp_endpoint_internal_test.go
+  h_9630b74bdac540 12-20,22-36,38-51,94-130,133-155
+server/internal/mcp/authnchallenge_token_test.go
+  h_9630b74bdac540 19,21,102-166
+server/internal/mcp/authnchallenge.go
+  h_9630b74bdac540 41,44,61-66,90-100,205-208,434-436,438,450-452,454,622-629
+server/internal/networkingress/queries.sql
+  h_9630b74bdac540 1-9,11-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "bc462634937512e153339fe8685799abbc486857",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

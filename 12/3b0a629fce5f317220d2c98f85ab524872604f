@@ -1,0 +1,41 @@
+server/internal/telemetry/analytics/compiler.go
+  s_40d20f73dd889f::t_2e10f582d733d1 10,90
+  s_40d20f73dd889f::t_283b0ce7ca7ec8 1-9,11-89,91-298
+server/clickhouse/spikes/telemetry_v2.sql
+  s_40d20f73dd889f::t_1444c5537260f2 1-4,8-36,38-78,80-117,121-174
+  s_40d20f73dd889f::t_2e6c77734297eb 5-7,37,79,118-120
+server/internal/telemetry/analytics/README.md
+  s_40d20f73dd889f::t_a3d34beb5e33cb 1-9,15-68,70-98
+  s_40d20f73dd889f::t_a171b7ee85482a 10-14
+  s_40d20f73dd889f::t_2e6c77734297eb 69
+server/internal/telemetry/analytics/query.go
+  s_40d20f73dd889f::t_57cb7e234ef54b 1-266
+server/internal/telemetry/analytics/query_test.go
+  s_40d20f73dd889f::t_a939f2c1301138 13-14,177
+  s_40d20f73dd889f::t_51aa4e49685a93 213
+  s_40d20f73dd889f::t_46a7c83d8efc8b 1-12,15-176,178-212,214-224
+server/internal/telemetry/analytics/catalog.go
+  s_40d20f73dd889f::t_fdb8ff0c5b8c49 83-91,260-262
+  s_40d20f73dd889f::t_54dc0828d0faf9 1-82,92-259,263-343
+server/internal/telemetry/analytics/example/main.go
+  s_40d20f73dd889f::t_ff5f6bfa6a62bf 1-125,127-195,197-214
+  s_40d20f73dd889f::t_8928868f95fd63 126,196
+server/internal/telemetry/analytics/CURRENT_QUERY_MIGRATION.md
+  s_40d20f73dd889f::t_a171b7ee85482a 1-320
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "123b0a629fce5f317220d2c98f85ab524872604f",
+  "prompts": {},
+  "sessions": {
+    "s_40d20f73dd889f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a032b7-c51f-7ae2-8a4a-316446fda48b",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

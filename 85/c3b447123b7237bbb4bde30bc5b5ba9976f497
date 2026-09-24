@@ -1,0 +1,40 @@
+server/internal/authz/provisioner.go
+  s_34233f620b8dad::t_7beee5b58186aa 8,40-53
+server/internal/auth/impl.go
+  s_34233f620b8dad::t_ef91c9b4231501 777
+  s_34233f620b8dad::t_dd213773a11934 42
+  s_34233f620b8dad::t_7662694adb0bce 742
+  s_34233f620b8dad::t_cb2ca0e2e3ff41 827-874
+server/internal/auth/identity/identity.go
+  s_34233f620b8dad::t_1117fe9bac9bb7 375-377,381-392
+  s_34233f620b8dad::t_92e0f712a7cd6a 379
+server/internal/testenv/testcontainers.go
+  s_34233f620b8dad::t_9f4087c15a4e53 71-73
+.mise-tasks/seed.mts
+  s_34233f620b8dad::t_5332a2537d2604 446-448
+  s_34233f620b8dad::t_9e09ee36cf537a 449-476,478,495-523,528-548,5198-5200
+  s_34233f620b8dad::t_0a71c432cb58c6 477,479-494,524-527
+server/internal/authz/provisioner_test.go
+  s_34233f620b8dad::t_6a4ef32b4236e3 44-54,56-57,59-82
+  s_34233f620b8dad::t_02f5dd68ab69e1 9,55,58
+server/internal/auth/e2e_test.go
+  s_34233f620b8dad::t_90b299c9ba215f 9,413-434,436-440,442-465
+  s_34233f620b8dad::t_07625dfae9bb0c 435,441
+  s_34233f620b8dad::t_1f2aec6df29ad8 466-467
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "85c3b447123b7237bbb4bde30bc5b5ba9976f497",
+  "prompts": {},
+  "sessions": {
+    "s_34233f620b8dad": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fb3af-21fb-7e50-b84d-eb4bdbafa9cc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

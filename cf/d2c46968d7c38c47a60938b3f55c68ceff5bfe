@@ -1,0 +1,21 @@
+CORPUS_CHANGES.md
+  s_be9b75eed3b34d::t_411e000db46bfb 1-73
+server/internal/scanners/promptinjection/testdata/prompt_injection/url_cue_benigns.jsonl
+  s_be9b75eed3b34d::t_19f2415747cb9d 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "cfd2c46968d7c38c47a60938b3f55c68ceff5bfe",
+  "prompts": {},
+  "sessions": {
+    "s_be9b75eed3b34d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fccbd-003a-7e53-9c6c-22b0d5b26f0c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

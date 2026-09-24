@@ -1,0 +1,30 @@
+docs/research/age-2708-harness-quarantine-primitives.md
+  s_1b89b64f839d5a::t_f30f2b9afdd0a7 81-92,94
+  s_1b89b64f839d5a::t_037053a3595068 67-80
+  s_1b89b64f839d5a::t_80d836b7ae6a70 33-34
+  s_1b89b64f839d5a::t_480a0a3608d117 59
+  s_1b89b64f839d5a::t_63ce7654a61ad0 13-17
+  s_1b89b64f839d5a::t_58a5359967af05 1-12,18-20,38,95-135
+  s_1b89b64f839d5a::t_cc93c0974df807 29
+  s_1b89b64f839d5a::t_7a4156e0396f3c 39-52
+  s_1b89b64f839d5a::t_26b47415e257ef 136-158
+  s_1b89b64f839d5a::t_9cc09d21091844 21-28,30-32,35-37
+  s_1b89b64f839d5a::t_e0fb90d5695a7b 93
+  s_1b89b64f839d5a::t_b50549f04ae2ea 53-58,60-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2f226217fa727134750f2199776904b1db024d5f",
+  "prompts": {},
+  "sessions": {
+    "s_1b89b64f839d5a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b212c1f3-f9cc-4384-9d8d-3b389aad3c4b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,88 @@
+server/internal/riskjudge/judge.go
+  s_0ef87b252df3cd::t_5848c61314af5a 26,377,380
+server/internal/scanners/promptinjection/openrouter/metrics.go
+  s_0ef87b252df3cd::t_8db5da4e0b1e00 1-113
+server/cmd/gram/worker.go
+  s_0ef87b252df3cd::t_307d97892e5607 57-58,732
+server/internal/scanners/promptinjection/heuristics.go
+  s_993d8f7c7dc85c::t_c063398c772086 1-250
+server/internal/background/activities/risk_analysis/sources.go
+  s_0ef87b252df3cd::t_82749a09970417 7,25-26
+server/internal/scanners/promptinjection/heuristics_test.go
+  s_993d8f7c7dc85c::t_ba2486f973888c 1-28,30-33,35-38,40-43,45-48,50-53,55-58,60-63,65-68,70-73,75-78,80-84,86-89,91-97,99-101
+  s_0ef87b252df3cd::t_77a172a8c02362 29,34,39,44,49,54,59,64,69,74,79,85,90,98
+server/internal/background/worker.go
+  s_0ef87b252df3cd::t_307d97892e5607 47,87
+server/internal/scanners/promptinjection/openrouter/judge_test.go
+  s_0ef87b252df3cd::t_8db5da4e0b1e00 1,16-17,27-28,30-37,39,52,123
+server/internal/judgemessage/message_test.go
+  s_0ef87b252df3cd::t_9e3f827e148f4f 1-76
+server/cmd/risk-pi-report/main.go
+  s_0ef87b252df3cd::t_e8df5465c69eb2 126
+  s_0ef87b252df3cd::t_c61c4e71201872 23,27-28,33,293,304,330,345,363,380-381,384,395,408
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_0ef87b252df3cd::t_9e3f827e148f4f 31,45,65,83
+server/cmd/gram/start.go
+  s_0ef87b252df3cd::t_307d97892e5607 101-102,1007,1227
+server/internal/background/activities.go
+  s_0ef87b252df3cd::t_307d97892e5607 46,148
+server/internal/scanners/promptinjection/scanner.go
+  s_993d8f7c7dc85c::t_eb9a52c01ab2c2 1-8,10-19,21-23,25-53,55-64,66-82,84-152
+  s_0ef87b252df3cd::t_e65ed46016a20a 9,20,24,54,65,83
+server/internal/background/activities/risk_analysis/batch_messages.go
+  s_0ef87b252df3cd::t_9e3f827e148f4f 13,119,121,126,128,130,135,138,140
+server/internal/background/activities/risk_analysis/scan_prompt_injection.go
+  s_0ef87b252df3cd::t_9e3f827e148f4f 10,17,19
+server/internal/scanners/promptinjection/scanner_test.go
+  s_993d8f7c7dc85c::t_17192d596d3ab2 1-11,13-50,60-61,64-69,71,73-81,83-107,109-122,124-134,136,138-145,147-157,159,161-171,173-199
+  s_0ef87b252df3cd::t_77a172a8c02362 12,51-59,62-63,70,72,82,108,123,135,137,146,158,160,172
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_0ef87b252df3cd::t_8db5da4e0b1e00 1-2,22,26-27,101,108,110,114,119,139,158,169,179-180,189,223,243,254,273,313,315
+server/internal/scanners/promptinjection/openrouter/setup_test.go
+  s_0ef87b252df3cd::t_8db5da4e0b1e00 1-44
+server/internal/risk/impl.go
+  s_0ef87b252df3cd::t_fc0582b033cd20 45,57,110,176,2362,2805
+server/internal/risk/eval_guardrail_test.go
+  s_0ef87b252df3cd::t_e88119f6fab207 19,213
+server/cmd/riskjudgebench/main.go
+  s_0ef87b252df3cd::t_e88119f6fab207 51,219
+server/internal/feature/flags.go
+  s_0ef87b252df3cd::t_e88119f6fab207 10
+server/internal/risk/scanner.go
+  s_0ef87b252df3cd::t_e5be14c5029f05 25,34,129,150,156,515,570
+server/internal/background/activities/risk_analysis/llm_judge.go
+  s_0ef87b252df3cd::t_b964efec6ce68e 38
+  s_0ef87b252df3cd::t_04addda87b86f9 8,39
+server/internal/judgemessage/message.go
+  s_0ef87b252df3cd::t_04addda87b86f9 1-69
+server/internal/riskjudge/judge_test.go
+  s_0ef87b252df3cd::t_5848c61314af5a 18,61,80,101,121-123,143,173,271,291,311,325-327,358
+server/internal/background/activities/risk_analysis/rules.go
+  s_0ef87b252df3cd::t_82749a09970417 26
+server/internal/background/activities/risk_analysis/rules_test.go
+  s_0ef87b252df3cd::t_9e3f827e148f4f 10,76,132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3d5124b23321d43e76519a14d6fce8cbfa8618c7",
+  "prompts": {},
+  "sessions": {
+    "s_0ef87b252df3cd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f40fd-89c3-7d33-b377-8a732ed76fb0",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_993d8f7c7dc85c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "035cd132-44b9-419d-84bf-4177e5eca0c8",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

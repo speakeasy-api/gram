@@ -1,0 +1,28 @@
+server/internal/networkaccess/mode_test.go
+  h_9630b74bdac540 21-32,46,49,52-57,59
+server/internal/metamcp/impl.go
+  h_9630b74bdac540 114,288-290
+server/internal/mcpservers/updatemcpserver_test.go
+  h_9630b74bdac540 132-167
+server/internal/mv/metamcpserver.go
+  h_9630b74bdac540 21
+server/internal/networkaccess/mode.go
+  h_9630b74bdac540 35-38,40,44-56,61-63,65-66,68
+server/internal/mv/mcpserver.go
+  h_9630b74bdac540 28
+server/internal/metamcp/updatemetamcpserver_test.go
+  h_9630b74bdac540 179-209
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 163,615-617
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "2d638ca35a38f4d7d797cc54083f18f34b84244e",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

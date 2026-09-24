@@ -1,0 +1,30 @@
+server/internal/risk/impl.go
+  s_5e8039f9d96e02::t_c62a37d4e5a331 47
+  s_5e8039f9d96e02::t_076234c4f6d90f 98-100
+  s_5e8039f9d96e02::t_8122cdb12689e7 153
+  s_5e8039f9d96e02::t_42b2054c7e6350 174
+  s_5e8039f9d96e02::t_a8a6f179d4e417 133
+server/internal/risk/setup_test.go
+  s_5e8039f9d96e02::t_c0e231c2535c9c 28
+  s_5e8039f9d96e02::t_102f957951eace 129
+  s_5e8039f9d96e02::t_941b26bd49e7cc 35-41
+server/cmd/gram/start.go
+  s_5e8039f9d96e02::t_a726265c7fd080 94
+  s_5e8039f9d96e02::t_bc1100ae2cb911 1113-1116,1133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "0efc3709366d0004d3fa0c8a7fbe36b23db07043",
+  "prompts": {},
+  "sessions": {
+    "s_5e8039f9d96e02": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7204e23b-9892-40b9-9abd-f538d9fb898d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

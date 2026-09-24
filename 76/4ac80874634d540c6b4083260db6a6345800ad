@@ -1,0 +1,42 @@
+server/cmd/gram/netingress_attestor.go
+  h_9630b74bdac540 47-51,71-77,83
+server/internal/netingress/middleware.go
+  h_9630b74bdac540 8,11,15,74-77,87-91
+server/internal/xmcp/service.go
+  h_9630b74bdac540 92-93
+server/internal/netingress/queries.sql
+  h_9630b74bdac540 26
+server/internal/netingress/attestor_test.go
+  h_9630b74bdac540 6,39,78,144,222-223,225,246-274,294,296,302
+server/internal/netingress/tailscale_identity.go
+  h_9630b74bdac540 95
+server/internal/netingress/lookup_test.go
+  h_9630b74bdac540 20,30-31,133
+server/cmd/gram/start.go
+  h_9630b74bdac540 5,308,312-320,1725-1726,1728-1734,1766-1769,1917
+server/internal/netingress/attestation_test.go
+  h_9630b74bdac540 8,39-41,52,54-73,258-317
+server/internal/netingress/middleware_test.go
+  h_9630b74bdac540 75-96
+server/internal/netingress/attestor.go
+  h_9630b74bdac540 5-6,23-42,59,64-65
+server/internal/netingress/attestation.go
+  h_9630b74bdac540 15,28-29,60-61,80-81,100,203-212,216-224,226-230,247-249
+server/internal/netingress/tailscale_identity_test.go
+  h_9630b74bdac540 73-76
+server/internal/netingress/routes.go
+  h_9630b74bdac540 112-114
+server/internal/netingress/lookup.go
+  h_9630b74bdac540 32,63-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "764ac80874634d540c6b4083260db6a6345800ad",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

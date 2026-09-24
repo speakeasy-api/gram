@@ -1,0 +1,25 @@
+server/internal/testenv/testing.go
+  s_31b216bf41c9a1::t_71876eeb6daa5c 137-142
+  s_31b216bf41c9a1::t_994cdd7fbabd49 128-131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "cc4a614a0dc17cc85cc68a94b91665f326534c07",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_31b216bf41c9a1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a06bbb-58b2-7ab2-ba88-2ac534d6fd52",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

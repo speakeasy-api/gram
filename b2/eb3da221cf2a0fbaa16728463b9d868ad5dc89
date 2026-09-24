@@ -1,0 +1,2139 @@
+client/dashboard/src/pages/assistants/onboarding/tools/components.tsx
+  s_526f33b6861346::t_23aecf666a419a 54,139,281,510,703,737,766,784,814,844,1027,1064,1089
+.agents/skills/frontend/SKILL.md
+  s_526f33b6861346::t_cf39e59711bcf5 172,428-481,484-496,498,506
+.agents/skills/golang/SKILL.md
+  s_526f33b6861346::t_6cbcee605e5de8 192-194,196
+.agents/skills/gram-rbac/SKILL.md
+  s_526f33b6861346::t_dd18f56801f413 40
+.changeset/mcp-inventory-collected-relay.md
+  s_526f33b6861346::t_bbd63b41841540 2,5-10
+.changeset/ordered-mcp-inventory-hooks.md
+  s_526f33b6861346::t_d9e632e4189d93 2,5
+.github/workflows/composite/build-push/action.yaml
+  s_526f33b6861346::t_7195861af3840e 37-39,49-56,155-159
+.github/workflows/pr.yaml
+  s_526f33b6861346::t_0b8d40cef685b9 351,410,492-495,1565,2244-2251,2253-2256
+.mise-tasks/gen/infra.sh
+  s_526f33b6861346::t_48ea114c2294fd 35-38
+.mise-tasks/hooks/e2e.js
+  s_526f33b6861346::t_e0671d11fe1dd1 16,225-348,1181-1196,1198,1213,1333,1426,2577
+.mise-tasks/smoke/platform-mcp.sh
+  s_526f33b6861346::t_79aded4ca6fc2b 1-27
+.speakeasy/openapi-hooks.yaml
+  s_526f33b6861346::t_5ef03d42c006c6 345-347,380,882
+.speakeasy/out.openapi.yaml
+  s_526f33b6861346::t_c59f1f131499b8 3715-3814,3929,3931-3932,3934-3942,3970,4029,4032,4042-4046,4048-4062,4075,4134,4137-4145,4147-4148,4150-4151,4164,4171,4230,4233,4235-4236,4238-4239,4252,4259,4318,4321,4323-4327,4336-4341,4347,4406,4408-4409,4411-4415,4418,4420,4422,4424-4429,4435,4492,4494,4496-4497,4499-4500,4502-4503,4517,4576,4579,4581-4695,4709,4768,4771,4773-4774,4776-4777,4790,4793-4798,4856,4858-4859,4861-4865,4881-4886,4888-4889,4948,4951,4953-4954,4956-4957,4986,5046,5049,5051-5055,5057-5064,5084,5144,5147,5149-5150,5152-5153,5173-5269,8391-8404,24058,27348,27409-27414,30711,30713-30714,30741,30810,30813,30815-30816,30818-30819,30846,30915,30918,30920-31025,31027-31028,31055,31124,31127,31129-31133,31167-31170,46632-46633,46635,46637,46640,46642-46643,46645-46646,46667,46724,46727,46730,46732-46736,46774,46836,46839,46841-46842,46844-46845,46848,46945,46948,46950-46951,46953-46954,46957,46991,47060,47063,47065-47066,47068-47069,47072,47106,47175,47178,47180-47181,47183-47184,47187,47221,47290,47293,47295,50133,56585,59153-59158,59190,59192,59813-59815,59848,60304-60307,60330,60541-60616,61208-61220,61578,61615,63057,63060-63077,63079,63081,63083,63086-63088,63100,64150-64152,64201,65767,67037,67200,68183,68185,71773-71784,73604,74011-74013,74016,74045-74047,74057-74060,74080-74083,74086,74090-74092,74095,74119,74129,74209,74733
+client/dashboard/CHANGELOG.md
+  s_526f33b6861346::t_47466d94862ff2 3-153
+client/dashboard/package.json
+  s_526f33b6861346::t_c978b57a32de66 4,56,73,87,95-97,109
+client/dashboard/src/App.css
+  s_526f33b6861346::t_f5d5723d378dcb 93,97-100
+client/dashboard/src/App.tsx
+  s_526f33b6861346::t_8c14fa79cb3098 2,8,14,24,168-200,279-292,305,362
+client/dashboard/src/assets/google-mark.svg
+  s_526f33b6861346::t_31a9d45fe88f6a 1-7
+client/dashboard/src/components/EnableLoggingOverlay.tsx
+  s_526f33b6861346::t_b0f07e5b7c19f9 48,61
+client/dashboard/src/components/ObservabilitySkeleton.tsx
+  s_526f33b6861346::t_1152d9c914a222 12,18,22,25
+client/dashboard/src/components/OpenApiSourceInput.tsx
+  s_526f33b6861346::t_1ddf18d640c342 120,147,155
+client/dashboard/src/components/access/ApprovalRequestsContent.tsx
+  s_526f33b6861346::t_71a8274f7dc690 262,505,556,560,578,603,616,634,680,1073,1078,1109,1114,1132
+client/dashboard/src/components/access/RiskPolicyChallengeAcknowledgeContent.tsx
+  s_526f33b6861346::t_d7d7b9b1fe1e6c 218
+client/dashboard/src/components/ai-elements/code-block.tsx
+  s_526f33b6861346::t_9f6feee8af93f4 66
+client/dashboard/src/components/ai-elements/message.tsx
+  s_526f33b6861346::t_ebbcd9d760d3f2 26
+client/dashboard/src/components/ai-elements/tool.tsx
+  s_526f33b6861346::t_0210a9004579bb 27,146,184
+client/dashboard/src/components/app-layout.tsx
+  s_526f33b6861346::t_22d7459502d37c 119-126,130-131,134-137,145,170,234
+client/dashboard/src/components/app-sidebar.tsx
+  s_526f33b6861346::t_fe54bd95e7bfdd 2,45,94-98,138-139,154,264,356
+client/dashboard/src/components/asset-image.tsx
+  s_526f33b6861346::t_7699a120c9dba1 14
+client/dashboard/src/components/assistants/sessions-list.tsx
+  s_526f33b6861346::t_0f2cabb19d1f76 79,124
+client/dashboard/src/components/auditlogs/action-meta.ts
+  s_526f33b6861346::t_a4dc91c395a15e 1-78
+client/dashboard/src/components/auditlogs/feed.tsx
+  s_526f33b6861346::t_08f4085a87f046 10,29,37-49,51,53-54,57-64,66,139
+client/dashboard/src/components/auditlogs/structured-diff.tsx
+  s_526f33b6861346::t_18ba6729270daf 38,42,95
+client/dashboard/src/components/billing/breakdown-picker.tsx
+  s_526f33b6861346::t_e6eadea28e9ca9 41
+client/dashboard/src/components/billing/contract-price-estimator.tsx
+  s_526f33b6861346::t_90b375120d5632 130
+client/dashboard/src/components/billing/tum-admin-section.tsx
+  s_526f33b6861346::t_969360c72a6e60 61-62
+client/dashboard/src/components/billing/tum-details-table.tsx
+  s_526f33b6861346::t_97453f51294487 11-14,45-47,50-53,84-86,93-94,97,102-114,124-125,151-162,234-243,288,296,399-413,472,483,489-495,497-503,515,586,608
+client/dashboard/src/components/billing/tum-section.tsx
+  s_526f33b6861346::t_bfb2c8733fd655 123
+client/dashboard/src/components/billing/tum-usage-card.tsx
+  s_526f33b6861346::t_04aa2ead830eb3 96,101,103,108,111,115,157,164-166,172,332,367,369,374
+client/dashboard/src/components/billing/usage-controls.tsx
+  s_526f33b6861346::t_f0a1d3bb693acc 66,80
+client/dashboard/src/components/block.tsx
+  s_526f33b6861346::t_189f9d72a9ca65 22,34,55,70
+client/dashboard/src/components/brand-mesh.tsx
+  s_526f33b6861346::t_e73cb32319e523 1-2,4-8,10-15,18-19,21-22,25-30,32-53
+client/dashboard/src/components/chart/ChartButton.tsx
+  s_526f33b6861346::t_983d263b92fac0 22
+client/dashboard/src/components/chart/ChartCard.tsx
+  s_526f33b6861346::t_d50ea7343a6af7 53,58,81
+client/dashboard/src/components/chart/MetricCard.tsx
+  s_526f33b6861346::t_b588ee42674582 3-10,13,37-42,45-62,79,113,115-139,141-149,151-154,156-163,165-177
+client/dashboard/src/components/chart/RankedBarList.tsx
+  s_526f33b6861346::t_b412eb85c45624 35,37
+client/dashboard/src/components/chart/ToolCallsTimeSeriesChart.tsx
+  s_526f33b6861346::t_a87933356d31ce 7-16,74,90-91,96-97,104,114,125-129,131-133,151,163-167,172,174,179-180
+client/dashboard/src/components/chart/palette.ts
+  s_526f33b6861346::t_ab0d673f88ba6b 1-11,13-15,17-36,38-62,64-66,68-70,72-117,119-131
+client/dashboard/src/components/chart/useSeriesColors.ts
+  s_526f33b6861346::t_b5f9edbc9c9af6 1-28
+client/dashboard/src/components/chat-launch-overlay.tsx
+  s_526f33b6861346::t_7d1020dc354914 14-16,48
+client/dashboard/src/components/code.tsx
+  s_526f33b6861346::t_c6be7340db2353 139
+client/dashboard/src/components/command-palette/CommandPalette.tsx
+  s_526f33b6861346::t_14a19f53e359ee 28
+client/dashboard/src/components/command-palette/CommandPaletteTrigger.tsx
+  s_526f33b6861346::t_ee60fcef2dbdfb 40,49
+client/dashboard/src/components/content-error-boundary.tsx
+  s_526f33b6861346::t_6a2e7e327b0bc6 42
+client/dashboard/src/components/create-resource-card.tsx
+  s_526f33b6861346::t_cc920a6069338e 3,27,50
+client/dashboard/src/components/detail-hero.tsx
+  s_526f33b6861346::t_f0bb542b94e171 12-13,25
+client/dashboard/src/components/enterprise-gate.tsx
+  s_526f33b6861346::t_9a7f906cb9b334 28
+client/dashboard/src/components/expandable.tsx
+  s_526f33b6861346::t_d8945ddc8b9758 41,60
+client/dashboard/src/components/filters/FilterChip.tsx
+  s_526f33b6861346::t_17442045ce05c1 46,108,174
+client/dashboard/src/components/filters/FilterControl.tsx
+  s_526f33b6861346::t_a7072284e54144 132,234,314
+client/dashboard/src/components/full-page-error.tsx
+  s_526f33b6861346::t_b9edfc220b2442 38
+client/dashboard/src/components/functions/GettingStartedInstructions.tsx
+  s_526f33b6861346::t_d62511b2ef8233 33
+client/dashboard/src/components/gradient-colors.ts
+  s_526f33b6861346::t_9b395c7f5c5fc6 20-30,52-67
+client/dashboard/src/components/inline-editable-text.tsx
+  s_526f33b6861346::t_36fd7a5f081eb8 77
+client/dashboard/src/components/input-dialog.tsx
+  s_526f33b6861346::t_eea77d0a653f14 42,51,142
+client/dashboard/src/components/insights-dock-shortcut-hint.tsx
+  s_526f33b6861346::t_f015dec241346a 34
+client/dashboard/src/components/insights-dock.tsx
+  s_526f33b6861346::t_499b1abb2c5d07 113,117,125,224,256-258,260-262,428,474-475,503,548,565,1009-1011,1218,1225,1235
+client/dashboard/src/components/install-steps.tsx
+  s_526f33b6861346::t_2047fe10875a28 23
+client/dashboard/src/components/internal-admin-badge.tsx
+  s_526f33b6861346::t_3a0d0be3049350 3-4,7,10
+client/dashboard/src/components/log-workbench.tsx
+  s_526f33b6861346::t_e7d422cc6a86a7 2,10-11,30,58,60-61
+client/dashboard/src/components/mcp-detail-sidebar-nav.tsx
+  s_526f33b6861346::t_51a30b266989a3 33,132-138,187-200
+client/dashboard/src/components/mcp-server-readiness-bar.tsx
+  s_526f33b6861346::t_8b164e08419e30 35
+client/dashboard/src/components/mcp-server-x-sidebar-nav.tsx
+  s_526f33b6861346::t_a943519bf2ffbb 40,233-246
+client/dashboard/src/components/mcp-sidebar-nav-shell.tsx
+  s_526f33b6861346::t_e42af04923c172 90-93,109,119-120
+client/dashboard/src/components/mcp/BuiltInMCPCard.tsx
+  s_526f33b6861346::t_dc5cd8271230f6 1,25,53
+client/dashboard/src/components/mcp/MCPActivityIndicator.tsx
+  s_526f33b6861346::t_407406c5ac00d6 65
+client/dashboard/src/components/mcp/MCPCard.tsx
+  s_526f33b6861346::t_272b3996f82e6f 2,80,171,177,179,185,187,189
+client/dashboard/src/components/mcp/MCPServerCard.tsx
+  s_526f33b6861346::t_7d13a828c5c32b 1,45,47,93
+client/dashboard/src/components/mcp/MCPStatusIndicator.tsx
+  s_526f33b6861346::t_b9b4f9c8483f1b 17-18,24-25,30-31
+client/dashboard/src/components/mcp/MCPTableRow.tsx
+  s_526f33b6861346::t_ff0e7ee9fbf220 176,181,185
+client/dashboard/src/components/member-facepile.tsx
+  s_526f33b6861346::t_b7d62cee07ff62 2,42-43,49,87
+client/dashboard/src/components/moon/input.tsx
+  s_526f33b6861346::t_4e1647c65fbda5 15
+client/dashboard/src/components/moon/textarea.tsx
+  s_526f33b6861346::t_cad722408c372d 13
+client/dashboard/src/components/nav-menu.test.tsx
+  s_526f33b6861346::t_8fe5be446d0ff0 9-16,142-254
+client/dashboard/src/components/nav-menu.tsx
+  s_526f33b6861346::t_2243b28c657fcc 2-6,9,67-75,78,80,90-95,99-101,103-104,106,110-112,115-117,120-122,124-125,135-150,176-179,187,243,420,514,520,537,545-558,562,564,647
+client/dashboard/src/components/observe/BusinessMemoryCorpus.tsx
+  s_526f33b6861346::t_648d5096398e15 258
+client/dashboard/src/components/observe/BusinessMemoryScopeTree.tsx
+  s_526f33b6861346::t_d5555e02ea4d24 41,49,84,110
+client/dashboard/src/components/observe/InsightsAgents.tsx
+  s_526f33b6861346::t_06ae217a20f403 4-5,11,477,479,532,536,544,557,565,574,670,673-679,722,811,820,825,836,892,1003,1352,1359,1398,1454,1488,1496-1497,1499-1500
+client/dashboard/src/components/observe/InsightsEmployeeDetail.tsx
+  s_526f33b6861346::t_4fb61e05669b65 2-3,16,18,134-135,137-144,148-152,480-481,523,527,533,545,553,561,571,619,634,656,689,692,699,718,744,752-753,755-757,820,824,833,846,886,906,967,1061,1070,1480-1483,1617,1619,1665-1666,1677,1679,1720-1721,1808-1811
+client/dashboard/src/components/observe/InsightsEmployees.tsx
+  s_526f33b6861346::t_023abc8a9f731b 2,8,458-459,515,519,531,544,557,566,876,940,947,997,1040
+client/dashboard/src/components/observe/InsightsTools.tsx
+  s_526f33b6861346::t_ceaa3cf0b34fca 2,55-57,111-116,152-171,173-176,592-593,745-746,976,988,1043,1085,1089,1136,1141-1142,1153,1200,1202,1244,1248,1281,1359,1369,1399,1477,1487,1489,1513,1544,1553,1555,1579,1610,1619,1621,1645,1668,1704,1708,1775,1855,2022,2024,2033,2041,2049,2056,2063,2070,2076
+client/dashboard/src/components/observe/LoggingPageHeader.test.tsx
+  s_526f33b6861346::t_1eb21efca99f3e 3,16-23
+client/dashboard/src/components/observe/LoggingPageHeader.tsx
+  s_526f33b6861346::t_9fd0b12b5b8396 2,45,49,52-60
+client/dashboard/src/components/observe/LogsAgents.tsx
+  s_526f33b6861346::t_63f0fc1a34a0e3 754,869,876
+client/dashboard/src/components/observe/LogsTools.tsx
+  s_526f33b6861346::t_5d6d364f7a284a 67-68,74,676-690,762-790,800,838-839,841,900-924,1044,1052,1054-1058,1070,1080,1094,1130-1137,1143,1145,1148,1151,1169,1189-1190,1194,1196,1198,1200,1203,1207-1208,1210,1217-1218,1223,1228,1233,1244,1250
+client/dashboard/src/components/observe/ObserveFilterBar.tsx
+  s_526f33b6861346::t_210d18b3781b82 461
+client/dashboard/src/components/observe/OrgMemory.tsx
+  s_526f33b6861346::t_0799bea5629b3b 2-4,72,84-85,92-93,103,122,188,201-202,214,225,243,337,339,349
+client/dashboard/src/components/observe/agentTokenTimeSeriesChartData.ts
+  s_526f33b6861346::t_3d0853bab863fc 2,32-34,46-47,54,63,70,77,95-96
+client/dashboard/src/components/observe/toolUsageTimeSeriesChartData.ts
+  s_526f33b6861346::t_2dfd106b183ba7 2-7,10-11,82,165-171,175,181
+client/dashboard/src/components/onboarding-banner.tsx
+  s_526f33b6861346::t_289f42550b10e5 36
+client/dashboard/src/components/onboarding-choice-step.tsx
+  s_526f33b6861346::t_31ada1e7e3907f 29,69
+client/dashboard/src/components/onboarding-resume-button.tsx
+  s_526f33b6861346::t_2229f689b88be8 36
+client/dashboard/src/components/org-sidebar.tsx
+  s_526f33b6861346::t_05d1ecdd69f00f 27,93-99,129-132,189,246-277,284-285,292
+client/dashboard/src/components/page-eyebrow.tsx
+  s_526f33b6861346::t_a4041a2b09b328 1-23
+client/dashboard/src/components/page-header.tsx
+  s_526f33b6861346::t_6e4447d4a51f87 81,104
+client/dashboard/src/components/page-layout.tsx
+  s_526f33b6861346::t_4e76b364a025ac 18,145,150-151,153-157,159-167,171-177,220,258,265,273,281
+client/dashboard/src/components/product-tier-badge.tsx
+  s_526f33b6861346::t_00365c30a9ff22 24
+client/dashboard/src/components/product-tier-utils.ts
+  s_526f33b6861346::t_7a92de9b507b17 3-4,10-12,15-17,20-22,25-27
+client/dashboard/src/components/project/ActivityTimelineCard.tsx
+  s_526f33b6861346::t_e24dc4f7457f32 1,5,51,63
+client/dashboard/src/components/project/ProjectDashboard.tsx
+  s_526f33b6861346::t_f3bf21c15abb83 2,6,490,492,497,504,509,516,521,530,536,541,549-553,559,692,699-700,830
+client/dashboard/src/components/public-mcp-warning-dialog.tsx
+  s_526f33b6861346::t_9985cd7c7c31ce 62
+client/dashboard/src/components/release-stage-badge.tsx
+  s_526f33b6861346::t_22598b27a79a78 1,13-18,38-43,46-47
+client/dashboard/src/components/require-scope.tsx
+  s_526f33b6861346::t_e9729f3dcd48a8 312,329
+client/dashboard/src/components/sessions/ClientSourceBadge.tsx
+  s_526f33b6861346::t_bb89ba87323b7a 1-41
+client/dashboard/src/components/sessions/ClientsAndSessionsTab.test.tsx
+  s_526f33b6861346::t_dfcefd488923e2 2-100,102-111,115,117-130,134-159,162-164,167-174,178-189,193-195,197-233,236-237,239-240,242-245,247-250,252-256,259-294,297-305,307,310-327,330,332,335-355,358-369,372-388,390-416,418-491,493-587,589-736
+client/dashboard/src/components/sessions/ClientsAndSessionsTab.tsx
+  s_526f33b6861346::t_18b8b48b97efc1 1-4,6-8,10-14,17-36,39-108,110-128,130-142,144-147,152,155-163,165-171,173-183,185-197,199-221,225-240,242
+client/dashboard/src/components/sessions/ListStateBoundary.tsx
+  s_526f33b6861346::t_a673b0b6ada6cf 1-54
+client/dashboard/src/components/sessions/RevokeClientDialog.tsx
+  s_526f33b6861346::t_d52f487c4f1048 1-2,4-6,8-10,12-25,27-79
+client/dashboard/src/components/sessions/SessionRow.tsx
+  s_526f33b6861346::t_f97e9c07733649 11,20,33,35-42,59
+client/dashboard/src/components/sessions/SessionTableRow.tsx
+  s_526f33b6861346::t_ddf8a69d0ae92d 19,77-78,80-88
+client/dashboard/src/components/sessions/UserSessionClientsList.tsx
+  s_526f33b6861346::t_eb7525b18cac77 1-367
+client/dashboard/src/components/sessions/UserSessionsList.tsx
+  s_526f33b6861346::t_8577a6bb9cea55 1-367
+client/dashboard/src/components/sessions/ViewOrgSessionsButton.test.tsx
+  s_526f33b6861346::t_2ba357e29f87c0 2-5,7-10,12-13,16-29,32-69,71-72,74,76
+client/dashboard/src/components/sessions/ViewOrgSessionsButton.tsx
+  s_526f33b6861346::t_73518a422e25eb 1,3-6,8-22,24-28,30-40
+client/dashboard/src/components/sessions/session-filters.test.ts
+  s_526f33b6861346::t_4faa6350af0abc 3-51
+client/dashboard/src/components/sessions/session-filters.ts
+  s_526f33b6861346::t_a900f7a6cadf6e 1,4-5,7-11,13-31,33-55,57-66,68-73,75-80,82-85,87-91,93-105,107-120
+client/dashboard/src/components/sessions/useDrainedPages.test.ts
+  s_526f33b6861346::t_e06829b4b510af 1-16,18-104
+client/dashboard/src/components/sessions/useDrainedPages.ts
+  s_526f33b6861346::t_c30320f63a1934 1-62
+client/dashboard/src/components/setup-guide/SetupGuideCard.tsx
+  s_526f33b6861346::t_ccc5dfb62d6fae 33
+client/dashboard/src/components/shadow-mcp/ShadowMCPDispositionPicker.tsx
+  s_526f33b6861346::t_0a1912ff8e0107 72
+client/dashboard/src/components/shadow-mcp/ShadowMCPInventoryActions.tsx
+  s_526f33b6861346::t_334e12b98b0b6e 264,279,387,420,424,442
+client/dashboard/src/components/shadow-mcp/ShadowMCPInventoryCells.tsx
+  s_526f33b6861346::t_c6165ba9084ee2 5,57-59,61-66
+client/dashboard/src/components/shadow-mcp/ShadowMCPInventoryTable.tsx
+  s_526f33b6861346::t_f91161dbbd4c75 84
+client/dashboard/src/components/shadow-mcp/ShadowMCPPolicyServerSelector.tsx
+  s_526f33b6861346::t_990e5ad0a107de 157,439
+client/dashboard/src/components/shadow-mcp/ShadowMCPPolicyStatus.tsx
+  s_526f33b6861346::t_8007c884f31bf9 80
+client/dashboard/src/components/side-panel/SidePanel.tsx
+  s_526f33b6861346::t_85c891d3f4d9dd 119,135,144,149,172,182,274
+client/dashboard/src/components/sidebar-footer-action.tsx
+  s_526f33b6861346::t_50c6ff671a08f6 70
+client/dashboard/src/components/sidebar-nav-skeleton.tsx
+  s_526f33b6861346::t_c1e4c866b925ab 34-35
+client/dashboard/src/components/sidebar-user-menu.tsx
+  s_526f33b6861346::t_57414bded09942 76,89,97
+client/dashboard/src/components/sources/RemoveMcpSourceDialogContent.tsx
+  s_526f33b6861346::t_67edd027c72ba7 81
+client/dashboard/src/components/sources/SourceActivityPanel.tsx
+  s_526f33b6861346::t_04f5bf2d19f7dc 30,34,42,104,112-113,118,125
+client/dashboard/src/components/sources/SourceCard.tsx
+  s_526f33b6861346::t_b369abcc37e7aa 7,260,302,310,317,322
+client/dashboard/src/components/sources/SourceCardIllustrations.tsx
+  s_526f33b6861346::t_5bf471a26575a6 111
+client/dashboard/src/components/sources/SourceInfoTable.tsx
+  s_526f33b6861346::t_def6cebb8c8ce8 9
+client/dashboard/src/components/sources/Sources.tsx
+  s_526f33b6861346::t_5aef9c3981936a 417,419-420,432,434-435,447,449-450,461,463-464,478,480-481,496,498-499
+client/dashboard/src/components/sources/SourcesEmptyState.tsx
+  s_526f33b6861346::t_ce5344b9c3fad6 76-77,104,106,119,121,134,136,148,150,165,167,183,185
+client/dashboard/src/components/sources/sources-hooks.ts
+  s_526f33b6861346::t_52dcb9919ee114 80
+client/dashboard/src/components/stacked-time-series-panel.tsx
+  s_526f33b6861346::t_1a4c00e4db61b0 24,26-30,126-128,132-133,135-136,139-141,202-206,225-229,238,369-370,394,421,489,496
+client/dashboard/src/components/stacked-time-series.ts
+  s_526f33b6861346::t_f07ba7fe8c77ba 7,13-15
+client/dashboard/src/components/status-banner.tsx
+  s_526f33b6861346::t_3d0e17887ade09 3-6,8-10,16,33,37-43
+client/dashboard/src/components/tool-list/AnnotationBadges.tsx
+  s_526f33b6861346::t_187036f45b5560 69
+client/dashboard/src/components/tool-list/MethodBadge.tsx
+  s_526f33b6861346::t_73f53cb4b39a4e 5-6
+client/dashboard/src/components/tool-list/ToolList.tsx
+  s_526f33b6861346::t_0f9f49b8e488cf 638,1079,1151,1156
+client/dashboard/src/components/trial-status-card.test.tsx
+  s_526f33b6861346::t_4c079448bc59cb 1-200
+client/dashboard/src/components/trial-status-card.tsx
+  s_526f33b6861346::t_60936c68f2189e 1-160
+client/dashboard/src/components/ui/Accordion/index.tsx
+  s_526f33b6861346::t_8b4e6031d02fc1 36
+client/dashboard/src/components/ui/Alert/index.tsx
+  s_526f33b6861346::t_de9db5a48368bd 23-27,87,142
+client/dashboard/src/components/ui/Badge/index.tsx
+  s_526f33b6861346::t_f803d3a6a51cf0 55
+client/dashboard/src/components/ui/Button/index.stories.tsx
+  s_526f33b6861346::t_b83184af2e5c98 34,476,486-487,491,521,534,546,560,572-573,587,591,655
+client/dashboard/src/components/ui/Button/index.tsx
+  s_526f33b6861346::t_b3e467db8ed743 127,154,161,167,187,503
+client/dashboard/src/components/ui/Card/index.stories.tsx
+  s_526f33b6861346::t_a445a426ea3c55 268-289
+client/dashboard/src/components/ui/Card/index.tsx
+  s_526f33b6861346::t_34a93bdebb13f6 44,158,234-288,290
+client/dashboard/src/components/ui/Checkbox/index.tsx
+  s_526f33b6861346::t_9164d0d85e3293 15
+client/dashboard/src/components/ui/CodeSnippet/index.tsx
+  s_526f33b6861346::t_95139b25e99976 150,158
+client/dashboard/src/components/ui/Combobox/index.tsx
+  s_526f33b6861346::t_44c459da9d4837 81
+client/dashboard/src/components/ui/Command/index.stories.tsx
+  s_526f33b6861346::t_c4ba34cfbade66 23
+client/dashboard/src/components/ui/Command/index.tsx
+  s_526f33b6861346::t_78f294a1cb49af 16,40,61,106,135
+client/dashboard/src/components/ui/ContextMenu/index.stories.tsx
+  s_526f33b6861346::t_71f1b211725998 23
+client/dashboard/src/components/ui/ContextMenu/index.tsx
+  s_526f33b6861346::t_c5be58b1677fb6 33,54
+client/dashboard/src/components/ui/DashboardCard/index.tsx
+  s_526f33b6861346::t_a3470a847c6222 19,22
+client/dashboard/src/components/ui/Dialog/index.tsx
+  s_526f33b6861346::t_d83eaeb04859f1 41,55
+client/dashboard/src/components/ui/DotRow/index.tsx
+  s_526f33b6861346::t_74d39630aab861 65
+client/dashboard/src/components/ui/DotTable/index.tsx
+  s_526f33b6861346::t_5a014fc1658120 4,26
+client/dashboard/src/components/ui/Dropdown/index.tsx
+  s_526f33b6861346::t_ba095560fff145 30,50,68,87,103,127
+client/dashboard/src/components/ui/Grid/index.stories.tsx
+  s_526f33b6861346::t_2d360371d49cca 15
+client/dashboard/src/components/ui/Heading/index.tsx
+  s_526f33b6861346::t_e78d74ca5de52c 35,39-45
+client/dashboard/src/components/ui/HoverCard/index.tsx
+  s_526f33b6861346::t_a54d976218a1e9 19
+client/dashboard/src/components/ui/IconButton/index.stories.tsx
+  s_526f33b6861346::t_9d988b8c820e0c 40,279
+client/dashboard/src/components/ui/Input/index.tsx
+  s_526f33b6861346::t_b91e5d88dcf86e 165
+client/dashboard/src/components/ui/InputGroup/index.tsx
+  s_526f33b6861346::t_753de91b3dd561 19,42,90-92,130,146
+client/dashboard/src/components/ui/MetricCard/index.stories.tsx
+  s_526f33b6861346::t_2f2f9cc790feb5 3,5-7,12-13,16-47,49-72,77,79-131
+client/dashboard/src/components/ui/MetricCard/index.tsx
+  s_526f33b6861346::t_aaef4c82ed6852 1-134
+client/dashboard/src/components/ui/Modal/index.tsx
+  s_526f33b6861346::t_cdeffa0046438d 50,82
+client/dashboard/src/components/ui/MoreActions/index.tsx
+  s_526f33b6861346::t_b9b9ecbfeedb8c 62
+client/dashboard/src/components/ui/MultiSelect/index.tsx
+  s_526f33b6861346::t_5518bafdb4548a 360,969,1141,1260
+client/dashboard/src/components/ui/Popover/index.tsx
+  s_526f33b6861346::t_0d7c9466d81d44 31
+client/dashboard/src/components/ui/ResizablePanel/index.stories.tsx
+  s_526f33b6861346::t_73c65fa01d2fdc 16
+client/dashboard/src/components/ui/ResizablePanel/index.tsx
+  s_526f33b6861346::t_9f4f58453cb716 106
+client/dashboard/src/components/ui/SearchBar/index.tsx
+  s_526f33b6861346::t_762f0d3cfa0695 23
+client/dashboard/src/components/ui/SegmentedControl/index.tsx
+  s_526f33b6861346::t_02ca31370fb0e8 10,12-13,16-18,43
+client/dashboard/src/components/ui/Select/index.tsx
+  s_526f33b6861346::t_7cbac48e93ddc3 56,80,116
+client/dashboard/src/components/ui/Sheet/index.tsx
+  s_526f33b6861346::t_936da75ee7c25c 68
+client/dashboard/src/components/ui/Sidebar/index.tsx
+  s_526f33b6861346::t_28049cc0a557e9 226,283-288
+client/dashboard/src/components/ui/Skeleton/index.tsx
+  s_526f33b6861346::t_7c08f4eced468b 22-24,45,59,69,180
+client/dashboard/src/components/ui/Slider/index.tsx
+  s_526f33b6861346::t_36f8738f5dd250 43,80
+client/dashboard/src/components/ui/Stack/index.stories.tsx
+  s_526f33b6861346::t_a279ed93fca926 15
+client/dashboard/src/components/ui/Switch/index.tsx
+  s_526f33b6861346::t_1e242e48877aa7 31,38
+client/dashboard/src/components/ui/Table/index.test.tsx
+  s_526f33b6861346::t_4001162f7c6cda 1-134
+client/dashboard/src/components/ui/Table/index.tsx
+  s_526f33b6861346::t_4740ed45aa321b 168-169,404,408-412,591-613,617,620-621,625-626,898,904,934
+client/dashboard/src/components/ui/TablePagination/index.tsx
+  s_526f33b6861346::t_f8a9c16923dfc1 1,3-4,6-28,30-31,34-56
+client/dashboard/src/components/ui/Tabs/index.tsx
+  s_526f33b6861346::t_989903364c6db2 27,43,72-74,91
+client/dashboard/src/components/ui/Textarea/index.tsx
+  s_526f33b6861346::t_c2b20145e39fd6 3
+client/dashboard/src/components/ui/ThemeSwitcher/index.tsx
+  s_526f33b6861346::t_c09a002fb6c250 3,31,34-35,38-39,45,77,79,81
+client/dashboard/src/components/ui/ToggleButton/index.tsx
+  s_526f33b6861346::t_3671c9fd0ee9c6 3-5,21,23
+client/dashboard/src/components/ui/ToggleGroup/index.tsx
+  s_526f33b6861346::t_a7b2bf94be6cdb 28,58
+client/dashboard/src/components/ui/ToggleGroup/toggle-variants.ts
+  s_526f33b6861346::t_37a67b5a713503 4
+client/dashboard/src/components/ui/Toolbar/index.tsx
+  s_526f33b6861346::t_dffa7f71d7d88f 73,75,218,405
+client/dashboard/src/components/ui/Tooltip/index.tsx
+  s_526f33b6861346::t_eabd7a471ab4e6 76
+client/dashboard/src/components/ui/XyFade/index.stories.tsx
+  s_526f33b6861346::t_846e5e6fee5eb8 16
+client/dashboard/src/components/ui/all-components.mdx
+  s_526f33b6861346::t_37522ca59cf019 152,425,569,599-600,609,619,632
+client/dashboard/src/components/ui/bulk-action-bar.tsx
+  s_526f33b6861346::t_60ee1c181e73e4 29-30,86-90,95-99,101
+client/dashboard/src/components/ui/context/ConfigContext.tsx
+  s_526f33b6861346::t_d554a47fdaefa4 1-2,17-31
+client/dashboard/src/components/ui/styles/base.css
+  s_526f33b6861346::t_bf974d632e4def 517-518
+client/dashboard/src/components/ui/styles/utilities.css
+  s_526f33b6861346::t_f9efc52b69dd03 239-250
+client/dashboard/src/components/upload-asset/deploy-step.tsx
+  s_526f33b6861346::t_20a0b9a511f0c0 268
+client/dashboard/src/components/upload.tsx
+  s_526f33b6861346::t_cc7d721ab7edd5 126-130,135,141,144
+client/dashboard/src/components/workspace-switcher.tsx
+  s_526f33b6861346::t_d97eb3b48262cd 63,69,76,117,119-120,123,143-144,150,152-159
+client/dashboard/src/contexts/Auth.tsx
+  s_526f33b6861346::t_5b607805742ff7 9,53,205-206
+client/dashboard/src/contexts/AuthProvider.tsx
+  s_526f33b6861346::t_3f17412cd66913 95-96,102,293-304
+client/dashboard/src/elements/components/assistant-ui/thread.tsx
+  s_526f33b6861346::t_6389cba9ab42ec 1507
+client/dashboard/src/elements/components/assistant-ui/user-message-text.tsx
+  s_526f33b6861346::t_d43b5be579712e 30,46,61
+client/dashboard/src/hooks/useNavArea.ts
+  s_526f33b6861346::t_38f233f09ec863 1-67
+client/dashboard/src/hooks/useObservabilityMcpConfig.ts
+  s_526f33b6861346::t_ed56389aab9e9d 57-67
+client/dashboard/src/hooks/useProjectNavRoutes.test.tsx
+  s_526f33b6861346::t_cba4495737551a 95
+client/dashboard/src/hooks/useProjectNavRoutes.ts
+  s_526f33b6861346::t_e4d2389ce07c61 76-77
+client/dashboard/src/hooks/useToolsetUrl.ts
+  s_526f33b6861346::t_91427ee1a125fc 103-115,147-150,185-186,191-193
+client/dashboard/src/lib/audit-log-colors.test.ts
+  s_526f33b6861346::t_3b3be5c09092b3 37-39,50-52,55-57
+client/dashboard/src/lib/audit-log-colors.ts
+  s_526f33b6861346::t_427ac00682b076 11-12,32-33,36-38,41-43,46-48,51-53
+client/dashboard/src/lib/initials.ts
+  s_526f33b6861346::t_90f79ecb9cd83a 1-13
+client/dashboard/src/lib/local-storage-keys.ts
+  s_526f33b6861346::t_4c67ecc35b874f 2-3,5-7
+client/dashboard/src/lib/logout-storage.test.ts
+  s_526f33b6861346::t_f2d02d49a32682 5,7-9,30-40,55,57-61,64,71-74,77,87-107
+client/dashboard/src/lib/logout-storage.ts
+  s_526f33b6861346::t_567f04494d5cde 7-13,23-56,58,60-61,79-80,83-87
+client/dashboard/src/lib/session-expired.test.ts
+  s_526f33b6861346::t_a2738b0dd9b1ac 6-17,19,21,24,62-67,71-72,78-96
+client/dashboard/src/lib/session-expired.ts
+  s_526f33b6861346::t_d762a5fc4621e1 1-2,11,65
+client/dashboard/src/lib/trial-status.test.ts
+  s_526f33b6861346::t_fffb49e45d6cba 1-121
+client/dashboard/src/lib/trial-status.ts
+  s_526f33b6861346::t_486e0770d914b3 1,3-45
+client/dashboard/src/lib/user-session-client-source.ts
+  s_526f33b6861346::t_7d3e2c8c6eda33 1-2,4-9,11-17,19-26,29-58,60
+client/dashboard/src/lib/utils.ts
+  s_526f33b6861346::t_557d3983dd8e0c 130-158
+client/dashboard/src/pages/Skills.test.tsx
+  s_526f33b6861346::t_11bab97ae28616 1,4,50
+client/dashboard/src/pages/Skills.tsx
+  s_526f33b6861346::t_48ed0c3c3a8026 8-9
+client/dashboard/src/pages/access/Access.tsx
+  s_526f33b6861346::t_9d22943b835282 105-107,110-111
+client/dashboard/src/pages/access/ChallengesTab.tsx
+  s_526f33b6861346::t_4d396ff081d7ee 119,146,538
+client/dashboard/src/pages/access/ChangeRoleDialog.tsx
+  s_526f33b6861346::t_13c4f170d5718e 103,129,171,183
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  s_526f33b6861346::t_4ed3e20b6c4074 586,652,691,703,791,895,1099,1108,1112,1117,1138
+client/dashboard/src/pages/access/DeleteRoleDialog.tsx
+  s_526f33b6861346::t_53896a10ef14cb 71,79
+client/dashboard/src/pages/access/GrantAccessDialog.tsx
+  s_526f33b6861346::t_bbaa7ddb4530ba 155,247
+client/dashboard/src/pages/access/GrantDrawer.tsx
+  s_526f33b6861346::t_7b2268f902cd07 143,172,174,195-196,217,219,248,294,332
+client/dashboard/src/pages/access/GrantRuleDrawerContent.tsx
+  s_526f33b6861346::t_8a2fe374d062ed 337,837,880,1331,1390,1418,1449,1479,1514
+client/dashboard/src/pages/access/MembersTab.tsx
+  s_526f33b6861346::t_b4d45b36405355 23
+client/dashboard/src/pages/access/RequestAccess.tsx
+  s_526f33b6861346::t_662f1b27357c42 62,83
+client/dashboard/src/pages/access/ResourceLink.tsx
+  s_526f33b6861346::t_579d31a8e1f184 6-19,61-63,100-104
+client/dashboard/src/pages/access/RolesTab.tsx
+  s_526f33b6861346::t_2f290cebc2d309 76,205-207,217,263-268,291,299,313
+client/dashboard/src/pages/access/useChallengeRowColumns.tsx
+  s_526f33b6861346::t_b31ccb0597c507 170
+client/dashboard/src/pages/assistants/AssistantAuditLog.tsx
+  s_526f33b6861346::t_1dfcb67627e37b 2,12,55-56,80,95-97,110,169-170,196,221,225
+client/dashboard/src/pages/assistants/Assistants.tsx
+  s_526f33b6861346::t_a044affe5207d7 8,15,58-59,124-126,174,178,239,241-242,311,313,352
+client/dashboard/src/pages/assistants/onboarding/AssistantDraftPanel.tsx
+  s_526f33b6861346::t_436514e8ac0769 12,131,135,185,187,198-204,220,242,285
+client/dashboard/src/pages/assistants/onboarding/AssistantOnboarding.tsx
+  s_526f33b6861346::t_f295ba6c98a6bf 126,174-175,177
+client/dashboard/src/pages/assistants/onboarding/AssistantSkillsSection.tsx
+  s_526f33b6861346::t_fb62269f7bb9ed 257
+client/dashboard/src/pages/assistants/onboarding/tools/useOnboardingTools.tsx
+  s_526f33b6861346::t_5f523ba0dd562e 2325
+client/dashboard/src/pages/billing/Billing.tsx
+  s_526f33b6861346::t_76b59eb9dc7765 413-414
+client/dashboard/src/pages/blocks/BlockDetail.tsx
+  s_526f33b6861346::t_937761fa3424c2 113
+client/dashboard/src/pages/budgets/Budgets.tsx
+  s_526f33b6861346::t_16ab8738163801 1,230,234,242,254,266,276
+client/dashboard/src/pages/budgets/RuleDetailSheet.tsx
+  s_526f33b6861346::t_4e74c80bf7bb95 203,312,399
+client/dashboard/src/pages/budgets/RuleSheet.tsx
+  s_526f33b6861346::t_5d0875fdc0c6e0 283,293,335,337,363,382,548,655
+client/dashboard/src/pages/budgets/budget-shared.tsx
+  s_526f33b6861346::t_ae721238e145a5 46
+client/dashboard/src/pages/catalog/AddServerDialog.tsx
+  s_526f33b6861346::t_a87ad37bc482ee 369,547,552,616,626,849,852,854,885,907-908,1101,1136,1192,1259-1260,1278-1279,1295-1296
+client/dashboard/src/pages/catalog/Catalog.tsx
+  s_526f33b6861346::t_ac621c8023d9a3 313
+client/dashboard/src/pages/catalog/CatalogDetail.tsx
+  s_526f33b6861346::t_2397cfd3b23f30 21,192,195,260,265,272,279,449-460,496,533-543,557-561,564,567
+client/dashboard/src/pages/catalog/CommandBar.tsx
+  s_526f33b6861346::t_8944db8f23f8be 49-52,54,58,60-69,71-72,74-78,80-81,83-90
+client/dashboard/src/pages/catalog/ServerCard.tsx
+  s_526f33b6861346::t_7231608a092285 5,72,130-131,133-134,137,154
+client/dashboard/src/pages/catalog/ServerTableRow.tsx
+  s_526f33b6861346::t_951722bae9950b 63-64,67
+client/dashboard/src/pages/chat/Chat.tsx
+  s_526f33b6861346::t_cf05e4cb81f609 38-39,58,60,76-82,93-96,160,194-198,242-247,249-283,286-312,319-323,332,369,390,516-517,520-522,529,531-534,545,563,603,678,728-731,739,757,808,846,856,1004-1007
+client/dashboard/src/pages/chatLogs/ChatDetailPanel.tsx
+  s_526f33b6861346::t_4904070e4efe71 302,497,507,509-510,527,566,568,743,789
+client/dashboard/src/pages/chatLogs/ChatLogsTable.tsx
+  s_526f33b6861346::t_77c81f0029673c 41,51-53,55-56,59,114,153,166,202,220,237,260,262,274,279-280,284-293,296,316-325,327-337,340-341,345-350,357,365
+client/dashboard/src/pages/chatLogs/ChatTranscript.tsx
+  s_526f33b6861346::t_ce600166414670 363,425,531,545,669,895,1056,1366,1394
+client/dashboard/src/pages/chatLogs/QueryHighlight.tsx
+  s_526f33b6861346::t_10ff69e77fa305 9,11
+client/dashboard/src/pages/chatLogs/WorkUnitsMetrics.tsx
+  s_526f33b6861346::t_3f50f52ca8843f 98-99,103,203
+client/dashboard/src/pages/chatLogs/chatHelpers.tsx
+  s_526f33b6861346::t_873c3b2789bd40 21,27
+client/dashboard/src/pages/chatLogs/chatRisk.tsx
+  s_526f33b6861346::t_f1922a7cfc98e3 123,172
+client/dashboard/src/pages/chatLogs/claudeUsage.test.ts
+  s_526f33b6861346::t_3f7a9857668922 119
+client/dashboard/src/pages/chatLogs/claudeUsage.ts
+  s_526f33b6861346::t_68db4f6b834431 13-14
+client/dashboard/src/pages/cli/CliCallback.tsx
+  s_526f33b6861346::t_f4c7e4ff29f5cd 162-165,175-176
+client/dashboard/src/pages/collections/CollectionCard.tsx
+  s_526f33b6861346::t_effaa44786928d 1,110,121,200
+client/dashboard/src/pages/collections/CollectionDetail.tsx
+  s_526f33b6861346::t_a3d381ec072c14 355,376,379,385,464,480,508,521,581,592,626,634,791,793,798,847,858,880,954
+client/dashboard/src/pages/collections/CollectionInstallDialog.tsx
+  s_526f33b6861346::t_a9c2ce7c4b3e38 229,276,362,413
+client/dashboard/src/pages/collections/CreateCollection.tsx
+  s_526f33b6861346::t_df3960385931e6 303,316,338
+client/dashboard/src/pages/costs/BreakdownBar.tsx
+  s_526f33b6861346::t_ee6e83c213fa40 84
+client/dashboard/src/pages/costs/CostTable.tsx
+  s_526f33b6861346::t_d772195e3a1bb3 28,55-56,58-59,570,575,599-601,685,694
+client/dashboard/src/pages/costs/CostWidgets.tsx
+  s_526f33b6861346::t_46084497944404 7-8,10,12-14,16-18,39,72-73,99,103,124-125,154,156-157,174,179,236,238,255,273,310,356,403-405,447
+client/dashboard/src/pages/costs/CostsExplorer.tsx
+  s_526f33b6861346::t_860689c3cbf920 2,1314-1315
+client/dashboard/src/pages/costs/EntityProfile.tsx
+  s_526f33b6861346::t_3e84441de686b4 136,139,161-164,172,178,248-249,440-441,462-473,506,511,526,528,569-572,580,582,618-623,627-628,638-645,693-695
+client/dashboard/src/pages/costs/SessionTable.tsx
+  s_526f33b6861346::t_d4e301520e70af 325,350-351,416,425
+client/dashboard/src/pages/costs/gridTable.tsx
+  s_526f33b6861346::t_ca286da234686b 51
+client/dashboard/src/pages/costs/sparkline-math.ts
+  s_526f33b6861346::t_b9d9dc86ce1624 5,14-16
+client/dashboard/src/pages/demo/SwitchOrg.tsx
+  s_526f33b6861346::t_5dd57b6e38bc2f 42,52,147
+client/dashboard/src/pages/demo/components/DemoBookingFlow.tsx
+  s_526f33b6861346::t_b5f70d376a9f7a 111
+client/dashboard/src/pages/deployments/Deployments.tsx
+  s_526f33b6861346::t_544f037b4d7d3e 221,223-238,299,301,316
+client/dashboard/src/pages/deployments/deployment/AssetsTabContent.tsx
+  s_526f33b6861346::t_025c73ebbd2beb 1-2,55,89,105,143-145,155-165
+client/dashboard/src/pages/deployments/deployment/Deployment.tsx
+  s_526f33b6861346::t_e92756ad9f5d2b 18,20-21,88-94,177-183,188-194,267-270,305-322,324-326,328-377
+client/dashboard/src/pages/deployments/deployment/FailedSourcesSection.tsx
+  s_526f33b6861346::t_f884d63b27bf35 184,210,222,252,267,279,285
+client/dashboard/src/pages/deployments/deployment/LogsTabContent.tsx
+  s_526f33b6861346::t_11197e659a2385 28-29,31-35,613,644,655,659,665,674,678,684,690,712,717,726,733,742,752,805,807-809,816,836,868,870-872,879,897,915
+client/dashboard/src/pages/deployments/deployment/ToolsTabContent.tsx
+  s_526f33b6861346::t_4fbd3a8e33d52f 21
+client/dashboard/src/pages/device-agent/DeviceAgent.tsx
+  s_526f33b6861346::t_3a494dd5939894 1,5,12,94-109,111,115-124,126-128,130-131,133-140
+client/dashboard/src/pages/device-agent/device-agent-configuration.tsx
+  s_526f33b6861346::t_f146905b8e172a 2-3,56-61,190-192,195-206,333,401,505,520,546-552,554-564
+client/dashboard/src/pages/device-agent/device-agent-setup.tsx
+  s_526f33b6861346::t_5e0e0f419b7c3f 84-94,100-108,110,112,116,122-123,135-142,153-155,158-162,217,265,283-286,295,304,323-325,363,416-419,421,449,466-536,538-546,553,606-644,646-650,730-732,735-736,766,878-985,987-989,997,1008,1012,1015,1037,1050-1053,1055-1062,1086-1095,1150,1224,1226,1255-1257,1265-1270,1273-1278
+client/dashboard/src/pages/elements/Elements.tsx
+  s_526f33b6861346::t_0cfc970a8f9c6a 366,372-373,740,1253,1327,1379,1402,1409,1437,1444,1483,1485,1515,1655,1682,1694-1695,1699-1700,1705-1707,1714,1723,1725,1727,1731-1733,1735-1737,1739-1741,1750,1760,1763-1764,1768,1771-1772,1775,1778-1779,1789,1792-1796,1800,1802-1804,1806-1808
+client/dashboard/src/pages/environments/CloneEnvironmentDialog.tsx
+  s_526f33b6861346::t_3876f7e4994b06 64
+client/dashboard/src/pages/environments/Environment.tsx
+  s_526f33b6861346::t_fddc0a6bfa617a 92
+client/dashboard/src/pages/environments/Environments.tsx
+  s_526f33b6861346::t_cdf2a141973086 5,105,143,146,195-197,226
+client/dashboard/src/pages/home/Home.tsx
+  s_526f33b6861346::t_2c49e741c8ef55 5,37-39,41,45-46
+client/dashboard/src/pages/hooks/HooksEmptyState.tsx
+  s_526f33b6861346::t_e2ad344d230801 23,55,59,68
+client/dashboard/src/pages/hooks/HooksSetupDialog.tsx
+  s_526f33b6861346::t_0c65286eb02010 75,110,135,181,197,213,236,321,342,347,372,374,387,391-392,394,476,535
+client/dashboard/src/pages/integrations/Integrations.tsx
+  s_526f33b6861346::t_abe8e8512f6a6b 50-55,67-73,298
+client/dashboard/src/pages/login/SignUp.tsx
+  s_526f33b6861346::t_c5f14997b41988 1-10
+client/dashboard/src/pages/login/components/agent-session-showcase.tsx
+  s_526f33b6861346::t_63ce6a3a3bfbdd 137,144,168,178
+client/dashboard/src/pages/login/components/auth-constants.ts
+  s_526f33b6861346::t_6234a3f9c3e86c 5-7,9
+client/dashboard/src/pages/login/components/auth-shell.tsx
+  s_526f33b6861346::t_a2899709ac6d1f 133
+client/dashboard/src/pages/login/components/login-panel.tsx
+  s_526f33b6861346::t_55dedc1b3d94f7 29
+client/dashboard/src/pages/login/components/register-panel.tsx
+  s_526f33b6861346::t_8798d837016692 120,143-145
+client/dashboard/src/pages/login/components/signup-panel.test.tsx
+  s_526f33b6861346::t_5daf8843a7a8f2 1-232
+client/dashboard/src/pages/login/components/signup-panel.tsx
+  s_526f33b6861346::t_f9c174be99344c 1-294
+client/dashboard/src/pages/logs/LogDetailSheet.tsx
+  s_526f33b6861346::t_2bf89e0a55a570 165,167,169,175,180,186,188,198-200,202,209,216,222,241,243,245,257,261,263-264,277,321,323,333,374,386,394,405,416,423,425-426,523,525,533,550,565
+client/dashboard/src/pages/logs/LogFilterBar.tsx
+  s_526f33b6861346::t_6f4da8cbcb54b7 352,366,371,573,578,591,639
+client/dashboard/src/pages/logs/TraceLogsList.tsx
+  s_526f33b6861346::t_a76a526752df69 45-47,49-53,59-60,131,142,155,170,180,217,219,243
+client/dashboard/src/pages/mcp/AddVariableSheet.tsx
+  s_526f33b6861346::t_f02661ef101c43 233,247,292,306
+client/dashboard/src/pages/mcp/BuiltInMCPDetailPage.tsx
+  s_526f33b6861346::t_ba2a8cf3e55d3f 69,72,78-79,84-85,104
+client/dashboard/src/pages/mcp/EnvironmentVariableRow.tsx
+  s_526f33b6861346::t_7be15e583b7bee 51-82,201-203,212-213,252,311,325
+client/dashboard/src/pages/mcp/MCP.tsx
+  s_526f33b6861346::t_c2a827f2fd2806 337-340
+client/dashboard/src/pages/mcp/MCPDetails.tsx
+  s_526f33b6861346::t_b5fde05c268fed 3,11,127,133,138,141-142,145,244-249,663,682,1063-1066,1499-1502,1533-1534,1543-1544,1628,1662,1783,1850
+client/dashboard/src/pages/mcp/MCPDetailsRouting.ts
+  s_526f33b6861346::t_c3a4eec0657119 11,86-87
+client/dashboard/src/pages/mcp/MCPEmptyState.tsx
+  s_526f33b6861346::t_19014b53dec4f9 14
+client/dashboard/src/pages/mcp/MCPEnvironmentSettings.tsx
+  s_526f33b6861346::t_13a83a09f72c79 733,783,983,998,1009-1010,1108,1123,1129-1130,1138,1157,1176
+client/dashboard/src/pages/mcp/MCPPerformanceTab.tsx
+  s_526f33b6861346::t_3c444bfa97a155 38,47
+client/dashboard/src/pages/mcp/MCPTeamAccessTab.tsx
+  s_526f33b6861346::t_0561f03d5ad9f9 140,144,482
+client/dashboard/src/pages/mcp/MCPToolFilterScopesPanel.tsx
+  s_526f33b6861346::t_9b5758f216913c 39
+client/dashboard/src/pages/mcp/oauth-wizard/ExternalOAuthForm.tsx
+  s_526f33b6861346::t_a3c4eb2f6baa54 296,317,400
+client/dashboard/src/pages/mcp/oauth-wizard/OAuthWizard.test.tsx
+  s_526f33b6861346::t_11b5b31b8ebf42 20-24,56-57,59,63-64,66,70-71,73-87,102,130-147,280-283,297-301,332-333
+client/dashboard/src/pages/mcp/oauth-wizard/OAuthWizard.tsx
+  s_526f33b6861346::t_126dad52204708 103
+client/dashboard/src/pages/mcp/oauth-wizard/PathSelection.tsx
+  s_526f33b6861346::t_d4c56a913c7846 115,139
+client/dashboard/src/pages/mcp/oauth-wizard/ProxyMetadataForm.tsx
+  s_526f33b6861346::t_d39ea042f4576f 41,61,135
+client/dashboard/src/pages/mcp/oauth-wizard/machine.test.ts
+  s_526f33b6861346::t_2aaa86ae5ebff2 23,63,87,90-94,480-482,494,497,627,639,654-658,666
+client/dashboard/src/pages/mcp/oauth-wizard/machine.ts
+  s_526f33b6861346::t_a12180fca2216f 15,118,141-143,448-467,469-472,474-486,489-496,499
+client/dashboard/src/pages/mcp/oauth-wizard/services.ts
+  s_526f33b6861346::t_b7a6450e848399 2-7,11,14-18,26-43,50-54,60-62,88-89,120,122-127,129-159,161-189,192,195-216,265
+client/dashboard/src/pages/mcp/overview/MCPOverviewTab.tsx
+  s_526f33b6861346::t_5596f24e54aa89 1,61,85-88,133-134,142-154,156,159,166,174-178,196,204,216-217,224-225
+client/dashboard/src/pages/mcp/overview/PluginStatusBanner.tsx
+  s_526f33b6861346::t_9f3646742361c8 276,295
+client/dashboard/src/pages/mcp/toolsetAuthSurface.test.ts
+  s_526f33b6861346::t_383c7a168033f2 20,43-44,55,137,185,217
+client/dashboard/src/pages/mcp/toolsetAuthSurface.ts
+  s_526f33b6861346::t_9f5358d5b77749 8-10,13,55-57,59
+client/dashboard/src/pages/mcp/x/MCPServerDetails.tsx
+  s_526f33b6861346::t_e6803d2d636e09 39,44,95-102,176-183,210,349,364,387
+client/dashboard/src/pages/mcp/x/MCPServerDetailsRouting.ts
+  s_526f33b6861346::t_f8cbbdd18f4107 3-9,13-16,99-100
+client/dashboard/src/pages/mcp/x/tabs/RemoteMcpToolsSection.tsx
+  s_526f33b6861346::t_a51864765fc3b0 341,520,540,568
+client/dashboard/src/pages/mcp/x/tabs/ToolMetadataDriftPanel.tsx
+  s_526f33b6861346::t_597b9c92312d50 89
+client/dashboard/src/pages/mcp/x/tabs/UnproxiedMcpOverviewTab.tsx
+  s_526f33b6861346::t_2ea5d2514d14b4 117,148,171
+client/dashboard/src/pages/mcp/x/tabs/settings/SettingsInlineEmptyState.tsx
+  s_526f33b6861346::t_f6cc2dccf41ee4 36
+client/dashboard/src/pages/mcp/x/tabs/settings/SettingsSection.tsx
+  s_526f33b6861346::t_8187f7e5060798 105
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/BrandingSection.tsx
+  s_526f33b6861346::t_d9df6415cedc41 151
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/HeadersSection.tsx
+  s_526f33b6861346::t_b4eede115e414a 421,594
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/ServerUrlSection.tsx
+  s_526f33b6861346::t_fd7246ba6118c8 41
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/AttachRemoteIdentityProviderSheet.tsx
+  s_526f33b6861346::t_865030d500a4b3 229
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/IssuerFormFields.tsx
+  s_526f33b6861346::t_79f581f89c8da7 42
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/RemoteIdentityProvidersField.tsx
+  s_526f33b6861346::t_f5dbbaef8e68e5 97,102
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/authentication/UserSessionDurationField.tsx
+  s_526f33b6861346::t_15b60fbd278bca 113,115,124-127,151-153
+client/dashboard/src/pages/not-found/NotFound.tsx
+  s_526f33b6861346::t_f3c1826f3a9e35 1-24
+client/dashboard/src/pages/onboarding/FunctionsOnboarding.tsx
+  s_526f33b6861346::t_225d9492c3f996 21,24-26
+client/dashboard/src/pages/onboarding/UploadOpenAPI.tsx
+  s_526f33b6861346::t_82af78208b0263 29-30,32-34
+client/dashboard/src/pages/org/OrgAIIntegrations.test.tsx
+  s_526f33b6861346::t_cf518a716d7fc0 56
+client/dashboard/src/pages/org/OrgAIIntegrations.tsx
+  s_526f33b6861346::t_c88e65be3a3968 37-38
+client/dashboard/src/pages/org/OrgApiKeys.tsx
+  s_526f33b6861346::t_ca98d7c4800627 3,193-203,232,263,267
+client/dashboard/src/pages/org/OrgAuditLogs.tsx
+  s_526f33b6861346::t_b619f2084b1275 2,44,236-237,252,277,281,292-293,345-355,785-787,852,880,883,888,892,898,907,911,917,923,944,949,958,965,974,984,1022
+client/dashboard/src/pages/org/OrgDomains.tsx
+  s_526f33b6861346::t_34d45b9e84e1fd 2,352,509,755-764,766,951,1009,1115,1148
+client/dashboard/src/pages/org/OrgHome.test.tsx
+  s_526f33b6861346::t_0567d51e34c60b 38
+client/dashboard/src/pages/org/OrgHome.tsx
+  s_526f33b6861346::t_e9d464d8041368 54,74,300-302,305,357,375,464,486,523,557,629,631,670,765,779,881,887,902-906,908,912,918,922,924,926-933,973-977,979,985,1032
+client/dashboard/src/pages/org/OrgIdentity.tsx
+  s_526f33b6861346::t_15f5c20244a364 253,313-337,339-376
+client/dashboard/src/pages/org/OrgLogs.tsx
+  s_526f33b6861346::t_555d95a77da8e5 1,154-164,166,197-198
+client/dashboard/src/pages/org/OrgSkills.tsx
+  s_526f33b6861346::t_91f7b195c8cc70 1,17-25,27,29
+client/dashboard/src/pages/org/OrgWebhooks.tsx
+  s_526f33b6861346::t_f386dcd1bfb756 1,51-63,134-136
+client/dashboard/src/pages/org/OtelForwardingSection.tsx
+  s_526f33b6861346::t_759545547b3563 149,206,237
+client/dashboard/src/pages/org/SkillContentUploadSetting.tsx
+  s_526f33b6861346::t_cf7cee6954f05c 15-19,33,36-41
+client/dashboard/src/pages/org/SkillEfficacySettingsSection.test.tsx
+  s_526f33b6861346::t_be8c3cb1c50e86 146,148
+client/dashboard/src/pages/org/SkillEfficacySettingsSection.tsx
+  s_526f33b6861346::t_0fec566e09879b 85,202,253
+client/dashboard/src/pages/org/UserSessions.tsx
+  s_526f33b6861346::t_81a4a06f4a9ccd 215-222,322
+client/dashboard/src/pages/org/ai-integration-providers.tsx
+  s_526f33b6861346::t_58348c266fc48a 144,153,162,254
+client/dashboard/src/pages/org/device-integrations/DeviceIntegrations.tsx
+  s_526f33b6861346::t_b0925630177e86 1,30-32,34-66,90
+client/dashboard/src/pages/org/device-integrations/MdmIntegrationDetail.tsx
+  s_526f33b6861346::t_c3ecb31f4aba14 227-228,244,455
+client/dashboard/src/pages/org/device-integrations/coverage-pipeline.tsx
+  s_526f33b6861346::t_0b729e6916fe50 79,136,174,193
+client/dashboard/src/pages/org/device-integrations/coverage-widgets.tsx
+  s_526f33b6861346::t_67b3571098179d 214
+client/dashboard/src/pages/org/external-services/ExternalCredentialDetail.tsx
+  s_526f33b6861346::t_3fa430cef689be 9,118,132,139
+client/dashboard/src/pages/org/external-services/GcpGrantInstructions.tsx
+  s_526f33b6861346::t_ca43197cb87ac5 68
+client/dashboard/src/pages/org/external-services/tabs/OverviewTab.tsx
+  s_526f33b6861346::t_c20ce52d20af1c 142
+client/dashboard/src/pages/org/external-services/tabs/SettingsTab.tsx
+  s_526f33b6861346::t_a4a7e989350c50 147
+client/dashboard/src/pages/org/litellm-integration-row.tsx
+  s_526f33b6861346::t_dbb2850e785a4d 327-329,498,509
+client/dashboard/src/pages/platform-admin/AdminSection.tsx
+  s_526f33b6861346::t_f38a687038e84c 1,3-24,27-33,35-40,42-48,50-52,54
+client/dashboard/src/pages/platform-admin/Features.tsx
+  s_526f33b6861346::t_b7d13e2b40c525 1-3,5-6,13-16,21,23-24,26,28-52,56-57,60-110,120,128-186,190-195,204,219-220,224-226,228,230-231,236,238-244,246-250,252,254-281,283-287,291,298,300-301,307-313,322,327-339,343-344,346-348,350,353,355-356,358,360,365-366,368,372,377,379-412,416-419,421,424-456,460-461,464-466,468-479
+client/dashboard/src/pages/platform-admin/Onboarding.tsx
+  s_526f33b6861346::t_cc9c45829eefb6 1,3-8,10-49,51-64,67-80,83-84,86-89,93-102
+client/dashboard/src/pages/platform-admin/Overview.tsx
+  s_526f33b6861346::t_75638ff49f3e47 1-160
+client/dashboard/src/pages/platform-admin/PlatformAdminGate.tsx
+  s_526f33b6861346::t_9c10e88d685049 1-26
+client/dashboard/src/pages/platform-admin/RbacOverride.tsx
+  s_526f33b6861346::t_c2134564c26b4a 1-282
+client/dashboard/src/pages/platform-admin/rbac-override-state.ts
+  s_526f33b6861346::t_41ce0d74386963 1-4,6,8,14,17,89-106,115-125,130,135,141-149,151,175,187-188,193,198,208-211
+client/dashboard/src/pages/platform-remote-identity-providers/MigrateToGlobalIssuerDialog.tsx
+  s_526f33b6861346::t_e02b8d96435ecd 1,4-9,11-23,26-28,32-63,66-70,75-79,82-109,111-145,147-149
+client/dashboard/src/pages/platform-remote-identity-providers/PlatformConvergenceTab.tsx
+  s_526f33b6861346::t_8191fe899cb0ac 1-4,6-166
+client/dashboard/src/pages/platform-remote-identity-providers/PlatformRemoteIdentityProviderDetail.tsx
+  s_526f33b6861346::t_fcb12199d69c73 8,21,29,100,122,126-128,132,141-144
+client/dashboard/src/pages/platform-remote-identity-providers/PlatformSettingsTab.tsx
+  s_526f33b6861346::t_cda6760bff685c 302
+client/dashboard/src/pages/platform-remote-identity-providers/convergenceBlockers.test.ts
+  s_526f33b6861346::t_ee393566f99a68 1,3-7,9-24,27-29,32-39,42-47,50-60,62,64-68,71,73-91,93-96
+client/dashboard/src/pages/platform-remote-identity-providers/convergenceBlockers.ts
+  s_526f33b6861346::t_bcdf52db323f21 1-51
+client/dashboard/src/pages/playground/ChatWindow.tsx
+  s_526f33b6861346::t_08370cb9bf3d61 594
+client/dashboard/src/pages/playground/MessageHistoryIndicator.tsx
+  s_526f33b6861346::t_3d790b37e85fd6 20
+client/dashboard/src/pages/playground/Playground.tsx
+  s_526f33b6861346::t_8cc9521605fcab 146
+client/dashboard/src/pages/playground/PlaygroundAuth.tsx
+  s_526f33b6861346::t_90540c0aa3c1bc 56
+client/dashboard/src/pages/playground/PlaygroundConfigPanel.tsx
+  s_526f33b6861346::t_31a1d3a6459da4 349-361,368,373
+client/dashboard/src/pages/playground/PlaygroundLogsPanel.tsx
+  s_526f33b6861346::t_7460b02ff82082 250,308,322,336
+client/dashboard/src/pages/playground/PlaygroundMcpApps.tsx
+  s_526f33b6861346::t_00347c8fd31511 424
+client/dashboard/src/pages/playground/PlaygroundProxiedChat.tsx
+  s_526f33b6861346::t_07728ee6ad7354 99,121
+client/dashboard/src/pages/playground/ToolMentions.tsx
+  s_526f33b6861346::t_4a0784c1d116ad 168,183,248
+client/dashboard/src/pages/plugins/InstallInstructionsDialog.tsx
+  s_526f33b6861346::t_ba56a42ec6eb97 222,253,257,259,271,288,295,299,365,369,381,450,464,549,568,600,611,623,627,730-731,733-734,751,766,774,789-794,949,993,999
+client/dashboard/src/pages/plugins/MarketplaceCard.tsx
+  s_526f33b6861346::t_3cd167946286bd 30-31,52,61,83-84,90-91,98-99,113,125,133,144,158-159,184-185,201,231-232,234,251,260
+client/dashboard/src/pages/plugins/PluginAssignmentRow.tsx
+  s_526f33b6861346::t_dbe8e72650d9a5 53
+client/dashboard/src/pages/plugins/PluginAssignmentsList.tsx
+  s_526f33b6861346::t_8037777865bcd6 33,47
+client/dashboard/src/pages/plugins/PluginAssignmentsSheet.tsx
+  s_526f33b6861346::t_fd8acfa375df04 191
+client/dashboard/src/pages/plugins/PluginCard.test.tsx
+  s_526f33b6861346::t_18b60adeb55de9 1-2,12-13,15-18,21-22,24-29,32,36,38,42-45,47-50,52-67,69-70,77-86,88-99,101-103,105-106,108,111-114,117-119,121-128,131-132,134-141,143-150
+client/dashboard/src/pages/plugins/PluginCard.tsx
+  s_526f33b6861346::t_54adc78b7b07e9 2,6,13,26,48-52,82,84,89,91,96,98,101-111,127-128,207-212,220,247-253,261,284-327
+client/dashboard/src/pages/plugins/PluginDetail.agent-plugins.test.tsx
+  s_526f33b6861346::t_a95b6fb86b086c 2,4-29,32-63,65-67,70-81,83-87,90-92
+client/dashboard/src/pages/plugins/PluginDetail.tsx
+  s_526f33b6861346::t_4610fe66f089f0 1,10,57,74-77,154-158,568,573-574,581,585,592,601,609,627,640,675-688,721,918,1033,1039,1043-1048,1052-1053,1070,1092-1095,1098-1101,1104-1107,1110-1117,1266,1342
+client/dashboard/src/pages/plugins/PluginInstallButton.tsx
+  s_526f33b6861346::t_360e7ca890eae7 5-7,12,14-15,21-25
+client/dashboard/src/pages/plugins/PluginSkillsSection.tsx
+  s_526f33b6861346::t_88d64e6b0cd7ed 4,143,266,316
+client/dashboard/src/pages/plugins/Plugins.tsx
+  s_526f33b6861346::t_1bb35c6c1d2e05 6,561,662
+client/dashboard/src/pages/plugins/PublishDialog.tsx
+  s_526f33b6861346::t_b54ae85d86ea81 278,282,328,353
+client/dashboard/src/pages/plugins/SectionEmptyState.tsx
+  s_526f33b6861346::t_1a1df66278377d 19
+client/dashboard/src/pages/plugins/downloadPluginPackage.test.ts
+  s_526f33b6861346::t_417faf57884ec0 1-133
+client/dashboard/src/pages/plugins/downloadPluginPackage.ts
+  s_526f33b6861346::t_8f41842f78a420 2-6,25,43-79
+client/dashboard/src/pages/prompts/PromptEditor.tsx
+  s_526f33b6861346::t_6a636ef4c04a03 236,239,250,264,277
+client/dashboard/src/pages/remote-identity-providers/MigrateImpact.tsx
+  s_526f33b6861346::t_5fc56d2092cc53 1-93
+client/dashboard/src/pages/remote-identity-providers/MigrateIssuerDialog.tsx
+  s_526f33b6861346::t_cb76fd5d7cb0c6 20
+client/dashboard/src/pages/remote-identity-providers/RemoteIdentityProviderDetail.tsx
+  s_526f33b6861346::t_371f290d1c8200 9,69,90,102
+client/dashboard/src/pages/remote-identity-providers/RemoteIdentityProviders.tsx
+  s_526f33b6861346::t_d272830f2be65f 37,209-236,239-260,265,271-286,381-389
+client/dashboard/src/pages/remote-identity-providers/RemoteSessionClientDetail.tsx
+  s_526f33b6861346::t_ad5e0d7d73b725 9,93,114,127
+client/dashboard/src/pages/remote-identity-providers/tabs/client/SettingsTab.tsx
+  s_526f33b6861346::t_47ab8729ee62b2 107
+client/dashboard/src/pages/remote-identity-providers/tabs/issuer/SettingsTab.tsx
+  s_526f33b6861346::t_2fda1fc8e062df 294
+client/dashboard/src/pages/security/DetectionRules.tsx
+  s_526f33b6861346::t_8a28c1716841c4 244-245,286-287,659,666,751,773,1003,1037,1104,1381,1388
+client/dashboard/src/pages/security/DetectorCard.tsx
+  s_526f33b6861346::t_c9503dc5f2229f 53
+client/dashboard/src/pages/security/DismissedFindingsTab.tsx
+  s_526f33b6861346::t_80132baba7dae2 135,172
+client/dashboard/src/pages/security/ExclusionsTab.tsx
+  s_526f33b6861346::t_c55665c3e4b8d2 231
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_526f33b6861346::t_9ae0fe8d0050e4 24,101,356,494-528,670-671,733-735,934-938,981,1092,1125,1217,1231,1305,1476,1485-1487,1499,1508,1531,1533,1550,1624,1712
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_526f33b6861346::t_3630df1cd63420 336,348,388,443,1143,1397,1433,1699,2525,2536,2610,2830,2843,2856,2920,3061,3314
+client/dashboard/src/pages/security/RiskEvents.tsx
+  s_526f33b6861346::t_c33875784b2055 39-48,57-117,373,377-384,491,520-522,532,535,579,604,669-672,707-708,752-754,762-766,771-772,774,792-795
+client/dashboard/src/pages/security/RiskOverviewCategoriesIndex.tsx
+  s_526f33b6861346::t_8cd734f3a08d00 108
+client/dashboard/src/pages/security/RiskOverviewCategoryDetail.tsx
+  s_526f33b6861346::t_84d4b60b6a1133 1,212-225,252,255-256,260,367,500,509,534,595
+client/dashboard/src/pages/security/RiskOverviewRulesIndex.tsx
+  s_526f33b6861346::t_c88fef9c19a8f3 105
+client/dashboard/src/pages/security/RiskOverviewUserDetail.tsx
+  s_526f33b6861346::t_899718005d20f3 1,142,146-148,155,159,229,275,284,328,337
+client/dashboard/src/pages/security/RiskOverviewUsersIndex.tsx
+  s_526f33b6861346::t_565c7d72fcfc86 107
+client/dashboard/src/pages/security/SecurityOverview.test.tsx
+  s_526f33b6861346::t_f014232b2e6e9c 16
+client/dashboard/src/pages/security/SecurityOverview.tsx
+  s_526f33b6861346::t_147b3f5f730530 1,3-4,127,285,350,374,376,381,387,392,398,403-405,411,416,421,462,512-513,597-598,600,614,641,643-644,666,700,711
+client/dashboard/src/pages/security/builtin-library.tsx
+  s_526f33b6861346::t_64d44683fdad54 35,91,103
+client/dashboard/src/pages/security/cel-field.tsx
+  s_526f33b6861346::t_2f55cbd75b6252 106
+client/dashboard/src/pages/security/cel-highlight.tsx
+  s_526f33b6861346::t_fb3f80d947a5b6 25
+client/dashboard/src/pages/security/cel-monaco-editor.tsx
+  s_526f33b6861346::t_3e1a2e9d48af39 384
+client/dashboard/src/pages/security/cel-traffic-preview.tsx
+  s_526f33b6861346::t_5e8bcdb1927985 258
+client/dashboard/src/pages/security/exclusion-sheet.tsx
+  s_526f33b6861346::t_ded0766a86a68c 389
+client/dashboard/src/pages/security/policy-summary.test.ts
+  s_526f33b6861346::t_13ee5d390de01d 1-170
+client/dashboard/src/pages/security/policy-summary.ts
+  s_526f33b6861346::t_0e035bc990806d 1-3,5-182
+client/dashboard/src/pages/security/risk-ui.tsx
+  s_526f33b6861346::t_ed5c6fced5d8e7 167,406
+client/dashboard/src/pages/security/riskTrendChartData.ts
+  s_526f33b6861346::t_5016f4df50a44f 2-7,16-39,41,43-46,59-61,72-76,115-116,125-126
+client/dashboard/src/pages/settings/ModelProviderKeysSection.tsx
+  s_526f33b6861346::t_8d50a2cf212ce9 209
+client/dashboard/src/pages/settings/RegistryCacheSection.tsx
+  s_526f33b6861346::t_04adcef86cfb48 62
+client/dashboard/src/pages/settings/Settings.tsx
+  s_526f33b6861346::t_199da957026952 28,30,44,51-52
+client/dashboard/src/pages/settings/SettingsDangerZone.tsx
+  s_526f33b6861346::t_9924e648fffb1a 52-53,89
+client/dashboard/src/pages/setup/components/onboarding-stepper.tsx
+  s_526f33b6861346::t_5e765ee576ddc0 56-57,61-62,65,67,70,74,79,82
+client/dashboard/src/pages/setup/components/onboarding-wizard.tsx
+  s_526f33b6861346::t_7a11f8e08d2777 5,51-55,63,75-78,88-89,92,170-173,197,204,206,212,219,221,244-258,261-271
+client/dashboard/src/pages/setup/components/platform-instrumentation-sheet.tsx
+  s_526f33b6861346::t_2d525bfd3bacbe 358,360,506,547,589,608,621
+client/dashboard/src/pages/setup/components/step-container.tsx
+  s_526f33b6861346::t_11f579e996302d 39,76
+client/dashboard/src/pages/setup/components/steps/additional-agent-config-step.tsx
+  s_526f33b6861346::t_70bbca18d1b5ec 97,182,184,223,231,370
+client/dashboard/src/pages/setup/components/steps/configure-policies-step.tsx
+  s_526f33b6861346::t_3f50ef29aa5611 461,502,516,584,678,736-739,742-743,752,775,782,792,819
+client/dashboard/src/pages/setup/components/steps/confirm-traffic-step.tsx
+  s_526f33b6861346::t_2010042270c575 154,184,196,269,271
+client/dashboard/src/pages/setup/components/steps/connect-idp-step.tsx
+  s_526f33b6861346::t_e54401a82bb3cb 141,182,191,226,228
+client/dashboard/src/pages/setup/components/steps/create-marketplace-step.tsx
+  s_526f33b6861346::t_544f3dc2d045d3 74,98,100
+client/dashboard/src/pages/setup/components/steps/directory-sync-step.tsx
+  s_526f33b6861346::t_f2221a0ac234ea 81,96,98
+client/dashboard/src/pages/setup/components/steps/distribute-servers-step.tsx
+  s_526f33b6861346::t_42e37c06e8c48a 364,384,387,434,440,442,557,597
+client/dashboard/src/pages/setup/components/steps/instrument-agents-step.tsx
+  s_526f33b6861346::t_3d6e1acf76ed2f 13,30-40,55,59,66-67,74-79,82-98,120,128,175,177,231-235
+client/dashboard/src/pages/setup/setup-data.ts
+  s_526f33b6861346::t_5f5fdf72a20f34 150
+client/dashboard/src/pages/shadow-mcp/ShadowMCPServerDetail.test.tsx
+  s_526f33b6861346::t_809e87327aa18b 538-540
+client/dashboard/src/pages/shadow-mcp/ShadowMCPServerDetail.tsx
+  s_526f33b6861346::t_a008b3d6818ee8 8,163,165-167,184-187,189-193,195-197,199-202,204-206,208-209,211-218,220-225,227-240,292
+client/dashboard/src/pages/skills/SharedSkillPage.tsx
+  s_526f33b6861346::t_63cf26e4384f16 94
+client/dashboard/src/pages/skills/SkillActivitySections.tsx
+  s_526f33b6861346::t_d65e27667a3f47 2,55,90,133-166,168-174,176,181,191-219
+client/dashboard/src/pages/skills/SkillDetail.test.tsx
+  s_526f33b6861346::t_ff816d1413b5a2 238,243,245,457,460-465
+client/dashboard/src/pages/skills/SkillDetail.tsx
+  s_526f33b6861346::t_74d4961b2bdbf6 417-418,431,531,555-556,594,601,627-629,642,781
+client/dashboard/src/pages/skills/SkillDistributionsSection.tsx
+  s_526f33b6861346::t_f35d790be2e224 84,91
+client/dashboard/src/pages/skills/SkillFeedbackSection.tsx
+  s_526f33b6861346::t_86f96f3b27580a 1,249,253,260,267,279,286,291,390,396,431
+client/dashboard/src/pages/skills/SkillInsightsSection.tsx
+  s_526f33b6861346::t_1659a5364e8977 3,141-165,194,304,477,496,670,673
+client/dashboard/src/pages/skills/SkillManifestDialog.tsx
+  s_526f33b6861346::t_1c9ef77c1ff330 383
+client/dashboard/src/pages/skills/SkillPickerDialog.tsx
+  s_526f33b6861346::t_7d3267abe533bf 146,239
+client/dashboard/src/pages/skills/SkillPluginBanner.tsx
+  s_526f33b6861346::t_e56c76f238f20b 272,291
+client/dashboard/src/pages/skills/SkillSharingControl.tsx
+  s_526f33b6861346::t_27cfd41bcf5be2 23,25,103-108,196,213
+client/dashboard/src/pages/skills/SkillSuggestionComment.tsx
+  s_526f33b6861346::t_0f32a9dae8c35e 58,144,157
+client/dashboard/src/pages/skills/SkillSuggestionReviewDialog.tsx
+  s_526f33b6861346::t_fe6c4ca7712074 47
+client/dashboard/src/pages/skills/SkillTextDiff.tsx
+  s_526f33b6861346::t_2f0e5a634e93ce 53
+client/dashboard/src/pages/skills/SkillsList.page.test.tsx
+  s_526f33b6861346::t_b961a4400d5a8d 204-210
+client/dashboard/src/pages/skills/SkillsList.tsx
+  s_526f33b6861346::t_e5c194ccda392d 11,34,212-218,362,659,667-668,685
+client/dashboard/src/pages/skills/SuggestedSkillEditSection.tsx
+  s_526f33b6861346::t_105210fff5494c 132,174,203
+client/dashboard/src/pages/skills/share-link.ts
+  s_526f33b6861346::t_97fdeb67eb9df0 1-2,9-19,21-25
+client/dashboard/src/pages/sources/SourceDeploymentsPanel.tsx
+  s_526f33b6861346::t_45333982afbebc 131,221-224,236
+client/dashboard/src/pages/sources/SourceDetails.tsx
+  s_526f33b6861346::t_17cac1e0b8ca25 7,111,268,291-293,295-296,300,302,304-305,327
+client/dashboard/src/pages/sources/SourceMCPServersTab.tsx
+  s_526f33b6861346::t_864748b414b3d5 1,17-19,63,84
+client/dashboard/src/pages/sources/SourceSettingsTab.tsx
+  s_526f33b6861346::t_0c612b8087031e 125
+client/dashboard/src/pages/sources/SourceToolsTab.tsx
+  s_526f33b6861346::t_69c2ced1e042d9 5,27-31,116,146,261,268-270,276-283,302-303,336-337,355,366
+client/dashboard/src/pages/sources/external-mcp/ExternalMCPDetails.tsx
+  s_526f33b6861346::t_6f21f991d6a62d 162,164-166,190,193,199,207,287,289,291-292,320,369,375
+client/dashboard/src/pages/sources/remote-mcp/CreateRemoteMcp.tsx
+  s_526f33b6861346::t_5463a3d0b94e14 88
+client/dashboard/src/pages/sources/remote-mcp/RemoteMCPDetails.tsx
+  s_526f33b6861346::t_d902c405874679 18,164,172,239,241,474,476,478-479,565,676,756
+client/dashboard/src/pages/sources/tunneled-mcp/CreateTunneledMcp.tsx
+  s_526f33b6861346::t_b2af3de4fd24ed 97,109,159
+client/dashboard/src/pages/sources/tunneled-mcp/TunneledMCPDetails.tsx
+  s_526f33b6861346::t_a8f96979d40731 14,187,196,275,277,426,447,452,479,632,634,636-637,743,903,975,1016,1099
+client/dashboard/src/pages/sources/tunneled-mcp/TunneledMcpSetupTabs.tsx
+  s_526f33b6861346::t_df9121cc2c7cad 79,95,460
+client/dashboard/src/pages/sources/unproxied-mcp/CreateUnproxiedMcp.tsx
+  s_526f33b6861346::t_19bb36ebb80824 108
+client/dashboard/src/pages/sources/unproxied-mcp/UnproxiedMCPDetails.tsx
+  s_526f33b6861346::t_919b29cdee45b5 182,184
+client/dashboard/src/pages/sources/useSourceToolActions.tsx
+  s_526f33b6861346::t_ce41d3774a1d5e 276
+client/dashboard/src/pages/team/Team.tsx
+  s_526f33b6861346::t_3af4c0aed22811 72,532-533,584,593,632,697-698,764-765,867,997,1014,1033
+client/dashboard/src/pages/toolBuilder/ToolBuilder.tsx
+  s_526f33b6861346::t_f70fc214f10d91 645,731
+client/dashboard/src/pages/toolsets/ServerTab.tsx
+  s_526f33b6861346::t_ccb08e23b8aed7 37
+client/dashboard/src/pages/toolsets/ToolsetsEmptyState.tsx
+  s_526f33b6861346::t_dd5aee06274659 61,80,107
+client/dashboard/src/pages/toolsets/resources/ResourcesTab.tsx
+  s_526f33b6861346::t_3f9420bec3ad99 159,213
+client/dashboard/src/pages/triggers/Triggers.tsx
+  s_526f33b6861346::t_5f85fe99c534b0 138,305-306,645,667
+client/dashboard/src/routes.tsx
+  s_526f33b6861346::t_0498973c98f959 37,87-90,211-216,445-448,488-491,1077,1083-1108
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_526f33b6861346::t_525260e5544604 24,74,76,78,820-821,857,957-958,1503,1618,1701,2117-2120,2252,3319,4590-4602,4844,4853,5155-5167,5404,5886-5897,6191-6202,6798-6819,7488,8133
+client/dashboard/src/sdk/src/funcs/adminRemoteSessionsGetGlobalIssuerMigratePreflight.ts
+  s_526f33b6861346::t_c4174fbac34772 7,16-18,34-37,42,45,47,49-50,54,76-77,82,98-102,109,111-113,116-117,133,141,155,186,197
+client/dashboard/src/sdk/src/funcs/adminRemoteSessionsListGlobalIssuerConvergenceCandidates.ts
+  s_526f33b6861346::t_98359795cfc74b 7,30-35,38-43,46,49,51,53-56,59-72,85-88,92-105,113-116,120,123,126,129-134,148,156,170,174,180,192,200-201,212-216,223-227,230-276
+client/dashboard/src/sdk/src/funcs/adminRemoteSessionsMigrateToGlobalIssuer.ts
+  s_526f33b6861346::t_5a2396107868b6 7,16-18,34-37,42,45,47,49-50,54,76-77,82,98-99,106-110,112,128,136,180,191
+client/dashboard/src/sdk/src/funcs/authLogin.ts
+  s_526f33b6861346::t_de58430527d113 103-104
+client/dashboard/src/sdk/src/funcs/organizationRemoteSessionIssuersMigrate.ts
+  s_526f33b6861346::t_0bcbfb9eda2e6a 45
+client/dashboard/src/sdk/src/funcs/pluginsDownloadPluginPackage.ts
+  s_526f33b6861346::t_ae88d7e7575546 203-206
+client/dashboard/src/sdk/src/funcs/userSessionClientsRevoke.ts
+  s_526f33b6861346::t_1c2d4104b9aa60 41
+client/dashboard/src/sdk/src/models/components/createusersessionissuerform.ts
+  s_526f33b6861346::t_645580c377b125 30
+client/dashboard/src/sdk/src/models/components/getproductfeaturesresponsebody.ts
+  s_526f33b6861346::t_c52fb9ada4e7ce 44-51,92-93,113-114
+client/dashboard/src/sdk/src/models/components/hookingestdata.ts
+  s_526f33b6861346::t_bbb82555f5de27 69-72,108,127,142
+client/dashboard/src/sdk/src/models/components/hookingestevent.ts
+  s_526f33b6861346::t_3d1eea94627849 16
+client/dashboard/src/sdk/src/models/components/inforesponsebody.ts
+  s_526f33b6861346::t_d5276580872e8d 15-19,29,41-70,82
+client/dashboard/src/sdk/src/models/components/issuerconvergencecandidate.ts
+  s_526f33b6861346::t_28882a20f7f6ea 7-13,15-18,20,22,24,26,28,30,32,34,36,38,40,42,46-48,51-56,60-63,68-74
+client/dashboard/src/sdk/src/models/components/issuermigratepreflight.ts
+  s_526f33b6861346::t_39c0d537f82df9 12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,46-47,51-57,61-66,71,73,76-77
+client/dashboard/src/sdk/src/models/components/listissuerconvergencecandidatesresult.ts
+  s_526f33b6861346::t_9c961737f79d82 10-13,16,18-19,21,23,27-28,32-33,37,42,44,48-49
+client/dashboard/src/sdk/src/models/components/listrolegrant.ts
+  s_526f33b6861346::t_d51a89feb57c84 43,77
+client/dashboard/src/sdk/src/models/components/migrateremotesessionissuerrequestbody.ts
+  s_526f33b6861346::t_7a2394b8ef9f9d 8,10,12,14,16,20-22,26-41,43-44,47-48
+client/dashboard/src/sdk/src/models/components/migrateremotesessionissuerresult.ts
+  s_526f33b6861346::t_5eadcb3a187518 11-13,15-18,20,22,24,26,28,30,34-35,39-41,45-46,51,53,56-57
+client/dashboard/src/sdk/src/models/components/plugin.ts
+  s_526f33b6861346::t_28bf6d15e46d91 17-20,68,90
+client/dashboard/src/sdk/src/models/components/requestaccessform.ts
+  s_526f33b6861346::t_35679c1fd075ea 27
+client/dashboard/src/sdk/src/models/components/rolegrant.ts
+  s_526f33b6861346::t_acf5e73a294fb0 47
+client/dashboard/src/sdk/src/models/components/scopedefinition.ts
+  s_526f33b6861346::t_4b2a9c0d4aaecd 81
+client/dashboard/src/sdk/src/models/components/setproductfeaturerequestbody.ts
+  s_526f33b6861346::t_594293d558f7b9 25,27
+client/dashboard/src/sdk/src/models/components/updateusersessionissuerform.ts
+  s_526f33b6861346::t_23abebf860d32b 58
+client/dashboard/src/sdk/src/models/components/usersession.ts
+  s_526f33b6861346::t_0c6109c47f19f9 16-20,52-55,65-68,79,100,107,112,120,124
+client/dashboard/src/sdk/src/models/components/usersessionclient.ts
+  s_526f33b6861346::t_712536f53213cc 12,16-20,25-29,58,64,83,86
+client/dashboard/src/sdk/src/models/components/usersessionissuer.ts
+  s_526f33b6861346::t_a3ef3ac6406b23 50
+client/dashboard/src/sdk/src/models/operations/authlogin.ts
+  s_526f33b6861346::t_d9b3b4121e1160 16-23,33-34,41-52
+client/dashboard/src/sdk/src/models/operations/downloadpluginpackage.ts
+  s_526f33b6861346::t_d30a23b0b6e7a3 24
+client/dashboard/src/sdk/src/models/operations/getglobalremotesessionissuermigratepreflight.ts
+  s_526f33b6861346::t_9548da4bcd34e3 8-9,12,14,16,18,20,22,24,28-29,33,35-36,39,48-50,53-54,60-63,67,69-70,73-75,79-81,86-88,91-92
+client/dashboard/src/sdk/src/models/operations/listglobalremotesessionissuerconvergencecandidates.ts
+  s_526f33b6861346::t_d32476b4dcc731 7-8,10-13,15-16,19,21,23,25,27,29,31-35,38-39,43-46,49,51-52,55,59,64-66,69-70,75-81,84,86-87,90-93,97-98,103-105,108-109,114,116-117,120,124,129-140
+client/dashboard/src/sdk/src/models/operations/migratetoglobalremotesessionissuer.ts
+  s_526f33b6861346::t_7d8240b5191bc6 8-11,13-14,17,22,26-27,31,33-34,37,46-48,51-52,58,60-61,65,67-68,72-73,78-79,84-86,89-90
+client/dashboard/src/sdk/src/react-query/globalRemoteSessionIssuerConvergenceCandidates.core.ts
+  s_526f33b6861346::t_54cc0b42680b19 1-220
+client/dashboard/src/sdk/src/react-query/globalRemoteSessionIssuerConvergenceCandidates.ts
+  s_526f33b6861346::t_9281b22ca22db7 6-17,31-33,35-62,65,77,80,82-89,91-93,96-102,107-180,183-217,221-235,237-283
+client/dashboard/src/sdk/src/react-query/globalRemoteSessionIssuerMigratePreflight.core.ts
+  s_526f33b6861346::t_212fede614cc68 6-8,11,14,16-18,20-21,23-36,40,42-44,46-49,52-64,66,68,70-71,80-94
+client/dashboard/src/sdk/src/react-query/globalRemoteSessionIssuerMigratePreflight.ts
+  s_526f33b6861346::t_f7396870ccdca2 6-11,25-27,29-44,47,59,62,64-69,71-73,76-82,87-107,111-122,124-169
+client/dashboard/src/sdk/src/react-query/migrateOrganizationRemoteSessionIssuer.ts
+  s_526f33b6861346::t_8aa07414b25db2 58
+client/dashboard/src/sdk/src/react-query/migrateToGlobalRemoteSessionIssuer.ts
+  s_526f33b6861346::t_084a9b2bc89255 11,14,27-29,34-36,40-41,43,55,58,60,62-64,67-69,73,78-79,82,88-89,92-93,97,110
+client/dashboard/src/sdk/src/react-query/revokeUserSessionClient.ts
+  s_526f33b6861346::t_3b7e6abe30e222 56
+client/dashboard/src/sdk/src/sdk/adminremotesessions.ts
+  s_526f33b6861346::t_7b1cf12b26c722 12,14,16,22-23,56-59,65-69,75-78,228-246,268-295,317-335
+client/dashboard/src/sdk/src/sdk/organizationremotesessionissuers.ts
+  s_526f33b6861346::t_7ea15b0687f9fe 218
+client/dashboard/src/sdk/src/sdk/usersessionclients.ts
+  s_526f33b6861346::t_55e4d295d7197c 69
+client/dashboard/src/theme-init.ts
+  s_526f33b6861346::t_b9df5083757593 1-8,12-14
+client/dashboard/vite.config.ts
+  s_526f33b6861346::t_65f0d1854fb442 254
+docs/plugins/package-format.md
+  s_526f33b6861346::t_ee7268af523713 49-59,66-68,343
+docs/rbac.md
+  s_526f33b6861346::t_744d8ded726043 87,93-97,121-122,126,549-550
+go.mod
+  s_526f33b6861346::t_03e0f089fb0f6c 73
+go.sum
+  s_526f33b6861346::t_00b7f23e764b7e 693-694
+hooks/relay/envelope.go
+  s_526f33b6861346::t_d9276e31978ae9 39-40,76-86,90-91,422-423
+hooks/relay/mcp_inventory.go
+  s_526f33b6861346::t_a0773c720911fb 7,11-13,23
+hooks/relay/relay_test.go
+  s_526f33b6861346::t_752a4b722f14b2 726,729-731,740-747,1492-1493,1513-1535,1537-1543,1547-1548,1550,1553-1575,1577-1612
+hooks/relay/runner.go
+  s_526f33b6861346::t_bc1a529eef2d5b 65-68,87,425-432
+hooks/sdk/.speakeasy/gen.lock
+  s_526f33b6861346::t_431919d0626565 9-11,42-43,118-119,242-243,246-247
+hooks/sdk/docs/models/components/hookingestdata.md
+  s_526f33b6861346::t_c2a12b99ece77a 8-20
+hooks/sdk/docs/models/components/type.md
+  s_526f33b6861346::t_4e39239ef003b8 23
+hooks/sdk/models/components/hookingestdata.go
+  s_526f33b6861346::t_928363f70c2f65 17-18,67-73
+hooks/sdk/models/components/hookingestevent.go
+  s_526f33b6861346::t_2ab7e6923cb171 19,46-47
+infra/cmd/infra/gen_topics.go
+  s_526f33b6861346::t_2028af43a75528 1-57
+infra/cmd/infra/root.go
+  s_526f33b6861346::t_86f742102d2901 44
+infra/internal/gcp/topic_bindings.go
+  s_526f33b6861346::t_2e53609e532273 1,5-9,12,14,17-35,37-43,45-48,51-68,71-86,88,91-109,111-114,116,119-136,138-139,142,145-155,157-168,171-187
+infra/internal/gcp/topic_bindings_render.go
+  s_526f33b6861346::t_186bf5e92a8bb9 1-217
+infra/internal/gcp/topic_bindings_test.go
+  s_526f33b6861346::t_028063febebf7d 1-263
+infra/pkg/gcp/publisher.go
+  s_526f33b6861346::t_eaf23671a40375 49-75,156-157,159-160,162-163
+infra/pkg/gcp/publisher_encoded.go
+  s_526f33b6861346::t_9945ea87f99f72 12-29,33,37-41,48-54,57-59,61-68,71-73,76-81,84,87-88,95,99,104-108,111-115
+infra/pkg/gcp/publisher_encoded_test.go
+  s_526f33b6861346::t_b9cbab5101d824 1-50
+infra/pkg/topics/encoded.go
+  s_526f33b6861346::t_dc475e592aaf78 1-222
+infra/pkg/topics/encoded_test.go
+  s_526f33b6861346::t_333fe2b6a2e36a 1,7,13,15,19,22-23,25-43,63-64,68-94,96-98,102,105-106,108,110-111,114-120,123-150,152-153,155-159,162,167,170-172,174,176,178,181-183,186-188,190-191,193-196,199,202-204,206-208,211,214,216-218,221-224,227-233,235-242
+infra/pkg/topics/topics_gen.go
+  s_526f33b6861346::t_959436ef983d41 1-128
+overlays/goa.yaml
+  s_526f33b6861346::t_bbf5620274c6d5 14-34
+pnpm-lock.yaml
+  s_526f33b6861346::t_4b3901ff0acbab 126,187-189,239-240,281-282,305-306,308-309,311-312,341-343,3861-3871,3873-3875,3877-3879,3881-3883,3891-3894,4476-4478,5236-5239,5384-5385,7244-7245,7336-7338,7843-7844,7858-7859,7861-7862,7864-7865,7870-7871,7873-7874,7876-7877,7879-7880,7882-7883,7885-7886,7888-7889,7891-7892,7894-7895,7897-7898,7900-7901,7903-7904,7906-7907,7909-7910,7912-7913,7915-7916,7921-7922,7924-7925,7927-7928,7930-7931,7933-7934,7936-7937,7939-7940,7942-7943,7945-7946,9589,9592,9599,9605,9608,9611,11419,11421-11429,11433,11435,11438,11440,11442,11444-11450,11462-11466,12148-12151,12831,12860-12861,13016,13018,14148,15309,15456,15458-15463,15465,15949,15957,15960-15961,15963,15965-15967,15969,15973-15975,15979,15982,15984,15987-15988,15990,15993,15995-15996,15998,16003-16007,16009-16010,16012,16018-16019,16021,16023,16026-16027,16029,16031,16033,16036-16038,16040,16044-16045,16047,16049,16051-16053,16055,16059,16061,16064,16066,16068,16070-16071,16073,16079-16080,16082,16087-16089,16091,16094-16095,16101,16105,16107,16110,16112-16113,16115,16119-16120,16122,16124,16126-16128,16130,16134-16139,16141,16144-16145,16147,16150-16151,16153,16155,16157-16159,16161-16174,16176-16183
+server/CHANGELOG.md
+  s_526f33b6861346::t_1e200456338f63 3-235
+server/cmd/gram/deps.go
+  s_526f33b6861346::t_ebb75942f4276e 51,80,827,1059-1068,1070
+server/cmd/gram/platform_mcp.go
+  s_526f33b6861346::t_29d748be645f97 1-174
+server/cmd/gram/platform_mcp_local_fixture.go
+  s_526f33b6861346::t_643f5bee93f960 1-40
+server/cmd/gram/platform_mcp_local_fixture_test.go
+  s_526f33b6861346::t_21250fd0b95a37 1,3-4,6-9,13-18,21-38,41-45,48-52,55-59,62-66,69-80,84-85,87-98,100-104
+server/cmd/gram/start.go
+  s_526f33b6861346::t_b41ed8ba23b77c 31,346-351,487-491,921,974,1112-1114,1116,1206,1231-1232,1248,1251,1255,1265,1287-1289,1303-1324,1435
+server/cmd/gram/worker.go
+  s_526f33b6861346::t_971df54d1b8a59 47,434,436,439,786
+server/cmd/risk-pi-report/main.go
+  s_526f33b6861346::t_ca6ea7a97cada2 734-736
+server/cmd/riskjudgebench/main.go
+  s_526f33b6861346::t_6225a7a11a80b4 288-290
+server/database/schema.sql
+  s_526f33b6861346::t_c84baf83711715 78-82,84-89,101-102,1403-1406,1742-1745,1748-1755,1775-1780,3838-3841,4052-4055,4187-4190,4697-4709,5956-6176
+server/database/sqlc.yaml
+  s_526f33b6861346::t_015bdcc30b0fc4 741-760
+server/design/access/design.go
+  s_526f33b6861346::t_02da187fc6d34c 709,723,729,767,1135
+server/design/auth/design.go
+  s_526f33b6861346::t_22b8e8dcff8876 10-19,68-69,80-81,216-218
+server/design/hooks/design.go
+  s_526f33b6861346::t_5eed25e76ae89f 163,295
+server/design/platformadmin/remotesessions/design.go
+  s_526f33b6861346::t_0d1fbf690f0ca6 306-464
+server/design/plugins/design.go
+  s_526f33b6861346::t_50a426b35e3134 8,242,251,275-277,489,502
+server/design/productfeatures/design.go
+  s_526f33b6861346::t_c86c50501b5a49 36,38,40,60
+server/design/remotesessionclients/design.go
+  s_526f33b6861346::t_46ce62668160cd 39-49
+server/design/remotesessionissuers/design.go
+  s_526f33b6861346::t_dbfe1b8cbda51f 446
+server/design/usersessionclients/design.go
+  s_526f33b6861346::t_64f6f61c41d60c 11,83,113,121-123,137,139
+server/design/usersessionissuers/design.go
+  s_526f33b6861346::t_8e70b9eb7f29ed 164,179,200
+server/design/usersessions/design.go
+  s_526f33b6861346::t_5057a90731289f 171-175,178
+server/gen/admin_remote_sessions/client.go
+  s_526f33b6861346::t_514f09fdcac882 19-33,38,40-54,325-394
+server/gen/admin_remote_sessions/endpoints.go
+  s_526f33b6861346::t_cbf3e78b877544 19-33,42-56,75-77,356-426
+server/gen/admin_remote_sessions/service.go
+  s_526f33b6861346::t_3476f9cb3e6521 61-83,106,214-224,248-300,313-324,343-350,359-382
+server/gen/auth/service.go
+  s_526f33b6861346::t_ca89e3925b002e 108,120-125,193-197
+server/gen/features/service.go
+  s_526f33b6861346::t_5e93b330c33b33 83-84,88-90
+server/gen/hooks/service.go
+  s_526f33b6861346::t_039e41ba022bfa 283-293
+server/gen/http/access/client/cli.go
+  s_526f33b6861346::t_194fbdfdd57706 738-739
+server/gen/http/access/client/types.go
+  s_526f33b6861346::t_5bf3689a4563f9 14509-14510,14551-14552,14597-14598,14653-14654,14658-14659
+server/gen/http/access/server/types.go
+  s_526f33b6861346::t_5ae78e61ffbdd5 8896-8897,8938-8939
+server/gen/http/admin_remote_sessions/client/cli.go
+  s_526f33b6861346::t_b4d9c4a6a858d5 509-619
+server/gen/http/admin_remote_sessions/client/client.go
+  s_526f33b6861346::t_55f42bb280dad3 68-79,101-120,411-483
+server/gen/http/admin_remote_sessions/client/encode_decode.go
+  s_526f33b6861346::t_20ba009cf6adf4 2824-3538,3637-3658
+server/gen/http/admin_remote_sessions/client/paths.go
+  s_526f33b6861346::t_0b5a87c885b0bd 69-83
+server/gen/http/admin_remote_sessions/client/types.go
+  s_526f33b6861346::t_5f311e6a474303 166-176,476-526,2807-2823,2826-2832,2834-2849,2851-2861,2864-2870,2872-2880,2883-2899,2902-3595,3600-4527,4530-4539,4541-4542,4545-4554,4556-4557,4560-4575,4577-4580,4583-4606,4609-4618,4620-4738,4740-4741,4744-4753,4755-4767,4773-4775,4788-4790,4803-4805,4818-4820,4833-4835,4848-4850,4863-4865,4878-4881,4894-4896,4909-4911,4924-4939,4941-4948,4955-4957,4970-4972,4985-4987,5000-5002,5015-5017,5030-5032,5045-5047,5060-5062,5075-5077,5090-5092,5105-5118,5124-5126,5139-5141,5154-5156,5169-5171,5184-5186,5199-5201,5214-5216,5229-5231,5244-5246,5259-5261,5274-5289,5291-5293,5295-5298,5305-5307,5320-5322,5335-5337,5350-5352,5365-5367,5380-5382,5395-5397,5410-5412,5425-5427,5440-5442,5455-5480,5486-5488,5501-5503,5516-5518,5531-5533,5546-5548,5561-5563,5576-5578,5591-5593,5606-5608,5621-5630,5636-5638,5651-5653,5666-5668,5681-5683,5696-5698,5711-5713,5726-5728,5741-5743,5756-5758,5771-5773,5786-5800,5806-5809,5822-5825,5838-5841,5854-5857,5870-5873,5886-5889,5902-5904,5917-5918,5920,5933-5936,5949-5952,5965-5972,5974-5976,5978-5988,5994-5996,6009-6011,6024-6026,6039-6041,6054-6056,6069-6072,6085-6087,6100-6103,6116-6118,6131-6133,6146-6147,6149-6152,6154-6168,6174-6176,6189-6191,6204-6206,6219-6221,6234-6236,6249-6251,6264-6266,6279-6281,6294-6296,6305-6535,6538-6542,6544-6551,6554-6558,6560-6561,6563-6601,6604-6605,6607-6608,6610,6613-6617,6619-6620,6622-6623,6625-6626,6628-6629,6631-6632,6634-6644,6646-6647,6649-6650,6652-6653,6655-6660,6663-6664,6666-6667,6669,6672-6676,6678-6683,6685,6688-6692,6694-6695,6697-6698,6700-6701,6703-6704,6706-6707,6709-6712,6715-6719,6721-6732,6735-6754,6756,6759-6763,6765-6780,6783-6787,6789-6804,6807-6811,6813-6828,6831-6835,6837-6852,6855-6859,6861-6876,6879-6883,6885-6900,6903-6913,6915-6925,6927-6948,6951-6955,6957-6972,6975-6980,6984-6985,6987-6988,6990-6991,6993-6994,6996-7003,7005-7006,7008-7009,7011-7012,7014-7015,7017-7018,7020-7027,7029-7030,7032-7042,7047-7051,7053-7066,7071-7075,7077-7078,7080-7081,7083-7090,7095-7100,7104-7105,7107-7108,7110-7111,7113-7114,7116-7123,7125-7126,7128-7129,7131-7132,7134-7135,7137-7138,7140-7147,7149-7150,7152-7162,7167-7171,7173-7174,7176-7177,7179-7180,7182-7186,7191-7195,7197-7198,7200-7210,7215-7220,7224-7225,7227-7228,7230-7231,7233-7234,7236-7243,7245-7246,7248-7249,7251-7252,7254-7255,7257-7258,7260-7267,7269-7270,7272-7273,7275-7276,7278-7279,7281-7282,7287-7291,7293-7306,7311-7316,7320-7321,7323-7324,7326-7327,7329-7330,7332-7339,7341-7342,7344-7345,7347-7348,7350-7351,7353-7354,7356-7363,7365-7366,7368-7369,7371-7372,7374-7375,7377-7378,7383-7388,7392-7393,7395-7396,7398-7399,7401-7402,7404-7411,7413-7414,7416-7417,7419-7420,7422-7423,7425-7426,7428-7435,7437-7438,7440-7441,7443-7444,7446-7447,7449-7450,7455-7457,7479-7481,7503-7505,7527-7529,7551-7553,7575-7577,7599-7601,7623-7625,7647-7649,7671-7673,7695-7697,7719-7721,7743-7745,7767-7769,7791-7793,7815-7817,7839-7841,7863-7865,7887-7889,7911-7913,7935-7937,7959-7961,7983-7985,8007-8009,8031-8033,8055-8058,8080-8082,8104-8107,8129-8131,8153-8155,8177-8179,8201-8203,8225-8227,8249-8251,8273-8275,8297-8300,8322-8324,8346-8349,8371-8373,8395-8398,8420-8422,8444-8446,8468-8470,8492-8494,8516-8518,8540-8542,8564-8566,8588-8590,8612-8614,8636-8638,8660-8662,8684-8686,8708-8710,8732-8734,8756-8758,8780-8782,8804-8806,8828-8830,8852-8854,8876-8878,8900-8902,8924-8926,8948-8950,8972-8974,8996-8998,9020-9022,9044-9046,9068-9070,9092-9094,9116-9118,9140-9142,9164-9166,9188-9190,9212-9214,9236-9238,9260-9262,9284-9286,9308-9310,9332-9334,9356-9358,9380-9382,9404-9406,9428-9430,9452-9454,9476-9478,9500-9502,9524-9526,9548-9550,9572-9574,9596-9598,9620-9623,9645-9648,9670-9673,9695-9698,9720-9723,9745-9748,9770-9773,9795-9798,9820-9823,9845-9848,9870-9873,9895-9898,9920-9923,9945-9948,9970-9972,9994-9997,10019-10021,10043-10046,10068-10071,10093-10096,10118-10120,10142-10144,10166-10168,10190-10192,10214-10216,10238-10240,10262-10264,10286-10289,10311-10313,10335-10337,10485-10513
+server/gen/http/admin_remote_sessions/server/encode_decode.go
+  s_526f33b6861346::t_c535a2ebeeb1f2 2544-3191,3296-3327
+server/gen/http/admin_remote_sessions/server/paths.go
+  s_526f33b6861346::t_be6619d338192e 69-83
+server/gen/http/admin_remote_sessions/server/server.go
+  s_526f33b6861346::t_4afd9c9e1f05d3 21-36,78-80,82-96,117-119,139-141,796-958
+server/gen/http/admin_remote_sessions/server/types.go
+  s_526f33b6861346::t_b6b2446b5994e9 168-178,478-528,2809-2815,2817-2825,2828-2834,2836-2844,2847-2863,2866-2882,2885-2901,2904-3599,3606-3654,3666-3966,3968-3981,3983-3996,3998-4191,4196-4197,4199-4206,4211-4212,4214-4221,4223-4236,4241-4242,4244-4251,4253-4266,4271-4272,4274-4281,4283-4296,4301-4311,4313-4326,4328-4341,4346-4347,4349-4356,4358-4371,4376-4377,4379-4380,4391-4392,4394-4395,4406-4407,4409-4410,4421-4422,4424-4425,4436-4437,4439-4440,4451-4452,4454-4455,4466-4467,4469-4470,4481-4482,4484-4485,4496-4497,4499-4500,4511-4512,4514-4515,4526-4527,4529-4530,4541-4545,4556-4557,4559-4560,4571-4572,4574-4575,4586-4587,4589-4590,4601-4602,4604-4605,4616-4617,4619-4620,4631-4632,4634-4635,4646-4647,4649-4650,4661-4662,4664-4665,4676-4680,4691-4695,4706-4710,4721-4725,4736-4740,4751-4755,4766-4770,4781-4785,4796-4800,4811-4815,4826-4830,4841-4842,4844-4845,4856-4860,4871-4875,4886-4890,4901-4905,4916-4920,4931-4935,4946-4950,4961-4965,4976-4977,4979-4980,4991-4992,4994-4995,5006-5007,5009-5010,5021-5022,5024-5025,5036-5037,5039-5040,5051-5052,5054-5055,5066-5067,5069-5070,5081-5082,5084-5085,5096-5097,5099-5100,5111-5112,5114-5115,5126-5130,5141-5145,5156-5157,5159-5160,5171-5175,5186-5190,5201-5205,5216-5220,5231-5235,5246-5247,5249-5250,5261-5265,5276-5280,5291-5295,5306-5310,5321-5325,5336-5340,5351-5355,5366-5370,5381-5385,5396-5400,5411-5415,5426-5427,5429-5430,5441-5442,5444-5445,5456-5457,5459-5460,5471-5472,5474-5475,5486-5487,5489-5490,5501-5502,5504-5505,5516-5517,5519-5520,5531-5532,5534-5535,5546-5547,5549-5550,5561-5562,5564-5565,5576-5577,5579-5580,5591-5595,5606-5607,5609-5610,5621-5622,5624-5625,5636-5637,5639-5640,5651-5652,5654-5655,5666-5667,5669-5670,5681-5682,5684-5685,5696-5697,5699-5700,5711-5712,5714-5715,5726-5728,5730-5731,5742-5747,5758-5763,5774-5778,5789-5793,5804-5806,5808-5809,5820-5824,5835-5837,5839-5840,5851-5856,5867-5869,5871-5872,5883-5887,5898-5902,5913-5917,5928-5932,5943-5947,5958-5962,5973-5977,5988-5992,6003-6007,6018-6022,6033-6034,6036-6037,6048-6049,6051-6052,6063-6064,6066-6067,6078-6082,6093-6097,6108-6109,6111-6112,6123-6127,6138-6139,6141-6142,6153-6154,6156-6157,6168-6169,6171-6172,6408-6442,6558-6575
+server/gen/http/auth/client/cli.go
+  s_526f33b6861346::t_d3fde91f5326f2 39,46-57,60-61
+server/gen/http/auth/client/encode_decode.go
+  s_526f33b6861346::t_98f96e2936dcc9 304-309,1730-1743
+server/gen/http/auth/client/types.go
+  s_526f33b6861346::t_c7bd104dafbc5e 39,1304-1309,2285-2287,2470-2474,4165-4181
+server/gen/http/auth/server/encode_decode.go
+  s_526f33b6861346::t_ae8c555815c56c 245-246,248-249,253-261,1448-1461
+server/gen/http/auth/server/types.go
+  s_526f33b6861346::t_4aebb2d7b2eb28 37,1302-1307,1348-1350,2356,2359-2360
+server/gen/http/cli/gram/cli.go
+  s_526f33b6861346::t_b286d666ac2e82 124,139,142,154,161,576-577,1991-2005,3643-3645,5240-5248,6204,7139-7147,9562-9563,9572-9573,9577,12105,15305,15502,15775-15777,16028-16093,20474,20479,20547
+server/gen/http/features/client/cli.go
+  s_526f33b6861346::t_7d8b220514d6a3 44-45
+server/gen/http/features/client/types.go
+  s_526f33b6861346::t_bb8c3d47754a34 54-55,59-61,467,469,815-817,821-823
+server/gen/http/features/server/types.go
+  s_526f33b6861346::t_de20919dbe8256 56-57,61-63,459,461,791-792
+server/gen/http/hooks/client/cli.go
+  s_526f33b6861346::t_c8148442a2c7ad 259
+server/gen/http/hooks/client/encode_decode.go
+  s_526f33b6861346::t_7966bed6df5d6b 1944-1946,2210-2212
+server/gen/http/hooks/client/types.go
+  s_526f33b6861346::t_1f6f9ae0628ada 1763-1774,5418-5419
+server/gen/http/hooks/server/encode_decode.go
+  s_526f33b6861346::t_7e871a11144d7b 1881-1883
+server/gen/http/hooks/server/types.go
+  s_526f33b6861346::t_6faf2784e7bafd 1763-1774,3627-3628
+server/gen/http/litellm/client/types.go
+  s_526f33b6861346::t_72f8186a045453 2341-2345,2347-2352,2354,2357-2361,2363-2364,2366-2378
+server/gen/http/openapi3.yaml
+  s_526f33b6861346::t_9bd13e0f197899 4454-4552,4666,4668-4669,4671-4679,4707,4765,4768,4778-4782,4784-4798,4811,4869,4872-4880,4882-4883,4885-4886,4899,4906,4964,4967,4969-4970,4972-4973,4986,4993,5051,5054,5056-5060,5069-5074,5080,5138,5140-5141,5143-5147,5150,5152,5154,5156-5161,5167,5224-5225,5227-5228,5230-5231,5233-5234,5248,5306,5309,5311-5424,5438,5496,5499,5501-5502,5504-5505,5518,5521-5526,5583,5585-5586,5588-5592,5608-5613,5615-5616,5674,5677,5679-5680,5682-5683,5712,5771,5774,5776-5780,5782-5789,5809,5868,5871,5873-5874,5876-5877,5897-5992,9066-9079,24579,27834,27895-27900,31163,31165-31166,31193,31261,31264,31266-31267,31269-31270,31297,31365,31368,31370-31474,31476-31477,31504,31572,31575,31577-31581,31615-31618,46940-46941,46943-46944,46947,46949-46950,46952-46953,46974,47031,47033,47036,47038-47042,47080,47141,47144,47146-47147,47149-47150,47153,47249,47252,47254-47255,47257-47258,47261,47295,47363,47366,47368-47369,47371-47372,47375,47409,47477,47480,47482-47483,47485-47486,47489,47523,47591,47594,47596,50406,56836,59403-59408,59440,59442,60063-60065,60098,60554-60555,60788-60863,61455-61467,61825,61862,63304,63307-63324,63326,63328,63330,63333-63335,63347,64397-64399,64448,66014,67284,67447,68430,68432,72020-72031,73851,74258-74260,74263,74292-74294,74304-74307,74327-74330,74333,74337-74339,74342,74366,74376,74456,74980
+server/gen/http/plugins/client/cli.go
+  s_526f33b6861346::t_59b1f0b7ebe558 398-399
+server/gen/http/plugins/client/encode_decode.go
+  s_526f33b6861346::t_e945c0a7cf6afe 2179,2225-2238,3824-3834
+server/gen/http/plugins/client/types.go
+  s_526f33b6861346::t_967162a47606cb 115-117,145-147,175-177,1960-1978,3313-3315,3649-3659,3839-3849,4029-4039,5023-5037,6191-6193,6238-6240,6285-6287,8625-8649,10350-10352
+server/gen/http/plugins/server/encode_decode.go
+  s_526f33b6861346::t_578054d60d4e20 2033-2034,2077-2090,3517-3527
+server/gen/http/plugins/server/types.go
+  s_526f33b6861346::t_5ab05dc7c9bd96 115-117,145-147,175-177,1960-1978,3313-3315,3388-3398,3427-3437,3466-3476,4889-4903
+server/gen/http/remote_session_clients/client/client.go
+  s_526f33b6861346::t_7fcb63d642fa64 73-85
+server/gen/http/remote_session_clients/client/types.go
+  s_526f33b6861346::t_1cf94cd846fbc3 2338-2341,2370-2372,2385-2387,2400-2402,2415-2417,2430-2432,2445-2447,2460-2462,2475-2477,2490-2492,2505-2507,2520-2521,2523
+server/gen/http/remote_session_clients/server/server.go
+  s_526f33b6861346::t_41526db0589400 21-29,68-75
+server/gen/http/toolsets/client/types.go
+  s_526f33b6861346::t_755e8ae38383d7 2722-2723,2725,2741-2742,2744,2760-2761,2763,2779-2780,2782,2798-2801,2817-2820,2836-2839,2855-2858,2874-2875,2877,2893-2894,2896,2912-2913,2915,2931-2932,2934,2950-2951,2953,2969-2970,2972,2988-2989,2991,3007-3008,3010,3026-3027,3029,3045-3046,3048,3064-3065,3067,3083-3084,3086,3102-3105,3108-3110,3112-3114,3116-3130,3133-3138,3141-3148,3152-3155,3157-3166,3169-3173,3176-3187,3190-3217,3219-3223,3225-3249,3252-3259,3262-3267,3269-3276,3279-3281,3283-3293,3295-3314,3317-3331,3334-3351,3353-3357,3359-3383,3386-3402,3437-3451,3454-3456,3459-3462,3469,3471,3473-3478,3657-3664,3667-3679,3682-3692,3695-3703,3706-3733,3736-3743,3746-3752,3755-3761,3764-3769,3771-3773,3775-3779,3781-3788,3790,3793-3802,3804-3806,3808-3830,3833-3838,3840,3843-3847,3849,3852-3856,3858,3861-3863,3943-4091,4093-4106,4108-4121,4123-4132,4134,4137,4143,4145,4158,4160,4173,4175,4188,4190,4203,4205,4218,4220,4233,4235,4248,4250,4263,4265,4278,4280,4293-4298,4300,4303,4309-4311,4324-4326,4338-4341,4354-4356,4369-4371,4384-4386,4399-4401,4414-4416,4429-4431,4444-4446,4459-4461,4575,4577,4590-4592,4605-4607,4620-4622,4635-4637,4644,4646-4659,4661-4674,4676-4704,4706-4719,4725-4727,4740-4742,4755-4757,4770-4772,4785-4787,4800-4802,4815-4817,4830-4832,4845-4847,4860-4862,4875-4877,4991-4993,5006-5008,5021-5023,5036-5038,5051-5053,5066-5068,5081-5083,5096-5098,5111-5113,5126-5128,5141-5147,5149-5150,5152,5155,5157-5163,5169-5171,5184-5186,5199-5201,5214-5216,5229-5231,5244-5246,5259-5261,5274-5276,5289-5291,5304-5306,5319-5321,5334-5336,5349-5351,5364-5366,5379-5381,5394-5396,5409-5411,5424-5426,5439-5441,5454-5456,5469-5488,5491-5492,5494-5496,5498-5500,5502-5507,5509,5512-5517,5519,5522-5527,5529,5532-5537,5539,5542-5547,5549,5551-5553,5555-5561,5563-5565,5567-5573,5575-5576,5578-5579,5581-5594,5596-5609,5611-5624,5626-5639,5641-5654,5656-5669,5671-5684,5686-5699,5701-5714,5716-5729,5731-5754,5756-5758,5760-5766,5768-5773,5775,5778-5783,5785,5788-5793,5795,5798-5805,5808-5813,5815,5817-5819,5821-5825,5827,5829-5831,5833-5837,5839,5841-5842,5844-5845,5847-5848,5851-5860,5862-5875,5877-5890,5892-5905,5907-5920,5922-5935,5937-5950,5952-5965,5967-5980,5982-5995,5997-6020,6023-6024,6026-6028,6030-6032,6034-6039,6041,6044-6049,6051,6054-6059,6061,6064-6069,6071,6074-6079,6081,6083-6085,6087-6091,6093,6095-6097,6099-6103,6105,6107-6108,6110-6111,6113-6126,6128-6141,6143-6156,6158-6171,6173-6186,6188-6201,6203-6216,6218-6231,6233-6246,6248-6261,6263-6286,6288-6290,6292-6294,6296-6305,6307,6310-6315,6317,6320-6325,6327,6330-6337,6340-6345,6347,6349-6351,6353-6357,6359,6361-6363,6365-6369,6371,6373-6374,6376-6377,6379-6380,6383-6392,6394-6407,6409-6422,6424-6437,6439-6452,6454-6467,6469-6482,6484-6497,6499-6512,6514-6527,6529-6552,6555-6556,6558-6560,6562-6564,6566-6571,6573,6576-6581,6583,6586-6591,6593,6596-6601,6603,6606-6611,6613,6615-6623,6625,6627-6629,6631-6635,6637,6640,6643,6645-6658,6660-6673,6675-6763,6765-6778,6780-6793,6795-6796,6799-6801,6955-6989,7143-7145,7299-7333,7487-7489,7643-7645,7649-7650,7652-7653,7655-7656,7661-7662,7664-7665,7667-7668,7670-7671,7673-7674,7676-7677,7679-7680,7682-7683,7685-7686,7688-7689,7691-7692,7694-7695,7697-7700,7702-7703,7705-7708,7710-7715,7717-7722,7724-7729,7731-7736,7738-7741,7743-7748,7750-7755,7757-7762,7764-7765,7767-7770,7772-7775,7777-7780,7782-7783,7785-7788,7790-7791,7793-7794,7799-7801,7805-7806,7808-7809,7811-7812,7817-7818,7820-7821,7823-7824,7826-7827,7829-7830,7832-7833,7835-7836,7838-7839,7841-7842,7844-7845,7847-7848,7850-7851,7853-7856,7858-7871,7873-7878,7880-7885,7887-7892,7894-7897,7899-7904,7906-7911,7913-7918,7920-7921,7923-7926,7928-7931,7933-7936,7938-7939,7941-7944,7946-7947,7949-7950,7955-7957,7961-7962,7964-7965,7967-7968,7973-7974,7976-7977,7979-7980,7982-7983,7985-7986,7988-7989,7991-7992,7994-7995,7997-7998,8000-8001,8003-8004,8006-8007,8009-8012,8014-8015,8017-8020,8022-8027,8029-8034,8036-8053,8055-8060,8062-8067,8069-8074,8076-8077,8079-8082,8084-8087,8089-8092,8094-8095,8097-8100,8102-8103,8105-8106,8111-8113,8135-8137,8159-8161,8183-8185,8207-8209,8231-8233,8255-8257,8279-8281,8303-8305,8327-8329,8351-8353,8375-8377,8399-8401,8423-8425,8447-8449,8471-8473,8495-8497,8519-8521,8543-8545,8567-8569,8591-8593,8615-8617,8639-8641,8663-8665,8687-8689,8711-8713,8735-8737,8759-8761,8783-8785,8807-8809,8831-8833,8855-8857,8879-8881,8903-8905,8927-8929,8951-8953,8975-8977,8999-9001,9023-9025,9047-9049,9071-9073,9095-9097,9119-9121,9143-9145,9167-9169,9191-9193,9215-9217,9239-9241,9263-9265,9287-9289,9311-9313,9335-9337,9359-9361,9383-9385,9407-9409,9431-9433,9455-9457,9479-9481,9503-9505,9527-9529,9551-9553,9575-9577,9599-9601,9623-9625,9647-9649,9671-9673,9695-9697,9719-9721,9743-9745,9767-9769,9791-9793,9815-9817,9839-9841,9863-9865,9887-9889,9911-9914,9936-9938,9960,9962-9963,9985-9987,10009-10011,10033-10035,10057-10059,10081-10083,10105-10107,10129-10131,10153-10155,10177-10179,10201-10203,10225-10227,10249-10251,10273-10275,10297-10299,10321-10323,10345-10347,10369-10371,10393-10395,10417-10419,10441-10444,10466-10468,10490-10492,10514-10516,10538-10540,10562-10564,10586-10588,10610-10612,10634-10636,10658-10660,10682-10684,10706-10708,10730-10732
+server/gen/http/toolsets/server/types.go
+  s_526f33b6861346::t_95423ada32b91a 2722-2723,2725,2741-2742,2744,2760-2761,2763,2779-2780,2782,2798-2801,2817-2820,2836-2839,2855-2858,2874-2875,2877,2893-2894,2896,2912-2913,2915,2931-2932,2934,2950-2951,2953,2969-2970,2972,2988-2989,2991,3007-3008,3010,3026-3027,3029,3045-3046,3048,3064-3065,3067,3083-3084,3086,3102-3104,3106-3124,3758-3761,3764-3767,3901-3907,3909,3912,3915,3920-3926,3928,3931,3934,3939-3942,4076-4079,4210-4243,4248-4251,4385-4388,4522-4525,4887-4890,4892-4902,4904-4910,4912-4922,4924-4928,4933-4936,4947-4950,4961-4964,4975-4978,4989-4992,5003-5006,5017-5020,5031-5034,5045-5048,5059-5062,5073-5076,5087-5090,5101-5104,5115-5118,5129-5132,5143-5146,5157-5160,5171-5174,5185-5188,5199-5202,5213-5217,5228-5232,5243-5247,5258-5261,5272-5275,5286-5290,5301-5304,5315-5319,5330-5334,5345-5349,5360-5363,5374-5377,5388-5391,5402-5405,5416-5419,5430-5433,5444-5447,5458-5461,5472-5475,5486-5489,5500-5503,5514-5517,5528-5531,5542-5545,5556-5559,5570-5573,5584-5587,5598-5601,5612-5615,5626-5629,5640-5643,5654-5657,5668-5671,5682-5685,5696-5699,5710-5713,5724-5727,5738-5741,5752-5755,5766-5769,5780-5783,5794-5797,5808-5811,5822-5825,5836-5839,5850-5853,5864-5867,5878-5882,5893-5896,5907-5910,5921-5925,5936-5937,5939-5940,5951-5955,5966-5967,5969-5970,5981-5985,5996-6000,6011-6015,6026-6030,6041-6045,6056-6057,6059-6060,6071-6074,6085-6088,6099-6102,6113-6116,6127-6130,6141-6144,6155-6158,6169-6172,6183-6186,6197-6200,6211-6215,6226-6227,6229-6230,6241-6245,6256-6257,6259-6260,6271-6272,6274-6275,6286-6290,6301-6302,6304-6305,6316-6320,6331-6332,6334-6335,6346-6350,6361-6362,6364-6365,6376-6379,6390-6391,6393-6394,6405-6408,6419-6422,6433-6434,6436-6437,6448-6451,6462-6463,6465-6466,6477-6481,6492-6496
+server/gen/http/user_session_clients/client/encode_decode.go
+  s_526f33b6861346::t_4344435ba14b7a 754,760
+server/gen/http/user_session_clients/client/types.go
+  s_526f33b6861346::t_1052fc0d713e1f 31-32,34-41,50-53,633-634,636-643,652-655,833,839,1192-1194,1966-1968
+server/gen/http/user_session_clients/server/encode_decode.go
+  s_526f33b6861346::t_236d437b04a450 732,738
+server/gen/http/user_session_clients/server/types.go
+  s_526f33b6861346::t_e9585492306e18 31-32,34-41,50-53,633-634,636-643,652-655,688,694
+server/gen/http/user_session_issuers/client/client.go
+  s_526f33b6861346::t_c53011cae92852 61-70
+server/gen/http/user_session_issuers/client/types.go
+  s_526f33b6861346::t_5e66deb883847d 23,36,58,83,116,1091
+server/gen/http/user_session_issuers/server/server.go
+  s_526f33b6861346::t_3c85be9235b24a 21-26,62-66
+server/gen/http/user_session_issuers/server/types.go
+  s_526f33b6861346::t_63746ca1fd94be 23,36,58,83,116,1091
+server/gen/http/user_sessions/client/encode_decode.go
+  s_526f33b6861346::t_88d128f19ff682 998,1000,1003
+server/gen/http/user_sessions/client/types.go
+  s_526f33b6861346::t_67602d7eba0283 829-832,834,836-839,844-846,2608-2610
+server/gen/http/user_sessions/server/encode_decode.go
+  s_526f33b6861346::t_18729355ff7d1a 976,978,981
+server/gen/http/user_sessions/server/types.go
+  s_526f33b6861346::t_99520bd5515317 828-831,833,835-838,843-845
+server/gen/litellm/client.go
+  s_526f33b6861346::t_0e6ebcfd60dad4 27
+server/gen/litellm/service.go
+  s_526f33b6861346::t_b2c9d7584ec876 63
+server/gen/organization_remote_session_issuers/service.go
+  s_526f33b6861346::t_961ca17d57e4cf 60-66
+server/gen/plugins/client.go
+  s_526f33b6861346::t_aa85428b325a2c 256
+server/gen/plugins/service.go
+  s_526f33b6861346::t_38a0c461915080 249-251,474-478
+server/gen/remote_session_clients/client.go
+  s_526f33b6861346::t_84303c82306ad5 19-26,31,33-40
+server/gen/remote_session_clients/endpoints.go
+  s_526f33b6861346::t_c81493d6e5432c 19-26,35-42
+server/gen/remote_session_clients/service.go
+  s_526f33b6861346::t_eba4bfecc3013b 71
+server/gen/toolsets/client.go
+  s_526f33b6861346::t_5d6efe9f381fcb 35
+server/gen/toolsets/service.go
+  s_526f33b6861346::t_5c560e103b870d 74
+server/gen/types/user_session.go
+  s_526f33b6861346::t_20f42fd448a41b 29-32,34,36-39,44-46
+server/gen/types/user_session_client.go
+  s_526f33b6861346::t_7aa34a61bf0ecf 17-18,20-27,36-39
+server/gen/types/user_session_issuer.go
+  s_526f33b6861346::t_496f06a0a2afee 21
+server/gen/user_session_clients/service.go
+  s_526f33b6861346::t_cd8617b5af11c5 18-22,28-32
+server/gen/user_session_issuers/client.go
+  s_526f33b6861346::t_ad1689645f9c8d 19-23,28,30-34
+server/gen/user_session_issuers/endpoints.go
+  s_526f33b6861346::t_3936d867a91cab 19-23,32-36
+server/gen/user_session_issuers/service.go
+  s_526f33b6861346::t_9e14ba8d3880e2 54,66,124
+server/internal/access/impl.go
+  s_526f33b6861346::t_d0cc4d840c8232 270,364-370,621
+server/internal/access/listscopes_test.go
+  s_526f33b6861346::t_1c6b0d6f807f46 20
+server/internal/access/listusergrants_test.go
+  s_526f33b6861346::t_4dfac520d47f4c 33,134-148
+server/internal/access/queries.sql
+  s_526f33b6861346::t_331b368b42349b 6,9,16,19,24,27,40,43,52-60,63-71,80
+server/internal/access/rbac_test.go
+  s_526f33b6861346::t_0ea0c7122c7376 92
+server/internal/access/repo/queries.sql.go
+  s_526f33b6861346::t_fb81a0dca634ce 125,135,205,217,486,489,515,595-601,611-612,1328,1331,1385,1388,1425,1437,1440,1480,1936-1942,1963-1964
+server/internal/admin/oauth.go
+  s_526f33b6861346::t_18e4684ada19bc 34-35
+server/internal/aiintegrations/README.md
+  s_526f33b6861346::t_9d9ed4b79d8675 103,107
+server/internal/aiintegrations/chatgpt_conversation_import.go
+  s_526f33b6861346::t_ac9a7a96836227 485
+server/internal/aiintegrations/chatgpt_conversation_import_test.go
+  s_526f33b6861346::t_7fe5ddf4ec8244 135,164
+server/internal/aiintegrations/codex_cloud_import.go
+  s_526f33b6861346::t_5715bc4b8ca8c2 561
+server/internal/aiintegrations/codex_cloud_import_test.go
+  s_526f33b6861346::t_3076fb61a7d7e4 144,201,303,323,382
+server/internal/aiintegrations/codex_cost_import.go
+  s_526f33b6861346::t_5ea06cbb9cf535 116,121-127,157-168,277-279,282-283,348-350,476-496
+server/internal/aiintegrations/codex_cost_import_test.go
+  s_526f33b6861346::t_1ae22e4622a3d4 174-227,287-288
+server/internal/aiintegrations/compliance_import.go
+  s_526f33b6861346::t_c3dcc416095037 228,434
+server/internal/aiintegrations/compliance_import_db_test.go
+  s_526f33b6861346::t_3631152befa0d3 58,73
+server/internal/aiintegrations/sync_error.go
+  s_526f33b6861346::t_3218a19c423c79 145-152,171-172
+server/internal/assistants/compaction_persist.go
+  s_526f33b6861346::t_8b67658a9648cc 96-99,122-125
+server/internal/assistants/compaction_persist_test.go
+  s_526f33b6861346::t_a3f1fc28f769fa 70
+server/internal/assistants/platform_slugs_test.go
+  s_526f33b6861346::t_16ad04659806b1 1-110
+server/internal/assistants/service.go
+  s_526f33b6861346::t_2f502fdd46e98d 34,39,399,444,470-477,1898,1947,1959-1978,2282-2285,2780-2782,2792-2814
+server/internal/assistants/service_self_heal_test.go
+  s_526f33b6861346::t_9becef61642cc2 191
+server/internal/assistants/service_test.go
+  s_526f33b6861346::t_9adccb69b9e843 2458-2518
+server/internal/attr/conventions.go
+  s_526f33b6861346::t_60ef514d3b45f0 364-410,1554-1565
+server/internal/audit/events.go
+  s_526f33b6861346::t_92fdead600dd99 38
+server/internal/audit/organizations.go
+  s_526f33b6861346::t_636dbb79cc428f 6,27-30,329-424
+server/internal/audit/platformmcpregistrations.go
+  s_526f33b6861346::t_4900db22351173 1-131
+server/internal/audit/toolsets.go
+  s_526f33b6861346::t_db63cb76668659 284-286
+server/internal/auth/callback_test.go
+  s_526f33b6861346::t_6325ea18e50d80 8,14-16,614-749
+server/internal/auth/e2e_test.go
+  s_526f33b6861346::t_30ffd75736a5b6 17,29,34,178,472-473,500-518
+server/internal/auth/email.go
+  s_526f33b6861346::t_605597841a295e 1-46
+server/internal/auth/email_test.go
+  s_526f33b6861346::t_f7c01101e457a9 1,4,10,13,15-16,18-20,23,25-26,28-30,33-36,38-42,44-65
+server/internal/auth/enterprise_trial.go
+  s_526f33b6861346::t_925afc202a2060 1-75
+server/internal/auth/enterprise_trial_test.go
+  s_526f33b6861346::t_a60ad6d40b9084 1,4,6,10,13-18,21-49,52,54,57-63,65-66,68,70-78,80,82,84,87-90,93-99,101-103,106-113,115-118,120
+server/internal/auth/identity/authorization_url_test.go
+  s_526f33b6861346::t_02431e7b2cf0ef 1-112
+server/internal/auth/identity/identity.go
+  s_526f33b6861346::t_a751f97e9d0c4a 49-56,589-596
+server/internal/auth/impl.go
+  s_526f33b6861346::t_b52aec2b9515b6 18,32,49,119-120,138-139,159-160,269-288,322-348,492-517,531-540,543-552,558-559,748-754,869,880-902,904,906-917,919-928,930,932,936,938,941-944,946,949-975,993-998,1000,1044-1047,1054,1068,1089-1094,1102-1159,1276-1300
+server/internal/auth/info_test.go
+  s_526f33b6861346::t_e08cbed7d6c77b 5,7,13-14,22,25-56,60-161,565-596
+server/internal/auth/login_test.go
+  s_526f33b6861346::t_ec5af50645ee9e 10,144-345
+server/internal/auth/org_name.go
+  s_526f33b6861346::t_1debcf6ecc24ae 5,8-9,11,13,82-136
+server/internal/auth/org_name_test.go
+  s_526f33b6861346::t_12c4387be73606 4,6,31-81
+server/internal/auth/redirect_signup_error_test.go
+  s_526f33b6861346::t_1258aa7d132ab8 1-50
+server/internal/auth/register_test.go
+  s_526f33b6861346::t_61d93ecc90cf4e 209-270
+server/internal/auth/setup_test.go
+  s_526f33b6861346::t_54018d03bd25bc 20,30,174,241,288-308
+server/internal/auth/trial_test.go
+  s_526f33b6861346::t_43e01e8f8531ad 1,5,9-10,13-14,16-17,19-26,28
+server/internal/authz/access.go
+  s_526f33b6861346::t_17542183e886ad 53-54,58
+server/internal/authz/chat_scope_test.go
+  s_526f33b6861346::t_b8fe3499feedfe 17,20
+server/internal/authz/checks.go
+  s_526f33b6861346::t_443500d1c12939 23,33,47,59,84-89,91-100,115
+server/internal/authz/context_test.go
+  s_526f33b6861346::t_85d4713eb81d05 87-108
+server/internal/authz/engine.go
+  s_526f33b6861346::t_b5f75e5dedce28 96-98
+server/internal/authz/engine_test.go
+  s_526f33b6861346::t_c8d941acb0444e 313,339,384,410,444,473
+server/internal/authz/expressions.go
+  s_526f33b6861346::t_73c39873a4eb02 122,137,139,285,296
+server/internal/authz/expressions_test.go
+  s_526f33b6861346::t_e4e5ec9cd3d390 57,72-73,91-92,116-118
+server/internal/authz/grant_persistence_test.go
+  s_526f33b6861346::t_6e31c46c71edd0 1-78
+server/internal/authz/grant_surface.go
+  s_526f33b6861346::t_f581d09bd66ed5 44
+server/internal/authz/grant_surface_test.go
+  s_526f33b6861346::t_77d822f46f7564 17-21
+server/internal/authz/grants.go
+  s_526f33b6861346::t_4d334db98c7978 48-49,231,299,301,303,307-308,310,318-319,335-337,341,347,351,353,370-372,377,380,388,391
+server/internal/authz/override.go
+  s_526f33b6861346::t_2c9a0a5d2eca8f 55
+server/internal/authz/principal_test.go
+  s_526f33b6861346::t_c44991b92103df 90-91
+server/internal/authz/scopes.go
+  s_526f33b6861346::t_e54417fd46c3dd 45,72-78,112,198-199,233
+server/internal/authz/scopes_test.go
+  s_526f33b6861346::t_efda696f8aa6bf 177-178,181,189,191-192,200,208,216,224,232,240,248,256,264,273,276,279,282,290,294,304-305,308,314-315,318,328-329,332,342,346,351-352,358-362,365-366,369,375,377,384,388,391,401-402
+server/internal/authz/selector.go
+  s_526f33b6861346::t_7e8507549eda05 49-50,183,192
+server/internal/authztest/helpers.go
+  s_526f33b6861346::t_ea92ecbde07487 39
+server/internal/authztest/helpers_test.go
+  s_526f33b6861346::t_846c49a59440a3 13,25
+server/internal/background/activities.go
+  s_526f33b6861346::t_9712f2e1009ba9 20,52,85,159-160,257-269,346,360,803-842
+server/internal/background/activities/chat_resolutions/analyze_segment.go
+  s_526f33b6861346::t_2c29b1f1d465d0 92-94,122,154,165,197
+server/internal/background/activities/chat_resolutions/delete_chat_resolutions.go
+  s_526f33b6861346::t_d8caee1b2c40ad 24-25,29-32
+server/internal/background/activities/chat_resolutions/errors.go
+  s_526f33b6861346::t_535136478bdea0 73-97,103-106
+server/internal/background/activities/chat_resolutions/get_user_feedback.go
+  s_526f33b6861346::t_5616785cd6b716 52-55,60-63
+server/internal/background/activities/generate_chat_title.go
+  s_526f33b6861346::t_f55173f009d0ff 68-73,75,115-117
+server/internal/background/activities/generate_chat_title_skip_test.go
+  s_526f33b6861346::t_e9fed871713ede 95,148-150,153
+server/internal/background/activities/publish_outbox/errors.go
+  s_526f33b6861346::t_310ffbf0b80617 14-22,28
+server/internal/background/activities/publish_outbox/relay.go
+  s_526f33b6861346::t_6ea873dd251b82 18,40,105,112,231
+server/internal/background/activities/publish_outbox/relay_test.go
+  s_526f33b6861346::t_58e7fbc2f3b505 14,16,48,63,100,142,186-191,196,198-199,204-205,207,209,211-212,215,219-221,230-231,235-237,261,288
+server/internal/background/activities/publish_outbox/setup_test.go
+  s_526f33b6861346::t_0f140df6ab36ea 20,60,64,69-70,79
+server/internal/background/activities/queries.sql
+  s_526f33b6861346::t_591a745f903dc5 146,159
+server/internal/background/activities/remote_session_refresh.go
+  s_526f33b6861346::t_0e9365cdc1ffd5 1,5,7-8,10,13,15,17,19-20,23-37,40-41,44-47,50-71,73,76-122,124,126-128,130,132-141,143-148,151-155
+server/internal/background/activities/remote_session_refresh_test.go
+  s_526f33b6861346::t_efac7664039beb 1-23
+server/internal/background/activities/repo/queries.sql.go
+  s_526f33b6861346::t_d8a3421cc2ac25 20,655
+server/internal/background/activities/trial_demotion.go
+  s_526f33b6861346::t_5e8aea104ea82c 1,9-11,13-17,20-25,28-39,43-44,46,49-50,52-57,59,61-74,77-89,92-94,97-107,110-111,114
+server/internal/background/activities/trial_demotion_test.go
+  s_526f33b6861346::t_2832082504789d 1-253
+server/internal/background/analyze_chat_resolutions.go
+  s_526f33b6861346::t_f6c79aabffd01c 80-81,113-121
+server/internal/background/remote_session_refresh.go
+  s_526f33b6861346::t_9464a8e2a9f8a1 1-159
+server/internal/background/remote_session_refresh_workflow_test.go
+  s_526f33b6861346::t_d1e66fede43724 1-183
+server/internal/background/skill_efficacy_test.go
+  s_526f33b6861346::t_690319f1e66b5a 584-587
+server/internal/background/trial_demotion.go
+  s_526f33b6861346::t_5372731e63b47d 1-118
+server/internal/background/trial_demotion_test.go
+  s_526f33b6861346::t_81917129a9c55e 1-76
+server/internal/background/triggers/app.go
+  s_526f33b6861346::t_8fa32ca064521b 20,68,91,127-132,134,884,890,895,901,905,910,928,934
+server/internal/background/triggers/app_test.go
+  s_526f33b6861346::t_9268e2943a7df4 9,11-14,110-151
+server/internal/background/worker.go
+  s_526f33b6861346::t_b4836dcca70d7a 24,161,426-431,540-543,642-653
+server/internal/chat/chat_write_authorization_test.go
+  s_526f33b6861346::t_bef381dd57b2e0 1-221
+server/internal/chat/completion_error_test.go
+  s_526f33b6861346::t_3b97f73b37f58e 1-40
+server/internal/chat/delete_chat_test.go
+  s_526f33b6861346::t_162986d4861524 53,61,74,77-140
+server/internal/chat/generate_title_test.go
+  s_526f33b6861346::t_39ea80119dfc0f 34,52,76,107,125-128,149-207,209-212
+server/internal/chat/heal_deleted_chat_test.go
+  s_526f33b6861346::t_62d4b8226887d7 74,78,87
+server/internal/chat/impl.go
+  s_526f33b6861346::t_362b3cf5d77b2f 685-703,712-720,749-755,758,766-776,779-784,787-808,816,832-835,1282-1283,1848-1853,1856-1858,1913-1926,1930-1931,1957-1958,1992-1998,2001-2003,2006-2013,2177-2178
+server/internal/chat/list_chats_test.go
+  s_526f33b6861346::t_0610bbf14e4b49 146-148,151,170-182
+server/internal/chat/load_chat_apikey_test.go
+  s_526f33b6861346::t_8d72342197ecb6 61-63,65,81,231
+server/internal/chat/message_capture_strategy.go
+  s_526f33b6861346::t_693b931d8365c7 6,13,83-89,98-103,108,164-168,176,519-527
+server/internal/chat/message_capture_strategy_test.go
+  s_526f33b6861346::t_42489cd6b214a2 17,851-901
+server/internal/chat/queries.sql
+  s_526f33b6861346::t_fef4a46c2d3683 84-85,88,96-100,148-154,159-162,174-178,300,739,793,800,834,851,863,889,918-919,928,933-934,947,954,964,981,988,996,1022,1068,1092-1094,1102,1137,1140-1145,1153-1163,1167-1168,1172-1176,1180,1256,1267-1268,1271-1273,1278-1282,1290-1300,1306
+server/internal/chat/queries_scoping_test.go
+  s_526f33b6861346::t_8ed76d350f55ce 1-126
+server/internal/chat/repo/queries.sql.go
+  s_526f33b6861346::t_909376930d16c8 19,25,29,61,531,534-540,552-553,556-558,565,570,628,631-635,663-664,708,775,968-969,972-978,1048-1058,1071-1076,1095-1099,1106,1109-1110,1112,1124-1134,1147-1151,1171-1174,1186,1192-1198,1200,1238,1315,1383,1390,1398,1483,1490,1500,1588,1658-1660,1666,1679,1772,2174,2213-2214,2285,2437,2582,2586-2592,3064-3067,3073,3077,3112,3116-3118,3125,3133,3140,3144-3149,3176,3184,3206-3211
+server/internal/chat/set_pinned_test.go
+  s_526f33b6861346::t_28cb48fbf56f02 31,36,49,53,84,108-143
+server/internal/chat/submit_feedback_test.go
+  s_526f33b6861346::t_e93ef17da16c94 1-135
+server/internal/chat/summarize_test.go
+  s_526f33b6861346::t_9456bf74438a1d 15-16,19,139,183,208-347
+server/internal/chat/turnstream_http.go
+  s_526f33b6861346::t_e3c596cf61c7f7 11,53-60
+server/internal/chat/upsert_external_chat_title_test.go
+  s_526f33b6861346::t_9d1c8cff84fc20 49
+server/internal/database/models.go
+  s_526f33b6861346::t_239bd1395a09bf 1442-1465,1505-1537,1555-1571,1776-1792,2421-2430
+server/internal/demoseed/clickhouse.sql
+  s_526f33b6861346::t_c632b94fbac197 9,48,51-58,60,62,64,66,68,70,72,74,76-79
+server/internal/demoseed/demoseed.go
+  s_526f33b6861346::t_9e75f66038f8af 108-109,111,113-114
+server/internal/externalmcp/registry_cache.go
+  s_526f33b6861346::t_e8e0340bef5f2f 36-37,47-48
+server/internal/externalmcp/registryclient.go
+  s_526f33b6861346::t_5af14007b7eacf 34,46,64-83
+server/internal/feature/flags.go
+  s_526f33b6861346::t_a77614eebbbd8a 46-59
+server/internal/feature/provider.go
+  s_526f33b6861346::t_238a4337635b74 5,82-132
+server/internal/feature/provider_test.go
+  s_526f33b6861346::t_3ecaf013bfa06d 4,12-53
+server/internal/hooks/account_attribution_test.go
+  s_526f33b6861346::t_01af512acd6ee9 447,497
+server/internal/hooks/block_view_link.go
+  s_526f33b6861346::t_b204ef0eeab971 5,10,23-25,65,77-97,101,104-161
+server/internal/hooks/block_view_link_test.go
+  s_526f33b6861346::t_8e032d64d29744 1-331
+server/internal/hooks/cache.go
+  s_526f33b6861346::t_3e8577dc645a4b 27-35,83-89
+server/internal/hooks/claude_hooks.go
+  s_526f33b6861346::t_deaf93ee8f516b 1392-1393
+server/internal/hooks/ingest_hooks.go
+  s_526f33b6861346::t_1eea0a8f274893 233,244,254-259,812,816-836,845-855,872,884-885,887-893,895-918,1905
+server/internal/hooks/ingest_hooks_test.go
+  s_526f33b6861346::t_3e9fc693023e2e 1030,1104,1987-1989,2077,2123,2125-2134,2136-2148,2151-2165,2169-2190,2192-2219,2221-2229,2234-2256,2260-2346
+server/internal/hooks/pending_helpers.go
+  s_526f33b6861346::t_440085714cebc1 166,288-303
+server/internal/hooks/session_capture.go
+  s_526f33b6861346::t_6fc15e486f7e95 9,25,426-430,478-494
+server/internal/hooks/session_capture_test.go
+  s_526f33b6861346::t_61c8c087fb0717 17-19,128-200
+server/internal/litellm/health.go
+  s_526f33b6861346::t_49a900a43ac436 197,201
+server/internal/litellm/impl.go
+  s_526f33b6861346::t_9a738df5d3d4b6 68,191-201,311-321
+server/internal/litellm/integration_test.go
+  s_526f33b6861346::t_f42e43823d5764 233
+server/internal/litellm/metrics_test.go
+  s_526f33b6861346::t_ff48173de1603e 36,41-44,131,134,185,187,201
+server/internal/litellm/setup_test.go
+  s_526f33b6861346::t_04bc010d2b86b5 181
+server/internal/management/readmodel/readmodel.go
+  s_526f33b6861346::t_58b20548dae267 1-99
+server/internal/marketplace/handler.go
+  s_526f33b6861346::t_f51f8c38b9ed20 187-189
+server/internal/marketplace/handler_test.go
+  s_526f33b6861346::t_d56e901509881e 5,83-89,94-101,109,138,140
+server/internal/mcp/authnchallenge.go
+  s_526f33b6861346::t_c223bce5dc0c1b 133-159,178-183
+server/internal/mcp/authnchallenge_authorize.go
+  s_526f33b6861346::t_1f74721b29813c 128-133,141-145,211-212,246-251,263-274
+server/internal/mcp/authnchallenge_authorize_test.go
+  s_526f33b6861346::t_b920f58183978d 8,80-174,281-319
+server/internal/mcp/authnchallenge_cimd_test.go
+  s_526f33b6861346::t_347ec6b2e6e217 385
+server/internal/mcp/authnchallenge_consent.go
+  s_526f33b6861346::t_f9bf16e05b1765 19,30,32,109-132,136-138,146-163,278-281,287-289,293-299,302,305-317,333-336,398-401,403-419,424-438,485-495,502-513,542-585,587-599,602-604,607-608,610-617,620-621,624,652-724,735,749,751,758,760-775,777,779-789,794-825
+server/internal/mcp/authnchallenge_consent_action.go
+  s_526f33b6861346::t_4221a4a5d83aca 1-188
+server/internal/mcp/authnchallenge_consent_internal_test.go
+  s_526f33b6861346::t_b1ed7500db0120 1-198
+server/internal/mcp/authnchallenge_consent_template_test.go
+  s_526f33b6861346::t_a200be0e74fca4 5,7,26-36,63-73,103-252,260
+server/internal/mcp/authnchallenge_firstparty.go
+  s_526f33b6861346::t_0746bfe4818670 95-96
+server/internal/mcp/authnchallenge_idp_callback.go
+  s_526f33b6861346::t_1407f18203b3f2 89-95,103-135,198-199
+server/internal/mcp/authnchallenge_internal_test.go
+  s_526f33b6861346::t_786f985882170c 1-24
+server/internal/mcp/authnchallenge_test.go
+  s_526f33b6861346::t_38b8a3ccfc4624 24,117-204,553-675,997-1045
+server/internal/mcp/authnchallenge_token.go
+  s_526f33b6861346::t_40e58d9c70fbf4 43-47,240-245,315,327-331,336-337,346-350,357-360,367-368,372-387,389-404,406-408,410-412,414,421-427,444-445,451-455
+server/internal/mcp/authnchallenge_well_known.go
+  s_526f33b6861346::t_fb9b1b6d71ce20 64-88,450-458,460,463
+server/internal/mcp/consent_script.js
+  s_526f33b6861346::t_f69b226e322fb2 58-95,98
+server/internal/mcp/consent_template.html
+  s_526f33b6861346::t_085f8bfbb4171b 39-41,48,60,154-199,268-272,277-280,286,290,294-295,302,306-307,309-310,313-316,319-367,481-529,532-546,559-575,580-584,591-655,671
+server/internal/mcp/impl.go
+  s_526f33b6861346::t_22fe1a4ff10de2 403-406,430,447-454,788,839
+server/internal/mcp/remotesession_resolver_test.go
+  s_526f33b6861346::t_048ab8b647aa33 235
+server/internal/mcp/resolved_mcp_endpoint.go
+  s_526f33b6861346::t_271e27178f8c6f 247-256
+server/internal/mcp/resolved_mcp_endpoint_internal_test.go
+  s_526f33b6861346::t_ed3401a27c2100 1-77
+server/internal/mcp/serve_platform.go
+  s_526f33b6861346::t_224fc2c19d3eec 22,135-137,158-177
+server/internal/mcp/serve_platform_test.go
+  s_526f33b6861346::t_421216a345df19 28,261-378
+server/internal/mcp/servepublic_credentialsvalid_test.go
+  s_526f33b6861346::t_ea6e138f8a74ca 2-3
+server/internal/mcp/servepublic_mcpendpoint_test.go
+  s_526f33b6861346::t_b0b015a3926aeb 321-324,344-345,349
+server/internal/mcp/setup_test.go
+  s_526f33b6861346::t_25fc9b09be2ea5 46,242,246
+server/internal/mcp/wellknown_test.go
+  s_526f33b6861346::t_8e4ad385ac976e 214-218
+server/internal/mcpendpoints/setup_test.go
+  s_526f33b6861346::t_ef9e8683aa55f0 165
+server/internal/mcpservers/impl.go
+  s_526f33b6861346::t_4bcfd9a84f2f35 39,489-490,515
+server/internal/mcpservers/queries.sql
+  s_526f33b6861346::t_b6242ffeffb041 91-121
+server/internal/mcpservers/repo/queries.sql.go
+  s_526f33b6861346::t_da728158db6a2e 321-362,447-502,616-666
+server/internal/mcpservers/updatemcpserver_test.go
+  s_526f33b6861346::t_c07252490b7264 482,501,566
+server/internal/middleware/cors.go
+  s_526f33b6861346::t_10eae6097c9d6d 15-16
+server/internal/modelkeys/setup_test.go
+  s_526f33b6861346::t_db918766bc9989 70-73
+server/internal/mv/usersession.go
+  s_526f33b6861346::t_74724088fa3fc9 36-43,54,56,59-62
+server/internal/mv/usersessionclient.go
+  s_526f33b6861346::t_4fd999d9ad09c1 7,14-22,33,40
+server/internal/oauth/wellknown/wellknown.go
+  s_526f33b6861346::t_a6e5cf14b293b6 202-203
+server/internal/oops/codes.go
+  s_526f33b6861346::t_9c572022f6e2fb 13,28-31,48,60,80-81,92-93,118,120
+server/internal/oops/http_test.go
+  s_526f33b6861346::t_fe52f48340aa02 161-172
+server/internal/otelforwarding/forwarder_test.go
+  s_526f33b6861346::t_a8fd6e6e0b7f6b 128-129
+server/internal/outbox/events/audit_log.go
+  s_526f33b6861346::t_497e6886d7f094 46,50
+server/internal/outbox/events/catalog_gen.go
+  s_526f33b6861346::t_5912287ce2d411 37,42
+server/internal/outbox/events/catalog_gen.yaml
+  s_526f33b6861346::t_2bb7e953099c78 1519-1572,1739-1792
+server/internal/outbox/publish.go
+  s_526f33b6861346::t_fd9b817122efc7 32,68,174,176-178,180-181
+server/internal/outbox/publish_test.go
+  s_526f33b6861346::t_a3162d432c8e2f 49,55-56,59-60
+server/internal/platformmcp/adapters.go
+  s_526f33b6861346::t_488da3fd91eedd 1,5,10-14,16-21,24-29,32-43,46-48,51-53,55-57,60-62,64-70,72,74-75,78-111,113-121,123,125-126,128-130,132-134,136-138,141-146,148-149,152,154,156,158,160-166,168-169,171-173,175-177,179-181,183,185,187-188,190-196,198-203,205-207,210-212,214-218,220,222-240,242-244,246-247,249-251,253-254,257-259,261-263,265-267,269-274,279-280,283-284,287-289,291-294,297-302,305-307,309-311,313-316,318,321-324,327-330,332,335-339,341,343-349,351-356,358,360-361,363-367,370-383
+server/internal/platformmcp/admission.go
+  s_526f33b6861346::t_d919d1274fafb2 1-89
+server/internal/platformmcp/admission_test.go
+  s_526f33b6861346::t_68b92300bf0828 1-151
+server/internal/platformmcp/catalog.go
+  s_526f33b6861346::t_6895761e88a503 1-172
+server/internal/platformmcp/catalog_cursor.go
+  s_526f33b6861346::t_ccb249b45d93ee 1,3-81
+server/internal/platformmcp/catalog_cursor_test.go
+  s_526f33b6861346::t_9f636213f552da 1-80
+server/internal/platformmcp/catalog_test.go
+  s_526f33b6861346::t_9f709333012833 1-80
+server/internal/platformmcp/credentials.go
+  s_526f33b6861346::t_c79e96a41f0f34 1-86
+server/internal/platformmcp/credentials_test.go
+  s_526f33b6861346::t_e8f7927c6d5535 1,4-5,13-23,26-27,29-31,33-35,37-40,42-43,45-57
+server/internal/platformmcp/gate.go
+  s_526f33b6861346::t_60f03de8bb6bd3 1-130
+server/internal/platformmcp/gate_test.go
+  s_526f33b6861346::t_191b753e715a2d 1-205
+server/internal/platformmcp/lifecycle.go
+  s_526f33b6861346::t_4b2532f9e992a0 1-621
+server/internal/platformmcp/lifecycle_test.go
+  s_526f33b6861346::t_34316f17bb26ad 1-88
+server/internal/platformmcp/localfixture/config.go
+  s_526f33b6861346::t_7289d276dcbde6 1-196
+server/internal/platformmcp/localfixture/config_test.go
+  s_526f33b6861346::t_69800f27b27472 1,4,10,13,16-35,37-46,49,51-53
+server/internal/platformmcp/localfixture/configurator.go
+  s_526f33b6861346::t_dca57de7a15549 1-348
+server/internal/platformmcp/localfixture/configurator_test.go
+  s_526f33b6861346::t_93abcb7a36f2ad 1,5-9,14,18-48,50-70,73-102,105-126,129,132,134,136,139,142-146,149-159,161,163-171
+server/internal/platformmcp/localfixture/mcp.go
+  s_526f33b6861346::t_d28857423085e1 1-192
+server/internal/platformmcp/localfixture/mcp_test.go
+  s_526f33b6861346::t_9645259dae98e8 1-152
+server/internal/platformmcp/localfixture/oauth.go
+  s_526f33b6861346::t_55dd680158c461 1-362
+server/internal/platformmcp/localfixture/oauth_test.go
+  s_526f33b6861346::t_daa8650a2548bd 1-303
+server/internal/platformmcp/localfixture/registry.go
+  s_526f33b6861346::t_0c57685643bf60 1,4-5,8-19,22-23,26-41,44-53,56-58,60-90,92-93,96-99
+server/internal/platformmcp/localfixture/registry_test.go
+  s_526f33b6861346::t_8b1f6f047180e5 1,4,7,12-15,19,22-24,26,28-36,38-47,49-52,54-58,61,64-68,70-73,75-78,81,83,85
+server/internal/platformmcp/oauth/state.go
+  s_526f33b6861346::t_aef23696ba6b30 27-32,54-59,74-79,82-88,91,94-96,100-101,103-105,140-153,177-183,188-236,241,278-280,308-312,317-342,351-353,388,393,401-421,426
+server/internal/platformmcp/oauth/state_test.go
+  s_526f33b6861346::t_67ad4f9d13fc21 47-59,93-124,200-221,229,237-287,297-300,319,321,395-400,406-411
+server/internal/platformmcp/oauthhttp.go
+  s_526f33b6861346::t_0ea177a5e39c26 1-841
+server/internal/platformmcp/oauthhttp_test.go
+  s_526f33b6861346::t_e3da56cfea7fd5 1-474
+server/internal/platformmcp/oauthstore.go
+  s_526f33b6861346::t_ebe76658f1add1 1-625
+server/internal/platformmcp/oauthstore_test.go
+  s_526f33b6861346::t_da89ed48fa82b6 1-31
+server/internal/platformmcp/operation_budget.go
+  s_526f33b6861346::t_70de3cbf574703 1-82
+server/internal/platformmcp/operation_budget_test.go
+  s_526f33b6861346::t_29c38858133604 1-59
+server/internal/platformmcp/provider_adapter.go
+  s_526f33b6861346::t_0236c63cf55165 1,4-6,12-15,17-80,82,85-93,96-100,103-107,110-115,118-122,125-129
+server/internal/platformmcp/provider_adapter_test.go
+  s_526f33b6861346::t_4d8be5c2841959 1-142
+server/internal/platformmcp/provider_authorization.go
+  s_526f33b6861346::t_f486cdb42ef623 1,3-6,8-59
+server/internal/platformmcp/provider_authorization_test.go
+  s_526f33b6861346::t_e14b1f68fe4d22 1-63
+server/internal/platformmcp/queries.sql
+  s_526f33b6861346::t_8b30a3c6b63c5e 1-959
+server/internal/platformmcp/readiness_service.go
+  s_526f33b6861346::t_1d59ba244d0f22 1-146
+server/internal/platformmcp/readiness_service_test.go
+  s_526f33b6861346::t_fe10f95da91f40 1-95
+server/internal/platformmcp/registration.go
+  s_526f33b6861346::t_d77ef11295686b 1-733
+server/internal/platformmcp/registration_integration_test.go
+  s_526f33b6861346::t_4608595a308b88 1-769
+server/internal/platformmcp/registration_service.go
+  s_526f33b6861346::t_b9c4df4ada21c2 1,5,9,12,14-15,18-24,27-31,34-39,41-48,50-61,63-77,79,81-83,85-86,88-90,92-93,95-97,99,102-106,108,110-111,113-115,117-118,120-122,124-125,127-146,149-151,153-154,157-159,161-162,165-167,169-170,173-175,177-178,180-186,188-190,192-196,198-199,201-202,204-211,213-215,218-226,229-230,232,234-235
+server/internal/platformmcp/registration_service_test.go
+  s_526f33b6861346::t_c2d3c99416bf6a 1-382
+server/internal/platformmcp/registration_test.go
+  s_526f33b6861346::t_dbe3fbe3d14230 1-119
+server/internal/platformmcp/remotesessionprovider/adapter.go
+  s_526f33b6861346::t_4fc5b3d96b8cdb 1-4,8,11,14,17-34,37-48,51-58,61-65,68-80,84-86,88-89,91-95,97-98,100-102,104-110,113-116,118-121,123-124,126,128-129,131,134-145,147,149-163,165-166,168-170,172-174,177-193,195-202,205,208-210,212-213,215-243,245,247-251,254-270,272,274-276,278-279,281-282,284-285,287-289,291-292,294-296,298-299,301-305,307-317,319-322,324-337,339-364,366,368
+server/internal/platformmcp/remotesessionprovider/adapter_test.go
+  s_526f33b6861346::t_33031e859724bf 1-123
+server/internal/platformmcp/remotesessionprovider/vertical_integration_test.go
+  s_526f33b6861346::t_243d142aa36a29 1-401
+server/internal/platformmcp/repo/db.go
+  s_526f33b6861346::t_92121c48963133 1-5,10-11,14-31
+server/internal/platformmcp/repo/models.go
+  s_526f33b6861346::t_b222b5efdbb25f 1-143
+server/internal/platformmcp/repo/queries.sql.go
+  s_526f33b6861346::t_225dbee9de0e3f 1-2754
+server/internal/platformmcp/runtime.go
+  s_526f33b6861346::t_a412c7383d6f47 1-171
+server/internal/platformmcp/runtime_test.go
+  s_526f33b6861346::t_42439fcf6036ac 1-219
+server/internal/platformmcp/setup_http.go
+  s_526f33b6861346::t_20240ec74a91e5 1-171
+server/internal/platformmcp/setup_http_test.go
+  s_526f33b6861346::t_7b661d825d71dc 1-162
+server/internal/platformmcp/setup_resources.go
+  s_526f33b6861346::t_d039ecebb2a95f 1-67
+server/internal/platformmcp/setup_resources_test.go
+  s_526f33b6861346::t_9a9c9158550bfe 1-30
+server/internal/platformmcp/telemetry.go
+  s_526f33b6861346::t_059c03e5be1ff7 1-120
+server/internal/platformmcp/telemetry_test.go
+  s_526f33b6861346::t_1d14799c27a5b7 1-45
+server/internal/platformmcp/tool_catalog.go
+  s_526f33b6861346::t_e59a91d0e40b8c 1-131
+server/internal/platformmcp/tool_get_mcp.go
+  s_526f33b6861346::t_edde057f124f6b 1-34
+server/internal/platformmcp/tool_get_platform_context.go
+  s_526f33b6861346::t_57954645661887 1-27
+server/internal/platformmcp/tool_lifecycle.go
+  s_526f33b6861346::t_233907f02c085a 1-57
+server/internal/platformmcp/tool_list_project_mcps.go
+  s_526f33b6861346::t_9c95550b56be02 1-35
+server/internal/platformmcp/tool_list_projects.go
+  s_526f33b6861346::t_ee95bc7454ffaf 1-32
+server/internal/platformmcp/tool_readiness.go
+  s_526f33b6861346::t_8f1f138aac186a 1-102
+server/internal/platformmcp/tool_registration.go
+  s_526f33b6861346::t_0c864fcab34af3 1-54
+server/internal/platformmcp/tools.go
+  s_526f33b6861346::t_b9395ea968c636 1-251
+server/internal/platformtools/platform/tool_get_mcp.go
+  s_526f33b6861346::t_0172acd8a24738 1-61
+server/internal/platformtools/platform/tool_get_platform_context.go
+  s_526f33b6861346::t_e6648bf868ffee 1-67
+server/internal/platformtools/platform/tool_list_project_mcps.go
+  s_526f33b6861346::t_33ff81015d2526 1-61
+server/internal/platformtools/platform/tool_list_projects.go
+  s_526f33b6861346::t_b9f92cf30c97b3 1-58
+server/internal/platformtools/platform/tools.go
+  s_526f33b6861346::t_d7096d21e6e041 1-32
+server/internal/platformtools/platform/tools_test.go
+  s_526f33b6861346::t_cff96f25915ab2 1-194
+server/internal/platformtools/registry_test.go
+  s_526f33b6861346::t_b820454470a155 101-128
+server/internal/platformtools/runtime/service.go
+  s_526f33b6861346::t_61adac316f0f66 20,28,247-259
+server/internal/platformtools/toolsets.go
+  s_526f33b6861346::t_6db718a7bfe1af 15-20,37,55-59,95-101
+server/internal/platformtools/types.go
+  s_526f33b6861346::t_dadeecb2cb5846 18,42-45
+server/internal/platformtools/usersessions/tools.go
+  s_526f33b6861346::t_31a28650a80c97 67-74,85,87,90-93
+server/internal/plugins/agent_plugins.go
+  s_526f33b6861346::t_190e272de840d2 1,4-7,9,11,13,15-17,20-24,26-27,29-30,32,34,36-39,41-43,46-53,55-58,60-62,65-73,75-79,81,83-87,89-91,93-94,96,98-123,125-132,134-136,138-143,145-158,162-166,169-174,177-178,180-186,191-194,196,198,200-202,204-207,210-212,214-215,217-224,226-228,230,232-247,249-250,253-254,256,258-259,261-262,264,266-270,272-273,276-277,279-280,282-287
+server/internal/plugins/agent_plugins_schema/LICENSE.apache-2.0.txt
+  s_526f33b6861346::t_9e453004108825 1-201
+server/internal/plugins/agent_plugins_schema/NOTICE.md
+  s_526f33b6861346::t_06a032b7bd2980 1,3-10
+server/internal/plugins/agent_plugins_schema/mcp.schema.json
+  s_526f33b6861346::t_6f9340da2bb5af 1-10,12-15,17-24,26,28-29,31-34,36-41,43-51,53-62,64-68,70-72,74-84,86-91,93-98,100-110,112-119
+server/internal/plugins/agent_plugins_schema/plugin.schema.json
+  s_526f33b6861346::t_0e022b0227d4d4 1-65
+server/internal/plugins/agent_plugins_test.go
+  s_526f33b6861346::t_b23f94a4cf164a 1-156
+server/internal/plugins/generate.go
+  s_526f33b6861346::t_2969d334564352 7,10,66-67,102-104,143-156,207-209,366-371,384,402-409,430,438-444,566-570,633-648,669-678,725-733,831-835,908-909,1959-2002
+server/internal/plugins/generate_test.go
+  s_526f33b6861346::t_1e0a6ed0170a3d 60-149,950,2126-2142
+server/internal/plugins/hooks_config_test.go
+  s_526f33b6861346::t_adcc530b3c8c03 49,75
+server/internal/plugins/hooks_release_pins.go
+  s_526f33b6861346::t_8e336cc5e70639 15,20-25,113-120
+server/internal/plugins/hooks_rollout_internal_test.go
+  s_526f33b6861346::t_89233fe78ba526 18
+server/internal/plugins/impl.go
+  s_526f33b6861346::t_f408422c6a6b52 51,164-173,191,211-212,224,229-241,302-305,316-328,416-420,508-510,609-613,1190,1203,1214-1216,1355,1451-1464,1671-1686,1692-1694,1700,1960-1983,1985-2014,2063-2066,2075-2076,2084,2108-2125,2133-2140,2166-2170,2173-2187,2292-2296,2320-2358,2767-2772,2780,2785,2789-2796,2809,2816-2821,2829-2841,2862-2864,2884,2908,2927-2931,2957-2968,2982-2988,3074,3076-3088
+server/internal/plugins/impl_test.go
+  s_526f33b6861346::t_4989514516074d 4-5,9-10,27,40-48,828-1073,1840-1843,2268-2431,2508-2517,2656,2691,2736,2769,2779-2780,2804-2805,2822-2823
+server/internal/plugins/platform_mcp_eligibility_test.go
+  s_526f33b6861346::t_2d500e963902ca 1-85
+server/internal/plugins/queries.sql
+  s_526f33b6861346::t_2acc0fd2654032 98-107,326-327,330,333-351,376-377,389,394,401-403,407-413,416-527,766
+server/internal/plugins/repo/queries.sql.go
+  s_526f33b6861346::t_49229d8578354c 573-764,848-898,1092,1100-1104,1120-1121,1247-1248,1260,1265,1272-1274,1278-1284,1288-1292,1303-1304,1323-1324,1342-1343,1375-1376,1379,1383-1387,1406-1407
+server/internal/plugins/setup_test.go
+  s_526f33b6861346::t_e5f35ba54ff6ea 30,36,106,117,124,176,190,207,238-247,320-325,345-348,363
+server/internal/plugins/skill_distributions_test.go
+  s_526f33b6861346::t_5eded283cd3e79 166
+server/internal/productfeatures/bundle_test.go
+  s_526f33b6861346::t_877b6d50b650d5 1-41
+server/internal/productfeatures/client.go
+  s_526f33b6861346::t_522eb11f75bcbb 40-44,150-195
+server/internal/productfeatures/features.go
+  s_526f33b6861346::t_56f182b2ae0fd4 25-27,33
+server/internal/productfeatures/impl.go
+  s_526f33b6861346::t_4bb42072c72bbd 90-92,253,256,258
+server/internal/productfeatures/setproductfeature_test.go
+  s_526f33b6861346::t_56f9d3855350d3 319-340
+server/internal/productfeatures/skills_test.go
+  s_526f33b6861346::t_c2d2dfc5a22265 24,32,90
+server/internal/projects/impl.go
+  s_526f33b6861346::t_5cb4bb64371a4d 32,298
+server/internal/projects/queries.sql
+  s_526f33b6861346::t_59db3c651c07b3 20-27
+server/internal/projects/repo/queries.sql.go
+  s_526f33b6861346::t_8ff6de87cfbe25 355-399
+server/internal/remotesessions/adminhandlers.go
+  s_526f33b6861346::t_01e7f02d247508 513-815
+server/internal/remotesessions/challenge.go
+  s_526f33b6861346::t_1158cec9fb724e 41,84-87,117-122,127-128,138,166,180,224,257-276,280,282,284,289,294,296-317,322-388,392-393,419-424,452,594-596,599,602-605,611-617,625-631,668-671,676-690
+server/internal/remotesessions/challenge_synthetic_expiry_test.go
+  s_526f33b6861346::t_347930d426b71d 4-7,65-69,92,96,98-99,103,107-140,146-155,193,275-278
+server/internal/remotesessions/clienthandlers.go
+  s_526f33b6861346::t_cec634716ab40f 258-260
+server/internal/remotesessions/clienthandlers_test.go
+  s_526f33b6861346::t_fc13975c8e5836 814,820
+server/internal/remotesessions/impl.go
+  s_526f33b6861346::t_406bd8e05a5ca1 11,43-44,48-59,79,83-94,145-155
+server/internal/remotesessions/issuermigration.go
+  s_526f33b6861346::t_ced1940c362845 7,16,54-56,152-162,166,186-210,317-357
+server/internal/remotesessions/issuermigration_internal_test.go
+  s_526f33b6861346::t_014f6633e30a33 223-261
+server/internal/remotesessions/legacycallback_test.go
+  s_526f33b6861346::t_6e8e2440b8f755 1-53
+server/internal/remotesessions/migrateissuer_test.go
+  s_526f33b6861346::t_a21a50a4c3cf47 127,133
+server/internal/remotesessions/organizationissuerhandlers.go
+  s_526f33b6861346::t_bfa9326dfb56fc 821-826,959,961
+server/internal/remotesessions/organizationsessionhandlers.go
+  s_526f33b6861346::t_7389d10f59f424 194-202,205-212,222-225
+server/internal/remotesessions/platformmigrateissuer_test.go
+  s_526f33b6861346::t_884a57c8f1eae9 1-14,19,22,24,27,29,31-33,36-42,44-50,52-59,61-69,71-88,91,94-98,101-104,106-107,109-112,114,116,119-120,123-130,133-135,137,139-145,147,149-152,154-155,158-167,170-172,174-176,178,180,182-190,192-200,203-214,217-225,227,229-241,243-245,247-249,252-256,259-261,263-268,270,272-273,275,277-278,280-294,296,298-299,302-306,309-311,313-315,317-318,320-323,325-326,329-332,335,337-338,340-341,344-347,350,352,354-356,358-361,363-371,374-377,380,382-385,387-389,391-395,397-399,402-404,407-409,411-412,414-418,420-425,427-428,431,434-436,438-439,441-442,444-445,447-448,451-455,458-460,462-463,465,467-476,479-483,486-489,491,493-497,499-500,502-523,526-529,532-550,554-555,557-565,568,571,573-581,583,587-618,621-622,624-627,630-664,666-673
+server/internal/remotesessions/proxyregister.go
+  s_526f33b6861346::t_bca4af0fdec0d7 1,22-24,38-62,65-69,77-78,87,91,134,145
+server/internal/remotesessions/queries.sql
+  s_526f33b6861346::t_766d7adf101ab4 56-117,461-470,611,613-615,624,626-628,635,638,651,672-676,678,680-683,702-705,711-718,720-726,729-735,740,748-757,870-988,1173-1180,1234-1245,1309-1318,1390-1398,1670-1777
+server/internal/remotesessions/refreshservice.go
+  s_526f33b6861346::t_07fff7d4935591 1-9,14-16,20,22-23,25-26,28,32-67,69-77,79-84,86,88-135,137-172,175-194,197-203,205,208-209,211-212,215-220,223-225,228-244,247-250,252,255-258,261-264,266,269-270,272-308,311-313,316,318-319,321-322,325-328,330
+server/internal/remotesessions/refreshservice_concurrent_test.go
+  s_526f33b6861346::t_661710d1db3062 1-84
+server/internal/remotesessions/refreshservice_invalid_grant_test.go
+  s_526f33b6861346::t_fcd70c0b82e394 1-82
+server/internal/remotesessions/refreshsession_test.go
+  s_526f33b6861346::t_7336046f297de8 67-68,71-80,99,126-130,198
+server/internal/remotesessions/refreshsweep_test.go
+  s_526f33b6861346::t_76845fc22b4e2c 4,14,16,20-22,25-28,30-37,39-46,48-58,60-65,70-80,82-89,92-107,109-122,125,129-131,133,135-137,139,141-143,145,147,150,153-164,167-189,191-200,202,204-205,207-209,211-214,217-253
+server/internal/remotesessions/repo/models.go
+  s_526f33b6861346::t_8c066e92e04196 14-30
+server/internal/remotesessions/repo/queries.sql.go
+  s_526f33b6861346::t_be678b1f97c8f6 37-187,258-380,382,426-428,929-975,1019,1045,1048-1050,1059-1132,1329-1335,1338-1340,1343-1347,1351-1365,1371,1415,1418-1420,1607-1622,1624,1650,1653-1655,2046-2153,2424-2433,2586-2593,2757,2811,2814-2816,3287-3294,3296-3302,3305-3311,3317,3321-3327,3339-3342,3348,3356-3364,3376,3435,3438-3440,3458-3477,3480-3483,3486-3490,3493-3523,3528,3530-3561,3603,3612-3629,3647,3650-3652,3672,3695,3698-3700,3709-3717,3719,3722-3723,3725-3726,3729-3731,3733-3734,3736,3739-3750,3812-3875,3893,3899-3935,4421-4429,4716-4718,4720-4722,4724-4725,4729-4738,4749,4766,4769-4771,4788,4790-4792,4802-4805,4812,4815,4817,4821-4831,4848,4851-4852,4863,4866-4868
+server/internal/remotesessions/setup_test.go
+  s_526f33b6861346::t_4fc755133c57e3 95,119,191,197
+server/internal/remotesessions/token_refresh_error.go
+  s_526f33b6861346::t_ad5ff54de51637 3-7,19-22,39,46-53,58,61-64
+server/internal/remotesessions/token_refresh_error_test.go
+  s_526f33b6861346::t_8e19d98ec64e46 1,3-6,8-27
+server/internal/remotesessions/token_response.go
+  s_526f33b6861346::t_9bdb397ee86e3a 3-6,9-10,12-20,29-61
+server/internal/remotesessions/token_response_test.go
+  s_526f33b6861346::t_be07122eeca371 1-55
+server/internal/remotesessions/tokenservice.go
+  s_526f33b6861346::t_830b32e650b1ce 7,13-15,95-110,147-152,178-246,330-334,340-342,345-347,359,361,363-365,448,473,476,479-493,500-509
+server/internal/remotesessions/tokenservice_authmethod_test.go
+  s_526f33b6861346::t_558c422121ce17 170
+server/internal/remotesessions/tokenservice_concurrent_refresh_test.go
+  s_526f33b6861346::t_35c848b4e27fde 83-84,133-136
+server/internal/remotesessions/tokenservice_invalid_grant_test.go
+  s_526f33b6861346::t_28f70ad72251bd 18,39-42,49,53-55,63-64,76,79,122-125,156
+server/internal/remotesessions/tokenservice_resolve_test.go
+  s_526f33b6861346::t_1d815aea13edf3 116,122,131-197,236-267,289,295
+server/internal/remotesessions/tokenservice_revoke_during_refresh_test.go
+  s_526f33b6861346::t_7a28a35842f8a1 45-48
+server/internal/risk/impl.go
+  s_526f33b6861346::t_cbb93020c6b6b9 3071-3072,3074
+server/internal/risk/policy_audience_test.go
+  s_526f33b6861346::t_7a85911c42dec4 140,146-147,155-156,299,302
+server/internal/risk/policybypass/url_grants_test.go
+  s_526f33b6861346::t_6bda984a9c8e83 275
+server/internal/scanners/shadowmcpscan/scanner.go
+  s_526f33b6861346::t_80c0f00227c207 362-366,371
+server/internal/scanners/shadowmcpscan/scanner_test.go
+  s_526f33b6861346::t_1bb56905447fe0 175,597-598,603
+server/internal/sessiontokens/sessiontokens.go
+  s_526f33b6861346::t_eae032cdf42083 51-55,73-77,85
+server/internal/sessiontokens/sessiontokens_test.go
+  s_526f33b6861346::t_05f098458b61f6 52-70
+server/internal/skills/impl.go
+  s_526f33b6861346::t_2515f7b1c583ab 13,64,79,92,104-108
+server/internal/skills/queries.sql
+  s_526f33b6861346::t_170bb5397d4587 2677-2705
+server/internal/skills/repo/queries.sql.go
+  s_526f33b6861346::t_6bd6bb13a5548b 1973-2028
+server/internal/skills/restore_version_test.go
+  s_526f33b6861346::t_42c4db1b8d7089 99,249,312
+server/internal/skills/setup_test.go
+  s_526f33b6861346::t_d3619a23266345 7,137-139
+server/internal/skills/shared_skill_page.html.tmpl
+  s_526f33b6861346::t_d4beeb8befac85 1-193
+server/internal/skills/sharepage.go
+  s_526f33b6861346::t_cf39ecbc50b117 1-201
+server/internal/skills/sharepage_test.go
+  s_526f33b6861346::t_82d097c4e16257 1,5-6,9,13-14,18-28,30-35,37-40,42-43,45-50,53-54,56-59,62-77,80,84-86,88-91,93-96,99,103-106,108-111,113-115,118,122-124,126-129,132,136-140,143-144,146-149,152-157,160-161,163-169,172-173,175-178,181-185,188-189,191-201
+server/internal/telemetry/dedupe.go
+  s_526f33b6861346::t_5b5ae80bcd8a0d 1-148
+server/internal/telemetry/dedupe_test.go
+  s_526f33b6861346::t_e15311a5571127 1,4,9-11,15-17,19-31,33-35,38,40,42-47,49,51-53,55-61,64-66,68,70-77,79-80,82-85,88,90-100,102-105,108-111,113-129,132-135,137,139-140,142-149,152-180,183-194,196
+server/internal/telemetry/logger.go
+  s_526f33b6861346::t_6e9eabda881b45 183-184,189-190,193-200,204,206,209-214,216,227
+server/internal/telemetry/repo/queries.sql.go
+  s_526f33b6861346::t_2b523b11afcf8b 308-320,1956-1960
+server/internal/telemetry/repo/usage_event_dedupe.go
+  s_526f33b6861346::t_a8896f0b46d526 1-127
+server/internal/testenv/queries.sql
+  s_526f33b6861346::t_ec19e273db2782 19-23,278-290,310-354
+server/internal/testenv/testrepo/queries.sql.go
+  s_526f33b6861346::t_73e085e5f044f5 13,63-94,203-226,402-459,527-555,693-715,1205-1220
+server/internal/thirdparty/openrouter/disable_test.go
+  s_526f33b6861346::t_8054cd6e9f0e16 1,5,8,15-16,18,21-25,28-35,38-43,46-48,50-59,61,63-65,67-98,100-104,107,110-112,114-115,117-119,121,123,125-132,134-135,138-140,142,144-153,155-158,160-162,165-167,170-172,174-175,177-178,180,182-187,190-192,195-200,203-205,207,209-210,212-219,221-224,226-228,230-238,240-243,245-256,259-268,270,272-280
+server/internal/thirdparty/openrouter/errors.go
+  s_526f33b6861346::t_4e8d13f7266381 26-37
+server/internal/thirdparty/openrouter/local.go
+  s_526f33b6861346::t_b82a650a872190 25-28
+server/internal/thirdparty/openrouter/openrouter.go
+  s_526f33b6861346::t_b7e0d0c0ada6c4 30,193-201,215-217,220-225,312-317,377,439-446,449,460-462,471-513,522-526,530-547,641-650,655-669,696-699,763
+server/internal/thirdparty/openrouter/queries.sql
+  s_526f33b6861346::t_0d271067201121 31-32,38-48
+server/internal/thirdparty/openrouter/repo/queries.sql.go
+  s_526f33b6861346::t_10a82532e777b2 61-82,132-135,144,154
+server/internal/thirdparty/openrouter/trial_credits_test.go
+  s_526f33b6861346::t_b0ff28e04805ed 1-292
+server/internal/thirdparty/openrouter/unified_client_test.go
+  s_526f33b6861346::t_098b52a4378709 68-71
+server/internal/thirdparty/posthog/posthog.go
+  s_526f33b6861346::t_2bd68f7afc7321 117-170
+server/internal/thirdparty/posthog/posthog_test.go
+  s_526f33b6861346::t_f099f2702402c9 1-92
+server/internal/toolsets/impl.go
+  s_526f33b6861346::t_ff46a821f08190 913
+server/internal/toolsets/setup_test.go
+  s_526f33b6861346::t_159d7d6a6a349f 210
+server/internal/trials/queries.sql
+  s_526f33b6861346::t_63698188e346f4 1-77
+server/internal/trials/repo/db.go
+  s_526f33b6861346::t_8a8edb57ead647 1-5,10-11,14-21,24-26,28-31
+server/internal/trials/repo/models.go
+  s_526f33b6861346::t_58a9134bf4363e 1-19
+server/internal/trials/repo/queries.sql.go
+  s_526f33b6861346::t_8a1890f28e2e82 1-212
+server/internal/urn/platform_mcp_registration.go
+  s_526f33b6861346::t_12c9162b4b4f42 1-157
+server/internal/urn/platform_mcp_registration_test.go
+  s_526f33b6861346::t_a6d8a1d0911140 1-46
+server/internal/usersessions/clienthandlers.go
+  s_526f33b6861346::t_cbcce4c78ab6cb 41-42,64-66,76-85,88,119-121,132-163
+server/internal/usersessions/getusersessionclient_test.go
+  s_526f33b6861346::t_6b6bcf29301864 12,46-82
+server/internal/usersessions/impl.go
+  s_526f33b6861346::t_27ff4583e63db0 88,92-101,143-152
+server/internal/usersessions/listusersessionclients_test.go
+  s_526f33b6861346::t_fb808289a6833e 5,10,13,15,94-223
+server/internal/usersessions/listusersessions_test.go
+  s_526f33b6861346::t_12de14e1b75b8a 10,416-481
+server/internal/usersessions/minthandler.go
+  s_526f33b6861346::t_3e8e8072606d2e 124-128
+server/internal/usersessions/proxytombstone.go
+  s_526f33b6861346::t_c5d360784a265c 1-18,20-28,30-44,46-58
+server/internal/usersessions/proxytombstone_test.go
+  s_526f33b6861346::t_81a061968d759a 1-50
+server/internal/usersessions/queries.sql
+  s_526f33b6861346::t_72caed051e6e00 140-142,154-175,326,329,344-345
+server/internal/usersessions/repo/queries.sql.go
+  s_526f33b6861346::t_4713de58bd360f 16-63,866-868,1175,1178,1193-1194,1241,1244,1282,1285
+server/internal/usersessions/setup_test.go
+  s_526f33b6861346::t_391c1e6504d41b 256-277
+server/internal/xmcp/service.go
+  s_526f33b6861346::t_079f3b919697ce 105,151-164
+server/internal/xmcp/setup_test.go
+  s_526f33b6861346::t_d851e0f738ab38 161
+server/internal/xmcp/wellknown_test.go
+  s_526f33b6861346::t_b4cac4a1d0f9e6 199-203,331-334,336
+server/migrations/20260806224308_trials-table-tier.sql
+  s_526f33b6861346::t_b362fe3858a34b 1,3-16
+server/migrations/20260807090620_risk-results-fk-cascade-indexes.sql
+  s_526f33b6861346::t_1a5eba43df4f23 1-6
+server/migrations/20260807103825_remote-session-refresh-support.sql
+  s_526f33b6861346::t_91cc4ea5d8d939 1-6
+server/migrations/20260810123455_platform-mcp-registration-state.sql
+  s_526f33b6861346::t_8fe84c3056ea4d 1-168
+server/migrations/atlas.sum
+  s_526f33b6861346::t_57a03ceb432e0b 1,322-325
+server/package.json
+  s_526f33b6861346::t_49d3830f7bdc51 3
+tunnel/Dockerfile
+  s_526f33b6861346::t_c595397f7e07fb 6-8
+tunnel/Dockerfile.dockerignore
+  s_526f33b6861346::t_ea3d6bf43331c0 1-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "b2eb3da221cf2a0fbaa16728463b9d868ad5dc89",
+  "prompts": {},
+  "sessions": {
+    "s_526f33b6861346": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019febc3-e301-7a13-a8d2-7b64854a64e0",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

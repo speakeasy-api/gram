@@ -1,0 +1,35 @@
+server/internal/testenv/queries.sql
+  s_d57c903c3bc12c::t_e18f380d913496 824-829
+server/cmd/tools/migrations/legacypolicyscope/runner_test.go
+  s_d57c903c3bc12c::t_3f9f480f1d7cb8 9,318-412
+server/cmd/tools/migrations/legacypolicyscope/runner.go
+  s_d57c903c3bc12c::t_f94695bd80dc9a 230
+  s_d57c903c3bc12c::t_b9e07a77134552 9,88-101,224-225,319-349,351-356,366-371,382-390
+  s_d57c903c3bc12c::t_6ac2706f2ea295 391
+server/cmd/tools/migrations/LEGACY_POLICY_SCOPE_MIGRATION.md
+  s_d57c903c3bc12c::t_97a21accc2fee1 62
+  s_d57c903c3bc12c::t_7e93000d840445 74,125-129
+server/cmd/tools/migrations/legacy_policy_scope_cmd_test.go
+  s_d57c903c3bc12c::t_6776293878d61a 108
+  s_d57c903c3bc12c::t_2261660f147991 4,6,93-107,109-126
+server/cmd/tools/migrations/legacy_policy_scope_cmd.go
+  s_d57c903c3bc12c::t_880e9ca6691727 12,69-77
+server/internal/testenv/testrepo/queries.sql.go
+  s_d57c903c3bc12c::t_038dde41dbe13a 1808-1819
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "af5f5055282e9e76de06659cd35f275db2135147",
+  "prompts": {},
+  "sessions": {
+    "s_d57c903c3bc12c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db8bb333-57c1-4f55-9089-77952e65a646",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

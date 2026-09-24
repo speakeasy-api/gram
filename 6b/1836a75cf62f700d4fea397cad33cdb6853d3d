@@ -1,0 +1,19 @@
+server/internal/plugins/generate_test.go
+  s_231dc78127db77::t_c93ddc953bae09 2012-2074,2264-2269,2293-2296
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "6b1836a75cf62f700d4fea397cad33cdb6853d3d",
+  "prompts": {},
+  "sessions": {
+    "s_231dc78127db77": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b1e73d1a-6ff8-4598-b6fb-795a59454728",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

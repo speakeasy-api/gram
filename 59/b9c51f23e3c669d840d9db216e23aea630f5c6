@@ -1,0 +1,19 @@
+server/internal/risk/impl.go
+  s_29b0461c94a5c4::t_45f6dd425be698 355-357
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "59b9c51f23e3c669d840d9db216e23aea630f5c6",
+  "prompts": {},
+  "sessions": {
+    "s_29b0461c94a5c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1038a49d-c381-4c3d-9a4a-36e639255f83",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

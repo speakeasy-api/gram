@@ -1,0 +1,35 @@
+server/database/schema.sql
+  s_03ab56aca1fcca::t_9c0857057e765a 3007-3009,3011-3014,3017-3018
+server/internal/risk/celenv/descriptor_test.go
+  s_5e8039f9d96e02::t_d0fe80c1ce00db 150,152
+server/internal/risk/celenv/descriptor.go
+  s_5e8039f9d96e02::t_d0fe80c1ce00db 116-117,148,152
+server/internal/risk/celenv/celenv_test.go
+  s_5e8039f9d96e02::t_d0fe80c1ce00db 59,86,90,99,120,146,165,183,198,215,222,232,265,330
+server/internal/risk/celenv/celenv.go
+  s_5e8039f9d96e02::t_d0fe80c1ce00db 7,13,18-23,26-30,35,66,96,108,128,269-274
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "12d59b15cdfe6ffaf4a0f6dc251a0993354c907e",
+  "prompts": {},
+  "sessions": {
+    "s_03ab56aca1fcca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3f03da73-b20c-48aa-ae9f-e8a382ed2821",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    },
+    "s_5e8039f9d96e02": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7204e23b-9892-40b9-9abd-f538d9fb898d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

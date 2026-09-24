@@ -1,0 +1,55 @@
+.changeset/faster-skill-insights.md
+  s_664ae7d369889a::t_fcf4d3df8bf779 5
+  s_664ae7d369889a::t_e8a19f7dc6edae 1-4
+server/internal/telemetry/repo/skill_version_metrics.go
+  s_664ae7d369889a::t_2221232bff3b69 204-208
+  s_664ae7d369889a::t_096befd37cbc42 228
+  s_664ae7d369889a::t_fdfbd277cd66aa 212-214,220-221,223-227,229,237,240-242,255-257
+  s_664ae7d369889a::t_8d8b74b3d32a6b 222,238-239,244
+  s_664ae7d369889a::t_0b949a11703f63 160-170,172-180,183-186,189-191,193-199,201-202
+  s_664ae7d369889a::t_cc75e2dfc82f1b 230-236,251
+  s_664ae7d369889a::t_8581f3461b4634 209-211
+server/internal/telemetry/repo/skill_efficacy_scores.go
+  s_664ae7d369889a::t_7f31062b6e1355 118-124,126-129,131-132,134,136,138-144,146-149,188-191
+  s_664ae7d369889a::t_2e54780a1747dd 67-76
+  s_664ae7d369889a::t_366be7a6d96441 349-534
+  s_664ae7d369889a::t_bece65544a0c24 61-66
+  s_0562d5ccc0eaab::t_d6ec222140829f 93-115
+server/internal/telemetry/repo/skill_mapped_sessions.go
+  s_664ae7d369889a::t_8877633a38d10e 1-2,4,6-16
+  s_664ae7d369889a::t_98c277f75deb20 3
+  s_664ae7d369889a::t_096befd37cbc42 5
+server/internal/telemetry/repo/skill_efficacy_scores_test.go
+  s_664ae7d369889a::t_321a03823cd943 137,139-146
+  s_664ae7d369889a::t_fcb0cba9f19ea0 7,129-136,138,147-150,155-161,163-173
+  s_664ae7d369889a::t_6db829aee894bc 151-154,162
+  s_664ae7d369889a::t_a5629f29666874 174-175
+server/internal/telemetry/repo/skill_version_metrics_test.go
+  s_664ae7d369889a::t_5136a9045efbe6 28-44
+  s_664ae7d369889a::t_fcf4d3df8bf779 1-25,27
+  s_664ae7d369889a::t_391fd2de680fb8 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "a9a1e095250780546b8692336d21a201493306d1",
+  "prompts": {},
+  "sessions": {
+    "s_0562d5ccc0eaab": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019feac9-55de-7990-9a61-dcfe038b3137",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_664ae7d369889a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0237f-0bfe-7680-a351-49299ea5f43e",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,83 @@
+server/internal/risk/celenv/reference.go
+  s_e5457925ae460d::t_118f699cf72b1e 3,8-11,14,16-21,26-30,35,44,65-66,74,84
+server/internal/risk/celenv/reference_test.go
+  s_e5457925ae460d::t_118f699cf72b1e 3-6,17-19,21-26,29-33,35-36,38-44,46,48-49,53-56,61-64,67-68,70-72,74-75,78-80,82,84-99
+server/internal/risk/celenv/celenv_test.go
+  s_e5457925ae460d::t_cbf757da8f3e3f 318,320,322,324,335
+server/internal/risk/celenv/completion.go
+  s_e5457925ae460d::t_118f699cf72b1e 1-2,8-16,18-30,32-37,40-41,43,45-46,48-50,52-60,64-65,72-75,93-114,116-134,135-142,143,151-152,154-158,161-163,165-180
+server/internal/risk/celenv/celenv.go
+  s_e5457925ae460d::t_cbf757da8f3e3f 83-89,91-139,141,146-156,158-160,162-163
+server/internal/risk/celenv/completion_test.go
+  s_e5457925ae460d::t_118f699cf72b1e 1-80,103-112
+server/internal/risk/repo/copyfrom.go
+  s_e5457925ae460d::t_c47f32e21c3261 47,57
+server/internal/background/activities/risk_analysis/message_view.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 1-71
+server/internal/background/worker.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 43,253-261,301
+server/internal/risk/queries.sql
+  s_e5457925ae460d::t_6232daaa6ab5d7 263,272,295,676,695,724,731
+  s_e5457925ae460d::t_76940aba4b6514 14-15,37-38,94-95,110-111
+server/cmd/gram/start.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 94,990-994,1133
+server/design/risk/design.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 33,138,401-429,719,724,810,814,1051,1076,1080,1185-1191
+  s_e5457925ae460d::t_76940aba4b6514 35-36,140-141
+server/internal/background/activities/risk_analysis/presidio.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 486-487,632-633
+server/internal/background/activities/risk_analysis/gitleaks.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 28-32,90-91
+server/internal/risk/prompt_policy_scanner_test.go
+  s_e5457925ae460d::t_11f1a986d39347 103,126,151,170,189,206,225
+server/internal/background/activities/risk_analysis/llm_judge.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 193-194
+server/internal/background/activities/risk_analysis/celadapter_test.go
+  s_e5457925ae460d::t_11f1a986d39347 1-8,10-13,15-22,24-34,39-63,66-82,85-92,94-104
+  s_e5457925ae460d::t_cbf757da8f3e3f 9,14,23,35-38,64-65,83-84,93
+server/design/shared/risk.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 116-117,192,200-226,261
+  s_e5457925ae460d::t_76940aba4b6514 78-79
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_e5457925ae460d::t_11f1a986d39347 27,55-63,72,129,221,325,409,627,685-714,868,893,896-898,906
+server/internal/background/activities/risk_analysis/celadapter.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 1-51,55,59-117
+  s_e5457925ae460d::t_76940aba4b6514 118-184
+server/internal/background/activities/risk_analysis/pi_heuristics.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 199-200,238-239,266-267
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 35,78,94,116,236,242-244,246,359,388,495-502,515-519,557-563,611,620-624,729-754,763-765,768,770,774-778,782-783,930-931,992-993,1052-1053,1113-1114,1118-1123,1140,1148-1192,1316,1342
+  s_e5457925ae460d::t_76940aba4b6514 196-207,234,579-592
+server/internal/risk/impl.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 47,98-100,133,153,174,322-323,554,648-649,1008-1021,1037,1328,1356,1385,1419-1447,1646,1651,1667,1754-1755,1766-1771,1871-1875,1947,1951,1954,1958-1966,1974-1985,1997-2032,2042,2046-2050,2052,2093-2097,2111-2116,2126-2130,2167,2257-2259,2263,2266-2288,2397-2405,2409,2411,2417-2418,2425,2429,2431,2464,2469,2481-2508,2534,2543-2549,2823,2841,2845-2869
+  s_e5457925ae460d::t_76940aba4b6514 336-344,363-364,539-553,679-680,1986-1993,2344-2345,2377-2378
+server/internal/risk/scanner.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 25,123,133,153,193,196-198,201,238-239,352-360,392,395-398,404-406,467-477,561-565,571,573,576,578,582-586,590-591,595-599
+  s_e5457925ae460d::t_76940aba4b6514 190-192,194-195,361-371,393-394
+server/internal/risk/setup_test.go
+  s_e5457925ae460d::t_11f1a986d39347 28,35-41,129
+server/internal/background/activities/risk_analysis/pi_scanner.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 190-191
+server/internal/risk/policy_audience_test.go
+  s_e5457925ae460d::t_11f1a986d39347 185,228,275
+server/internal/risk/scanner_test.go
+  s_e5457925ae460d::t_11f1a986d39347 180,215,251,287,321,349
+server/internal/background/activities.go
+  s_e5457925ae460d::t_6232daaa6ab5d7 41,153,188
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "0e59cfe701cf75c4d75340388d9fe070c3b8f79e",
+  "prompts": {},
+  "sessions": {
+    "s_e5457925ae460d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "27e802d5-8b32-4910-b9fd-7266730d92eb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+docs/permissions-rewrite.md
+  s_a5f37a1929f11b::t_afa0fb6d7d6bf0 78,80,82,85,87,89,91,93,95,97
+  s_a5f37a1929f11b::t_2f8376713408ae 1-77,79,81,83-84,86,88,90,92,94,96,98-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "c0ebb3b60515d9afc4779fef2b47e2b12bd155b0",
+  "prompts": {},
+  "sessions": {
+    "s_a5f37a1929f11b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ee04b-25b9-7e42-9e18-fe6de7ddd0f2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

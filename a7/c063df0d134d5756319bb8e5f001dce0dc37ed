@@ -1,0 +1,21 @@
+server/cmd/tools/migrations/LEGACY_POLICY_SCOPE_MIGRATION.md
+  s_d32de0b0e2b253::t_893ae2e7efb13d 48-64,88-89,100-101
+server/cmd/tools/migrations/legacy_policy_scope_cmd.go
+  s_d32de0b0e2b253::t_d3c9199f7a606e 45-46,71-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "a7c063df0d134d5756319bb8e5f001dce0dc37ed",
+  "prompts": {},
+  "sessions": {
+    "s_d32de0b0e2b253": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3c4ca134-6d21-4756-a37e-e1180d485004",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+client/dashboard/src/components/write-only-header-row.tsx
+  h_2620cc60cfd1e9 11-12,25-26,38,48,54,66-68
+client/dashboard/src/pages/data-exports/DestinationEditorSheet.tsx
+  h_2620cc60cfd1e9 204-205
+client/dashboard/src/pages/org/OtelForwardingSection.tsx
+  h_2620cc60cfd1e9 247-248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "5f1ac81ea49a249cf7868b4fdf87571f75af1ac5",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

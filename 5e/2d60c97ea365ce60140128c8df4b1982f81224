@@ -1,0 +1,84 @@
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_1fd25e6450fcc7::t_f23df0ae740e93 67,76
+  s_1fd25e6450fcc7::t_e90a7edd8bbde8 1-7,46-47,77,85-88,129-131,133,135-141,149,188-189,372,412-415,517,520-528,530-533,536-547
+  s_1fd25e6450fcc7::t_992b55d84b0445 370-371,377-386
+server/internal/riskjudge/judge.go
+  s_1fd25e6450fcc7::t_8bb2abefbac32b 202-206
+server/internal/background/activities/risk_analysis/policy_eval.go
+  s_1fd25e6450fcc7::t_192a93897deea5 39-41,48-54,63-70
+client/dashboard/src/pages/security/policy-evals/EvalsTab.tsx
+  s_1fd25e6450fcc7::t_f0d5e414c98aea 4,6-11,31,57-65,91,104-105,134-135,151-153,179-181,184,200,205,219-221,223-238,246,254,262,315-316,326,333-334,344-345,353,360,395-396,440-441,443-447,449-476,480,484-488,518-523,555,559-562,605-607,611-631,633,646,648,650,659,671-683,687,689-706,710-712,718-719,739-741,771,795,797,840,874-875,878-879,883-885,893-897,900-901,903-909,913,915,934-935,940-941,957,963-964,966-967
+  s_1fd25e6450fcc7::t_8f27dae9b8836f 56
+  s_1fd25e6450fcc7::t_5a61a74995ed1f 350
+  s_1fd25e6450fcc7::t_2d68b1b31bcd9d 657,660-670
+  s_1fd25e6450fcc7::t_70e79d1bb0e951 871-873,886,898
+  s_1fd25e6450fcc7::t_20fd9949c0f2e0 140
+  s_1fd25e6450fcc7::t_e2c544e61ff7ad 367-372,377,380-384
+  s_1fd25e6450fcc7::t_bbf7d3c8e18400 423-425
+  s_1fd25e6450fcc7::t_2dd3ad699cbd6e 528
+  s_1fd25e6450fcc7::t_c6bfc78a04f146 707-709,713-717,728
+  s_1fd25e6450fcc7::t_d3689c27d95bd4 647,756-758,760,762,773,965
+  s_1fd25e6450fcc7::t_a2891fcb2da848 35
+  s_1fd25e6450fcc7::t_accd728aaf1e08 55
+  s_1fd25e6450fcc7::t_5e288297ce0c4b 408
+  s_1fd25e6450fcc7::t_f2d82cd25f9c8f 491,493-501,507
+  s_1fd25e6450fcc7::t_e6bce718e6cc92 92-94,106-112,124-126,136-139,155-159,182-183,191-192,354,946
+  s_1fd25e6450fcc7::t_bbefd9d197818c 48-49
+  s_1fd25e6450fcc7::t_f41a7f110c06dc 355-359
+  s_1fd25e6450fcc7::t_2e36d4ef45e4eb 563-604
+  s_1fd25e6450fcc7::t_cf6b98ba1e68f7 265-279,932
+  s_1fd25e6450fcc7::t_8f1be4f6a26be9 490,492,502,504-506,510-513,516-517,527,529-540,544-554,556-558,655
+  s_1fd25e6450fcc7::t_6c114d76a99cf0 608-610
+  s_1fd25e6450fcc7::t_0f1bd918db9f0b 640,745-747,777-780,784-785,789-793,902
+  s_1fd25e6450fcc7::t_0c7eadb2b475b1 858
+  s_1fd25e6450fcc7::t_b5964240c33e94 298-304,314
+  s_1fd25e6450fcc7::t_679b6043a7429b 481-483
+  s_1fd25e6450fcc7::t_edc0da455c137f 201,206,209-210
+  s_1fd25e6450fcc7::t_192339167146ae 335-337,346-348,373-376,397,412-414,416
+  s_1fd25e6450fcc7::t_f0841120242af6 418-422,426
+  s_1fd25e6450fcc7::t_b91d1748bf6d32 541-543
+  s_1fd25e6450fcc7::t_5992c44700a359 339
+  s_1fd25e6450fcc7::t_49680a4f54a6b4 767-769
+  s_1fd25e6450fcc7::t_e941a641d29271 378-379
+  s_1fd25e6450fcc7::t_bb2592c7f527f2 398-407,409-411,415,800
+  s_1fd25e6450fcc7::t_e1764ebf4e309b 342
+  s_1fd25e6450fcc7::t_896f7b830c5fd8 524-526
+  s_1fd25e6450fcc7::t_dcbe8676e4b1ed 634-636,656,720-727,729-738,798,899,970
+  s_1fd25e6450fcc7::t_f1756f195a0f1d 88-89,96-101,114-121,132,169,174-177,190
+client/dashboard/src/components/command-palette/ResourceResults.tsx
+  s_1fd25e6450fcc7::t_7397fbb68276ca 264-265
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_1fd25e6450fcc7::t_17d58277aa4230 139-156,183-184
+  s_1fd25e6450fcc7::t_6640008737a75a 181-182
+  s_1fd25e6450fcc7::t_090a60fd7678a3 9-11
+  s_1fd25e6450fcc7::t_6f9cd5a032390b 71-72,86-91
+  s_1fd25e6450fcc7::t_156dab9b1b479f 179
+  s_1fd25e6450fcc7::t_5f201d8f5dfc7e 1-2,4-6,8,12-16,29,36-41,43,45-50,64-69,83-85,92-95,103,108-111,119,121-123,129
+  s_1fd25e6450fcc7::t_f57cfca454010f 157-163
+server/internal/background/activities/risk_analysis/policy_eval_activity.go
+  s_1fd25e6450fcc7::t_128a38d8d09dfd 27-32
+  s_1fd25e6450fcc7::t_c99a8d53390251 270-278
+client/dashboard/src/routes.tsx
+  s_1fd25e6450fcc7::t_e2dafdd3621fd7 86
+  s_1fd25e6450fcc7::t_3d8219f6798824 511-513,518-528
+client/dashboard/src/pages/security/policy-summary.tsx
+  s_1fd25e6450fcc7::t_8ad96dfe68c55a 19
+  s_1fd25e6450fcc7::t_8aa1fbb0963118 1,5-6
+  s_1fd25e6450fcc7::t_69ee4685fff2d3 3-4,9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "5e2d60c97ea365ce60140128c8df4b1982f81224",
+  "prompts": {},
+  "sessions": {
+    "s_1fd25e6450fcc7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7ea42380-1a11-45cd-902e-a44d16cbae01",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

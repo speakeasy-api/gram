@@ -1,0 +1,77 @@
+server/internal/authz/expressions_bench_test.go
+  s_bad31f9bdaac48::t_fa44301c421bc9 1-73,108-140
+  s_95d069cf52f7b4::t_c165143b5013f3 74,76-81,83-85,87-89,91-96,98-100,102-107
+  s_95d069cf52f7b4::t_c6bb0e4b6c2cc2 75,82,90,97
+  s_95d069cf52f7b4::t_eb6344012674da 86,101
+server/internal/authz/grants.go
+  s_9971e86f513595::t_908660c9f3de54 281,285,293,298
+  s_95d069cf52f7b4::t_c7ce01a464bcc2 229-230
+  s_95d069cf52f7b4::t_21565ec8524457 231
+server/internal/authz/selector_test.go
+  s_95d069cf52f7b4::t_eb6344012674da 178,180,187,189,191,206,208,228,230
+client/sdk/.speakeasy/gen.lock
+  s_95d069cf52f7b4::t_ce4caf155583c1 546,924,6989,7072
+server/internal/authz/expressions.go
+  s_95d069cf52f7b4::t_eb6344012674da 22,219
+  s_95d069cf52f7b4::t_2c74f38e050442 34
+server/internal/authz/expressions_test.go
+  s_95d069cf52f7b4::t_e18ae34c60ee39 176,213,235,271,295
+  s_95d069cf52f7b4::t_eb6344012674da 182,219,241,277,301
+server/internal/authz/scopes.go
+  s_95d069cf52f7b4::t_61638d2da9de3f 18-19,21,23,25,27,29,31,33,35,37-38,117-118,120,122,124,126,128,130,132,134,136-137,145,165
+  s_95d069cf52f7b4::t_eb6344012674da 20,22,24,26,28,32,34,36,119,123,131,133,147,151,159,161
+  s_95d069cf52f7b4::t_4596333b89cb8b 99
+  s_95d069cf52f7b4::t_828ba2da412908 100
+client/dashboard/src/pages/access/roundtrip.test.ts
+  s_95d069cf52f7b4::t_d5acb82ae7bf67 51,58-65,67-69,71-107,109-110,112-115,117-121,163,198
+  s_95d069cf52f7b4::t_eb6344012674da 43,50,70,111,116
+server/design/access/design.go
+  s_95d069cf52f7b4::t_d7036a168e5777 758
+  s_95d069cf52f7b4::t_eb6344012674da 694,708
+server/internal/authz/scopes_test.go
+  s_95d069cf52f7b4::t_e598c3235899e4 87,43,47
+  s_95d069cf52f7b4::t_d668a9a6000bc1 91
+  s_95d069cf52f7b4::t_45bbe9613769a0 1134,1151-1163,21-22,44,48-49,459-460,481,486-487
+  s_95d069cf52f7b4::t_2674cafdeffdd7 14
+docs/rbac.md
+  s_95d069cf52f7b4::t_fc02466d70ca5e 226,252,311,316,339-343,345-346
+  s_95d069cf52f7b4::t_eb6344012674da 322,331
+client/dashboard/src/pages/access/roleGrantTransform.ts
+  s_95d069cf52f7b4::t_b116be0bb7bc8e 4,30,76,79-83,89,91,113,128,130,138-141,145,148-151,153,155-157,159,185,191,213,265,267-268,284
+  s_95d069cf52f7b4::t_b5e318aa5d02f0 154,158
+server/internal/authz/engine_test.go
+  s_95d069cf52f7b4::t_e18ae34c60ee39 388,412
+  s_95d069cf52f7b4::t_eb6344012674da 397,421
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "19c1b816f29af635e3cfcc288ab9f81cb144c368",
+  "prompts": {},
+  "sessions": {
+    "s_95d069cf52f7b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfff-79bd-7ac0-8355-76dbf61e503f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_9971e86f513595": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecbe4-9fbc-7a21-bc41-2031dbdd6e97",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_bad31f9bdaac48": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4ea-4166-7552-bf58-8b723ca59372",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

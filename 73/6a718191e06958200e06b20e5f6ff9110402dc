@@ -1,0 +1,41 @@
+server/cmd/risk-pi-report/main.go
+  s_bd7cd997c597f2::t_a70d916bbcac0e 216-217,264,268,283,288-292,298,300-301,525,528-529,532,536,538-541,546-548
+  s_bd7cd997c597f2::t_344cd54ed44df4 67,182,779,808
+server/internal/scanners/promptinjection/scanner_test.go
+  s_bd7cd997c597f2::t_726b2e48d865e5 37,68,70-72,75,77,79-83,86,89,93,95,99,101,104,106,110,113-116,120,122-123,126,128,131,133-134,137,139,141,143,146,150-152,162,165-181,184,187,191-203,205-207,210,214,217,221-224,227-228
+server/internal/scanners/promptinjection/testdata/prompt_injection/corpus_notes.md
+  s_bd7cd997c597f2::t_f838fc20baa236 22,30,53
+.changeset/prompt-injection-judge-always-on.md
+  s_bd7cd997c597f2::t_4c438bfad5ce93 1-5
+server/internal/scanners/promptinjection/scanner.go
+  s_bd7cd997c597f2::t_257ff206a6a267 102
+  s_bd7cd997c597f2::t_feb67692b70f47 61,68,72,75,79,81,84,86-89,95
+server/internal/background/activities/risk_analysis/scan_prompt_injection.go
+  s_bd7cd997c597f2::t_4c125039ea608c 15-17,20
+server/internal/risk/impl.go
+  s_bd7cd997c597f2::t_61ad6a73455f1c 2836
+client/dashboard/src/pages/security/policy-data.ts
+  s_bd7cd997c597f2::t_78fd40b13ae9a9 1577-1578
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_bd7cd997c597f2::t_73ab400f2b7664 1,36,100,141
+server/internal/risk/scanner.go
+  s_bd7cd997c597f2::t_6c68ebd0b3e916 177,186-187,337,464,602
+server/internal/scanners/promptinjection/testdata/prompt_injection/floors.json
+  s_bd7cd997c597f2::t_63e9ba7e40a44f 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.13",
+  "base_commit_sha": "736a718191e06958200e06b20e5f6ff9110402dc",
+  "prompts": {},
+  "sessions": {
+    "s_bd7cd997c597f2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6023-c413-72c0-a589-54ec717a73c2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

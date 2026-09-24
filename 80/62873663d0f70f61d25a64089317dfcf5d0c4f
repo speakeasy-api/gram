@@ -1,0 +1,19 @@
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_ecd3c0270d8258::t_549de44481708b 1552
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8062873663d0f70f61d25a64089317dfcf5d0c4f",
+  "prompts": {},
+  "sessions": {
+    "s_ecd3c0270d8258": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f29a5-b8ee-7410-adc0-75daeac1de45",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

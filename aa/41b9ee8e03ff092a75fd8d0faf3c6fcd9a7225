@@ -1,0 +1,14 @@
+client/dashboard/src/components/org-sidebar.tsx
+  h_9630b74bdac540 83-88,104-105,109,196-199,254-256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "aa41b9ee8e03ff092a75fd8d0faf3c6fcd9a7225",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

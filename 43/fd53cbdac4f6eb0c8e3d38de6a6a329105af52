@@ -1,0 +1,26 @@
+server/internal/plugins/list_directory_audiences_test.go
+  s_5987dba16de244::t_3fda9d0d9cca2c 67
+server/internal/thirdparty/workos/queries.sql
+  s_5987dba16de244::t_18e62585c198a2 282,288
+  s_5987dba16de244::t_3fda9d0d9cca2c 337,341
+server/internal/thirdparty/workos/repo/queries.sql.go
+  s_5987dba16de244::t_a3fb7617ada420 434,438,573,579
+server/internal/agent/getplugins_test.go
+  s_5987dba16de244::t_18e62585c198a2 160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "43fd53cbdac4f6eb0c8e3d38de6a6a329105af52",
+  "prompts": {},
+  "sessions": {
+    "s_5987dba16de244": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01959-19dd-7eb1-8706-1fa16b5d07e0",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,672 @@
+.changeset/identity-chaining-issuer-lifecycle.md
+  h_9630b74bdac540 4,7
+.changeset/tailscale-identity-headers.md
+  h_9630b74bdac540 2,5
+.speakeasy/out.admin.openapi.yaml
+  h_9630b74bdac540 1553-1704,4826-4879,5609-5612,5696,5706-5709,5735,6355-6373
+.speakeasy/out.openapi.yaml
+  h_9630b74bdac540 673-764,7433-7443,71135-71173,80113-80116,81361,81371-81374,81400,81969-81981,86095-86098,86109,86114,86120,86130-86133,86156,86272,86277-86280,86302,88143-88146
+client/admin/CHANGELOG.md
+  h_9630b74bdac540 3-8
+client/admin/package.json
+  h_9630b74bdac540 4,36
+client/admin/src/lib/gramAdminClient.test.ts
+  h_9630b74bdac540 16,47-54,150-225
+client/admin/src/lib/gramAdminClient.ts
+  h_9630b74bdac540 72-75,194-218
+client/admin/src/pages/organization/Features.test.tsx
+  h_9630b74bdac540 14-17
+client/admin/src/pages/organization/Features.tsx
+  h_9630b74bdac540 27,170,256-257
+client/admin/src/pages/organization/Onboarding.test.tsx
+  h_9630b74bdac540 1-300
+client/admin/src/pages/organization/Onboarding.tsx
+  h_9630b74bdac540 1-233
+client/admin/src/pages/remote-session-issuers/Convergence.test.tsx
+  h_9630b74bdac540 74-129
+client/admin/src/pages/remote-session-issuers/Convergence.tsx
+  h_9630b74bdac540 206-218
+client/admin/src/sdk/.speakeasy/gen.lock
+  h_9630b74bdac540 53,78,115-117,162,195,269-270,287,490,602-613,918-928
+client/admin/src/sdk/src/funcs/adminGetOrganizationOnboarding.ts
+  h_9630b74bdac540 1-179
+client/admin/src/sdk/src/funcs/adminSetOrganizationOnboarding.ts
+  h_9630b74bdac540 1-175
+client/admin/src/sdk/src/models/components/adminonboardingconfiguration.ts
+  h_9630b74bdac540 1-73
+client/admin/src/sdk/src/models/components/adminonboardingpreset.ts
+  h_9630b74bdac540 1-50
+client/admin/src/sdk/src/models/components/adminonboardingtask.ts
+  h_9630b74bdac540 1-36
+client/admin/src/sdk/src/models/components/globalremotesessionissuer.ts
+  h_9630b74bdac540 19-22,47,55
+client/admin/src/sdk/src/models/components/issuermigratepreflight.ts
+  h_9630b74bdac540 20,31-34,66,78
+client/admin/src/sdk/src/models/components/setorganizationonboardingrequestbody.ts
+  h_9630b74bdac540 1-76
+client/admin/src/sdk/src/models/operations/admingetorganizationonboarding.ts
+  h_9630b74bdac540 1-41
+client/admin/src/sdk/src/react-query/adminOrganizationOnboarding.core.ts
+  h_9630b74bdac540 1-80
+client/admin/src/sdk/src/react-query/adminOrganizationOnboarding.ts
+  h_9630b74bdac540 1-137
+client/admin/src/sdk/src/react-query/setAdminOrganizationOnboarding.ts
+  h_9630b74bdac540 1-109
+client/admin/src/sdk/src/sdk/admin.ts
+  h_9630b74bdac540 24,49,67,102,121,424-451
+client/dashboard/CHANGELOG.md
+  h_9630b74bdac540 3-24
+client/dashboard/package.json
+  h_9630b74bdac540 4,28,31-32,95
+client/dashboard/src/components/observe/EmployeeShadowAISection.tsx
+  h_9630b74bdac540 2,38-41
+client/dashboard/src/components/org-sidebar.tsx
+  h_9630b74bdac540 113,147,275-278
+client/dashboard/src/components/shadow-ai/AIToolDecisionSheet.tsx
+  h_9630b74bdac540 15,99-100
+client/dashboard/src/components/shadow-ai/AIToolsTable.test.tsx
+  h_9630b74bdac540 2-3,21-31,93-160
+client/dashboard/src/components/shadow-ai/AIToolsTable.tsx
+  h_9630b74bdac540 15,107-111,114-120,298-302
+client/dashboard/src/components/shadow-ai/SignalBadges.tsx
+  h_9630b74bdac540 1-20
+client/dashboard/src/components/shadow-ai/detectionColumns.tsx
+  h_9630b74bdac540 1-62
+client/dashboard/src/hooks/useOrganizationSetupTasks.ts
+  h_9630b74bdac540 3-4,37-53
+client/dashboard/src/lib/audit-actions.ts
+  h_9630b74bdac540 138,586-587
+client/dashboard/src/pages/agents/AgentAPIKeys.test.tsx
+  h_9630b74bdac540 833-837,922
+client/dashboard/src/pages/agents/agent-key-discovery.test.ts
+  h_9630b74bdac540 5-8,20-23,26-27,29-34,37,57-67,69-75,77,82-87,91,104-133,138,142-144,146,149,181-185
+client/dashboard/src/pages/agents/agent-key-discovery.ts
+  h_9630b74bdac540 3,9-16,38-55,58
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.test.tsx
+  h_9630b74bdac540 23-24,140-141,270-271,569,582-595,775
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkAccessSection.tsx
+  h_9630b74bdac540 300-301,519-520,528-529,555-559,561-562
+client/dashboard/src/pages/platform-admin/SupportMatrix.tsx
+  h_9630b74bdac540 1-497
+client/dashboard/src/pages/platform-admin/support-matrix-model.test.ts
+  h_9630b74bdac540 1-77
+client/dashboard/src/pages/platform-admin/support-matrix-model.ts
+  h_9630b74bdac540 1-161
+client/dashboard/src/pages/remote-identity-providers/MigrateImpact.test.tsx
+  h_9630b74bdac540 1-53
+client/dashboard/src/pages/remote-identity-providers/MigrateImpact.tsx
+  h_9630b74bdac540 150,159,207-218
+client/dashboard/src/pages/remote-identity-providers/MigrateIssuerDialog.tsx
+  h_9630b74bdac540 140
+client/dashboard/src/pages/setup/SetupBoard.tsx
+  h_9630b74bdac540 209-210
+client/dashboard/src/pages/setup/SetupTaskPage.test.tsx
+  h_9630b74bdac540 170-185
+client/dashboard/src/pages/setup/SetupTaskPage.tsx
+  h_9630b74bdac540 172,181,231
+client/dashboard/src/pages/setup/SetupWizard.test.tsx
+  h_9630b74bdac540 78-84,89-91,180,326-349
+client/dashboard/src/pages/setup/SetupWizard.tsx
+  h_9630b74bdac540 8,10,17-20,200-205,270,302,311,379-381
+client/dashboard/src/pages/setup/components/board/task-step.test.tsx
+  h_9630b74bdac540 1-202
+client/dashboard/src/pages/setup/components/board/task-step.tsx
+  h_9630b74bdac540 1-150
+client/dashboard/src/pages/setup/components/board/tasks.ts
+  h_9630b74bdac540 1-90
+client/dashboard/src/pages/setup/components/confirm-traffic-section.test.tsx
+  h_9630b74bdac540 4,41-43,300-323
+client/dashboard/src/pages/setup/components/confirm-traffic-section.tsx
+  h_9630b74bdac540 87,114,144-147
+client/dashboard/src/pages/setup/components/enable-logging-and-session-capture-setting.test.tsx
+  h_9630b74bdac540 31-35,96-97,127-130,162-165,257-260,265-267,287-290
+client/dashboard/src/pages/setup/components/enable-logging-and-session-capture-setting.tsx
+  h_9630b74bdac540 7,153
+client/dashboard/src/pages/setup/components/setup-task-content.test.tsx
+  h_9630b74bdac540 1-51
+client/dashboard/src/pages/setup/components/setup-task-content.tsx
+  h_9630b74bdac540 1-2,10-18,20-29
+client/dashboard/src/pages/setup/components/steps/confirm-traffic-step.tsx
+  h_9630b74bdac540 1-30
+client/dashboard/src/pages/setup/components/steps/connect-idp-step.tsx
+  h_9630b74bdac540 1-257
+client/dashboard/src/pages/setup/components/steps/create-marketplace-step.test.tsx
+  h_9630b74bdac540 1-66
+client/dashboard/src/pages/setup/components/steps/create-marketplace-step.tsx
+  h_9630b74bdac540 1-126
+client/dashboard/src/pages/setup/components/steps/directory-sync-step.tsx
+  h_9630b74bdac540 1-128
+client/dashboard/src/pages/setup/components/steps/identity-provider-step.test.tsx
+  h_9630b74bdac540 5-8,22-26,29-32,66-68,72-166,255-316
+client/dashboard/src/pages/setup/components/steps/index.ts
+  h_9630b74bdac540 2-5
+client/dashboard/src/pages/setup/task-slugs.ts
+  h_9630b74bdac540 6-10,32
+client/dashboard/src/pages/shadow-ai/ShadowAI.tsx
+  h_9630b74bdac540 54-57
+client/dashboard/src/pages/shadow-ai/ShadowAIAssistants.tsx
+  h_9630b74bdac540 13-14
+client/dashboard/src/pages/shadow-ai/ShadowAIHarnesses.tsx
+  h_9630b74bdac540 13-14
+client/dashboard/src/pages/shadow-ai/ShadowAIModels.tsx
+  h_9630b74bdac540 13
+client/dashboard/src/pages/shadow-ai/ShadowAIToolDetail.test.tsx
+  h_9630b74bdac540 1-265
+client/dashboard/src/pages/shadow-ai/ShadowAIToolDetail.tsx
+  h_9630b74bdac540 1-135
+client/dashboard/src/routes.test.tsx
+  h_9630b74bdac540 38,93,104
+client/dashboard/src/routes.tsx
+  h_9630b74bdac540 116,141,906-908,912-920,925-933,938-946,1493-1498
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_9630b74bdac540 41,794,1161,2157,2560-2561,6327,6641,6666,6702,7742-7753,9718
+client/dashboard/src/sdk/src/funcs/accessListAIDetectionUsers.ts
+  h_9630b74bdac540 1-201
+client/dashboard/src/sdk/src/funcs/agentsListDelegableGrants.ts
+  h_9630b74bdac540 112
+client/dashboard/src/sdk/src/models/components/aidetectionuser.ts
+  h_9630b74bdac540 1-90
+client/dashboard/src/sdk/src/models/components/globalremotesessionissuer.ts
+  h_9630b74bdac540 19-22,47,55
+client/dashboard/src/sdk/src/models/components/issuermigratepreflight.ts
+  h_9630b74bdac540 20,31-34,66,78
+client/dashboard/src/sdk/src/models/components/listaidetectionusersresult.ts
+  h_9630b74bdac540 1-43
+client/dashboard/src/sdk/src/models/components/organizationissuerdeletepreflight.ts
+  h_9630b74bdac540 16,23-26,44,53
+client/dashboard/src/sdk/src/models/components/organizationissuermigratepreflight.ts
+  h_9630b74bdac540 24,35-38,66,79
+client/dashboard/src/sdk/src/models/components/organizationusersessionissuerdeletepreflight.ts
+  h_9630b74bdac540 20,27-30,51,62
+client/dashboard/src/sdk/src/models/components/querypayload.ts
+  h_9630b74bdac540 87-90,121,137,146
+client/dashboard/src/sdk/src/models/operations/listagentdelegablegrants.ts
+  h_9630b74bdac540 21-24,65,77,84
+client/dashboard/src/sdk/src/models/operations/listaidetectionusers.ts
+  h_9630b74bdac540 1-84
+client/dashboard/src/sdk/src/react-query/aiDetectionUsers.core.ts
+  h_9630b74bdac540 1-83
+client/dashboard/src/sdk/src/react-query/aiDetectionUsers.ts
+  h_9630b74bdac540 1-151
+client/dashboard/src/sdk/src/react-query/listAgentDelegableGrants.core.ts
+  h_9630b74bdac540 54,85
+client/dashboard/src/sdk/src/react-query/listAgentDelegableGrants.ts
+  h_9630b74bdac540 122,139
+client/dashboard/src/sdk/src/sdk/access.ts
+  h_9630b74bdac540 10,35,73-76,240-258
+dev-idp-dashboard/package.json
+  h_9630b74bdac540 28
+docs/plugins/package-format.md
+  h_9630b74bdac540 256-261,265-268
+docs/rbac.md
+  h_9630b74bdac540 537-538,577
+functions/CHANGELOG.md
+  h_9630b74bdac540 3-8
+functions/internal/javascript/gram-start.mjs
+  h_9630b74bdac540 73-81,318-322
+functions/internal/javascript/tests/gram-start.test.ts
+  h_9630b74bdac540 207,247,363
+functions/package.json
+  h_9630b74bdac540 5
+overlays/admin-sdk.yaml
+  h_9630b74bdac540 97-99,151-153
+pnpm-lock.yaml
+  h_9630b74bdac540 10-11,13-14,37-38,50,52-53,149-150,213-214,217,220,222-223,225-226,244,325,414-415,565-566,636,656-657,660,697-698,703-704,709-710,715-716,719-720,728-729,739-740,742-743,745,755-756,764-765,774-775,787-788,790,799-800,1399-1400,4470-4471,4531-4546,4559-4560,6943-6944,7221-7223,7871,7873-7874,7878,7880-7883,7885,7887-7888,7893,7895,7902,7904,7909,7911,7915,7917-7920,7930,7932-7936,7938-7940,7943-7945,7949,7951-7952,7954-7956,7962,7964,7966,7968-7970,7974,7976,7980,7987,7989-7995,8000,8004-8006,8010,8012,8016-8017,8663,8665,8667,8823,8825,11472,11474-11476,11479-11485,11543,11545-11546,11557,14288,14613-14614
+pnpm-workspace.yaml
+  h_9630b74bdac540 17,24,26,47-48,66
+seed/demo/PAGES.md
+  h_9630b74bdac540 54-55
+server/CHANGELOG.md
+  h_9630b74bdac540 3-26
+server/database/schema.sql
+  h_9630b74bdac540 3677-3682,4059-4065,4071-4078
+server/design/access/design.go
+  h_9630b74bdac540 501-527,1272-1299
+server/design/admin/design.go
+  h_9630b74bdac540 289-310,1057-1078
+server/design/agents/design.go
+  h_9630b74bdac540 205,212
+server/design/platformadmin/remotesessions/design.go
+  h_9630b74bdac540 466-467,478-479,482,510-511
+server/design/remotesessionissuers/admin.go
+  h_9630b74bdac540 40,47-48,84-85,95-96,98
+server/design/telemetry/design.go
+  h_9630b74bdac540 1869-1871
+server/design/usersessionissuers/design.go
+  h_9630b74bdac540 534,536-537
+server/gen/access/client.go
+  h_9630b74bdac540 35,48,67,455-477
+server/gen/access/endpoints.go
+  h_9630b74bdac540 36,70,102,627-649
+server/gen/access/service.go
+  h_9630b74bdac540 73-80,142,175-194,449-468
+server/gen/admin/client.go
+  h_9630b74bdac540 54-55,78,114-115,914-959
+server/gen/admin/endpoints.go
+  h_9630b74bdac540 54-55,134-135,194-195,969-1014
+server/gen/admin/service.go
+  h_9630b74bdac540 119-122,234,360-381,879-885,974-977,1028-1034,1375-1385
+server/gen/admin_remote_sessions/service.go
+  h_9630b74bdac540 316-319,370-376
+server/gen/agents/service.go
+  h_9630b74bdac540 207-210
+server/gen/http/access/client/cli.go
+  h_9630b74bdac540 748-777
+server/gen/http/access/client/client.go
+  h_9630b74bdac540 88-91,165,591-614
+server/gen/http/access/client/encode_decode.go
+  h_9630b74bdac540 4028-4261,6831-6852
+server/gen/http/access/client/paths.go
+  h_9630b74bdac540 95-99
+server/gen/http/access/client/types.go
+  h_9630b74bdac540 367-376,3590-3776,5741-5758,9053-9219,11151-11174,15453-15692,18378-18412
+server/gen/http/access/server/encode_decode.go
+  h_9630b74bdac540 3723-3930,6411-6440
+server/gen/http/access/server/paths.go
+  h_9630b74bdac540 95-99
+server/gen/http/access/server/server.go
+  h_9630b74bdac540 39,95,123,158,192,1110-1162
+server/gen/http/access/server/types.go
+  h_9630b74bdac540 369-378,3592-3778,5717-5734,6373-6394,9023-9172,10731-10740
+server/gen/http/admin/client/cli.go
+  h_9630b74bdac540 1085-1149
+server/gen/http/admin/client/client.go
+  h_9630b74bdac540 155-162,293-294,1138-1185
+server/gen/http/admin/client/encode_decode.go
+  h_9630b74bdac540 8175-8643,13502-13530,13555
+server/gen/http/admin/client/paths.go
+  h_9630b74bdac540 180-189
+server/gen/http/admin/client/types.go
+  h_9630b74bdac540 140-149,1055-1074,1208-1211,1424-1430,8029-8408,12328-12343,12384-12387,12822-12840,18873-19228,19858,21074,23766-23833,24066-24068,25017-25523,25545-25548,25570-25572,25594-25597,25619-25621,25643-25645,25667-25669,25691-25693,25715-25717,25739-25741,25763-25765,25787-25789,25811-25813,25835-25838,25860-25862,25884-25886,25908-25911,25933-25936,25958-25961,25983-25986,26008-26011,26033-26036,26058,26060-26061,26083-26086,26108,26110-26111,26133-26136,26158-26161,26183-26186,26208-26211,26233-26236,26258-26261,26283-26286,26308-26311,26333-26336,26358,26360-26361,26383-26386,26408-26411,26433,26435-26436,26458,26460-26461,26483,26485-26486,26508-26510,26532,26534-26535,26557-26559,26581-26584,26606-26609,26631,26633-26634,26656-26658,26680-26682,26704-26706,26728-26730,26752-26754,26776,26778-26779,26801-26803,26825,26827-26828,26850-26852,26874,26876-26877,26899-26901,26923-26925,26947-26949,26971-26973,26995-26997,27019-27021,27043-27045,27067-27069,27091-27093,27115-27117,27139-27141,27163-27165,27187-27189,27211-27213,27235-27237,27259-27261,27283-27285,27307-27309,27331-27333,27355-27357,27379-27381,27403-27405,27427-27429,27451-27453,27475-27477,27499-27501,27523-27525,27547-27550,27572-27574,27596-27598,27620-27622,27644-27646,27668-27670,27692-27694,27716-27718,27740-27742,27764-27766,27788-27790,27812-27814,27836-27838,27860-27862,27884-27886,27908-27910,27932-27934,27956-27958,27980-27982,28004-28006,28028-28030,28052-28054,28076-28078,28100-28102,28124-28126,28148-28150,28172-28174,28196-28198,28220-28222,28244-28246,28268-28270,28292-28294,28316-28318,28340-28342,28364-28366,28388-28390,28412-28414,28436-28438,28460-28463,28485-28487,28509-28512,28534-28536,28558-28560,28582-28584,28606-28608,28630-28632,28654-28656,28678-28680,28702-28705,28727-28729,28751-28754,28776-28778,28800-28802,28824-28826,28848-28850,28872-28874,28896-28898,28920-28922,28944,28946-28947,28969-28971,28993,28995-28996,29018-29020,29042-29044,29066-29068,29090-29092,29114-29116,29138-29140,29162-29164,29186-29188,29210-29212,29234-29236,29258-29260,29282-29284,29306-29308,29330-29332,29354-29356,29378-29380,29402-29404,29426-29428,29450-29452,29474-29476,29498-29500,29522-29524,29546-29548,29570-29572,29594-29596,29618-29620,29642-29644,29666-29668,29690-29692,29714-29716,29738-29740,29762-29764,29786-29788,29810-29812,29834-29836,29858-29860,29882-29884,29906-29908,29930-29932,29954-29956,29978-29980,30002-30004,30026-30028,30050-30052,30074-30076,30098-30100,30122-30124,30146-30148,30170-30172,30194-30196,30218-30220,30242-30244,30266-30268,30290-30292,30314-30316,30338-30340,30362-30364,30386-30388,30410-30412,30434-30436,30458-30460,30482-30484,30506-30508,30530-30532,30554-30556,30578-30580,30602-30604,30626-30629,30651-30653,30675-30678,30700-30702,30724-30727,30749-30751,30773-30775,30797-30799,30821-30823,30845-30847,30869-30872,30894-30896,30918-30921,30943-30945,30967-30969,30991-30993,31015-31017,31039-31041,31063-31065,31087-31089,31111-31113,31135-31137,31159-31161,31183,31185-31186,31208-31210,31232-31234,31256-31258,31280-31282,31304-31306,31328-31330,31352-31354,31376-31378,31400-31402,31424-31426,31448-31450,31472-31474,31496-31498,31520-31522,31544-31546,31568-31570,31592-31594,31616-31618,31640-31642,31664-31666,31688-31690,31712-31714,31736-31738,31760-31762,31784-31786,31808-31810,31832-31834,31856-31858,31880-31882,31904-31906,31928-31930,31952-31954,31976-31979,32001-32003,32025-32027,32049-32051,32073-32075,32097-32099,32121-32123,32145-32147,32169-32171,32193-32196,32218-32220,32242-32245,32267-32269,32291-32293,32315-32317,32339-32341,32363-32365,32387-32389,32411-32413,32435-32437,32459-32462,32484-32486,32508-32511,32533-32535,32557-32559,32581-32584,32606-32608,32630-32632,32654-32656,32678-32702,32704-32705,32727-32729,32751-32754,32776-32778,32800-32803,32825-32827,32849-32851,32873-32875,32897-32899,32921-32945,32947-32948,32970-32972,32994,32996-32997,33019-33021,33043-33045,33067-33069,33091-33093,33115-33117,33139-33141,33163-33165,33187,33189-33190,33212-33214,33236,33238-33239,33261-33263,33285-33287,38454-38488
+server/gen/http/admin/server/encode_decode.go
+  h_9630b74bdac540 7253-7667,11997-12029,12054
+server/gen/http/admin/server/paths.go
+  h_9630b74bdac540 180-189
+server/gen/http/admin/server/server.go
+  h_9630b74bdac540 58-59,142-143,198-199,261-262,323-324,2166-2273
+server/gen/http/admin/server/types.go
+  h_9630b74bdac540 140-149,1063-1082,1216-1219,1432-1438,8037-8416,12336-12351,12392-12395,13250-13320,13464,13699,19041-19340,22677-22702,23351-23367
+server/gen/http/admin_remote_sessions/client/encode_decode.go
+  h_9630b74bdac540 3802
+server/gen/http/admin_remote_sessions/client/types.go
+  h_9630b74bdac540 397-400,772-778,3881-3884,4907,6913,7709-7711
+server/gen/http/admin_remote_sessions/server/encode_decode.go
+  h_9630b74bdac540 3417
+server/gen/http/admin_remote_sessions/server/types.go
+  h_9630b74bdac540 399-402,774-780,3883-3886,4220,4591
+server/gen/http/agents/client/cli.go
+  h_9630b74bdac540 239,259-276,286
+server/gen/http/agents/client/encode_decode.go
+  h_9630b74bdac540 1451-1453
+server/gen/http/agents/server/encode_decode.go
+  h_9630b74bdac540 1306,1323-1329,1337
+server/gen/http/agents/server/types.go
+  h_9630b74bdac540 6355,6359
+server/gen/http/cli/gram/cli.go
+  h_9630b74bdac540 115,191,359-362,505,4067-4074,4430,5257-5258,5634-5636,7963-7968,8294-8296,8385,10649-10654,11151,11539-11558,12192,12203,12208,25415,27471-27472,28212-28251
+server/gen/http/openapi3.yaml
+  h_9630b74bdac540 1565-1718,5326-5416,12015-12025,75097-75135,75967-76020,85263-85266,86532,86542-86545,86571,87226-87238,91496-91499,91510,91515,91521,91531-91534,91557,91673,91678-91681,91703,93544-93547,97744-97762
+server/gen/http/organization_remote_session_issuers/client/types.go
+  h_9630b74bdac540 456-458,693-699,4115-4116,5111-5113,6021-6023,6167-6169
+server/gen/http/organization_remote_session_issuers/server/types.go
+  h_9630b74bdac540 456-458,693-699,3451-3452,3685-3687
+server/gen/http/organization_user_session_issuers/client/types.go
+  h_9630b74bdac540 218-219,221-223,3645,5340-5342
+server/gen/http/organization_user_session_issuers/server/types.go
+  h_9630b74bdac540 218-219,221-223,2984
+server/gen/http/telemetry/client/cli.go
+  h_9630b74bdac540 920,953-959,971-976
+server/gen/http/telemetry/client/types.go
+  h_9630b74bdac540 285-287,9268-9274,9286-9291
+server/gen/http/telemetry/server/types.go
+  h_9630b74bdac540 285-287,15395-15397,15414-15416
+server/gen/organization_remote_session_issuers/service.go
+  h_9630b74bdac540 347-349,375-381
+server/gen/organization_user_session_issuers/service.go
+  h_9630b74bdac540 270-271,273-275
+server/gen/telemetry/service.go
+  h_9630b74bdac540 1587-1589
+server/internal/access/ai_detection_users_test.go
+  h_9630b74bdac540 1-216
+server/internal/access/ai_detections.go
+  h_9630b74bdac540 5-6,11,70,109,125-206,314
+server/internal/admin/impl.go
+  h_9630b74bdac540 375-376
+server/internal/admin/onboarding.go
+  h_9630b74bdac540 1-64
+server/internal/admin/onboarding_test.go
+  h_9630b74bdac540 1-133
+server/internal/admin/remotesessions.go
+  h_9630b74bdac540 197,235
+server/internal/admin/remotesessions_ema_count_test.go
+  h_9630b74bdac540 1-19
+server/internal/agent/reportaiscan_test.go
+  h_9630b74bdac540 40
+server/internal/agentmanagement/delegable.go
+  h_9630b74bdac540 5,51,53-63,79,81,95-116
+server/internal/agentmanagement/delegable_test.go
+  h_9630b74bdac540 419-456
+server/internal/agents/runtimepolicy/delegable.go
+  h_9630b74bdac540 5,13-18,69-70
+server/internal/anthropicinference/service.go
+  h_9630b74bdac540 139-143
+server/internal/audit/organizations.go
+  h_9630b74bdac540 29,61-94
+server/internal/background/worker_test.go
+  h_9630b74bdac540 109-110
+server/internal/demoseed/postgres.sql
+  h_9630b74bdac540 371-375,511-512,516-524,528,2375-2382
+server/internal/hooks/impl.go
+  h_9630b74bdac540 232-234
+server/internal/hooks/ingest_hooks.go
+  h_9630b74bdac540 310-312,385-387,464-466,571-573,725-727,810-812,896-898,988-990,1039-1041
+server/internal/hooks/mcp_attribution.go
+  h_9630b74bdac540 37-39
+server/internal/hooks/pending_helpers.go
+  h_9630b74bdac540 56-58
+server/internal/hooks/quarantine_gate.go
+  h_9630b74bdac540 23-25,77-79
+server/internal/hooks/risk_scan.go
+  h_9630b74bdac540 67-69,226-228,253-255
+server/internal/hooks/shadow_mcp_inventory.go
+  h_9630b74bdac540 35-38
+server/internal/hooks/spend_gate.go
+  h_9630b74bdac540 21-23
+server/internal/mcp/authnchallenge_authorize.go
+  h_9630b74bdac540 23
+server/internal/mcp/authnchallenge_clientauth.go
+  h_9630b74bdac540 18
+server/internal/mcp/authnchallenge_clientauth_accept_test.go
+  h_9630b74bdac540 18
+server/internal/mcp/authnchallenge_consent_action.go
+  h_9630b74bdac540 81-88
+server/internal/mcp/authnchallenge_consent_authority_internal_test.go
+  h_9630b74bdac540 1-97
+server/internal/mcp/authnchallenge_federation.go
+  h_9630b74bdac540 51-52,97,409,412-416,421
+server/internal/mcp/authnchallenge_federation_fixture_test.go
+  h_9630b74bdac540 44-51,102-109
+server/internal/mcp/authnchallenge_federation_offline_test.go
+  h_9630b74bdac540 106,150
+server/internal/mcp/authnchallenge_federation_retry_test.go
+  h_9630b74bdac540 16-17,20-22,29-58,88,120-174,205-213,215,222-233,259
+server/internal/mcp/authnchallenge_idjag_test.go
+  h_9630b74bdac540 30
+server/internal/mcp/authnchallenge_register.go
+  h_9630b74bdac540 27
+server/internal/mcp/authnchallenge_test.go
+  h_9630b74bdac540 55-57,88-90
+server/internal/mcp/authnchallenge_token.go
+  h_9630b74bdac540 39
+server/internal/mcp/authnchallenge_token_dispatch_internal_test.go
+  h_9630b74bdac540 19
+server/internal/mcp/authnchallenge_token_dispatch_test.go
+  h_9630b74bdac540 11
+server/internal/mcp/authnchallenge_well_known.go
+  h_9630b74bdac540 37
+server/internal/mcp/authnchallenge_workloadgrant.go
+  h_9630b74bdac540 30
+server/internal/mcp/client_resolver.go
+  h_9630b74bdac540 25
+server/internal/mcp/consent_assets/consent-tools.js
+  h_9630b74bdac540 91
+server/internal/mcp/presented_client_credentials.go
+  h_9630b74bdac540 7
+server/internal/mcpendpoints/impl.go
+  h_9630b74bdac540 254-256,604,735
+server/internal/mcpendpoints/plugin_publish.go
+  h_9630b74bdac540 1-41
+server/internal/mcpendpoints/unifiedslugavailability_test.go
+  h_9630b74bdac540 21,228-261
+server/internal/mcpservers/deletemcpserver_ema_test.go
+  h_9630b74bdac540 1-50
+server/internal/mcpservers/impl.go
+  h_9630b74bdac540 61,870-879,1192-1194,1249-1256
+server/internal/netingress/middleware_test.go
+  h_9630b74bdac540 192-238
+server/internal/netingress/tailscale_identity.go
+  h_9630b74bdac540 81-83,129-139,143,148
+server/internal/netingress/tailscale_identity_test.go
+  h_9630b74bdac540 4,7,163-245
+server/internal/oauthwire/oauthwire.go
+  h_9630b74bdac540 1-4
+server/internal/oauthwire/oauthwire_test.go
+  h_9630b74bdac540 9
+server/internal/oktaresourceconnections/derive.go
+  h_9630b74bdac540 13
+server/internal/oktaresourceconnections/derive_test.go
+  h_9630b74bdac540 9
+server/internal/oktaresourceconnections/setup_test.go
+  h_9630b74bdac540 29
+server/internal/organizations/impl.go
+  h_9630b74bdac540 1128,1139-1147,1220-1222
+server/internal/organizations/listsetuptasks_test.go
+  h_9630b74bdac540 17-19,32,38,71-73,77-89,110-111,343-519
+server/internal/organizations/onboarding.go
+  h_9630b74bdac540 1-137
+server/internal/organizations/onboarding_test.go
+  h_9630b74bdac540 1-309
+server/internal/organizations/queries.sql
+  h_9630b74bdac540 944-952,1000,1011-1032
+server/internal/organizations/repo/queries.sql.go
+  h_9630b74bdac540 156-172,589-622,784,1827-1844,1871-1890
+server/internal/organizations/setup_tasks.go
+  h_9630b74bdac540 47-48,54-57,64-65,106,108,161,163,194-195,235,237,279,304,307,311,315,355,374-381
+server/internal/organizations/setupcallback_test.go
+  h_9630b74bdac540 1-71
+server/internal/organizations/setuptaskassignmentemail_test.go
+  h_9630b74bdac540 94
+server/internal/organizations/updatesetuptask_test.go
+  h_9630b74bdac540 192-224
+server/internal/outbox/events/audit_log.go
+  h_9630b74bdac540 64
+server/internal/outbox/events/catalog_gen.go
+  h_9630b74bdac540 54
+server/internal/outbox/events/catalog_gen.yaml
+  h_9630b74bdac540 2563-2620
+server/internal/platformmcp/client_admission.go
+  h_9630b74bdac540 19,112-114,124-129
+server/internal/platformmcp/client_admission_integration_test.go
+  h_9630b74bdac540 4,9,14-18,99-194
+server/internal/platformmcp/descriptor_test.go
+  h_9630b74bdac540 275-278
+server/internal/platformmcp/localfixture/oauth.go
+  h_9630b74bdac540 16
+server/internal/platformmcp/oauth_client_resolver.go
+  h_9630b74bdac540 26
+server/internal/platformmcp/oauthhttp.go
+  h_9630b74bdac540 31
+server/internal/platformmcp/oauthhttp_test.go
+  h_9630b74bdac540 20
+server/internal/platformmcp/tool_get_platform_context.go
+  h_9630b74bdac540 16
+server/internal/platformmcp/tools.go
+  h_9630b74bdac540 63-64
+server/internal/plugins/generate.go
+  h_9630b74bdac540 376,389,832,1068-1071,1075,1080-1081,1414,1449,1453,1459,3428,3437
+server/internal/plugins/generate_test.go
+  h_9630b74bdac540 793-851
+server/internal/plugins/impl.go
+  h_9630b74bdac540 50,3070-3079,3083,3117-3123,3126-3128,3133-3136
+server/internal/plugins/network_address.go
+  h_9630b74bdac540 1-29
+server/internal/plugins/network_address_test.go
+  h_9630b74bdac540 1-41
+server/internal/plugins/platform_mcp_public.go
+  h_9630b74bdac540 174
+server/internal/plugins/private_package_test.go
+  h_9630b74bdac540 1-65
+server/internal/plugins/queries.sql
+  h_9630b74bdac540 336-360,412-422,462-464,481-484,488-497,511,520,546-552,563,590,598-606
+server/internal/plugins/repo/queries.sql.go
+  h_9630b74bdac540 673-717,831-837,848,875,883-891,1455-1458,1462-1471,1485,1494,1525-1527,1540-1542,1569-1571,1597-1607,1624-1640,1668-1671
+server/internal/projects/deleteproject_ema_test.go
+  h_9630b74bdac540 1-45
+server/internal/projects/impl.go
+  h_9630b74bdac540 573-590
+server/internal/projects/queries.sql
+  h_9630b74bdac540 156-164
+server/internal/projects/repo/queries.sql.go
+  h_9630b74bdac540 15-30,83-96,539-554
+server/internal/remotesessions/adminhandlers.go
+  h_9630b74bdac540 256,277-278,298-302,304,389-397,443-448,518-521,653-656,866
+server/internal/remotesessions/adminhandlers_ema_count_test.go
+  h_9630b74bdac540 1-41
+server/internal/remotesessions/delegation/contracts.go
+  h_9630b74bdac540 45-46
+server/internal/remotesessions/delegation/repository.go
+  h_9630b74bdac540 149
+server/internal/remotesessions/delegation/service.go
+  h_9630b74bdac540 457-476,613
+server/internal/remotesessions/delegation_security_regression_test.go
+  h_9630b74bdac540 1-162
+server/internal/remotesessions/delegation_service.go
+  h_9630b74bdac540 7,55,61,71-73,105
+server/internal/remotesessions/delegation_status_configuration_test.go
+  h_9630b74bdac540 75,78-89
+server/internal/remotesessions/federation.go
+  h_9630b74bdac540 23,80-83,97
+server/internal/remotesessions/federation_delegation_loader_test.go
+  h_9630b74bdac540 14,18,66-80,82-91,93-94
+server/internal/remotesessions/federation_delegation_revision_test.go
+  h_9630b74bdac540 10,12,19-20
+server/internal/remotesessions/federation_metadata.go
+  h_9630b74bdac540 8-10,69-76,122-125
+server/internal/remotesessions/federation_metadata_failure_test.go
+  h_9630b74bdac540 1-110
+server/internal/remotesessions/federation_refresh.go
+  h_9630b74bdac540 86-91,98
+server/internal/remotesessions/federation_refresh_dependency_test.go
+  h_9630b74bdac540 95,98-101,107,117-119
+server/internal/remotesessions/issuerconfiguration_internal_test.go
+  h_9630b74bdac540 1-59
+server/internal/remotesessions/issuerhandlers.go
+  h_9630b74bdac540 318-321,684-689,983-986,1038-1041,1475,1752-1767
+server/internal/remotesessions/issuerlifecycle.go
+  h_9630b74bdac540 1-70
+server/internal/remotesessions/issuermetadatarefresh.go
+  h_9630b74bdac540 30,442-444,447-450,594-598
+server/internal/remotesessions/issuermetadatarefresh_test.go
+  h_9630b74bdac540 1350-1373
+server/internal/remotesessions/issuermigration.go
+  h_9630b74bdac540 398,409,421-425,481,514,520-521,528-531
+server/internal/remotesessions/issuermigration_ema_test.go
+  h_9630b74bdac540 1-66
+server/internal/remotesessions/issuermigration_internal_test.go
+  h_9630b74bdac540 298-300
+server/internal/remotesessions/organizationissuerhandlers.go
+  h_9630b74bdac540 358-362,364,599-604,765-768,848-856,874,878-879,886-889,1041-1044,1184
+server/internal/remotesessions/queries.sql
+  h_9630b74bdac540 515,518-526,2705,2708-2716,3457,3460-3468,3567,3570-3580,3961-4026,4151-4168,4181-4184
+server/internal/remotesessions/repo/delegation_test.go
+  h_9630b74bdac540 130-131,136-137
+server/internal/remotesessions/repo/ema_binding_sql_test.go
+  h_9630b74bdac540 1-231
+server/internal/remotesessions/repo/models.go
+  h_9630b74bdac540 74-91
+server/internal/remotesessions/repo/queries.sql.go
+  h_9630b74bdac540 911-946,1833,1836,1838-1844,1847-1901,1903,2024,2027,2029-2035,2043-2096,2098,2100,2228,2231,2233-2239,2247-2301,2303,2361,2364-2366,2368-2374,2377-2430,2435,2437,2575-2602,3031-3085,7999-8044,8708-8725,8936-8938,8947,8959,9434-9504
+server/internal/remotesessions/tokenservice.go
+  h_9630b74bdac540 51
+server/internal/remotesessions/tokenservice_credentials_internal_test.go
+  h_9630b74bdac540 18
+server/internal/telemetry/query.go
+  h_9630b74bdac540 178-179,181-189
+server/internal/telemetry/query_test.go
+  h_9630b74bdac540 11,481-486,542-558,684-700,1239-1244,1530-1554
+server/internal/telemetry/repo/ai_detections.go
+  h_9630b74bdac540 410-411,473-479,492,494-522,529-530,564-640
+server/internal/telemetry/repo/ai_detections_test.go
+  h_9630b74bdac540 69-105
+server/internal/telemetry/repo/attribute_metrics.go
+  h_9630b74bdac540 207-210,399-402
+server/internal/telemetry/repo/canonical_identity_test.go
+  h_9630b74bdac540 47
+server/internal/telemetry/repo/skill_version_metrics.go
+  h_9630b74bdac540 270
+server/internal/telemetry/repo/skill_version_metrics_test.go
+  h_9630b74bdac540 15-23,28-46
+server/internal/testenv/queries.sql
+  h_9630b74bdac540 1417-1468
+server/internal/testenv/testrepo/queries.sql.go
+  h_9630b74bdac540 288-303,825-835,1101-1125,2199-2210,3348-3380,3486-3555,3587-3613
+server/internal/thirdparty/okta/client.go
+  h_9630b74bdac540 26
+server/internal/thirdparty/okta/setup_test.go
+  h_9630b74bdac540 29
+server/internal/usersessions/assertion/privatekeyjwt/assertion.go
+  h_9630b74bdac540 6
+server/internal/usersessions/authorizationrequest.go
+  h_9630b74bdac540 16
+server/internal/usersessions/cimd/cimd.go
+  h_9630b74bdac540 56
+server/internal/usersessions/cimd/cimd_test.go
+  h_9630b74bdac540 15
+server/internal/usersessions/cimd/inspection.go
+  h_9630b74bdac540 10
+server/internal/usersessions/cimd/validate.go
+  h_9630b74bdac540 10
+server/internal/usersessions/cimd/validate_test.go
+  h_9630b74bdac540 14
+server/internal/usersessions/clientauthmethod.go
+  h_9630b74bdac540 4
+server/internal/usersessions/clientcred/clientcred.go
+  h_9630b74bdac540 15
+server/internal/usersessions/clienthandlers.go
+  h_9630b74bdac540 21
+server/internal/usersessions/clientregistration.go
+  h_9630b74bdac540 23
+server/internal/usersessions/clientregistration_test.go
+  h_9630b74bdac540 14
+server/internal/usersessions/emalifecycle.go
+  h_9630b74bdac540 1-21
+server/internal/usersessions/issuerhandlers.go
+  h_9630b74bdac540 28,145-147,160-170,371-373
+server/internal/usersessions/jwks/keysource.go
+  h_9630b74bdac540 8
+server/internal/usersessions/jwks/keysource_test.go
+  h_9630b74bdac540 9
+server/internal/usersessions/lifecycle/ema.go
+  h_9630b74bdac540 1-76
+server/internal/usersessions/organizationissuerhandlers.go
+  h_9630b74bdac540 347-359,460,482-484,495,546-550,577,582
+server/internal/usersessions/organizationissuerpreflight_ema_test.go
+  h_9630b74bdac540 1-166
+server/internal/usersessions/queries.sql
+  h_9630b74bdac540 885,914-921,1015,1041-1048
+server/internal/usersessions/repo/queries.sql.go
+  h_9630b74bdac540 1019,1046-1052,1060-1079,1081,1169,1199-1205,1213-1231,1237,1239
+server/internal/usersessions/tokenrequest.go
+  h_9630b74bdac540 13
+server/migrations/20260923235951_chat-messages-project-listing-idx.sql
+  h_9630b74bdac540 1-8
+server/migrations/atlas.sum
+  h_9630b74bdac540 1,433-434
+server/package.json
+  h_9630b74bdac540 3
+ts-framework/create-function/CHANGELOG.md
+  h_9630b74bdac540 3-4
+ts-framework/create-function/package.json
+  h_9630b74bdac540 4
+ts-framework/functions/CHANGELOG.md
+  h_9630b74bdac540 3-8
+ts-framework/functions/README.md
+  h_9630b74bdac540 431-451,477
+ts-framework/functions/package.json
+  h_9630b74bdac540 4,59
+ts-framework/functions/src/framework.test.ts
+  h_9630b74bdac540 499-601
+ts-framework/functions/src/framework.ts
+  h_9630b74bdac540 557-560,668-718
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "11b95c459f122d47dee43307a868d0048dc7ec0f",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

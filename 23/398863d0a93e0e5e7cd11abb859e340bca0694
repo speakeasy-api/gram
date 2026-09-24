@@ -1,0 +1,18 @@
+server/internal/otel/dialect/sensitivity.go
+  h_2620cc60cfd1e9 5-12,15-20,23-25,27-29,32
+server/internal/otel/dialect/sensitivity_test.go
+  h_2620cc60cfd1e9 9,13-14,16-34,38
+server/internal/otel/sensitive_data.go
+  h_2620cc60cfd1e9 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "23398863d0a93e0e5e7cd11abb859e340bca0694",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

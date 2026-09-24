@@ -1,0 +1,51 @@
+client/dashboard/src/components/ui/MultiSelect/index.tsx
+  s_5987dba16de244::t_915ebbf5aa0342 506,830-833
+  s_5987dba16de244::t_82f937bb7b4e36 819-824,838-841
+  s_5987dba16de244::t_501e811506f32c 991,1011-1026,1210-1211
+  s_5987dba16de244::t_69ffc1be9bae29 842-843,1027-1084,1087-1099,1101-1138,1140-1147,1149-1153,1155-1177,1180-1200,1203-1208
+  s_5987dba16de244::t_364157fac9b881 834-835,1209
+client/dashboard/src/components/member-facepile.test.tsx
+  s_5987dba16de244::t_68e6fa46f13280 3,6-31,35-38
+  s_5987dba16de244::t_69ffc1be9bae29 32-34
+  s_5987dba16de244::t_c6e424944eaa3d 1-2,4-5
+client/dashboard/src/components/ui/MultiSelect/index.test.tsx
+  s_5987dba16de244::t_c10c2fc69674d0 11,261-296,300-302
+  s_5987dba16de244::t_98d0e7dcc01ed1 218-260,303-305
+  s_5987dba16de244::t_69ffc1be9bae29 297-299
+client/dashboard/src/pages/plugins/PluginAssignmentsSheet.tsx
+  s_5987dba16de244::t_82f937bb7b4e36 31,260-262,309,376,378
+  s_5987dba16de244::t_cf9de243f84fa9 47,53
+  s_5987dba16de244::t_69ffc1be9bae29 377
+client/dashboard/src/pages/plugins/principals.test.ts
+  s_5987dba16de244::t_98d0e7dcc01ed1 9,135-142
+  s_a45598db4a4df7::t_2a4dc525c88702 143-144
+client/dashboard/src/components/member-facepile.tsx
+  s_5987dba16de244::t_d3a764da80fcc7 107,121
+  s_5987dba16de244::t_cf9de243f84fa9 122-126,128-132
+client/dashboard/src/pages/plugins/principals.ts
+  s_5987dba16de244::t_82f937bb7b4e36 99-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "fbaca4894760960b2dfb4591cdc9e8cce2934c7b",
+  "prompts": {},
+  "sessions": {
+    "s_5987dba16de244": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01959-19dd-7eb1-8706-1fa16b5d07e0",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_a45598db4a4df7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02004-6932-7dc0-8650-7782e08db883",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

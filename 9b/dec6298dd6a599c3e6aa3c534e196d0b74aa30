@@ -1,0 +1,21 @@
+server/internal/mcp/tunnel_manager.go
+  s_96b2c00dcff3bd::t_2564f590b4aaf5 108-115,117,119
+server/internal/mcp/tunnelpublic.go
+  s_96b2c00dcff3bd::t_43195946def7cc 530
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "9bdec6298dd6a599c3e6aa3c534e196d0b74aa30",
+  "prompts": {},
+  "sessions": {
+    "s_96b2c00dcff3bd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fa7ffb9e-4a92-4c17-871e-ef187a8b1d4b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,64 @@
+.speakeasy/out.openapi.yaml
+  h_2620cc60cfd1e9 12809,13018,13221,13434,64547,64554,64556,66334,66344,66354,84507,84517,84519,85402,85408
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_2620cc60cfd1e9 3620,3623,6731,9324,9327
+client/dashboard/src/sdk/src/funcs/dataExportsCreateRoute.ts
+  h_2620cc60cfd1e9 45
+client/dashboard/src/sdk/src/funcs/dataExportsDeleteRoute.ts
+  h_2620cc60cfd1e9 41
+client/dashboard/src/sdk/src/funcs/dataExportsListRoutes.ts
+  h_2620cc60cfd1e9 45
+client/dashboard/src/sdk/src/funcs/dataExportsUpdateRoute.ts
+  h_2620cc60cfd1e9 45
+client/dashboard/src/sdk/src/models/components/createdataexportrouteform.ts
+  h_2620cc60cfd1e9 13,21,33
+client/dashboard/src/sdk/src/models/components/dataexportroute.ts
+  h_2620cc60cfd1e9 16,26,46
+client/dashboard/src/sdk/src/models/components/updaterouterequestbody.ts
+  h_2620cc60cfd1e9 13,32
+client/dashboard/src/sdk/src/react-query/createDataExportRoute.ts
+  h_2620cc60cfd1e9 57
+client/dashboard/src/sdk/src/react-query/dataExportRoutes.ts
+  h_2620cc60cfd1e9 62,88
+client/dashboard/src/sdk/src/react-query/deleteDataExportRoute.ts
+  h_2620cc60cfd1e9 56
+client/dashboard/src/sdk/src/react-query/updateDataExportRoute.ts
+  h_2620cc60cfd1e9 57
+client/dashboard/src/sdk/src/sdk/dataexports.ts
+  h_2620cc60cfd1e9 76,114,152,190
+server/design/dataexports/design.go
+  h_2620cc60cfd1e9 102,122,143,165,224,228,231,260-261,263,268,270,272
+server/gen/data_exports/service.go
+  h_2620cc60cfd1e9 27,29,31,33,93,108-109,236
+server/gen/http/cli/gram/cli.go
+  h_2620cc60cfd1e9 12092-12095,12206,12229,12239,12254,12265,12279
+server/gen/http/data_exports/client/cli.go
+  h_2620cc60cfd1e9 264,266-267,320,322-323
+server/gen/http/data_exports/client/types.go
+  h_2620cc60cfd1e9 48,59,130-131,150-151,1705-1706,3280-3281,3324-3325,5360-5361
+server/gen/http/data_exports/server/types.go
+  h_2620cc60cfd1e9 48,59,130-131,150-151,1686-1687,3200-3201,3220-3221
+server/gen/http/openapi3.yaml
+  h_2620cc60cfd1e9 14659,14866,15067,15278,65924,65931,65933,67711,67721,67731,85878,85888,85890,86773,86779
+server/internal/dataexports/authorization_test.go
+  h_2620cc60cfd1e9 48,56,64
+server/internal/dataexports/destinations_test.go
+  h_2620cc60cfd1e9 187
+server/internal/dataexports/impl.go
+  h_2620cc60cfd1e9 386,390,396-403,462-463,535-536
+server/internal/dataexports/impl_internal_test.go
+  h_2620cc60cfd1e9 1-36
+server/internal/dataexports/routes_test.go
+  h_2620cc60cfd1e9 25,35,68,76,87,97,101-118,125,127,132-209,231,247
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "9043ebb5b7e7a9fdc1b1bec955d6db9d4342958c",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

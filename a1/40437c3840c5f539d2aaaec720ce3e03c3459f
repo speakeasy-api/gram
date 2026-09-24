@@ -1,0 +1,31 @@
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_7a2cf6d9fe9304::t_a58b185f3eaa67 160,1039,1920,2608-2609,7143-7151
+client/dashboard/src/sdk/src/funcs/dataExportsListForOrg.ts
+  s_7a2cf6d9fe9304::t_560139854c65c8 1-197
+client/dashboard/src/sdk/src/models/components/listdataexportsfororgresult.ts
+  s_7a2cf6d9fe9304::t_3114570d8ea615 1-43
+client/dashboard/src/sdk/src/models/operations/listdataexportsfororg.ts
+  s_7a2cf6d9fe9304::t_197607a08a40f4 1-77
+client/dashboard/src/sdk/src/react-query/listDataExportsForOrg.core.ts
+  s_7a2cf6d9fe9304::t_7b273d7f8c95a1 1-82
+client/dashboard/src/sdk/src/react-query/listDataExportsForOrg.ts
+  s_7a2cf6d9fe9304::t_4c4369b94d928e 1-147
+client/dashboard/src/sdk/src/sdk/dataexports.ts
+  s_7a2cf6d9fe9304::t_1d1e39ec7b85b0 10,18,44-47,154-172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "a140437c3840c5f539d2aaaec720ce3e03c3459f",
+  "prompts": {},
+  "sessions": {
+    "s_7a2cf6d9fe9304": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d6a7248f-767c-4b5c-8c34-9ecdb2ba28e0",
+        "model": "unknown"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

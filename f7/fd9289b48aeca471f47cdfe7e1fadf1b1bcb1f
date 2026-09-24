@@ -1,0 +1,32 @@
+infra/gen/gram/otel/v1/inbound_metric.pb.go
+  h_2620cc60cfd1e9 71,78,82,3821,3969-3971
+infra/gen/gram/otel/v1/metric.pb.go
+  h_2620cc60cfd1e9 71,78,82,3818,3966-3968
+infra/gen/kcc.yaml
+  h_2620cc60cfd1e9 217,583
+infra/gen_py/gram/otel/v1/inbound_metric_pb2.py
+  h_2620cc60cfd1e9 28,39,81
+infra/gen_py/gram/otel/v1/inbound_metric_pb2.pyi
+  h_2620cc60cfd1e9 23,25
+infra/gen_py/gram/otel/v1/metric_pb2.py
+  h_2620cc60cfd1e9 28,39,81
+infra/gen_py/gram/otel/v1/metric_pb2.pyi
+  h_2620cc60cfd1e9 23,25
+infra/proto/gram/otel/v1/inbound_metric.proto
+  h_2620cc60cfd1e9 89
+infra/proto/gram/otel/v1/metric.proto
+  h_2620cc60cfd1e9 86
+server/internal/otlp/metric_copies_test.go
+  h_2620cc60cfd1e9 59,83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "f7fd9289b48aeca471f47cdfe7e1fadf1b1bcb1f",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

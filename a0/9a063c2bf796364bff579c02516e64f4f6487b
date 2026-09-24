@@ -1,0 +1,18 @@
+server/internal/remotesessions/challenge.go
+  h_9630b74bdac540 168-170,173-182,194,197,215,217-220,686,689
+server/internal/mcp/private_oauth_authority.go
+  h_9630b74bdac540 7,10,31-33,37
+server/cmd/gram/start.go
+  h_9630b74bdac540 1100-1102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a09a063c2bf796364bff579c02516e64f4f6487b",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

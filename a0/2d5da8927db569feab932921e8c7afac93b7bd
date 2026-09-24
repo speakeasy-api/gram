@@ -1,0 +1,14 @@
+client/dashboard/src/pages/sources/remote-mcp/autoConfigureAuth.test.ts
+  h_9630b74bdac540 1-2,8,509
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a02d5da8927db569feab932921e8c7afac93b7bd",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

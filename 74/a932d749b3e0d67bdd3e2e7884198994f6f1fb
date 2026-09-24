@@ -1,0 +1,25 @@
+server/internal/authz/repo/challenge_buckets_test.go
+  s_62bf807f9fa23e::t_da4fc9a11a83d5 1-52
+server/internal/access/list_challenge_buckets_test.go
+  s_62bf807f9fa23e::t_870129ad6eedde 256-306,321-339
+  s_62bf807f9fa23e::t_54a747dab9de89 307-320
+server/internal/authz/repo/queries.go
+  s_62bf807f9fa23e::t_1fce380c99ee25 231,498,503
+  s_62bf807f9fa23e::t_fe3fb688e808c3 8,215,233,235-256,499-501,568-571
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "74a932d749b3e0d67bdd3e2e7884198994f6f1fb",
+  "prompts": {},
+  "sessions": {
+    "s_62bf807f9fa23e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff163-7dd5-7302-81f9-6276dfd2ce9f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

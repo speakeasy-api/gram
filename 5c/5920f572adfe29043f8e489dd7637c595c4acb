@@ -1,0 +1,25 @@
+server/design/risk/design.go
+  s_e5457925ae460d::t_71a04a2efe9aa9 1083
+  s_e5457925ae460d::t_c37f8775eb820d 720
+  s_e5457925ae460d::t_2dd5de228bfdf9 812
+  s_e5457925ae460d::t_046e0097729da1 1079
+server/internal/risk/impl.go
+  s_e5457925ae460d::t_a72e36a4422554 1875
+  s_e5457925ae460d::t_3915a51862dd5f 2131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "5c5920f572adfe29043f8e489dd7637c595c4acb",
+  "prompts": {},
+  "sessions": {
+    "s_e5457925ae460d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "27e802d5-8b32-4910-b9fd-7266730d92eb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

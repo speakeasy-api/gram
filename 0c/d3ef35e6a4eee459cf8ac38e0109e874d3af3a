@@ -1,0 +1,26 @@
+server/internal/background/activities/process_workos_user_events_test.go
+  s_5d8cca81d02447::t_5422ce39cf4140 172,181
+  s_5d8cca81d02447::t_220bc2b3192bd8 121-171,173-180,182-206
+server/internal/directory/queries.sql
+  s_5d8cca81d02447::t_6e4ce51ac424e3 129,132-139
+server/internal/background/activities/process_workos_user_events.go
+  s_5d8cca81d02447::t_220bc2b3192bd8 217,358,365-367
+server/internal/directory/repo/queries.sql.go
+  s_5d8cca81d02447::t_1647b6f55e264a 432,435-442,446-448,452
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0cd3ef35e6a4eee459cf8ac38e0109e874d3af3a",
+  "prompts": {},
+  "sessions": {
+    "s_5d8cca81d02447": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01a67-b971-77b3-9c1f-897b58a5a5ba",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

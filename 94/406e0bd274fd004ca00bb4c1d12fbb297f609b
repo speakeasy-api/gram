@@ -1,0 +1,68 @@
+server/internal/authz/override.go
+  s_95d069cf52f7b4::t_50247b5f493d0c 31,35,61
+server/internal/authz/load.go
+  s_95d069cf52f7b4::t_50247b5f493d0c 38
+server/design/access/design.go
+  s_95d069cf52f7b4::t_d7036a168e5777 758-761
+client/dashboard/src/pages/access/roleGrantTransform.ts
+  s_95d069cf52f7b4::t_12364ac751395b 3,15-33,76-79,81,85-86,131,134,162
+server/internal/authz/checks.go
+  s_95d069cf52f7b4::t_ae01e890d0d645 37-38,44-46,49
+server/internal/authz/resource_grants.go
+  s_95d069cf52f7b4::t_50247b5f493d0c 274
+server/internal/access/impl.go
+  s_95d069cf52f7b4::t_fec77e1a498120 302,315,497-499
+  s_95d069cf52f7b4::t_b8fb1c88416574 258-259
+  s_95d069cf52f7b4::t_bc3e582a8b2bfc 257
+  s_95d069cf52f7b4::t_55d58e7afe9276 225
+  s_95d069cf52f7b4::t_bb01891edb2574 241-251,255-256,260-267
+server/internal/authz/access.go
+  s_95d069cf52f7b4::t_096b9b6db1b2ec 59-60
+  s_95d069cf52f7b4::t_ddc26ea7f21811 17-19,52-54,63
+client/dashboard/src/pages/access/roundtrip.test.ts
+  s_95d069cf52f7b4::t_176c93df6df546 3,12-32,59-62,79-80,132
+server/internal/access/listscopes_test.go
+  s_95d069cf52f7b4::t_13c8c0825184f4 35-41
+server/internal/authz/scopes.go
+  s_95d069cf52f7b4::t_cc81a683c6cf9d 104-107,125,129,131,133,139,144-147,171-174,188-189,192-193
+  s_95d069cf52f7b4::t_8e4818f21651d6 178-179
+  s_95d069cf52f7b4::t_828ba2da412908 30,41-47,60-84,148-168,175,187,191
+  s_95d069cf52f7b4::t_4596333b89cb8b 85
+  s_95d069cf52f7b4::t_1fc8dbaa53be2f 180-181
+server/internal/authz/grants.go
+  s_95d069cf52f7b4::t_21565ec8524457 528-532
+  s_95d069cf52f7b4::t_f52bd99cb93c9f 524-526
+  s_95d069cf52f7b4::t_50247b5f493d0c 224,307,367
+server/internal/authz/scopes_test.go
+  s_95d069cf52f7b4::t_35e699402e553a 82
+  s_95d069cf52f7b4::t_dd1aa632eb49a4 45,49-52
+  s_95d069cf52f7b4::t_e598c3235899e4 74-75,78,83-85
+  s_95d069cf52f7b4::t_d668a9a6000bc1 86-101
+  s_95d069cf52f7b4::t_c93ad3a8744d01 23-27,38,53,1236,1240
+  s_95d069cf52f7b4::t_de5caafa1847d0 60-73,76-77,79
+  s_95d069cf52f7b4::t_57611cac3cc589 1237-1238,1241-1242
+  s_95d069cf52f7b4::t_9a59a540d6e42a 20
+client/dashboard/src/pages/access/CreateRoleDialog.tsx
+  s_95d069cf52f7b4::t_0e647f99811542 180,437-438,441-444
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "94406e0bd274fd004ca00bb4c1d12fbb297f609b",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_95d069cf52f7b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfff-79bd-7ac0-8355-76dbf61e503f",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}

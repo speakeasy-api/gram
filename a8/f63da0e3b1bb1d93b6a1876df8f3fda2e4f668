@@ -1,0 +1,30 @@
+client/dashboard/src/components/ui/Combobox/index.tsx
+  h_2620cc60cfd1e9 39,53,72
+client/dashboard/src/lib/write-only-headers.test.ts
+  h_2620cc60cfd1e9 17-29,54-64
+client/dashboard/src/lib/write-only-headers.ts
+  h_2620cc60cfd1e9 5,26-27,40,58,60-62
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  h_2620cc60cfd1e9 4,25-26,32,75-77,87,156,162,175-177,192,215,227-239,254,257,264,273-274,302-307,330,358-361,373-376,379-382,418,420-423,596,680,686,708
+client/dashboard/src/pages/data-exports/DestinationEditorSheet.tsx
+  h_2620cc60cfd1e9 84,151-152,198-201,309-318,321
+client/dashboard/src/pages/data-exports/RouteEditorSheet.tsx
+  h_2620cc60cfd1e9 25,47,51-52,99,101,117,119,123,128
+client/dashboard/src/pages/org/OtelForwardingSection.tsx
+  h_2620cc60cfd1e9 241-244
+server/internal/dataexports/destinations.go
+  h_2620cc60cfd1e9 59-60
+server/internal/dataexports/destinations_test.go
+  h_2620cc60cfd1e9 171,175,177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "a8f63da0e3b1bb1d93b6a1876df8f3fda2e4f668",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

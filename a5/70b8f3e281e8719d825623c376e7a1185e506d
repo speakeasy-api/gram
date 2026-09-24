@@ -1,0 +1,19 @@
+server/internal/risk/impl.go
+  s_d16499501a966c::t_5b4cbf844938de 732
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "a570b8f3e281e8719d825623c376e7a1185e506d",
+  "prompts": {},
+  "sessions": {
+    "s_d16499501a966c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03341-61d8-73b1-b230-ec13908068ae",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

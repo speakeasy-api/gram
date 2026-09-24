@@ -1,0 +1,32 @@
+.mise-tasks/gen/celwasm.sh
+  s_e5457925ae460d::t_855255ffb41cca 1-24
+server/cmd/celwasm/main.go
+  s_e5457925ae460d::t_855255ffb41cca 1-2,9-18,23-41,53-54,64-68,70,72-74,76,78-81,83-85,88,90-91,93-101,103-110,112
+  s_e5457925ae460d::t_bfc2d8830add13 3-8,19-22,42-52,55-63,69,71,75,77,82,86-87,89,92,102,111
+client/dashboard/.gitignore
+  s_e5457925ae460d::t_855255ffb41cca 27-29
+server/.gitignore
+  s_e5457925ae460d::t_855255ffb41cca 1-3
+client/dashboard/package.json
+  s_e5457925ae460d::t_855255ffb41cca 8-9
+.mise-tasks/gen/all.sh
+  s_e5457925ae460d::t_855255ffb41cca 13
+server/cmd/celwasm/stub.go
+  s_e5457925ae460d::t_855255ffb41cca 1-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "3820cf76496d15206856c824ddc38b104977f63f",
+  "prompts": {},
+  "sessions": {
+    "s_e5457925ae460d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "27e802d5-8b32-4910-b9fd-7266730d92eb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}

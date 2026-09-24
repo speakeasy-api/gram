@@ -1,0 +1,25 @@
+hooks/relay/runner.go
+  s_d91d1a4a046c46::t_d6d201ac2efeb0 188-190
+hooks/relay/prompt_attachments.go
+  s_d91d1a4a046c46::t_20e9146d4f4e83 375
+  s_d91d1a4a046c46::t_b4027a753c2f27 43-57,163-166,184-188,199,213-214,217-222,232,288-315,318,321,325-326
+  s_d91d1a4a046c46::t_9da6dc36c42445 338-374,376-408
+hooks/relay/prompt_attachments_test.go
+  s_d91d1a4a046c46::t_92d35840240d7a 4-5,95-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "98ff86633c594f78bec675e840c43c034c234f31",
+  "prompts": {},
+  "sessions": {
+    "s_d91d1a4a046c46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa265-7139-7c02-9009-a76952cd8302",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

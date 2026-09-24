@@ -1,0 +1,27 @@
+server/internal/background/activities/risk_analysis/presidio_internal_test.go
+  s_67a619368d9a59::t_561b108ec07128 429-465
+pystreams/src/pystreams/risk/scanner.py
+  s_67a619368d9a59::t_561b108ec07128 61-64,547-557
+pystreams/tests/test_risk_scanner.py
+  s_67a619368d9a59::t_561b108ec07128 58-74,266,268-282
+  s_67a619368d9a59::t_910ca0e1c0a39d 267
+  s_67a619368d9a59::t_22203b682a98fb 283-284
+server/internal/background/activities/risk_analysis/presidio.go
+  s_67a619368d9a59::t_561b108ec07128 9,127-128,636-647
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "2ccad7e94b478a1986758bbb712728889256c527",
+  "prompts": {},
+  "sessions": {
+    "s_67a619368d9a59": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03906-8f04-7d91-a193-3b3b51a49e03",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

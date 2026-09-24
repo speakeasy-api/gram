@@ -1,0 +1,22 @@
+.changeset/prompt-eval-loop-status.md
+  s_ecd3c0270d8258::t_cade2ae553dde8 1-5
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_ecd3c0270d8258::t_d30e38ef67e398 1267-1276,1367-1371,1385,1412,1477-1481,1544,1549,1565,1577-1634,1643-1658,1666-1674,1716,1720,1724,1735,1738,1746-1762,1766,1774,1778,1785-1786,1807-1815,1900,1903,1907,1910,1930-1933,1935
+  s_ecd3c0270d8258::t_6e910be278ff7f 1934,1936-1937
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ae5d6de12a76f189bceecd7be3568fd3266db9f1",
+  "prompts": {},
+  "sessions": {
+    "s_ecd3c0270d8258": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f29a5-b8ee-7410-adc0-75daeac1de45",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

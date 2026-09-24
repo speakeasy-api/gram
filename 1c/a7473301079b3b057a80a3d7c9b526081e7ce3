@@ -1,0 +1,32 @@
+server/internal/thirdparty/workos/stub.go
+  s_bad31f9bdaac48::t_37fc9b4f081f23 472-490
+server/internal/thirdparty/workos/user.go
+  s_bad31f9bdaac48::t_bc766f1a9d9756 31-32,131-159
+  s_bad31f9bdaac48::t_c69498110ec9a4 160-161
+server/internal/thirdparty/workos/client_test.go
+  s_bad31f9bdaac48::t_37fc9b4f081f23 599-613
+server/cmd/workos-user-backfill/main.go
+  s_bad31f9bdaac48::t_2be7d5ba0a7cbb 178,221,226,237,258,263,269,279,282,290,306,311
+  s_bad31f9bdaac48::t_bc766f1a9d9756 28,31-34,69-74,84,87,93,104,109,111,115,117-119,143,182-183,193,197,219,530-546
+  s_bad31f9bdaac48::t_c69498110ec9a4 1-27,29-30,35-68,75-83,85-86,88-92,94-103,105-108,110,112-114,116,120-142,144-177,179-181,184-192,194-196,198-218,220,222-225,227-236,238,240-257,259-262,264-268,270-278,281,283-289,291-305,307-310,312-324,327-334,337-345,348-529,547-599
+  s_bad31f9bdaac48::t_7908d638ac56e7 239,280
+  s_bad31f9bdaac48::t_37fc9b4f081f23 325-326,335-336,346-347
+server/internal/thirdparty/workos/client.go
+  s_bad31f9bdaac48::t_bc766f1a9d9756 194-195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "1ca7473301079b3b057a80a3d7c9b526081e7ce3",
+  "prompts": {},
+  "sessions": {
+    "s_bad31f9bdaac48": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4ea-4166-7552-bf58-8b723ca59372",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

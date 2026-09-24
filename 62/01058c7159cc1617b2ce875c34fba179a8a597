@@ -1,0 +1,30 @@
+server/internal/dataexports/impl.go
+  h_2620cc60cfd1e9 199,233-234,236,257,290,294,350-351,353,380,524,543,585,614
+server/internal/dataexports/queries.sql
+  h_2620cc60cfd1e9 44-57,159-172
+server/internal/dataexports/repo/queries.sql.go
+  h_2620cc60cfd1e9 364-432,525-595
+server/internal/dataexports/sources.go
+  h_2620cc60cfd1e9 10,15-17,20
+server/internal/platformmcp/operational_reads_integration_test.go
+  h_2620cc60cfd1e9 6,14,20,32-39,92-152,265-322,341-346,395-401
+server/internal/platformmcp/tool_create_data_export.go
+  h_2620cc60cfd1e9 28,73-78,95,97-99,231-234
+server/internal/platformmcp/tool_data_exports.go
+  h_2620cc60cfd1e9 36,95,97-105,108,110-116,118-122,124,132,151-152,164-165
+server/internal/platformmcp/tool_recent_tool_calls.go
+  h_2620cc60cfd1e9 14,104-108,113-114
+server/internal/telemetry/impl.go
+  h_2620cc60cfd1e9 3384,3622,3685,3741,3827-3830,3832,3835,3840,3853,3855,3858,3889,3896
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "6201058c7159cc1617b2ce875c34fba179a8a597",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

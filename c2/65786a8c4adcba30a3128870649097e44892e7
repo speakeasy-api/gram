@@ -1,0 +1,36 @@
+server/internal/platformmcp/plugins_test.go
+  h_9630b74bdac540 4-6,8,12-14,51-71,100-108,120-122,130-276
+server/internal/platformmcp/plugins_integration_test.go
+  h_9630b74bdac540 6,77-138,203-204
+server/internal/platformmcp/descriptor_test.go
+  h_9630b74bdac540 187
+server/internal/plugins/impl.go
+  h_9630b74bdac540 1104,1106,1109-1110,1112-1115
+server/internal/platformmcp/tool_plugins.go
+  h_9630b74bdac540 23-32,47,62
+server/internal/platformmcp/feedback.go
+  h_9630b74bdac540 402
+server/internal/platformmcp/feedback_test.go
+  h_9630b74bdac540 43,46,49-50,52-53
+server/internal/platformmcp/subject_reference.go
+  h_9630b74bdac540 27
+.changeset/platform-mcp-plugin-audiences.md
+  h_9630b74bdac540 1-5
+server/internal/platformmcp/plugins.go
+  h_9630b74bdac540 6-8,11,13,19,21-23,44-46,49-56,87-97,184-192,225-245,257-259,263-274,279-282,287,345-365,418-441,450-454,456-457,565-699
+server/internal/plugins/audience/resolver.go
+  h_9630b74bdac540 1-72
+server/internal/plugins/audiences.go
+  h_9630b74bdac540 1-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c265786a8c4adcba30a3128870649097e44892e7",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

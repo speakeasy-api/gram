@@ -1,0 +1,21 @@
+server/cmd/tools/enforceproto/main.go
+  s_b390d6ce53b276::t_304f2b42963100 129
+server/cmd/tools/enforceload/main.go
+  s_b390d6ce53b276::t_304f2b42963100 632
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "4addebc88e8d8f1a05cc0e9bc43f04dec2a61745",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

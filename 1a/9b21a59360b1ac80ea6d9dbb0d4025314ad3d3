@@ -1,0 +1,16 @@
+server/migrations/20260828092510_data_exports_fanout.sql
+  h_2620cc60cfd1e9 1-8
+server/migrations/atlas.sum
+  h_2620cc60cfd1e9 1,374
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "1a9b21a59360b1ac80ea6d9dbb0d4025314ad3d3",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

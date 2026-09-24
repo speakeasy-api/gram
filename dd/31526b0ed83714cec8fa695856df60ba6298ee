@@ -1,0 +1,37 @@
+server/clickhouse/local/golang_migrate/20260727130935_chat-content-parts.down.sql
+  s_3d388cbf35fcf4::t_3c6f64dc070ff7 1-2
+server/clickhouse/local/golang_migrate/20260727130935_chat-content-parts.up.sql
+  s_3d388cbf35fcf4::t_ae3cc2291e58ad 1-2
+server/clickhouse/local/golang_migrate/atlas.sum
+  s_3d388cbf35fcf4::t_ff470a8cc01109 1,80
+server/clickhouse/migrations/20260727130929_chat-content-parts.sql
+  s_3d388cbf35fcf4::t_77a47fd1db1643 1-2
+server/clickhouse/migrations/atlas.sum
+  s_3d388cbf35fcf4::t_cc30be77b4df7f 1,85
+server/clickhouse/schema.sql
+  s_3d388cbf35fcf4::t_75dec5227971f0 1206,1256
+server/database/schema.sql
+  s_3d388cbf35fcf4::t_1eb563cb10dc63 2015-2059,4102-4103,4144-4146,4171-4173
+server/internal/database/models.go
+  s_3d388cbf35fcf4::t_dbe5c09c633b11 352-370,1669-1670
+server/migrations/20260727174208_chat-content-parts.sql
+  s_3d388cbf35fcf4::t_104c98320729af 1-33
+server/migrations/atlas.sum
+  s_3d388cbf35fcf4::t_40ef9f1125d9b8 1,300
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "dd31526b0ed83714cec8fa695856df60ba6298ee",
+  "prompts": {},
+  "sessions": {
+    "s_3d388cbf35fcf4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "acec37c7-b1cc-4ee7-82c8-afd405d96140",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

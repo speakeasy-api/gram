@@ -1,0 +1,78 @@
+client/admin/src/pages/organization/Features.test.tsx
+  h_9630b74bdac540 5-7,9,11,42,89
+server/internal/audit/networkingresses.go
+  h_9630b74bdac540 1-98
+server/internal/networkingress/resources.go
+  h_9630b74bdac540 1-71
+server/database/sqlc.yaml
+  h_9630b74bdac540 404-412
+server/internal/audit/events.go
+  h_9630b74bdac540 40
+client/dashboard/src/pages/platform-admin/Features.tsx
+  h_9630b74bdac540 116-122
+server/internal/attr/conventions.go
+  h_9630b74bdac540 287,2057-2058
+server/internal/urn/networkingress_test.go
+  h_9630b74bdac540 1-42
+server/internal/networkingress/queries.sql
+  h_9630b74bdac540 1-181
+client/admin/src/pages/organization/Features.tsx
+  h_9630b74bdac540 63-68
+client/admin/src/lib/gramAdminApi.ts
+  h_9630b74bdac540 569,581
+server/design/gram.go
+  h_9630b74bdac540 44
+server/internal/mv/networkingress.go
+  h_9630b74bdac540 1-33
+server/internal/networkingress/admission.go
+  h_9630b74bdac540 1-111
+server/internal/feature/flags.go
+  h_9630b74bdac540 128-131
+client/dashboard/src/lib/audit-actions.ts
+  h_9630b74bdac540 96-99,347-354
+server/design/productfeatures/design.go
+  h_9630b74bdac540 44,46,68
+server/internal/networkingress/setup_test.go
+  h_9630b74bdac540 1-115
+server/internal/productfeatures/impl.go
+  h_9630b74bdac540 347
+server/internal/urn/networkingress.go
+  h_9630b74bdac540 1-122
+server/cmd/gram/start.go
+  h_9630b74bdac540 101-102,1565-1573,1576,1674-1679,1681
+server/internal/networkingress/admission_test.go
+  h_9630b74bdac540 1-58
+server/internal/customdomains/impl.go
+  h_9630b74bdac540 51,59-60,81,95,707-715
+client/dashboard/src/lib/audit-log-format.ts
+  h_9630b74bdac540 3,32-33
+server/internal/productfeatures/features.go
+  h_9630b74bdac540 54-56
+server/internal/networkingress/impl_test.go
+  h_9630b74bdac540 1-116
+server/internal/customdomains/setup_test.go
+  h_9630b74bdac540 8,23,153-158,160
+client/dashboard/src/components/auditlogs/action-meta.ts
+  h_9630b74bdac540 55-56
+server/internal/networkingress/impl.go
+  h_9630b74bdac540 1-433
+server/internal/outbox/events/audit_log.go
+  h_9630b74bdac540 49
+server/design/networkingress/design.go
+  h_9630b74bdac540 1-153
+server/internal/customdomains/deletedomain_test.go
+  h_9630b74bdac540 9,21-22,35-70
+server/internal/admin/features_handler.go
+  h_9630b74bdac540 28,46,95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "79accce204677ab8d75fc6fd3c7ca852f39ba8c1",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+client/dashboard/src/contexts/AuthProvider.test.tsx
+  h_2620cc60cfd1e9 32-34,225-264
+client/dashboard/src/contexts/AuthProvider.tsx
+  h_2620cc60cfd1e9 200-201,206-207,214
+client/dashboard/src/pages/data-exports/ConfigureExportSheet.tsx
+  h_2620cc60cfd1e9 38,46-50,53,68,70-71,79,94,103,131,165-166,299,353,493
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  h_2620cc60cfd1e9 23,32-34,41,45,50,96-97,167,206-208,215-221,261,285-287,306-307,312-318,425,436-474,494,498,634,644
+client/dashboard/src/pages/data-exports/LegacyDataRedirect.tsx
+  h_2620cc60cfd1e9 1-14
+client/dashboard/src/routes.test.tsx
+  h_2620cc60cfd1e9 2,9-10,17-21,33-50
+client/dashboard/src/routes.tsx
+  h_2620cc60cfd1e9 34,1076-1081
+server/internal/dataexports/destinations_test.go
+  h_2620cc60cfd1e9 222
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "614d776e572f7ccbcb0cb2fcd073c9951e43bd58",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

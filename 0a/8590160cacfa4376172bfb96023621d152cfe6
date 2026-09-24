@@ -1,0 +1,29 @@
+server/internal/background/activities/risk_analysis/gitleaks.go
+  s_5e8039f9d96e02::t_9f3066248aab6d 90-91
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_5e8039f9d96e02::t_1fd5007daaa45f 685-688
+server/internal/risk/impl.go
+  s_5e8039f9d96e02::t_78a87f1dcb4618 133
+server/internal/background/worker.go
+  s_5e8039f9d96e02::t_c3ca8855bab738 259
+server/internal/risk/scanner.go
+  s_5e8039f9d96e02::t_e9a2403a2fe99d 123
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_5e8039f9d96e02::t_047dd650744734 78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "0a8590160cacfa4376172bfb96023621d152cfe6",
+  "prompts": {},
+  "sessions": {
+    "s_5e8039f9d96e02": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7204e23b-9892-40b9-9abd-f538d9fb898d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

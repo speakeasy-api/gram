@@ -1,0 +1,163 @@
+server/internal/chat/repo/models.go
+  s_07604749635772::t_b061a4592276be 23,25-27
+server/gen/http/hooks/server/types.go
+  s_07604749635772::t_5d45dc46e5227d 1575-1577,1687-1712,3249-3255,3302-3316
+server/internal/judgemessage/payload.go
+  s_07604749635772::t_dcaf162220d5a3 118-119
+server/internal/chat/queries.sql
+  s_07604749635772::t_dcaf162220d5a3 167,169-171,198,200-202
+.speakeasy/out.openapi.yaml
+  s_07604749635772::t_97f148e6a46207 50010-50014,50146-50186
+  s_07604749635772::t_2b1028af86f684 48047,54257,55840
+server/internal/assistants/compaction_persist.go
+  s_07604749635772::t_b4b22509e736a1 143,145-147
+hooks/relay/mcp_inventory.go
+  s_07604749635772::t_fd0b8e926d7d2d 109-118
+client/dashboard/src/sdk/src/models/components/hookpromptattachmententry.ts
+  s_07604749635772::t_84defd0e70527a 1-105
+server/internal/message/message_types.go
+  s_07604749635772::t_dcaf162220d5a3 10-12,20,24-28
+hooks/sdk/docs/models/components/hookpromptattachmententry.md
+  s_07604749635772::t_eea17b733b0189 1-19
+client/dashboard/src/sdk/src/models/components/promptguardrailmessageverdict.ts
+  s_07604749635772::t_736af47febc094 40
+hooks/sdk/.speakeasy/gen.lock
+  s_07604749635772::t_562464b8325dd4 9-11,42-43,72-75,218-219,248-251
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_07604749635772::t_b4b22509e736a1 1127,1129-1131,1201,1203-1205,1481,1483-1485
+server/internal/hooks/codex_hooks.go
+  s_07604749635772::t_b760ceb268c165 553,555-557,602,604-606,654,656-658,706,708-710
+server/internal/chat/impl.go
+  s_07604749635772::t_885a7bc9ea8cb4 2050,2052-2054
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_07604749635772::t_2b4aad83ee06a0 676
+server/gen/http/openapi3.yaml
+  s_07604749635772::t_5ff5ef355e928e 48383,54593,56176
+  s_07604749635772::t_6b5e7a5910e029 50346-50350,50482-50522
+hooks/relay/prompt_attachments_test.go
+  s_07604749635772::t_2bfcc5c90a26ff 1-57,78-88
+  s_07604749635772::t_a0d2c6004cb300 58-77
+client/dashboard/src/sdk/src/models/components/hookingestdata.ts
+  s_07604749635772::t_8176d52eac90fa 27-31,81-84,107,125-127,136
+server/internal/background/activities/risk_analysis/eval_guardrail.go
+  s_07604749635772::t_a034ecec39a214 65
+server/gen/http/risk/server/types.go
+  s_07604749635772::t_510958ff226110 353-354,416,519,606,9322,9732
+hooks/sdk/models/components/hookpromptattachmententry.go
+  s_07604749635772::t_fd0b8e926d7d2d 1-97
+server/gen/http/risk/client/types.go
+  s_07604749635772::t_ec7de6e105bdeb 351-352,414,517,604,9346,9756
+server/gen/types/risk_policy.go
+  s_07604749635772::t_050153feee87c7 49
+.changeset/prompt-attachment-capture.md
+  s_07604749635772::t_5a55712f4fdcad 1,3
+  s_07604749635772::t_af253ccbb57153 2,4
+  s_07604749635772::t_bc9ab8d428605c 5
+hooks/relay/prompt_attachments.go
+  s_07604749635772::t_73b940e06f35f1 1-27,33-102,104,106-109,111-113,115-118,120-123,128,130-141,143-146,155,157-276,285-293
+  s_07604749635772::t_a0d2c6004cb300 142,147-154,156
+  s_07604749635772::t_9939097869ef8c 277
+  s_07604749635772::t_0e1bd971878bbf 28-32,103,105,110,114,119,124-127,129,278-284
+server/gen/risk/service.go
+  s_07604749635772::t_a18511e5650f42 444-445,821
+server/internal/database/models.go
+  s_07604749635772::t_b061a4592276be 336,338-340
+server/internal/chat/repo/queries.sql.go
+  s_07604749635772::t_e2fa67a5b40aed 342,344-346,964,989,991-993,1217,1249,1251-1253,1288,1353,1355-1357,1392,1462,1464-1466,1501,1536,1538-1540,2114,2146,2148-2150,2187,2211,2238,2240-2242,2303,2305-2307,2347,2364,2393,2395-2397,2461,2463-2465
+server/design/risk/design.go
+  s_07604749635772::t_74f354f24cd1b4 1365,1500
+hooks/sdk/docs/models/components/hookingestdata.md
+  s_07604749635772::t_eea17b733b0189 16
+server/internal/chat/message_capture_strategy.go
+  s_07604749635772::t_885a7bc9ea8cb4 382,384-386
+server/internal/hooks/ingest_hooks_test.go
+  s_07604749635772::t_2bfcc5c90a26ff 969-1018,1020,1026-1029
+  s_07604749635772::t_576952a348b16c 1019
+  s_07604749635772::t_9198a08589b883 19,1021-1025
+client/dashboard/src/sdk/src/models/components/riskpolicy.ts
+  s_07604749635772::t_b7a08fcd82dcb8 103
+server/internal/risk/celenv/reference.go
+  s_07604749635772::t_74f354f24cd1b4 58
+.speakeasy/openapi-hooks.yaml
+  s_07604749635772::t_eea17b733b0189 261-265,397-437
+server/internal/hooks/session_capture.go
+  s_07604749635772::t_885a7bc9ea8cb4 341,343-345,445,447-449,501,503-505
+client/dashboard/src/sdk/src/models/components/evaluatepromptguardrailrequestbody.ts
+  s_07604749635772::t_8df64c4b2350bf 19
+server/gen/http/cli/gram/cli.go
+  s_07604749635772::t_3cb360ee9fcd88 10466
+server/gen/http/hooks/client/cli.go
+  s_07604749635772::t_2962a6d54e9bab 258
+server/migrations/20260722185028_chat-messages-prompt-attachments.sql
+  s_07604749635772::t_35d7c8e57910b0 1-2
+hooks/sdk/models/components/hookingestdata.go
+  s_07604749635772::t_fd0b8e926d7d2d 23-24,86-90
+  s_07604749635772::t_604f2e1fab6514 91-92
+server/internal/risk/repo/queries.sql.go
+  s_07604749635772::t_af6ee7ccc1be9d 1111,1125-1132,1162
+server/internal/background/activities/risk_analysis/message_types_test.go
+  s_07604749635772::t_9198a08589b883 9,23,34-35,38,41-42
+  s_07604749635772::t_576952a348b16c 30
+server/internal/background/activities/risk_analysis/batch_messages.go
+  s_07604749635772::t_dcaf162220d5a3 72,90-91,141,144-150
+server/gen/http/hooks/client/types.go
+  s_07604749635772::t_1cab99d408711e 1575-1577,1687-1712
+server/database/schema.sql
+  s_07604749635772::t_dcaf162220d5a3 1880,1882-1884
+hooks/relay/envelope.go
+  s_07604749635772::t_fd0b8e926d7d2d 74-83,403-404
+server/gen/http/hooks/server/encode_decode.go
+  s_07604749635772::t_3419b9e7415158 1701-1710,1850-1872
+server/design/hooks/design.go
+  s_07604749635772::t_73b940e06f35f1 254-268,280
+server/internal/risk/impl.go
+  s_07604749635772::t_74f354f24cd1b4 2456
+server/internal/hooks/cursor_hooks.go
+  s_07604749635772::t_16ca0f64c0895a 744,746-748,817,819-821,869,871-873,938,940-942
+server/internal/risk/queries.sql
+  s_07604749635772::t_dcaf162220d5a3 872
+server/internal/chat/transcript_order_test.go
+  s_07604749635772::t_e979b2d4de0c92 188-191
+  s_07604749635772::t_b2e232627a1ed4 192-198
+server/design/shared/risk.go
+  s_07604749635772::t_74f354f24cd1b4 141
+server/gen/http/hooks/client/encode_decode.go
+  s_07604749635772::t_324c03542b5f6e 1761-1770,1910-1932,2024-2033,2173-2195
+server/internal/hooks/ingest_hooks.go
+  s_07604749635772::t_0558975a483dce 1049-1058
+  s_07604749635772::t_350e672553ad9e 658-667,1041-1048,1059-1081,1083,1088-1094,1096-1112,1114-1121,1124-1128
+  s_07604749635772::t_ddf1f7338dcf20 20
+  s_07604749635772::t_c4c4d74a784048 1082,1084-1087,1095
+  s_07604749635772::t_5fb4a6b0519af0 1113,1122-1123
+  s_07604749635772::t_9198a08589b883 961,963-965
+  s_07604749635772::t_4cfea594c74dd8 1129-1130
+server/gen/hooks/service.go
+  s_07604749635772::t_54e1d9f5cd2169 287-289,377-402
+server/internal/risk/eval_guardrail_test.go
+  s_07604749635772::t_b4b22509e736a1 306,308-310
+server/internal/assistants/service.go
+  s_07604749635772::t_b4b22509e736a1 3352,3354-3356
+server/internal/chat/repo/copyfrom.go
+  s_07604749635772::t_b061a4592276be 40,42-44,73
+server/migrations/atlas.sum
+  s_07604749635772::t_35d7c8e57910b0 1,294
+hooks/relay/runner.go
+  s_07604749635772::t_fd0b8e926d7d2d 185,187-189
+  s_07604749635772::t_0e1bd971878bbf 183-184,186,242-244
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "ecfe6be595b92ba1b1a7e4f9e282e84c78197f72",
+  "prompts": {},
+  "sessions": {
+    "s_07604749635772": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8b15-df68-7041-be64-2744d9d8a90f",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,155 @@
+server/internal/background/activities.go
+  s_3d388cbf35fcf4::t_a33b21751404fc 195
+server/internal/risk/impl.go
+  s_3d388cbf35fcf4::t_afa3875a521bdf 1364-1380,1716,1748,2507,3836,3843-3860,3869-3876
+server/gen/http/chat/client/types.go
+  s_3d388cbf35fcf4::t_8d21c1d9a83621 80-81,2131-2148,2661-2668,3989-3991,4029-4035,6619-6642
+server/internal/risk/results_test.go
+  s_3d388cbf35fcf4::t_479b634a2c3e03 85-126,253-315
+server/internal/background/activities/risk_analysis/category_scopes_test.go
+  s_3d388cbf35fcf4::t_485ff9636a867e 192,200-201
+server/internal/chat/impl.go
+  s_3d388cbf35fcf4::t_fcc028bed22429 38,995-1026,1058,2167-2179
+server/gen/chat/service.go
+  s_3d388cbf35fcf4::t_e55ee1e3280f0f 95-96,181-197
+server/internal/background/activities/risk_analysis/message_types_test.go
+  s_3d388cbf35fcf4::t_7987c483c3693e 14,21-28,31-32,35,37-39
+server/internal/attr/conventions.go
+  s_3d388cbf35fcf4::t_2e3f259022093c 124-132,830-834
+server/gen/http/risk/client/types.go
+  s_3d388cbf35fcf4::t_7c0327a40d8fc3 357-358,420,526,616,9361,9444,9446-9448,9517,9519-9521,9780,29625-29627,29686-29688
+client/dashboard/src/sdk/src/models/components/chat.ts
+  s_3d388cbf35fcf4::t_9be8ae07eb385a 11-14,37-40,159,206
+client/dashboard/src/pages/chatLogs/transcript.ts
+  s_3d388cbf35fcf4::t_53dc7e936c0771 2,88,92-99,112-182,217-224,258,287,298-300,311-316,328-333,340,365-379
+client/dashboard/src/pages/chatLogs/ChatTranscript.tsx
+  s_3d388cbf35fcf4::t_362560f6103987 24,61,64,448,455,458-465,468-473,475,489,492-493,509,512-513,515,522-557,562-647,746,751,760,1153-1155
+server/internal/background/activities/risk_analysis/scan_prompt_injection.go
+  s_3d388cbf35fcf4::t_f43a63ca7427d6 25
+client/dashboard/src/sdk/src/models/components/riskpolicy.ts
+  s_3d388cbf35fcf4::t_49befea86094c1 103
+server/gen/risk/service.go
+  s_3d388cbf35fcf4::t_dba01b1ad1c10b 447-448,824
+server/internal/risk/chrepo/queries.go
+  s_3d388cbf35fcf4::t_f70bbd1687eec2 28,98,130
+server/gen/http/chat/server/encode_decode.go
+  s_3d388cbf35fcf4::t_c6b173b7a57f14 2578-2593
+server/internal/background/activities/risk_analysis/risk_result_writer.go
+  s_3d388cbf35fcf4::t_e4b5e9967cb0d5 48,52,58,66,85-86,168-186,223-224,235,242-243,258,265-266
+client/dashboard/src/sdk/src/models/components/chatcontentpart.ts
+  s_3d388cbf35fcf4::t_2bfc760d7622fa 1-76
+server/internal/assets/blobio/blobio.go
+  s_3d388cbf35fcf4::t_c5ca4966116952 1-44
+client/dashboard/src/sdk/src/models/components/riskresult.ts
+  s_3d388cbf35fcf4::t_1d6fdc21d4dab4 17-20,26,28,104,106,131
+server/gen/http/risk/client/encode_decode.go
+  s_3d388cbf35fcf4::t_beafc2e0dfbd78 10628-10646,10690-10704
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_3d388cbf35fcf4::t_d34c33f28b9b8c 7,23-24,155,204,264-298,305-317,325,353,361-362,397,473,583,688,847,1322-1328,1330-1331,1339,1367
+client/dashboard/src/pages/chatLogs/chatHelpers.tsx
+  s_3d388cbf35fcf4::t_b8a2b6586751a2 41-44
+server/design/risk/design.go
+  s_3d388cbf35fcf4::t_d8d20b0255ff40 1371,1506
+server/internal/background/activities/risk_analysis/mark_analyzed.go
+  s_3d388cbf35fcf4::t_4b56a48a7f62ad 34-36,43,52-59,61-67
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_3d388cbf35fcf4::t_b4368f67d09cfa 563,725,5963
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_3d388cbf35fcf4::t_824133e1c458dc 17,21,47,67-68,74,110,137,167,181,215,219,238,277,324,329-332,342-352,359,363-390,394-424
+server/internal/background/activities/risk_analysis/batch_messages.go
+  s_3d388cbf35fcf4::t_5f3751f76008a1 21,87-112,126,141-170,183-187,189-190,258-259,261,263
+  s_3d388cbf35fcf4::t_85049929c248d1 250-257,260,262
+server/gen/http/risk/server/encode_decode.go
+  s_3d388cbf35fcf4::t_bda4c767da84b6 10289-10307,10351-10365
+server/gen/http/chat/server/types.go
+  s_3d388cbf35fcf4::t_4bb0a1598d66c6 81-82,2132-2149,2328-2339
+server/design/chat/design.go
+  s_3d388cbf35fcf4::t_74a875ff45eca2 478,489-506
+server/internal/judgemessage/payload.go
+  s_3d388cbf35fcf4::t_18a1b7d93894f6 118-119
+client/dashboard/src/pages/chatLogs/ChatDetailPanel.tsx
+  s_3d388cbf35fcf4::t_5a43ce6f778650 79,1120-1123,1125,1153-1154
+server/gen/http/chat/client/encode_decode.go
+  s_3d388cbf35fcf4::t_d225983e5055c1 2514-2529
+server/internal/risk/queries.sql
+  s_3d388cbf35fcf4::t_e4262444e00051 844-861,885-894,971,991,1011-1016,1023,1025-1026,1059,1067,1070-1072,1078,1083-1085,1098-1099,1104,1108,1173,1175-1177,1191,1193,1197,1199-1201,1210,1215,1217,1626-1630
+server/internal/risk/repo/queries.sql.go
+  s_3d388cbf35fcf4::t_8854dc5d0309e4 443-469,904-921,940-978,1220-1271,1700,1702-1703,1826,2620,2622-2624,2633,2638,2640,2741,2743-2745,2759,2761,2867,2875,2878-2880,2886,2891-2893,2906-2907,2912,2916,2999,3073,3469-3485
+server/internal/chat/transcript_order_test.go
+  s_3d388cbf35fcf4::t_356922241229dc 188-194
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_3d388cbf35fcf4::t_51a588694dd8be 116
+client/dashboard/src/pages/chatLogs/chatHelpers.test.ts
+  s_3d388cbf35fcf4::t_78b3a1042e5d1e 8,148-164
+client/dashboard/src/sdk/src/models/components/hookingestdata.ts
+  s_3d388cbf35fcf4::t_c10d126e9d577b 27-31,81-84,107,125-127,136
+server/design/shared/risk.go
+  s_3d388cbf35fcf4::t_13768e2ed6ba3e 141,249-252,275,324-327,347
+client/dashboard/src/sdk/src/models/components/promptguardrailmessageverdict.ts
+  s_3d388cbf35fcf4::t_79e3ee78120f06 40
+server/internal/hooks/ingest_hooks_test.go
+  s_3d388cbf35fcf4::t_518d8e76d48a09 17,31,1135-1179
+server/gen/types/risk_result.go
+  s_3d388cbf35fcf4::t_687abdd240344f 20-24
+server/internal/background/activities/risk_analysis/scan_presidio.go
+  s_3d388cbf35fcf4::t_693ab6c7ea9ee3 19
+  s_3d388cbf35fcf4::t_798609554efd40 39-41,54
+server/gen/types/risk_policy.go
+  s_3d388cbf35fcf4::t_c76af809a101aa 49
+server/gen/http/cli/gram/cli.go
+  s_3d388cbf35fcf4::t_0ae55834d2dbce 11043
+server/gen/types/risk_result_redacted.go
+  s_3d388cbf35fcf4::t_f34ee54266842d 17-21
+client/dashboard/src/sdk/src/models/components/evaluatepromptguardrailrequestbody.ts
+  s_3d388cbf35fcf4::t_b7c965b2a69ea9 19
+.speakeasy/out.openapi.yaml
+  s_3d388cbf35fcf4::t_282fb03c435f11 48964-48968,49070,49105-49134,52011,54048-54052,54184-54227,58395,59996,60279-60282,60289,60363-60366,60373
+client/dashboard/src/pages/chatLogs/transcript.test.ts
+  s_3d388cbf35fcf4::t_90583014eca996 46
+client/dashboard/src/sdk/src/models/components/hookpromptattachmententry.ts
+  s_3d388cbf35fcf4::t_98c8c7dd8860ee 1-112
+server/internal/background/activities/risk_analysis/scan_gitleaks.go
+  s_3d388cbf35fcf4::t_d367a0d0e39b7b 28-30,41
+  s_3d388cbf35fcf4::t_c3ad43fbf3651a 16
+server/internal/risk/chrepo_roundtrip_test.go
+  s_3d388cbf35fcf4::t_cdfa94e9db7dfb 40
+server/gen/http/risk/server/types.go
+  s_3d388cbf35fcf4::t_15e7108c8796db 359-360,422,528,618,9337,9420-9424,9493-9497,9756
+server/gen/http/openapi3.yaml
+  s_3d388cbf35fcf4::t_7c6138bc0d1934 49265-49269,49371,49406-49435,52311,54348-54352,54484-54527,58695,60296,60579-60582,60589,60663-60666,60673
+server/internal/background/activities/risk_analysis/scan_account_identity_test.go
+  s_3d388cbf35fcf4::t_ce83f1955b112d 136
+server/internal/risk/celenv/reference.go
+  s_3d388cbf35fcf4::t_a64fd7e8dcdaf3 58
+server/internal/background/activities/risk_analysis/scan_custom_rules.go
+  s_3d388cbf35fcf4::t_c283070f07e9db 18
+  s_3d388cbf35fcf4::t_d2b597dd84b2e6 58-59,69,82
+server/internal/chat/load_chat_test.go
+  s_3d388cbf35fcf4::t_9be0d67fa06300 5,7,14,16-18,140-206
+client/dashboard/src/sdk/src/models/components/riskresultredacted.ts
+  s_3d388cbf35fcf4::t_ee4c91c1288806 16-19,25,27,92,94,115
+server/internal/background/risk_analysis_coordinator.go
+  s_3d388cbf35fcf4::t_aa443d546dd8b4 86,97,114-132,144-146
+server/internal/outbox/events/risk_finding_created.go
+  s_3d388cbf35fcf4::t_0b26b5fa01bbfd 23-34
+server/internal/background/activities/risk_analysis/fetch_unanalyzed.go
+  s_3d388cbf35fcf4::t_48df8eae9ffbfc 53-55,78-80,84,92-99,102-104,109-111
+server/internal/risk/repo/copyfrom.go
+  s_3d388cbf35fcf4::t_064bd14f7e3ea6 38,58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "4843f5f5b9fdba2e4b2811fe921ead46f505dc40",
+  "prompts": {},
+  "sessions": {
+    "s_3d388cbf35fcf4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "acec37c7-b1cc-4ee7-82c8-afd405d96140",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

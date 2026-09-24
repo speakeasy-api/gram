@@ -1,0 +1,192 @@
+server/internal/toolsets/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 17-18,128,229
+server/internal/chatanalysis/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 14-15,89
+server/internal/customdomains/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 13-14,135
+infra/pkg/topics/topics_gen.go
+  s_6cd0b3509a4ad1::t_d98d42af7ff721 11,27-28,56,74-75,109-110
+server/internal/plugins/setup_test.go
+  s_6cd0b3509a4ad1::t_a9a477a5d129b8 104
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 18-19,165
+server/internal/triggers/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 15-16,121
+server/internal/tunneledmcp/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 13-14,71
+server/internal/authz/context_test.go
+  s_6cd0b3509a4ad1::t_003e02a0991b97 88,95
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 10-11,26,36,49,56,68,76,108,123,136,159,181,192
+server/internal/assets/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 12-13,98-99,101-102
+server/internal/externalkeys/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 14-15,107
+server/internal/access/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 16-17,116
+server/internal/spendrules/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 13-14,89
+server/internal/tools/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 17-18,117
+server/internal/usersessions/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 20-21,101
+server/internal/authz/challenge_writer.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 1-115
+server/cmd/gram/deps.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 48,997-1013,1100
+server/internal/authz/engine_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 8,11-12,28,30,38,41,50,52,61,90,93,104,120-121,131-139,145-147,156-161,167-169,175,182,191,204,225,248,271,287,310,323,341,354,366,392,395,404,407,416,434,440,469,486,505-507,513,518,520,531,534,544-546,558-564,571,581,591,607-609,615,673,687,709,713,721,726,734,740,748,756,775,785,795,805
+server/cmd/gram/start.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 745-753
+server/internal/mcp/rpc_tools_list_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 14-15,285,298,320,329,348,356,371,398,414,427,449,457
+infra/gen_py/gram/authz/v1/challenge_ch_writer_pb2.pyi
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 1-10
+server/internal/remotemcp/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 16-17,117
+server/internal/remotesessions/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 16-17,118
+server/internal/mcp/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 15-16,210
+server/internal/access/list_challenge_buckets_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 113-147
+infra/proto/gram/authz/v1/challenge.proto
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 1-60
+server/internal/assistantmemories/impl_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 13-14,68,139,308,379
+server/internal/authz/integration_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 8-9,33,65,102
+server/internal/skillefficacy/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 12-13,72
+server/internal/unproxiedmcp/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 14-15,93
+server/internal/packages/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 12-13,72
+server/internal/projects/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 12-13,101-102,104-105
+server/internal/authz/challenge_logger.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 13-14,46-49,52,108,114-125,127-136,152-173,175-176,178-184,188-205
+server/internal/templates/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 13-14,83
+infra/gen_py/gram/authz/v1/challenge_pb2.pyi
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 1-90
+server/internal/background/worker.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 21,155
+server/cmd/gram/worker.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 551,554-556
+server/internal/agent/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 15-16,88
+server/internal/auditapi/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 12-13,69
+server/internal/litellm/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 17-18,126
+server/internal/mcpendpoints/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 15-16,94,183
+server/internal/resources/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 10-11,71
+server/internal/usage/impl_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 18-19,155
+server/internal/auth/e2e_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 15-16,176
+server/internal/externalmcp/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 13-14,79
+server/internal/deployments/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 12-13,108
+server/internal/authz/challenge_writer_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 1-154
+server/internal/authz/engine.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 10-11,36,42-49,60,203,219,240,256,289,308,326,348,435,452,486,540,557,592
+server/internal/chat/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 15-16,116
+server/internal/hooks/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 21-22,177
+infra/gen/kcc.yaml
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 7-56,470-487,641-656
+server/internal/authz/challenge_logger_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 7,10-11,17-37,41,49-51,64,73-75,78,95,106-124,127,137,146-153,156,160,168,177-182,190,195,204-207,210,214,218,239-255,258,262,266,268,277-283
+server/internal/assistants/impl_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 14-15,485
+server/internal/authz/demo_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 9-10,32,34,66,68
+server/cmd/gram/streams.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 27,34,327-329,331,425-428
+  s_6cd0b3509a4ad1::t_dd7d9fc04ddb4d 429
+server/internal/authz/repo/queries.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 14-16,19-22,273,306,336,413-414
+server/internal/mcpmetadata/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 17-18,101
+server/internal/auth/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 19-20,172,236
+server/internal/mcp/rbac_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 12-13,29,32,44,47,59,62,72,75,103,114,128,139,155,162,176,187,203,215,225,238,250,261
+server/internal/risk/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 18-19,208
+server/internal/authz/load_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 9-10,34,167
+server/internal/variations/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 10-11,72
+server/internal/modelkeys/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 14-15,141
+server/internal/xmcp/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 24-25,138
+server/internal/authz/repo/db.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 3-4
+docs/pubsub-topology.md
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 18-19,34,46-52,54,56-71,85-106,113-114,134
+server/internal/functions/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 14-15,118
+server/internal/environments/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 12-13,77
+infra/proto/gram/authz/v1/challenge_ch_writer.proto
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 1-23
+server/internal/usage/tum_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 15-16,79
+server/internal/skills/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 17-18,134
+server/internal/externalcredentials/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 15-16,122
+server/internal/telemetry/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 16-17,128
+server/internal/remotemcp/tools_call_authz_interceptor_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 10-11,40
+server/internal/mcp/handle_get_server_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 14-15,35
+server/internal/mcpservers/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 14-15,89
+server/internal/mcp/handle_get_server_proxy_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 19-20,161
+server/internal/organizations/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 13-14,138,191,242
+server/internal/keys/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 13-14,80
+server/internal/productfeatures/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 14-15,108
+server/internal/collections/setup_test.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 14-15,85
+server/internal/background/activities.go
+  s_6cd0b3509a4ad1::t_e1154c8dd4689e 17,73
+.changeset/publish-authz-challenges.md
+  s_6cd0b3509a4ad1::t_ebeecf58661fd5 1-7
+infra/gen/gram/authz/v1/challenge.pb.go
+  s_6cd0b3509a4ad1::t_ad4ca0e6f626ea 1-1362
+infra/gen/gram/authz/v1/challenge_ch_writer.pb.go
+  s_6cd0b3509a4ad1::t_27ee16cca147f7 1-111
+infra/gen_py/gram/authz/v1/challenge_ch_writer_pb2.py
+  s_6cd0b3509a4ad1::t_816b6b7289aaed 1-40
+infra/gen_py/gram/authz/v1/challenge_pb2.py
+  s_6cd0b3509a4ad1::t_7dc9132aab34f3 1-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "d89e6214b0cf15ab9a91101a6966cf4c531a0b44",
+  "prompts": {},
+  "sessions": {
+    "s_6cd0b3509a4ad1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd754-8571-7ca3-9b80-f41a12ff308a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

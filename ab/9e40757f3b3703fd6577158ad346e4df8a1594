@@ -1,0 +1,20 @@
+server/internal/access/role_manager_test.go
+  h_9630b74bdac540 5,9-10,20,22,302-378
+server/internal/platformmcp/access_role_assignment_scope_test.go
+  h_9630b74bdac540 48,53
+server/internal/platformmcp/access_role_assignment_scope.go
+  h_9630b74bdac540 64-66
+server/internal/access/role_manager.go
+  h_9630b74bdac540 1343-1349,1351-1356
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ab9e40757f3b3703fd6577158ad346e4df8a1594",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

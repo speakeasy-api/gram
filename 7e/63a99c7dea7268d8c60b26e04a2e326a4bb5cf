@@ -1,0 +1,93 @@
+infra/proto/gram/risk/v1/prompt_policy_analyzer.proto
+  s_fcb426b5b94105::t_76f6416e329700 1-22
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_fcb426b5b94105::t_55ed2bb37c92e7 87-98,107
+  s_fcb426b5b94105::t_672990e10a92be 163-164,259-260,367-368,455-456,966-967
+server/internal/background/activities/risk_analysis/scan_account_identity_test.go
+  s_fcb426b5b94105::t_672990e10a92be 144-145
+server/internal/scanners/promptpolicy/handler_test.go
+  s_fcb426b5b94105::t_526ba9552c4566 1-108
+server/internal/background/worker.go
+  s_fcb426b5b94105::t_2baee91edc85df 151-155
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_fcb426b5b94105::t_d24ee9343fb580 12-13,88-89,113-145,148-153
+  s_fcb426b5b94105::t_3c58afc8687bd8 14
+  s_fcb426b5b94105::t_5183c73bc2673f 147
+  s_fcb426b5b94105::t_a4e390cdcd544e 146
+  s_fcb426b5b94105::t_c4fe66e0099d41 154
+infra/proto/gram/risk/v1/prompt_injection_analysis.proto
+  s_fcb426b5b94105::t_76f6416e329700 1-36
+docs/pubsub-topology.md
+  s_fcb426b5b94105::t_ce38b4de6b0a19 25-26,33-34,46-57,66-83,94,97-98,110-111
+infra/gen/kcc.yaml
+  s_fcb426b5b94105::t_ce38b4de6b0a19 113-169,263-290,354-373
+infra/gen_py/gram/risk/v1/prompt_injection_analyzer_pb2.pyi
+  s_fcb426b5b94105::t_ce38b4de6b0a19 1-10
+infra/gen_py/gram/risk/v1/prompt_policy_analysis_pb2.pyi
+  s_fcb426b5b94105::t_ce38b4de6b0a19 1-49
+infra/proto/gram/risk/v1/prompt_injection_analyzer.proto
+  s_fcb426b5b94105::t_76f6416e329700 1-22
+server/internal/scanners/promptinjection/handler.go
+  s_fcb426b5b94105::t_61c6c916db07b2 1-94,96-103
+  s_fcb426b5b94105::t_5183c73bc2673f 95
+infra/gen_py/gram/risk/v1/prompt_injection_analysis_pb2.pyi
+  s_fcb426b5b94105::t_ce38b4de6b0a19 1-47
+infra/gen_py/gram/risk/v1/prompt_policy_analyzer_pb2.pyi
+  s_fcb426b5b94105::t_ce38b4de6b0a19 1-10
+server/internal/background/activities/risk_analysis/batch_scanners.go
+  s_fcb426b5b94105::t_d24ee9343fb580 68
+server/internal/scanners/promptpolicy/handler.go
+  s_fcb426b5b94105::t_61c6c916db07b2 1-91,93-100
+  s_fcb426b5b94105::t_5183c73bc2673f 92
+server/cmd/gram/deps.go
+  s_fcb426b5b94105::t_24ddfe449ac2c1 1021-1032,1050-1054
+infra/proto/gram/risk/v1/prompt_policy_analysis.proto
+  s_fcb426b5b94105::t_76f6416e329700 1-37
+server/internal/background/activities.go
+  s_fcb426b5b94105::t_24ddfe449ac2c1 58-62,204
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_fcb426b5b94105::t_24ddfe449ac2c1 52-53,75-76
+  s_fcb426b5b94105::t_a4e390cdcd544e 104-105
+server/internal/scanners/promptinjection/handler_test.go
+  s_fcb426b5b94105::t_526ba9552c4566 1-70,72-89
+  s_fcb426b5b94105::t_e10ec6c08f80ef 71
+server/internal/background/activities/risk_analysis/scan_prompt_injection.go
+  s_fcb426b5b94105::t_d24ee9343fb580 5,7,10-11,18,21-22,45-70,72-77
+  s_fcb426b5b94105::t_5183c73bc2673f 71
+  s_fcb426b5b94105::t_b8f98f69f44ed7 78
+server/cmd/gram/streams.go
+  s_fcb426b5b94105::t_a4e390cdcd544e 74-149,391-392
+  s_fcb426b5b94105::t_38b220e0df8441 27,32,34,38-39,43-46,48,237-249,275-299,332-335
+infra/gen/gram/risk/v1/prompt_injection_analysis.pb.go
+  s_fcb426b5b94105::t_a46af1a4ef3dd0 1-686
+infra/gen/gram/risk/v1/prompt_injection_analyzer.pb.go
+  s_fcb426b5b94105::t_36d7973cb7302d 1-110
+infra/gen/gram/risk/v1/prompt_policy_analysis.pb.go
+  s_fcb426b5b94105::t_82cf0b124cb721 1-722
+infra/gen/gram/risk/v1/prompt_policy_analyzer.pb.go
+  s_fcb426b5b94105::t_76a88cbe4aa63c 1-110
+infra/gen_py/gram/risk/v1/prompt_injection_analysis_pb2.py
+  s_fcb426b5b94105::t_0de4cbe5f901d4 1-42
+infra/gen_py/gram/risk/v1/prompt_injection_analyzer_pb2.py
+  s_fcb426b5b94105::t_ee584b515072a8 1-40
+infra/gen_py/gram/risk/v1/prompt_policy_analysis_pb2.py
+  s_fcb426b5b94105::t_4ec5c840a9975a 1-42
+infra/gen_py/gram/risk/v1/prompt_policy_analyzer_pb2.py
+  s_fcb426b5b94105::t_c8676422ec77e3 1-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "7e63a99c7dea7268d8c60b26e04a2e326a4bb5cf",
+  "prompts": {},
+  "sessions": {
+    "s_fcb426b5b94105": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5fda-27e6-75a2-89c7-44a3382734a3",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

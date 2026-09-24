@@ -1,0 +1,25 @@
+server/internal/risk/replyinbox/inbox_test.go
+  s_b390d6ce53b276::t_664be77352e4e2 148,151-152,154,156,160-177
+server/internal/risk/replyinbox/inbox.go
+  s_b390d6ce53b276::t_3fea77a829040f 550,552,557,559-561
+  s_b390d6ce53b276::t_e2eadcb7934e20 379-384,389-390,392,395-405,408
+  s_b390d6ce53b276::t_0466081a315682 141-143,145-146
+  s_b390d6ce53b276::t_efbf0d41a242c1 34-36
+  s_b390d6ce53b276::t_6f19e9283b3c1b 346-348,350-351
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "692455d1578a991002c55cfa4e1564bed455ebd9",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

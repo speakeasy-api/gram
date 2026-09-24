@@ -1,0 +1,27 @@
+server/internal/risk/pubsub_internal_test.go
+  s_b390d6ce53b276::t_cee0c8ccfc00dd 1-56
+server/internal/background/activities/risk_analysis/presidio.go
+  s_b390d6ce53b276::t_6f4c09c5975f94 239-251
+server/internal/risk/scanner.go
+  s_b390d6ce53b276::t_a471814f722eea 1014-1020,1025-1028
+  s_b390d6ce53b276::t_d12ff97c8ddbc8 39-40
+  s_b390d6ce53b276::t_1b39c2362de5ab 959-962,967-968
+server/internal/scanners/gitleaks/describe.go
+  s_b390d6ce53b276::t_d5501d555b6a96 1-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "737b9112baff93a674b56ff8011bd453c3725c84",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

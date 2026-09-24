@@ -1,0 +1,28 @@
+server/cmd/gram/start.go
+  h_9630b74bdac540 102-103,127,204-219,305,307-308,832-833,1257-1261,1572,1575,1584-1585,1664-1671,1673-1714,1848-1850,1852-1856,1938-1939,1942-1944,1946-1952,1954
+server/internal/netingress/routes.go
+  h_9630b74bdac540 1-109,111-144
+server/cmd/gram/root.go
+  h_9630b74bdac540 42
+server/internal/netingress/attestor.go
+  h_9630b74bdac540 1-34,37-39,41-126
+server/cmd/gram/netingress_attestor.go
+  h_9630b74bdac540 1-45,47-63,65-68,70-127
+server/internal/mcp/impl.go
+  h_9630b74bdac540 73,394,481-483,511-564,743,854,953
+server/internal/xmcp/service.go
+  h_9630b74bdac540 25,62-91,94-101
+server/internal/netingress/attestor_test.go
+  h_9630b74bdac540 1-37,39-43,45-76,78-80,82-142,144-145,147-260,262,264-268,270-274
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "655bfc52f4dd2e93aa14566959b1c44c2f286717",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

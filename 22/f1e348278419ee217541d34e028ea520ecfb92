@@ -1,0 +1,27 @@
+.agents/skills/clickhouse/SKILL.md
+  s_a6cc4a2c69d92d::t_d20065e6cd144d 3
+  s_a6cc4a2c69d92d::t_9cd0876e5d63b8 36
+  s_a6cc4a2c69d92d::t_74e595a283fb93 6-12,17-18,26,32,40,42,107-112
+.agents/skills/writing-skills/SKILL.md
+  s_a6cc4a2c69d92d::t_02cf039013b4ed 14
+.agents/recommended-skills.json
+  s_a6cc4a2c69d92d::t_85fabc2f848166 4-13
+CLAUDE.md
+  s_a6cc4a2c69d92d::t_02cf039013b4ed 119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "22f1e348278419ee217541d34e028ea520ecfb92",
+  "prompts": {},
+  "sessions": {
+    "s_a6cc4a2c69d92d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019feb2a-323e-75e3-9ba5-f2b7583535ee",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,19 @@
+server/internal/hooks/pending_helpers.go
+  s_67e5161625cc67::t_516712e3d435fa 137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "2f65682e600c98503a2238557cd02529132220ed",
+  "prompts": {},
+  "sessions": {
+    "s_67e5161625cc67": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfe0-9405-7441-aec9-1a4a9133f548",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

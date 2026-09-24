@@ -1,0 +1,16 @@
+server/internal/platformmcp/operational_reads_integration_test.go
+  h_2620cc60cfd1e9 40-48
+server/internal/platformmcp/tool_recent_tool_calls.go
+  h_2620cc60cfd1e9 38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "3832bec8dc99d2575ebe9280939317af0407c52d",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

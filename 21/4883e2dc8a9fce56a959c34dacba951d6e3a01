@@ -1,0 +1,37 @@
+server/internal/scanners/promptinjection/openrouter/judge_v2_test.go
+  s_e5952da15582a2::t_52230dcd0c164d 53,56,88,123,127,165,171,180,183-187,209
+server/cmd/gram/pi_judge.go
+  s_e5952da15582a2::t_47fc786c34efb3 4,12-19,27,31
+server/cmd/risk-pi-report/main.go
+  s_e5952da15582a2::t_0fbca71a6af2b2 1027-1032
+  s_e5952da15582a2::t_52230dcd0c164d 1033-1035,1147
+server/internal/scanners/promptinjection/openrouter/judge_test.go
+  s_e5952da15582a2::t_52230dcd0c164d 201
+server/internal/scanners/promptinjection/openrouter/judge.go
+  s_e5952da15582a2::t_0fbca71a6af2b2 50,162
+  s_e5952da15582a2::t_3284953a5dfb7e 33-37,51,101,140,143,163-164,178,180,187,194-195,207,210,212-213,216,221,247-248,286-287,325-326,370,373,380-381,385,388,392,406,418,432,438,440,446-447,455,457-458,461-462,471,475,520,523,543,620,633,644-645
+server/cmd/gram/worker.go
+  s_e5952da15582a2::t_47fc786c34efb3 45,765
+server/cmd/gram/start.go
+  s_e5952da15582a2::t_47fc786c34efb3 85,1020,1257
+server/cmd/gram/pi_judge_test.go
+  s_e5952da15582a2::t_47fc786c34efb3 17-19,28-37
+server/cmd/gram/streams.go
+  s_e5952da15582a2::t_47fc786c34efb3 349
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "214883e2dc8a9fce56a959c34dacba951d6e3a01",
+  "prompts": {},
+  "sessions": {
+    "s_e5952da15582a2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8b4a-b218-76f0-becc-8d70e94d8075",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

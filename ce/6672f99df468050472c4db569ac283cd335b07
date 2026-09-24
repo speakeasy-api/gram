@@ -1,0 +1,241 @@
+.agents/skills/frontend/SKILL.md
+  s_62bf807f9fa23e::t_aaf7f2bc381b1a 13,15-22,24,28
+.agents/skills/grafana-lgtm/SKILL.md
+  s_62bf807f9fa23e::t_bffa24c01e3301 1-162
+.agents/skills/gram-playwright-cli/SKILL.md
+  s_62bf807f9fa23e::t_a742fefed1502d 347
+.agents/skills/gram-telemetry-query-dimensions/SKILL.md
+  s_62bf807f9fa23e::t_4204fca9001241 165
+.agents/skills/page-toolbar/SKILL.md
+  s_62bf807f9fa23e::t_6d7862b3a2cc86 111
+.changeset/attribute-cursor-sessions.md
+  s_62bf807f9fa23e::t_83dbcda849f936 1-5
+.changeset/cimd-metadata-document-cache.md
+  s_62bf807f9fa23e::t_fb1435d8590e7c 1-9
+.changeset/litellm-originating-client.md
+  s_62bf807f9fa23e::t_3d01547129d9a4 1-6
+.claude/skills/grafana-lgtm
+  s_62bf807f9fa23e::t_d6aadb16b7ba08 1
+.codex/skills/grafana-lgtm
+  s_62bf807f9fa23e::t_69bc3091a7e4c7 1
+.cursor/skills/grafana-lgtm
+  s_62bf807f9fa23e::t_2cdcab4410d165 1
+.github/workflows/hygiene.yaml
+  s_62bf807f9fa23e::t_5f6737b20a223d 210,214,216-217,219,223,232,245,253,255
+.github/workflows/pr.yaml
+  s_62bf807f9fa23e::t_cefe6b2db539d1 274,277,279-280,282,284,286,293,295,1494,1497,1499-1500,1502,1505,1510,1567,1569,1651,1654,1656-1657,1659,1662,1667,1670,1674,1680,1682,1704,1707,1709-1710,1712,1715,1718,1721,1723,1746,1749,1751-1752,1754,1757,1769,1771,1802,1805,1807-1808,1810,1816,1824,1828,1862,1864,1891,1894,1896-1897,1899,1902,2015,2017,2037,2040,2042-2043,2045,2048,2051,2054,2056,2058
+.github/workflows/release.yaml
+  s_62bf807f9fa23e::t_96e4e19f219d5f 42,45,47-48,50,53,74,79-80
+.gitignore
+  s_62bf807f9fa23e::t_e36df074fcb9f9 44
+.mise-tasks/build/server-cache.sh
+  s_62bf807f9fa23e::t_dc80ad8ed44ae5 1-28
+.mise-tasks/datadog/sourcemaps.sh
+  s_62bf807f9fa23e::t_0e4d4080aacb34 16
+.mise-tasks/db/mig-pr.sh
+  s_62bf807f9fa23e::t_637ef9884c05d7 114-115
+.mise-tasks/gen/sdk.sh
+  s_62bf807f9fa23e::t_7610aeff0dbd04 16-20
+.mise-tasks/git/workboot.sh
+  s_62bf807f9fa23e::t_34d681b93a7531 43-49
+.mise-tasks/git/workinit.sh
+  s_62bf807f9fa23e::t_aa3f4e84f58ef0 40,42
+.mise-tasks/github/_default
+  s_62bf807f9fa23e::t_1e7cc9f07d41a1 12-16
+.mise-tasks/github/pre-cache.mts
+  s_62bf807f9fa23e::t_dd6282eab15a5c 7,86-91,95,102-103,105-106,108,111-118,123
+.mise-tasks/infra/start.sh
+  s_62bf807f9fa23e::t_17d8e855eed131 10-16,19-24,26,29-45,62-77
+.mise-tasks/install/_default
+  s_62bf807f9fa23e::t_e8ab5172d72e4e 3
+.mise-tasks/install/aube.sh
+  s_62bf807f9fa23e::t_349f7e0ed3fc65 15
+.mise-tasks/lint/client.sh
+  s_62bf807f9fa23e::t_5a0cc8d6d6eaa1 3,7
+.mise-tasks/open/grafana.sh
+  s_62bf807f9fa23e::t_29c559fb1d5de2 3,7,9
+.mise-tasks/start/dashboard.sh
+  s_62bf807f9fa23e::t_d1faad6a70e0f7 8
+.mise-tasks/start/dev-idp-dashboard.sh
+  s_62bf807f9fa23e::t_8310e260b9acfc 13
+.mise-tasks/zero/summary.mts
+  s_62bf807f9fa23e::t_c040d610098af3 164-165
+.node-version
+  s_62bf807f9fa23e::t_8a39a36dce1681 1
+.opencode/skills/grafana-lgtm
+  s_62bf807f9fa23e::t_f348bbfc7a1437 1
+.speakeasy/out.openapi.yaml
+  s_62bf807f9fa23e::t_30297b84b49d58 55007-55009,55232-55234
+CLAUDE.md
+  s_62bf807f9fa23e::t_2296ddaf42b1fc 81-83
+ONBOARDING.md
+  s_62bf807f9fa23e::t_7f3ec0c5a1932d 21
+client/dashboard/knip.config.ts
+  s_62bf807f9fa23e::t_a35b832030d2de 9-11
+client/dashboard/package.json
+  s_62bf807f9fa23e::t_d295f4c4671856 9,11,14,19
+client/dashboard/src/components/page-templates/page-templates.mdx
+  s_62bf807f9fa23e::t_4bfa7954125085 162-163
+client/dashboard/src/elements/components/ChatComposer/index.tsx
+  s_62bf807f9fa23e::t_1eec6c65db1263 51-59
+client/dashboard/src/elements/components/ShadowRoot.tsx
+  s_62bf807f9fa23e::t_d867b1b2fa14b4 101-106
+client/dashboard/src/pages/chatLogs/ChatLogsTable.test.tsx
+  s_62bf807f9fa23e::t_6d0f95de9b848a 161-208
+client/dashboard/src/pages/chatLogs/ChatLogsTable.tsx
+  s_62bf807f9fa23e::t_bb175a3ed3e150 323-325
+client/dashboard/src/pages/hooks/HookSourceIcon.test.tsx
+  s_62bf807f9fa23e::t_4611b24916635a 3,20-29
+client/dashboard/src/pages/hooks/HookSourceIcon.tsx
+  s_62bf807f9fa23e::t_bd15ad689f733b 351-355
+client/dashboard/src/sdk/src/models/components/chat.ts
+  s_62bf807f9fa23e::t_76795ae38a4de7 85-88,181,220
+client/dashboard/src/sdk/src/models/components/chatoverview.ts
+  s_62bf807f9fa23e::t_05173444061755 48-51,125,155
+compose.shared.yml
+  s_62bf807f9fa23e::t_4e9bca1e2bfca1 9
+compose.yml
+  s_62bf807f9fa23e::t_70e8c582283562 106,108-111,114-116,118-125
+hk.pkl
+  s_62bf807f9fa23e::t_6debd9423d8bfa 74-75
+local/otel-collector/config.yaml
+  s_62bf807f9fa23e::t_7de6a5b2cfa740 8-9,21,23,25
+mise.lock
+  s_62bf807f9fa23e::t_03d2e9180eabed 69-108
+mise.toml
+  s_62bf807f9fa23e::t_314ecab7e9c4de 29-31,33-44,220-221
+mprocs.yaml
+  s_62bf807f9fa23e::t_4ad324a328c583 8-9
+package.json
+  s_62bf807f9fa23e::t_f65e468c8a225c 9-13
+pitchfork.toml
+  s_62bf807f9fa23e::t_bcef86ecff15e3 39-45
+server/clickhouse/local/golang_migrate/20260811155533_challenge-bucket-summaries.up.sql
+  s_62bf807f9fa23e::t_75f8a1ddbadbef 25
+server/clickhouse/local/golang_migrate/atlas.sum
+  s_62bf807f9fa23e::t_f808baa8167140 1,89
+server/clickhouse/migrations/20260811155529_challenge-bucket-summaries.sql
+  s_62bf807f9fa23e::t_a16c5f88482814 25
+server/clickhouse/migrations/atlas.sum
+  s_62bf807f9fa23e::t_5a04fc16cfd870 1,94
+server/clickhouse/schema.sql
+  s_62bf807f9fa23e::t_1e21deb44ec5fa 1282
+server/database/schema.sql
+  s_62bf807f9fa23e::t_70c333350496db 274-284,287-288,303-304,307-329,1469-1470,1473-1475
+server/design/chat/design.go
+  s_62bf807f9fa23e::t_e5c7f0b0130e5a 447
+server/gen/chat/service.go
+  s_62bf807f9fa23e::t_93c1034bcfa148 145-147,256-258
+server/gen/http/chat/client/encode_decode.go
+  s_62bf807f9fa23e::t_f01861b2bce818 2458
+server/gen/http/chat/client/types.go
+  s_62bf807f9fa23e::t_b818fe4776cfe9 130-132,2039-2041,2644
+server/gen/http/chat/server/encode_decode.go
+  s_62bf807f9fa23e::t_227952a0d05c6c 2524
+server/gen/http/chat/server/types.go
+  s_62bf807f9fa23e::t_f26762d7d20ffc 131-133,2040-2042,2307
+server/gen/http/openapi3.yaml
+  s_62bf807f9fa23e::t_073c95af68b136 55252-55254,55477-55479
+server/internal/aiintegrations/cursor_usage_polling.go
+  s_62bf807f9fa23e::t_f41acb236162e7 171-190,203-204
+server/internal/aiintegrations/cursor_usage_polling_test.go
+  s_62bf807f9fa23e::t_2ab90985a153a2 41,62
+server/internal/aiintegrations/event_key_test.go
+  s_62bf807f9fa23e::t_5599fbb5f415f8 23,42-43
+server/internal/assets/queries.sql
+  s_62bf807f9fa23e::t_0896faffcc13a7 13,26,29,39,46,53,57,62
+server/internal/assets/repo/models.go
+  s_62bf807f9fa23e::t_05197f6eb81489 13-25
+server/internal/assets/repo/queries.sql.go
+  s_62bf807f9fa23e::t_e27604e9dcac26 27,37,64,82,131,164,219,247,261,277,291,307,322
+server/internal/assistants/queries.sql
+  s_62bf807f9fa23e::t_75ce69c3da403d 1506
+server/internal/assistants/repo/queries.sql.go
+  s_62bf807f9fa23e::t_9022b03c0f6a58 1786
+server/internal/chat/impl.go
+  s_62bf807f9fa23e::t_7bcd9826f377d7 378,1126,1135-1143,1155
+server/internal/chat/list_chats_test.go
+  s_62bf807f9fa23e::t_b6de81edcb102d 104-107,918-955
+server/internal/chat/load_chat_test.go
+  s_62bf807f9fa23e::t_a8efe66205ebb1 20,211-231
+server/internal/chat/queries.sql
+  s_62bf807f9fa23e::t_47a06d05a2bd2f 756-771,779,803,1559-1560,1563-1564
+server/internal/chat/repo/queries.sql.go
+  s_62bf807f9fa23e::t_400b85efcc3e07 2073-2088,2096,2120,2150,2207,2828-2829,2834-2838,2841-2842,2850
+server/internal/database/models.go
+  s_62bf807f9fa23e::t_a4744d176476d5 88-100
+server/internal/functions/queries.sql
+  s_62bf807f9fa23e::t_385dbac2e45406 169
+server/internal/functions/repo/queries.sql.go
+  s_62bf807f9fa23e::t_6c485ff63e30d9 242
+server/internal/hooks/ingest_hooks.go
+  s_62bf807f9fa23e::t_be63714ea96cb2 45,67,1408
+server/internal/litellm/callcache/callcache.go
+  s_62bf807f9fa23e::t_3813f05d015a9d 19-25,47-53
+server/internal/litellm/impl.go
+  s_62bf807f9fa23e::t_c1593a7446d8f5 160-161,170-171,217,238-244,270-271,282-297,347,434-438,441-447,450-452,454-455,457-461,464-498
+server/internal/litellm/ingest_test.go
+  s_62bf807f9fa23e::t_bb969c899d360c 225,237-243,295,297,299-301,303,305-306,308,311,313-334,342-345,347-349,351,355-356,365-371,403,431-454
+server/internal/litellm/traces_test.go
+  s_62bf807f9fa23e::t_2c79f0c41175d2 1387-1393,1435-1441
+server/internal/mcp/authnchallenge_cimd_test.go
+  s_62bf807f9fa23e::t_6519a51c835381 16,19,35-38,42-59,61-63,65-78,84-94,98-125,339,350,361,386,401-403,494-562,564-566,578,580-582,587-588,592-778,878,900,951
+server/internal/mcp/client_resolver.go
+  s_62bf807f9fa23e::t_635fc10b252d99 4-6,22,44-47,106-140,142-145,152-196,198-200
+server/internal/thirdparty/cursor/client.go
+  s_62bf807f9fa23e::t_009097cb01c578 81
+server/internal/thirdparty/cursor/client_test.go
+  s_62bf807f9fa23e::t_85047b5476b24e 201,219,239,283,303
+server/internal/usersessions/cimd/cache_outcome.go
+  s_62bf807f9fa23e::t_2c9da66823daf5 1-20
+server/internal/usersessions/cimd/cache_policy.go
+  s_62bf807f9fa23e::t_04c752206702d7 1-324
+server/internal/usersessions/cimd/cache_policy_test.go
+  s_62bf807f9fa23e::t_c19f045d519a5d 1-441
+server/internal/usersessions/cimd/cache_result.go
+  s_62bf807f9fa23e::t_1ae5bb6282eafd 1-26
+server/internal/usersessions/cimd/cache_state.go
+  s_62bf807f9fa23e::t_e332bcf4b1f620 1-16
+server/internal/usersessions/cimd/cache_test.go
+  s_62bf807f9fa23e::t_295c9d3ba2438a 1-351
+server/internal/usersessions/cimd/cimd.go
+  s_62bf807f9fa23e::t_5cae75621c1a8e 7-11,226-239,243-255,259-264,270-276,301-303,308-340,342,349,358,363-365,369-411,439-441,465-467,490-492,557-589,598,602-614,617,621-624,626,633,635,639
+server/internal/usersessions/cimd/cimd_test.go
+  s_62bf807f9fa23e::t_0d29013af93a2e 10,66-70,76,78-81,91,113,127,144,159,171,187
+server/internal/usersessions/cimd/inspect_test.go
+  s_62bf807f9fa23e::t_780c33aeb2277d 209
+server/internal/usersessions/cimd/inspection.go
+  s_62bf807f9fa23e::t_8a40c00d3bde0c 8,44-47,78-90
+server/internal/usersessions/cimd/metrics.go
+  s_62bf807f9fa23e::t_4e4c7998d67081 33-46,54
+server/internal/usersessions/cimd/metrics_test.go
+  s_62bf807f9fa23e::t_e8df6c91d8fc11 11,94,131,162,190,221,247,265-338,350-365,374-375,380-382
+server/internal/usersessions/queries.sql
+  s_62bf807f9fa23e::t_8dc834822ee339 444-451,472-474,485-487,495-496,501-551
+server/internal/usersessions/repo/queries.sql.go
+  s_62bf807f9fa23e::t_6b8fb1f8a4a9f4 1298-1349,1652-1708,1770-1772,1783-1785,1793-1794,1801-1806,1812-1819,1837-1838
+server/migrations/20260811225530_expand-assets-tiers.sql
+  s_62bf807f9fa23e::t_8047c71e8742f3 1-5
+server/migrations/20260811225943_assets-tier-dedupe-indexes.sql
+  s_62bf807f9fa23e::t_9151f8eeeb64b2 1-6
+server/migrations/atlas.sum
+  s_62bf807f9fa23e::t_1aca7df82a14ed 1,332-333
+zero
+  s_62bf807f9fa23e::t_6df3222799e949 185-193,227-231,234-239
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "ce6672f99df468050472c4db569ac283cd335b07",
+  "prompts": {},
+  "sessions": {
+    "s_62bf807f9fa23e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ff163-7dd5-7302-81f9-6276dfd2ce9f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

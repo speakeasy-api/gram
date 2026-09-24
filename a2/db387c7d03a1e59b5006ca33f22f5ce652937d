@@ -1,0 +1,18 @@
+server/internal/otel/handler_metric_relay.go
+  h_2620cc60cfd1e9 195,206-208
+server/internal/otel/handler_metric_relay_test.go
+  h_2620cc60cfd1e9 25,46,110-150
+server/internal/otel/metric.go
+  h_2620cc60cfd1e9 19,21-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "a2db387c7d03a1e59b5006ca33f22f5ce652937d",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

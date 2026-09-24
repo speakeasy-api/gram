@@ -1,0 +1,25 @@
+CORPUS_CHANGES.md
+  s_be9b75eed3b34d::t_fae8046e61f617 68-73
+server/internal/scanners/promptinjection/testdata/prompt_injection/manifest.json
+  s_be9b75eed3b34d::t_8d4ab48aa5910a 65-76
+server/internal/scanners/promptinjection/testdata/prompt_injection/trajectory_independent_fp.jsonl
+  s_be9b75eed3b34d::t_1389e745e53567 1-20
+server/internal/scanners/promptinjection/testdata/prompt_injection/trajectory_independent_recall.jsonl
+  s_be9b75eed3b34d::t_fd86312a806ff8 1-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "878481cd510261f383da5cbd74d2db05adb1368e",
+  "prompts": {},
+  "sessions": {
+    "s_be9b75eed3b34d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fccbd-003a-7e53-9c6c-22b0d5b26f0c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

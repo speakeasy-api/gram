@@ -1,0 +1,38 @@
+server/internal/platformmcp/drilldown.go
+  h_9630b74bdac540 109-114,116,142,255,286,316,335,363,610,625,673-683,688,694-697,713,716-725,740-746
+server/internal/growthsignals/actionmap_test.go
+  h_9630b74bdac540 117-118
+client/dashboard/src/lib/audit-actions.ts
+  h_9630b74bdac540 135,537-538
+server/internal/telemetry/impl.go
+  h_9630b74bdac540 3115
+server/internal/platformmcp/usage_attribution_test.go
+  h_9630b74bdac540 27,35,75-76
+server/internal/telemetry/repo/mcp_diagnostics.go
+  h_9630b74bdac540 58-60,78,91,186,193-195,252,263-266
+server/internal/platformmcp/usage_attribution.go
+  h_9630b74bdac540 60,149,156,161
+server/internal/growthsignals/actionmap.go
+  h_9630b74bdac540 99
+server/internal/platformmcp/drilldown_audit.go
+  h_9630b74bdac540 59-65
+server/internal/platformmcp/drilldown_test.go
+  h_9630b74bdac540 61-62,70,206-213,248
+server/internal/platformmcp/diagnostics.go
+  h_9630b74bdac540 396-399,402,404,407,414-416,418-419
+server/internal/telemetry/mcp_drilldown_test.go
+  h_9630b74bdac540 338
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 2430-2434,2445-2447,2451
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "41190cdd6ea1f229df5ebdd306b76362e3368f0a",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

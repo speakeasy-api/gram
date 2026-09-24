@@ -1,0 +1,36 @@
+server/internal/platformmcp/operation_budget.go
+  h_9630b74bdac540 272
+server/internal/platformmcp/tool_access_reads_test.go
+  h_9630b74bdac540 5,16-29,40-41,55-127
+server/internal/authz/grants.go
+  h_9630b74bdac540 59-61
+server/internal/platformmcp/tool_plugins.go
+  h_9630b74bdac540 28,39
+server/internal/platformmcp/access_reads_integration_test.go
+  h_9630b74bdac540 6,38,40-47,56,59-61,69-76,78-89
+server/internal/authz/grants_test.go
+  h_9630b74bdac540 1-27
+server/internal/platformmcp/tool_call.go
+  h_9630b74bdac540 1-25
+server/internal/platformmcp/operation_budget_test.go
+  h_9630b74bdac540 13-38
+server/internal/platformmcp/tool_access_reads.go
+  h_9630b74bdac540 24,35,46
+server/internal/platformmcp/access_reads_test.go
+  h_9630b74bdac540 21,24,71-75,105-106
+server/internal/platformmcp/access_reads.go
+  h_9630b74bdac540 58-59,241-246,248,250-252,256-258,263,269-270,274-275,282,473,493-496,498,500-503,505,675-680
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 2737-2769
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "c2346b3874ea09fa47544f0abc490ff36380a872",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

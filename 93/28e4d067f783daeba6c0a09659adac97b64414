@@ -1,0 +1,87 @@
+infra/proto/gram/risk/v1/presidio_enforcement.proto
+  s_b390d6ce53b276::t_024825ffc3de16 1-30
+pystreams/src/pystreams/risk/fingerprint.py
+  s_b390d6ce53b276::t_ded7f5cde16487 1-83,87-109
+  s_b390d6ce53b276::t_7400c7b4ef169f 84-86
+infra/pkg/topics/topics_gen.go
+  s_b390d6ce53b276::t_62eaeefba94cfd 49-50,75,108-109,151-152
+docs/pubsub-topology.md
+  s_b390d6ce53b276::t_85cb679abd9feb 84-93,125-150,186,211,224,226-227
+  s_b390d6ce53b276::t_62eaeefba94cfd 39-40,60,118-119,187,212,225
+pystreams/tests/test_multi.py
+  s_b390d6ce53b276::t_28506f4ee3264f 67-69
+pystreams/src/pystreams/risk/replywriter.py
+  s_b390d6ce53b276::t_84bf81b7233f9e 28,31
+  s_b390d6ce53b276::t_79c0557c9bc059 1-11,13-14,16-27,29-30,32-48,50-65
+  s_b390d6ce53b276::t_b693924e9af08a 12,15
+  s_b390d6ce53b276::t_35e5e57fcbf34c 49
+pystreams/tests/test_risk_enforce.py
+  s_b390d6ce53b276::t_1d173fc10446d6 110
+  s_b390d6ce53b276::t_9ba61a43cd426f 1-32,37-63,73-109,111-137,139-234
+  s_b390d6ce53b276::t_e16ef120f09a77 67
+  s_b390d6ce53b276::t_bcd72104d1ba4d 64-66,68-72
+  s_b390d6ce53b276::t_7400c7b4ef169f 33-36,138
+pystreams/src/pystreams/cmd/flags_enforce.py
+  s_b390d6ce53b276::t_faf9f60e8f0266 1-32
+infra/gen_py/gram/risk/v1/presidio_enforcer_pb2.pyi
+  s_b390d6ce53b276::t_62eaeefba94cfd 1-10
+pystreams/pyproject.toml
+  s_b390d6ce53b276::t_8274c5692ac093 29
+  s_b390d6ce53b276::t_f78c42f5119e40 21
+infra/gen/kcc.yaml
+  s_b390d6ce53b276::t_62eaeefba94cfd 597-618,956-973,1203-1218
+pystreams/src/pystreams/risk/enforce_handler.py
+  s_b390d6ce53b276::t_40504d431632ce 1-102,104-136,138-254
+  s_b390d6ce53b276::t_7400c7b4ef169f 103,137
+infra/proto/gram/risk/v1/presidio_enforcer.proto
+  s_b390d6ce53b276::t_5360ae04b078f5 1-21
+infra/gen_py/gram/risk/v1/presidio_enforcement_pb2.pyi
+  s_b390d6ce53b276::t_62eaeefba94cfd 1-36
+server/internal/risk/replyinbox/dispatch.go
+  s_b390d6ce53b276::t_91f9ab9066a303 48,64-73
+  s_b390d6ce53b276::t_9447b58bb6876e 96-98
+  s_b390d6ce53b276::t_c5f7340af2caab 160-166
+  s_b390d6ce53b276::t_690532e7da8125 131-140
+pystreams/src/pystreams/cmd/multi.py
+  s_b390d6ce53b276::t_f73e8347c54294 33-34,36,38
+  s_b390d6ce53b276::t_57788bfb562b69 79-82
+  s_b390d6ce53b276::t_6fac77c80923cf 159-183
+  s_b390d6ce53b276::t_5b9b9403c4dd59 12-18
+  s_b390d6ce53b276::t_1c20fa9ac0a699 187-191
+  s_b390d6ce53b276::t_e16ef120f09a77 24
+  s_b390d6ce53b276::t_da3fd1b32e89cf 49
+  s_b390d6ce53b276::t_edd5ba75d9e0ed 234-240
+  s_b390d6ce53b276::t_b466a1b5d87d94 245-254
+  s_b390d6ce53b276::t_0f544204cf596c 4
+server/internal/risk/replyinbox/dispatch_test.go
+  s_b390d6ce53b276::t_bd4dc079a3d257 89-119
+  s_b390d6ce53b276::t_dc036efc4d43ca 35-53
+pystreams/src/pystreams/risk/maskdisplay.py
+  s_b390d6ce53b276::t_02b6f1f972f235 1-44
+infra/gen/gram/risk/v1/presidio_enforcement.pb.go
+  s_b390d6ce53b276::t_96d70695e82339 1-499
+infra/gen/gram/risk/v1/presidio_enforcer.pb.go
+  s_b390d6ce53b276::t_4f9806a9ce9e04 1-111
+infra/gen_py/gram/risk/v1/presidio_enforcement_pb2.py
+  s_b390d6ce53b276::t_bc93bccad402d8 1-40
+infra/gen_py/gram/risk/v1/presidio_enforcer_pb2.py
+  s_b390d6ce53b276::t_71c2d39f5bf176 1-40
+uv.lock
+  s_b390d6ce53b276::t_d8e33f935ba83a 310-322,1084,1092,1115,1123,1185-1193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "9328e4d067f783daeba6c0a09659adac97b64414",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

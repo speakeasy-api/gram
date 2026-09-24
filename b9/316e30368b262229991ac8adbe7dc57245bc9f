@@ -1,0 +1,43 @@
+.changeset/mgmt-api-drop-policy-scope-writes.md
+  s_acd17ef3f6d0bb::t_c263546861f417 1-6
+.speakeasy/out.openapi.yaml
+  s_acd17ef3f6d0bb::t_4bccfc826acc77 84137,84180,84183
+client/dashboard/src/components/project-guide/useSecretGuideOperations.test.tsx
+  s_acd17ef3f6d0bb::t_ae20a593d13697 247-252
+client/dashboard/src/components/project-guide/useSecretGuideOperations.ts
+  s_acd17ef3f6d0bb::t_f098fcb8e75d4b 10,454-459
+client/dashboard/src/sdk/src/models/components/riskpolicy.ts
+  s_acd17ef3f6d0bb::t_da203fedb14bde 118,155,159
+server/design/shared/risk.go
+  s_acd17ef3f6d0bb::t_aa87fc2f6780ab 158-160
+server/gen/http/cli/gram/cli.go
+  s_acd17ef3f6d0bb::t_29f51002cdf4e7 22140,22232
+server/gen/http/openapi3.yaml
+  s_acd17ef3f6d0bb::t_b255d67f1c5180 87551,87594,87597
+server/gen/http/risk/client/cli.go
+  s_acd17ef3f6d0bb::t_8677bc4e23a133 29,266
+server/gen/http/risk/client/types.go
+  s_acd17ef3f6d0bb::t_9bb103d77f2862 457-459,461-463,465-467,571-573,575-577,579-581,669-671,673-675,677-679,10607-10609,10611-10613,10615-10617
+server/gen/http/risk/server/types.go
+  s_acd17ef3f6d0bb::t_17331dd676835b 459-461,463-465,467-469,573-575,577-579,581-583,671-673,675-677,679-681,10586-10588,10590-10592,10594-10596
+server/gen/types/risk_policy.go
+  s_acd17ef3f6d0bb::t_3aab1e8c74cbb8 47-49,51-53,55-57
+server/internal/risk/impl.go
+  s_acd17ef3f6d0bb::t_5e2e8b9caf66b7 496-499,981-993
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b9316e30368b262229991ac8adbe7dc57245bc9f",
+  "prompts": {},
+  "sessions": {
+    "s_acd17ef3f6d0bb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "22df7a47-ffd7-4d55-9034-c9e9b71d55cf",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

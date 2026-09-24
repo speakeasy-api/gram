@@ -1,0 +1,19 @@
+.changeset/typed-pi-shadow-redesign.md
+  s_e5952da15582a2::t_6fb8c738766284 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "66bc2f901a08cd46a86dc74e045f6cba27eae105",
+  "prompts": {},
+  "sessions": {
+    "s_e5952da15582a2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8b4a-b218-76f0-becc-8d70e94d8075",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

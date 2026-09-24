@@ -1,0 +1,75 @@
+pystreams/src/pystreams/risk/maskdisplay.py
+  s_b390d6ce53b276::t_32d1dc7266d21a 1-44
+server/internal/scanners/gitleaks/enforce_handler.go
+  s_b390d6ce53b276::t_93d8f2f726f97c 91-93
+pystreams/src/pystreams/cmd/multi.py
+  s_b390d6ce53b276::t_7b0c74b58dd940 4,12-18,24,33-34,36,38,49,79-82,126-130,136-170,198-211,255-271
+pystreams/src/pystreams/cmd/flags_enforce.py
+  s_b390d6ce53b276::t_c90d15147759d5 1-33
+server/internal/scanners/gitleaks/enforce_handler_test.go
+  s_b390d6ce53b276::t_8347a9e261e77d 85-103
+docs/pubsub-topology.md
+  s_b390d6ce53b276::t_635da645c3e5d2 180-189,253
+pystreams/tests/test_multi.py
+  s_b390d6ce53b276::t_aa553d2f7bb513 67-69
+pystreams/src/pystreams/risk/enforce_handler.py
+  s_b390d6ce53b276::t_4400b93cb1fc51 19
+  s_b390d6ce53b276::t_110dd19f26018b 149
+  s_b390d6ce53b276::t_9f568d0edd787e 131-133
+  s_b390d6ce53b276::t_86a13664f38c96 146-148
+  s_b390d6ce53b276::t_70bb884d7ab4dc 134-136,183-185
+  s_b390d6ce53b276::t_187434d406fe96 1-15,23-127,137-145,150-182,195-285
+  s_b390d6ce53b276::t_dcaed07ae46601 20-22,128-130
+  s_b390d6ce53b276::t_cc3d90c33b1b70 186-191
+  s_b390d6ce53b276::t_b6a9d40eb664f5 16-18
+  s_b390d6ce53b276::t_07dc77f6640cca 192-194
+server/internal/risk/fingerprint_test.go
+  s_b390d6ce53b276::t_2e600332a2d282 107-111,128,234
+server/internal/risk/fingerprint.go
+  s_b390d6ce53b276::t_a8359336cda4a8 21-24,239-244
+pystreams/tests/test_risk_enforce.py
+  s_b390d6ce53b276::t_9da9b9442fc1df 292-294,298-300
+  s_b390d6ce53b276::t_c60c5311e5b039 302-304,306-308
+  s_b390d6ce53b276::t_4c06ae8fc5a794 336-338
+  s_b390d6ce53b276::t_88f639689701b5 268-270,276-278
+  s_b390d6ce53b276::t_c7d9516a96a904 284-286
+  s_b390d6ce53b276::t_ecf7dd1fa10e63 288-290
+  s_b390d6ce53b276::t_726dc130363f7f 280-282
+  s_b390d6ce53b276::t_d04dd5c828e46e 50-52
+  s_b390d6ce53b276::t_ee197703400f7f 127-129,148-150
+  s_b390d6ce53b276::t_acb0a08a824dee 126,151,204,229-257,260-264,266-267,279,283,287,291,301,309-310,323-325,327,334-335
+  s_b390d6ce53b276::t_4c17f1d1bdf34d 205-207,226-228
+  s_b390d6ce53b276::t_cbd4ec2d82edfd 258-259
+  s_b390d6ce53b276::t_40ba706d99c36f 311-313,320-322
+  s_b390d6ce53b276::t_7a62c0bfa0ec5d 1-49,66-122,130-147,155-200,208-225,271-275,295-297,305,314-319,339-340
+  s_b390d6ce53b276::t_3302f985f3f605 152-154,201-203
+  s_b390d6ce53b276::t_529317ba6b67c5 53-62
+  s_b390d6ce53b276::t_0c915668251076 326
+  s_b390d6ce53b276::t_9b55204bc72865 328-333
+  s_b390d6ce53b276::t_a71decd3eb7d6b 63-65,123-125
+  s_b390d6ce53b276::t_9171dac18d3b77 265
+pystreams/src/pystreams/risk/fingerprint.py
+  s_b390d6ce53b276::t_18e6fadce36c54 72,123-127
+  s_b390d6ce53b276::t_f9abc38a3d3cad 128-130
+  s_b390d6ce53b276::t_9648d0a0498527 135
+  s_b390d6ce53b276::t_0b0bef773a76b6 1-38,48-68,76-119,131-134,136
+  s_b390d6ce53b276::t_30e721417be6fd 73-75,120-122
+  s_b390d6ce53b276::t_b9e4c2bf199c4f 39-47
+  s_b390d6ce53b276::t_cee6ce5dc6ed50 69-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "47f976d0939feddb55b030f838ac4c0014773788",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": null
+    }
+  }
+}

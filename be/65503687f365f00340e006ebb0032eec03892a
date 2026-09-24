@@ -1,0 +1,22 @@
+server/cmd/gram/streams.go
+  h_2620cc60cfd1e9 516,524,532
+server/internal/otel/handler_log_relay.go
+  h_2620cc60cfd1e9 63,89
+server/internal/otel/handler_metric_relay.go
+  h_2620cc60cfd1e9 62,88
+server/internal/otel/handler_span_relay.go
+  h_2620cc60cfd1e9 67,93
+server/internal/otel/signal_relay.go
+  h_2620cc60cfd1e9 49,98,105,163
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "be65503687f365f00340e006ebb0032eec03892a",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

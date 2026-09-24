@@ -1,0 +1,895 @@
+server/internal/mcpapproval/queries.sql
+  s_5d8cca81d02447::t_2461d7c5696a4c 376-410,465,481
+client/dashboard/src/hooks/useIsCurrentOrganization.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-15
+server/internal/externalmcp/registryclient.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 33-41,710-723,742,744
+client/dashboard/src/consent-tools/ConsentToolsApp.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-698
+client/admin/src/pages/organization/Billing.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-367
+server/internal/plugins/impl.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 37,1094-1103,1105-1108,1110-1112,1114-1145,1147,1149-1154,1179,1182-1184,1187,1190-1191,1202-1224,1226-1239,1241-1248,1254-1255,1259,1266-1269,1280
+  s_5d8cca81d02447::t_570471cabbe936 46,1104,1109,1113,1146,1148,1201,1225
+  s_5d8cca81d02447::t_0d271bf167caa4 1240
+client/dashboard/src/components/tool-list/AnnotationBadges.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 4,47
+server/internal/mcp/setup_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 20,48,204-211,245,267
+server/internal/chatanalysis/trigger_analysis_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 4,11,26-44
+  s_5d8cca81d02447::t_1744e7a841180d 45-46
+server/internal/admin/features_handler.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-155
+server/internal/mcp/remotesession_resolver_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 249,256,259-277
+  s_5d8cca81d02447::t_88b4d85b2bc7ec 278
+server/migrations/atlas.sum
+  s_5d8cca81d02447::t_2461d7c5696a4c 1,358-360
+server/internal/database/models.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 480-497,1203-1216,1228,1643
+client/dashboard/src/pages/org/encryption-keys/CreateExternalKeySheet.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 43,47,62,64,73
+server/internal/authz/requested_organization.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-46
+client/dashboard/src/consent-tools/consent-tools.css
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-73
+client/dashboard/src/pages/platform-admin/Features.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 29,32-34,52-56,132-138,140-146,161,210
+server/internal/risk/policy_standing_decisions_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-270
+client/dashboard/src/components/ui/MultiSelect/index.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 112-113,767-778,1077,1086,1296-1318
+server/internal/mcp/rpc_tools_list.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 82-90,128-135,137
+server/internal/plugins/list_directory_audiences_test.go
+  s_5d8cca81d02447::t_375b9f25e55b6d 13,25,28,38,49,62,74,82
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-12,14-24,26-27,29-37,39-48,50-61,63-73,75-81,83-123
+server/internal/mcp/authnchallenge_token.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 26,247-266,352-370,400-403,412,490
+client/dashboard/src/components/shadow-mcp/shadowMCPInventoryStatus.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 15,90-96,110-111,129-130,154-161,166-178,180-184
+server/internal/agent/sessions.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 21,174-206,217-220,222-226
+server/internal/mcp/consent_assets/consent-tools.js
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-90
+server/cmd/gram/deps.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 663-666,669,677,685,691
+client/dashboard/src/pages/plugins/PluginDetail.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 2,40,95-100,215,224-227,230-233,520,548
+client/dashboard/src/components/billing/inference-cap-meter.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 109-110,131,141-143
+server/internal/testenv/memcache_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-38
+server/internal/background/activities/openrouter_daily_spend.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 33-34,36-37,85-91,93-95,107,109,124-125,135,139,148,153-154,157,163,165,175,182-183,186-187,189
+client/dashboard/src/hooks/usePlatformMcpCta.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 6,89-93
+client/dashboard/src/components/tool-selection/annotations.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-46
+client/dashboard/src/components/billing/payg-usage-section.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 166,169-172,299,337,341-344,347,351-352,376,427-429,439-440
+client/dashboard/src/pages/org/PlatformMCP.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 7,17,19,45,152-193,211-217,279,288,300
+client/dashboard/src/pages/org/OrgLogs.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 2,16,19-27,30-37,66,82,95,106,119,131,143,155
+client/dashboard/src/pages/plugins/principals.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 3,6,21-22,24-31,41-42,59,67-82,129-156,172-176
+server/internal/mcpapproval/impl.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1009
+server/internal/mcp/toolfilter/session_tool_witness_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-98
+server/cmd/gram/flags_stripe_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 16
+server/design/agent/design.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 25-26,37-44,67-72,200-201
+  s_5d8cca81d02447::t_fdeaf740fed95d 202
+client/dashboard/src/consent-tools/ConsentToolsApp.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-336
+client/dashboard/src/pages/access/toolSelectionTransition.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-62
+server/cmd/gram/start.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 89,1041,1534-1535,1555
+client/dashboard/src/pages/access/toolSelectionTransition.test.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-68
+client/dashboard/src/pages/plugins/PluginAssignmentsList.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 4,22,27,43
+server/internal/remotemcp/proxy/strict_tool_selection_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-342
+server/internal/risk/false_positive.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 299,335-357
+server/internal/xmcp/service.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 106-107,167-178
+  s_5d8cca81d02447::t_6985eed150ed2e 179
+client/dashboard/src/pages/access/GrantRuleDrawerContent.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 3-11,21,26-30,34,42,581,666-738,764-766,785-786,788-790,792-794,796-801,803-863,866-867,869-875,878,880-883,885-891,896-955,957-958,962-989
+server/CHANGELOG.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 3-104
+.changeset/policy-create-honors-standing-approvals.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-5
+server/design/productfeatures/design.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 20-21,42,44,49,63,66,69,88,92
+server/internal/chat/impl.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 711-777,863-866,2149-2152
+server/design/admin/design.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 160-195,644-693
+server/internal/agent/configuration_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 56,99
+server/internal/mcp/rpc_tools_call.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 118-135
+server/internal/risk/list_ch.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 261-268
+ts-framework/functions/package.json
+  s_5d8cca81d02447::t_2461d7c5696a4c 4
+client/dashboard/src/hooks/useOrganizationPlatformMCPOnboarding.test.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-27
+server/database/schema.sql
+  s_5d8cca81d02447::t_2461d7c5696a4c 3697-3705,3719-3722,5506-5514,5533,7096-7097,7118-7127,7141-7144,7192-7251,7293-7295,7316-7317,7324,7331-7332,7334
+server/internal/background/activities/settle_stripe_invoice_allocations_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 22,178-182,188,196-212,262,270,278-296,319-394,406,411,425,445,478,502,558,567,608,616,632,639,660,674-677,681,694,704-707,727,735-738,743-772,786,795,810,825,839,869,889,916,921,946,953,1045,1105
+server/internal/billing/usage_tiers_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 36
+server/internal/externalmcp/queries.sql
+  s_5d8cca81d02447::t_2461d7c5696a4c 2-14,20-32
+.changeset/suppressed-risk-result-fields.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-5
+server/internal/admin/billing.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-154
+server/internal/externalmcp/official_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-129
+server/internal/productfeatures/queries.sql
+  s_5d8cca81d02447::t_2461d7c5696a4c 7-14
+server/internal/usage/stripe_subscription_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 57-66
+server/internal/mcpapproval/researchagent/sealed_runner_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 46,87
+server/internal/admin/impl.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 32,48,66-69,73-80,90-110,118,122,126-130,145,148-149,168-180,186-187,200-202,208-232,1209
+client/dashboard/src/pages/chatLogs/ChatLogsTable.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 40-45
+server/internal/agent/getplugins_test.go
+  s_5d8cca81d02447::t_375b9f25e55b6d 14,205,214,224
+  s_5d8cca81d02447::t_2461d7c5696a4c 5,7,15,50,74,95,120,129,135-204,206-213,215-223,225-251,260,287,322,355,386,409,447,458-490,495,505,519,545,574,587,600,613,636,668
+server/internal/externalmcp/catalog.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-302
+server/internal/usage/stripe_subscription.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 29-45,55,59,88-90,104-116,126-141,167,222-223,233,250-252,258-260,266-268,284-285,298-304
+  s_5d8cca81d02447::t_0be5e55d31ddfc 305
+server/internal/chat/queries.sql
+  s_5d8cca81d02447::t_2461d7c5696a4c 1786-1828
+server/internal/mcpapproval/repo/models.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 58
+.github/workflows/pr.yaml
+  s_5d8cca81d02447::t_2461d7c5696a4c 1801-1804,2214-2215
+client/dashboard/src/components/project/ProjectDashboard.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 2,93,98
+server/package.json
+  s_5d8cca81d02447::t_2461d7c5696a4c 3
+server/internal/usage/payg_billing_summary.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 13,19-29,38-39,42-48,50-60,81,88-94,106,124-127
+client/dashboard/src/components/billing/payg-usage-section.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 104,121-123,127-128,166,168,182,184-185
+server/internal/mcp/rpc_resources_templates_list.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-41
+server/internal/chatanalysis/settings_persistence.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-142
+server/internal/agent/syncedusers_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 46,56,75,77
+client/admin/src/lib/adminQueries.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 14-15,17-19,26,28-29,31-32,95-121,146-197
+  s_5d8cca81d02447::t_b81b41fc6a6832 198
+client/dashboard/src/hooks/useOrganizationPlatformMCPOnboarding.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-51
+server/internal/mcpapproval/enforcement_backfill_internal_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-54
+server/internal/mcp/authnchallenge.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 39,184-189,210-222,277,279,283-298,302-330,336,339,344,355,374,444,447,450,472,476,504,506,510
+server/cmd/gram/platform_mcp.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 61,136,140,286-290,292,294-306,308,341-342
+server/internal/remotemcp/proxy/tools_list_response.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 118-130,155-159
+  s_5d8cca81d02447::t_7150780f37f030 160
+client/admin/src/lib/gramAdminApi.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 135-144,490-690
+.changeset/device-agent-cloud-sessions.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-5
+client/admin/src/pages/organization/billingState.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-108
+client/dashboard/src/pages/org/OrgHome.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 134-136
+server/internal/directory/queries.sql
+  s_5d8cca81d02447::t_99ea345197a7b4 244-342
+server/internal/mcp/consent_tool_inventory.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-296
+server/internal/mcp/tunnel_manager.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 7,11,42-46,49,51,55,97,100
+  s_5d8cca81d02447::t_0c90d50cb1738d 6
+server/internal/authz/requested_organization_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-86
+server/internal/productfeatures/setproductfeature_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 31-33,57-59,65-67,93-95,108-110,123-125,145-147,156-177,229-231,237-239,245-247,263-265,311-313,403-405,415-417
+server/internal/mcp/toolfilter/session_tool_witness.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-206
+client/dashboard/src/hooks/useIsCurrentOrganization.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-26
+server/internal/risk/policy_bypass_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 12,960-963
+  s_5d8cca81d02447::t_d40dd289e1b55e 964-965
+server/internal/usage/payg_billing_summary_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 5,22-23,58-59,103-127,129-133,139,154-162,173-175,185-206,208,210,220,226-228,231-237,240
+ts-framework/create-function/package.json
+  s_5d8cca81d02447::t_2461d7c5696a4c 4
+server/cmd/gram/deps_stripe_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 38-58
+server/internal/demoseed/clickhouse.sql
+  s_5d8cca81d02447::t_2461d7c5696a4c 602-631,646,648-653,663,669,673
+server/migrations/20260820053103_platform-mcp-d1-lifecycle-registry-prerequisite.sql
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-22
+server/internal/mcpapproval/researchagent/researchagent_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 128-167,246,298,337,374,443,476,502,540,559-702,726,756,783,805,819,845,867,889,911
+server/internal/access/shadow_mcp_inventory_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 843-845,870-874,883,1139-1184
+  s_5d8cca81d02447::t_da1b5e30439756 1185-1186
+server/internal/mcp/serveendpoint.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 20-21,60-66,68-82,84,90,92,98,100,103,145,152,159,173,176,178-179,181,209,372-374,383,414,450,465,564-610
+client/dashboard/src/pages/setup/components/steps/instrument-agents-step.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 83,85-86,93-94
+client/dashboard/vite.consent.config.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-39
+server/internal/mcp/authnchallenge_consent_gate_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-29
+server/internal/productfeatures/organizationscope_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-308
+server/internal/mcpapproval/enforcement_backfill.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-148
+client/dashboard/src/components/observe/LogsAgents.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 547-560,620,669,713,913
+client/dashboard/package.json
+  s_5d8cca81d02447::t_2461d7c5696a4c 4,11,27,32,58,105-107,121
+client/dashboard/src/pages/skills/skill-manifest.test.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 6,51-56
+  s_5d8cca81d02447::t_04238edf83a8c7 57-58
+dev-idp-dashboard/package.json
+  s_5d8cca81d02447::t_2461d7c5696a4c 16-17,19-20
+server/internal/remotemcp/session_selection_interceptor_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-273
+client/dashboard/src/components/shadow-mcp/ShadowMCPPolicyServerSelector.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 107-108
+server/internal/mcp/authnchallenge_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 5-6,21,28,30,454-478,484-487,509-510,515,541-544,567-568,573,1322-1692
+.mise-tasks/git/workinit.sh
+  s_5d8cca81d02447::t_2461d7c5696a4c 39-48
+server/internal/chatanalysis/setup_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 57,66,93
+.changeset/suppressed-listing-all-reasons.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-5
+client/admin/src/routes/organizations.$idOrSlug.features.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-8
+.oxfmtrc.json
+  s_5d8cca81d02447::t_2461d7c5696a4c 20
+client/admin/src/pages/organization/Features.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-294
+client/dashboard/src/pages/org/RemoteSessionRefreshPolicySetting.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 5,21,54-71,73,78,80,84,180
+server/internal/background/activities/settle_stripe_invoice_allocations.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 9,20,42,45,83-86,99-100,121-123,176-179,186-187,200-205,209-214,223,241-244,250-254,256-258,260-261,263,265,267-269,271-272,274-285,289,294-295,301,303,308-313,318,320-322,324,332,357-359,373,390,397,714-721,732-736,739-744,746-755,757
+server/internal/admin/billing_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-233
+docs/rbac.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 95,97,555-556
+server/cmd/gram/admin.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 20,28-30,34,38,40,42,45-60,89-114,262-284,286,323-340,368-379,426,431-432,497
+server/internal/productfeatures/setup_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 51-58
+client/dashboard/src/components/ui/MultiSelect/index.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 184-239
+client/dashboard/src/pages/org/ConsentToolFilteringSetting.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-195
+server/internal/externalmcp/registryclient_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 549,575,597,645,694,745,788-803
+  s_5d8cca81d02447::t_fcbeb7fd6f821f 804-805
+client/dashboard/knip.config.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 5-8
+client/dashboard/src/components/billing/inference-caps.test.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 81-89,172
+server/internal/mcp/toolselection_internal_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-16
+client/admin/src/routeTree.gen.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 20-21,67-78,106-107,118-119,134-135,151-152,163-164,178-179,250-263,289-290,298-299
+client/dashboard/src/pages/org/ConsentToolFilteringSetting.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-120
+client/dashboard/src/pages/chatLogs/useChatDetailSheet.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 25
+client/dashboard/src/pages/chatLogs/ChatLogsTable.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 15,21-22,24-25,69-130,249-270,366-375
+server/internal/mcpapproval/researchagent/report.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 147-225
+server/internal/mcp/authnchallenge_consent.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 17,133-146,229-238,343,352,406-435,455-458,473-477,489-494,503-508,534-542,570-599,613-626,657,665-666,685-705,707
+  s_5d8cca81d02447::t_16f51596294a0f 706,708
+server/internal/remotemcp/proxy/tools_call_request.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 34-47
+client/dashboard/src/components/plugin-detail-sidebar-nav.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 25,36,62,73-76,189
+.changeset/session-lineage-links.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-6
+server/design/chat/design.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 457-488,513-539
+  s_5d8cca81d02447::t_da56b7742bf58f 540
+server/internal/usersessions/minthandler.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 152
+.changeset/requested-organization-authorization.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-5
+client/dashboard/src/components/shadow-mcp/shadowMCPInventoryStatus.test.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 8,10,187-283
+server/internal/background/activities/mcp_research.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 5,68,82,86,97-99,103-105,111,129,150,163-171,182,227-243
+  s_5d8cca81d02447::t_87dda5b1f8f5cf 244
+server/internal/mcp/types.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 106
+server/internal/remotemcp/session_selection_interceptor.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-196
+server/internal/usage/impl.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 115-142
+server/internal/risk/chrepo/dismissed.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 7,20-25,39-47,50-67,74-78,100,104-117,128-129,158
+client/dashboard/src/pages/org/RemoteSessionRefreshPolicySetting.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 6,8,22-26,38-46,68,75,77,82,88-104,108-112,124-143,152,161,163,166
+client/dashboard/src/pages/plugins/principals.test.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 2,6-7,27-32,111-132
+server/internal/directory/audience_test.go
+  s_5d8cca81d02447::t_935542ac4a307d 1-94
+.changeset/bill-all-payg-inference.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-7
+client/dashboard/src/pages/skills/skill-manifest.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 3-12
+server/internal/mcp/toolfilter/selection.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-385
+client/admin/src/components/app-sidebar.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 478,485,502,512,516,523-525,528,536-538
+server/internal/background/activities/queries.sql
+  s_5d8cca81d02447::t_2461d7c5696a4c 186,197,227,238,272,279,290,297,341,348,359,366,409,418,421,424,428,433,439,442-443,445-447,456-458,461,464-465,476,478
+server/internal/remotemcp/proxy/strict_json_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-85
+client/dashboard/src/pages/org/encryption-keys/EncryptionKeys.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 2,24,27,30,37,57-58,60,87-93,96-102,104,108,111-114,139,149-153,167-170,184-187,199-202,219,226,290-293,306,309,311-314
+client/dashboard/CHANGELOG.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 3-67
+server/internal/usersessions/queries.sql
+  s_5d8cca81d02447::t_2461d7c5696a4c 392-421,637-638,648-649
+pnpm-workspace.yaml
+  s_5d8cca81d02447::t_2461d7c5696a4c 16,24
+client/admin/src/components/record-nav.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 7,97-100,105-108,209-237
+server/internal/plugins/principal.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-13,16-26,28-95,98,100-101,110-153
+  s_5d8cca81d02447::t_570471cabbe936 14-15,96-97,99,102-109
+  s_5d8cca81d02447::t_4d661d0ef569ed 27
+server/internal/thirdparty/openrouter/key_type_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 23-37
+server/internal/mcp/servepublic_resources_templates_list_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-49
+server/internal/productfeatures/hooksfailopen_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 26-28,51-53,61-63,79-81,89-91,111-113,130-132,145-146,151-153,157-158
+server/internal/remotemcp/proxy/reject_error.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 28-31
+client/dashboard/src/pages/plugins/PluginAssignmentRow.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 3,7,20,30,34-41,53,58,60-65,67-73
+server/design/risk/design.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 516,527-529,541
+server/internal/chat/chat_write_authorization_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 46,74,158-160
+server/internal/mcpapproval/views.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 18,147,152-217
+  s_5d8cca81d02447::t_7622405967a7ed 218
+server/internal/risk/impl.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 539-557,1032-1050,4200-4207
+client/dashboard/src/components/EnableLoggingOverlay.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 2,8,21-40,45,50,64
+server/internal/externalmcp/setup_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 82-83
+client/admin/src/components/record-nav.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 173-178
+client/admin/src/routes/organizations.$idOrSlug.billing.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-8
+client/dashboard/src/components/org-sidebar.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 2,62,65-72
+server/internal/platformmcp/catalog.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 85,91
+server/internal/testenv/memcache.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-112
+.changeset/require-product-feature-organization.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-6
+client/admin/src/pages/organization/billingState.test.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-9
+client/dashboard/src/consent-tools/main.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-52
+server/cmd/gram/admin_billing_dependencies_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-28
+server/internal/chatanalysis/trigger.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-42
+server/design/shared/risk.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 289,292-301
+server/internal/mcp/toolselection_integration_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-305
+server/internal/mcpapproval/researchagent/researchagent.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 41-42,182-184,256,318,334-353,355-359,362-363,365,368-369,388,390,395,403-408,411,414,582,619-621,626-629,794-935
+client/dashboard/src/pages/skills/SkillManifestDialog.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 13-16,433-462,489-493
+server/internal/mcp/authnchallenge_consent_template_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 397-501
+ts-framework/create-function/CHANGELOG.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 3-8
+client/dashboard/src/consent-tools/prefill.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-59
+client/dashboard/src/pages/chatLogs/sessionLinks.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-45
+client/dashboard/src/pages/platform-admin/Features.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-8,13-28,34-40,130-137,139-181,193,197-204,208-209,350-427
+  s_5d8cca81d02447::t_3b6bc8a4a3d309 428
+server/internal/chat/set_pinned_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 109-111,128-142
+  s_5d8cca81d02447::t_f229a3b9dbd8d3 143-144
+server/internal/access/impl.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 289-290
+client/dashboard/src/pages/skills/SkillManifestDialog.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 19,244-250,290-316
+server/design/access/design.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 823,866-868
+client/dashboard/src/components/tool-selection/ToolSelectionPanel.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-602
+client/dashboard/src/pages/device-agent/device-agent-cloud-setup.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-417
+examples/openai-apps-sdk/package.json
+  s_5d8cca81d02447::t_2461d7c5696a4c 27
+server/design/mcpapproval/design.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 332,337-371
+  s_5d8cca81d02447::t_62b70647ab5d34 372
+.changeset/research-activity-log.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-6
+client/dashboard/src/pages/org/UserSessions.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 28,271,273-274
+client/dashboard/src/lib/formatPlatform.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 20-22
+server/internal/access/shadow_mcp_inventory.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 37-47,990-1007,1027-1034,1097,1104-1106,1111-1113,1191-1196,1201,1203-1204
+server/internal/productfeatures/skills_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 8,31-32,37-39,43-44,66-68,80-82,88-90,95-96,216-240
+  s_5d8cca81d02447::t_9642a08b0fe230 241
+server/internal/remotemcp/proxy/mirrored_headers_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-109
+server/migrations/20260820013033_add-chat-session-links.sql
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-29
+server/internal/background/openrouter_daily_spend.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 67
+server/design/plugins/design.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 240-261,596-607,714-717
+  s_5d8cca81d02447::t_d1bb98cb9a792b 718-719
+server/internal/background/openrouter_daily_spend_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 31-34,55
+client/admin/src/pages/organization/Billing.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-212
+server/internal/remotemcp/proxy/proxy.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 242-252,356,412,524-547,574-583,591-601,632-637,639,641-645,727,765,801-818,854-859,875-881,940-946,967,1062-1075,1124-1132
+  s_5d8cca81d02447::t_5cf3052156183f 1133
+server/internal/externalmcp/official.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-249
+server/internal/xmcp/setup_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 42,161
+client/dashboard/src/pages/device-agent/device-agent-setup.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 25-29,86,88,132,227-235,1065-1067,1071-1089,1093-1096,1100,1102-1105,1134,1139-1140,1143,1147,1153,1156,1158-1159,1175,1256-1265,1273-1285,1296-1298,1300,1308-1310,1325,1331-1337,1346-1347,1349
+server/design/platformadmin/chatanalysis/design.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 113
+server/internal/admin/setup_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 13-14,40-44,56-63,69-71,73-74
+server/internal/agent/queries.sql
+  s_5d8cca81d02447::t_2461d7c5696a4c 260-277
+server/internal/externalmcp/impl.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 44,51,63,164,166,170,172-173,175-178,180,183-184,186,189,191,209-214,216,219-223,226-241,297-334,336-341,343
+server/internal/admin/chatanalysis_handler_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-196
+server/internal/thirdparty/openrouter/openrouter.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 6,80-108
+  s_5d8cca81d02447::t_f121bebeb17ac6 109
+server/internal/remotemcp/proxy/forward_retry_internal_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 71
+server/internal/remotemcp/proxy/mirrored_headers.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-134
+server/migrations/20260818203838_mcp-research-tool-calls.sql
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-2
+server/internal/directory/audience.go
+  s_5d8cca81d02447::t_9de5331bfd2ab8 1-166
+server/internal/mcp/tunnelpublic.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 278,528
+client/admin/CHANGELOG.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 3-8
+server/internal/agent/setup_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 213-215,217-236,238-253,255-262
+  s_5d8cca81d02447::t_375b9f25e55b6d 26,216,237,254
+  s_5d8cca81d02447::t_23fdb2d87e4a43 263
+ts-framework/functions/CHANGELOG.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 3-4
+client/dashboard/src/pages/org/SkillContentUploadSetting.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 7-8,10-14,24-27,30-31,33-41,53-55,57,63-89,93-97,110
+client/dashboard/src/pages/org/SkillContentUploadSetting.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 2,15,22-42,44,49,53,91
+server/internal/risk/false_positive_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 12,331-336,392-393,401-402,429-430,432-436,439-452,461-470,477,482,485-505,511,514-583
+server/internal/agent/impl.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 36,113-117,123-124,127-129,195-201,203,256-260
+client/admin/src/lib/gramAdminApi.test.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 5,10-12,21,137-200
+  s_5d8cca81d02447::t_06c375937706be 201-202
+client/admin/package.json
+  s_5d8cca81d02447::t_2461d7c5696a4c 4,22-23,37
+server/design/usage/design.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 172
+client/dashboard/src/components/billing/inference-caps.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 53-54,56,64,66,73-75,140
+server/internal/mcp/authnchallenge_consent_tools.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-308
+server/internal/productfeatures/client.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 8-9,26,37,53-60,62-79,81-86,88,135-198,205,213-280
+  s_5d8cca81d02447::t_65a05dbc01a2bc 281
+client/dashboard/src/pages/plugins/use-plugin-assignments-visible.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 2,16,19-21
+server/internal/audit/chatsessions.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 84-87,100-102,109-110
+  s_5d8cca81d02447::t_beec7d5fbf9ee1 111
+server/internal/mcp/toolfilter/selection_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-214
+client/dashboard/src/components/mcp-approvals/ApprovalReview.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 580,585-718
+  s_5d8cca81d02447::t_aa9c9665fa0059 719
+server/internal/mcp/servepublic_mcpendpoint_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 677,684,742,749
+.mise-tasks/lint/server.sh
+  s_5d8cca81d02447::t_2461d7c5696a4c 8,15-39,41-128,131-133
+server/internal/authz/scopes.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 74-80
+server/internal/agent/reportsessionmoved_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 4,14,36-42,71-77,86-92,114-120,146-152,173-179,188-305
+server/internal/mcp/consent_tool_inventory_internal_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-396
+client/admin/src/pages/organization/Features.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-480
+server/internal/background/activities/openrouter_daily_spend_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 197-247
+client/dashboard/src/pages/chatLogs/ChatDetailPanel.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 7,42,70,128-130,212,239,796-887,1016,1624-1627
+  s_5d8cca81d02447::t_2db3a5738d5efe 1628-1629
+client/dashboard/src/pages/device-agent/cloud-setup.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-122
+server/internal/chat/listsessionlinks_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-170
+.changeset/product-features-backend-org-scope.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-6
+server/internal/admin/features_handler_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-164
+server/internal/externalmcp/catalog_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-84
+server/internal/productfeatures/getproductfeatures_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 27-28,47-48,57-58,63-65,67-68,77-78,82-84,86-87
+server/internal/mcp/authnchallenge_consent_mcp_endpoint.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-675
+server/internal/admin/chatanalysis_handler.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-147
+client/dashboard/src/pages/plugins/PluginAssignmentsSheet.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 12-16,22-25,29-96,151-155,164-219,221-233,251,261,264-265,267,273,275-284,286-287
+server/internal/mcp/toolselection.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-116
+server/internal/mcp/rpc_resources_templates_list_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-41
+seed/demo/PAGES.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 34
+server/internal/productfeatures/features.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 49-53
+server/internal/remotemcp/proxy/tools_list_duplicate_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-40
+server/internal/middleware/logging.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 91-92
+server/internal/remotemcp/proxymanager.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 14,58-62,81,102,127-132,142,158,170,215-222,252
+client/dashboard/src/pages/settings/ModelProviderKeysSection.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 2,41-44
+client/dashboard/src/pages/device-agent/cloud-setup.test.ts
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-135
+server/internal/mcp/consent_template.html
+  s_5d8cca81d02447::t_2461d7c5696a4c 97,399-417,718-740,762,764,786-788
+server/internal/chatanalysis/impl.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 127-128,131-134,138,152,154,157,161-163,165,168-172
+server/internal/platformmcp/repo/models.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 76
+.changeset/product-features-callers-org-scope.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-5
+server/internal/mcpapproval/enforcement.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 8,11,49,56-63,89-92,94-123,125,127-136,138-141,143-148
+server/internal/productfeatures/impl.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 34-41,58-65,79,81-86,88-114,121-127,195,201-203,216-218,220-226,234,244,257,260,263,273,280-282,286,328
+.changeset/shadow-mcp-blocked-by-review-copy.md
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-6
+server/internal/mcp/impl.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 64,114-116,156-159,273-276,394-403,470-471,474,739,778-782,857,862,1007,1333-1334
+client/dashboard/src/pages/org/external-services/ExternalServices.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 2,63,65
+server/internal/billing/tier_limits.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 34
+server/internal/plugins/impl_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 14,778-789,792-808,810-838,840-885
+  s_5d8cca81d02447::t_375b9f25e55b6d 24,790-791,809,839
+  s_5d8cca81d02447::t_4b377ce6ff1bc1 886
+server/internal/risk/approval_intake.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 7,27-35
+server/internal/usage/queries.sql
+  s_5d8cca81d02447::t_2461d7c5696a4c 18-26,29,33-50,52,63,348,775-787
+server/internal/background/activities/mcp_research_internal_test.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-24
+server/internal/email/loops/payg_activated.lmx
+  s_5d8cca81d02447::t_2461d7c5696a4c 16
+server/internal/mcp/authnchallenge_consent_assets.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-51
+server/internal/authz/checks.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 94-95,97-99
+server/internal/remotemcp/proxy/strict_json.go
+  s_5d8cca81d02447::t_2461d7c5696a4c 1-100
+client/dashboard/src/pages/org/OrgIdentity.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 294-296
+client/dashboard/src/pages/billing/Billing.test.tsx
+  s_5d8cca81d02447::t_2461d7c5696a4c 261
+.speakeasy/out.openapi.yaml
+  s_5d8cca81d02447::t_a28d599552be25 4983,4988,4998-5006,10520-10631,31056-31145,31919-31926,38850,38870-38882,57999-58018,58229-58259,58357-58398,59536-59542,60122-60169,64997-64999,65062,66706-66715,67623-67632,70015,70468-70492,72183-72186,72234-72271,72311-72315,72322-72361,72496-72502,73282-73285,73288,73323-73336,75007,75009-75011,75013,75034-75036,75045,75307,75375-75379
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_5d8cca81d02447::t_ab8fbe7d056921 140,355,681,908,971,1091,1147,1149-1150,1733,1744,2061-2062,2367-2368,4767,5371-5373,5376,6168-6176,6269-6280,6395-6403,7882,8386,8406
+client/dashboard/src/sdk/src/funcs/agentGetPlugins.ts
+  s_5d8cca81d02447::t_81d4c5813a6817 49,76,98-99,111,118,123,126,130-134
+client/dashboard/src/sdk/src/funcs/chatListSessionLinks.ts
+  s_5d8cca81d02447::t_75ba0781814ffc 1-222
+client/dashboard/src/sdk/src/funcs/featuresGet.ts
+  s_5d8cca81d02447::t_7fc7016966b8a1 7,49,76,98,109-112,115,152
+client/dashboard/src/sdk/src/funcs/pluginsListAudiences.ts
+  s_5d8cca81d02447::t_dee08013357d94 1-205
+client/dashboard/src/sdk/src/funcs/riskResultsListDismissed.ts
+  s_5d8cca81d02447::t_6cfd8f34bc3e74 45,116
+client/dashboard/src/sdk/src/models/components/chatsessionlink.ts
+  s_5d8cca81d02447::t_7e8d4c6f65c018 1-109
+client/dashboard/src/sdk/src/models/components/getproductfeaturesresponsebody.ts
+  s_5d8cca81d02447::t_a3ef7f4e4796b1 20-23,94,116
+client/dashboard/src/sdk/src/models/components/listaudiencesresult.ts
+  s_5d8cca81d02447::t_d626f60e03351c 1-37
+client/dashboard/src/sdk/src/models/components/listsessionlinksresult.ts
+  s_5d8cca81d02447::t_22a9721c356d0e 1-37
+client/dashboard/src/sdk/src/models/components/paygbillingsummary.ts
+  s_5d8cca81d02447::t_0f30767f31de4c 18
+client/dashboard/src/sdk/src/models/components/pluginaudience.ts
+  s_5d8cca81d02447::t_8f98e26c38d1ff 1-78
+client/dashboard/src/sdk/src/models/components/reportsessionmovedrequestbody.ts
+  s_5d8cca81d02447::t_1191608ab22f4f 25-28,37,50,57
+client/dashboard/src/sdk/src/models/components/researchpagefetchcall.ts
+  s_5d8cca81d02447::t_989e1a72e22a3b 1-95
+client/dashboard/src/sdk/src/models/components/researchreport.ts
+  s_5d8cca81d02447::t_dce6d9c0a8dc20 10-13,63-66,93,103
+client/dashboard/src/sdk/src/models/components/researchtoolcall.ts
+  s_5d8cca81d02447::t_20195cdab924b4 1-64
+client/dashboard/src/sdk/src/models/components/researchwebsearchcall.ts
+  s_5d8cca81d02447::t_e214e6b2930c5c 1-61
+client/dashboard/src/sdk/src/models/components/riskresult.ts
+  s_5d8cca81d02447::t_060e842a5a6564 8,13-25,64-68,107-118,129-133,150,163-167,180,187-189
+client/dashboard/src/sdk/src/models/components/setproductfeaturerequestbody.ts
+  s_5d8cca81d02447::t_d3e7ccb4f74395 29,45-48,59,70,75
+client/dashboard/src/sdk/src/models/components/setremotesessionautorefreshpolicyrequestbody.ts
+  s_5d8cca81d02447::t_1a237b77896d33 6,25-28,42,51-61
+client/dashboard/src/sdk/src/models/components/shadowmcpinventoryserver.ts
+  s_5d8cca81d02447::t_01254a57f981d5 24
+client/dashboard/src/sdk/src/models/components/shadowmcpinventoryurlstate.ts
+  s_5d8cca81d02447::t_04979b1d5268bc 8,20-29,31,45-49,56
+client/dashboard/src/sdk/src/models/operations/getagentplugins.ts
+  s_5d8cca81d02447::t_4478ae38fece1f 14,16,21-24,65,67,78,80,87
+client/dashboard/src/sdk/src/models/operations/getproductfeatures.ts
+  s_5d8cca81d02447::t_e4c6f1e793f438 13-16,53,63,68
+client/dashboard/src/sdk/src/models/operations/listaudiences.ts
+  s_5d8cca81d02447::t_a3d30bdc07d12c 1-84
+client/dashboard/src/sdk/src/models/operations/listchatsessionlinks.ts
+  s_5d8cca81d02447::t_f4ef9429cf0468 1-179
+client/dashboard/src/sdk/src/models/operations/listdismissedriskresults.ts
+  s_5d8cca81d02447::t_db418319946cf3 7,24-30,40-43,165-169,174,188
+client/dashboard/src/sdk/src/react-query/agentPlugins.core.ts
+  s_5d8cca81d02447::t_d845cdf96310e9 25,41,50-54,82,84
+client/dashboard/src/sdk/src/react-query/agentPlugins.ts
+  s_5d8cca81d02447::t_d75e65d3c8caa9 65,88,111,113,129,131
+client/dashboard/src/sdk/src/react-query/audiences.core.ts
+  s_5d8cca81d02447::t_6a57477dea5ae2 1-82
+client/dashboard/src/sdk/src/react-query/audiences.ts
+  s_5d8cca81d02447::t_cf98102c691be1 1-143
+client/dashboard/src/sdk/src/react-query/listChatSessionLinks.core.ts
+  s_5d8cca81d02447::t_3a6216b4f69abb 1-90
+client/dashboard/src/sdk/src/react-query/listChatSessionLinks.ts
+  s_5d8cca81d02447::t_10b337b6b52fea 1-159
+client/dashboard/src/sdk/src/react-query/productFeatures.core.ts
+  s_5d8cca81d02447::t_df89d6b660e859 25,41,49-52,78
+client/dashboard/src/sdk/src/react-query/productFeatures.ts
+  s_5d8cca81d02447::t_9b1d5be2d27ac8 65,91,112-114,125
+client/dashboard/src/sdk/src/react-query/riskListDismissedResults.core.ts
+  s_5d8cca81d02447::t_a3698f8d52e8c8 18,55,88
+client/dashboard/src/sdk/src/react-query/riskListDismissedResults.ts
+  s_5d8cca81d02447::t_ed5349e73f828f 27,63,92,123,142
+client/dashboard/src/sdk/src/sdk/agent.ts
+  s_5d8cca81d02447::t_9a552cfb0fac12 94
+client/dashboard/src/sdk/src/sdk/chat.ts
+  s_5d8cca81d02447::t_d5a6772421f514 11,25,54-57,199-217
+client/dashboard/src/sdk/src/sdk/features.ts
+  s_5d8cca81d02447::t_6751b3d7709f1d 32
+client/dashboard/src/sdk/src/sdk/plugins.ts
+  s_5d8cca81d02447::t_7a63adbd993d24 16,26,84-87,332-350
+client/dashboard/src/sdk/src/sdk/results.ts
+  s_5d8cca81d02447::t_4bf17021a1c3af 52
+pnpm-lock.yaml
+  s_5d8cca81d02447::t_65c5a2dd12e746 10-11,34-35,104-105,107-108,144-145,189-190,193,209-211,217,282-283,298,340,418-419,421-422,424-425,466-467,496-497,499-500,505-506,508-509,652-653,658-659,664-665,674-675,1052-1054,1064-1066,1556-1562,1878-1882,1888-1892,1898-1902,1908-1912,1918-1922,1928-1932,1938-1942,1949-1954,1961-1966,1973-1978,1985-1990,1997-2002,2009-2014,2021-2026,2033-2038,2044-2048,2054-2058,2064-2068,2074-2078,4144-4145,4148,4153-4154,4156,4158-4159,4161,4164-4165,4169,4190-4191,4197,4204-4205,4209,4216-4217,4223,4351-4352,4354-4355,4358-4359,4369-4370,4383-4384,4390-4391,4397-4398,4414-4415,4421-4422,4450-4451,4462-4463,4466-4467,4470-4471,4475,4495-4496,4503-4504,4515-4516,4519-4520,4529-4530,4569-4574,5015-5019,5024-5025,5080-5083,5174-5177,6832-6835,7048-7050,7470-7471,7478-7481,7765-7766,8437-8448,8556,8559,8563,8566,8570,8583,8585,8587-8588,8617-8618,8621,8736,8763,8795,8802,8819,8876,8878,8880,9155-9160,9177-9181,9585-9598,9639,9641,9744,9781-9783,9787-9789,9793-9795,9799-9801,9805-9807,9811-9813,9817-9819,9823-9825,9829-9831,9835-9837,9841-9843,9847-9849,9853-9855,9859-9861,9865-9867,9871-9873,9881-9887,9891-9893,9897-9899,11908,11911,11913,11916,11927,11929,11932,11934-11935,11943,11945,11957,11961,11966,11970-11971,11978,11991,11994,11999,12093,12099,12101,12109,12111,12115,12124,12126,12128,12133,12135-12137,12141,12143-12144,12146,12148-12149,12167,12169-12171,12177,12179-12182,12184-12186,12220,12223,12234,12236,12241,12244,12254,12259-12260,12266,12291,12293,12295,12300,12305-12307,12309,12338,12340-12343,12350,12352,12358,12380,12400-12403,12424-12425,12436,12441,12861-12862,12872,12874,12876,12936-12937,13016-13019,13101,13911,14829-14832,14960,14965,15121-15142,15554-15555,15692,15702-15709,16068,16074,16082-16083,16086,16403,16905-16906
+server/gen/admin/client.go
+  s_5d8cca81d02447::t_7669bc51614781 34-38,42,60-64,424-538
+server/gen/admin/endpoints.go
+  s_5d8cca81d02447::t_eceb6bfa612550 35-39,63-67,89-93,421-535
+server/gen/admin/service.go
+  s_5d8cca81d02447::t_21f4226ba92b8d 70-81,104,117-126,215-227,275-288,323-329,364-370,385-391,403-409,507-513
+server/gen/agent/service.go
+  s_5d8cca81d02447::t_9cab75cdd74520 190-198,266-270
+server/gen/chat/client.go
+  s_5d8cca81d02447::t_2fd71e630825e7 30,34,48,310-331
+server/gen/chat/endpoints.go
+  s_5d8cca81d02447::t_e3034fee590b6d 31,51,69,563-609
+server/gen/chat/service.go
+  s_5d8cca81d02447::t_81a351ce24b599 62-67,92,325-360,555-571
+server/gen/features/service.go
+  s_5d8cca81d02447::t_a783e6b4c12a25 52-54,99-101,111-112,123-124
+server/gen/http/access/client/types.go
+  s_5d8cca81d02447::t_cf67079629fcc7 7761-7762,7825-7829,12774-12775
+server/gen/http/admin/client/cli.go
+  s_5d8cca81d02447::t_b70a2968123003 575-684
+server/gen/http/admin/client/client.go
+  s_5d8cca81d02447::t_401a3c768bc1e0 82-101,138-142,534-653
+server/gen/http/admin/client/encode_decode.go
+  s_5d8cca81d02447::t_bae0c887482078 3827-5003,5058-5071
+server/gen/http/admin/client/paths.go
+  s_5d8cca81d02447::t_61a78bca986920 89-113
+server/gen/http/admin/client/types.go
+  s_5d8cca81d02447::t_608ccc41a09140 74-85,406-460,3398-3403,3405-3413,3416-3419,3421-3431,3434-3437,3439-3449,3452-3467,3470-3485,3488-3504,3507-3522,3525-3541,3544-3559,3562-3577,3580-3596,3599-3615,3618-3634,3637-3653,3656-3671,3674-3690,3693-3708,3711-3727,3730-3746,3749-3765,3768-3784,3787-3803,3806-3822,3825-3826,3828-3841,3844-3859,3862-3878,3881-3896,3899-3915,3918-3934,3937-3953,3956-3972,3975-3991,3994-4010,4013-4029,4032-4048,4051-4067,4070-4086,4089-4105,4108-4125,4127-4143,4146-6624,6636-6638,6651-6653,6666-6683,6689-6691,6704-6706,6719-6721,6734-6736,6749-6751,6764-6766,6779-6781,6794-6796,6809-6811,6824-6826,6839-6841,6862-7028,7041,7043,7056-7058,7071,7073,7086,7088,7101-7103,7116,7118,7131-7133,7146-7148,7161-7163,7176-7185,7191-7193,7206-7208,7221-7223,7236-7238,7251-7253,7266-7268,7281-7283,7296-7298,7311-7313,7326-7328,7341-7352,7358-7360,7373-7375,7388-7390,7403-7405,7418-7420,7433-7435,7448,7450,7463-7465,7478-7480,7493-7495,7508-7520,7526-7528,7541-7543,7556-7558,7571-7573,7586-7588,7601-7603,7616,7618,7631-7633,7646-7648,7661-7663,7676-7696,7709-7711,7724-7726,7739-7741,7754-7756,7769-7771,7784-7786,7799-7801,7814-7816,7829-7838,7844-7864,7877-7879,7892-7894,7907-7909,7922-7924,7937-7939,7952-7954,7967-7969,7982-7984,7997-7999,8008-8175,8178-8216,8219-8220,8222-8223,8225-8226,8228,8231-8235,8237-8238,8240-8241,8243-8244,8246-8247,8249-8250,8252-8281,8284-8288,8290-8297,8300-8304,8306-8310,8313,8316-8320,8322-8323,8325-8330,8332,8335-8339,8341-8385,8388-8392,8394-8438,8441-8483,8485-8486,8488-8489,8491,8494-8498,8500-8501,8503-8504,8506-8507,8509-8510,8512,8515-8519,8521-8522,8524-8525,8527-8528,8530-8531,8533-8534,8536-8537,8539-8540,8542-8546,8548,8551-8555,8557-8592,8595-8599,8601-8636,8639-8643,8645-8680,8683-8687,8689-8704,8707-8711,8713-8728,8731-8735,8737-8752,8755-8759,8761-8777,8779-8800,8803-8816,8818-8819,8821-8824,8827-8831,8833-8848,8851-8855,8857-8872,8875-8879,8881-8896,8899-8903,8905-8920,8923-8927,8929-8944,8947-8951,8953-8968,8971-8990,8992,8995-8999,9001-9002,9004-9005,9007-9016,9019-9023,9025-9040,9043-9047,9049-9064,9067-9071,9073-9088,9091-9095,9097-9112,9115-9119,9121-9136,9139-9158,9160,9163-9167,9169-9184,9187-9191,9193-9208,9211-9215,9217-9232,9235-9239,9241-9256,9259-9263,9265-9280,9283-9287,9289-9304,9307-9317,9319-9329,9331-9352,9355-9357,9361-9362,9364-9365,9367-9368,9370-9371,9373-9374,9376-9383,9385-9386,9388-9389,9391-9392,9394-9395,9397-9398,9403-9408,9412-9413,9415-9416,9418-9419,9421-9422,9424-9431,9433-9434,9436-9437,9439-9440,9442-9443,9445-9446,9448-9455,9457-9458,9460-9461,9463-9470,9475-9479,9481-9494,9499-9504,9508-9509,9511-9512,9514-9515,9517-9518,9520-9527,9529-9530,9532-9533,9535-9536,9538-9539,9541-9542,9544-9551,9553-9554,9556-9563,9565-9566,9571-9573,9577-9578,9580-9581,9583-9584,9586-9587,9589-9590,9592-9599,9601-9602,9604-9605,9607-9608,9610-9611,9613-9614,9619-9621,9625-9626,9628-9629,9631-9632,9634-9635,9637-9638,9640-9647,9649-9650,9652-9653,9655-9656,9658-9659,9661-9662,9667-9671,9673-9674,9676-9677,9679-9686,9691-9695,9697-9698,9700-9710,9715-9717,9721-9722,9724-9725,9727-9728,9730-9731,9733-9734,9736-9743,9745-9746,9748-9749,9751-9752,9754-9755,9757-9758,9763-9765,9769-9770,9772-9773,9775-9776,9778-9779,9781-9782,9784-9791,9793-9794,9796-9797,9799-9800,9802-9803,9805-9806,9811-9813,9817-9818,9820-9821,9823-9824,9826-9827,9829-9830,9832-9839,9841-9842,9844-9845,9847-9848,9850-9851,9853-9854,9859-9863,9865-9866,9868-9869,9871-9872,9874-9878,9883-9885,9907-9909,9931-9933,9955-9957,9979-9981,10003-10005,10027-10029,10051-10054,10076-10078,10100-10102,10124-10126,10147-10150,10172-10174,10196-10198,10220-10222,10244-10246,10268-10270,10292-10294,10316-10318,10340-10342,10364-10366,10388-10390,10412-10414,10436-10438,10460-10462,10484-10486,10508-10510,10532-10534,10556-10558,10580-10582,10604-10606,10628-10630,10652-10654,10676-10678,10700-10702,10724-10726,10748-10750,10772-10774,10796-10798,10820-10822,10844-10846,10868-10870,10892-10894,10916-10918,10940-10942,10964-10967,10989-10991,11013-11016,11038-11040,11062-11064,11086-11088,11110-11112,11134-11136,11157-11160,11182-11184,11206-11209,11231-11233,11255,11257-11258,11280-11282,11304-11306,11328-11330,11352-11354,11376-11378,11400-11402,11424-11426,11448-11450,11472-11474,11496-11498,11520-11522,11544-11546,11568-11570,11592-11594,11616-11618,11640-11642,11664-11666,11688-11690,11712-11714,11736-11738,11760-11762,11784-11786,11808-11810,11832-11834,11856-11858,11880-11882,11904-11906,11928-11930,11952-11954,11976-11978,12000-12002,12024-12026,12048-12050,12072-12074,12096-12098,12120-12122,12144-12146,12167-12170,12192-12194,12216-12218,12240-12242,12264-12266,12288-12290,12312-12314,12336-12338,12360-12362,12384-12386,12408-12410,12432-12434,12456-12458,12480-12482,12504-12506,12528-12530,12552-12554,12576-12578,12600-12602,12624-12626,12648-12650,12672-12674,12696-12698,12720-12722,12744-12746,12768-12770,12792-12794,12816-12818,12840-12842,12864-12866,12888-12890,12912-12914,12936-12939,12961-12963,12985-12987,13009-13011,13033-13035,13057-13059,13081-13083,13105-13107,13129-13131,13153-13155,13177-13180,13202-13204,13226-13228,13250-13252,13274-13276,13298-13300,13322-13324,13346-13348,13370-13373,13395-13397,13419-13422,13444-13446,13468-13470,13492-13494,13516-13518,13540-13542,13564-13566,13588-13590,13612-13615,13637-13639,13661-13664,13686-13688,13710-13712,13846-13863
+server/gen/http/admin/server/encode_decode.go
+  s_5d8cca81d02447::t_f9d490e8f259fd 3396-4427,4482-4495
+server/gen/http/admin/server/paths.go
+  s_5d8cca81d02447::t_11209dc5fe2349 89-113
+server/gen/http/admin/server/server.go
+  s_5d8cca81d02447::t_40fca7be11dc91 38-42,88-92,110-114,139-143,167-171,1028-1294
+server/gen/http/admin/server/types.go
+  s_5d8cca81d02447::t_ebf3b09401c84c 76-87,408-466,3404-3409,3411-3419,3422-3425,3427-3437,3440-3445,3447-3461,3463-3473,3476-3491,3494-3510,3513-3528,3531-3547,3550-4662,4676-5297,5302-5311,5316-5325,5330-5339,5341-5353,5358-5367,5372-5381,5386-5453,5458-5467,5472-5476,5487-5491,5502-5506,5517-5521,5532-5536,5547-5551,5562-5566,5577-5581,5592-5596,5607-5611,5622-5625,5636-5639,5650-5653,5664-5667,5678-5681,5692-5696,5707-5710,5721-5725,5736-5739,5750-5753,5764-5767,5778-5781,5792-5795,5806-5809,5820-5823,5834-5838,5849-5852,5863-5867,5878-5881,5892-5895,5906-5909,5920-5923,5934-5937,5948-5951,5962-5965,5976-5979,5990-5993,6004-6008,6019-6022,6033-6036,6047-6051,6062-6066,6077-6081,6092-6096,6107-6111,6122-6126,6137-6141,6152-6156,6167-6171,6182-6186,6197-6201,6212-6216,6227-6231,6242-6246,6257-6261,6272-6276,6287-6288,6290-6291,6302-6306,6317-6321,6332-6336,6347-6350,6361-6364,6375-6378,6389-6392,6403-6406,6417-6418,6420-6421,6432-6435,6446-6450,6461-6464,6475-6478,6489-6492,6503-6506,6517-6520,6531-6534,6545-6548,6559-6562,6573-6576,6587-6590,6601-6604,6615-6618,6629-6632,6643-6646,6657-6660,6671-6674,6685-6688,6699-6703,6711-6717,6728-6729,6731-6732,6743-6746,6757-6760,6771-6774,6785-6788,6799-6802,6813-6816,6827-6830,6841-6844,6855-6858,6869-6872,6883-6886,6897-6900,6911-6915,6926-6930,6941-6945,6956-6960,6971-6975,6986-6990,7001-7002,7004-7005,7016-7020,7031-7035,7046-7050,7061-7064,7075-7078,7089-7092,7103-7106,7117-7120,7131-7132,7134-7135,7146-7149,7160-7161,7163-7164,7174-7178,7189-7192,7203-7207,7218-7222,7233-7237,7248-7252,7263-7267,7278-7282,7293-7297,7308-7312,7323-7327,7338-7342,7353-7357,7368-7372,7383-7387,7398-7402,7413-7417,7428-7432,7443-7447,7458-7462,7473-7477,7488-7492,7503-7507,7518-7522,7533-7537,7548-7552,7563-7567,7578-7582,7593-7597,7608-7612,7623-7627,7638-7642,7653-7657,7668-7672,7683-7687,7698-7702,7713-7717,7728-7732,7743-7744,7746-7747,7758-7762,7773-7777,7788-7792,7984-8035,8173-8190
+server/gen/http/agent/client/cli.go
+  s_5d8cca81d02447::t_03ced36514b8c0 21-22,24-26,34-39,53,55,167,175-179,208-212
+server/gen/http/agent/client/encode_decode.go
+  s_5d8cca81d02447::t_741bd0331856d9 48-51,61-63
+server/gen/http/agent/client/types.go
+  s_5d8cca81d02447::t_a5d6e07fbbdb0a 35-39,1513-1517
+server/gen/http/agent/server/encode_decode.go
+  s_5d8cca81d02447::t_2a280f89c63810 40,42,46-48,54-57,66
+server/gen/http/agent/server/types.go
+  s_5d8cca81d02447::t_38112d8a7d52d4 37-41,2618,2620,2622,2676-2680,2733-2737
+server/gen/http/chat/client/cli.go
+  s_5d8cca81d02447::t_47506acd3570e4 774-823
+server/gen/http/chat/client/client.go
+  s_5d8cca81d02447::t_ad66905012e186 68-71,104,400-423
+server/gen/http/chat/client/encode_decode.go
+  s_5d8cca81d02447::t_69dea2f9791fc6 2924-3166,3375-3395
+server/gen/http/chat/client/paths.go
+  s_5d8cca81d02447::t_c725a0f1cd814c 69-73
+server/gen/http/chat/client/types.go
+  s_5d8cca81d02447::t_002f2077052e3a 249-255,2438-2619,2850-2886,4930-4938,4940,4942-4943,4946-4955,4957-4958,4961-4970,4972-4973,4976-4985,4987-5159,5321-5336,8219-8458,8722-8751
+server/gen/http/chat/server/encode_decode.go
+  s_5d8cca81d02447::t_5ccce7c7b8b16a 2965-3199,3424-3444
+server/gen/http/chat/server/paths.go
+  s_5d8cca81d02447::t_1b3d8283f51a61 69-73
+server/gen/http/chat/server/server.go
+  s_5d8cca81d02447::t_8f9f4dc7893436 34,76,90,111,131,775-827
+server/gen/http/chat/server/types.go
+  s_5d8cca81d02447::t_347d253fe19afe 250-256,2439-2620,2851-2887,3095-3113,4808-4949,5119-5130
+server/gen/http/cli/gram/cli.go
+  s_5d8cca81d02447::t_0ee1ebd1056ebf 103,113,144,184,394-413,417,419,790-795,1799-1802,1850-1852,2419,3584-3588,3671,3927,4587-4601,4828-4830,5534-5536,6686-6700,6707,6942-6944,7651-7653,7690,8019,9207-9211,9560-9659,9679,9681,9691,9693,9699,9799,10948,11275-11298,15791,16004-16023,16249,16258,16263,16283,16303,18370,18746,18754,18759,18766
+server/gen/http/features/client/cli.go
+  s_5d8cca81d02447::t_daf9094fc61f68 21-25,33,47,49-50,66-68,83,99-100
+server/gen/http/features/client/encode_decode.go
+  s_5d8cca81d02447::t_8a0da27889d9c3 49-51
+server/gen/http/features/client/types.go
+  s_5d8cca81d02447::t_0157c764cb2931 18-19,29-30,77-79,653-655,665-666,691,1199-1201
+server/gen/http/features/server/encode_decode.go
+  s_5d8cca81d02447::t_ceaa075a43e57a 40-42,44-47,52-55
+server/gen/http/features/server/types.go
+  s_5d8cca81d02447::t_679dba4d7408b4 20-21,31-32,79-81,671,1122,1124,1134-1136,1147-1148,1158-1160,1168-1169,1183-1185
+server/gen/http/mcp_approval/client/encode_decode.go
+  s_5d8cca81d02447::t_b0bcb83b3590a4 2124-2200
+server/gen/http/mcp_approval/client/types.go
+  s_5d8cca81d02447::t_606d79b281f239 254-257,1907-1965,3087-3096,3683-3689,5792-5810
+server/gen/http/mcp_approval/server/encode_decode.go
+  s_5d8cca81d02447::t_4ea6b90076b4fb 2028-2104
+server/gen/http/mcp_approval/server/types.go
+  s_5d8cca81d02447::t_cb70b38b3b656a 256-259,1909-1967,2168-2177
+server/gen/http/openapi3.yaml
+  s_5d8cca81d02447::t_f025cfc40389c0 280,284-286,292,299,356,360-362,368,432,436-438,444,508-509,512-520,584,588-590,592,594,599,606,663,667-669,683-685,742-743,746-757,764,821-822,825-834,841,898,900-904,906,908-910,913,916,920,922,928,934,940,946,952,958,964,970,977-978,981-989,996-1459,6676,6681,6691-6699,12143-12253,29502-29589,29592,29594-29598,29600-29606,29619,29677,29680,29682-29686,29689-29691,29693,29703-29704,29760,29762,29764-29765,29767-29771,29788-29793,29851,29854,29856-29860,29876-29881,29946,29949,29951-29952,29954-29955,29971-29977,29982,29989,30047-30050,30052-30053,30055-30059,30087-30193,30254,30257,30259-30263,30286-30291,30297,30358,30361,30363-30367,30390-30395,30401,30403-30408,30468,30471,30473-30474,30476-30477,30487-30488,30544-30545,30547-30548,30550-30554,30567,30574,30632,30635,30637-30641,30713,30716,30718-30722,30794,30797,30799-30800,30802-30803,30875,30878,30880-30881,30883-30884,30893-30898,30900-30901,30958,30961,30963-30964,30966-30967,30980,30983-30988,31045,31048,31050-31051,31053-31054,31067,31132,31135,31137-31138,31140-31141,31219,31222,31224-31225,31227-31228,31241,31306,31309,31311-31312,31314-31315,31329,31387,31390,31392-31393,31395-31396,31405-31417,31419,31423-31424,31480-31482,31484-31485,31487-31488,31490-31491,31511,31518,31577-31669,31672,31674-31678,31695,31697,31699-31708,31766,31769-31773,31776,31778,31781-31786,31805,31874,31877-31878,31880-31881,31884,31889,31895,31956-31961,31989,31992-31993,31995-31996,31999-32008,32013,32112,32115-32116,32118-32119,32138,32140,32199,32202-32205,32207-32208,32222,32279-32280,32283,32285-32286,32288-32289,32291-32297,32305-32311,32317,32374-32376,32379,32381-32382,32384-32385,32406,32465,32468,32470-32471,32473-32474,32495,32554,32557,32559,33325-33332,40190,40210-40222,59165-59184,59395-59425,59523-59564,60701-60707,61287-61334,66161-66163,66226,67867-67876,68784-68793,71176,71629-71653,73344-73347,73395-73432,73472-73476,73483-73522,73657-73663,74443-74446,74449,74484-74497,76168,76170-76172,76174,76195-76197,76206,76468,76536-76540
+server/gen/http/plugins/client/cli.go
+  s_5d8cca81d02447::t_c3ed1bca558a9f 383-404
+server/gen/http/plugins/client/client.go
+  s_5d8cca81d02447::t_58ac0f443795d0 57-60,130,365-388
+server/gen/http/plugins/client/encode_decode.go
+  s_5d8cca81d02447::t_c194bc78aa04e7 2135-2368,4867-4880
+server/gen/http/plugins/client/paths.go
+  s_5d8cca81d02447::t_27187146319188 55-59
+server/gen/http/plugins/client/types.go
+  s_5d8cca81d02447::t_2e6ed06e73e263 233-239,2043-2224,4225-4236,5808-5976,5989-5991,6004-6006,6019-6021,6034-6036,6049-6051,8001-8016,10322-10561,13158-13177
+server/gen/http/plugins/server/encode_decode.go
+  s_5d8cca81d02447::t_57533963c928ce 1998-2202,4437-4450
+server/gen/http/plugins/server/paths.go
+  s_5d8cca81d02447::t_dcb84a075552b4 55-59
+server/gen/http/plugins/server/server.go
+  s_5d8cca81d02447::t_8dbb29fc8d2dfe 33,82,103,131,158,653-705
+server/gen/http/plugins/server/types.go
+  s_5d8cca81d02447::t_d6d2926e74c1e3 233-239,2043-2224,4225-4236,4435-4453,5839-5978,7647-7656
+server/gen/http/risk/client/cli.go
+  s_5d8cca81d02447::t_8a05ad1b22896a 1016,1045-1061,1083
+server/gen/http/risk/client/encode_decode.go
+  s_5d8cca81d02447::t_7a815090f4eab3 3001-3003,11611-11614
+server/gen/http/risk/client/types.go
+  s_5d8cca81d02447::t_e964512c83aad7 10325-10326,10328-10340,32295-32305
+server/gen/http/risk/server/encode_decode.go
+  s_5d8cca81d02447::t_453c191359df7b 3011,3043-3048,3064,11285-11288
+server/gen/http/risk/server/types.go
+  s_5d8cca81d02447::t_03a8ba94b46e18 10301-10302,10304-10316,19028,19032
+server/gen/http/usage/client/types.go
+  s_5d8cca81d02447::t_3144f2b03bb848 191-192
+server/gen/http/usage/server/types.go
+  s_5d8cca81d02447::t_eaa4463c613a0b 195-196
+server/gen/mcp_approval/service.go
+  s_5d8cca81d02447::t_c538fb539edfeb 309-335,363-397
+server/gen/plugins/client.go
+  s_5d8cca81d02447::t_88529a3ce3cddf 28,42,53,261-282
+server/gen/plugins/endpoints.go
+  s_5d8cca81d02447::t_a4bfb80dea673b 29,92,117,445-479
+server/gen/plugins/service.go
+  s_5d8cca81d02447::t_cdfee7cb43198b 38-39,109,242-255,358-368
+server/gen/risk/service.go
+  s_5d8cca81d02447::t_784d09ea5dedcb 55-57,655-657
+server/gen/types/risk_result.go
+  s_5d8cca81d02447::t_a9d9781e03c535 61-62,64-76
+server/gen/usage/service.go
+  s_5d8cca81d02447::t_94ecb41d6dfad6 187-188
+server/internal/agent/repo/queries.sql.go
+  s_5d8cca81d02447::t_5567d88a3a5394 288-337
+server/internal/background/activities/repo/queries.sql.go
+  s_5d8cca81d02447::t_e5de4719aef623 396,407,1063,1074,1085,1091-1096,1477,1480-1481,1483-1485,1494-1496,1499,1502-1503,1514,1516,1520-1523,1529,1537-1542,1553,1572,1581,1584,1589,1591-1594,1598-1601,1606,1612,1614-1619,1627-1632,1728-1729,1735,1746-1747,1753,1778-1782,1786-1787,1826-1827,1833,1844-1845,1851,1881-1883,1898
+server/internal/chat/repo/queries.sql.go
+  s_5d8cca81d02447::t_96f1bf9f414f5f 1987-2092
+server/internal/directory/repo/queries.sql.go
+  s_5d8cca81d02447::t_125cea49b99e31 145-191,450-645
+server/internal/externalmcp/repo/queries.sql.go
+  s_5d8cca81d02447::t_333c28c328a9c2 611-623,629-640,650-656,972-984,991-1002,1018-1024
+server/internal/mcpapproval/repo/queries.sql.go
+  s_5d8cca81d02447::t_30d30c521ab1af 43-44,47-48,51,57,71,85,206,248,267,270-271,274,279,287-292,302,667,695,1134,1164,1227-1283,1314-1330
+server/internal/platformmcp/repo/queries.sql.go
+  s_5d8cca81d02447::t_da1f78939c5ab5 659,695,2137,2170,4880,4918,4969,4999
+server/internal/productfeatures/repo/queries.sql.go
+  s_5d8cca81d02447::t_6444638990b863 12-27,167-182
+server/internal/usage/repo/queries.sql.go
+  s_5d8cca81d02447::t_7b0babd096c220 834-842,845-846,849-866,868,880-886,902,905,1110,1124-1126,1138,1741-1776,2043,2051,2058-2063
+server/internal/usersessions/repo/queries.sql.go
+  s_5d8cca81d02447::t_18e9d4e9296ac0 73-74,84-85,98,113,458-497,832-861
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "7e8bb73fa1e5f1c528074596f40bba6bce6a8e2e",
+  "prompts": {},
+  "sessions": {
+    "s_5d8cca81d02447": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01a67-b971-77b3-9c1f-897b58a5a5ba",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

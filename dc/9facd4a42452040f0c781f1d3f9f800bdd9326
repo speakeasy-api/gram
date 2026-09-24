@@ -1,0 +1,25 @@
+server/internal/risk/policycore/validation.go
+  s_d57c903c3bc12c::t_7ccbded78902ee 142-151,162,165-174
+server/internal/risk/detection_scopes_api_test.go
+  s_d57c903c3bc12c::t_3a099652ff5cfa 184-207,210-213,216-230
+  s_d57c903c3bc12c::t_f037d984d6efba 208-209,214-215
+server/internal/risk/policycore/validation_test.go
+  s_d57c903c3bc12c::t_dde8dcb2ac4170 10,12,112-132
+  s_d57c903c3bc12c::t_c6646664671a2f 133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "dc9facd4a42452040f0c781f1d3f9f800bdd9326",
+  "prompts": {},
+  "sessions": {
+    "s_d57c903c3bc12c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db8bb333-57c1-4f55-9089-77952e65a646",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

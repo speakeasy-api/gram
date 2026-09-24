@@ -1,0 +1,26 @@
+.changeset/otel-metrics-ingest-relay.md
+  h_2620cc60cfd1e9 1-5
+server/cmd/gram/streams.go
+  h_2620cc60cfd1e9 414,418,525
+server/cmd/gram/streams_test.go
+  h_2620cc60cfd1e9 34,40,49,53,61
+server/internal/otel/handler_metric_relay.go
+  h_2620cc60cfd1e9 206
+server/internal/otel/handler_metric_relay_test.go
+  h_2620cc60cfd1e9 85-88,90-95,167-177,180-190
+server/internal/otel/impl_metrics.go
+  h_2620cc60cfd1e9 16-17,43,74-76,83-88,98-103
+server/internal/otel/impl_metrics_test.go
+  h_2620cc60cfd1e9 8,24,55,82-170,191
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "331787b245667af537088da5c6d89bf41e4cb051",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

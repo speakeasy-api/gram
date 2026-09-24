@@ -1,0 +1,31 @@
+server/design/shared/risk.go
+  s_e5457925ae460d::t_76940aba4b6514 78-79
+server/internal/risk/impl.go
+  s_e5457925ae460d::t_76940aba4b6514 336-344,363-364,539-553,679-680,1986-1993,2344-2345,2377-2378
+server/internal/background/activities/risk_analysis/celadapter.go
+  s_e5457925ae460d::t_76940aba4b6514 113-179
+server/internal/risk/queries.sql
+  s_e5457925ae460d::t_76940aba4b6514 14-15,37-38,94-95,110-111
+server/design/risk/design.go
+  s_e5457925ae460d::t_76940aba4b6514 35-36,140-141
+server/internal/risk/scanner.go
+  s_e5457925ae460d::t_76940aba4b6514 190-192,194-195,361-371,393-394
+server/internal/background/activities/risk_analysis/analyze_batch.go
+  s_e5457925ae460d::t_76940aba4b6514 196-207,234,579-592
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "f46ec91312ec06543cc669ad731381ab58d25dff",
+  "prompts": {},
+  "sessions": {
+    "s_e5457925ae460d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "27e802d5-8b32-4910-b9fd-7266730d92eb",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <cartmanboy1991@gmail.com>"
+    }
+  }
+}

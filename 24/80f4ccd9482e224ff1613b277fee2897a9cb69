@@ -1,0 +1,22 @@
+client/dashboard/src/lib/audit-actions.ts
+  s_1b89b64f839d5a::t_575886e2b2476d 150-151
+  s_1b89b64f839d5a::t_86d911751517c0 532-536
+server/design/shared/risk.go
+  s_1b89b64f839d5a::t_3d4d67c0d7b506 162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2480f4ccd9482e224ff1613b277fee2897a9cb69",
+  "prompts": {},
+  "sessions": {
+    "s_1b89b64f839d5a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b212c1f3-f9cc-4384-9d8d-3b389aad3c4b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+server/internal/plugins/default_plugin_test.go
+  h_9630b74bdac540 42,75
+server/internal/platformmcp/plugins.go
+  h_9630b74bdac540 256
+server/internal/platformmcp/operation_budget.go
+  h_9630b74bdac540 36-37,68-71
+server/internal/platformmcp/plugins_integration_test.go
+  h_9630b74bdac540 349,353,357-367,386-388,393-395,399,403,405,408,414-416,420-421,428,436,443,449,455,463-465,470,474,478,484,517,538,546,554,562-563,573-574,577-578,584,588,592-593,611,615,617-618,621
+server/internal/platformmcp/descriptor_test.go
+  h_9630b74bdac540 190
+server/internal/platformmcp/plugin_audience_mutation.go
+  h_9630b74bdac540 22,25-28,31,37-38,40,43,46,49,55,60,64,66,68,72-73,77,80,84,86,94,102,104,106-107,113-114,116-118,122,126,128,130,133,137,139,141,143,145-146,149,153,156,158,160,170,172,175,177-180,182-183,191,193,195,202,205,207,209,212,217,219,221,223,226-229,233,235,237,241-259,261,264-265,268,270,275-290,292-297,302,306,309,317,324-326,330-331,334-335,338-339,342,344,346
+server/internal/platformmcp/risk_mutation_receipt.go
+  h_9630b74bdac540 132-143,145-154
+server/internal/plugins/impl.go
+  h_9630b74bdac540 412,627,687,1135-1136
+server/internal/plugins/assignments/command.go
+  h_9630b74bdac540 86,97-101,158-162
+server/internal/feature/flags.go
+  h_9630b74bdac540 43,46
+server/internal/plugins/impl_test.go
+  h_9630b74bdac540 862-877,1464,1481
+server/internal/platformmcp/plugin_audience_mutation_test.go
+  h_9630b74bdac540 12,16-17,19,21,24,32-33,42,45,47-48,51,54-55,57,60-63,66,70,74,77-78,80,86,90-91,94-105,108-109,112,115-116,118
+server/internal/platformmcp/plugin_audience_receipt.go
+  h_9630b74bdac540 17,19,21,26-27,30,32,34,36,38-47,49,53,55,59,61,65-67,71,73-74,79-81,84-85,91-92
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 298-300,303,641-643,646
+server/internal/platformmcp/tool_plugins.go
+  h_9630b74bdac540 22,24-25,27-29,74,118
+server/internal/plugins/queries.sql
+  h_9630b74bdac540 342-350,353-359
+server/internal/platformmcp/mutation_receipt_executor.go
+  h_9630b74bdac540 1-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "84225751e2c39181165f71976a4a3db94015b275",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

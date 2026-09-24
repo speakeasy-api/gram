@@ -1,0 +1,38 @@
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_e1c8905d8aee27::t_f4978faffd3018 1502-1503,1505-1509,1522-1523
+  s_e1c8905d8aee27::t_d2a96138e4b542 1526-1528
+  s_e1c8905d8aee27::t_d91fa4bf6c199e 2051-2058,2066-2073,2079,2086-2093,2105,2122-2144,2153-2154,2159,2167-2170,2172
+  s_e1c8905d8aee27::t_67b3dd37c2b21a 41-45,63
+  s_e1c8905d8aee27::t_f85e71c17f764e 1495-1496,1504,1510-1520,1524
+  s_e1c8905d8aee27::t_324698e5420548 1471,1476,1488-1494,1497-1498,1500
+  s_e1c8905d8aee27::t_5a31f64c34c0a3 1280-1286,1312
+  s_e1c8905d8aee27::t_abd50f3ccb52c8 1243,1437-1439,1452-1454,1472-1473,1481,1486,1525,1529-1539,1558-1559,1569-1570
+  s_e1c8905d8aee27::t_8bb854b0d4eba4 1432-1436,1440-1451,1459-1468
+  s_e1c8905d8aee27::t_b7452775df1ea1 1287,1289-1296,1879
+  s_e1c8905d8aee27::t_68c011344f9c1f 1875-1877
+  s_8860283851235f::t_1ca6290f505ba8 40,1288,1571-1576,1878,1880-1883,2178-2180,2225-2227,2235-2237,2268-2272
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f9fb74ef1c74b836b7c06aa8664667b1527ebecd",
+  "prompts": {},
+  "sessions": {
+    "s_8860283851235f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a60586c7-5b1b-4e8e-952b-236346010fe1",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_e1c8905d8aee27": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2ea6-167b-7023-8157-1cc24ffad2f8",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

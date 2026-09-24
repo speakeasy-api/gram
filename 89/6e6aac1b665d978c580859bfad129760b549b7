@@ -1,0 +1,19 @@
+server/internal/background/activities/risk_analysis/category_scopes.go
+  s_09e46b15ddbad6::t_df9dcfc29aafa9 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "896e6aac1b665d978c580859bfad129760b549b7",
+  "prompts": {},
+  "sessions": {
+    "s_09e46b15ddbad6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ac4e8538-3450-4bb8-926b-387012d62634",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

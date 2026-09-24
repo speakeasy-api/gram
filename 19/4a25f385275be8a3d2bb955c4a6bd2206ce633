@@ -1,0 +1,32 @@
+pystreams/src/pystreams/risk/presidiofp/classify.py
+  s_d6640a57723ec2::t_10d8cfd588df92 9,14,23-24,30-31,50
+server/internal/risk/presidiofp/url.go
+  s_d6640a57723ec2::t_955c3a37a467a0 1-35
+server/internal/risk/presidiofp/classify.go
+  s_d6640a57723ec2::t_ef3942a7f9f131 17,26-28,35-36,56
+pystreams/src/pystreams/risk/presidiofp/url.py
+  s_d6640a57723ec2::t_91a432f93f884d 1-35
+pystreams/tests/test_presidiofp.py
+  s_d6640a57723ec2::t_8c28d56d44c31c 186-215
+  s_d6640a57723ec2::t_28cac16bff57c8 82
+server/internal/risk/presidiofp/url_test.go
+  s_d6640a57723ec2::t_13ac76e88c6fff 1-39
+server/internal/risk/presidiofp/classify_test.go
+  s_d6640a57723ec2::t_756b282153d7dd 61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "194a25f385275be8a3d2bb955c4a6bd2206ce633",
+  "prompts": {},
+  "sessions": {
+    "s_d6640a57723ec2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "810056d0-e1a2-422d-a2f9-5b0394666020",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

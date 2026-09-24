@@ -1,0 +1,147 @@
+client/dashboard/src/components/platform-admin-toolbar.tsx
+  s_0b26b5ae3e9ee8::t_a2669c6566430c 735-741
+  s_0b26b5ae3e9ee8::t_2002b0f54b6a65 12
+  s_0b26b5ae3e9ee8::t_d9e2fb18287d37 676-683
+  s_0b26b5ae3e9ee8::t_6fa4e1dd1cf9bd 22
+client/dashboard/src/components/platform-admin-panel.tsx
+  s_0b26b5ae3e9ee8::t_fd035e7f770b5d 647
+  s_0b26b5ae3e9ee8::t_21d7640558eb07 32
+  s_0b26b5ae3e9ee8::t_8e0fed39ffa75d 698
+  s_0b26b5ae3e9ee8::t_d26e4887e85edb 759-762
+  s_0b26b5ae3e9ee8::t_c04b942f355c1d 540-637,639-646,648-697,699-708,710-723,725-738
+  s_0b26b5ae3e9ee8::t_d25a18dc01ab7a 724
+  s_0b26b5ae3e9ee8::t_29e4dbf2887c5e 709
+  s_0b26b5ae3e9ee8::t_f51aa7cd3c68d1 638
+  s_0b26b5ae3e9ee8::t_e1fb7eea246064 2,5-11
+server/internal/risk/queries.sql
+  s_0b26b5ae3e9ee8::t_056859fb1c63a3 856-878
+server/internal/background/risk_adhoc_analysis_test.go
+  s_0b26b5ae3e9ee8::t_9986c4824a49cb 1-232,235-294
+  s_0b26b5ae3e9ee8::t_144fb86fcca386 233-234
+server/cmd/gram/start.go
+  s_0b26b5ae3e9ee8::t_5212d2c1b35fc0 1149,1159
+server/design/platformadmin/riskanalysis/design.go
+  s_0b26b5ae3e9ee8::t_6811bdba8e569d 1-32,35-108
+  s_0b26b5ae3e9ee8::t_f61daad508fd4b 33-34
+server/internal/background/risk_adhoc_analysis.go
+  s_0b26b5ae3e9ee8::t_116e58fc8e6bd9 1-188
+server/design/gram.go
+  s_0b26b5ae3e9ee8::t_571913483fd755 40
+server/internal/background/worker.go
+  s_0b26b5ae3e9ee8::t_7e40b403cf3128 540,551-556
+  s_0b26b5ae3e9ee8::t_b3461b5cd57497 569,581-585,606-610,612,622
+  s_0b26b5ae3e9ee8::t_ca52a58afd7339 268-274
+  s_0b26b5ae3e9ee8::t_2a3d0642ae9311 377-381
+  s_0b26b5ae3e9ee8::t_1b082946616f1e 441
+  s_d754a6e294f855::t_d5a724c7e83661 557-558
+server/internal/background/risk_adhoc_client.go
+  s_0b26b5ae3e9ee8::t_6d3cf11f3b4fd4 1-32,34-139
+  s_0b26b5ae3e9ee8::t_fa560f8fa01ef9 33
+server/internal/background/activities/risk_analysis/fetch_adhoc.go
+  s_0b26b5ae3e9ee8::t_653dd2d29a466d 1-139
+server/internal/risk/impl.go
+  s_0b26b5ae3e9ee8::t_2686b502fd9329 155
+  s_0b26b5ae3e9ee8::t_3546913a25b4a4 100-101
+  s_0b26b5ae3e9ee8::t_53355467979c4a 29-30
+  s_0b26b5ae3e9ee8::t_2191c07d77f351 180
+  s_0b26b5ae3e9ee8::t_60d10e5d226b44 69-70
+  s_0b26b5ae3e9ee8::t_c3fb59cc727f3b 205
+  s_0b26b5ae3e9ee8::t_dce360235e0498 229-236
+  s_0b26b5ae3e9ee8::t_fa560f8fa01ef9 91-99,102
+server/internal/risk/setup_test.go
+  s_0b26b5ae3e9ee8::t_34df1c49731206 165
+server/internal/risk/adhoc.go
+  s_0b26b5ae3e9ee8::t_a24d318258c44b 1-57
+.changeset/adhoc-risk-analysis-workflow.md
+  s_0b26b5ae3e9ee8::t_9df49836a62b7e 1-6
+server/internal/background/activities/risk_analysis/fetch_adhoc_test.go
+  s_0b26b5ae3e9ee8::t_5ff269895d2023 1-223
+server/internal/risk/adminhandlers.go
+  s_0b26b5ae3e9ee8::t_6e359feafa63cc 128,130-136
+  s_0b26b5ae3e9ee8::t_0d7fa31ef5b8a8 17
+  s_0b26b5ae3e9ee8::t_dfb4c5e1d3033b 1-16,18-127,129,137-173
+server/internal/background/activities.go
+  s_0b26b5ae3e9ee8::t_aac2b9b030fd87 439-454
+  s_0b26b5ae3e9ee8::t_e845707e66db95 232
+  s_0b26b5ae3e9ee8::t_a980e45dc04c24 100
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_0b26b5ae3e9ee8::t_9ea5d03a8806c1 74-75,476-477,1016,1226,1457,1519-1520,2038,2109,3571-3582,6094-6104
+client/dashboard/src/sdk/src/funcs/adminRiskAnalysisStatus.ts
+  s_0b26b5ae3e9ee8::t_e4f9aeb70aaf00 1-201
+client/dashboard/src/sdk/src/funcs/adminRiskAnalysisTrigger.ts
+  s_0b26b5ae3e9ee8::t_77e59f3c5d0a27 1-199
+client/dashboard/src/sdk/src/models/components/adhocriskanalysisprogress.ts
+  s_0b26b5ae3e9ee8::t_d06f97ee4bbc59 1-78
+client/dashboard/src/sdk/src/models/components/adhocriskanalysisstatus.ts
+  s_0b26b5ae3e9ee8::t_4f56fa61589638 1-74
+client/dashboard/src/sdk/src/models/components/triggerrequestbody.ts
+  s_0b26b5ae3e9ee8::t_1d9e962e753226 1-60
+client/dashboard/src/sdk/src/models/operations/getadhocriskanalysisstatus.ts
+  s_0b26b5ae3e9ee8::t_18012d644e400f 1-84
+client/dashboard/src/sdk/src/models/operations/triggeradhocriskanalysis.ts
+  s_0b26b5ae3e9ee8::t_fab47540b7c98e 1-86
+client/dashboard/src/sdk/src/react-query/adhocRiskAnalysisStatus.core.ts
+  s_0b26b5ae3e9ee8::t_beb62ca9cf7d8b 1-83
+client/dashboard/src/sdk/src/react-query/adhocRiskAnalysisStatus.ts
+  s_0b26b5ae3e9ee8::t_f260493e14cdfd 1-149
+client/dashboard/src/sdk/src/react-query/triggerAdhocRiskAnalysis.ts
+  s_0b26b5ae3e9ee8::t_b01c9eb3e3e33d 1-117
+client/dashboard/src/sdk/src/sdk/adminriskanalysis.ts
+  s_0b26b5ae3e9ee8::t_ad74470958e8c5 1-57
+client/dashboard/src/sdk/src/sdk/sdk.ts
+  s_0b26b5ae3e9ee8::t_9c917fabf18504 8,78-82
+server/gen/admin_risk_analysis/client.go
+  s_0b26b5ae3e9ee8::t_bab0693bb57b4a 1-73
+server/gen/admin_risk_analysis/endpoints.go
+  s_0b26b5ae3e9ee8::t_c2c52ae312728b 1-85
+server/gen/admin_risk_analysis/service.go
+  s_0b26b5ae3e9ee8::t_a949c01a0dfb1c 1-156
+server/gen/http/admin_risk_analysis/client/cli.go
+  s_0b26b5ae3e9ee8::t_665376837f30d6 1-78
+server/gen/http/admin_risk_analysis/client/client.go
+  s_0b26b5ae3e9ee8::t_2cbefc361b3e66 1-104
+server/gen/http/admin_risk_analysis/client/encode_decode.go
+  s_0b26b5ae3e9ee8::t_6eb1f8a4ffd296 1-506
+server/gen/http/admin_risk_analysis/client/paths.go
+  s_0b26b5ae3e9ee8::t_7dcec74f94a78c 1-18
+server/gen/http/admin_risk_analysis/client/types.go
+  s_0b26b5ae3e9ee8::t_f821a5c67542f6 1-1337
+server/gen/http/admin_risk_analysis/server/encode_decode.go
+  s_0b26b5ae3e9ee8::t_80adc5c993ce1f 1-456
+server/gen/http/admin_risk_analysis/server/paths.go
+  s_0b26b5ae3e9ee8::t_2cabc5263f17fb 1-18
+server/gen/http/admin_risk_analysis/server/server.go
+  s_0b26b5ae3e9ee8::t_5d738eb896354b 1-188
+server/gen/http/admin_risk_analysis/server/types.go
+  s_0b26b5ae3e9ee8::t_f85c50652e6a90 1-800
+server/gen/http/cli/gram/cli.go
+  s_0b26b5ae3e9ee8::t_2d612dfec288a4 20,119,1246-1255,2878-2881,3244-3245,4032-4041,5582-5591,11261-11312
+server/gen/http/openapi3.yaml
+  s_0b26b5ae3e9ee8::t_ea9e1d2b706d06 4595-4771,42736-42798,58759-58781,61026-61027
+server/internal/risk/repo/queries.sql.go
+  s_0b26b5ae3e9ee8::t_018cf62c70fd52 426-446,1976-2026
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "e752c5861fc9f75f5db54069741d6bc18f36b100",
+  "prompts": {},
+  "sessions": {
+    "s_0b26b5ae3e9ee8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bd145136-8447-4b5c-bc59-9439603fc56a",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_d754a6e294f855": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0832504a-3843-4909-adf9-0764d2e217d3",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+.mise-tasks/seed.mts
+  s_fc571f39c642e8::t_fb688834f5a2de 4831-4833
+  s_fc571f39c642e8::t_4bf064f56d75fe 29,4732,4734,4815-4830,4834-4839,4844,4904
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "e2578341511261d9d0bff86e9f7565aeda1e4cc7",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  },
+  "sessions": {
+    "s_fc571f39c642e8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa7d1-17b5-7831-ad39-8403c6daa46c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

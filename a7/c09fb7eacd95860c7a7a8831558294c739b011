@@ -1,0 +1,16 @@
+client/dashboard/src/lib/data-export-validation.ts
+  h_2620cc60cfd1e9 1-7,14
+client/dashboard/src/lib/write-only-headers.ts
+  h_2620cc60cfd1e9 56-62,77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "a7c09fb7eacd95860c7a7a8831558294c739b011",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

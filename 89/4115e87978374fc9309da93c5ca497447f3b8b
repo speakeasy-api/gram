@@ -1,0 +1,27 @@
+server/internal/otel/enrich_log_directory.go
+  s_a45598db4a4df7::t_41551e4df01917 17-20,23,26-27,48
+server/internal/otel/enrich_span_directory.go
+  s_a45598db4a4df7::t_41551e4df01917 18-21,24,27-28,49
+server/internal/otel/user_enrichment.go
+  s_a45598db4a4df7::t_41551e4df01917 28,57,73-74,89,104
+server/internal/otel/handler_ilog_transforms.go
+  s_a45598db4a4df7::t_41551e4df01917 34,46
+server/internal/otel/handler_ispan_transforms.go
+  s_a45598db4a4df7::t_41551e4df01917 34,46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "894115e87978374fc9309da93c5ca497447f3b8b",
+  "prompts": {},
+  "sessions": {
+    "s_a45598db4a4df7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02004-6932-7dc0-8650-7782e08db883",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

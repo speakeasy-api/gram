@@ -1,0 +1,21 @@
+server/internal/risk/recommendedscopes/registry.go
+  s_a1e983049864ec::t_865df2154b63b9 1-141
+server/internal/risk/recommendedscopes/registry_test.go
+  s_a1e983049864ec::t_865df2154b63b9 1-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "dc0a817ad49d1ddaf504f587835c2ddf5aa87a57",
+  "prompts": {},
+  "sessions": {
+    "s_a1e983049864ec": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4a4c-8a3b-73d2-8970-e371e2d28932",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

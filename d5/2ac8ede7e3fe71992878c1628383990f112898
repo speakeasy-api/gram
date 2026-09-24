@@ -1,0 +1,22 @@
+server/internal/judgemessage/payload.go
+  s_34bb055991fd9f::t_02174bc8ec50b8 78-81,83,90-91,93-103,112,135
+  s_34bb055991fd9f::t_a911b1ca238c72 75-77
+server/internal/judgemessage/message_test.go
+  s_34bb055991fd9f::t_f2762fd21d65b1 120-145
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "d52ac8ede7e3fe71992878c1628383990f112898",
+  "prompts": {},
+  "sessions": {
+    "s_34bb055991fd9f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7fb75c1e-7536-4618-bdda-3b9973bfb8e2",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

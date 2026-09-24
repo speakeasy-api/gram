@@ -1,0 +1,56 @@
+server/internal/access/queries.sql
+  s_1451562751221e::t_7d42b6261a5186 6,9,16,19,24,27,40,43,52,54-55,58,62-63,74
+server/internal/authz/access.go
+  s_1451562751221e::t_0b776ed117d5f2 53-54,58
+server/internal/authz/engine_test.go
+  s_1451562751221e::t_cca21fd126236f 313,339,384,410,444,473
+.changeset/allow-only-rbac-grants.md
+  s_1451562751221e::t_4bfebfc78eee5d 1-7
+server/internal/authz/checks.go
+  s_1451562751221e::t_10626f0a4d881c 23,33,47,59,90,105
+server/internal/authz/grants.go
+  s_1451562751221e::t_fc13dee5fa7a0b 48-49,231,299,301,303,307-308,310,318-319,335-337,341,347,351,353,370-372,377,380,388,391
+server/internal/authz/scopes_test.go
+  s_1451562751221e::t_151e9da599ee81 346,351-352,358-362,365-366,369,375,377,384,388,391,401-402
+  s_1451562751221e::t_d3c9864ec33bf6 294,308,318,332
+  s_1451562751221e::t_340738bf2f0805 177-178,181,189,191-192,200,208,216,224,232,240,248,256,264,273,276,279,282,290,304-305,314-315,328-329,342
+server/internal/authz/selector.go
+  s_1451562751221e::t_d71be4990a4cda 49-50,183,192
+server/internal/authz/chat_scope_test.go
+  s_1451562751221e::t_340738bf2f0805 17,20
+server/internal/authztest/helpers_test.go
+  s_1451562751221e::t_6d6856f4d9dc61 13,25
+server/internal/authz/expressions.go
+  s_1451562751221e::t_16133da6d386ed 122,137,139,285,296
+server/internal/authz/expressions_test.go
+  s_1451562751221e::t_ff5a8e1ee2687d 57,72-73,91-92,116-118
+server/internal/authztest/helpers.go
+  s_1451562751221e::t_6d6856f4d9dc61 39
+server/internal/authz/principal_test.go
+  s_1451562751221e::t_340738bf2f0805 90-91
+server/internal/risk/policy_audience_test.go
+  s_1451562751221e::t_6d7ec09dda1f0b 140,146-147
+  s_1451562751221e::t_15ffc31db73f87 155-156,299,302
+server/internal/risk/policybypass/url_grants_test.go
+  s_1451562751221e::t_15ffc31db73f87 275
+server/internal/authz/override.go
+  s_1451562751221e::t_10626f0a4d881c 55
+server/internal/access/repo/queries.sql.go
+  s_1451562751221e::t_df60e4ec63523d 125,135,205,217,486,489,515,595-596,1324,1327,1381,1384,1421,1433,1436,1476,1932-1933,1936,1957
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "e7fe31aec8c63bcb93a4b10cec4c29a86ebc9a5c",
+  "prompts": {},
+  "sessions": {
+    "s_1451562751221e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fd75a-a5d2-7b62-b482-7b7f6c0d2746",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

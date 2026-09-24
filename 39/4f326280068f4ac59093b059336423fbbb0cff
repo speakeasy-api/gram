@@ -1,0 +1,14 @@
+server/internal/dataexports/impl.go
+  h_2620cc60cfd1e9 242
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "394f326280068f4ac59093b059336423fbbb0cff",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

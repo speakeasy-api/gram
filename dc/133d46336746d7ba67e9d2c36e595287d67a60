@@ -1,0 +1,16 @@
+client/dashboard/src/pages/data-exports/ConfigureExportSheet.tsx
+  h_2620cc60cfd1e9 108,198
+client/dashboard/src/pages/data-exports/DataExports.tsx
+  h_2620cc60cfd1e9 2,16,22,26,33,37,53-176,193,197-201,203-207,209-222,228-260,262,265-273,282-283,285,288,295,312,319,330,340,342,344,350,354,373,386,392,396-397,401,410-420,422-424,432,434,436-442,446-476,478,480-485,491-492,498,512-513,516-517,521,527-543,548-549,554-560,564,566-655,658,660,682-710,712-742,744
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "dc133d46336746d7ba67e9d2c36e595287d67a60",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

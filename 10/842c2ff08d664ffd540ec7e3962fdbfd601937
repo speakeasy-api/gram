@@ -1,0 +1,23 @@
+server/internal/otel/user_enrichment_test.go
+  s_a45598db4a4df7::t_6cc1e0331ba352 167-171,180-185
+  s_a45598db4a4df7::t_c5558a73d8f287 144-145,147,153-166,172-179,186-190,200-203
+server/internal/otel/user_enrichment.go
+  s_a45598db4a4df7::t_c5558a73d8f287 51-61,69,89,91,93,97,99
+  s_a45598db4a4df7::t_eb210f4b19fadd 47,90,92,94-96,98,100-102,105,107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "10842c2ff08d664ffd540ec7e3962fdbfd601937",
+  "prompts": {},
+  "sessions": {
+    "s_a45598db4a4df7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02004-6932-7dc0-8650-7782e08db883",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

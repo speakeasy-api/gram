@@ -1,0 +1,32 @@
+client/dashboard/src/sdk/src/models/operations/queryskillefficacyinsights.ts
+  h_2620cc60cfd1e9 111-112,130-131
+server/design/skillefficacy/design.go
+  h_2620cc60cfd1e9 188-189
+server/gen/http/cli/gram/cli.go
+  h_2620cc60cfd1e9 2816-2817
+server/gen/http/skill_efficacy/client/cli.go
+  h_2620cc60cfd1e9 152,155-157,163,166-168
+server/gen/http/skill_efficacy/client/encode_decode.go
+  h_2620cc60cfd1e9 541-546
+server/gen/http/skill_efficacy/server/encode_decode.go
+  h_2620cc60cfd1e9 476-477,522,527,532,537
+server/gen/http/skill_efficacy/server/types.go
+  h_2620cc60cfd1e9 1245
+server/gen/skill_efficacy/service.go
+  h_2620cc60cfd1e9 77,79
+server/internal/skillefficacy/impl.go
+  h_2620cc60cfd1e9 161,170
+server/internal/skillefficacy/insights_test.go
+  h_2620cc60cfd1e9 68,71,101,110,126,152,172,188,202,211,226,233,265,280,314,339,344
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "dbde8b739f3a4e5df10a4ab6df76383f7dd2ba0c",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

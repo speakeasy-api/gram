@@ -1,0 +1,47 @@
+server/internal/risk/replyinbox/inbox.go
+  s_b390d6ce53b276::t_9bfa543de76469 2-3,19,23-30,33,45-50,53-54,56-57,59-62,64-65,67-68,70-71,74-75,80-81,83-87,89-92,98-108,111,120-128,136-145,149-151,154-156,164-166
+  s_b390d6ce53b276::t_0e10e229ca6580 119
+  s_b390d6ce53b276::t_45c26f27bde500 131
+  s_b390d6ce53b276::t_0de819e0d49cf0 1
+  s_b390d6ce53b276::t_77bb346bd57a33 157,159,161
+  s_b390d6ce53b276::t_d632b913910cc8 88,93-97
+  s_b390d6ce53b276::t_d044686a253677 77-78
+  s_b390d6ce53b276::t_c613369c9911a9 129
+server/internal/replicainbox/writer.go
+  s_b390d6ce53b276::t_f5df3f83fae75d 1-95
+server/cmd/tools/enforceload/main.go
+  s_b390d6ce53b276::t_1a86114a852c12 342,435
+server/internal/risk/replyinbox/inbox_test.go
+  s_b390d6ce53b276::t_57a314e7ff1c31 45,66,87-88,92,113-114,129,132,179,223,241
+  s_b390d6ce53b276::t_70d72ff7c4b647 243
+server/internal/replicainbox/inbox_test.go
+  s_b390d6ce53b276::t_c43ad9f1338e6b 6,30-33,35-41
+  s_b390d6ce53b276::t_4b48638c66355a 1-5,7-29,34,42-202
+server/internal/risk/replyinbox/setup_test.go
+  s_b390d6ce53b276::t_9b16569b0f776d 51,54
+server/internal/replicainbox/inbox.go
+  s_b390d6ce53b276::t_58267cc0f3156c 1-626
+server/internal/risk/replyinbox/dispatch.go
+  s_b390d6ce53b276::t_04232517b93aaa 99
+  s_b390d6ce53b276::t_7ded02bc4e2e82 127,133-141
+  s_b390d6ce53b276::t_1a86114a852c12 97,115
+server/internal/risk/replyinbox/writer_test.go
+  s_b390d6ce53b276::t_ae39e931430742 22
+  s_b390d6ce53b276::t_9bd9f39dfadfe1 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "299111b50942a27fe1bbd720302535c2414b5aee",
+  "prompts": {},
+  "sessions": {
+    "s_b390d6ce53b276": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c7be466b-35a7-46f8-83d3-cbbede48fd92",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+seed/demo/PAGES.md
+  s_1b89b64f839d5a::t_f1b9067e76871a 12-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "5a1c699971e3f05e35c07352b2f44e57259c968f",
+  "prompts": {},
+  "sessions": {
+    "s_1b89b64f839d5a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b212c1f3-f9cc-4384-9d8d-3b389aad3c4b",
+        "model": "unknown"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

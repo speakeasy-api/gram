@@ -1,0 +1,26 @@
+server/internal/dataexports/authorization_test.go
+  h_2620cc60cfd1e9 10,22,28,43,51,59
+server/internal/dataexports/destinations.go
+  h_2620cc60cfd1e9 71-74,95,141,149,152
+server/internal/dataexports/destinations_test.go
+  h_2620cc60cfd1e9 56,61-63
+server/internal/dataexports/impl.go
+  h_2620cc60cfd1e9 221-224,233,246,547,565,621
+server/internal/dataexports/queries.sql
+  h_2620cc60cfd1e9 141
+server/internal/dataexports/repo/queries.sql.go
+  h_2620cc60cfd1e9 362
+server/internal/mv/dataexports.go
+  h_2620cc60cfd1e9 7,32-33,44-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "7f202cb84bbe696e6b2fee9948ab10908b861aa0",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

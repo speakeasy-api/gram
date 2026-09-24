@@ -1,0 +1,31 @@
+server/internal/plugins/generate_test.go
+  s_231dc78127db77::t_c93ddc953bae09 2012-2074,2264-2269,2293-2296
+client/dashboard/src/pages/plugins/InstallInstructionsDialog.tsx
+  s_231dc78127db77::t_187d1a69213588 558
+client/dashboard/src/pages/setup/setup-data.test.ts
+  s_231dc78127db77::t_983edab821304b 13-30
+client/dashboard/src/pages/setup/setup-data.ts
+  s_231dc78127db77::t_448227cf86024f 52,61,67
+server/internal/plugins/generate.go
+  s_231dc78127db77::t_37e0acd2c9ce3f 2134,2149-2154,2157,2249,2291-2307,2315-2318,2325-2336
+server/internal/plugins/impl.go
+  s_231dc78127db77::t_494de828420288 1414-1421,1423
+server/internal/plugins/impl_test.go
+  s_231dc78127db77::t_500c1ef6188144 9,958-992
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "c17576b06f64b48bdfc00ccd9d61f87bed17655c",
+  "prompts": {},
+  "sessions": {
+    "s_231dc78127db77": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b1e73d1a-6ff8-4598-b6fb-795a59454728",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

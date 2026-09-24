@@ -1,0 +1,25 @@
+server/internal/database/models.go
+  s_1b89b64f839d5a::t_cfe960c083c7e7 1471-1487
+server/internal/organizations/repo/models.go
+  s_1b89b64f839d5a::t_cfe960c083c7e7 28-44
+server/internal/organizations/repo/queries.sql.go
+  s_1b89b64f839d5a::t_eed289e9f9f7f3 200,411,442,473,1236,1276,1603,1673,1737
+server/internal/projects/repo/queries.sql.go
+  s_1b89b64f839d5a::t_a5dadfb65c24fd 191,200-219
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "f825457aff753b8d88467c3e57e0bc3e128c3078",
+  "prompts": {},
+  "sessions": {
+    "s_1b89b64f839d5a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b212c1f3-f9cc-4384-9d8d-3b389aad3c4b",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

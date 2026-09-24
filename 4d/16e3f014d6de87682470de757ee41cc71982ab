@@ -1,0 +1,45 @@
+server/internal/platformmcp/tool_plugins.go
+  h_9630b74bdac540 47,49,51-58,65,67,69-87,103,109-113
+client/dashboard/src/pages/org/HeadlessContent.test.tsx
+  h_9630b74bdac540 44
+server/internal/platformmcp/plugin_audience_mutation.go
+  h_9630b74bdac540 227-229,234
+server/internal/platformmcp/queries.sql
+  h_9630b74bdac540 2778-2849
+server/internal/platformmcp/install_instructions.go
+  h_9630b74bdac540 1-127
+server/internal/plugins/delivery_principals.go
+  h_9630b74bdac540 1-70
+server/internal/platformmcp/repo/queries.sql.go
+  h_9630b74bdac540 4350-4440,6496-6576
+server/internal/platformmcp/adapters.go
+  h_9630b74bdac540 172-198
+server/internal/platformmcp/plugins.go
+  h_9630b74bdac540 11,21,25,28,132-135,228,231-233,237,241,255-257,289-291,306-327,403-552,644-645,654-657,877-880,897
+client/dashboard/src/pages/org/HeadlessContent.tsx
+  h_9630b74bdac540 61,118-120
+client/dashboard/src/pages/org/PlatformMCP.tsx
+  h_9630b74bdac540 20,171-172,288-290,453,488-489,597,673,676,678-680,694,794,800,810-812,814-824,1267,1282,1294-1319,1381-1383,1585,1615,1659
+server/internal/platformmcp/plugins_integration_test.go
+  h_9630b74bdac540 22,31,33,117,142-236,280,293,296-297,338-341,393-394,413-414,428-429,728-729
+server/cmd/gram/platform_mcp.go
+  h_9630b74bdac540 340-341,759-760
+server/internal/agent/impl.go
+  h_9630b74bdac540 262,336-345
+server/internal/platformmcp/management.go
+  h_9630b74bdac540 99,114-116,125,140-142,150,175,183-185,190,198-200,320,330,332,336-352,354-360,362-370,373-386,388,411-438
+server/internal/platformmcp/plugins_test.go
+  h_9630b74bdac540 4,13,36,52-69,72-98,125-126,136,157-158
+  h_9630b74bdac540 70-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4d16e3f014d6de87682470de757ee41cc71982ab",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

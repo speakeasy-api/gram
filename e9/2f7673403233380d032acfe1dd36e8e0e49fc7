@@ -1,0 +1,41 @@
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_b56e537d7da853::t_e5a6bae5b15e51 1058,1060-1062,1077-1081
+  s_b56e537d7da853::t_795b3bcd9c3554 1901-1902
+  s_b56e537d7da853::t_e8bd68acb4595c 813-814
+client/dashboard/src/pages/setup/components/steps/configure-policies-step.tsx
+  s_b56e537d7da853::t_5609d0f272e795 81-82,84-91,94-98,101-102
+  s_b56e537d7da853::t_4ff11aa173b5bb 170
+  s_b56e537d7da853::t_c98490fc81beaa 249
+  s_b56e537d7da853::t_10b31ec3f2b77d 427
+  s_b56e537d7da853::t_da9e453a6ff7d9 357
+.speakeasy/out.openapi.yaml
+  s_b56e537d7da853::t_299c9359823e00 31209,45029,45064,45067,46209,46212,59156,59184,59187
+client/dashboard/src/sdk/src/funcs/riskEvalsEvaluate.ts
+  s_b56e537d7da853::t_3e8cce0f289c85 45
+client/dashboard/src/sdk/src/models/components/createriskpolicyrequestbody.ts
+  s_b56e537d7da853::t_831925d18289a8 94,123,127
+client/dashboard/src/sdk/src/models/components/evaluatepromptguardrailrequestbody.ts
+  s_b56e537d7da853::t_933b04a6b7b5b6 24,28
+client/dashboard/src/sdk/src/models/components/updateriskpolicyrequestbody.ts
+  s_b56e537d7da853::t_af28c8d2ab72ee 90,115,119
+client/dashboard/src/sdk/src/react-query/riskEvaluatePromptGuardrail.ts
+  s_b56e537d7da853::t_2cc21c1fa598fd 62,91
+client/dashboard/src/sdk/src/sdk/evals.ts
+  s_b56e537d7da853::t_550561aa44b716 55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "e92f7673403233380d032acfe1dd36e8e0e49fc7",
+  "prompts": {},
+  "sessions": {
+    "s_b56e537d7da853": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28c88414-3d38-4df1-a67c-5d0aa757ac45",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

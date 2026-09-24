@@ -1,0 +1,22 @@
+server/internal/admin/features_handler_test.go
+  h_9630b74bdac540 63,93
+server/internal/mcpmetadata/impl.go
+  h_9630b74bdac540 1057-1058,1086,1104
+client/admin/src/pages/organization/Features.test.tsx
+  h_9630b74bdac540 44,67,136,202,216
+client/admin/src/pages/organization/Features.tsx
+  h_9630b74bdac540 144-148
+server/internal/admin/impl.go
+  h_9630b74bdac540 247
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "05e57601850083e708f12931078fd10846872194",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}

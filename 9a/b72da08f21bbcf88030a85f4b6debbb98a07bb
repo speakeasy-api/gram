@@ -1,0 +1,19 @@
+.changeset/policy-eval-workbench.md
+  s_e1c8905d8aee27::t_df9040eeddc6c1 1-5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9ab72da08f21bbcf88030a85f4b6debbb98a07bb",
+  "prompts": {},
+  "sessions": {
+    "s_e1c8905d8aee27": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2ea6-167b-7023-8157-1cc24ffad2f8",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

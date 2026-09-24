@@ -1,0 +1,78 @@
+.changeset/setup-legacy-rbac.md
+  s_11408e199abd50::t_7c070e097a42a2 1-6
+server/internal/admin/setuprbac_test.go
+  s_11408e199abd50::t_5c2f6df327313c 1-43
+server/design/admin/design.go
+  s_11408e199abd50::t_f64f0edf643f28 414-435
+client/admin/src/pages/organization/Overview.tsx
+  s_11408e199abd50::t_85871f9411cf03 178,181,311
+  s_11408e199abd50::t_1296c181a09e50 8,26,100,117-120,137-143,176-177,179-180,182-199,302-310,312-317
+  s_5d8cca81d02447::t_5b95689324a242 318
+server/internal/admin/impl.go
+  s_11408e199abd50::t_1296c181a09e50 790-808
+client/admin/src/pages/organization/Overview.test.tsx
+  s_11408e199abd50::t_85871f9411cf03 667,681,684
+  s_11408e199abd50::t_c0a94b44d15188 686-688,695-697
+  s_11408e199abd50::t_c816da0a506335 690
+  s_11408e199abd50::t_fd56d44c85e183 26,39,151-152,658-666,668-680,682-683,685,689,691-694,698
+client/admin/src/lib/gramAdminApi.ts
+  s_11408e199abd50::t_1296c181a09e50 378-387
+client/admin/src/lib/gramAdminApi.test.ts
+  s_11408e199abd50::t_8703dc3eeada7a 22,323,327-328,332-334
+  s_11408e199abd50::t_d85a1af9d40c55 324-326,329-331
+  s_11408e199abd50::t_fb149de839950f 335-340
+.speakeasy/out.openapi.yaml
+  s_11408e199abd50::t_ad97cbfda0f904 75232-75240
+server/gen/admin/client.go
+  s_11408e199abd50::t_45f186cf2197ac 26,43,53,246-263
+server/gen/admin/endpoints.go
+  s_11408e199abd50::t_32066a063029d5 27,56,83,241-263
+server/gen/admin/service.go
+  s_11408e199abd50::t_8b048e118de322 42-45,108,518-524
+server/gen/http/admin/client/cli.go
+  s_11408e199abd50::t_c863684b224642 275-305
+server/gen/http/admin/client/client.go
+  s_11408e199abd50::t_568592b13b6c7c 50-53,134,348-371
+server/gen/http/admin/client/encode_decode.go
+  s_11408e199abd50::t_cf5be1cea2ad13 1928-2148
+server/gen/http/admin/client/paths.go
+  s_11408e199abd50::t_4c32adf003347a 50-54
+server/gen/http/admin/client/types.go
+  s_11408e199abd50::t_65a2e82942ad95 49-55,1929-2108,4644-4652,6013-6161,10944-11183
+server/gen/http/admin/server/encode_decode.go
+  s_11408e199abd50::t_0c329ac0be55d0 1694-1903
+server/gen/http/admin/server/paths.go
+  s_11408e199abd50::t_f38cd41d67f350 50-54
+server/gen/http/admin/server/server.go
+  s_11408e199abd50::t_947bdc46200d3e 30,81,104,134,163,608-660
+server/gen/http/admin/server/types.go
+  s_11408e199abd50::t_bd1f1e38745498 51-57,1935-2114,6093-6232,8219-8228,8436-8449
+server/gen/http/cli/gram/cli.go
+  s_11408e199abd50::t_51231a86c8fbc2 103,353-356,3580,4568-4570,6670-6672,9210,9392-9411
+server/gen/http/openapi3.yaml
+  s_11408e199abd50::t_d670246173f277 1053-1124,76465-76473
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f62aa377c305d9c8f50c7d75194ea470b9a9148f",
+  "prompts": {},
+  "sessions": {
+    "s_11408e199abd50": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01e8d-a8ee-7f01-9591-eb3b0e46e7b7",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_5d8cca81d02447": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a01a67-b971-77b3-9c1f-897b58a5a5ba",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

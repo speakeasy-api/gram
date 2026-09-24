@@ -1,0 +1,21 @@
+server/internal/scanners/promptinjection/testdata/prompt_injection/agentdojo_fp.jsonl
+  s_be9b75eed3b34d::t_ddb93c7c26c988 1-27
+server/internal/scanners/promptinjection/testdata/prompt_injection/agentdojo_recall.jsonl
+  s_be9b75eed3b34d::t_c4b4dc59684a23 1-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c344a99ca7a35399d82b326beef05dc93c9484b3",
+  "prompts": {},
+  "sessions": {
+    "s_be9b75eed3b34d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fccbd-003a-7e53-9c6c-22b0d5b26f0c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

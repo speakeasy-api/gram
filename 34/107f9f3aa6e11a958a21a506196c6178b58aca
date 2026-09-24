@@ -1,0 +1,136 @@
+server/internal/background/activities/risk_analysis/analyze_batch_test.go
+  s_d91d1a4a046c46::t_dc4dc32acba1d7 306-319,327,355,363-374
+server/internal/background/activities/risk_analysis/scan_presidio.go
+  s_d91d1a4a046c46::t_8623e16a1fe61f 39-41,44-45
+server/internal/background/activities/risk_analysis/scan_gitleaks.go
+  s_d91d1a4a046c46::t_9cc5062965289b 28-30,33-34
+infra/proto/gram/risk/v1/presidio_analysis.proto
+  s_d91d1a4a046c46::t_992f7069fde681 24
+server/internal/risk/impl.go
+  s_d91d1a4a046c46::t_536eada74241e7 1364-1380,1716,1748,3836,3843-3860,3869-3871
+  s_d91d1a4a046c46::t_ecfe3cbefe4347 3873-3874
+  s_3d388cbf35fcf4::t_d67fd72fb0fcc4 3872,3875-3876
+infra/proto/gram/risk/v1/prompt_injection_analysis.proto
+  s_d91d1a4a046c46::t_992f7069fde681 25
+server/internal/background/activities/risk_analysis/prompt_judge_batch.go
+  s_d91d1a4a046c46::t_3e186266af0484 147,159-160
+server/internal/scanners/customruleanalyzer/handler.go
+  s_d91d1a4a046c46::t_ec75d1e07214fc 102-103
+server/internal/scanners/promptinjection/handler_test.go
+  s_d91d1a4a046c46::t_cb9359fa2eda15 94-125
+server/internal/risk/queries.sql
+  s_d91d1a4a046c46::t_dcfc12fac180f3 1023,1025-1026,1059,1067,1070-1072,1078,1083-1085,1098-1099,1104,1108,1173,1175-1177,1191,1193,1197,1199-1201,1210,1215,1217
+server/internal/background/activities/risk_analysis/scan_custom_rules.go
+  s_d91d1a4a046c46::t_5f78bf1263bcec 58-60,72-73
+server/internal/scanners/promptinjection/handler.go
+  s_d91d1a4a046c46::t_766012e17c19e4 45-49,53
+  s_d91d1a4a046c46::t_ec75d1e07214fc 73
+server/internal/scanners/promptpolicy/handler.go
+  s_d91d1a4a046c46::t_766012e17c19e4 46-50,54
+  s_d91d1a4a046c46::t_ec75d1e07214fc 70
+server/internal/scanners/gitleaks/handler.go
+  s_d91d1a4a046c46::t_ec75d1e07214fc 70-71
+server/internal/scanners/publish.go
+  s_d91d1a4a046c46::t_d6898fed11e384 42-43
+server/design/shared/risk.go
+  s_d91d1a4a046c46::t_2af7dc494c9ff0 249-252,275,324-327,347
+client/dashboard/src/pages/chatLogs/ChatDetailPanel.tsx
+  s_d91d1a4a046c46::t_718711a45fbdb4 73,967
+  s_d91d1a4a046c46::t_68edeece71a826 968-970,972
+infra/proto/gram/risk/v1/gitleaks_analysis.proto
+  s_d91d1a4a046c46::t_992f7069fde681 20
+server/internal/scanners/gitleaks/handler_test.go
+  s_d91d1a4a046c46::t_03e6e19f412a88 82-100
+client/dashboard/src/pages/chatLogs/chatHelpers.tsx
+  s_d91d1a4a046c46::t_7c3dcb92f56eb7 41-44
+infra/proto/gram/risk/v1/prompt_policy_analysis.proto
+  s_d91d1a4a046c46::t_992f7069fde681 26
+server/internal/risk/results_test.go
+  s_d91d1a4a046c46::t_932d61bfe43788 85-127,254-315
+  s_d91d1a4a046c46::t_d3ff100c275303 316
+client/dashboard/src/pages/chatLogs/chatHelpers.test.ts
+  s_d91d1a4a046c46::t_29f310723501de 8,148-163
+  s_3d388cbf35fcf4::t_ab0572be6ee3df 164
+server/internal/background/activities/risk_analysis/scan_prompt_injection.go
+  s_d91d1a4a046c46::t_f875705c9a78d5 54-56,68-69
+server/internal/background/activities/risk_analysis/batch_messages.go
+  s_d91d1a4a046c46::t_f1f9c12cf632a0 155-170
+infra/proto/gram/risk/v1/custom_rules_analysis.proto
+  s_d91d1a4a046c46::t_992f7069fde681 26
+.speakeasy/out.openapi.yaml
+  s_d91d1a4a046c46::t_9930802be096d3 60167-60170,60177,60251-60254,60261
+client/dashboard/src/sdk/src/models/components/riskresult.ts
+  s_d91d1a4a046c46::t_059145afb82039 17-20,26,28,104,106,131
+client/dashboard/src/sdk/src/models/components/riskresultredacted.ts
+  s_d91d1a4a046c46::t_debcb2d022b45c 16-19,25,27,92,94,115
+infra/gen/gram/risk/v1/custom_rules_analysis.pb.go
+  s_3d388cbf35fcf4::t_331980dd6429d1 41,176-185,188,193,198,203,208,213,218,223,228,239-243,307-313,359-363,378,386,390,394,398,402,406,410,414,418,423-426,546,563-564
+infra/gen/gram/risk/v1/gitleaks_analysis.pb.go
+  s_3d388cbf35fcf4::t_2babee5aa995f3 35,154-163,166,171,176,181,186,191,196,201,206-211,277-283,329-333,346,354,358,362,366,370,374,378,382,386,389-392,400,413-415
+infra/gen/gram/risk/v1/presidio_analysis.pb.go
+  s_3d388cbf35fcf4::t_43a281b692c105 37,170-179,182,187,192,197,202,207,212,217,222,231-236,309-315,366-370,387,395,399,403,407,411,415,419,423,427,432,435-438,446,462-463
+infra/gen/gram/risk/v1/prompt_injection_analysis.pb.go
+  s_3d388cbf35fcf4::t_e351613088596d 40,205-214,217,222,227,232,237,242,247,252,257,262,267,272,277,284-288,380-386,452-456,474,482,486,490,494,498,502,506,510,514,518,522,526,530,534-537,656,677-678
+infra/gen/gram/risk/v1/prompt_policy_analysis.pb.go
+  s_3d388cbf35fcf4::t_69bf06ffed187a 41,216-225,228,233,238,243,248,253,258,263,268,273,281,286,291,296,303-307,406-412,483-487,506,514,518,522,526,530,534,538,542,546,550,554,558,562,566,570-573,692,713-714
+infra/gen_py/gram/risk/v1/custom_rules_analysis_pb2.py
+  s_3d388cbf35fcf4::t_19f6e9306c1b16 28,39-41
+infra/gen_py/gram/risk/v1/custom_rules_analysis_pb2.pyi
+  s_3d388cbf35fcf4::t_2216cc73531cd4 11,30,42-43
+infra/gen_py/gram/risk/v1/gitleaks_analysis_pb2.py
+  s_3d388cbf35fcf4::t_4853a8d3d852b9 28,39
+infra/gen_py/gram/risk/v1/gitleaks_analysis_pb2.pyi
+  s_3d388cbf35fcf4::t_cdf503835f3794 9,19,29-30
+infra/gen_py/gram/risk/v1/presidio_analysis_pb2.py
+  s_3d388cbf35fcf4::t_b5f0d331a64f78 28,39
+infra/gen_py/gram/risk/v1/presidio_analysis_pb2.pyi
+  s_3d388cbf35fcf4::t_92bb92588c385d 11,23,35-36
+infra/gen_py/gram/risk/v1/prompt_injection_analysis_pb2.py
+  s_3d388cbf35fcf4::t_04f973a8fe0c43 28,39-41
+infra/gen_py/gram/risk/v1/prompt_injection_analysis_pb2.pyi
+  s_3d388cbf35fcf4::t_6d4f27dc584111 11,33,48-49
+infra/gen_py/gram/risk/v1/prompt_policy_analysis_pb2.py
+  s_3d388cbf35fcf4::t_d23b04554c2840 28,39-41
+infra/gen_py/gram/risk/v1/prompt_policy_analysis_pb2.pyi
+  s_3d388cbf35fcf4::t_a1b85865c7495c 11,34,50-51
+server/gen/http/openapi3.yaml
+  s_d91d1a4a046c46::t_37568a8816e247 60468-60471,60478,60552-60555,60562
+server/gen/http/risk/client/encode_decode.go
+  s_d91d1a4a046c46::t_5eb83071131b68 10628-10646,10690-10704
+server/gen/http/risk/client/types.go
+  s_d91d1a4a046c46::t_1ca79a21aa885c 9444,9446-9448,9517,9519-9521,29625-29627,29686-29688
+server/gen/http/risk/server/encode_decode.go
+  s_d91d1a4a046c46::t_5ce1ac7c1996e9 10289-10307,10351-10365
+server/gen/http/risk/server/types.go
+  s_d91d1a4a046c46::t_77cefb7fbd4037 9420-9424,9493-9497
+server/gen/types/risk_result.go
+  s_d91d1a4a046c46::t_443f5f67f536e4 20-24
+server/gen/types/risk_result_redacted.go
+  s_d91d1a4a046c46::t_52310eb73ee4ef 17-21
+server/internal/risk/repo/queries.sql.go
+  s_d91d1a4a046c46::t_d8994aa80fadf9 1753,1755-1756,2673,2675-2677,2686,2691,2693,2794,2796-2798,2812,2814,2920,2928,2931-2933,2939,2944-2946,2959-2960,2965,2969,3052,3126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "34107f9f3aa6e11a958a21a506196c6178b58aca",
+  "prompts": {},
+  "sessions": {
+    "s_3d388cbf35fcf4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "acec37c7-b1cc-4ee7-82c8-afd405d96140",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    },
+    "s_d91d1a4a046c46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa265-7139-7c02-9009-a76952cd8302",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

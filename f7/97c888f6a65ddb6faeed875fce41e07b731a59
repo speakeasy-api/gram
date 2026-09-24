@@ -1,0 +1,38 @@
+server/internal/otel/dialect/sensitivity.go
+  h_2620cc60cfd1e9 1-47
+server/internal/otel/dialect/sensitivity_test.go
+  h_2620cc60cfd1e9 1-40
+server/internal/otel/handler_log_relay.go
+  h_2620cc60cfd1e9 407-409
+server/internal/otel/handler_log_relay_test.go
+  h_2620cc60cfd1e9 258,291-293,375,393-399
+server/internal/otel/handler_metric_relay.go
+  h_2620cc60cfd1e9 160-162,279,284,304,405-407
+server/internal/otel/handler_metric_relay_test.go
+  h_2620cc60cfd1e9 83-88,90-91,103-119,148,181-217,247-254,257,265-276
+server/internal/otel/handler_span_relay.go
+  h_2620cc60cfd1e9 404-406
+server/internal/otel/handler_span_relay_test.go
+  h_2620cc60cfd1e9 160,178-183
+server/internal/otel/impl_metrics_test.go
+  h_2620cc60cfd1e9 69
+server/internal/otel/sensitive_data.go
+  h_2620cc60cfd1e9 1-75
+server/internal/otel/sensitive_data_test.go
+  h_2620cc60cfd1e9 1-249
+server/internal/otel/signal_relay.go
+  h_2620cc60cfd1e9 28-31,126,134-139,215-220
+server/internal/otel/signal_relay_test.go
+  h_2620cc60cfd1e9 81-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "f797c888f6a65ddb6faeed875fce41e07b731a59",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

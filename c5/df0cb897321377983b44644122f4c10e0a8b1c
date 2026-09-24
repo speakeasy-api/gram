@@ -1,0 +1,57 @@
+client/dashboard/src/pages/security/policy-delete-dialog.ts
+  s_d16499501a966c::t_b1ca5172104358 93-99,107-109
+client/dashboard/src/pages/security/PolicyCenter.tsx
+  s_d16499501a966c::t_48f6784ecf99e8 633-638,1148-1161
+  s_d16499501a966c::t_3d967970bb9ae4 1041
+  s_d16499501a966c::t_072a20ac9379bb 1162-1163
+server/design/risk/design.go
+  s_d16499501a966c::t_c4fef5a7ae29be 45,197,315,2031-2034
+  s_d16499501a966c::t_c102bd60ac3a69 2035-2037
+  s_d16499501a966c::t_6e67e24ee92129 2038-2039
+client/dashboard/src/pages/security/policy-delete-dialog.test.ts
+  s_d16499501a966c::t_b1ca5172104358 126-131,146-151,153
+  s_d16499501a966c::t_60d85626479849 152
+client/dashboard/src/pages/security/PolicyDetail.tsx
+  s_d16499501a966c::t_04d6275da0058c 230-262,2032,2035,2040,2438,4182
+client/dashboard/src/pages/setup/components/steps/configure-policies-step.tsx
+  s_d16499501a966c::t_d736489515de20 168-173,639,662-667
+  s_d16499501a966c::t_85f9d278eef1dd 668
+.speakeasy/out.openapi.yaml
+  s_d16499501a966c::t_2930ee3d5038d3 42209,64099,77511-77519,83111
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  s_d16499501a966c::t_f9d22af5999faf 1261
+client/dashboard/src/sdk/src/funcs/riskSessionQuarantinesReleaseSessionQuarantine.ts
+  s_d16499501a966c::t_c2df9a4c40f4d8 105-107
+client/dashboard/src/sdk/src/models/components/createriskpolicyrequestbody.ts
+  s_d16499501a966c::t_7b22e8a1b52352 20,29,73
+client/dashboard/src/sdk/src/models/components/sessionquarantinereleaserequestbody.ts
+  s_d16499501a966c::t_6bf7b6761843b0 1-35
+client/dashboard/src/sdk/src/models/components/updateriskpolicyrequestbody.ts
+  s_d16499501a966c::t_ad348166dbf18e 20,29,65
+client/dashboard/src/sdk/src/models/operations/releasesessionquarantine.ts
+  s_d16499501a966c::t_a93343596ce801 8-11,41,156-157,169-170,177-178
+server/gen/http/openapi3.yaml
+  s_d16499501a966c::t_f9c341f3f70327 43518,65240,78646-78654,84246
+server/gen/http/risk/client/types.go
+  s_d16499501a966c::t_6ad538b4d815ba 59-60,135-136,178
+server/gen/http/risk/server/types.go
+  s_d16499501a966c::t_9dbeee9f4b48d1 61-62,137-138,180
+server/gen/risk/service.go
+  s_d16499501a966c::t_5de405fd3ed606 365-366,1554-1555
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "c5df0cb897321377983b44644122f4c10e0a8b1c",
+  "prompts": {},
+  "sessions": {
+    "s_d16499501a966c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a03341-61d8-73b1-b230-ec13908068ae",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

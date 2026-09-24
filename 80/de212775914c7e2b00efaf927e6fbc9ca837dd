@@ -1,0 +1,24 @@
+client/dashboard/src/lib/data-export-validation.test.ts
+  h_2620cc60cfd1e9 1-50
+client/dashboard/src/lib/data-export-validation.ts
+  h_2620cc60cfd1e9 1-36
+client/dashboard/src/lib/write-only-headers.test.ts
+  h_2620cc60cfd1e9 65-94
+client/dashboard/src/lib/write-only-headers.ts
+  h_2620cc60cfd1e9 55-57,63-74
+client/dashboard/src/pages/data-exports/ConfigureDestinationSheet.tsx
+  h_2620cc60cfd1e9 18
+client/dashboard/src/pages/data-exports/ConfigureExportSheet.tsx
+  h_2620cc60cfd1e9 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "80de212775914c7e2b00efaf927e6fbc9ca837dd",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

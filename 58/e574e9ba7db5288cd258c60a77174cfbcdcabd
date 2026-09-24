@@ -1,0 +1,34 @@
+server/internal/authz/grants.go
+  s_95d069cf52f7b4::t_50247b5f493d0c 224,307,367
+  s_9971e86f513595::t_908660c9f3de54 281,285,293,298
+  s_95d069cf52f7b4::t_c7ce01a464bcc2 229-230
+  s_95d069cf52f7b4::t_21565ec8524457 231
+server/internal/authz/scopes_test.go
+  s_95d069cf52f7b4::t_e598c3235899e4 56
+  s_95d069cf52f7b4::t_d668a9a6000bc1 60
+  s_95d069cf52f7b4::t_45bbe9613769a0 1073,1090-1102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "58e574e9ba7db5288cd258c60a77174cfbcdcabd",
+  "prompts": {},
+  "sessions": {
+    "s_95d069cf52f7b4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecfff-79bd-7ac0-8355-76dbf61e503f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    },
+    "s_9971e86f513595": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ecbe4-9fbc-7a21-bc41-2031dbdd6e97",
+        "model": "gpt-5.5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}

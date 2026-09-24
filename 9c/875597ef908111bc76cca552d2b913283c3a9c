@@ -1,0 +1,28 @@
+NOTES.md
+  s_8abf64d25deee6::t_51b5b08d7c071b 1-11
+server/internal/hooks/quarantine_gate.go
+  s_8abf64d25deee6::t_995c9aba860c4e 257
+  s_8abf64d25deee6::t_cfaad96e693e75 8,23-24,169-177,183-199,207,209-210,213,232,239,241,244-245,252,256,258-260
+server/internal/hooks/ingest_hooks.go
+  s_8abf64d25deee6::t_cfaad96e693e75 588-589,621-622,643-644,668-669
+server/internal/hooks/session_quarantine_test.go
+  s_8abf64d25deee6::t_539237a2a80f20 156-157,191-194
+  s_8abf64d25deee6::t_995c9aba860c4e 4,6-7,9,18,25-28,30-43,49-55,59,76,79-87,95-98,100-105,110-115,139-155,158-190,195-205,264-285
+  s_8abf64d25deee6::t_d711cb35d6e08d 29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "9c875597ef908111bc76cca552d2b913283c3a9c",
+  "prompts": {},
+  "sessions": {
+    "s_8abf64d25deee6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0254b-a2d8-7222-939d-713da07e5f61",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

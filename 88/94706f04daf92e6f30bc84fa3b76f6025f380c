@@ -1,0 +1,55 @@
+hooks/relay/prompt_attachments.go
+  s_d91d1a4a046c46::t_ee631b633768b7 39,43-73,205,207,233,251,261,265,269,272-276,280-285
+hooks/relay/prompt_attachments_test.go
+  s_d91d1a4a046c46::t_a294d7b24bfc42 14,28,39,49,58,64,78
+server/internal/chat/queries.sql
+  s_d91d1a4a046c46::t_7e493d9af27e60 696-703
+  s_d91d1a4a046c46::t_89040885b02012 706,708-712
+  s_d91d1a4a046c46::t_bbe43b7f18b35a 695,704-705,707,713-720
+server/internal/hooks/ingest_hooks.go
+  s_d91d1a4a046c46::t_cbe70aa0f7b5b5 5,36-40,1081,1088,1131-1134,1142,1168,1170-1171,1173-1184,1186,1196-1220
+  s_d91d1a4a046c46::t_992d424f8b20d7 1172
+  s_d91d1a4a046c46::t_ad41d46db707ee 1221
+server/design/hooks/design.go
+  s_d91d1a4a046c46::t_cf691d76783e21 259
+server/internal/hooks/ingest_hooks_test.go
+  s_d91d1a4a046c46::t_658819913b78b5 1046-1055,1061,1082-1083,1085,1088-1090,1096,1100
+  s_d91d1a4a046c46::t_158f6da5885faf 5-6
+  s_d91d1a4a046c46::t_8cbd2d0a25273a 1133-1137
+server/gen/hooks/service.go
+  s_d91d1a4a046c46::t_68d02da380d1d4 385-387
+server/gen/http/cli/gram/cli.go
+  s_d91d1a4a046c46::t_1dd13319ecfcad 10897
+server/gen/http/hooks/client/cli.go
+  s_d91d1a4a046c46::t_900b774dce11a8 258
+server/gen/http/hooks/client/encode_decode.go
+  s_d91d1a4a046c46::t_b1eab8828b4b38 1920,2184
+server/gen/http/hooks/client/types.go
+  s_d91d1a4a046c46::t_ef060c7819c607 1695-1697
+server/gen/http/hooks/server/encode_decode.go
+  s_d91d1a4a046c46::t_0edfd17df4f5c7 1860
+server/gen/http/hooks/server/types.go
+  s_d91d1a4a046c46::t_10ce04c1c4cef6 1695-1697
+server/gen/http/openapi3.yaml
+  s_d91d1a4a046c46::t_c60fc660739ddf 53732-53734
+server/internal/chat/repo/queries.sql.go
+  s_d91d1a4a046c46::t_171fd7e7a653b0 58-91,2561-2601
+client/dashboard/src/sdk/src/models/components/hookpromptattachmententry.ts
+  s_d91d1a4a046c46::t_19325c4c4871de 40-43,67,86,99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "8894706f04daf92e6f30bc84fa3b76f6025f380c",
+  "prompts": {},
+  "sessions": {
+    "s_d91d1a4a046c46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa265-7139-7c02-9009-a76952cd8302",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}

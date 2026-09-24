@@ -1,0 +1,23 @@
+server/internal/hooks/claude_hooks_test.go
+  s_daa31238f0a480::t_1dcc5f48d56fb8 822,825-830,833,844-856,859
+.changeset/claude-hook-auth-email-fallback.md
+  s_daa31238f0a480::t_1609f9260e00a5 1-5
+server/internal/hooks/claude_hooks.go
+  s_daa31238f0a480::t_45f0728a70bbbe 687,694-703,719
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8b44d2b73c6712906fec1d5296dbee56f84e9dfb",
+  "prompts": {},
+  "sessions": {
+    "s_daa31238f0a480": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f2951-c183-7ee3-be5f-ce7f49b4f60b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vishal Gowda <vishal@speakeasy.com>"
+    }
+  }
+}
