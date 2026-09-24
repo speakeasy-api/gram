@@ -6,7 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { MemoryRouter, useLocation, useNavigate } from "react-router";
+import { MemoryRouter } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SlackDirectory } from "./SlackDirectory";
 
@@ -15,19 +15,8 @@ const mocks = vi.hoisted(() => ({
   admin: true,
   query: vi.fn(),
 }));
-vi.mock("./SlackMappingDialog", () => ({
-  SlackMappingDialog: ({
-    id,
-    onClose,
-  }: {
-    id: string;
-    onClose: () => void;
-  }) => (
-    <div role="dialog">
-      Review {id}
-      <button onClick={onClose}>Close review</button>
-    </div>
-  ),
+vi.mock("@gram/client/react-query/listOrganizationUsers.js", () => ({
+  useListOrganizationUsers: () => ({ data: undefined }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => mocks.admin }),
@@ -44,34 +33,11 @@ vi.mock("@gram/client/react-query/slackDirectoryMembers.js", () => ({
     };
   },
 }));
-function Location() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  return (
-    <>
-      <output>{location.search}</output>
-      <button
-        onClick={() =>
-          void navigate(
-            "?tab=slack-workspaces&slack_view=members&slack_member=membership-two&slack_workspace=filtered-workspace&slack_mapping=needs_review",
-          )
-        }
-      >
-        Other membership
-      </button>
-    </>
-  );
-}
-function show() {
+function show(search: string) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter
-        initialEntries={[
-          "/example/identity?tab=slack-workspaces&slack_view=members&slack_member=membership-one&slack_workspace=filtered-workspace&slack_mapping=unmapped",
-        ]}
-      >
+      <MemoryRouter initialEntries={[`/example/identity${search}`]}>
         <SlackDirectory connections={[]} />
-        <Location />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -82,44 +48,44 @@ afterEach(() => {
   mocks.pending = true;
   mocks.admin = true;
 });
-it("opens the exact membership while a differently filtered directory is loading, and retains it through search", async () => {
-  show();
-  expect(screen.getByRole("dialog").textContent).toContain("membership-one");
+it("opens a person's Slack ID from an identity link with every member type shown", () => {
+  show(
+    "?tab=slack-workspaces&slack_view=members&slack_workspace=filtered-workspace&slack_search=UEXAMPLE01&slack_deactivated=true&slack_bots=true&slack_guests=true",
+  );
   expect(mocks.query).toHaveBeenCalledWith(
     expect.objectContaining({
       connectionId: "filtered-workspace",
-      mappingStatus: "unmapped",
+      search: "UEXAMPLE01",
+      includeDeactivated: true,
+      includeBots: true,
+      includeGuests: true,
     }),
+  );
+  expect(
+    (
+      screen.getByPlaceholderText(
+        "Search name, email or Slack ID…",
+      ) as HTMLInputElement
+    ).value,
+  ).toBe("UEXAMPLE01");
+});
+it("keeps workspace and mapping filters while searching", async () => {
+  mocks.pending = false;
+  show(
+    "?tab=slack-workspaces&slack_view=members&slack_workspace=filtered-workspace&slack_mapping=unmapped",
   );
   fireEvent.change(
     screen.getByPlaceholderText("Search name, email or Slack ID…"),
     { target: { value: "no matching person" } },
   );
-  mocks.pending = false;
   await waitFor(() =>
     expect(mocks.query).toHaveBeenLastCalledWith(
-      expect.objectContaining({ search: "no matching person" }),
+      expect.objectContaining({
+        search: "no matching person",
+        connectionId: "filtered-workspace",
+        mappingStatus: "unmapped",
+      }),
     ),
   );
-  expect(screen.getByRole("dialog").textContent).toContain("membership-one");
   expect(screen.getByText("No matching members")).toBeTruthy();
-});
-it("follows URL selection changes and closes without dropping workspace or mapping filters", () => {
-  show();
-  fireEvent.click(screen.getByRole("button", { name: "Other membership" }));
-  expect(screen.getByRole("dialog").textContent).toContain("membership-two");
-  fireEvent.click(screen.getByRole("button", { name: "Close review" }));
-  expect(screen.queryByRole("dialog")).toBeNull();
-  expect(screen.getByRole("status").textContent).toContain(
-    "slack_mapping=needs_review",
-  );
-  expect(screen.getByRole("status").textContent).toContain(
-    "slack_workspace=filtered-workspace",
-  );
-  expect(screen.getByRole("status").textContent).not.toContain("slack_member");
-});
-it("does not mount the privileged membership dialog for a non-admin URL", () => {
-  mocks.admin = false;
-  show();
-  expect(screen.queryByRole("dialog")).toBeNull();
 });

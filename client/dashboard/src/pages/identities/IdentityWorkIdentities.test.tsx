@@ -137,7 +137,7 @@ it("reads an exact self ID and offers only contact-admin guidance", () => {
   expect(
     screen.getByText(/contact your organization administrator/),
   ).toBeTruthy();
-  expect(screen.queryByRole("link", { name: /Review/ })).toBeNull();
+  expect(screen.queryByRole("link", { name: /Slack members/ })).toBeNull();
   expect(
     screen.queryByRole("button", { name: /map|edit|connect|confirm/i }),
   ).toBeNull();
@@ -212,13 +212,14 @@ it("admins see all memberships and deep-link to the exact organization membershi
     expect.anything(),
   );
   const link = screen.getByRole("link", {
-    name: /Review Slack mapping.*Example Operations/,
+    name: /Open .*Example Operations Slack members/,
   });
   const url = new URL(link.getAttribute("href")!, "https://example.test");
   expect(url.pathname).toBe("/example/identity");
-  expect(url.searchParams.get("slack_member")).toBe(
-    "00000000-0000-4000-8000-000000000003",
-  );
+  expect(url.searchParams.get("slack_search")).toBe("UEXAMPLE01");
+  expect(url.searchParams.get("slack_deactivated")).toBe("true");
+  expect(url.searchParams.get("slack_guests")).toBe("true");
+  expect(url.searchParams.get("slack_bots")).toBe("true");
   expect(url.searchParams.get("slack_workspace")).toBe(
     "00000000-0000-4000-8000-000000000004",
   );

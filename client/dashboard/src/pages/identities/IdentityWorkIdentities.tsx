@@ -93,7 +93,7 @@ function WorkIdentities({
       onRetry={() => void query.refetch()}
       footer={
         canReview
-          ? "Mappings grant no extra permissions. Review a membership in Organization Identity to correct it."
+          ? "Mappings grant no extra permissions. Correct a mapping from Slack members in Organization Identity."
           : "Mappings grant no extra permissions. If an account is missing or incorrect, contact your organization administrator."
       }
     >
@@ -135,10 +135,10 @@ function WorkIdentities({
               canReview && (
                 <Button asChild variant="tertiary" size="sm">
                   <Link
-                    aria-label={`Review Slack mapping for ${member.displayName || member.slackUserId} in ${member.workspaceName || member.workspaceId}`}
-                    to={`${routes.identity.href()}?${new URLSearchParams({ tab: "slack-workspaces", slack_view: "members", slack_workspace: member.connectionId, slack_member: member.id })}`}
+                    aria-label={`Open ${member.displayName || member.slackUserId} in ${member.workspaceName || member.workspaceId} Slack members`}
+                    to={`${routes.identity.href()}?${new URLSearchParams({ tab: "slack-workspaces", slack_view: "members", slack_workspace: member.connectionId, slack_search: member.slackUserId, slack_deactivated: "true", slack_bots: "true", slack_guests: "true" })}`}
                   >
-                    Review
+                    Open in Slack members
                   </Link>
                 </Button>
               )

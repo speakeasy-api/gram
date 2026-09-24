@@ -217,21 +217,27 @@ func TestPersonAccountsShowsEveryMembershipAndRetainedReviewState(t *testing.T) 
 		}
 	}
 	require.NoError(t, syncer(f, profileSnapshot("deactivated", "person", "example@demo.getgram.ai", "Synthetic person")).Run(ctx, syncRequest(f, first), nil))
-	_, err = f.service.Disconnect(ctx, &gen.DisconnectPayload{SessionToken: nil, ID: first.ID, Generation: first.Generation})
-	require.NoError(t, err)
 	result, err := f.service.ListPersonAccounts(ctx, personAccountsRequest(f.auth.UserID))
 	require.NoError(t, err)
 	require.Len(t, result.Accounts, 3)
 	for _, account := range result.Accounts {
+		require.Equal(t, "current", account.DirectoryStatus)
 		if account.Member.ID == m.ID {
 			require.Equal(t, "deactivated", account.Member.Status)
 			require.Equal(t, "needs_review", account.Member.MappingStatus)
-			require.Equal(t, "stale", account.DirectoryStatus)
 			require.Equal(t, "member_deactivated", *account.Member.MappingConflictReason)
 		} else {
 			require.Equal(t, "mapped", account.Member.MappingStatus)
-			require.Equal(t, "current", account.DirectoryStatus)
 		}
+	}
+	// Disconnected workspaces leave the UI, including a person's accounts.
+	_, err = f.service.Disconnect(ctx, &gen.DisconnectPayload{SessionToken: nil, ID: first.ID, Generation: first.Generation})
+	require.NoError(t, err)
+	result, err = f.service.ListPersonAccounts(ctx, personAccountsRequest(f.auth.UserID))
+	require.NoError(t, err)
+	require.Len(t, result.Accounts, 2)
+	for _, account := range result.Accounts {
+		require.NotEqual(t, m.ID, account.Member.ID)
 	}
 	// Revoked mappings disappear, with no email-based replacement.
 	_, err = f.service.SetMapping(ctx, mappingRequest(readMapping(t, ctx, f, m.ID), nil))
