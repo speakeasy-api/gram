@@ -1839,11 +1839,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
                           'scope_exempt', ds_readonly_exempt),
        jsonb_build_object('category', 'destructive_tool',
                           'scope_include', 'kind in ["tool_request"]',
-                          'scope_exempt', ds_readonly_exempt))), '{}',
-     jsonb_build_object('servers', jsonb_build_array(
-       jsonb_build_object(
-         'mcp_server_id', demo.det_uuid('gram-demo-mcpserver-support')::text,
-         'tools', jsonb_build_array('process_refund')))),
+                          'scope_exempt', ds_readonly_exempt))), '{}', NULL,
      TRUE, 'flag', 'everyone', NULL, FALSE, 8.6, 1),
     -- MCP annotation rule scoped to the support server.
     (policy_ma, proj_a, demo_org, 'Acme destructive MCP tool policy', 'standard',

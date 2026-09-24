@@ -98,7 +98,14 @@ vi.mock("@gram/client/react-query/metaMcpServers.js", () => ({
 
 vi.mock("@gram/client/react-query/metaMcpMembers.js", () => ({
   useMetaMcpMembers: () => ({
-    data: { members: [] },
+    data: {
+      members: [
+        {
+          mcpServerId: "11111111-1111-4111-8111-111111111111",
+          mcpServerName: "Support MCP",
+        },
+      ],
+    },
     isLoading: false,
     isError: false,
   }),
@@ -351,7 +358,7 @@ describe("StandardPolicyEditor scope rows", () => {
   });
 
   it("preserves server selection across mode switches", async () => {
-    renderEditor(policy());
+    renderEditor(policy({ sources: ["gitleaks"] }));
 
     fireEvent.click(screen.getByText("Selected MCP servers"));
     const server = screen.getByRole("checkbox", { name: "Support MCP" });
@@ -373,6 +380,7 @@ describe("StandardPolicyEditor scope rows", () => {
     const expression = 'content.contains("access token")';
     renderEditor(
       policy({
+        sources: ["gitleaks"],
         detectionScopes: [
           { category: "secrets", scopeInclude: expression, scopeExempt: "" },
         ],

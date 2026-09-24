@@ -256,7 +256,7 @@ export function PolicyMCPScopePicker({
         const server = pickerServers.find(
           (candidate) => candidate.id === entry.mcpServerId,
         );
-        return server?.kind === "server" && entry.tools !== undefined;
+        return server?.kind !== "gateway" && entry.tools !== undefined;
       });
       onChange({ ...value, allServers: true, servers: retained });
       return;

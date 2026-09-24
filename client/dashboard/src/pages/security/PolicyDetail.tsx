@@ -3501,6 +3501,7 @@ export function StandardPolicyEditor({
   // single category-level `pii` detector and the Presidio-only controls
   // (entity selection, sensitivity) leave the form. See `DetectorMode`.
   const mode = useDetectorMode();
+  const categoriesQuery = useRiskCategories();
   const [initializedInventoryForPolicy, setInitializedInventoryForPolicy] =
     useState<string | null>(null);
 
@@ -3699,12 +3700,19 @@ export function StandardPolicyEditor({
     mcpScope.mode === "mcp" &&
     (selectedCategories.has("account_identity") ||
       selectedCategories.has("shadow_mcp"));
+  const inspectRowsValid = inspectRowsAreValid(
+    selectedCategories,
+    scopeOverrides,
+    categoriesQuery.data?.categories,
+    mcpScope.mode === "mcp",
+  );
   const saveBlocked =
     !hasEnabledDetector ||
     audienceMissing ||
     shadowMCPInventoryUnavailable ||
     mcpScopeMissingServers ||
     mcpScopeIncompatible ||
+    !inspectRowsValid ||
     !shadowMCPSelectionInitialized;
 
   const shadowMCPSelectionDirty = shadowMCPSelectionIsDirty(
