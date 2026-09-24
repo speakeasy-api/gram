@@ -253,7 +253,7 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 	require.EqualValues(t, 2, accepted.Load(), "a consent credential must never forward tools/call")
 	// Manual connection verification exercises the SDK discovery, handshake,
 	// list, and detached DELETE paths with the same live consent proof.
-	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, endpoint.OrganizationID, "assertion-upstream", resource, []uuid.UUID{sessionIssuer.ID})
+	remoteClient := createConsentRemoteClient(t, ctx, ti.conn, projectID, endpoint.OrganizationID, "assertion-upstream", "", []uuid.UUID{sessionIssuer.ID})
 	stampRemoteSessionIssuer(t, ctx, ti.conn, projectID, serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, endpoint.OrganizationID, remoteClient)))
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sessionIssuer.ID, remoteClient, *state.Subject, "upstream-oauth", resource)
 	state.CSRFToken = "csrf-token"
