@@ -235,3 +235,17 @@ Access is by IMPERSONATION only — demo org never gets membership rows.
 Everything in this directory is committed to a public repo: fictional
 companies, `*@demo.getgram.ai` emails, `EXAMPLE`/`DEMO` marked fake secrets
 only. Never paste real org/project/user ids here.
+
+### Global registry (manual administration)
+
+An empty global registry is expected in production. Once the staff admin UI is
+available, staff manually create the initial servers there; production has no
+JSON import command or starter-data prerequisite.
+
+No starter inventory is shipped, and there is no automatic local import
+workflow. Tenant reseeds and `RunLocalFixtures` never populate or
+reset the global catalog, including staff edits and publication state.
+
+Existing Pulse-backed demo installations remain unchanged; this is not a Pulse
+cutover. Global staff-only administration is not exposed to demo customers, and
+tenant seeds create no demo-prefixed catalog copies.

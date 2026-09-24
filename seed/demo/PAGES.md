@@ -191,6 +191,11 @@ Claude Tag: Agent Sessions includes “Claude Tag in #demo-releases”. Open it 
 - `[~]` Trial end-date changes: org-scoped audit example records a shortened trial with previous/new dates; browser verification pending.
 
 The Collaborator role includes project-selected `plugin:write` for plugin references and publishing, separately from its unchanged skill authoring grants.
+The global registry may be empty until staff manually add servers through the
+admin UI. JSON records are local/test contract fixtures, not production setup.
+Tenant reseeds do not populate or reset the global catalog. Existing Pulse-backed
+demo installations remain intact. Global catalog administration is staff-only
+and intentionally absent from the demo customer's pages.
 
 ### Identity chaining preparation (management API) — `[x]`
 
