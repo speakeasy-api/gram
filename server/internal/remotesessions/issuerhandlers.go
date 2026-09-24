@@ -319,6 +319,10 @@ func (s *Service) RefreshRemoteSessionIssuerMetadata(ctx context.Context, payloa
 
 	beforeView := mv.BuildRemoteSessionIssuerView(locked)
 
+	if err := guardEMAEndpointRefresh(ctx, txRepo, locked, params); err != nil {
+		return nil, err
+	}
+
 	updated, err := txRepo.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -683,6 +687,12 @@ func (s *Service) UpdateRemoteSessionIssuer(ctx context.Context, payload *gen.Up
 		return nil, oops.E(oops.CodeUnexpected, err, "update remote session issuer").LogError(ctx, logger)
 	}
 
+	if issuerBindingConfigurationChanged(existing, updated) {
+		if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID); err != nil {
+			return nil, err
+		}
+	}
+
 	afterView := mv.BuildRemoteSessionIssuerView(updated)
 
 	if err := s.auditLogger.LogRemoteSessionIssuerUpdate(ctx, dbtx, audit.LogRemoteSessionIssuerUpdateEvent{
@@ -974,6 +984,10 @@ func (s *Service) DeleteRemoteSessionIssuer(ctx context.Context, payload *gen.De
 	}
 	if trustedCount > 0 {
 		return oops.E(oops.CodeConflict, nil, "remote session issuer is trusted by active user session issuers; unlink them first").LogError(ctx, logger)
+	}
+
+	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, *authCtx.ProjectID, issuerID); err != nil {
+		return err
 	}
 
 	deleted, err := txRepo.DeleteRemoteSessionIssuer(ctx, repo.DeleteRemoteSessionIssuerParams{
@@ -1813,4 +1827,20 @@ func parseCursor(cursor *string) (uuid.NullUUID, error) {
 		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}, fmt.Errorf("parse cursor: %w", err)
 	}
 	return uuid.NullUUID{UUID: id, Valid: true}, nil
+}
+
+// issuerBindingConfigurationChanged compares the effective persisted values, so
+// omitted fields, no-op patches, and presentation-only edits do not require an
+// unlink. Callers keep the issuer advisory lock through update, guard and commit;
+// a rejected configuration update is rolled back with the transaction.
+func issuerBindingConfigurationChanged(before, after repo.RemoteSessionIssuer) bool {
+	return before.Issuer != after.Issuer ||
+		before.AuthorizationEndpoint.String != after.AuthorizationEndpoint.String ||
+		before.TokenEndpoint.String != after.TokenEndpoint.String ||
+		before.RevocationEndpoint.String != after.RevocationEndpoint.String ||
+		before.RegistrationEndpoint.String != after.RegistrationEndpoint.String ||
+		before.JwksUri.String != after.JwksUri.String ||
+		before.UserinfoEndpoint.String != after.UserinfoEndpoint.String ||
+		before.IntrospectionEndpoint.String != after.IntrospectionEndpoint.String ||
+		before.TunneledMcpServerID != after.TunneledMcpServerID
 }

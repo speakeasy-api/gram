@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -441,8 +442,15 @@ func (r *IssuerMetadataRefresher) refresh(ctx context.Context, existing repo.Rem
 		success = remotesessionmetrics.IssuerMetadataRefreshOutcomeRefreshedPartial
 	}
 	outcome, err := r.apply(ctx, logger, existing, func(q *repo.Queries) (repo.RemoteSessionIssuer, error) {
+		if err := guardEMAEndpointRefresh(ctx, q, existing, params); err != nil {
+			return repo.RemoteSessionIssuer{}, err
+		}
 		return q.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	}, success)
+	if shared, ok := errors.AsType[*oops.ShareableError](err); ok && shared.Code == oops.CodeConflict {
+		logger.WarnContext(ctx, "refreshed issuer endpoints are blocked by an active client binding", attr.SlogError(err))
+		outcome, err = r.recordFailure(ctx, existing, "issuer metadata endpoint changes are blocked by an active client binding; remove the binding before refreshing", "", remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure)
+	}
 	if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
 		logger.WarnContext(ctx, "refreshed issuer metadata is incompatible with identity-provider login", attr.SlogError(err))
 		outcome, err = r.recordFailure(ctx, existing, trustedClientMetadataIncompatibility, "", remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure)
@@ -587,6 +595,11 @@ func (r *IssuerMetadataRefresher) apply(ctx context.Context, logger *slog.Logger
 
 	updated, err := write(txRepo)
 	if err != nil {
+		if shared, ok := errors.AsType[*oops.ShareableError](err); ok && shared.Code == oops.CodeConflict {
+			// Policy rejection is not a concurrent snapshot conflict. Let the
+			// caller persist a visible failure after this transaction rolls back.
+			return remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure, err
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return remotesessionmetrics.IssuerMetadataRefreshOutcomeConflict, nil
 		}

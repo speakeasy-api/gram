@@ -1192,6 +1192,10 @@ type GetGlobalIssuerResponseBody struct {
 	// Number of active tenant-owned user_session_issuers that trust this issuer.
 	// These block deletion and must be unlinked by their owning organizations.
 	TrustedUserSessionIssuerCount int `form:"trusted_user_session_issuer_count" json:"trusted_user_session_issuer_count" xml:"trusted_user_session_issuer_count"`
+	// Number of active identity-chaining bindings that block deletion and must be
+	// explicitly unlinked by their owning organizations. Included in the detail
+	// response; omitted from listings.
+	EmaBindingCount *int `form:"ema_binding_count,omitempty" json:"ema_binding_count,omitempty" xml:"ema_binding_count,omitempty"`
 }
 
 // UpdateGlobalIssuerResponseBody is the type of the "admin" service
@@ -1410,8 +1414,13 @@ type GetGlobalIssuerMigratePreflightResponseBody struct {
 	// Number of user_session_issuers that trust the source. Any non-zero value
 	// blocks migration.
 	TrustedUserSessionIssuerCount int `form:"trusted_user_session_issuer_count" json:"trusted_user_session_issuer_count" xml:"trusted_user_session_issuer_count"`
-	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
-	// MCP-server bindings, or user-session issuers that trust the source.
+	// Number of active identity-chaining bindings on the source. Non-zero blocks
+	// migration; explicitly unlink these bindings before migration, then prepare
+	// new bindings for the target.
+	EmaBindingCount int `form:"ema_binding_count" json:"ema_binding_count" xml:"ema_binding_count"`
+	// TRUE when the migration would succeed: no active identity-chaining bindings,
+	// endpoint mismatches, conflicting MCP-server bindings, or user-session
+	// issuers that trust the source.
 	CanMigrate bool `form:"can_migrate" json:"can_migrate" xml:"can_migrate"`
 	// Number of tenant-owned remote_session_clients already registered with the
 	// target issuer, BEFORE this migration. Any non-zero value blocks deleting the
@@ -11969,6 +11978,10 @@ type GlobalRemoteSessionIssuerResponseBody struct {
 	// Number of active tenant-owned user_session_issuers that trust this issuer.
 	// These block deletion and must be unlinked by their owning organizations.
 	TrustedUserSessionIssuerCount int `form:"trusted_user_session_issuer_count" json:"trusted_user_session_issuer_count" xml:"trusted_user_session_issuer_count"`
+	// Number of active identity-chaining bindings that block deletion and must be
+	// explicitly unlinked by their owning organizations. Included in the detail
+	// response; omitted from listings.
+	EmaBindingCount *int `form:"ema_binding_count,omitempty" json:"ema_binding_count,omitempty" xml:"ema_binding_count,omitempty"`
 }
 
 // RemoteSessionIssuerResponseBody is used to define fields on response body
@@ -12976,6 +12989,7 @@ func NewGetGlobalIssuerResponseBody(res *admin.GlobalRemoteSessionIssuer) *GetGl
 		GlobalClientCount:             res.GlobalClientCount,
 		TenantClientCount:             res.TenantClientCount,
 		TrustedUserSessionIssuerCount: res.TrustedUserSessionIssuerCount,
+		EmaBindingCount:               res.EmaBindingCount,
 	}
 	if res.Issuer != nil {
 		body.Issuer = marshalTypesRemoteSessionIssuerToRemoteSessionIssuerResponseBody(res.Issuer)
@@ -13222,6 +13236,7 @@ func NewGetGlobalIssuerMigratePreflightResponseBody(res *admin.IssuerMigratePref
 	body := &GetGlobalIssuerMigratePreflightResponseBody{
 		ClientCount:                   res.ClientCount,
 		TrustedUserSessionIssuerCount: res.TrustedUserSessionIssuerCount,
+		EmaBindingCount:               res.EmaBindingCount,
 		CanMigrate:                    res.CanMigrate,
 		TargetTenantClientCount:       res.TargetTenantClientCount,
 	}

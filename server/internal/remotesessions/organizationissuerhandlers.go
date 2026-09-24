@@ -356,7 +356,13 @@ func (s *Service) GetIssuerDeletePreflight(ctx context.Context, payload *orgissu
 		trusted = append(trusted, &orgissuersgen.TrustedUserSessionIssuerReference{ID: row.ID.String(), Slug: row.Slug})
 	}
 
+	emaCount, err := r.CountActiveEMABindingsForIssuer(ctx, repo.CountActiveEMABindingsForIssuerParams{IssuerID: issuerID, OrganizationID: authCtx.ActiveOrganizationID, ProjectID: uuid.Nil})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count identity-chaining bindings")
+	}
+
 	return &orgissuersgen.OrganizationIssuerDeletePreflight{
+		EmaBindingCount:           emaCount,
 		ClientCount:               int(clientCount),
 		McpServerNames:            names,
 		TrustedUserSessionIssuers: trusted,
@@ -592,6 +598,12 @@ func (s *Service) UpdateIssuer(ctx context.Context, payload *orgissuersgen.Updat
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "update organization admin remote session issuer").LogError(ctx, logger)
 	}
+	if issuerBindingConfigurationChanged(existing, updated) {
+		if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, existing.ProjectID.UUID, issuerID); err != nil {
+			return nil, err
+		}
+	}
+
 	if err := validateTrustedIdentityProviderIssuerClients(ctx, txRepo, updated); err != nil {
 		if errors.Is(err, errTrustedIdentityProviderClientIneligible) {
 			return nil, oops.E(oops.CodeBadRequest, err, "update would make a client ineligible for identity-provider login: %v", err).LogError(ctx, logger)
@@ -752,6 +764,10 @@ func (s *Service) RefreshIssuerMetadata(ctx context.Context, payload *orgissuers
 
 	beforeView := mv.BuildRemoteSessionIssuerView(locked)
 
+	if err := guardEMAEndpointRefresh(ctx, txRepo, locked, params); err != nil {
+		return nil, err
+	}
+
 	updated, err := txRepo.UpdateRemoteSessionIssuerDiscoveredMetadata(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -831,6 +847,15 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orgissuersgen.Delet
 
 	txRepo := repo.New(dbtx)
 
+	// Authorize before entering the UUID-wide advisory lock domain. Keep the
+	// established advisory-before-row order, then revalidate after any wait.
+	if _, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{ID: issuerID, OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID), IncludeGlobal: false}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "remote session issuer not found")
+		}
+		return oops.E(oops.CodeUnexpected, err, "authorize issuer deletion")
+	}
+
 	// Serialize the count-then-delete below against client creation: every
 	// client writer takes this advisory lock before binding a client to the
 	// issuer. Without it a create commits in the gap and strands a live client
@@ -848,15 +873,20 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orgissuersgen.Delet
 	// silently succeeding against the org-scoped delete below. Platform issuers
 	// are excluded for the same reason: a tenant must never delete one, and
 	// CountRemoteSessionClientsByIssuerID below is unscoped by organization.
-	if _, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
+	existing, err := txRepo.GetOrganizationRemoteSessionIssuerByID(ctx, repo.GetOrganizationRemoteSessionIssuerByIDParams{
 		ID:             issuerID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
 		IncludeGlobal:  false,
-	}); err != nil {
+	})
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "remote session issuer not found").LogError(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "get organization admin remote session issuer").LogError(ctx, logger)
+	}
+
+	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, existing.ProjectID.UUID, issuerID); err != nil {
+		return err
 	}
 
 	clientCount, err := txRepo.CountRemoteSessionClientsByIssuerID(ctx, issuerID)
@@ -1010,6 +1040,10 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orgissuersgen.MoveIss
 		}
 	}
 
+	if err := guardEMABindingsForIssuer(ctx, txRepo, authCtx.ActiveOrganizationID, existing.ProjectID.UUID, issuerID); err != nil {
+		return nil, err
+	}
+
 	updated, err := txRepo.SetOrganizationRemoteSessionIssuerProject(ctx, repo.SetOrganizationRemoteSessionIssuerProjectParams{
 		ProjectID:      projectID,
 		ID:             issuerID,
@@ -1149,6 +1183,7 @@ func (s *Service) GetIssuerMigratePreflight(ctx context.Context, payload *orgiss
 	}
 
 	return &orgissuersgen.OrganizationIssuerMigratePreflight{
+		EmaBindingCount:           preflight.emaBindingCount,
 		ClientCount:               int(preflight.clientCount),
 		McpServerNames:            preflight.mcpServerNames,
 		EndpointMismatches:        issuerFieldMismatchViews(preflight.endpointMismatches),

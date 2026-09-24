@@ -347,6 +347,9 @@ type OrganizationIssuerDeletePreflight struct {
 	// Organization-owned user_session_issuers that trust this issuer and block
 	// deletion.
 	TrustedUserSessionIssuers []*TrustedUserSessionIssuerReference
+	// Active identity-chaining bindings that must be explicitly unlinked before
+	// deletion.
+	EmaBindingCount int64
 }
 
 // OrganizationIssuerMigratePreflight is the result type of the
@@ -372,8 +375,13 @@ type OrganizationIssuerMigratePreflight struct {
 	// User-session issuers that trust the source and block migration until
 	// explicitly unlinked or re-linked.
 	TrustedUserSessionIssuers []*TrustedUserSessionIssuerReference
-	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
-	// MCP-server bindings, or user-session issuers that trust the source.
+	// Number of active identity-chaining bindings on the source. Non-zero blocks
+	// migration; explicitly unlink these bindings before migration, then prepare
+	// new bindings for the target.
+	EmaBindingCount int64
+	// TRUE when the migration would succeed: no active identity-chaining bindings,
+	// endpoint mismatches, conflicting MCP-server bindings, or user-session
+	// issuers that trust the source.
 	CanMigrate bool
 }
 
