@@ -4,7 +4,7 @@ import type {
 } from "@gram/client/models/components/riskmcpscope.js";
 import type { RiskMCPServerScope } from "@gram/client/models/components/riskmcpserverscope.js";
 
-export type PolicyScopeMode = "everywhere" | "mcp";
+type PolicyScopeMode = "everywhere" | "mcp";
 export type ToolAnnotation = RiskMCPScopeToolAnnotations;
 
 export interface PolicyMCPScopeValue {
