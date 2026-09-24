@@ -11,11 +11,11 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { cn } from "@/lib/utils";
-import type {
-  RiskMCPScope,
-  RiskMCPScopeToolAnnotations,
-} from "@gram/client/models/components/riskmcpscope.js";
 import type { RiskMCPServerScope } from "@gram/client/models/components/riskmcpserverscope.js";
+import {
+  type PolicyMCPScopeValue,
+  type ToolAnnotation,
+} from "./policy-mcp-scope";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { buildListMcpServerToolMetadataQuery } from "@gram/client/react-query/listMcpServerToolMetadata.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
@@ -24,49 +24,6 @@ import { useMetaMcpServers } from "@gram/client/react-query/metaMcpServers.js";
 import { useQueries } from "@tanstack/react-query";
 import { ChevronDown, Info, Loader2, Network, Server, X } from "lucide-react";
 import { useMemo, useState } from "react";
-
-export type PolicyScopeMode = "everywhere" | "mcp";
-export type ToolAnnotation = RiskMCPScopeToolAnnotations;
-
-export interface PolicyMCPScopeValue {
-  mode: PolicyScopeMode;
-  allServers: boolean;
-  toolAnnotations: ToolAnnotation[];
-  servers: RiskMCPServerScope[];
-}
-
-export function policyMCPScopeValue(
-  scope: RiskMCPScope | null | undefined,
-): PolicyMCPScopeValue {
-  return {
-    mode: scope ? "mcp" : "everywhere",
-    allServers: scope?.allServers ?? false,
-    toolAnnotations: [...(scope?.toolAnnotations ?? [])],
-    servers:
-      scope?.servers.map((server) => ({
-        mcpServerId: server.mcpServerId,
-        ...(server.tools === undefined ? {} : { tools: [...server.tools] }),
-      })) ?? [],
-  };
-}
-
-export function policyMCPScopePayload(
-  value: PolicyMCPScopeValue,
-): RiskMCPScope | null {
-  if (value.mode === "everywhere") return null;
-  return {
-    allServers: value.allServers,
-    toolAnnotations: [...value.toolAnnotations].sort(),
-    servers: value.servers
-      .map((server) => ({
-        mcpServerId: server.mcpServerId,
-        ...(server.tools === undefined
-          ? {}
-          : { tools: [...server.tools].sort() }),
-      }))
-      .sort((left, right) => left.mcpServerId.localeCompare(right.mcpServerId)),
-  };
-}
 
 type AnnotationFields = Partial<Record<ToolAnnotation, boolean>>;
 

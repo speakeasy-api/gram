@@ -92,12 +92,12 @@ import {
   type ShadowMCPDisposition,
 } from "./policy-shadow-mcp-setup";
 import { SupersedeDecisionsDialog } from "./SupersedeDecisionsDialog";
+import { PolicyMCPScopePicker } from "./PolicyMCPScopePicker";
 import {
-  PolicyMCPScopePicker,
   policyMCPScopePayload,
   policyMCPScopeValue,
   type PolicyMCPScopeValue,
-} from "./PolicyMCPScopePicker";
+} from "./policy-mcp-scope";
 
 import {
   DETECTION_RULES,

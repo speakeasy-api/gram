@@ -13,10 +13,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { StandardPolicyEditor } from "./PolicyDetail";
-import {
-  policyMCPScopePayload,
-  policyMCPScopeValue,
-} from "./PolicyMCPScopePicker";
+import { policyMCPScopePayload, policyMCPScopeValue } from "./policy-mcp-scope";
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
