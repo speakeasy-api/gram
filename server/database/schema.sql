@@ -9365,6 +9365,7 @@ CREATE TABLE IF NOT EXISTS support_matrix_integration_methods (
   vendor TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
   plan_notes TEXT NOT NULL DEFAULT '',
+  account_eligibility jsonb NOT NULL DEFAULT '{}',
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -9416,6 +9417,7 @@ CREATE TABLE IF NOT EXISTS support_matrix_method_platforms (
   applicability TEXT NOT NULL DEFAULT 'unknown',
   operating_systems TEXT[],
   plan_types TEXT[],
+  account_eligibility jsonb NOT NULL DEFAULT '{}',
   conditions TEXT NOT NULL DEFAULT '',
   CONSTRAINT support_matrix_method_platforms_integration_method_id_fkey FOREIGN KEY (integration_method_id) REFERENCES support_matrix_integration_methods (id) ON DELETE SET NULL,
   CONSTRAINT support_matrix_method_platforms_platform_id_fkey FOREIGN KEY (platform_id) REFERENCES support_matrix_platforms (id) ON DELETE SET NULL,
@@ -9459,6 +9461,8 @@ COMMENT ON COLUMN support_matrix_method_platforms.operating_systems IS 'NULL mea
 COMMENT ON COLUMN support_matrix_method_platforms.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.';
 COMMENT ON COLUMN support_matrix_coverage.operating_systems IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible operating systems. Coverage restrictions supplement mapping restrictions.';
 COMMENT ON COLUMN support_matrix_coverage.plan_types IS 'NULL means unassessed; an empty array means unrestricted; otherwise lists eligible plan types. Coverage restrictions supplement mapping restrictions.';
+COMMENT ON COLUMN support_matrix_integration_methods.account_eligibility IS 'Application-validated object keyed by account type (personal, team, enterprise) with values supported, unsupported, or unknown. An absent key is unknown. Eligibility is assessed separately from capability coverage: an ineligible account never has coverage, an eligible one is not thereby covered.';
+COMMENT ON COLUMN support_matrix_method_platforms.account_eligibility IS 'Same shape as the method-level column, holding only the account types this platform differs on. An absent key inherits the method''s eligibility rather than meaning unknown.';
 -- Queries are Explore's one server-side object: a named, saved question
 -- against a catalog dataset, kept with the builder state it was built with.
 -- Columns are what the server reasons about (scope, listing, impact checks);
