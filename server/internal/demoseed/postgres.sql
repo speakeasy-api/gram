@@ -163,6 +163,7 @@ DECLARE
   policy_cd CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f007';
   policy_tb CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f008';
   policy_q  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f009';
+  policy_ma CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f010';
 
   -- Read-only tool verbs the destructive-command policy exempts. Declared once
   -- because both of that policy's categories carry the same exemption.
@@ -936,7 +937,7 @@ BEGIN
     INSERT INTO http_tool_definitions
       (tool_urn, project_id, deployment_id, openapiv3_document_id, name, summary,
        description, server_env_var, http_method, path, schema_version, schema,
-       read_only_hint)
+       read_only_hint, destructive_hint)
     VALUES (tool_urns[i], proj_a, deploy_id, doa_id, tool_names[i],
             'Acme ' || replace(tool_names[i], '_', ' '),
             'Calls the Acme internal API operation ' || tool_names[i] || '.',
@@ -944,7 +945,8 @@ BEGIN
             CASE WHEN tool_names[i] IN ('process_refund', 'set_env') THEN 'POST' ELSE 'GET' END,
             '/' || replace(tool_names[i], '_', '/'),
             '1.0.0', '{"type":"object","properties":{}}'::jsonb,
-            tool_names[i] <> 'process_refund');
+            tool_names[i] <> 'process_refund',
+            tool_names[i] = 'process_refund');
   END LOOP;
 
   -- Keep a metadata-based External OAuth row so the authentication page can
@@ -1806,14 +1808,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   ------------------------------------------------------------------
   INSERT INTO risk_policies (id, project_id, organization_id, name, policy_type,
                              sources, presidio_entities, analyzer_config,
-                             custom_rule_ids,
+                             custom_rule_ids, mcp_scope,
                              enabled, action, audience_type,
                              shadow_mcp_disposition, auto_name, score, version)
   VALUES
     -- OWASP LLM02 sensitive information disclosure.
     (policy_a, proj_a, demo_org, 'Acme secrets & PII policy', 'standard',
      '{gitleaks,presidio}', '{CREDIT_CARD,EMAIL_ADDRESS,PHONE_NUMBER,US_SSN}',
-     '{}'::jsonb, '{}',
+     '{}'::jsonb, '{}', NULL,
      TRUE, 'flag', 'everyone', NULL, TRUE, 8.0, 1),
     -- OWASP LLM01 prompt injection + ASI01 agent goal hijack; LLM07 covers the
     -- system-prompt-extraction half of the same category.
@@ -1821,7 +1823,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      '{prompt_injection}', NULL,
      jsonb_build_object('detection_scopes', jsonb_build_array(
        jsonb_build_object('category', 'prompt_injection',
-                          'scope_include', 'kind in ["tool_response","user_message"]'))), '{}',
+                          'scope_include', 'kind in ["tool_response","user_message"]'))), '{}', NULL,
      TRUE, 'warn', 'everyone', NULL, FALSE, 9.1, 1),
     -- OWASP LLM06 excessive agency + ASI05 unexpected code execution. Both
     -- sources are flag-only, hence action = flag. The exemption keeps
@@ -1838,18 +1840,34 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
        jsonb_build_object('category', 'destructive_tool',
                           'scope_include', 'kind in ["tool_request"]',
                           'scope_exempt', ds_readonly_exempt))), '{}',
+     jsonb_build_object('servers', jsonb_build_array(
+       jsonb_build_object(
+         'mcp_server_id', demo.det_uuid('gram-demo-mcpserver-support')::text,
+         'tools', jsonb_build_array('process_refund')))),
      TRUE, 'flag', 'everyone', NULL, FALSE, 8.6, 1),
+    -- MCP annotation rule scoped to the support server.
+    (policy_ma, proj_a, demo_org, 'Acme destructive MCP tool policy', 'standard',
+     '{destructive_tool}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'destructive_tool',
+                          'scope_include', 'kind in ["tool_request","tool_response"]'))), '{}',
+     jsonb_build_object(
+       'tool_annotations', jsonb_build_array('destructiveHint'),
+       'servers', jsonb_build_array(
+         jsonb_build_object(
+           'mcp_server_id', demo.det_uuid('gram-demo-mcpserver-support')::text))),
+     TRUE, 'flag', 'everyone', NULL, FALSE, 8.8, 1),
     -- MCP security best practices: unapproved / unsandboxed MCP servers.
     -- Name matches shadowMCPPolicyAutoName so the UI reads consistently.
     (policy_sm, proj_a, demo_org, 'Shadow MCP Server Policy', 'standard',
-     '{shadow_mcp}', NULL, '{}'::jsonb, '{}',
+     '{shadow_mcp}', NULL, '{}'::jsonb, '{}', NULL,
      TRUE, 'block', 'everyone', 'block_all', TRUE, 9.0, 1),
     -- OWASP ASI03 identity/privilege misuse: agent sessions on a personal or
     -- off-domain AI account. flag-only source.
     (policy_ai, proj_a, demo_org, 'Acme non-corporate account policy', 'standard',
      '{account_identity}', NULL,
      '{"account_identity": {"approved_email_domains": ["demo.getgram.ai"]}}'::jsonb,
-     '{}',
+     '{}', NULL,
      TRUE, 'flag', 'everyone', NULL, FALSE, 5.5, 1),
     -- Custom CEL rules only (no built-in source): OWASP LLM02 credential-file
     -- reads, CI/CD env-secret dumps, and MCP-best-practice SSRF targets.
@@ -1858,14 +1876,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      jsonb_build_object('detection_scopes', jsonb_build_array(
        jsonb_build_object('category', 'custom',
                           'scope_include', 'kind in ["tool_request"]'))),
-     '{custom.sensitive_file_read,custom.env_secret_dump,custom.ssrf_metadata_endpoint}',
+     '{custom.sensitive_file_read,custom.env_secret_dump,custom.ssrf_metadata_endpoint}', NULL,
      TRUE, 'block', 'everyone', NULL, FALSE, 9.3, 1),
     -- OWASP LLM02, lower tier: routine customer contact data (support tickets
     -- carry it by design). Scored well below the regulated/secret policies so
     -- the highest-volume findings do not drown the Watchdog list in the same
     -- severity as a leaked key — policy score IS the signal severity.
     (policy_cd, proj_a, demo_org, 'Acme customer contact data policy', 'standard',
-     '{presidio}', '{EMAIL_ADDRESS,PHONE_NUMBER}', '{}'::jsonb, '{}',
+     '{presidio}', '{EMAIL_ADDRESS,PHONE_NUMBER}', '{}'::jsonb, '{}', NULL,
      TRUE, 'flag', 'everyone', NULL, FALSE, 6.4, 1),
     -- OWASP LLM07 / ASI01 tail: off-topic or boundary-testing conversations.
     -- Informational, hence the low score.
@@ -1876,7 +1894,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      -- (pii.topic_boundary_violation) classify as off_policy, not pii.
      (SELECT jsonb_build_object('detection_scopes', jsonb_agg(
         jsonb_build_object('category', c, 'scope_include', 'kind in ["user_message"]')))
-      FROM unnest(ARRAY['financial','government_ids','healthcare','off_policy','pii']) AS c), '{}',
+      FROM unnest(ARRAY['financial','government_ids','healthcare','off_policy','pii']) AS c), '{}', NULL,
      TRUE, 'flag', 'everyone', NULL, FALSE, 3.4, 1),
     -- Disabled so the demo can inspect quarantine configuration without
     -- freezing exploratory sessions.
@@ -1884,7 +1902,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      '{prompt_injection}', NULL,
      jsonb_build_object('detection_scopes', jsonb_build_array(
        jsonb_build_object('category', 'prompt_injection',
-                          'scope_include', 'kind in ["tool_request","user_message"]'))), '{}',
+                          'scope_include', 'kind in ["tool_request","user_message"]'))), '{}', NULL,
      FALSE, 'quarantine', 'everyone', NULL, FALSE, 9.5, 1);
 
   -- The same canonical target has two grants, so Platform MCP demonstrates
