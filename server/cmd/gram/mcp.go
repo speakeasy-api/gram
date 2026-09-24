@@ -436,7 +436,11 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	// which refuses hosts it does not know.
 	mux.Use(authenticationHost.Middleware)
 	mux.Use(mcpSecurity)
-	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
+	platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice("platform-hosts"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid platform hosts: %w", err)
+	}
+	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL, platformHosts))
 	mux.Use(metering.NewMCPBandwidthMiddleware(logger, publishers.MeterReadings))
 	mux.Use(middleware.SessionMiddleware)
 	return mux, nil

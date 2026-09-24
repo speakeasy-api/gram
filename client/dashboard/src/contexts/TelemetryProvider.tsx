@@ -52,11 +52,19 @@ export function failOpenMissingFlags(telemetry: Telemetry): Telemetry {
   };
 }
 
+// Hosts serving the production dashboard. Compared exactly: a substring check
+// would also match dev.ai.speakeasy.com and preview hosts.
+const PROD_HOSTS = new Set(["app.getgram.ai", "ai.speakeasy.com"]);
+
+function isProdHost(serverURL: string): boolean {
+  return PROD_HOSTS.has(new URL(serverURL).hostname);
+}
+
 export const TelemetryProvider = (props: {
   children: ReactNode;
 }): JSX.Element => {
   const serverURL = getServerURL();
-  const isProd = serverURL.includes("app.getgram.ai");
+  const isProd = isProdHost(serverURL);
   const ph = isPublicSharePath()
     ? null
     : posthog.init(
@@ -86,8 +94,11 @@ export const TelemetryProvider = (props: {
     }
 
     const serverURL = getServerURL();
-    if (serverURL.includes("getgram.ai")) {
-      const env = serverURL.includes("app.getgram.ai") ? "prod" : "dev";
+    if (
+      serverURL.includes("getgram.ai") ||
+      new URL(serverURL).hostname.endsWith("ai.speakeasy.com")
+    ) {
+      const env = isProdHost(serverURL) ? "prod" : "dev";
       datadogRum.init({
         applicationId: "93afb64a-dd15-490c-a749-51b4c5c5a171",
         clientToken: "pub8358667232c624e2f91e1eaa0bd380fd",

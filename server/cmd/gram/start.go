@@ -317,6 +317,11 @@ const probeDrainTimeout = 20 * time.Second
 
 func mcpRuntimeFlags() []cli.Flag {
 	flags := []cli.Flag{
+		&cli.StringSliceFlag{
+			Name:    "platform-hosts",
+			Usage:   "Extra first-party hosts that serve the full product alongside the server URL's host, e.g. ai.speakeasy.com. Login on these hosts completes on the same host.",
+			EnvVars: []string{"GRAM_PLATFORM_HOSTS"},
+		},
 		&cli.StringFlag{
 			Name:    "authentication-host-url",
 			Usage:   "Base URL of the alternate authentication host. It serves the per-server MCP OAuth authorization server, kept apart from MCP traffic. Issuers opt in to announcing it. Empty disables it.",
@@ -838,6 +843,10 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("invalid authentication host url: %w", err)
 			}
+			platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice("platform-hosts"))
+			if err != nil {
+				return fmt.Errorf("invalid platform hosts: %w", err)
+			}
 
 			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
@@ -1329,7 +1338,7 @@ func newStartCommand() *cli.Command {
 			// which refuses hosts it does not know.
 			mux.Use(mcpAuthenticationHost.Middleware)
 			mux.Use(mcpSecurity)
-			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
+			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL, platformHosts))
 			// Ordering invariant: recovery and context-enrichment middleware stay
 			// outside bandwidth metering so panics and pre-handler rejections are
 			// not billable and validated custom-domain context is available.
