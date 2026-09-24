@@ -3,6 +3,7 @@ package chat_test
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"io"
 	"net/url"
 	"strings"
@@ -59,6 +60,31 @@ func TestConversationPublicationIncludesEmptyMessages(t *testing.T) {
 	require.True(t, messages[0].HasBody())
 	require.Empty(t, messages[0].GetBody().GetParts())
 	require.Empty(t, meterMessages(t, ti))
+}
+
+func TestConversationPublicationSupportsWrappedToolCalls(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	chatID := seedChat(t, ctx, ti, "u", "", "wrapped tool calls")
+	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), ti.conn, ti.assets)
+	t.Cleanup(func() { _ = shutdown(context.WithoutCancel(t.Context())) })
+	params := minimalChatMessageParams(chatID, ti.projectID)
+	params.Content = ""
+	params.Role = "assistant"
+	encoded, err := json.Marshal(`[{"id":"call-1","function":{"name":"lookup","arguments":"{\"query\":\"example\"}"}}]`)
+	require.NoError(t, err)
+	params.ToolCalls = encoded
+	_, err = writer.Write(ctx, ti.projectID, []chat.MessageWrite{{Params: params}})
+	require.NoError(t, err)
+	require.Len(t, listAllMessages(t, ctx, ti.conn, chatID, ti.projectID), 1)
+	messages := conversationMessages(t, ti)
+	require.Len(t, messages, 1)
+	parts := messages[0].GetBody().GetParts()
+	require.Len(t, parts, 1)
+	require.Equal(t, "call-1", parts[0].GetToolCall().GetId())
+	require.Equal(t, "lookup", parts[0].GetToolCall().GetName())
+	require.JSONEq(t, `{"query":"example"}`, parts[0].GetToolCall().GetArgumentsJson())
 }
 
 func TestConversationPublicationSpillsLargeBody(t *testing.T) {
