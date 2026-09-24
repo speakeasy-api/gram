@@ -45,25 +45,20 @@ func clientUpstreamResource(rows []repo.ListOrganizationMcpServersForClientRow) 
 	return resource
 }
 
-// clientResourceForUpstream qualifies a client's grant for the upstream the
-// user is connecting through. A client that derives a resource of its own
-// keeps it. A client whose derivation is ambiguous claims upstream only when
-// it is attached to it and no sibling bound to the same endpoint could: an
-// endpoint's own server sits in every bound client's rows, so a looser rule
-// would let a second client record the same resource and fail routing closed
-// as a duplicate.
-func clientResourceForUpstream(own []repo.ListOrganizationMcpServersForClientRow, siblings [][]repo.ListOrganizationMcpServersForClientRow, upstream string) string {
+// claimableUpstream qualifies a client's grant for the upstream the user is
+// connecting through. A client that derives a resource of its own keeps it
+// (claimable false). A client whose derivation is ambiguous may claim upstream
+// when it is attached to it — the caller must still check that no sibling
+// bound to the same endpoint serves it: an endpoint's own server sits in every
+// bound client's rows, so a looser rule would let a second client record the
+// same resource and fail routing closed as a duplicate.
+func claimableUpstream(own []repo.ListOrganizationMcpServersForClientRow, upstream string) (resource string, claimable bool) {
 	derived := clientUpstreamResource(own)
 	want := strings.TrimRight(upstream, "/")
 	if want == "" || derived != "" || !rowsServeUpstream(own, want) {
-		return derived
+		return derived, false
 	}
-	for _, rows := range siblings {
-		if rowsServeUpstream(rows, want) {
-			return ""
-		}
-	}
-	return want
+	return want, true
 }
 
 func rowsServeUpstream(rows []repo.ListOrganizationMcpServersForClientRow, upstream string) bool {
