@@ -127,7 +127,7 @@ export type RepairAction = ClosedEnum<typeof RepairAction>;
 /**
  * Current server-derived onboarding stage.
  */
-export const Stage = {
+export const PlatformMCPOnboardingStateStage = {
   NotStarted: "not_started",
   InstallInstructions: "install_instructions",
   Authorized: "authorized",
@@ -136,7 +136,9 @@ export const Stage = {
 /**
  * Current server-derived onboarding stage.
  */
-export type Stage = ClosedEnum<typeof Stage>;
+export type PlatformMCPOnboardingStateStage = ClosedEnum<
+  typeof PlatformMCPOnboardingStateStage
+>;
 
 /**
  * Safe, session-authenticated Platform MCP onboarding projection. It contains no provider URLs, credentials, OAuth values, setup handoffs, or internal resource identifiers.
@@ -237,7 +239,7 @@ export type PlatformMCPOnboardingState = {
   /**
    * Current server-derived onboarding stage.
    */
-  stage: Stage;
+  stage: PlatformMCPOnboardingStateStage;
   /**
    * Whether the authenticated user has an active onboarding workflow in this organization.
    */
@@ -279,7 +281,9 @@ export const RepairAction$inboundSchema: z.ZodMiniEnum<typeof RepairAction> = z
   .enum(RepairAction);
 
 /** @internal */
-export const Stage$inboundSchema: z.ZodMiniEnum<typeof Stage> = z.enum(Stage);
+export const PlatformMCPOnboardingStateStage$inboundSchema: z.ZodMiniEnum<
+  typeof PlatformMCPOnboardingStateStage
+> = z.enum(PlatformMCPOnboardingStateStage);
 
 /** @internal */
 export const PlatformMCPOnboardingState$inboundSchema: z.ZodMiniType<
@@ -310,7 +314,7 @@ export const PlatformMCPOnboardingState$inboundSchema: z.ZodMiniType<
     selected_project_name: z.string(),
     selected_project_slug: z.string(),
     selected_use_verified: z.boolean(),
-    stage: Stage$inboundSchema,
+    stage: PlatformMCPOnboardingStateStage$inboundSchema,
     workflow_active: z.boolean(),
   }),
   z.transform((v) => {

@@ -33590,6 +33590,516 @@ paths:
       x-speakeasy-name-override: reset
       x-speakeasy-react-hook:
         name: ResetOktaResourceConnection
+  /rpc/onboarding.get:
+    get:
+      description: Get the organization's onboarding answers, stage, planned steps and next step.
+      operationId: getOnboarding
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingState'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getOnboarding onboarding
+      tags:
+        - onboarding
+      x-speakeasy-name-override: getOnboarding
+      x-speakeasy-react-hook:
+        name: Onboarding
+  /rpc/onboarding.getUseCaseStatus:
+    get:
+      description: Report, for every use case, whether the organization has evidence for it in the last 30 days. Product pages use this to decide whether their surface is set up.
+      operationId: getOnboardingUseCaseStatus
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingUseCaseStatusResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getUseCaseStatus onboarding
+      tags:
+        - onboarding
+      x-speakeasy-name-override: getUseCaseStatus
+      x-speakeasy-react-hook:
+        name: OnboardingUseCaseStatus
+  /rpc/onboarding.listReferenceData:
+    get:
+      description: List the providers with their plans and products, the use cases and the MDM vendors the wizard offers.
+      operationId: listOnboardingReferenceData
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingReferenceData'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listReferenceData onboarding
+      tags:
+        - onboarding
+      x-speakeasy-name-override: listReferenceData
+      x-speakeasy-react-hook:
+        name: OnboardingReferenceData
+  /rpc/onboarding.saveStack:
+    post:
+      description: 'Save the organization''s stack: the providers it uses with their plans, its products and its MDM vendor. Keeps a previously picked use case and recomputes the next step. Organization admins only.'
+      operationId: saveOnboardingStack
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveStackRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingState'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: saveStack onboarding
+      tags:
+        - onboarding
+      x-speakeasy-name-override: saveStack
+      x-speakeasy-react-hook:
+        name: SaveOnboardingStack
+  /rpc/onboarding.selectUseCase:
+    post:
+      description: Pick the one use case to reach first. Requires a saved stack. Changing the use case starts a new plan. Organization admins only.
+      operationId: selectOnboardingUseCase
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelectUseCaseRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingState'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: selectUseCase onboarding
+      tags:
+        - onboarding
+      x-speakeasy-name-override: selectUseCase
+      x-speakeasy-react-hook:
+        name: SelectOnboardingUseCase
+  /rpc/onboarding.verifyStep:
+    post:
+      description: Check a planned step against the last 30 days of evidence. A passing check records the step as verified and moves to the next one. Organization admins only.
+      operationId: verifyOnboardingStep
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyStepRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingVerifyStepResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: verifyStep onboarding
+      tags:
+        - onboarding
+      x-speakeasy-name-override: verifyStep
+      x-speakeasy-react-hook:
+        name: VerifyOnboardingStep
   /rpc/organizationAssets.uploadImage:
     post:
       description: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.
@@ -86230,6 +86740,48 @@ components:
         - resource_indicator
         - scopes
         - client_binding
+    OnboardingAnswers:
+      type: object
+      properties:
+        completed_at:
+          type: string
+          description: Set once every step for the use case has been verified
+          format: date-time
+        mdm_vendor:
+          type: string
+          description: MDM vendor the organization uses
+          enum:
+            - jamf
+            - intune
+            - iru
+            - none
+        product_slugs:
+          type: array
+          items:
+            type: string
+          description: Products the organization uses. Each belongs to one of the selected providers.
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingSelectedProvider'
+          description: Providers the organization uses, each with the plan it is on
+        updated_at:
+          type: string
+          format: date-time
+        use_case:
+          type: string
+          description: The single use case the admin picked. Omitted until the admin picks one.
+          enum:
+            - observability
+            - cost-tracking
+            - security
+            - mcp-gateway
+      description: What an organization admin told us during onboarding.
+      required:
+        - providers
+        - product_slugs
+        - mdm_vendor
+        - updated_at
     OnboardingHookEvent:
       type: object
       properties:
@@ -86261,6 +86813,138 @@ components:
         - time_unix_nano
         - source
         - project_slug
+    OnboardingOption:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Display name
+        slug:
+          type: string
+          description: Stable key
+      description: A fixed choice offered by the wizard.
+      required:
+        - slug
+        - name
+    OnboardingPlan:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Display name
+        slug:
+          type: string
+          description: Stable plan key, e.g. anthropic-enterprise
+      description: A plan a provider sells. It applies to every product of that provider.
+      required:
+        - slug
+        - name
+    OnboardingProduct:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Display name
+        slug:
+          type: string
+          description: Stable product key
+        source_ids:
+          type: array
+          items:
+            type: string
+          description: hook_source ids whose events belong to this product
+      description: A product surface the platform can cover.
+      required:
+        - slug
+        - name
+        - source_ids
+    OnboardingProvider:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Display name
+        plans:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingPlan'
+          description: Plans an admin can declare for this provider. Empty when the provider has no plans.
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingProduct'
+          description: Products of this provider, in display order
+        slug:
+          type: string
+          description: Stable provider key
+      description: A vendor whose products the platform can cover, with the plans it sells and the products it makes.
+      required:
+        - slug
+        - name
+        - plans
+        - products
+    OnboardingReferenceData:
+      type: object
+      properties:
+        mdm_vendors:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingOption'
+          description: MDM vendors the admin can declare
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingProvider'
+          description: Providers the admin can pick, in display order, each with its plans and products
+        use_cases:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingOption'
+          description: Use cases the admin can pick exactly one of
+      description: Everything the wizard needs to render its questions.
+      required:
+        - providers
+        - use_cases
+        - mdm_vendors
+    OnboardingSelectedProvider:
+      type: object
+      properties:
+        plan_slug:
+          type: string
+          description: Slug of one of the provider's plans. Omitted only when the provider has no plans.
+        provider_slug:
+          type: string
+          description: Slug of a provider from the reference data
+      required:
+        - provider_slug
+    OnboardingState:
+      type: object
+      properties:
+        answers:
+          $ref: '#/components/schemas/OnboardingAnswers'
+        done:
+          type: boolean
+          description: True once the selected use case is covered
+        next_step:
+          $ref: '#/components/schemas/OnboardingStep'
+        stage:
+          type: string
+          description: 'stack: the organization''s stack has not been saved. use-case: the stack is saved and a use case is needed. steps: a use case is picked and steps remain. done: the use case is covered.'
+          enum:
+            - stack
+            - use-case
+            - steps
+            - done
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingStep'
+          description: Every step planned for the picked use case, in order, with verification state
+      description: Where an organization is in onboarding.
+      required:
+        - stage
+        - steps
+        - done
     OnboardingStatusResult:
       type: object
       properties:
@@ -86283,6 +86967,96 @@ components:
         - dsync_configured
         - domain_verified
         - verified_domains
+    OnboardingStep:
+      type: object
+      properties:
+        description:
+          type: string
+          description: What to do and why it is the quickest path
+        destination:
+          type: string
+          description: Dashboard area where the work happens
+          enum:
+            - plugins
+            - integrations
+            - policies
+            - mcp
+            - devices
+            - settings
+        evidence:
+          type: string
+          description: What must be observed in the last 30 days for the step to count as verified
+        product_slug:
+          type: string
+          description: Product this step covers. Omitted for steps that cover the whole organization.
+        slug:
+          type: string
+          description: Stable step key, unique within an organization's plan
+        technique_slug:
+          type: string
+          description: Coverage technique this step sets up
+        title:
+          type: string
+          description: Short imperative title
+        verified_at:
+          type: string
+          description: When the step's evidence was last confirmed
+          format: date-time
+      description: One recommended action, verified against real evidence.
+      required:
+        - slug
+        - title
+        - description
+        - technique_slug
+        - destination
+        - evidence
+    OnboardingUseCaseStatus:
+      type: object
+      properties:
+        next_step:
+          $ref: '#/components/schemas/OnboardingStep'
+        selected:
+          type: boolean
+          description: Whether this is the use case the admin picked
+        use_case:
+          type: string
+          enum:
+            - observability
+            - cost-tracking
+            - security
+            - mcp-gateway
+        verified:
+          type: boolean
+          description: Whether the organization has evidence for this use case in the last 30 days
+      required:
+        - use_case
+        - verified
+        - selected
+    OnboardingUseCaseStatusResult:
+      type: object
+      properties:
+        statuses:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingUseCaseStatus'
+          description: One entry per use case
+      required:
+        - statuses
+    OnboardingVerifyStepResult:
+      type: object
+      properties:
+        evidence:
+          type: string
+          description: Human-readable summary of what was or was not found
+        state:
+          $ref: '#/components/schemas/OnboardingState'
+        verified:
+          type: boolean
+          description: Whether the step's evidence was found
+      required:
+        - verified
+        - evidence
+        - state
     OpenAPIv3DeploymentAsset:
       type: object
       properties:
@@ -91638,6 +92412,30 @@ components:
         - policy_id
         - chat_id
         - verdict
+    SaveStackRequestBody:
+      type: object
+      properties:
+        mdm_vendor:
+          type: string
+          enum:
+            - jamf
+            - intune
+            - iru
+            - none
+        product_slugs:
+          type: array
+          items:
+            type: string
+          description: Products the organization uses. Each must belong to a selected provider.
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingSelectedProvider'
+          description: Providers the organization uses, each with the plan it is on
+      required:
+        - providers
+        - product_slugs
+        - mdm_vendor
     ScopeDefinition:
       type: object
       properties:
@@ -92172,6 +92970,18 @@ components:
         - in_placement
         - scheme
         - env_variables
+    SelectUseCaseRequestBody:
+      type: object
+      properties:
+        use_case:
+          type: string
+          enum:
+            - observability
+            - cost-tracking
+            - security
+            - mcp-gateway
+      required:
+        - use_case
     Selector:
       type: object
       properties:
@@ -100195,6 +101005,14 @@ components:
       description: Result of a live 'who am I' probe against a platform credential's resolved identity.
       required:
         - verified
+    VerifyStepRequestBody:
+      type: object
+      properties:
+        step_slug:
+          type: string
+          description: Slug of a step in the organization's plan
+      required:
+        - step_slug
     VerifyURLForm:
       type: object
       properties:
@@ -100493,6 +101311,8 @@ tags:
     description: Manage an organization's private network ingress desired state.
   - name: oktaResourceConnections
     description: 'Okta resource connections per MCP server: what the organization administrator still has to do in the identity provider console, what they confirmed, and what the exchange path observed. Advisory only; the exchange path never consults it.'
+  - name: onboarding
+    description: 'Organization onboarding: the organization''s stack, the one use case to reach first, the one next step to get there, and verification against real evidence.'
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: otel
