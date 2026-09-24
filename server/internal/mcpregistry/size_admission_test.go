@@ -94,8 +94,8 @@ func TestSQLStoredRecordLimitAdmission(t *testing.T) {
 	raw := []byte(basicRecord)
 	_, err := q.CreateEntry(ctx, repo.CreateEntryParams{Data: raw, StoredRecordLimit: 1})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
-	var count int
-	require.NoError(t, db.QueryRow(ctx, "SELECT count(*) FROM mcp_registry_entries").Scan(&count))
+	count, err := q.CountRegistryEntries(ctx)
+	require.NoError(t, err)
 	require.Zero(t, count)
 	original, err := q.CreateEntry(ctx, repo.CreateEntryParams{Data: raw, StoredRecordLimit: StoredRecordByteLimit})
 	require.NoError(t, err)
