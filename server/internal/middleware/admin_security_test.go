@@ -158,6 +158,13 @@ func TestAdminOriginCheck_NativeMCPWithoutOriginOnly(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusForbidden, rec.Code)
+	for _, path := range []string{"/admin-mcp/token", "/admin-mcp/register"} {
+		req := httptest.NewRequest(http.MethodPost, "https://staff.example.test"+path, nil)
+		req.Header.Set("Origin", "null")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusForbidden, rec.Code, path)
+	}
 	req.Header.Del("Origin")
 	req.Header.Set("Referer", "https://other.example.test/authorization")
 	rec = httptest.NewRecorder()
