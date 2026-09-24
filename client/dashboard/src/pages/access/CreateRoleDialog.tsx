@@ -250,6 +250,12 @@ export function CreateRoleDialog({
         resourceType: "agent",
         description: "Agents available within the organization.",
       },
+      {
+        label: "Workload Identities",
+        resourceType: "workload",
+        description:
+          "The trust policy deciding which machines the organization recognises.",
+      },
     ];
     return groupOrder.map((g) => ({
       ...g,

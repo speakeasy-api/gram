@@ -89129,6 +89129,10 @@ components:
                         - agent:write
                         - agent:authorize
                         - agent:transfer
+                        - workload:read
+                        - workload:blocked_read
+                        - workload:write
+                        - workload:blocked_write
                         - org:device_agent_sync
                         - org:hooks_ingest
                 selectors:
@@ -89174,6 +89178,10 @@ components:
                             - agent:write
                             - agent:authorize
                             - agent:transfer
+                            - workload:read
+                            - workload:blocked_read
+                            - workload:write
+                            - workload:blocked_write
                             - org:device_agent_sync
                             - org:hooks_ingest
                     description: The inherited scopes the primary scope grants.
@@ -95263,6 +95271,8 @@ components:
                         - agent:write
                         - agent:authorize
                         - agent:transfer
+                        - workload:read
+                        - workload:write
                         - org:device_agent_sync
                         - org:hooks_ingest
             description: Form for requesting access to a scope.
@@ -97167,6 +97177,10 @@ components:
                         - agent:write
                         - agent:authorize
                         - agent:transfer
+                        - workload:read
+                        - workload:blocked_read
+                        - workload:write
+                        - workload:blocked_write
                         - org:device_agent_sync
                         - org:hooks_ingest
                 selectors:
@@ -97374,6 +97388,8 @@ components:
                         - skill:blocked_write
                         - plugin:blocked_write
                         - risk_policy:bypass
+                        - workload:blocked_read
+                        - workload:blocked_write
                 resource_type:
                     type: string
                     description: The type of resource this scope applies to.
@@ -97386,6 +97402,7 @@ components:
                         - risk_policy
                         - chat
                         - agent
+                        - workload
                 slug:
                     type: string
                     description: Unique scope identifier.
@@ -97423,6 +97440,10 @@ components:
                         - agent:write
                         - agent:authorize
                         - agent:transfer
+                        - workload:read
+                        - workload:blocked_read
+                        - workload:write
+                        - workload:blocked_write
                         - org:device_agent_sync
                         - org:hooks_ingest
                 visibility:
@@ -97911,6 +97932,7 @@ components:
                         - risk_policy
                         - chat
                         - agent
+                        - workload
                         - '*'
                 server_url:
                     type: string
