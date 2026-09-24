@@ -37,7 +37,7 @@ func (r *publicationRequester) Organization(_ context.Context, _ pgx.Tx, organiz
 
 func TestNetworkIngressCreateRollsBackWhenEnqueueFails(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestServiceWithRequester(t, true, failingReconcileRequester{})
+	ctx, ti := newTestServiceWithRequester(t, true, failingReconcileRequester{}, nil)
 	_, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: "private", OauthClientID: "client", OauthClientSecret: "secret"})
 	require.Error(t, err)
 	_, err = repo.New(ti.conn).GetNetworkIngressByOrganization(ctx, ti.orgID)
@@ -46,7 +46,7 @@ func TestNetworkIngressCreateRollsBackWhenEnqueueFails(t *testing.T) {
 
 func TestNetworkIngressPublicationRequesterIsOffByDefault(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestService(t)
+	ctx, ti := newTestServiceWithRequester(t, true, networkingress.NewOutboxRequester("test-network-ingress"), nil)
 	ti.create(t, ctx)
 	require.NoError(t, ti.service.DeleteIngress(ctx, &gen.DeleteIngressPayload{}))
 }

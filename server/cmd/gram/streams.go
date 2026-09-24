@@ -635,7 +635,7 @@ func newStreamsCommand() *cli.Command {
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
-				if c.Bool("plugin-publication-consume-enabled") {
+				if c.Bool(pluginPublicationConsumeFlagName) {
 					publicationHandler := plugins.NewPublicationHandler(logger, db, (&background.TemporalPluginPublisher{TemporalEnv: temporalEnv}).SignalPluginPublish)
 					organizationPublicationHandler := plugins.NewOrganizationPublicationHandler(logger, db)
 					settings := gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second}

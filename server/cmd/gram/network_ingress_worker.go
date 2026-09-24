@@ -198,7 +198,7 @@ func newNetworkIngressWorkerCommand() *cli.Command {
 				return errors.New("private ingress reconciler requires in-cluster Kubernetes clients")
 			}
 			var publicationRequester networkingress.PublicationRequester
-			if c.Bool("plugin-publication-emit-enabled") {
+			if c.Bool(pluginPublicationEmitFlagName) {
 				publicationRequester = plugins.PublicationRequests{Enabled: true}
 			}
 			executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, config, publicationRequester)

@@ -253,7 +253,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 		}
 	}
 
-	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{mcpServerID}, metaMcpServerID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
@@ -261,7 +261,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	}
 
 	s.triggerPluginPublish(ctx, authCtx, attached, pluginCreated)
-	if !attached && !s.publicationRequests.Enabled {
+	if !attached {
 		s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{mcpServerID}, metaMcpServerID)
 	}
 
@@ -608,15 +608,13 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 		}
 	}
 
-	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{existing.McpServerID, updated.McpServerID}, existing.MetaMcpServerID, updated.MetaMcpServerID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	if !s.publicationRequests.Enabled {
-		s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{existing.McpServerID, updated.McpServerID}, existing.MetaMcpServerID, updated.MetaMcpServerID)
-	}
+	s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{existing.McpServerID, updated.McpServerID}, existing.MetaMcpServerID, updated.MetaMcpServerID)
 
 	if wasRoot && existing.CustomDomainID.Valid {
 		if err := s.reconcileCustomDomains(ctx, []uuid.UUID{existing.CustomDomainID.UUID}); err != nil {
@@ -744,15 +742,13 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		}
 	}
 
-	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+	if err := s.requestPublicationForMCPMembership(ctx, dbtx, authCtx, []uuid.NullUUID{existing.McpServerID}, existing.MetaMcpServerID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "enqueue endpoint publication").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	if !s.publicationRequests.Enabled {
-		s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{existing.McpServerID}, existing.MetaMcpServerID)
-	}
+	s.publishForMCPMembership(ctx, authCtx, []uuid.NullUUID{existing.McpServerID}, existing.MetaMcpServerID)
 
 	if wasRoot {
 		if err := s.reconcileCustomDomains(ctx, []uuid.UUID{existing.CustomDomainID.UUID}); err != nil {

@@ -1552,7 +1552,7 @@ func newStartCommand() *cli.Command {
 			if pluginPublisher != nil {
 				pluginPublisher.WithDistributionAdmission(distributionAdmission)
 			}
-			publicationEmit := c.Bool("plugin-publication-emit-enabled")
+			publicationEmit := c.Bool(pluginPublicationEmitFlagName)
 			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler).
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit)
 			plugins.Attach(mux, pluginsSvc)

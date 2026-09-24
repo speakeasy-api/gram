@@ -2,6 +2,7 @@ package mcpendpoints
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 
@@ -22,36 +23,40 @@ func (s *Service) publishForMCPMembership(ctx context.Context, authCtx *contextv
 	if !connected {
 		return
 	}
+	attached, err := hasPluginMembershipForEndpoint(ctx, pluginsrepo.New(s.db), *authCtx.ProjectID, serverIDs, gatewayIDs)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "check plugin membership after endpoint mutation", attr.SlogError(err))
+		return
+	}
+	if attached {
+		s.triggerPluginPublish(ctx, authCtx, true, false)
+	}
+}
+
+func hasPluginMembershipForEndpoint(ctx context.Context, queries *pluginsrepo.Queries, projectID uuid.UUID, serverIDs, gatewayIDs []uuid.NullUUID) (bool, error) {
 	for _, id := range gatewayIDs {
 		if !id.Valid {
 			continue
 		}
-		attached, err := pluginsrepo.New(s.db).HasPluginMembershipForGateway(ctx, pluginsrepo.HasPluginMembershipForGatewayParams{
-			ProjectID: *authCtx.ProjectID, GatewayID: id.UUID,
-		})
+		attached, err := queries.HasPluginMembershipForGateway(ctx, pluginsrepo.HasPluginMembershipForGatewayParams{ProjectID: projectID, GatewayID: id.UUID})
 		if err != nil {
-			s.logger.ErrorContext(ctx, "check gateway plugin membership after endpoint mutation", attr.SlogError(err))
-			continue
+			return false, fmt.Errorf("check gateway plugin membership: %w", err)
 		}
 		if attached {
-			s.triggerPluginPublish(ctx, authCtx, true, false)
-			return
+			return true, nil
 		}
 	}
 	for _, id := range serverIDs {
 		if !id.Valid {
 			continue
 		}
-		attached, err := pluginsrepo.New(s.db).HasPluginMembershipForMCPServer(ctx, pluginsrepo.HasPluginMembershipForMCPServerParams{
-			ProjectID: *authCtx.ProjectID, McpServerID: id.UUID,
-		})
+		attached, err := queries.HasPluginMembershipForMCPServer(ctx, pluginsrepo.HasPluginMembershipForMCPServerParams{ProjectID: projectID, McpServerID: id.UUID})
 		if err != nil {
-			s.logger.ErrorContext(ctx, "check plugin membership after endpoint mutation", attr.SlogError(err))
-			continue
+			return false, fmt.Errorf("check MCP plugin membership: %w", err)
 		}
 		if attached {
-			s.triggerPluginPublish(ctx, authCtx, true, false)
-			return
+			return true, nil
 		}
 	}
+	return false, nil
 }

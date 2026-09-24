@@ -878,7 +878,7 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 
 	// A live server's mode, name or visibility can change generated package
 	// bytes; let the existing publisher coalesce and fingerprint unchanged ones.
-	if attached || (!s.publicationRequests.Enabled && existing.Visibility != VisibilityDisabled) {
+	if attached || existing.Visibility != VisibilityDisabled {
 		connected, connectionErr := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(ctx, *authCtx.ProjectID)
 		if connectionErr != nil {
 			logger.WarnContext(ctx, "check marketplace connection after MCP update", attr.SlogError(connectionErr))
@@ -1256,7 +1256,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
-	if !s.publicationRequests.Enabled && len(detachedPluginServers) > 0 {
+	if len(detachedPluginServers) > 0 {
 		connected, connectionErr := pluginsrepo.New(s.db).HasPluginGithubConnectionForProject(ctx, *authCtx.ProjectID)
 		if connectionErr != nil {
 			logger.WarnContext(ctx, "check marketplace connection after MCP deletion", attr.SlogError(connectionErr))

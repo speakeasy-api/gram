@@ -107,10 +107,10 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 func newTestServiceWithRuntime(t *testing.T, enabled bool) (context.Context, *testInstance) {
 	t.Helper()
-	return newTestServiceWithRequester(t, enabled, networkingress.NewOutboxRequester("test-network-ingress"))
+	return newTestServiceWithRequester(t, enabled, networkingress.NewOutboxRequester("test-network-ingress"), nil)
 }
 
-func newTestServiceWithRequester(t *testing.T, enabled bool, requester networkingress.ReconcileRequester, publicationRequesters ...networkingress.PublicationRequester) (context.Context, *testInstance) {
+func newTestServiceWithRequester(t *testing.T, enabled bool, requester networkingress.ReconcileRequester, publicationRequester networkingress.PublicationRequester) (context.Context, *testInstance) {
 	t.Helper()
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
@@ -137,10 +137,6 @@ func newTestServiceWithRequester(t *testing.T, enabled bool, requester networkin
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	admission := networkingress.NewExpansionAdmission(features, true, enabled)
 	enc := testenv.NewEncryptionClient(t)
-	var publicationRequester networkingress.PublicationRequester
-	if len(publicationRequesters) > 0 {
-		publicationRequester = publicationRequesters[0]
-	}
 	service := networkingress.NewServiceWithPublication(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), enc, audit.NewLogger(), admission, requester, publicationRequester, nil)
 
 	ti := &testInstance{service: service, conn: conn, features: features, orgID: orgID, orgSlug: orgSlug}

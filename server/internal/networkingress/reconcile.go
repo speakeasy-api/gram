@@ -224,7 +224,11 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 	if err != nil {
 		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
 	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
+	defer o11y.NoLogDefer(func() error {
+		rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		return tx.Rollback(rollbackCtx)
+	})
 	queries := repo.New(tx)
 	if err := queries.AcquireNetworkIngressOrganizationLock(ctx, row.OrganizationID); err != nil {
 		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
@@ -285,7 +289,11 @@ func (e *Executor) record(ctx context.Context, conn *pgxpool.Conn, row repo.Netw
 	if err != nil {
 		return ReconcileResult{Requeue: false}, reconcileFailure("database_unavailable")
 	}
-	defer o11y.NoLogDefer(func() error { return tx.Rollback(context.WithoutCancel(ctx)) })
+	defer o11y.NoLogDefer(func() error {
+		rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		return tx.Rollback(rollbackCtx)
+	})
 	queries := repo.New(tx)
 	current, err := queries.LockNetworkIngressForReconcile(ctx, repo.LockNetworkIngressForReconcileParams{ID: row.ID, OrganizationID: row.OrganizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
