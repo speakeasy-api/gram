@@ -147,6 +147,7 @@ func TestContextToolReturnsOnlyAuthenticatedContext(t *testing.T) {
 	require.Equal(t, "staff@example.test", message.Result.StructuredContent.Email)
 	require.True(t, message.Result.StructuredContent.ReadOnly)
 	require.Equal(t, []string{"admin:read"}, message.Result.StructuredContent.Scopes)
+	require.Equal(t, []string{"inspect staff admin context"}, message.Result.StructuredContent.Workflows)
 	require.NotContains(t, response.Body.String(), "test-token")
 	require.NotContains(t, response.Body.String(), "test-connection")
 }
