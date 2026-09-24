@@ -606,6 +606,7 @@ function createRegistryEntriesQuery(params: AdminListRegistryEntriesRequest) {
     queryFn: (context) => redirecting(generated.queryFn(context)),
   });
 }
+
 function createRegistryEntryQuery(id: string) {
   const generated = buildAdminGetRegistryEntryQuery(redirectingClient, { id });
   return queryOptions({
@@ -625,6 +626,7 @@ export function useCreateRegistryEntryMutation(): UseMutationResult<
     retry: false,
   });
 }
+
 export function useSaveRegistryEntryMutation(): UseMutationResult<
   AdminSaveRegistryEntryMutationData,
   AdminSaveRegistryEntryMutationError,
@@ -635,6 +637,7 @@ export function useSaveRegistryEntryMutation(): UseMutationResult<
     retry: false,
   });
 }
+
 export function useSetRegistryEntryPublishedMutation(): UseMutationResult<
   AdminSetRegistryEntryPublishedMutationData,
   AdminSetRegistryEntryPublishedMutationError,

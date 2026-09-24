@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateRegistryText } from "./registryValidation";
+
 describe("registry syntax and size validation", () => {
   it.each([
     "{}",
@@ -9,9 +10,11 @@ describe("registry syntax and size validation", () => {
   ])("leaves field validation to the server: %s", (raw) => {
     expect(validateRegistryText(raw)).toEqual([]);
   });
+
   it("reports invalid JSON syntax", () => {
     expect(validateRegistryText("{")[0]?.path).toBe("/");
   });
+
   it("bounds UTF-8 record bytes and escaped envelope bytes", () => {
     expect(
       validateRegistryText("é".repeat(4 * 1024 * 1024 + 1))[0]?.message,

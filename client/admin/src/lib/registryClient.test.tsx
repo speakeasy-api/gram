@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { renderWithApp } from "@/test/harness";
+
 const save = vi.hoisted(() => vi.fn());
 vi.mock("@gram/admin-client/react-query/adminSaveRegistryEntry", () => ({
   buildAdminSaveRegistryEntryMutation: () => ({
@@ -9,6 +10,7 @@ vi.mock("@gram/admin-client/react-query/adminSaveRegistryEntry", () => ({
   }),
 }));
 import { useSaveRegistryEntryMutation } from "./gramAdminClient";
+
 const dataJson =
   '{"server":{"name":"example.test/demo"},"_meta":{"n":9007199254740993}}';
 const updatedAt = "2026-09-21T12:00:00.123456Z";
@@ -28,6 +30,7 @@ function Probe() {
     </>
   );
 }
+
 it("passes raw text and opaque token through the normal mutation layer", async () => {
   save.mockResolvedValue({
     id,

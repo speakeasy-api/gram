@@ -30,6 +30,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
+
 function errorStatus(error: unknown): number | undefined {
   return error &&
     typeof error === "object" &&
@@ -38,15 +39,18 @@ function errorStatus(error: unknown): number | undefined {
     ? error.statusCode
     : undefined;
 }
+
 function errorText(error: unknown): string {
   return error instanceof Error
     ? error.message
     : "Request failed. Your text has been retained.";
 }
+
 // Mount a fresh editor per opening; background query updates never initialize it again.
 export function RegistryEntrySheet(props: Props): JSX.Element | null {
   return props.open ? <Editor key={props.id ?? "new"} {...props} /> : null;
 }
+
 function Editor({ id, open, onOpenChange }: Props): JSX.Element {
   const queryClient = useQueryClient();
   const [base, setBase] = useState<AdminRegistryEntry | null>(null);
@@ -64,6 +68,7 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
     setBase(detail.data);
     setText(detail.data.dataJson);
   }
+
   const loaded = id === null || base !== null;
   const dirty = loaded && text !== (base?.dataJson ?? EMPTY);
   useBlocker({
@@ -79,6 +84,7 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
     )
       onOpenChange(false);
   };
+
   const accept = async (entry: AdminRegistryEntry): Promise<void> => {
     await queryClient.cancelQueries({
       queryKey: registryEntryQuery(entry.id).queryKey,
@@ -93,6 +99,7 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
       predicate: (query) => query.queryKey.includes("listRegistryEntries"),
     });
   };
+
   const perform = async (
     kind: "save" | "visibility" | "reload",
   ): Promise<void> => {
@@ -107,9 +114,11 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
       !window.confirm("Reload the current entry and discard your edits?")
     )
       return;
+
     inFlight.current = true;
     setBusy(true);
     setFailure(null);
+
     try {
       if (kind === "reload") {
         const result = await detail.refetch();
@@ -151,6 +160,7 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
       setBusy(false);
     }
   };
+
   return (
     <Sheet
       open={open}
