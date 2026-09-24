@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
@@ -133,16 +134,17 @@ func TestExpiredRefreshableTokenStillAllowsManualSync(t *testing.T) {
 	require.True(t, result.Accepted)
 }
 
-func TestScheduledSyncAuditsAsSystem(t *testing.T) {
+func TestScheduledSyncIsNotAudited(t *testing.T) {
 	t.Parallel()
 	ctx, f := newService(t)
 	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
 	input := syncRequest(f, c)
 	input.ActorID = ""
 	require.NoError(t, syncer(f, snapshot("UEXAMPLE01")).Run(ctx, input, nil))
-	entry, err := audittest.LatestAuditLogByAction(ctx, f.db, audit.ActionSlackDirectoryConnectionSync)
+	require.Len(t, members(t, ctx, f), 1)
+	count, err := audittest.AuditLogCountByAction(ctx, f.db, audit.ActionSlackDirectoryConnectionSync)
 	require.NoError(t, err)
-	require.Equal(t, "slack-directory-schedule", entry.ActorID)
+	require.Zero(t, count)
 }
 
 func TestProviderRefreshRotatesTokens(t *testing.T) {
@@ -188,4 +190,32 @@ func TestProviderRefreshRotatesTokens(t *testing.T) {
 			require.WithinDuration(t, time.Now().Add(12*time.Hour), *tokens.ExpiresAt, time.Minute)
 		})
 	}
+}
+
+func TestSweepBacksOffAFailingWorkspace(t *testing.T) {
+	t.Parallel()
+	ctx, f := newService(t)
+	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
+	tooLarge := directoryFunc(func(context.Context, string, string, func(slackdirectoryconnections.SyncProgress)) ([]slackdirectoryconnections.DirectoryMember, error) {
+		return nil, &slackdirectoryconnections.SyncError{Code: "directory_too_large", Retryable: false, Reconnect: false, RetryAfter: 0}
+	})
+	require.Error(t, syncer(f, tooLarge).Run(ctx, syncRequest(f, c), nil))
+	due := func(failedAfter time.Time) int {
+		rows, err := repo.New(f.db).ListDueSlackDirectorySyncs(ctx, repo.ListDueSlackDirectorySyncsParams{
+			ExcludedOrganizationID: "org_synthetic_excluded",
+			StartedBefore:          pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+			FailedAfter:            pgtype.Timestamptz{Time: failedAfter, Valid: true, InfinityModifier: pgtype.Finite},
+			MaxRows:                100,
+		})
+		require.NoError(t, err)
+		n := 0
+		for _, row := range rows {
+			if row.ID.String() == c.ID {
+				n++
+			}
+		}
+		return n
+	}
+	require.Zero(t, due(time.Now().Add(-6*time.Hour)), "a recent failure is backed off")
+	require.Equal(t, 1, due(time.Now().Add(time.Hour)), "an older failure is retried")
 }

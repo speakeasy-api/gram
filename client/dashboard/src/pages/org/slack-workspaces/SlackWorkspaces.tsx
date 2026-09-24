@@ -299,7 +299,7 @@ function SlackWorkspacesContent(): JSX.Element {
           if (!open) close();
         }}
         title={`Disconnect ${selected?.workspaceName || selected?.workspaceId || "workspace"}?`}
-        description="Speakeasy will stop using this connection. The workspace is hidden from this list, the app stays installed in Slack, and its history is kept. Connect it again to restore it."
+        description="Speakeasy stops using this connection and deletes the workspace's synced members. The app stays installed in Slack. Connecting the workspace again starts a fresh sync."
         confirmLabel="Disconnect workspace"
         isPending={disconnect.isPending}
         error={disconnect.error?.message}

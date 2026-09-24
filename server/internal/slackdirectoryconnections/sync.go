@@ -246,8 +246,11 @@ func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(Sy
 	beforeView.MemberCount = previousCount
 	afterView := mv.BuildSlackDirectoryConnectionView(after)
 	afterView.MemberCount = int64(len(members))
-	if err := s.audit.LogSlackDirectoryConnectionSync(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: input.OrganizationID, Actor: syncActor(input), ActorDisplayName: nil, ConnectionURN: urn.NewSlackDirectoryConnection(current.ID), ConnectionSnapshotBefore: beforeView, ConnectionSnapshotAfter: afterView}, audit.SlackDirectorySyncSummary{Observed: len(members), ExcludedExternal: progress.ExcludedExternal, Bots: progress.Bots}); err != nil {
-		return fmt.Errorf("audit Slack snapshot: %w", err)
+	// Scheduled syncs are routine system work; auditing each would add 48 entries per workspace per day.
+	if input.ActorID != "" {
+		if err := s.audit.LogSlackDirectoryConnectionSync(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: input.OrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorID), ActorDisplayName: nil, ConnectionURN: urn.NewSlackDirectoryConnection(current.ID), ConnectionSnapshotBefore: beforeView, ConnectionSnapshotAfter: afterView}, audit.SlackDirectorySyncSummary{Observed: len(members), ExcludedExternal: progress.ExcludedExternal, Bots: progress.Bots}); err != nil {
+			return fmt.Errorf("audit Slack snapshot: %w", err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit Slack snapshot: %w", err)
@@ -266,12 +269,4 @@ func (s *DirectorySync) recordFailure(ctx context.Context, queries *repo.Queries
 		return nil
 	}
 	return failure
-}
-
-// Scheduled syncs have no requesting user.
-func syncActor(input SyncInput) urn.Principal {
-	if input.ActorID == "" {
-		return urn.NewSystemPrincipal("slack-directory-schedule")
-	}
-	return urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorID)
 }

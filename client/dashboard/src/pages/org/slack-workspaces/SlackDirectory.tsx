@@ -173,7 +173,7 @@ export function SlackDirectory({
           ))}
       </div>
       <MemberTable
-        key={`${connectionId ?? "all"}:${search}:${connections.map((c) => c.lastFullSyncSucceededAt ?? "").join(",")}`}
+        key={`${connectionId ?? "all"}:${search}`}
         connectionId={connectionId}
         search={search}
         syncing={connections.some(syncInProgress)}

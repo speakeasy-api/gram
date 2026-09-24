@@ -62,6 +62,8 @@ const (
 	slackDirectorySweepDueAfter = 25 * time.Minute
 	// Bounds child starts per tick; later workspaces are picked up by the next tick.
 	slackDirectorySweepMaxWorkspaces = 100
+	// A workspace whose latest sync failed is retried by the sweep at most this often.
+	slackDirectorySweepFailureBackoff = 6 * time.Hour
 )
 
 func slackDirectorySweepScheduleID(queue tenv.TaskQueueName) string {
@@ -100,6 +102,7 @@ func (a *slackDirectoryActivities) ListDueSlackDirectories(ctx context.Context) 
 	rows, err := slackrepo.New(a.db).ListDueSlackDirectorySyncs(ctx, slackrepo.ListDueSlackDirectorySyncsParams{
 		ExcludedOrganizationID: constants.DemoOrganizationID,
 		StartedBefore:          pgtype.Timestamptz{Time: time.Now().Add(-slackDirectorySweepDueAfter), Valid: true, InfinityModifier: pgtype.Finite},
+		FailedAfter:            pgtype.Timestamptz{Time: time.Now().Add(-slackDirectorySweepFailureBackoff), Valid: true, InfinityModifier: pgtype.Finite},
 		MaxRows:                slackDirectorySweepMaxWorkspaces,
 	})
 	if err != nil {

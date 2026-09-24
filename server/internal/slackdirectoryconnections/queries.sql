@@ -153,5 +153,7 @@ SELECT organization_id, id, generation FROM slack_directory_connections
 WHERE disconnected_at IS NULL AND health = 'connected' AND credentials_encrypted IS NOT NULL
   AND organization_id <> @excluded_organization_id
   AND (last_sync_started_at IS NULL OR last_sync_started_at < @started_before)
+  -- Back off a workspace whose latest attempt failed, so a permanent error is not retried every tick.
+  AND NOT (last_sync_failed_at IS NOT NULL AND last_sync_failed_at > coalesce(last_full_sync_succeeded_at, '-infinity'::timestamptz) AND last_sync_failed_at > @failed_after)
 ORDER BY last_sync_started_at ASC NULLS FIRST, id
 LIMIT @max_rows;
