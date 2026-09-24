@@ -386,7 +386,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "43"
+const hooksGeneratorVersion = "44"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -1673,6 +1673,22 @@ const apply = (target: any, reply: any) => {
   }
 }
 
+const sum = (a: any, b: any) => (typeof b === "number" ? (a ?? 0) + b : a)
+
+// Stop usage is the turn's total across every step.
+const addUsage = (acc: any, step: any) => ({
+  cost: sum(acc?.cost, step?.cost),
+  tokens: {
+    input: sum(acc?.tokens?.input, step?.tokens?.input),
+    output: sum(acc?.tokens?.output, step?.tokens?.output),
+    reasoning: sum(acc?.tokens?.reasoning, step?.tokens?.reasoning),
+    cache: {
+      read: sum(acc?.tokens?.cache?.read, step?.tokens?.cache?.read),
+      write: sum(acc?.tokens?.cache?.write, step?.tokens?.cache?.write),
+    },
+  },
+})
+
 const legacy = async (ctx: any) => {
   const { call, close } = connect()
   const failedCalls = new Set<string>()
@@ -1771,7 +1787,7 @@ const setup = async (ctx: any) => {
   const own = new Set<string>()
   const injected = new Map<string, string>()
   const finalText = new Map<string, { id: string; texts: string[] }>()
-  const usage = new Map<string, unknown>()
+  const usage = new Map<string, any>()
   const turn = new Map<string, string>()
 
   let inventory: Record<string, unknown> | undefined
@@ -1882,7 +1898,15 @@ const setup = async (ctx: any) => {
         return
       }
       case "session.step.ended":
-        if (sid && own.has(sid)) usage.set(sid, { tokens: d.tokens, cost: d.cost })
+        if (sid && own.has(sid)) usage.set(sid, addUsage(usage.get(sid), d))
+        return
+      case "session.deleted":
+        if (!sid) return
+        own.delete(sid)
+        turn.delete(sid)
+        injected.delete(sid)
+        finalText.delete(sid)
+        usage.delete(sid)
         return
       case "session.execution.succeeded":
       case "session.execution.failed":
@@ -1890,6 +1914,8 @@ const setup = async (ctx: any) => {
         if (!sid || !own.has(sid)) return
         const text = finalText.get(sid)?.texts.filter(Boolean).join("\n")
         const u = usage.get(sid)
+        finalText.delete(sid)
+        usage.delete(sid)
         return send("session.idle", {
           sessionID: sid,
           ...(text ? { finalMessage: text } : {}),
