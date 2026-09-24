@@ -8,7 +8,7 @@ import (
 
 func TestRecordContract(t *testing.T) {
 	t.Parallel()
-	raw, err := os.ReadFile("contract-cases.json")
+	raw, err := os.ReadFile("testdata/contract-cases.json")
 	if err != nil {
 		t.Fatal(err)
 	}
