@@ -2084,6 +2084,37 @@ func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
 	require.True(t, ok, "opencode package must ship the hooks bootstrapper the shim spawns")
 }
 
+// OpenCode 2 rejects a module without a default {id, setup} export and
+// OpenCode 1 only reaches the config hook through server(); pin both.
+func TestGenerateOpenCodeFeatureLoaderSupportsV1AndV2(t *testing.T) {
+	t.Parallel()
+	p := PluginInfo{
+		Name:    "Engineering Tools",
+		Slug:    "engineering-tools",
+		Servers: []PluginServerInfo{{DisplayName: "widget", MCPURL: "https://app.getgram.ai/mcp/widget"}},
+		Skills:  []PluginSkillInfo{{Name: "triage", Content: "---\nname: triage\ndescription: Triage\n---\nBody\n"}},
+	}
+	files := map[string][]byte{}
+	require.NoError(t, generateOpenCodePluginInDir(files, "", p, GenerateConfig{OrgName: "Acme"}))
+
+	loader := string(files["plugin/engineering-tools.ts"])
+	require.NotContains(t, loader, "__SLUG__")
+	require.Contains(t, loader, `join(dirname(fileURLToPath(import.meta.url)), "..", "engineering-tools")`)
+	require.Contains(t, loader, "export default {")
+	require.Contains(t, loader, `id: "speakeasy.engineering-tools"`)
+	require.Contains(t, loader, "async setup(ctx: any)")
+	require.Contains(t, loader, "ctx.mcp.transform(")
+	require.Contains(t, loader, "ctx.skill.transform(")
+	require.Contains(t, loader, "async server()")
+	require.Contains(t, loader, "config: async (cfg: any)")
+	require.NotContains(t, loader, "export const", "a named export is invoked as a second V1 plugin")
+
+	_, ok := files["engineering-tools/mcp.json"]
+	require.True(t, ok, "the loader reads its servers from the sibling mcp.json")
+	_, ok = files["engineering-tools/skills/triage/SKILL.md"]
+	require.True(t, ok, "the loader registers skills from the sibling skills dir")
+}
+
 // The whole OpenClaw hook registration is the index.js shim and plugin
 // detection keys on package.json, so regressions are silent until a customer
 // install fails — pin the layout and the shim's serve-mode wiring.
