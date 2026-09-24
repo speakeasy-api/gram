@@ -12576,8 +12576,8 @@ type SetupWorkstreamResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Workstream display title.
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
-	// Ordered task keys available in this response. Hidden tasks are included only
-	// in authorized responses.
+	// Ordered task keys, limited to the tasks present in the same response. Hidden
+	// tasks appear only when the reader is authorized to see them.
 	TaskKeys []string `form:"task_keys,omitempty" json:"task_keys,omitempty" xml:"task_keys,omitempty"`
 }
 

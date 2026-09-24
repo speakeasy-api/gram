@@ -1,4 +1,3 @@
-import { ONBOARDING_WORKSTREAMS } from "./components/board/workstream-fixtures";
 import type { ReactNode } from "react";
 import {
   cleanup,
@@ -14,13 +13,11 @@ import { MemoryRouter, Routes, Route, useLocation } from "react-router";
 import SetupWizard from "./SetupWizard";
 import SetupTaskPage from "./SetupTaskPage";
 import { OnboardingBoard } from "./components/board/onboarding-board";
-import { resolveBoardTasks } from "./components/board/board-store";
 import { StepSection } from "./components/step-section";
 
 const mocks = vi.hoisted(() => ({
   setupQuery: vi.fn(),
   update: vi.fn(),
-  updatePending: false,
   platformAdmin: false,
   realRouter: false,
   invalidate: vi.fn(),
@@ -28,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   showPylonChat: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  toastWarning: vi.fn(),
   navigate: vi.fn(),
   searchParams: new URLSearchParams(),
   setSearchParams: vi.fn(),
@@ -130,14 +128,18 @@ vi.mock("@tanstack/react-query", () => ({
   useQuery: (query: unknown) => query,
 }));
 vi.mock("@gram/client/react-query/updateSetupTask.js", () => ({
-  useUpdateSetupTaskMutation: () => ({
-    mutateAsync: mocks.update,
-    isPending: mocks.updatePending,
-  }),
+  useUpdateSetupTaskMutation: () => ({ mutateAsync: mocks.update }),
+}));
+vi.mock("@gram/client/react-query/assignSetupWorkstream.js", () => ({
+  useAssignSetupWorkstreamMutation: () => ({ mutateAsync: vi.fn() }),
 }));
 vi.mock("@/lib/pylon", () => ({ showPylonChat: mocks.showPylonChat }));
 vi.mock("sonner", () => ({
-  toast: { success: mocks.toastSuccess, error: mocks.toastError },
+  toast: {
+    success: mocks.toastSuccess,
+    error: mocks.toastError,
+    warning: mocks.toastWarning,
+  },
 }));
 
 function task(
@@ -151,6 +153,7 @@ function task(
     description: `${title} description`,
     status,
     completedByFact: false,
+    countsTowardProgress: true,
     blockedBy: [],
     hidden: false,
   };
@@ -162,9 +165,15 @@ const tasks: SetupTask[] = [
   task("instrument-agents", "Set up observability in other platforms"),
 ];
 
-function loaded(list: SetupTask[] = tasks) {
+// One workstream in list order unless a test supplies its own membership.
+function loaded(
+  list: SetupTask[] = tasks,
+  workstreams = [
+    { id: "all", title: "All", taskKeys: list.map((item) => item.key) },
+  ],
+) {
   return {
-    data: { tasks: list },
+    data: { tasks: list, workstreams },
     isPending: false,
     isSuccess: true,
     isError: false,
@@ -183,7 +192,6 @@ function lastParams(): URLSearchParams {
 
 afterEach(cleanup);
 beforeEach(() => {
-  mocks.updatePending = false;
   mocks.platformAdmin = false;
   mocks.realRouter = false;
   mocks.searchParams = new URLSearchParams();
@@ -196,6 +204,7 @@ beforeEach(() => {
   mocks.showPylonChat.mockReset();
   mocks.toastSuccess.mockReset();
   mocks.toastError.mockReset();
+  mocks.toastWarning.mockReset();
 });
 
 describe("SetupWizard", () => {
@@ -207,7 +216,7 @@ describe("SetupWizard", () => {
     expect(rail().textContent).toContain(
       "Set up observability in other platforms",
     );
-    expect(screen.getByText("1 of 3 tasks complete")).toBeTruthy();
+    expect(screen.getByText("1 of 3 required tasks complete")).toBeTruthy();
     expect(
       screen.getByText("Content for anthropic-observability"),
     ).toBeTruthy();
@@ -260,7 +269,7 @@ describe("SetupWizard", () => {
     render(<SetupWizard />);
 
     expect(screen.getByText("Content for instrument-agents")).toBeTruthy();
-    expect(screen.getByText("3 of 3 tasks complete")).toBeTruthy();
+    expect(screen.getByText("3 of 3 required tasks complete")).toBeTruthy();
   });
 
   it("moves between cards from the rail, dropping the outgoing card's step", () => {
@@ -348,9 +357,11 @@ describe("SetupWizard", () => {
     );
   });
 
-  it("holds the reader's own moves while a completion is settling", () => {
-    mocks.updatePending = true;
+  it("holds the reader's own moves while a completion is settling", async () => {
+    mocks.update.mockReturnValue(new Promise(() => {}));
     render(<SetupWizard />);
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledOnce());
 
     // Completing advances once its mutation lands; a move made in that
     // window would be overwritten a moment later, so none is taken.
@@ -374,6 +385,8 @@ describe("SetupWizard", () => {
   });
 
   it("advances a verified task without rewriting its server-derived status", () => {
+    // Verified tasks count as done, so the walk only lands on one by link.
+    mocks.searchParams = new URLSearchParams("task=anthropic-observability");
     mocks.setupQuery.mockReturnValue(
       loaded(tasks.map((t) => ({ ...t, completedByFact: true }))),
     );
@@ -409,8 +422,7 @@ describe("SetupWizard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Complete" }));
     await waitFor(() => expect(mocks.invalidate).toHaveBeenCalled());
 
-    // The mutation is done (isPending is false in this suite) but the
-    // completion is still awaiting the refetch before it advances, so a
+    // The mutation is done but the completion is still awaiting the refetch before it advances, so a
     // move now would be overwritten a moment later.
     const skip = screen.getByRole("button", { name: "Skip task" });
     expect(skip.hasAttribute("disabled")).toBe(true);
@@ -482,6 +494,7 @@ describe("SetupWizard", () => {
       isPending: false,
       isSuccess: false,
       isError: true,
+      error: new Error("Read failed"),
       refetch,
     });
     render(<SetupWizard />);
@@ -496,7 +509,7 @@ it("places the workstreams return above rail progress and keeps only a mobile he
     "from=workstreams&task=anthropic-observability&step=confirm-traffic&projectSlug=selected&filter=mine",
   );
   render(<SetupWizard />);
-  const progress = screen.getByText("1 of 3 tasks complete");
+  const progress = screen.getByText("1 of 3 required tasks complete");
   const railReturn = within(progress.parentElement!).getByRole("link", {
     name: "Workstreams",
   });
@@ -534,14 +547,16 @@ it("keeps the ordinary wizard view switch in the desktop header only", () => {
   expect(link.querySelector("svg.lucide-arrow-left")).toBeNull();
 });
 
-it("disables both rail and mobile return controls while a write is pending", () => {
+it("disables both rail and mobile return controls while a write is pending", async () => {
   mocks.searchParams = new URLSearchParams("from=workstreams");
-  mocks.updatePending = true;
+  mocks.update.mockReturnValue(new Promise(() => {}));
   render(<SetupWizard />);
+  fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+  await waitFor(() => expect(mocks.update).toHaveBeenCalledOnce());
   expect(screen.queryByRole("link", { name: "Workstreams" })).toBeNull();
   const controls = screen.getAllByRole("button", { name: "Workstreams" });
   expect(controls).toHaveLength(2);
-  const progress = screen.getByText("1 of 3 tasks complete");
+  const progress = screen.getByText("1 of 3 required tasks complete");
   const railReturn = within(progress.parentElement!).getByRole("button", {
     name: "Workstreams",
   });
@@ -704,17 +719,6 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/hooks/useOrgSetupStarted", () => ({
   useOrgSetupStarted: () => ({ markSetupStarted: () => {} }),
 }));
-vi.mock("./components/board/use-onboarding-board", () => ({
-  useOnboardingBoard: () => ({
-    tasks: resolveBoardTasks(tasks),
-    workstreams: ONBOARDING_WORKSTREAMS,
-    canAssign: true,
-    canHideTasks: false,
-    canSetStatus: () => true,
-    isLoading: false,
-    isPending: false,
-  }),
-}));
 vi.mock("./components/board/workstream-column", () => ({
   WorkstreamColumn: () => null,
 }));
@@ -761,3 +765,78 @@ vi.mock("@/components/page-layout", () => {
   };
 });
 vi.mock("./components/board/task-card", () => ({ TaskCard: () => null }));
+
+describe("board and wizard parity", () => {
+  // The task array order deliberately disagrees with workstream membership.
+  const unordered = [
+    task("instrument-agents", "Set up observability in other platforms"),
+    task("platform-mcp", "Set up Platform MCP", "done"),
+    task("identity-provider", "Set up identity provider", "done"),
+    task("anthropic-observability", "Set up Anthropic observability"),
+  ].map((item) =>
+    item.key === "platform-mcp"
+      ? { ...item, countsTowardProgress: false }
+      : item,
+  );
+  const workstreams = [
+    { id: "connect", title: "Connect", taskKeys: ["identity-provider"] },
+    {
+      id: "observe",
+      title: "Observe",
+      taskKeys: ["anthropic-observability", "instrument-agents"],
+    },
+    { id: "distribute", title: "Gateway", taskKeys: ["platform-mcp"] },
+  ];
+
+  it("walks tasks in API workstream order, not task-array order", () => {
+    mocks.setupQuery.mockReturnValue(loaded(unordered, workstreams));
+    render(<SetupWizard />);
+    const text = rail().textContent ?? "";
+    const positions = [
+      "Set up identity provider",
+      "Set up Anthropic observability",
+      "Set up observability in other platforms",
+      "Set up Platform MCP",
+    ].map((title) => text.indexOf(title));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    // First open task by workstream order, not the array's first entry.
+    expect(
+      screen.getByText("Content for anthropic-observability"),
+    ).toBeTruthy();
+  });
+
+  it("excludes optional tasks from progress, exactly like the board", () => {
+    mocks.setupQuery.mockReturnValue(loaded(unordered, workstreams));
+    render(<SetupWizard />);
+    expect(screen.getByText("1 of 3 required tasks complete")).toBeTruthy();
+  });
+
+  it("advances when the save committed but the refresh failed", async () => {
+    mocks.invalidate.mockRejectedValueOnce(new Error("Offline"));
+    render(<SetupWizard />);
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+    await waitFor(() =>
+      expect(lastParams().get("task")).toBe("other-platforms"),
+    );
+    expect(mocks.toastWarning).toHaveBeenCalledOnce();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it("refuses a blocked completion without calling the server", async () => {
+    mocks.setupQuery.mockReturnValue(
+      loaded(
+        tasks.map((item) =>
+          item.key === "anthropic-observability"
+            ? { ...item, blockedBy: ["identity-provider"] }
+            : item,
+        ),
+      ),
+    );
+    render(<SetupWizard />);
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledOnce());
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+  });
+});

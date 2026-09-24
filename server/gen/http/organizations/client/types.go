@@ -225,7 +225,8 @@ type GenerateWorkOSAdminPortalLinkResponseBody struct {
 type ListSetupTasksResponseBody struct {
 	// Setup tasks in catalog order.
 	Tasks []*SetupTaskResponseBody `form:"tasks,omitempty" json:"tasks,omitempty" xml:"tasks,omitempty"`
-	// Canonical workstreams in display order, including hidden task keys.
+	// Canonical workstreams in display order. Membership is limited to the tasks
+	// present in this response.
 	Workstreams []*SetupWorkstreamResponseBody `form:"workstreams,omitempty" json:"workstreams,omitempty" xml:"workstreams,omitempty"`
 }
 
@@ -234,7 +235,8 @@ type ListSetupTasksResponseBody struct {
 type AssignSetupWorkstreamResponseBody struct {
 	// Setup tasks in catalog order.
 	Tasks []*SetupTaskResponseBody `form:"tasks,omitempty" json:"tasks,omitempty" xml:"tasks,omitempty"`
-	// Canonical workstreams in display order, including hidden task keys.
+	// Canonical workstreams in display order. Membership is limited to the tasks
+	// present in this response.
 	Workstreams []*SetupWorkstreamResponseBody `form:"workstreams,omitempty" json:"workstreams,omitempty" xml:"workstreams,omitempty"`
 }
 
@@ -252,6 +254,9 @@ type UpdateSetupTaskResponseBody struct {
 	// Whether current organization facts force the effective status to done. This
 	// field is read-only.
 	CompletedByFact *bool `form:"completed_by_fact,omitempty" json:"completed_by_fact,omitempty" xml:"completed_by_fact,omitempty"`
+	// Whether the task counts toward onboarding completion progress. Optional
+	// tasks are excluded. This field is read-only.
+	CountsTowardProgress *bool `form:"counts_toward_progress,omitempty" json:"counts_toward_progress,omitempty" xml:"counts_toward_progress,omitempty"`
 	// Current resolved user or email assignee.
 	Assignee *SetupTaskAssigneeResponseBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
 	// Incomplete prerequisite task keys.
@@ -3555,6 +3560,9 @@ type SetupTaskResponseBody struct {
 	// Whether current organization facts force the effective status to done. This
 	// field is read-only.
 	CompletedByFact *bool `form:"completed_by_fact,omitempty" json:"completed_by_fact,omitempty" xml:"completed_by_fact,omitempty"`
+	// Whether the task counts toward onboarding completion progress. Optional
+	// tasks are excluded. This field is read-only.
+	CountsTowardProgress *bool `form:"counts_toward_progress,omitempty" json:"counts_toward_progress,omitempty" xml:"counts_toward_progress,omitempty"`
 	// Current resolved user or email assignee.
 	Assignee *SetupTaskAssigneeResponseBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
 	// Incomplete prerequisite task keys.
@@ -3582,8 +3590,8 @@ type SetupWorkstreamResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Workstream display title.
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
-	// Ordered task keys available in this response. Hidden tasks are included only
-	// in authorized responses.
+	// Ordered task keys, limited to the tasks present in the same response. Hidden
+	// tasks appear only when the reader is authorized to see them.
 	TaskKeys []string `form:"task_keys,omitempty" json:"task_keys,omitempty" xml:"task_keys,omitempty"`
 }
 
@@ -6287,12 +6295,13 @@ func NewAssignSetupWorkstreamGatewayError(body *AssignSetupWorkstreamGatewayErro
 // "updateSetupTask" endpoint result from a HTTP "OK" response.
 func NewUpdateSetupTaskSetupTaskOK(body *UpdateSetupTaskResponseBody) *organizations.SetupTask {
 	v := &organizations.SetupTask{
-		Key:             *body.Key,
-		Title:           *body.Title,
-		Description:     *body.Description,
-		Status:          *body.Status,
-		CompletedByFact: *body.CompletedByFact,
-		Hidden:          *body.Hidden,
+		Key:                  *body.Key,
+		Title:                *body.Title,
+		Description:          *body.Description,
+		Status:               *body.Status,
+		CompletedByFact:      *body.CompletedByFact,
+		CountsTowardProgress: *body.CountsTowardProgress,
+		Hidden:               *body.Hidden,
 	}
 	if body.Assignee != nil {
 		v.Assignee = unmarshalSetupTaskAssigneeResponseBodyToOrganizationsSetupTaskAssignee(body.Assignee)
@@ -6754,6 +6763,9 @@ func ValidateUpdateSetupTaskResponseBody(body *UpdateSetupTaskResponseBody) (err
 	}
 	if body.CompletedByFact == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("completed_by_fact", "body"))
+	}
+	if body.CountsTowardProgress == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("counts_toward_progress", "body"))
 	}
 	if body.BlockedBy == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("blocked_by", "body"))
@@ -10981,6 +10993,9 @@ func ValidateSetupTaskResponseBody(body *SetupTaskResponseBody) (err error) {
 	}
 	if body.CompletedByFact == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("completed_by_fact", "body"))
+	}
+	if body.CountsTowardProgress == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("counts_toward_progress", "body"))
 	}
 	if body.BlockedBy == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("blocked_by", "body"))

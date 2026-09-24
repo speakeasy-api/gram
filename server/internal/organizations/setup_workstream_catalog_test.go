@@ -59,3 +59,73 @@ func TestSetupWorkstreamViewsDoNotAliasCatalog(t *testing.T) {
 	require.Equal(t, title, fresh[0].Title)
 	require.Equal(t, keys, fresh[0].TaskKeys)
 }
+
+// The catalog is the only source of task keys, so every reference into it —
+// preset selections and prerequisite edges — must resolve, and the prerequisite
+// graph must stay acyclic or projectSetupTasks would block tasks forever.
+func TestSetupTaskCatalogReferencesResolve(t *testing.T) {
+	t.Parallel()
+	seen := map[string]bool{}
+	for _, definition := range setupTaskCatalog {
+		require.NotEmpty(t, definition.Key)
+		require.NotEmpty(t, definition.Title)
+		require.NotEmpty(t, definition.Description)
+		require.False(t, seen[definition.Key], "task keys must be unique: %s", definition.Key)
+		seen[definition.Key] = true
+		for _, prerequisite := range definition.Prerequisites {
+			require.NotEqual(t, definition.Key, prerequisite, "a task cannot require itself: %s", definition.Key)
+			require.NotNil(t, setupTaskDefinitionForKey(prerequisite), "unknown prerequisite %q on %q", prerequisite, definition.Key)
+		}
+	}
+	for _, preset := range onboardingPresets() {
+		require.NotEmpty(t, preset.Key)
+		require.NotEmpty(t, preset.VisibleTaskKeys)
+		presetKeys := map[string]bool{}
+		for _, key := range preset.VisibleTaskKeys {
+			require.NotNil(t, setupTaskDefinitionForKey(key), "unknown task %q in preset %q", key, preset.Key)
+			require.False(t, presetKeys[key], "preset %q repeats task %q", preset.Key, key)
+			presetKeys[key] = true
+		}
+	}
+}
+
+func TestSetupTaskPrerequisitesAreAcyclic(t *testing.T) {
+	t.Parallel()
+	const (
+		unvisited = 0
+		onStack   = 1
+		done      = 2
+	)
+	state := map[string]int{}
+	var walk func(key string, path []string)
+	walk = func(key string, path []string) {
+		switch state[key] {
+		case done:
+			return
+		case onStack:
+			require.Failf(t, "prerequisite cycle", "cycle through %v back to %s", path, key)
+			return
+		}
+		state[key] = onStack
+		definition := setupTaskDefinitionForKey(key)
+		require.NotNil(t, definition)
+		for _, prerequisite := range definition.Prerequisites {
+			walk(prerequisite, append(path, key))
+		}
+		state[key] = done
+	}
+	for _, definition := range setupTaskCatalog {
+		walk(definition.Key, nil)
+	}
+}
+
+func TestSetupTaskProgressMetadataIsExplicit(t *testing.T) {
+	t.Parallel()
+	optional := []string{}
+	for _, definition := range setupTaskCatalog {
+		if definition.Optional {
+			optional = append(optional, definition.Key)
+		}
+	}
+	require.Equal(t, []string{"platform-mcp"}, optional, "changing which tasks are optional changes every progress count")
+}

@@ -189,7 +189,8 @@ type ListSetupTasksPayload struct {
 type ListSetupTasksResult struct {
 	// Setup tasks in catalog order.
 	Tasks []*SetupTask
-	// Canonical workstreams in display order, including hidden task keys.
+	// Canonical workstreams in display order. Membership is limited to the tasks
+	// present in this response.
 	Workstreams []*types.SetupWorkstream
 }
 
@@ -363,6 +364,9 @@ type SetupTask struct {
 	// Whether current organization facts force the effective status to done. This
 	// field is read-only.
 	CompletedByFact bool
+	// Whether the task counts toward onboarding completion progress. Optional
+	// tasks are excluded. This field is read-only.
+	CountsTowardProgress bool
 	// Current resolved user or email assignee.
 	Assignee *SetupTaskAssignee
 	// Incomplete prerequisite task keys.

@@ -9,8 +9,11 @@ import {
 import { afterEach, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import { WorkstreamColumn } from "./workstream-column";
-import { ONBOARDING_WORKSTREAMS } from "./workstream-fixtures";
-import { resolveBoardTasks } from "./board-store";
+import { SETUP_WORKSTREAMS } from "./workstream-fixtures";
+import {
+  buildOnboardingModel,
+  type OnboardingTask,
+} from "../../onboarding-model";
 
 vi.mock("./assignee-picker", () => ({
   AssigneePicker: (
@@ -52,9 +55,8 @@ function mockDescriptionSize() {
 function column(description = workstream.description) {
   return (
     <WorkstreamColumn
-      workstream={{ ...workstream, description }}
+      workstream={withMembers(tasks, { ...workstream, description })}
       tasks={tasks}
-      allTasks={tasks}
       canAssign
       isPending={false}
       onAssign={vi.fn<ComponentProps<typeof WorkstreamColumn>["onAssign"]>()}
@@ -63,26 +65,32 @@ function column(description = workstream.description) {
     </WorkstreamColumn>
   );
 }
-const workstream = ONBOARDING_WORKSTREAMS[0]!;
-const tasks = resolveBoardTasks(
-  workstream.taskKeys.map((key, i) => ({
+const model = buildOnboardingModel(
+  SETUP_WORKSTREAMS[0]!.taskKeys.map((key, i) => ({
     key,
     title: key,
     description: "",
     status: "todo",
     completedByFact: false,
+    countsTowardProgress: true,
     hidden: i > 0,
     blockedBy: [],
     assignee: i === 0 ? { email: "owner@example.test" } : undefined,
   })),
+  SETUP_WORKSTREAMS,
 );
+const workstream = model.workstreams[0]!;
+const tasks = workstream.tasks;
+const withMembers = (members: OnboardingTask[], base = workstream) => ({
+  ...base,
+  tasks: members,
+});
 it("does not promote a legacy card owner to the workstream", () => {
   const assign = vi.fn<ComponentProps<typeof WorkstreamColumn>["onAssign"]>();
   render(
     <WorkstreamColumn
-      workstream={workstream}
+      workstream={withMembers(tasks, workstream)}
       tasks={tasks.slice(0, 1)}
-      allTasks={tasks}
       canAssign
       isPending={false}
       onAssign={assign}
@@ -105,9 +113,8 @@ it.each([
   const assign = vi.fn<ComponentProps<typeof WorkstreamColumn>["onAssign"]>();
   render(
     <WorkstreamColumn
-      workstream={workstream}
+      workstream={withMembers(tasks, workstream)}
       tasks={tasks}
-      allTasks={tasks}
       {...props}
       onAssign={assign}
     >
@@ -128,9 +135,8 @@ it.each([false, true])(
     const assign = vi.fn<ComponentProps<typeof WorkstreamColumn>["onAssign"]>();
     const { rerender } = render(
       <WorkstreamColumn
-        workstream={workstream}
+        workstream={withMembers(allTasks, workstream)}
         tasks={allTasks.slice(0, 1)}
-        allTasks={allTasks}
         canAssign
         isPending={false}
         onAssign={assign}
@@ -143,9 +149,8 @@ it.each([false, true])(
     ).toBeTruthy();
     rerender(
       <WorkstreamColumn
-        workstream={workstream}
+        workstream={withMembers([...allTasks].reverse(), workstream)}
         tasks={[]}
-        allTasks={[...allTasks].reverse()}
         canAssign
         isPending={false}
         onAssign={assign}
@@ -172,9 +177,8 @@ it("labels mixed legacy card owners explicitly", () => {
   const assign = vi.fn<ComponentProps<typeof WorkstreamColumn>["onAssign"]>();
   render(
     <WorkstreamColumn
-      workstream={workstream}
+      workstream={withMembers(allTasks, workstream)}
       tasks={allTasks.slice(0, 1)}
-      allTasks={allTasks}
       canAssign
       isPending={false}
       onAssign={assign}
@@ -205,9 +209,8 @@ it("uses user identity rather than differing profile details to count owners", (
   );
   render(
     <WorkstreamColumn
-      workstream={workstream}
+      workstream={withMembers(allTasks, workstream)}
       tasks={[]}
-      allTasks={allTasks}
       canAssign
       isPending={false}
       onAssign={vi.fn<ComponentProps<typeof WorkstreamColumn>["onAssign"]>()}
@@ -225,15 +228,14 @@ it.each([0, 1, 2])(
     const required = tasks.slice(0, 2).map((task, index) => ({
       ...task,
       hidden: false,
-      badge: undefined,
+      countsTowardProgress: true,
       status: index < completed ? ("done" as const) : ("in_progress" as const),
       verified: index === 0 && completed > 0,
     }));
     render(
       <WorkstreamColumn
-        workstream={workstream}
+        workstream={withMembers(required, workstream)}
         tasks={required}
-        allTasks={required}
         canAssign
         isPending={false}
         onAssign={vi.fn<ComponentProps<typeof WorkstreamColumn>["onAssign"]>()}
@@ -263,13 +265,12 @@ it("excludes hidden and optional tasks even when their cards are displayed", () 
     ...task,
     status: index === 0 ? ("awaiting_support" as const) : ("done" as const),
     hidden: index === 1,
-    badge: index === 2 ? "Optional" : undefined,
+    countsTowardProgress: index !== 2,
   }));
   render(
     <WorkstreamColumn
-      workstream={workstream}
+      workstream={withMembers(allTasks, workstream)}
       tasks={allTasks}
-      allTasks={allTasks}
       canAssign
       isPending={false}
       onAssign={vi.fn<ComponentProps<typeof WorkstreamColumn>["onAssign"]>()}
@@ -292,13 +293,12 @@ it.each(["empty", "hidden", "optional"])(
         : tasks.map((task) => ({
             ...task,
             hidden: kind === "hidden",
-            badge: kind === "optional" ? "Optional" : undefined,
+            countsTowardProgress: kind !== "optional",
           }));
     render(
       <WorkstreamColumn
-        workstream={workstream}
+        workstream={withMembers(allTasks, workstream)}
         tasks={allTasks}
-        allTasks={allTasks}
         canAssign
         isPending={false}
         onAssign={vi.fn<ComponentProps<typeof WorkstreamColumn>["onAssign"]>()}
@@ -318,9 +318,8 @@ it.each(["hover", "keyboard"])(
     const user = userEvent.setup();
     render(
       <WorkstreamColumn
-        workstream={workstream}
+        workstream={withMembers(tasks, workstream)}
         tasks={tasks}
-        allTasks={tasks}
         canAssign
         isPending={false}
         onAssign={vi.fn<ComponentProps<typeof WorkstreamColumn>["onAssign"]>()}
@@ -353,9 +352,8 @@ it.each([
   const allTasks = tasks.map((task) => ({ ...task, assignee }));
   render(
     <WorkstreamColumn
-      workstream={workstream}
+      workstream={withMembers(allTasks, workstream)}
       tasks={allTasks.slice(0, 1)}
-      allTasks={allTasks}
       canAssign
       isPending={false}
       onAssign={vi.fn<ComponentProps<typeof WorkstreamColumn>["onAssign"]>()}
@@ -453,9 +451,11 @@ it.each([
 ])("uses a title-case role placeholder for %s", (id, role) => {
   render(
     <WorkstreamColumn
-      workstream={ONBOARDING_WORKSTREAMS.find((item) => item.id === id)!}
+      workstream={withMembers(
+        [],
+        model.workstreams.find((item) => item.id === id)!,
+      )}
       tasks={[]}
-      allTasks={[]}
       canAssign
       isPending={false}
       onAssign={vi.fn<ComponentProps<typeof WorkstreamColumn>["onAssign"]>()}
@@ -485,9 +485,8 @@ it("labels partial legacy owners and keeps workstream assignment explicit", () =
   const assign = vi.fn<ComponentProps<typeof WorkstreamColumn>["onAssign"]>();
   render(
     <WorkstreamColumn
-      workstream={workstream}
+      workstream={withMembers(allTasks, workstream)}
       tasks={[]}
-      allTasks={allTasks}
       canAssign
       isPending={false}
       onAssign={assign}

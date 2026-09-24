@@ -7,8 +7,8 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { SetupWorkstream } from "@gram/client/models/components/setupworkstream.js";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
-import { ONBOARDING_WORKSTREAMS } from "./workstream-fixtures";
-import { useOnboardingBoard } from "./use-onboarding-board";
+import { SETUP_WORKSTREAMS } from "./components/board/workstream-fixtures";
+import { useOnboarding, useOnboardingActions } from "./use-onboarding";
 
 const state = vi.hoisted(() => ({
   org: "org-a",
@@ -53,7 +53,7 @@ beforeEach(() => {
   state.admin = true;
   state.staff = false;
   state.failRead = false;
-  state.workstreams = ONBOARDING_WORKSTREAMS;
+  state.workstreams = SETUP_WORKSTREAMS;
   state.tasks = [
     {
       key: "instrument-agents",
@@ -62,6 +62,7 @@ beforeEach(() => {
       status: "todo",
       hidden: false,
       completedByFact: false,
+      countsTowardProgress: true,
       blockedBy: [],
     },
   ];
@@ -77,11 +78,22 @@ function setup() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const hook = renderHook(() => useOnboardingBoard(), {
-    wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    ),
-  });
+  const hook = renderHook(
+    () => {
+      const onboarding = useOnboarding();
+      return {
+        ...onboarding,
+        ...useOnboardingActions(onboarding),
+        tasks: onboarding.model.tasks,
+        workstreams: onboarding.model.workstreams,
+      };
+    },
+    {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    },
+  );
   return { ...hook, client };
 }
 
@@ -96,11 +108,13 @@ it("reads server tasks and refreshes this organization's queries after a write",
   ];
   client.setQueryData(otherKey, { tasks: [] });
   await waitFor(() => expect(result.current.tasks).toHaveLength(1));
-  expect(result.current.workstreams).toEqual(ONBOARDING_WORKSTREAMS);
+  expect(result.current.workstreams.map((w) => w.id)).toEqual(
+    SETUP_WORKSTREAMS.map((w) => w.id),
+  );
   await act(async () => {
-    expect(await result.current.setStatus("instrument-agents", "done")).toBe(
-      true,
-    );
+    expect(
+      await result.current.setStatus("instrument-agents", "done"),
+    ).toMatchObject({ status: "saved" });
   });
   await waitFor(() => expect(result.current.tasks[0]!.status).toBe("done"));
   expect(state.write).toHaveBeenCalledWith(
@@ -121,20 +135,19 @@ it("retains server state on failed writes and permits retry", async () => {
   await waitFor(() => expect(result.current.tasks).toHaveLength(1));
   state.write.mockRejectedValueOnce(new Error("Write failed"));
   await act(async () => {
-    expect(await result.current.setStatus("instrument-agents", "done")).toBe(
-      false,
+    expect(await result.current.setStatus("instrument-agents", "done")).toEqual(
+      {
+        status: "failed",
+        message: "Write failed",
+      },
     );
   });
-  expect(result.current.writeError).toBe("Write failed");
-  expect(result.current.writeErrorTaskId).toBe("instrument-agents");
   expect(result.current.tasks[0]!.status).toBe("todo");
   await act(async () => {
-    expect(await result.current.setStatus("instrument-agents", "done")).toBe(
-      true,
-    );
+    expect(
+      await result.current.setStatus("instrument-agents", "done"),
+    ).toMatchObject({ status: "saved" });
   });
-  expect(result.current.writeError).toBeNull();
-  expect(result.current.writeErrorTaskId).toBeNull();
 });
 it("refreshes a task committed before a network error and preserves the write error", async () => {
   const { result, client } = setup();
@@ -145,13 +158,15 @@ it("refreshes a task committed before a network error and preserves the write er
     return Promise.reject(new Error("Response lost"));
   });
   await act(async () => {
-    expect(await result.current.setStatus("instrument-agents", "done")).toBe(
-      false,
+    expect(await result.current.setStatus("instrument-agents", "done")).toEqual(
+      {
+        status: "failed",
+        message: "Response lost",
+      },
     );
   });
   expect(invalidate).toHaveBeenCalled();
   await waitFor(() => expect(result.current.tasks[0]!.status).toBe("done"));
-  expect(result.current.writeError).toBe("Response lost");
   expect(result.current.isPending).toBe(false);
 });
 
@@ -163,11 +178,13 @@ it("keeps the original write error when its recovery refresh also fails", async 
     new Error("Read failed"),
   );
   await act(async () => {
-    expect(await result.current.setStatus("instrument-agents", "done")).toBe(
-      false,
+    expect(await result.current.setStatus("instrument-agents", "done")).toEqual(
+      {
+        status: "failed",
+        message: "Response lost",
+      },
     );
   });
-  expect(result.current.writeError).toBe("Response lost");
   expect(result.current.isPending).toBe(false);
 });
 
@@ -176,18 +193,18 @@ it("stays pending until the post-write refresh settles", async () => {
   await waitFor(() => expect(result.current.tasks).toHaveLength(1));
   const refresh = Promise.withResolvers<void>();
   vi.spyOn(client, "invalidateQueries").mockReturnValue(refresh.promise);
-  let saving: Promise<boolean>;
+  let saving: Promise<unknown>;
   await act(async () => {
     saving = result.current.setStatus("instrument-agents", "done");
   });
   await waitFor(() => expect(state.write).toHaveBeenCalledOnce());
   expect(result.current.isPending).toBe(true);
   await act(async () => {
-    expect(await result.current.setStatus("instrument-agents", "todo")).toBe(
-      false,
-    );
+    expect(
+      await result.current.setStatus("instrument-agents", "todo"),
+    ).not.toMatchObject({ status: "saved" });
     refresh.resolve();
-    expect(await saving).toBe(true);
+    expect(await saving).toEqual({ status: "saved" });
   });
   expect(result.current.isPending).toBe(false);
   expect(state.write).toHaveBeenCalledOnce();
@@ -196,15 +213,15 @@ it("restricts hidden-task access to authenticated staff", async () => {
   state.admin = true;
   const { result, rerender } = setup();
   await waitFor(() => expect(result.current.tasks).toHaveLength(1));
-  expect(result.current.canHideTasks).toBe(false);
+  expect(result.current.canInspectHidden).toBe(false);
   state.staff = true;
   rerender();
   await waitFor(() => expect(result.current.isLoading).toBe(false));
-  expect(result.current.canHideTasks).toBe(true);
+  expect(result.current.canInspectHidden).toBe(true);
   await act(async () => {
-    expect(await result.current.setHidden("instrument-agents", true)).toBe(
-      true,
-    );
+    expect(
+      await result.current.setHidden("instrument-agents", true),
+    ).toMatchObject({ status: "saved" });
   });
 });
 it("retries failed reads", async () => {
@@ -225,16 +242,16 @@ it("allows assigned readers to change status but not assignment or visibility", 
   await act(async () => {
     expect(
       await result.current.assignWorkstream(
-        ONBOARDING_WORKSTREAMS[1]!,
+        SETUP_WORKSTREAMS[1]!.id,
         undefined,
       ),
-    ).toBe(false);
-    expect(await result.current.setHidden("instrument-agents", true)).toBe(
-      false,
-    );
-    expect(await result.current.setStatus("instrument-agents", "done")).toBe(
-      true,
-    );
+    ).toMatchObject({ status: "rejected" });
+    expect(
+      await result.current.setHidden("instrument-agents", true),
+    ).not.toMatchObject({ status: "saved" });
+    expect(
+      await result.current.setStatus("instrument-agents", "done"),
+    ).toMatchObject({ status: "saved" });
   });
   expect(state.write).toHaveBeenCalledTimes(1);
 });
@@ -243,9 +260,9 @@ it("denies unassigned readers, fact completion and blocked transitions", async (
   const { result, rerender } = setup();
   await waitFor(() => expect(result.current.tasks).toHaveLength(1));
   await act(async () => {
-    expect(await result.current.setStatus("instrument-agents", "done")).toBe(
-      false,
-    );
+    expect(
+      await result.current.setStatus("instrument-agents", "done"),
+    ).not.toMatchObject({ status: "saved" });
   });
   state.admin = true;
   state.tasks = [{ ...state.tasks[0]!, completedByFact: true }];
@@ -253,7 +270,9 @@ it("denies unassigned readers, fact completion and blocked transitions", async (
     await result.current.retry();
   });
   rerender();
-  expect(result.current.canSetStatus(result.current.tasks[0]!)).toBe(false);
+  expect(
+    result.current.canSetStatus(result.current.tasks[0]!),
+  ).not.toMatchObject({ status: "saved" });
   state.tasks = [
     { ...state.tasks[0]!, completedByFact: false, blockedBy: ["connect-idp"] },
   ];
@@ -264,9 +283,9 @@ it("denies unassigned readers, fact completion and blocked transitions", async (
     expect(result.current.tasks[0]!.blockedBy).toHaveLength(1),
   );
   await act(async () => {
-    expect(await result.current.setStatus("instrument-agents", "done")).toBe(
-      false,
-    );
+    expect(
+      await result.current.setStatus("instrument-agents", "done"),
+    ).not.toMatchObject({ status: "saved" });
   });
   expect(state.write).not.toHaveBeenCalled();
 });
@@ -280,9 +299,9 @@ it("assigns every workstream task, including tasks omitted from the read, with o
   const invalidate = vi
     .spyOn(client, "invalidateQueries")
     .mockReturnValue(refresh.promise);
-  let saving: Promise<boolean>;
+  let saving: Promise<unknown>;
   await act(async () => {
-    saving = result.current.assignWorkstream(ONBOARDING_WORKSTREAMS[1]!, {
+    saving = result.current.assignWorkstream(SETUP_WORKSTREAMS[1]!.id, {
       kind: "email",
       email: "owner@example.test",
     });
@@ -299,20 +318,20 @@ it("assigns every workstream task, including tasks omitted from the read, with o
   await act(async () => {
     expect(
       await result.current.assignWorkstream(
-        ONBOARDING_WORKSTREAMS[0]!,
+        SETUP_WORKSTREAMS[0]!.id,
         undefined,
       ),
-    ).toBe(false);
-    expect(await result.current.setStatus("instrument-agents", "done")).toBe(
-      false,
-    );
+    ).toMatchObject({ status: "rejected" });
+    expect(
+      await result.current.setStatus("instrument-agents", "done"),
+    ).not.toMatchObject({ status: "saved" });
     write.resolve();
   });
   expect(invalidate).toHaveBeenCalledOnce();
   expect(result.current.isPending).toBe(true);
   await act(async () => {
     refresh.resolve();
-    expect(await saving).toBe(true);
+    expect(await saving).toEqual({ status: "saved" });
   });
   expect(result.current.isPending).toBe(false);
 });
@@ -326,21 +345,19 @@ it("refreshes failed atomic assignments and permits unassign retry", async () =>
   await act(async () => {
     expect(
       await result.current.assignWorkstream(
-        ONBOARDING_WORKSTREAMS[0]!,
+        SETUP_WORKSTREAMS[0]!.id,
         undefined,
       ),
-    ).toBe(false);
+    ).toEqual({ status: "failed", message: "Failed" });
   });
-  expect(result.current.writeError).toBe("Failed");
-  expect(result.current.writeErrorTaskId).toBeNull();
   expect(invalidate).toHaveBeenCalledOnce();
   await act(async () => {
     expect(
       await result.current.assignWorkstream(
-        ONBOARDING_WORKSTREAMS[0]!,
+        SETUP_WORKSTREAMS[0]!.id,
         undefined,
       ),
-    ).toBe(true);
+    ).toEqual({ status: "saved" });
   });
   expect(state.assign).toHaveBeenCalledTimes(2);
   expect(
@@ -349,15 +366,14 @@ it("refreshes failed atomic assignments and permits unassign retry", async () =>
         arg.request.assignSetupWorkstreamRequestBody.clearAssignee === true,
     ),
   ).toBe(true);
-  expect(result.current.writeError).toBeNull();
 });
 
 it("assigns one member to every gateway task including the optional task", async () => {
   const { result } = setup();
   await waitFor(() => expect(result.current.tasks).toHaveLength(1));
-  const workstream = ONBOARDING_WORKSTREAMS.find(
+  const workstream = SETUP_WORKSTREAMS.find(
     (stream) => stream.id === "distribute",
-  )!;
+  )!.id;
   await act(async () => {
     expect(
       await result.current.assignWorkstream(workstream, {
@@ -366,7 +382,7 @@ it("assigns one member to every gateway task including the optional task", async
         name: "Team member",
         email: "member@example.test",
       }),
-    ).toBe(true);
+    ).toEqual({ status: "saved" });
   });
   expect(state.assign).toHaveBeenCalledExactlyOnceWith({
     request: {
@@ -382,10 +398,13 @@ it("reports unsupported backend task keys without failing known tasks", async ()
   state.tasks.push({ ...state.tasks[0]!, key: "future-task" });
   const { result } = setup();
   await waitFor(() =>
-    expect(result.current.unsupportedTaskKeys).toEqual(["future-task"]),
+    expect(result.current.model.unsupportedTaskKeys).toEqual(["future-task"]),
   );
   expect(result.current.error).toBeUndefined();
-  expect(result.current.tasks).toHaveLength(1);
+  expect(result.current.tasks.map((task) => task.id)).toEqual([
+    "instrument-agents",
+    "future-task",
+  ]);
 });
 
 it("reports refresh failure but returns saved assignment so invitations need no reassignment", async () => {
@@ -397,14 +416,14 @@ it("reports refresh failure but returns saved assignment so invitations need no 
   await act(async () => {
     expect(
       await result.current.assignWorkstream(
-        ONBOARDING_WORKSTREAMS[0]!,
+        SETUP_WORKSTREAMS[0]!.id,
         undefined,
       ),
-    ).toBe(true);
+    ).toEqual({
+      status: "saved_stale",
+      message: expect.stringContaining("Could not refresh"),
+    });
   });
-  expect(result.current.writeError).toContain(
-    "Assignment saved. Could not refresh",
-  );
   expect(result.current.isPending).toBe(false);
 });
 
@@ -420,7 +439,8 @@ it("refreshes server catalog after assigning a newly introduced workstream", asy
   const { result } = setup();
   await waitFor(() => expect(result.current.workstreams).toHaveLength(1));
   expect(result.current.workstreams[0]).toMatchObject({
-    ...state.workstreams[0],
+    id: "new-stream",
+    title: "Server title",
     suggestedOwner: "Assign workstream",
   });
   state.assign.mockImplementationOnce(async () => {
@@ -435,10 +455,10 @@ it("refreshes server catalog after assigning a newly introduced workstream", asy
   await act(async () => {
     expect(
       await result.current.assignWorkstream(
-        result.current.workstreams[0]!,
+        result.current.workstreams[0]!.id,
         undefined,
       ),
-    ).toBe(true);
+    ).toEqual({ status: "saved" });
   });
   expect(state.assign).toHaveBeenCalledExactlyOnceWith({
     request: {
@@ -451,7 +471,7 @@ it("refreshes server catalog after assigning a newly introduced workstream", asy
   await waitFor(() =>
     expect(result.current.workstreams[0]?.title).toBe("Updated title"),
   );
-  expect(result.current.workstreams[0]?.taskKeys).toEqual([
+  expect(result.current.workstreams[0]?.tasks.map((task) => task.id)).toEqual([
     "instrument-agents",
     "future-task",
   ]);

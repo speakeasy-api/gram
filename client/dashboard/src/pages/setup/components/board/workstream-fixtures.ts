@@ -1,7 +1,7 @@
-import { resolveWorkstreams } from "./tasks";
+import type { SetupWorkstream } from "@gram/client/models/components/setupworkstream.js";
 
-// Representative API catalog for board tests; production membership comes from the server.
-export const ONBOARDING_WORKSTREAMS = resolveWorkstreams([
+// Representative API catalog for tests; production membership comes from the server.
+export const SETUP_WORKSTREAMS: SetupWorkstream[] = [
   {
     id: "connect",
     title: "Connect identity",
@@ -34,4 +34,4 @@ export const ONBOARDING_WORKSTREAMS = resolveWorkstreams([
     title: "Secure agent traffic",
     taskKeys: ["anthropic-admin-controls", "configure-policies"],
   },
-]);
+];

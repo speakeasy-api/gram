@@ -87,6 +87,11 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 		"distribute-servers", "configure-policies", "platform-mcp",
 	}, keys)
 	require.Empty(t, setupTask(result.Tasks, "distribute-servers").BlockedBy)
+	// Progress membership is server-owned; the dashboard must not re-derive it
+	// from a badge or a hardcoded key list.
+	for _, task := range result.Tasks {
+		require.Equal(t, task.Key != "platform-mcp", task.CountsTowardProgress, task.Key)
+	}
 }
 
 func TestService_ListSetupTasksAppliesCompletionFactsWithoutWriting(t *testing.T) {

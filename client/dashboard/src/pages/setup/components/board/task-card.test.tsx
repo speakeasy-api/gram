@@ -8,8 +8,8 @@ import {
   within,
 } from "@testing-library/react";
 import type { Action } from "@/components/ui/MoreActions";
-import type { BoardTask } from "./board-store";
-import { ONBOARDING_TASKS } from "./tasks";
+import type { OnboardingTask } from "../../onboarding-model";
+import { fallbackTaskTitle, ONBOARDING_TASK_IDS } from "../../onboarding-tasks";
 import { TaskCard } from "./task-card";
 import userEvent from "@testing-library/user-event";
 
@@ -37,8 +37,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// Server titles for prerequisites present in the response.
+const SERVER_TITLES: Record<string, string> = {
+  "instrument-agents": "Set up observability in other platforms",
+  "create-marketplace": "Create marketplace",
+};
+const dependencyTitle = (key: string) =>
+  SERVER_TITLES[key] ?? fallbackTaskTitle(key);
+
 function renderCard(
-  overrides: Partial<BoardTask> = {},
+  overrides: Partial<OnboardingTask> = {},
   isPending = false,
   canSetStatus = true,
   canHide = false,
@@ -47,8 +55,11 @@ function renderCard(
   const onOpen = vi.fn<() => void>();
   const onGoToTask = vi.fn<(id: string) => void>();
   const onToggleHidden = vi.fn<() => void>();
-  const task: BoardTask = {
-    ...ONBOARDING_TASKS[0]!,
+  const task: OnboardingTask = {
+    id: "domain-verification",
+    supported: true,
+    suggestedOwner: "IT Admin",
+    countsTowardProgress: true,
     title: "Task",
     description: "Task description",
     blockedBy: [],
@@ -68,7 +79,8 @@ function renderCard(
       canSetStatus={canSetStatus}
       onOpen={onOpen}
       onGoToTask={onGoToTask}
-      reachableTaskIds={ONBOARDING_TASKS.map((item) => item.id)}
+      reachableTaskIds={ONBOARDING_TASK_IDS}
+      dependencyTitle={dependencyTitle}
       onSetStatus={vi.fn<() => void>()}
 
       onToggleHidden={onToggleHidden}

@@ -546,14 +546,15 @@ var SetupTask = Type("SetupTask", func() {
 		Enum("todo", "in_progress", "awaiting_support", "done")
 	})
 	Attribute("completed_by_fact", Boolean, "Whether current organization facts force the effective status to done. This field is read-only.")
+	Attribute("counts_toward_progress", Boolean, "Whether the task counts toward onboarding completion progress. Optional tasks are excluded. This field is read-only.")
 	Attribute("assignee", SetupTaskAssignee, "Current resolved user or email assignee.")
 	Attribute("blocked_by", ArrayOf(String), "Incomplete prerequisite task keys.")
 	Attribute("hidden", Boolean, "Whether a platform administrator hid the task.")
-	Required("key", "title", "description", "status", "completed_by_fact", "blocked_by", "hidden")
+	Required("key", "title", "description", "status", "completed_by_fact", "counts_toward_progress", "blocked_by", "hidden")
 })
 
 var ListSetupTasksResult = Type("ListSetupTasksResult", func() {
 	Attribute("tasks", ArrayOf(SetupTask), "Setup tasks in catalog order.")
-	Attribute("workstreams", ArrayOf(shared.SetupWorkstream), "Canonical workstreams in display order, including hidden task keys.")
+	Attribute("workstreams", ArrayOf(shared.SetupWorkstream), "Canonical workstreams in display order. Membership is limited to the tasks present in this response.")
 	Required("tasks", "workstreams")
 })

@@ -19,7 +19,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/Popover";
 import { AssigneeAvatar } from "./assignee-avatar";
-import { type Assignee, assigneeLabel } from "./board-store";
+import { type Assignee, assigneeLabel } from "../../onboarding-model";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

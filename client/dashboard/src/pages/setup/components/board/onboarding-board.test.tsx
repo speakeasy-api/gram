@@ -6,21 +6,35 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import type { SetupTask } from "@gram/client/models/components/setuptask.js";
+import type { SetupWorkstream } from "@gram/client/models/components/setupworkstream.js";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { OnboardingBoard } from "./onboarding-board";
-import { resolveBoardTasks } from "./board-store";
 import { SETUP_CONTAINER } from "../setup-container";
-import { ONBOARDING_TASKS, resolveWorkstreams } from "./tasks";
-import { ONBOARDING_WORKSTREAMS } from "./workstream-fixtures";
+import { ONBOARDING_TASK_IDS } from "../../onboarding-tasks";
+import type { Onboarding, OnboardingActions } from "../../use-onboarding";
+import { SETUP_WORKSTREAMS } from "./workstream-fixtures";
 
 const state = vi.hoisted(() => ({
-  board: {} as ReturnType<
-    typeof import("./use-onboarding-board").useOnboardingBoard
-  >,
+  // Raw API data; the real model projection runs over it.
+  tasks: [] as SetupTask[],
+  workstreams: [] as SetupWorkstream[],
+  onboarding: {} as Omit<Onboarding, "model">,
+  actions: {} as OnboardingActions,
   search: new URLSearchParams(),
   hash: "",
   navigate: vi.fn(),
 }));
+vi.mock("../../use-onboarding", async () => {
+  const { buildOnboardingModel } = await import("../../onboarding-model");
+  return {
+    useOnboarding: () => ({
+      ...state.onboarding,
+      model: buildOnboardingModel(state.tasks, state.workstreams),
+    }),
+    useOnboardingActions: () => state.actions,
+  };
+});
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true, isLoading: false, error: null }),
 }));
@@ -36,9 +50,6 @@ vi.mock("react-router", () => ({
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock("./use-onboarding-board", () => ({
-  useOnboardingBoard: () => state.board,
-}));
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({
     organization: { id: "org-a" },
@@ -52,33 +63,43 @@ vi.mock("@/components/ui/MoreActions", () => ({ MoreActions: () => null }));
 vi.mock("../onboarding-header", () => ({ OnboardingHeader: () => null }));
 vi.mock("../onboarding-footer", () => ({ OnboardingFooter: () => null }));
 
+function serverTask(
+  key: string,
+  overrides: Partial<SetupTask> = {},
+): SetupTask {
+  return {
+    key,
+    title: key,
+    description: "Server description",
+    status: "todo",
+    completedByFact: false,
+    countsTowardProgress: key !== "platform-mcp",
+    hidden: false,
+    blockedBy: [],
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   state.search = new URLSearchParams();
   state.hash = "";
   state.navigate.mockReset();
-  state.board = {
-    workstreams: ONBOARDING_WORKSTREAMS,
-    tasks: resolveBoardTasks(
-      ONBOARDING_TASKS.map(({ id }) => ({
-        key: id,
-        title: id,
-        description: "Server description",
-        status: "todo",
-        completedByFact: false,
-        hidden: false,
-        blockedBy: [],
-      })),
-    ),
-    unsupportedTaskKeys: [],
+  state.workstreams = SETUP_WORKSTREAMS;
+  state.tasks = ONBOARDING_TASK_IDS.map((key) =>
+    serverTask(key, {
+      title: key === "domain-verification" ? "Verify your domain" : key,
+    }),
+  );
+  state.onboarding = {
     isLoading: false,
-    isPending: false,
     error: undefined,
-    writeError: null,
-    writeErrorTaskId: null,
     canAssign: true,
-    canHideTasks: false,
-    canSetStatus: () => true,
+    canInspectHidden: false,
     retry: vi.fn(),
+  };
+  state.actions = {
+    isPending: false,
+    canSetStatus: () => true,
     setStatus: vi.fn(),
     assignWorkstream: vi.fn(),
     setHidden: vi.fn(),
@@ -98,8 +119,8 @@ function renderBoard() {
 
 describe("workstreams-only onboarding", () => {
   it("renders loading placeholders before the catalog arrives", () => {
-    state.board.isLoading = true;
-    state.board.workstreams = [];
+    state.onboarding.isLoading = true;
+    state.workstreams = [];
     renderBoard();
     // Four workstream placeholders, each with a heading and two cards.
     expect(screen.getByRole("main").querySelectorAll(".skeleton")).toHaveLength(
@@ -110,7 +131,7 @@ describe("workstreams-only onboarding", () => {
     ).toBeNull();
   });
   it("uses server workstream titles, membership, and both levels of ordering", () => {
-    state.board.workstreams = resolveWorkstreams([
+    state.workstreams = [
       {
         id: "new-stream",
         title: "Server first",
@@ -122,8 +143,8 @@ describe("workstreams-only onboarding", () => {
         taskKeys: ["configure-policies"],
       },
       { id: "empty", title: "No supported tasks", taskKeys: ["future-task"] },
-    ]);
-    state.board.unsupportedTaskKeys = ["future-task"];
+    ];
+    state.tasks.push(serverTask("future-task"));
     renderBoard();
     const board = screen.getByRole("region", { name: "Setup workstreams" });
     expect(
@@ -133,7 +154,7 @@ describe("workstreams-only onboarding", () => {
     ).toEqual(["Server first", "Renamed identity"]);
     const first = screen.getByRole("region", { name: "Server first" });
     const instrument = within(first).getByText("instrument-agents");
-    const domain = within(first).getByText("domain-verification");
+    const domain = within(first).getByText("Verify your domain");
     expect(
       instrument.compareDocumentPosition(domain) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -147,7 +168,7 @@ describe("workstreams-only onboarding", () => {
     expect(screen.getByRole("alert").textContent).toContain("future-task");
   });
   it("does not recreate local workstreams for an empty server catalog", () => {
-    state.board.workstreams = [];
+    state.workstreams = [];
     renderBoard();
     expect(
       within(
@@ -161,7 +182,7 @@ describe("workstreams-only onboarding", () => {
     for (const name of SETUP_CONTAINER.split(" ")) {
       expect(main.firstElementChild?.classList.contains(name)).toBe(true);
     }
-    expect(screen.getByText("domain-verification")).toBeTruthy();
+    expect(screen.getByText("Verify your domain")).toBeTruthy();
   });
   it.each(["", "kanban", "workstreams", "wizard"])(
     "renders workstreams regardless of legacy view=%s",
@@ -174,8 +195,6 @@ describe("workstreams-only onboarding", () => {
     },
   );
   it("routes task deep links to the wizard", () => {
-    state.board.writeError = "Task A failed";
-    state.board.writeErrorTaskId = "instrument-agents";
     state.search.set("task", "connect-idp");
     renderBoard();
     expect(state.navigate).toHaveBeenCalledWith(
@@ -184,13 +203,13 @@ describe("workstreams-only onboarding", () => {
     );
   });
   it("excludes hidden and optional tasks from required progress", () => {
-    state.board.tasks = state.board.tasks.map((task) => ({
+    state.tasks = state.tasks.map((task) => ({
       ...task,
-      hidden: task.id === "identity-provider",
+      hidden: task.key === "identity-provider",
       status: "done",
     }));
-    const required = state.board.tasks.filter(
-      (task) => !task.hidden && !task.badge,
+    const required = state.tasks.filter(
+      (task) => !task.hidden && task.countsTowardProgress,
     ).length;
     renderBoard();
     expect(
@@ -199,10 +218,9 @@ describe("workstreams-only onboarding", () => {
     expect(screen.queryByText("identity-provider")).toBeNull();
   });
   it("counts fact-verified required tasks as complete even with todo status", () => {
-    state.board.tasks = state.board.tasks
-      .filter((task) => task.id === "domain-verification")
-      .map((task) => ({ ...task, status: "todo", verified: true }));
-    expect(state.board.tasks).toHaveLength(1);
+    state.tasks = [
+      serverTask("domain-verification", { completedByFact: true }),
+    ];
     renderBoard();
     expect(screen.getByText("1 of 1 required tasks complete")).toBeTruthy();
   });
@@ -212,12 +230,16 @@ describe("workstreams-only onboarding", () => {
     expect(
       screen.getByRole("region", { name: "Setup workstreams" }),
     ).toBeTruthy();
-    const requiredCount = ONBOARDING_TASKS.filter((task) => !task.badge).length;
+    const requiredCount = state.tasks.filter(
+      (task) => task.countsTowardProgress,
+    ).length;
     expect(
       screen.getByText(`0 of ${requiredCount} required tasks complete`),
     ).toBeTruthy();
-    for (const task of ONBOARDING_TASKS)
-      expect(screen.getByText(task.id)).toBeTruthy();
+    for (const id of ONBOARDING_TASK_IDS.filter(
+      (key) => key !== "domain-verification",
+    ))
+      expect(screen.getByText(id)).toBeTruthy();
     expect(localStorage.getItem("gram-onboarding-board:acme")).toBe(
       "preserved",
     );
@@ -229,7 +251,7 @@ describe("workstreams-only onboarding", () => {
     expect(screen.queryByText("No selected tasks")).toBeNull();
   });
   it("reports an empty selection without a zero denominator", () => {
-    state.board.tasks = [];
+    state.tasks = [];
     renderBoard();
     expect(screen.getByText("No selected tasks")).toBeTruthy();
     expect(screen.getByText("No required tasks")).toBeTruthy();
@@ -241,10 +263,7 @@ describe("workstreams-only onboarding", () => {
       { pathname: "/acme/setup/wizard", search: "task=connect-idp", hash: "" },
       { replace: true },
     );
-    state.board.tasks = state.board.tasks.map((task) => ({
-      ...task,
-      hidden: true,
-    }));
+    state.tasks = state.tasks.map((task) => ({ ...task, hidden: true }));
     rendered.rerender(
       <TooltipProvider>
         <OnboardingBoard />
@@ -255,10 +274,10 @@ describe("workstreams-only onboarding", () => {
     ).toBeTruthy();
   });
   it("offers retry on read failure rather than reporting empty success", () => {
-    state.board.error = "Network unavailable";
+    state.onboarding.error = "Network unavailable";
     renderBoard();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(state.board.retry).toHaveBeenCalledOnce();
+    expect(state.onboarding.retry).toHaveBeenCalledOnce();
     expect(screen.queryByText("No selected tasks")).toBeNull();
   });
 });
@@ -279,12 +298,12 @@ it("opens a card in the linear wizard with its task and project context", () => 
 });
 
 it("keeps workstream progress stable when filtering to assigned cards", () => {
-  state.board.tasks = state.board.tasks.map((task) => ({
+  state.tasks = state.tasks.map((task) => ({
     ...task,
-    status: task.id === "connect-idp" ? "done" : "todo",
+    status: task.key === "connect-idp" ? "done" : "todo",
     assignee:
-      task.id === "identity-provider"
-        ? { kind: "email", email: "dev@example.test" }
+      task.key === "identity-provider"
+        ? { email: "dev@example.test" }
         : undefined,
   }));
   renderBoard();
@@ -305,20 +324,18 @@ it.each([false, true])(
   async (hidden) => {
     state.search = new URLSearchParams("project=project-a&view=workstreams");
     state.hash = "#details";
-    state.board.canHideTasks = hidden;
-    state.board.tasks = state.board.tasks.map((task) => ({
+    state.onboarding.canInspectHidden = hidden;
+    state.tasks = state.tasks.map((task) => ({
       ...task,
-      hidden: task.id === "domain-verification" && hidden,
-      blockedBy: task.id === "connect-idp" ? ["domain-verification"] : [],
+      hidden: task.key === "domain-verification" && hidden,
+      blockedBy: task.key === "connect-idp" ? ["domain-verification"] : [],
       assignee:
-        task.id === "connect-idp"
-          ? { kind: "email", email: "dev@example.test" }
-          : undefined,
+        task.key === "connect-idp" ? { email: "dev@example.test" } : undefined,
     }));
     renderBoard();
     fireEvent.click(screen.getByRole("switch", { name: "Assigned to me" }));
     expect(
-      screen.queryByRole("button", { name: "domain-verification, To Do" }),
+      screen.queryByRole("button", { name: "Verify your domain, To Do" }),
     ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "connect-idp, To Do" }));
     fireEvent.click(
@@ -336,15 +353,15 @@ it.each([false, true])(
         .getByRole("switch", { name: "Assigned to me" })
         .getAttribute("aria-checked"),
     ).toBe("true");
-    expect(state.board.setHidden).not.toHaveBeenCalled();
+    expect(state.actions.setHidden).not.toHaveBeenCalled();
   },
 );
 
 it("does not expose actionable prerequisite links to readers", async () => {
-  state.board.canAssign = false;
-  state.board.tasks = state.board.tasks.map((task) => ({
+  state.onboarding.canAssign = false;
+  state.tasks = state.tasks.map((task) => ({
     ...task,
-    blockedBy: task.id === "connect-idp" ? ["domain-verification"] : [],
+    blockedBy: task.key === "connect-idp" ? ["domain-verification"] : [],
   }));
   renderBoard();
   fireEvent.click(screen.getByRole("button", { name: "connect-idp, To Do" }));
@@ -357,20 +374,32 @@ it("does not expose actionable prerequisite links to readers", async () => {
     within(prerequisites).getByText(/Ask an organization admin/),
   ).toBeTruthy();
   expect(state.navigate).not.toHaveBeenCalled();
-  expect(state.board.setHidden).not.toHaveBeenCalled();
+  expect(state.actions.setHidden).not.toHaveBeenCalled();
 });
 
-it("warns about unsupported server tasks rather than claiming onboarding completion", () => {
-  state.board.unsupportedTaskKeys = ["future-task"];
-  state.board.tasks = [];
+it("shows unsupported server tasks as unopenable cards and still counts them", () => {
+  state.workstreams = [
+    {
+      id: "connect",
+      title: "Connect",
+      taskKeys: ["future-task", "connect-idp"],
+    },
+  ];
+  state.tasks = [
+    serverTask("future-task"),
+    serverTask("connect-idp", { status: "done" }),
+  ];
   renderBoard();
   expect(screen.getByRole("alert").textContent).toContain("future-task");
-  expect(screen.getByRole("alert").textContent).toContain(
-    "not all onboarding work",
-  );
+  // Progress never claims completion while server work remains.
+  expect(screen.getByText("1 of 2 required tasks complete")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "future-task, To Do" }));
+  expect(state.navigate).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "connect-idp, Done" }));
+  expect(state.navigate).toHaveBeenCalledOnce();
 });
 it("keeps reader deep links on the board and explains admin-required opening", () => {
-  state.board.canAssign = false;
+  state.onboarding.canAssign = false;
   state.search.set("task", "connect-idp");
   renderBoard();
   expect(state.navigate).not.toHaveBeenCalled();
@@ -393,5 +422,17 @@ it("preserves the hash when opening a card", () => {
   fireEvent.click(screen.getByRole("button", { name: "connect-idp, To Do" }));
   expect(state.navigate).toHaveBeenCalledWith(
     expect.objectContaining({ hash: "#details" }),
+  );
+});
+it("resolves a short ?task= alias written by the wizard", () => {
+  state.search.set("task", "other-platforms");
+  renderBoard();
+  expect(state.navigate).toHaveBeenCalledWith(
+    {
+      pathname: "/acme/setup/wizard",
+      search: "task=other-platforms",
+      hash: "",
+    },
+    { replace: true },
   );
 });

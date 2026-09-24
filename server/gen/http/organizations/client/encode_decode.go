@@ -4084,12 +4084,13 @@ func marshalWorkOSDomainVerificationIntentOptionsRequestBodyToOrganizationsWorkO
 // type *organizations.SetupTask from a value of type *SetupTaskResponseBody.
 func unmarshalSetupTaskResponseBodyToOrganizationsSetupTask(v *SetupTaskResponseBody) *organizations.SetupTask {
 	res := &organizations.SetupTask{
-		Key:             *v.Key,
-		Title:           *v.Title,
-		Description:     *v.Description,
-		Status:          *v.Status,
-		CompletedByFact: *v.CompletedByFact,
-		Hidden:          *v.Hidden,
+		Key:                  *v.Key,
+		Title:                *v.Title,
+		Description:          *v.Description,
+		Status:               *v.Status,
+		CompletedByFact:      *v.CompletedByFact,
+		CountsTowardProgress: *v.CountsTowardProgress,
+		Hidden:               *v.Hidden,
 	}
 	if v.Assignee != nil {
 		res.Assignee = unmarshalSetupTaskAssigneeResponseBodyToOrganizationsSetupTaskAssignee(v.Assignee)

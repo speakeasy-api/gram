@@ -20,12 +20,17 @@ import {
   PopoverContent,
 } from "@/components/ui/Popover";
 import { cn } from "@/lib/utils";
-import type { BoardTask } from "./board-store";
-import { dependencyTitle } from "./task-dependencies";
-import { TASK_STATUS_META, TASK_STATUSES, type TaskStatus } from "./tasks";
+import type { OnboardingTask } from "../../onboarding-model";
+import {
+  TASK_STATUS_META,
+  TASK_STATUSES,
+  type TaskStatus,
+} from "../../onboarding-tasks";
 
 interface TaskCardProps {
-  task: BoardTask;
+  task: OnboardingTask;
+  /** Resolves a prerequisite key to its title. */
+  dependencyTitle: (key: string) => string;
   canOpen?: boolean;
   canHide: boolean;
   canSetStatus: boolean;
@@ -102,6 +107,7 @@ export function TaskCard({
   onToggleHidden,
   onGoToTask,
   reachableTaskIds,
+  dependencyTitle,
 }: TaskCardProps): JSX.Element {
   const blocked = task.blockedBy.length > 0;
   const showsPopover = blocked || !canOpen;

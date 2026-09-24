@@ -114,7 +114,7 @@ func (s *Service) AssignSetupWorkstream(ctx context.Context, payload *gen.Assign
 		return nil, oops.E(oops.CodeUnexpected, err, "commit setup workstream assignment")
 	}
 	if payload.Assignee != nil && len(changedKeys) > 0 {
-		notification := &gen.SetupTask{Key: "workstream:" + payload.Workstream, Title: workstream.Title, Description: workstream.Description, Assignee: setupTaskByKey(afterTasks, changedKeys[0]).Assignee, Status: "", CompletedByFact: false, BlockedBy: nil, Hidden: false}
+		notification := &gen.SetupTask{Key: "workstream:" + payload.Workstream, Title: workstream.Title, Description: workstream.Description, Assignee: setupTaskByKey(afterTasks, changedKeys[0]).Assignee, Status: "", CompletedByFact: false, CountsTowardProgress: false, BlockedBy: nil, Hidden: false}
 		detached := context.WithoutCancel(ctx)
 		go func() {
 			emailCtx, cancel := context.WithTimeout(detached, 10*time.Second)

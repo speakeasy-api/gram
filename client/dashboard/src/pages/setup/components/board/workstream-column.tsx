@@ -14,18 +14,19 @@ import {
 import {
   assigneeIdentity,
   assigneeLabel,
+  progressOf,
   type Assignee,
-  type BoardTask,
-} from "./board-store";
-import type { OnboardingWorkstreamDefinition } from "./tasks";
+  type OnboardingTask,
+  type OnboardingWorkstream,
+} from "../../onboarding-model";
 import { AssigneePicker } from "./assignee-picker";
 import { countTasksBelow } from "./count-tasks-below";
 
 interface WorkstreamColumnProps {
-  workstream: OnboardingWorkstreamDefinition;
-  tasks: BoardTask[];
+  /** Carries every readable member; `tasks` is the filtered subset shown. */
+  workstream: OnboardingWorkstream;
+  tasks: OnboardingTask[];
   children: ReactNode;
-  allTasks: BoardTask[];
   canAssign: boolean;
   isPending: boolean;
   onAssign: (owner: Assignee | undefined) => Promise<boolean> | boolean | void;
@@ -35,11 +36,11 @@ export function WorkstreamColumn({
   workstream,
   tasks,
   children,
-  allTasks,
   canAssign,
   isPending,
   onAssign,
 }: WorkstreamColumnProps): JSX.Element {
+  const allTasks = workstream.tasks;
   // Workstream assignment writes the same owner to every task. Do not promote
   // partial or mixed legacy card assignments to a workstream owner.
   const candidate = allTasks[0]?.assignee;
@@ -77,14 +78,9 @@ export function WorkstreamColumn({
         .join(" · ")
     : undefined;
   // Progress describes the workstream, not the current assignment filter.
-  const requiredTasks = allTasks.filter((task) => !task.hidden && !task.badge);
-  const completedTasks = requiredTasks.filter(
-    (task) => task.status === "done",
-  ).length;
+  const { done: completedTasks, total: requiredCount } = progressOf(allTasks);
   const progress =
-    requiredTasks.length > 0
-      ? (completedTasks / requiredTasks.length) * 100
-      : 0;
+    requiredCount > 0 ? (completedTasks / requiredCount) * 100 : 0;
   const headingId = `onboarding-workstream-${workstream.id}`;
   const descriptionRef = useRef<HTMLParagraphElement>(null);
   const [descriptionTruncated, setDescriptionTruncated] = useState(false);
@@ -177,18 +173,18 @@ export function WorkstreamColumn({
           />
         </div>
         <p className="text-muted-foreground text-xs font-medium tabular-nums">
-          {requiredTasks.length === 0
+          {requiredCount === 0
             ? "No required tasks"
-            : `${completedTasks} / ${requiredTasks.length} required tasks complete`}
+            : `${completedTasks} / ${requiredCount} required tasks complete`}
         </p>
-        {requiredTasks.length > 0 ? (
+        {requiredCount > 0 ? (
           <div
             role="progressbar"
             aria-label={`${workstream.title} progress`}
             aria-valuemin={0}
-            aria-valuemax={requiredTasks.length}
+            aria-valuemax={requiredCount}
             aria-valuenow={completedTasks}
-            aria-valuetext={`${completedTasks} of ${requiredTasks.length} required tasks complete`}
+            aria-valuetext={`${completedTasks} of ${requiredCount} required tasks complete`}
             className="bg-muted h-1 overflow-hidden"
           >
             <div

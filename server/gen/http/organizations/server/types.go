@@ -222,7 +222,8 @@ type GenerateWorkOSAdminPortalLinkResponseBody struct {
 type ListSetupTasksResponseBody struct {
 	// Setup tasks in catalog order.
 	Tasks []*SetupTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
-	// Canonical workstreams in display order, including hidden task keys.
+	// Canonical workstreams in display order. Membership is limited to the tasks
+	// present in this response.
 	Workstreams []*SetupWorkstreamResponseBody `form:"workstreams" json:"workstreams" xml:"workstreams"`
 }
 
@@ -231,7 +232,8 @@ type ListSetupTasksResponseBody struct {
 type AssignSetupWorkstreamResponseBody struct {
 	// Setup tasks in catalog order.
 	Tasks []*SetupTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
-	// Canonical workstreams in display order, including hidden task keys.
+	// Canonical workstreams in display order. Membership is limited to the tasks
+	// present in this response.
 	Workstreams []*SetupWorkstreamResponseBody `form:"workstreams" json:"workstreams" xml:"workstreams"`
 }
 
@@ -249,6 +251,9 @@ type UpdateSetupTaskResponseBody struct {
 	// Whether current organization facts force the effective status to done. This
 	// field is read-only.
 	CompletedByFact bool `form:"completed_by_fact" json:"completed_by_fact" xml:"completed_by_fact"`
+	// Whether the task counts toward onboarding completion progress. Optional
+	// tasks are excluded. This field is read-only.
+	CountsTowardProgress bool `form:"counts_toward_progress" json:"counts_toward_progress" xml:"counts_toward_progress"`
 	// Current resolved user or email assignee.
 	Assignee *SetupTaskAssigneeResponseBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
 	// Incomplete prerequisite task keys.
@@ -3526,6 +3531,9 @@ type SetupTaskResponseBody struct {
 	// Whether current organization facts force the effective status to done. This
 	// field is read-only.
 	CompletedByFact bool `form:"completed_by_fact" json:"completed_by_fact" xml:"completed_by_fact"`
+	// Whether the task counts toward onboarding completion progress. Optional
+	// tasks are excluded. This field is read-only.
+	CountsTowardProgress bool `form:"counts_toward_progress" json:"counts_toward_progress" xml:"counts_toward_progress"`
 	// Current resolved user or email assignee.
 	Assignee *SetupTaskAssigneeResponseBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
 	// Incomplete prerequisite task keys.
@@ -3553,8 +3561,8 @@ type SetupWorkstreamResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// Workstream display title.
 	Title string `form:"title" json:"title" xml:"title"`
-	// Ordered task keys available in this response. Hidden tasks are included only
-	// in authorized responses.
+	// Ordered task keys, limited to the tasks present in the same response. Hidden
+	// tasks appear only when the reader is authorized to see them.
 	TaskKeys []string `form:"task_keys" json:"task_keys" xml:"task_keys"`
 }
 
@@ -3824,12 +3832,13 @@ func NewAssignSetupWorkstreamResponseBody(res *organizations.ListSetupTasksResul
 // of the "updateSetupTask" endpoint of the "organizations" service.
 func NewUpdateSetupTaskResponseBody(res *organizations.SetupTask) *UpdateSetupTaskResponseBody {
 	body := &UpdateSetupTaskResponseBody{
-		Key:             res.Key,
-		Title:           res.Title,
-		Description:     res.Description,
-		Status:          res.Status,
-		CompletedByFact: res.CompletedByFact,
-		Hidden:          res.Hidden,
+		Key:                  res.Key,
+		Title:                res.Title,
+		Description:          res.Description,
+		Status:               res.Status,
+		CompletedByFact:      res.CompletedByFact,
+		CountsTowardProgress: res.CountsTowardProgress,
+		Hidden:               res.Hidden,
 	}
 	if res.Assignee != nil {
 		body.Assignee = marshalOrganizationsSetupTaskAssigneeToSetupTaskAssigneeResponseBody(res.Assignee)

@@ -1,33 +1,22 @@
-// Legacy /{org}/setup/{slug} aliases normalize to the shared ?task=<key> entry.
-export const SETUP_TASK_SLUGS: Record<string, string> = {
-  "domain-verification": "domain",
-  "enable-logging": "enable-logging",
-  "connect-idp": "connect-idp",
-  "directory-sync": "directory-sync",
-  "create-marketplace": "create-marketplace",
-  "confirm-traffic": "confirm-traffic",
-  "identity-provider": "idp",
-  "anthropic-observability": "anthropic-observability",
-  "anthropic-admin-controls": "anthropic-admin-controls",
-  "instrument-agents": "other-platforms",
-  litellm: "litellm",
-  "additional-agent-config": "integrations",
-  "distribute-servers": "distribute-servers",
-  "configure-policies": "policies",
-  "platform-mcp": "platform-mcp",
-};
+import {
+  ONBOARDING_TASK_IDS,
+  ONBOARDING_TASKS,
+  isOnboardingTaskId,
+  type OnboardingTaskPresentation,
+} from "./onboarding-tasks";
 
+// Legacy /{org}/setup/{slug} aliases normalize to the shared ?task=<key> entry.
 export function setupTaskSlug(taskKey: string): string {
-  return SETUP_TASK_SLUGS[taskKey] ?? taskKey;
+  if (!isOnboardingTaskId(taskKey)) return taskKey;
+  const task: OnboardingTaskPresentation = ONBOARDING_TASKS[taskKey];
+  return task.slug ?? taskKey;
 }
 
 export function setupTaskKeyForSlug(slug: string): string | undefined {
-  const match = Object.entries(SETUP_TASK_SLUGS).find(
-    ([, candidate]) => candidate === slug,
-  );
-  if (match) return match[0];
   // Task keys still work as slugs, so links minted with a key keep resolving.
-  return Object.hasOwn(SETUP_TASK_SLUGS, slug) ? slug : undefined;
+  return ONBOARDING_TASK_IDS.find(
+    (key) => setupTaskSlug(key) === slug || key === slug,
+  );
 }
 
 export function canonicalSetupSearch(
@@ -36,8 +25,7 @@ export function canonicalSetupSearch(
 ): URLSearchParams {
   const next = new URLSearchParams(search);
   const step = next.get("step");
-  const legacyTask =
-    step && Object.hasOwn(SETUP_TASK_SLUGS, step) ? step : undefined;
+  const legacyTask = step && isOnboardingTaskId(step) ? step : undefined;
   if (!next.has("task")) {
     const task = taskSlug
       ? (setupTaskKeyForSlug(taskSlug) ?? taskSlug)

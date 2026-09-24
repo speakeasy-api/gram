@@ -17,7 +17,7 @@ export type SetupWorkstream = {
    */
   id: string;
   /**
-   * Ordered task keys available in this response. Hidden tasks are included only in authorized responses.
+   * Ordered task keys, limited to the tasks present in the same response. Hidden tasks appear only when the reader is authorized to see them.
    */
   taskKeys: Array<string>;
   /**

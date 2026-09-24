@@ -14,7 +14,7 @@ import {
   PlatformMCPSetupStep,
 } from "../steps";
 import { AnthropicInferenceHooksStep } from "../steps/anthropic-inference-hooks-step";
-import type { OnboardingTaskId } from "./tasks";
+import type { OnboardingTaskId } from "../../onboarding-tasks";
 import { RequireScope } from "@/components/require-scope";
 import { useOrganization } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
@@ -87,64 +87,71 @@ export function TaskStep(props: TaskStepProps): JSX.Element {
   );
 }
 
-export function TaskStepContent({
-  taskId,
-  projectSlug,
-  onComplete,
-  onClose,
-}: TaskStepProps): JSX.Element {
-  switch (taskId) {
-    case "enable-logging":
-      return (
-        <StepContainer
-          title="Enable logging"
-          description="Enable logging and session capture to observe your team's AI usage."
-          onContinue={onComplete}
-          markDoneLabel="Continue"
-        >
-          <EnableLoggingSection index={1} />
-        </StepContainer>
-      );
-    case "domain-verification":
-      return <DomainVerificationStep onComplete={onComplete} />;
-    case "identity-provider":
-      return <IdentityProviderStep onComplete={onComplete} />;
-    case "anthropic-observability":
-      return <AnthropicInferenceHooksStep onComplete={onComplete} />;
-    case "litellm":
-      return <LiteLLMSetupStep onComplete={onComplete} />;
-    case "anthropic-admin-controls":
-      return <AnthropicAdminControlsStep onComplete={onComplete} />;
-    case "connect-idp":
-      return <ConnectIdpStep onSkip={onClose} onComplete={onComplete} />;
-    case "directory-sync":
-      return (
-        <DirectorySyncStep
-          onComplete={onComplete}
-          onSkip={onClose}
-          onBack={onClose}
-        />
-      );
-    case "create-marketplace":
-      return <CreateMarketplaceStep onComplete={onComplete} onBack={onClose} />;
-    case "instrument-agents":
-      return <InstrumentAgentsStep onComplete={onComplete} />;
-    case "additional-agent-config":
-      return <AdditionalAgentConfigStep onComplete={onComplete} />;
-    case "confirm-traffic":
-      return <ConfirmTrafficStep onComplete={onComplete} />;
-    case "distribute-servers":
-      return <DistributeServersStep onComplete={onComplete} />;
-    case "configure-policies":
-      return <ConfigurePoliciesStep onComplete={onComplete} />;
-    case "platform-mcp":
-      return (
-        <PlatformMCPSetupStep
-          onComplete={onComplete}
-          currentProjectSlug={projectSlug}
-        />
-      );
-    default:
-      return <p role="alert">Unsupported setup task: {taskId}</p>;
-  }
+type TaskRenderer = (props: TaskStepProps) => JSX.Element;
+
+// Exhaustive over the registry: adding a task id without a renderer is a type
+// error rather than a blank card.
+const TASK_RENDERERS: Record<OnboardingTaskId, TaskRenderer> = {
+  "enable-logging": ({ onComplete }) => (
+    <StepContainer
+      title="Enable logging"
+      description="Enable logging and session capture to observe your team's AI usage."
+      onContinue={onComplete}
+      markDoneLabel="Continue"
+    >
+      <EnableLoggingSection index={1} />
+    </StepContainer>
+  ),
+  "domain-verification": ({ onComplete }) => (
+    <DomainVerificationStep onComplete={onComplete} />
+  ),
+  "identity-provider": ({ onComplete }) => (
+    <IdentityProviderStep onComplete={onComplete} />
+  ),
+  "anthropic-observability": ({ onComplete }) => (
+    <AnthropicInferenceHooksStep onComplete={onComplete} />
+  ),
+  litellm: ({ onComplete }) => <LiteLLMSetupStep onComplete={onComplete} />,
+  "anthropic-admin-controls": ({ onComplete }) => (
+    <AnthropicAdminControlsStep onComplete={onComplete} />
+  ),
+  "connect-idp": ({ onComplete, onClose }) => (
+    <ConnectIdpStep onSkip={onClose} onComplete={onComplete} />
+  ),
+  "directory-sync": ({ onComplete, onClose }) => (
+    <DirectorySyncStep
+      onComplete={onComplete}
+      onSkip={onClose}
+      onBack={onClose}
+    />
+  ),
+  "create-marketplace": ({ onComplete, onClose }) => (
+    <CreateMarketplaceStep onComplete={onComplete} onBack={onClose} />
+  ),
+  "instrument-agents": ({ onComplete }) => (
+    <InstrumentAgentsStep onComplete={onComplete} />
+  ),
+  "additional-agent-config": ({ onComplete }) => (
+    <AdditionalAgentConfigStep onComplete={onComplete} />
+  ),
+  "confirm-traffic": ({ onComplete }) => (
+    <ConfirmTrafficStep onComplete={onComplete} />
+  ),
+  "distribute-servers": ({ onComplete }) => (
+    <DistributeServersStep onComplete={onComplete} />
+  ),
+  "configure-policies": ({ onComplete }) => (
+    <ConfigurePoliciesStep onComplete={onComplete} />
+  ),
+  "platform-mcp": ({ onComplete, projectSlug }) => (
+    <PlatformMCPSetupStep
+      onComplete={onComplete}
+      currentProjectSlug={projectSlug}
+    />
+  ),
+};
+
+// Renderers hold no hooks, so they are called directly rather than mounted.
+export function TaskStepContent(props: TaskStepProps): JSX.Element {
+  return TASK_RENDERERS[props.taskId](props);
 }

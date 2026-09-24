@@ -6549,7 +6549,7 @@ components:
           type: array
           items:
             type: string
-          description: Ordered task keys available in this response. Hidden tasks are included only in authorized responses.
+          description: Ordered task keys, limited to the tasks present in the same response. Hidden tasks appear only when the reader is authorized to see them.
         title:
           type: string
           description: Workstream display title.

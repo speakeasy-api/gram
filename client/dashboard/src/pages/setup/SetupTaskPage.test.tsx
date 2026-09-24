@@ -8,7 +8,8 @@ import {
 } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import SetupTaskPage from "./SetupTaskPage";
-import { SETUP_TASK_SLUGS, canonicalSetupSearch } from "./task-slugs";
+import { ONBOARDING_TASK_IDS } from "./onboarding-tasks";
+import { canonicalSetupSearch, setupTaskSlug } from "./task-slugs";
 
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({ setup: { href: () => "/org/setup" } }),
@@ -34,7 +35,7 @@ function renderLink(path: string) {
   );
 }
 describe("canonical setup links", () => {
-  it.each(Object.entries(SETUP_TASK_SLUGS))(
+  it.each(ONBOARDING_TASK_IDS.map((key) => [key, setupTaskSlug(key)]))(
     "normalizes %s from %s",
     (key, slug) => {
       renderLink(`/org/setup/${slug}?projectSlug=selected&step=2#details`);

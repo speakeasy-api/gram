@@ -13,17 +13,20 @@ import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { assignedTo, type BoardTask } from "./board-store";
+import { assignedTo, type OnboardingTask } from "../../onboarding-model";
+import {
+  useOnboarding,
+  useOnboardingActions,
+  type OnboardingWriteOutcome,
+} from "../../use-onboarding";
 import { useRBAC } from "@/hooks/useRBAC";
-import { canonicalSetupSearch } from "../../task-slugs";
+import { canonicalSetupSearch, setupTaskKeyForSlug } from "../../task-slugs";
 import { useSession } from "@/contexts/Auth";
 import { useOrgSetupStarted } from "@/hooks/useOrgSetupStarted";
 import { OnboardingFooter } from "../onboarding-footer";
 import { OnboardingHeader } from "../onboarding-header";
 import { SetupViewButton } from "../setup-view-button";
 import { TaskCard } from "./task-card";
-import { isOnboardingTaskId } from "./tasks";
-import { useOnboardingBoard } from "./use-onboarding-board";
 import { WorkstreamColumn } from "./workstream-column";
 
 const WORKSTREAM_GRID_CLASS =
@@ -47,14 +50,12 @@ function BoardHeader(): JSX.Element {
 function BoardToolbar({
   doneCount,
   totalCount,
-  hasUnsupportedTasks,
   showMine,
   onShowMineChange,
   canHide,
   showHidden,
   onShowHiddenChange,
 }: {
-  hasUnsupportedTasks: boolean;
   doneCount: number;
   totalCount: number;
   showMine: boolean;
@@ -68,10 +69,8 @@ function BoardToolbar({
       <Page.Toolbar.Leading>
         <span className="text-foreground whitespace-nowrap text-sm">
           {totalCount === 0
-            ? hasUnsupportedTasks
-              ? "No supported required tasks"
-              : "No required tasks"
-            : `${doneCount} of ${totalCount} ${hasUnsupportedTasks ? "supported " : ""}required tasks complete`}
+            ? "No required tasks"
+            : `${doneCount} of ${totalCount} required tasks complete`}
         </span>
       </Page.Toolbar.Leading>
       <Page.Toolbar.Actions>
@@ -148,6 +147,13 @@ export function OnboardingBoard(): JSX.Element {
   );
 }
 
+// Views own their feedback; the shared actions only report what happened.
+function writeMessage(outcome: OnboardingWriteOutcome): string | null {
+  if (outcome.status === "failed") return outcome.message;
+  if (outcome.status === "saved_stale") return `Saved. ${outcome.message}`;
+  return null;
+}
+
 function OnboardingBoardInner(): JSX.Element {
   const navigate = useNavigate();
   const { hash } = useLocation();
@@ -160,24 +166,31 @@ function OnboardingBoardInner(): JSX.Element {
     markSetupStarted();
   }, [markSetupStarted]);
 
-  const board = useOnboardingBoard();
+  const onboarding = useOnboarding();
+  const actions = useOnboardingActions(onboarding);
+  const { model, canAssign, canInspectHidden } = onboarding;
   const session = useSession();
   const [showMine, setShowMine] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
+  const [writeError, setWriteError] = useState<string | null>(null);
   const canonicalSearch = canonicalSetupSearch(searchParams).toString();
   useEffect(() => {
     if (canonicalSearch !== searchParams.toString())
       void navigate({ search: canonicalSearch, hash }, { replace: true });
   }, [canonicalSearch, searchParams, hash, navigate]);
 
+  const ready = !onboarding.isLoading && !onboarding.error;
   const taskParam = new URLSearchParams(canonicalSearch).get("task");
-  const openTaskId =
-    taskParam && isOnboardingTaskId(taskParam) ? taskParam : null;
-  const openTask = board.tasks.find(
-    (task) => task.id === openTaskId && (!task.hidden || board.canHideTasks),
-  );
+  // The wizard writes short aliases (?task=idp); resolve them like keys.
+  const requestedTask = taskParam
+    ? model.task(setupTaskKeyForSlug(taskParam) ?? taskParam)
+    : undefined;
+  // Tasks a reader may open: supported ones, hidden only for staff.
+  const openable = (task: OnboardingTask | undefined): task is OnboardingTask =>
+    Boolean(canAssign && task?.supported && (!task.hidden || canInspectHidden));
+  const openTask = openable(requestedTask) ? requestedTask : undefined;
   useEffect(() => {
-    if (!board.isLoading && !board.error && openTask && board.canAssign) {
+    if (ready && openTask) {
       const search = new URLSearchParams(canonicalSearch);
       search.delete("view");
       void navigate(
@@ -189,36 +202,32 @@ function OnboardingBoardInner(): JSX.Element {
         { replace: true },
       );
     }
-  }, [
-    board.canAssign,
-    hash,
-    board.isLoading,
-    board.error,
-    openTask,
-    canonicalSearch,
-    navigate,
-    routes,
-  ]);
+  }, [ready, hash, openTask, canonicalSearch, navigate, routes]);
 
-  const activeTasks = board.tasks.filter((task) => !task.hidden);
-  const requiredTasks = activeTasks.filter((task) => !task.badge);
-  const doneCount = requiredTasks.filter(
-    (task) => task.verified || task.status === "done",
-  ).length;
   const displayedTasks =
-    board.canHideTasks && showHidden ? board.tasks : activeTasks;
+    canInspectHidden && showHidden ? model.tasks : model.visibleTasks;
   const visibleTasks = showMine
     ? displayedTasks.filter((task) => assignedTo(task, session.user))
     : displayedTasks;
+  const shown = new Set(visibleTasks.map((task) => task.id));
 
   const handleLeave = () => {
     void navigate(`/${orgSlug}`);
   };
 
+  /** Resolves true once the write committed, even if the refresh failed. */
+  const report = async (
+    write: Promise<OnboardingWriteOutcome>,
+  ): Promise<boolean> => {
+    const outcome = await write;
+    // Refusals mean nothing was sent, so they leave the last message alone.
+    if (outcome.status !== "rejected") setWriteError(writeMessage(outcome));
+    return outcome.status === "saved" || outcome.status === "saved_stale";
+  };
+
   const openSetupTask = (id: string) => {
-    const target = board.tasks.find((task) => task.id === id);
-    if (!board.canAssign || !target || (target.hidden && !board.canHideTasks))
-      return;
+    const target = model.task(id);
+    if (!openable(target)) return;
     const search = new URLSearchParams(canonicalSearch);
     search.delete("view");
     search.delete("step");
@@ -231,105 +240,101 @@ function OnboardingBoardInner(): JSX.Element {
     });
   };
 
-  const renderTask = (task: BoardTask) => (
+  const reachableTaskIds = model.tasks
+    .filter((task) => openable(task))
+    .map((task) => task.id);
+
+  const renderTask = (task: OnboardingTask) => (
     <TaskCard
       key={task.id}
       task={task}
-      canOpen={board.canAssign}
-      canHide={board.canHideTasks}
-      canSetStatus={board.canSetStatus(task)}
-      isPending={board.isPending}
+      canOpen={openable(task)}
+      canHide={canInspectHidden}
+      canSetStatus={actions.canSetStatus(task)}
+      isPending={actions.isPending}
       onOpen={() => openSetupTask(task.id)}
-      reachableTaskIds={
-        board.canAssign
-          ? board.tasks
-              .filter((item) => !item.hidden || board.canHideTasks)
-              .map((item) => item.id)
-          : []
-      }
+      reachableTaskIds={reachableTaskIds}
+      dependencyTitle={model.titleFor}
       onGoToTask={openSetupTask}
-      onSetStatus={(next) => void board.setStatus(task.id, next)}
-      onToggleHidden={() => void board.setHidden(task.id, !task.hidden)}
+      onSetStatus={(next) => void report(actions.setStatus(task.id, next))}
+      onToggleHidden={() =>
+        void report(actions.setHidden(task.id, !task.hidden))
+      }
     />
   );
 
   return (
     <div className="bg-background flex h-screen max-h-dvh flex-col overflow-hidden supports-[height:100dvh]:h-dvh">
       <OnboardingHeader onLeave={handleLeave}>
-        {board.canAssign && <SetupViewButton disabled={board.isPending} />}
+        {canAssign && <SetupViewButton disabled={actions.isPending} />}
       </OnboardingHeader>
 
       <main className="flex min-h-0 flex-1 justify-center py-6">
         <div className={cn(SETUP_CONTAINER, "flex min-h-0 flex-col gap-4")}>
           <BoardHeader />
-          {!board.canAssign && (
+          {!canAssign && (
             <p className="text-muted-foreground text-sm">
               An organization admin is required to open setup tasks. You can
               still update the status of tasks assigned to you.
             </p>
           )}
-          {board.unsupportedTaskKeys?.length > 0 && (
+          {model.unsupportedTaskKeys.length > 0 && (
             <p role="alert" className="text-sm text-default-warning">
-              Some setup tasks are not supported by this version:{" "}
-              {board.unsupportedTaskKeys.join(", ")}. Progress below covers
-              supported tasks only, not all onboarding work. Refresh to update,
-              or contact support.
+              Some setup tasks cannot be opened in this version:{" "}
+              {model.unsupportedTaskKeys.join(", ")}. Refresh to update, or
+              contact support.
             </p>
           )}
-          {board.error && (
+          {onboarding.error && (
             <div role="alert">
-              Could not load setup tasks: {board.error}
-              <Button onClick={() => void board.retry()}>Retry</Button>
+              Could not load setup tasks: {onboarding.error}
+              <Button onClick={() => void onboarding.retry()}>Retry</Button>
             </div>
           )}
-          {board.writeError && <p role="alert">{board.writeError}</p>}
-          {!board.isLoading && !board.error && taskParam && !openTask && (
+          {writeError && <p role="alert">{writeError}</p>}
+          {ready && taskParam && !openTask && (
             <p role="status">
-              {openTaskId
+              {requestedTask
                 ? "This task is not part of your current onboarding"
                 : "Setup task not found"}
             </p>
           )}
           <BoardToolbar
-            hasUnsupportedTasks={Boolean(board.unsupportedTaskKeys?.length)}
-            doneCount={doneCount}
-            totalCount={requiredTasks.length}
+            doneCount={model.progress.done}
+            totalCount={model.progress.total}
             showMine={showMine}
             onShowMineChange={setShowMine}
-            canHide={board.canHideTasks}
+            canHide={canInspectHidden}
             showHidden={showHidden}
             onShowHiddenChange={setShowHidden}
           />
-          {!board.isLoading && !board.error && visibleTasks.length === 0 && (
+          {ready && visibleTasks.length === 0 && (
             <p role="status">
               {showMine ? "No tasks assigned to you" : "No selected tasks"}
             </p>
           )}
 
-          {board.isLoading && <BoardSkeleton />}
-          {!board.isLoading && !board.error && (
+          {onboarding.isLoading && <BoardSkeleton />}
+          {ready && (
             <div
               role="region"
               aria-label="Setup workstreams"
               className={WORKSTREAM_GRID_CLASS}
             >
-              {board.workstreams.map((workstream) => {
-                const workstreamTasks = workstream.taskKeys
-                  .map((id) => visibleTasks.find((task) => task.id === id))
-                  .filter((task) => task !== undefined);
+              {model.workstreams.map((workstream) => {
+                const workstreamTasks = workstream.tasks.filter((task) =>
+                  shown.has(task.id),
+                );
                 if (workstreamTasks.length === 0) return null;
                 return (
                   <WorkstreamColumn
                     key={workstream.id}
                     workstream={workstream}
                     tasks={workstreamTasks}
-                    allTasks={board.tasks.filter((task) =>
-                      workstream.taskKeys.includes(task.id),
-                    )}
-                    canAssign={board.canAssign}
-                    isPending={board.isPending}
+                    canAssign={canAssign}
+                    isPending={actions.isPending}
                     onAssign={(owner) =>
-                      board.assignWorkstream(workstream, owner)
+                      report(actions.assignWorkstream(workstream.id, owner))
                     }
                   >
                     {workstreamTasks.map(renderTask)}

@@ -1,28 +1,14 @@
-import { useRef, useState } from "react";
 import {
   useLocation,
   useNavigate,
   useParams,
   useSearchParams,
 } from "react-router";
-import type {
-  SetupTask,
-  SetupTaskStatus,
-} from "@gram/client/models/components/setuptask.js";
-import type { UpdateSetupTaskRequestBody } from "@gram/client/models/components/updatesetuptaskrequestbody.js";
-import { useGramContext } from "@gram/client/react-query/_context.js";
-import { useUpdateSetupTaskMutation } from "@gram/client/react-query/updateSetupTask.js";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { RequireScope } from "@/components/require-scope";
-import { useOrganization, useSession } from "@/contexts/Auth";
-import {
-  buildOrganizationSetupTasksQuery,
-  invalidateOrganizationSetupTasks,
-} from "@/hooks/useOrganizationSetupTasks";
 import { showPylonChat } from "@/lib/pylon";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
@@ -33,7 +19,14 @@ import { OnboardingStepper, type Step } from "./components/onboarding-stepper";
 import { SetupViewButton } from "./components/setup-view-button";
 import { SetupShell } from "./components/setup-shell";
 import { SetupTaskContent } from "./components/setup-task-content";
+import {
+  isTaskDone,
+  type OnboardingModel,
+  type OnboardingTask,
+} from "./onboarding-model";
+import type { TaskStatus } from "./onboarding-tasks";
 import { setupTaskKeyForSlug, setupTaskSlug } from "./task-slugs";
+import { useOnboarding, useOnboardingActions } from "./use-onboarding";
 
 /** Query parameter naming the card on screen, e.g. ?task=idp. */
 const TASK_PARAM = "task";
@@ -107,29 +100,30 @@ function CurrentTaskSteps({
 
 function WizardRail({
   tasks,
+  progress,
   currentKey,
   disabled,
   onPick,
 }: {
-  tasks: SetupTask[];
+  tasks: OnboardingTask[];
+  progress: OnboardingModel["progress"];
   currentKey: string | undefined;
   /** Mirrors WizardNav: no moves while a completion is settling. */
   disabled: boolean;
-  onPick: (task: SetupTask) => void;
+  onPick: (task: OnboardingTask) => void;
 }): JSX.Element {
   const [searchParams] = useSearchParams();
   const railSteps: Step[] = tasks.map((task) => ({
-    id: task.key,
+    id: task.id,
     title: task.title,
     description: task.description,
-    status: task.status === "done" ? "done" : undefined,
+    status: isTaskDone(task) ? "done" : undefined,
     detail:
-      task.key === currentKey ? (
+      task.id === currentKey ? (
         <CurrentTaskSteps disabled={disabled} />
       ) : undefined,
   }));
-  const currentStep = tasks.findIndex((task) => task.key === currentKey);
-  const doneCount = tasks.filter((task) => task.status === "done").length;
+  const currentStep = tasks.findIndex((task) => task.id === currentKey);
 
   return (
     <div>
@@ -139,7 +133,7 @@ function WizardRail({
         </div>
       )}
       <p className="text-eyebrow mb-4">
-        {doneCount} of {tasks.length} tasks complete
+        {progress.done} of {progress.total} required tasks complete
       </p>
       <OnboardingStepper
         steps={railSteps}
@@ -165,7 +159,7 @@ function WizardNav({
   onPrevious,
   onSkip,
 }: {
-  previous: SetupTask | undefined;
+  previous: OnboardingTask | undefined;
   isLast: boolean;
   returnsToBoard: boolean;
   /** While a completion is in flight its own advance is about to land. */
@@ -211,45 +205,28 @@ function SetupWizardInner(): JSX.Element {
   const { orgSlug } = useParams();
   const [searchParams] = useSearchParams();
   const location = useLocation();
-  const canInspectHidden = useSession().user.isAdmin;
   const navigate = useNavigate();
   const orgRoutes = useOrgRoutes();
-  const organization = useOrganization();
-  const queryClient = useQueryClient();
   // Platform admins can inspect hidden tasks, but they never join the walk.
-  const client = useGramContext();
-  const setupTasks = useQuery(
-    buildOrganizationSetupTasksQuery(
-      client,
-      organization.id,
-      canInspectHidden,
-      {
-        retry: false,
-      },
-    ),
-  );
-  const updateTask = useUpdateSetupTaskMutation();
-  // Complete and support await a round trip; a second click while the first
-  // is in flight must not fire it again. The ref blocks re-entry within a
-  // render; the state is what the controls read, and it spans the whole
-  // action — mutation and the refetch after it — where `isPending` alone
-  // clears as soon as the mutation resolves.
-  const actionInFlight = useRef(false);
-  const [actionSettling, setActionSettling] = useState(false);
+  const onboarding = useOnboarding();
+  const actions = useOnboardingActions(onboarding);
+  const { model, canInspectHidden } = onboarding;
 
-  const availableTasks = (setupTasks.data?.tasks ?? []).filter(
-    (task) => !task.hidden || canInspectHidden,
-  );
-  const tasks = availableTasks.filter((task) => !task.hidden);
+  // The walk is the board's visible tasks in workstream order.
+  const tasks = model.visibleTasks;
   // An explicit selector must never silently open a different task.
-  const requestedKey = setupTaskKeyForSlug(searchParams.get(TASK_PARAM) ?? "");
-  const requested = availableTasks.find((task) => task.key === requestedKey);
-  const firstOpen = tasks.find((task) => task.status !== "done");
+  const requestedSlug = searchParams.get(TASK_PARAM) ?? "";
+  const requested = model.task(
+    setupTaskKeyForSlug(requestedSlug) ?? requestedSlug,
+  );
+  const firstOpen = tasks.find((task) => !isTaskDone(task));
   const current = searchParams.has(TASK_PARAM)
-    ? requested
+    ? requested && (!requested.hidden || canInspectHidden)
+      ? requested
+      : undefined
     : (firstOpen ?? tasks[tasks.length - 1]);
   const currentIndex = current
-    ? tasks.findIndex((task) => task.key === current.key)
+    ? tasks.findIndex((task) => task.id === current.id)
     : -1;
   const previous = currentIndex > 0 ? tasks[currentIndex - 1] : undefined;
   const next =
@@ -261,9 +238,9 @@ function SetupWizardInner(): JSX.Element {
   // ?step=, which would otherwise be read as a link into the next card. It
   // replaces rather than pushes: Back belongs to wherever the reader came
   // from, not to each card passed through.
-  const goToTask = (task: SetupTask) => {
+  const goToTask = (task: OnboardingTask) => {
     const params = new URLSearchParams(searchParams);
-    params.set(TASK_PARAM, setupTaskSlug(task.key));
+    params.set(TASK_PARAM, setupTaskSlug(task.id));
     params.delete(STEP_PARAM);
     void navigate(
       {
@@ -278,8 +255,8 @@ function SetupWizardInner(): JSX.Element {
   // Completing a card advances once its mutation and refetch land. A
   // reader's own move in that window (Previous, Skip, a rail click) would be
   // overwritten a moment later, so those wait until it has settled.
-  const settling = actionSettling || updateTask.isPending;
-  const pick = (task: SetupTask) => {
+  const settling = actions.isPending;
+  const pick = (task: OnboardingTask) => {
     if (settling) return;
     goToTask(task);
   };
@@ -300,59 +277,50 @@ function SetupWizardInner(): JSX.Element {
     else leave();
   };
 
-  const mutate = async (body: UpdateSetupTaskRequestBody) => {
-    await updateTask.mutateAsync({
-      request: { updateSetupTaskRequestBody: body },
-    });
-    await invalidateOrganizationSetupTasks(queryClient, organization.id);
-  };
-
-  const guarded = async (action: () => Promise<void>) => {
-    if (updateTask.isPending || actionInFlight.current) return;
-    actionInFlight.current = true;
-    setActionSettling(true);
-    try {
-      await action();
-    } finally {
-      actionInFlight.current = false;
-      setActionSettling(false);
-    }
-  };
-
+  /** Saves a status and reports the outcome; true once it committed. */
   const setStatus = async (
-    status: SetupTaskStatus,
+    status: TaskStatus,
     fallback: string,
   ): Promise<boolean> => {
     if (!current) return false;
-    try {
-      await mutate({ taskKey: current.key, status });
-      return true;
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : fallback);
-      return false;
+    const outcome = await actions.setStatus(current.id, status);
+    switch (outcome.status) {
+      case "saved":
+        return true;
+      case "saved_stale":
+        toast.warning(outcome.message);
+        return true;
+      case "failed":
+        toast.error(outcome.message || fallback);
+        return false;
+      case "rejected":
+        // A second click while the first is saving is simply dropped.
+        if (outcome.reason === "blocked")
+          toast.error("Complete this task's prerequisites first.");
+        else if (outcome.reason !== "busy") toast.error(fallback);
+        return false;
     }
   };
 
-  const complete = () =>
-    guarded(async () => {
-      if (!current) return;
-      if (current.completedByFact) return advance();
-      if (await setStatus("done", "Failed to complete setup task")) {
-        toast.success(`${current.title} completed`);
-        advance();
-      }
-    });
+  const complete = async () => {
+    if (!current || settling) return;
+    if (current.verified) return advance();
+    if (await setStatus("done", "Failed to complete setup task")) {
+      toast.success(`${current.title} completed`);
+      advance();
+    }
+  };
 
-  const requestSupport = () =>
-    guarded(async () => {
-      if (current?.completedByFact) return showPylonChat();
-      if (await setStatus("awaiting_support", "Failed to request support")) {
-        showPylonChat();
-      }
-    });
+  const requestSupport = async () => {
+    if (settling) return;
+    if (current?.verified) return showPylonChat();
+    if (await setStatus("awaiting_support", "Failed to request support")) {
+      showPylonChat();
+    }
+  };
 
   let content: JSX.Element | null = null;
-  if (setupTasks.isError) {
+  if (onboarding.error) {
     content = (
       <Alert variant="error">
         <div>
@@ -361,10 +329,7 @@ function SetupWizardInner(): JSX.Element {
             Try again, or return to the board.
           </AlertDescription>
           <div className="mt-3 flex gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => void setupTasks.refetch()}
-            >
+            <Button variant="secondary" onClick={() => void onboarding.retry()}>
               Retry
             </Button>
             <Button variant="tertiary" onClick={returnToBoard}>
@@ -374,7 +339,11 @@ function SetupWizardInner(): JSX.Element {
         </div>
       </Alert>
     );
-  } else if (setupTasks.isSuccess && searchParams.has(TASK_PARAM) && !current) {
+  } else if (
+    !onboarding.isLoading &&
+    searchParams.has(TASK_PARAM) &&
+    !current
+  ) {
     content = (
       <Alert variant="info">
         <div>
@@ -388,7 +357,7 @@ function SetupWizardInner(): JSX.Element {
         </div>
       </Alert>
     );
-  } else if (setupTasks.isSuccess && !current) {
+  } else if (!onboarding.isLoading && !current) {
     content = (
       <Alert variant="info">
         <div>
@@ -433,7 +402,7 @@ function SetupWizardInner(): JSX.Element {
           }}
         />
         <SetupTaskContent
-          taskKey={current.key}
+          taskKey={current.id}
           projectSlug={searchParams.get("projectSlug") ?? "default"}
           onComplete={() => void complete()}
           onSupport={() => void requestSupport()}
@@ -451,17 +420,18 @@ function SetupWizardInner(): JSX.Element {
           previous card's active step into the next would land the reader on
           an unrelated section. The rail lives inside the provider too, so it
           can nest the current card's sub-steps under it. */}
-      <JourneyStepsProvider key={current?.key ?? "none"}>
+      <JourneyStepsProvider key={current?.id ?? "none"}>
         <JourneyLayout
           rail={
             <WizardRail
               tasks={tasks}
-              currentKey={current?.key}
+              progress={model.progress}
+              currentKey={current?.id}
               disabled={settling}
               onPick={pick}
             />
           }
-          loading={setupTasks.isPending}
+          loading={onboarding.isLoading}
           skeletonRows={6}
         >
           {content}

@@ -6,8 +6,10 @@ import { StepSupportProvider } from "../step-container";
 import { AnthropicInferenceHooksStep } from "../steps/anthropic-inference-hooks-step";
 import { DomainVerificationStep } from "../steps";
 import { TaskStep, TaskStepContent, type TaskStepProps } from "./task-step";
-import { ONBOARDING_TASKS } from "./tasks";
-import { SETUP_TASK_SLUGS } from "../../task-slugs";
+import { ONBOARDING_TASK_IDS } from "../../onboarding-tasks";
+import { setupTaskSlug } from "../../task-slugs";
+
+const ONBOARDING_TASKS = ONBOARDING_TASK_IDS.map((id) => ({ id }));
 const protectedHook = vi.hoisted(() => vi.fn());
 const access = vi.hoisted(() => ({
   allowedProject: "",
@@ -156,10 +158,10 @@ describe("workstream task coverage", () => {
     });
     expect(step.type).toBe(DomainVerificationStep);
     expect(step.props.onComplete).toBe(onComplete);
-    expect(SETUP_TASK_SLUGS["domain-verification"]).toBe("domain");
+    expect(setupTaskSlug("domain-verification")).toBe("domain");
   });
   it("includes every main task and every server-supported key", () => {
-    const ids = ONBOARDING_TASKS.map((task) => task.id);
+    const ids: string[] = ONBOARDING_TASK_IDS;
     const server = readFileSync(
       resolve(
         import.meta.dirname,
@@ -176,8 +178,10 @@ describe("workstream task coverage", () => {
       (match) => match[1],
     );
     expect(serverKeys.length).toBeGreaterThan(0);
-    for (const key of [...Object.keys(SETUP_TASK_SLUGS), ...serverKeys])
-      expect(ids).toContain(key);
+    // The registry and the server catalog must name the same tasks.
+    expect([...ids].sort((a, b) => a.localeCompare(b))).toEqual(
+      [...serverKeys].sort((a, b) => a!.localeCompare(b!)),
+    );
   });
   it.each(ONBOARDING_TASKS)("renders $id", (task) => {
     expect(

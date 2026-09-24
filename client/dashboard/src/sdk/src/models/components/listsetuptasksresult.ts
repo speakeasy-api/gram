@@ -18,7 +18,7 @@ export type ListSetupTasksResult = {
    */
   tasks: Array<SetupTask>;
   /**
-   * Canonical workstreams in display order, including hidden task keys.
+   * Canonical workstreams in display order. Membership is limited to the tasks present in this response.
    */
   workstreams: Array<SetupWorkstream>;
 };

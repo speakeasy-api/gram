@@ -3,7 +3,7 @@ import { useIdentityTint } from "@/components/gradient-colors";
 import { getInitials } from "@/lib/initials";
 import { safeExternalHttpUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
-import { type Assignee, assigneeIdentity } from "./board-store";
+import { type Assignee, assigneeIdentity } from "../../onboarding-model";
 
 /**
  * Two letters for the fallback face. Names go through the shared helper; an

@@ -89318,7 +89318,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/SetupWorkstream'
-                    description: Canonical workstreams in display order, including hidden task keys.
+                    description: Canonical workstreams in display order. Membership is limited to the tasks present in this response.
             required:
                 - tasks
                 - workstreams
@@ -98887,6 +98887,9 @@ components:
                 completed_by_fact:
                     type: boolean
                     description: Whether current organization facts force the effective status to done. This field is read-only.
+                counts_toward_progress:
+                    type: boolean
+                    description: Whether the task counts toward onboarding completion progress. Optional tasks are excluded. This field is read-only.
                 description:
                     type: string
                     description: Task description.
@@ -98913,6 +98916,7 @@ components:
                 - description
                 - status
                 - completed_by_fact
+                - counts_toward_progress
                 - blocked_by
                 - hidden
         SetupTaskAssignee:
@@ -98953,7 +98957,7 @@ components:
                     type: array
                     items:
                         type: string
-                    description: Ordered task keys available in this response. Hidden tasks are included only in authorized responses.
+                    description: Ordered task keys, limited to the tasks present in the same response. Hidden tasks appear only when the reader is authorized to see them.
                 title:
                     type: string
                     description: Workstream display title.
