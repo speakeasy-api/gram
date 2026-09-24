@@ -31,7 +31,7 @@ func (s *Service) registryError(ctx context.Context, err error) error {
 		return oops.E(oops.CodeBadRequest, nil, "%s", err.Error())
 	case errors.Is(err, mcpregistry.ErrNotFound):
 		return oops.E(oops.CodeNotFound, nil, "registry entry not found")
-	case errors.Is(err, mcpregistry.ErrConflict), errors.Is(err, mcpregistry.ErrStageAStructure):
+	case errors.Is(err, mcpregistry.ErrConflict), errors.Is(err, mcpregistry.ErrEndpointStructureImmutable):
 		return oops.E(oops.CodeConflict, nil, "registry mutation conflict")
 	default:
 		s.logger.ErrorContext(ctx, "registry operation failed", attr.SlogError(err))
