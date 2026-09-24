@@ -277,6 +277,93 @@ func TestServeConsentAction_ConnectAmbiguousUpstreamsSendsNoResource(t *testing.
 	require.Empty(t, state.Resource)
 }
 
+// seedSharedUpstreamEndpoint seeds the real remote-backed topology: the
+// endpoint's own server (upstream A) on the shared issuer, and a second
+// issuer hosting upstream B. Every client bound to the endpoint therefore
+// sees upstream A among its attached servers.
+func seedSharedUpstreamEndpoint(t *testing.T, slug string) (context.Context, consentActionFixture, uuid.UUID) {
+	t.Helper()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	other := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, shared, slug+"-srv-a", consentUpstreamA+"/")
+	attachConsentRemoteMcpServer(t, ctx, ti.conn, projectID, other, slug+"-srv-b", consentUpstreamB)
+
+	endpoint, stateID, subject := mintConsentEndpointState(t, ctx, ti, projectID, orgID, shared, slug)
+	endpoint.UpstreamResource = consentUpstreamA
+
+	return ctx, consentActionFixture{
+		ti:        ti,
+		endpoint:  endpoint,
+		stateID:   stateID,
+		projectID: projectID,
+		orgID:     orgID,
+		shared:    shared,
+		subject:   subject,
+		clientA:   uuid.Nil,
+		clientB:   uuid.Nil,
+		clientC:   uuid.Nil,
+		clientD:   uuid.Nil,
+	}, other
+}
+
+// AIM-362: the endpoint's only client, shared with a server on a different
+// upstream, records the endpoint's upstream — not "", which no remote
+// backend routes to and loops the consent page.
+func TestServeConsentAction_ConnectSharedClientRecordsEndpointUpstream(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim362-sole")
+	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-sole", "", []uuid.UUID{fx.shared, other})
+
+	loc := postConnectAction(t, fx, shared)
+	require.Equal(t, consentUpstreamA, loc.Query().Get("resource"))
+	state := mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state"))
+	require.Equal(t, consentUpstreamA, state.Resource)
+}
+
+// A shared client never claims the endpoint's upstream from a sibling that
+// derives it on its own: both recording it would fail routing closed as a
+// duplicate resource.
+func TestServeConsentAction_ConnectSharedClientDefersToOwningSibling(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim362-owned")
+	owner := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-owner", "", []uuid.UUID{fx.shared})
+	shared := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-shared", "", []uuid.UUID{fx.shared, other})
+
+	locOwner := postConnectAction(t, fx, owner)
+	require.Equal(t, consentUpstreamA, locOwner.Query().Get("resource"))
+
+	locShared := postConnectAction(t, fx, shared)
+	_, hasResource := locShared.Query()["resource"]
+	require.False(t, hasResource, "the owning sibling holds the endpoint's upstream")
+	require.Empty(t, mintedRemoteLoginState(t, ctx, fx, locShared.Query().Get("state")).Resource)
+}
+
+// Two shared clients on one endpoint are ambiguous: neither claims its
+// upstream.
+func TestServeConsentAction_ConnectTwoSharedClientsClaimNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, other := seedSharedUpstreamEndpoint(t, "aim362-two")
+	first := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-first", "", []uuid.UUID{fx.shared, other})
+	second := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "aim362-second", "", []uuid.UUID{fx.shared, other})
+
+	for _, id := range []uuid.UUID{first, second} {
+		loc := postConnectAction(t, fx, id)
+		_, hasResource := loc.Query()["resource"]
+		require.False(t, hasResource)
+	}
+}
+
 // A derivation failure must fail the connect closed: error out before any
 // upstream redirect or login state exists.
 func TestServeConsentAction_ConnectDerivationErrorFailsClosed(t *testing.T) {

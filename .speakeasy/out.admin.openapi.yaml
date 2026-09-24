@@ -1550,6 +1550,158 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: listOrganizationMembers
+  /admin/organization.onboarding:
+    get:
+      operationId: adminGetOrganizationOnboarding
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingConfiguration'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getOrganizationOnboarding admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: AdminOrganizationOnboarding
+      x-speakeasy-name-override: getOrganizationOnboarding
+    post:
+      operationId: adminSetOrganizationOnboarding
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetOrganizationOnboardingRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOnboardingConfiguration'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: setOrganizationOnboarding admin
+      tags:
+        - admin
+      x-speakeasy-react-hook:
+        name: SetAdminOrganizationOnboarding
+      x-speakeasy-name-override: setOrganizationOnboarding
   /admin/organization.open-dashboard:
     post:
       tags:
@@ -4671,6 +4823,60 @@ components:
         - buckets
         - queried_at
         - measurement_method
+    AdminOnboardingConfiguration:
+      type: object
+      properties:
+        organization_id:
+          type: string
+        preset:
+          type: string
+          description: Absent for legacy organizations.
+          enum:
+            - gateway
+            - security
+        presets:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOnboardingPreset'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOnboardingTask'
+      required:
+        - organization_id
+        - tasks
+        - presets
+    AdminOnboardingPreset:
+      type: object
+      properties:
+        key:
+          type: string
+          enum:
+            - gateway
+            - security
+        visible_task_keys:
+          type: array
+          items:
+            type: string
+      required:
+        - key
+        - visible_task_keys
+    AdminOnboardingTask:
+      type: object
+      properties:
+        description:
+          type: string
+        hidden:
+          type: boolean
+        key:
+          type: string
+        title:
+          type: string
+      required:
+        - key
+        - title
+        - description
+        - hidden
     AdminOrganization:
       type: object
       properties:
@@ -5400,6 +5606,10 @@ components:
     GlobalRemoteSessionIssuer:
       type: object
       properties:
+        ema_binding_count:
+          type: integer
+          description: Number of active identity-chaining bindings that block deletion and must be explicitly unlinked by their owning organizations. Included in the detail response; omitted from listings.
+          format: int64
         global_client_count:
           type: integer
           description: Number of non-deleted global remote_session_clients (project_id NULL, organization_id NULL) registered with this issuer. These block a delete and the platform admin can remove them here.
@@ -5483,7 +5693,7 @@ components:
       properties:
         can_migrate:
           type: boolean
-          description: 'TRUE when the migration would succeed: no endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
+          description: 'TRUE when the migration would succeed: no active identity-chaining bindings, endpoint mismatches, conflicting MCP-server bindings, or user-session issuers that trust the source.'
         client_count:
           type: integer
           description: Number of non-deleted remote_session_clients that would be re-pointed from the source issuer to the target issuer.
@@ -5493,6 +5703,10 @@ components:
           items:
             type: string
           description: Display names of MCP servers where both the source and the target issuer already have a client bound. Non-empty blocks the migration; detach one client per listed server and retry.
+        ema_binding_count:
+          type: integer
+          description: Number of active identity-chaining bindings on the source. Non-zero blocks migration; explicitly unlink these bindings before migration, then prepare new bindings for the target.
+          format: int64
         endpoint_mismatches:
           type: array
           items:
@@ -5518,6 +5732,7 @@ components:
           description: Non-blocking divergences (oidc, passthrough, scopes_supported), with both sides' values. The target issuer's values become authoritative for the migrated clients.
       description: 'Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.'
       required:
+        - ema_binding_count
         - client_count
         - mcp_server_names
         - endpoint_mismatches
@@ -6137,6 +6352,25 @@ components:
         - organization_id
         - feature_name
         - enabled
+    SetOrganizationOnboardingRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+        preset:
+          type: string
+          description: Omit to preserve the saved preset. Null/reset is not supported.
+          enum:
+            - gateway
+            - security
+        visible_task_keys:
+          type: array
+          items:
+            type: string
+          description: Complete explicit selection; an empty array selects no tasks.
+      required:
+        - organization_id
+        - visible_task_keys
     SetStripeCustomerRequestBody:
       type: object
       properties:

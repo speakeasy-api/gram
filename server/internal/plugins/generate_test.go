@@ -790,6 +790,65 @@ func TestGenerateSinglePluginPackageCodex(t *testing.T) {
 	err = json.Unmarshal(files[".codex-plugin/plugin.json"], &meta)
 	require.NoError(t, err)
 	require.Equal(t, "test", meta.Name, "flat package should use the raw slug, not slug-codex")
+	require.Equal(t, "Tools and skills for Test.", meta.Description)
+	require.NotNil(t, meta.Interface)
+	require.Equal(t, meta.Description, meta.Interface.ShortDescription)
+	require.Equal(t, meta.Description, meta.Interface.LongDescription)
+}
+
+func TestGenerateCodexPluginDescriptions(t *testing.T) {
+	t.Parallel()
+
+	for _, description := range []string{"", " \t\n\u2003", "Review code", strings.Repeat("界", 240), strings.Repeat("界", 241), "First line\nSecond\tline", strings.Repeat("界", 4001)} {
+		plugin := PluginInfo{Name: "Test", Slug: "test", Description: description}
+		files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{}, "codex")
+		require.NoError(t, err)
+
+		var manifest struct {
+			Description string `json:"description"`
+			Interface   struct {
+				ShortDescription string `json:"shortDescription"`
+				LongDescription  string `json:"longDescription"`
+			} `json:"interface"`
+		}
+		require.NoError(t, json.Unmarshal(files[".codex-plugin/plugin.json"], &manifest))
+		want := strings.TrimSpace(description)
+		if want == "" {
+			want = "Tools and skills for Test."
+		}
+		require.Equal(t, want, manifest.Description)
+		require.NotEmpty(t, strings.TrimSpace(manifest.Interface.ShortDescription))
+		require.LessOrEqual(t, len([]rune(manifest.Interface.ShortDescription)), 240)
+		require.NotContains(t, manifest.Interface.ShortDescription, "\n")
+		require.NotContains(t, manifest.Interface.ShortDescription, "\t")
+		require.Equal(t, string([]rune(want)[:min(len([]rune(want)), 4000)]), manifest.Interface.LongDescription)
+		if len([]rune(want)) <= 240 {
+			require.Equal(t, strings.Join(strings.Fields(want), " "), manifest.Interface.ShortDescription)
+		}
+	}
+}
+
+func TestGenerateCodexMarketplaceDescriptions(t *testing.T) {
+	t.Parallel()
+
+	files, err := GeneratePluginPackages([]PluginInfo{{Name: "Test", Slug: "test", Description: " \t\n"}}, GenerateConfig{OrgName: "Example", ServerURL: "https://example.com", HooksAPIKey: "EXAMPLE_HOOKS_KEY"})
+	require.NoError(t, err)
+	count := 0
+	for name, content := range files {
+		if !strings.HasSuffix(name, "/.codex-plugin/plugin.json") {
+			continue
+		}
+		count++
+		var manifest codexPluginMeta
+		require.NoError(t, json.Unmarshal(content, &manifest), name)
+		require.NotEmpty(t, strings.TrimSpace(manifest.Description), name)
+		require.NotNil(t, manifest.Interface, name)
+		require.NotEmpty(t, strings.TrimSpace(manifest.Interface.ShortDescription), name)
+		require.LessOrEqual(t, len([]rune(manifest.Interface.ShortDescription)), 240, name)
+		require.Equal(t, manifest.Description, manifest.Interface.LongDescription, name)
+	}
+	// Native, shared Agent Plugins overlay, and observability manifests.
+	require.GreaterOrEqual(t, count, 3)
 }
 
 func TestGenerateReadmeEscapesMarkdownInTableCells(t *testing.T) {

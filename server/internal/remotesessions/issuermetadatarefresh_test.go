@@ -1347,3 +1347,27 @@ func TestIssuerMetadataRefresh_FlowRowReprojectionFlagMatchesTheStoredRow(t *tes
 	require.False(t, flow.MetadataNeedsReprojection, "a refreshed row has every capability column set")
 	require.True(t, flow.MetadataFetchedAt.Valid)
 }
+
+func TestIssuerMetadataRefresh_Refresh_GuardedEndpointFailureIsVisibleAndPaced(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	user := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "guarded-refresh-human")
+	refresher, _ := newIssuerMetadataRefresher(t, ti)
+	upstream := fakeIssuerServer(t, nil)
+	id := createProjectIssuer(t, ctx, ti, "guarded-refresh", upstream.URL)
+	existing := loadIssuerByID(t, ctx, ti, id)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	q := repo.New(ti.conn)
+	require.NoError(t, q.EnsureEMABinding(ctx, repo.EnsureEMABindingParams{
+		ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID,
+		UserSessionIssuerID: user, RemoteSessionIssuerID: id, Resource: "https://resource.example.com/",
+	}))
+	outcome, err := refresher.Refresh(ctx, refreshCandidate(t, ctx, ti, id))
+	require.NoError(t, err)
+	require.Equal(t, remotesessionmetrics.IssuerMetadataRefreshOutcomeDefinitiveFailure, outcome)
+	after := loadIssuerByID(t, ctx, ti, id)
+	require.Equal(t, existing.TokenEndpoint, after.TokenEndpoint)
+	require.Contains(t, after.MetadataLastError.String, "blocked by an active client binding")
+	require.True(t, after.MetadataLastErrorAt.Valid)
+	require.False(t, fetchDue(t, ctx, ti, id, time.Now()), "guard rejection must not immediately requeue the issuer")
+}

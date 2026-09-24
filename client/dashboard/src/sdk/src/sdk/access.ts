@@ -7,6 +7,7 @@ import { accessDeleteRole } from "../funcs/accessDeleteRole.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
 import { accessListAIDetections } from "../funcs/accessListAIDetections.js";
+import { accessListAIDetectionUsers } from "../funcs/accessListAIDetectionUsers.js";
 import { accessListAudienceOptions } from "../funcs/accessListAudienceOptions.js";
 import { accessListChallengeBuckets } from "../funcs/accessListChallengeBuckets.js";
 import { accessListChallenges } from "../funcs/accessListChallenges.js";
@@ -31,6 +32,7 @@ import { accessUpdateShadowMCPInventoryServerName } from "../funcs/accessUpdateS
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AccessMember } from "../models/components/accessmember.js";
 import { ListAIDetectionsResult } from "../models/components/listaidetectionsresult.js";
+import { ListAIDetectionUsersResult } from "../models/components/listaidetectionusersresult.js";
 import { ListAudienceOptionsResult } from "../models/components/listaudienceoptionsresult.js";
 import { ListChallengeBucketsResult } from "../models/components/listchallengebucketsresult.js";
 import { ListChallengesResult } from "../models/components/listchallengesresult.js";
@@ -68,6 +70,10 @@ import {
   ListAIDetectionsRequest,
   ListAIDetectionsSecurity,
 } from "../models/operations/listaidetections.js";
+import {
+  ListAIDetectionUsersRequest,
+  ListAIDetectionUsersSecurity,
+} from "../models/operations/listaidetectionusers.js";
 import {
   ListAudienceOptionsRequest,
   ListAudienceOptionsSecurity,
@@ -224,6 +230,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ShadowMCPInventoryServer> {
     return unwrapAsync(accessGetShadowMCPInventoryServer(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listAIDetectionUsers access
+   *
+   * @remarks
+   * List the enrolled users one detected AI tool was found for, each with their devices, signals, versions and first and last sightings: the evidence listEmployeeAIDetections gives per tool for one person, expanded the other way round. Org-scoped like listAIDetections and, like it, requires an authenticated session authorized for org:admin on the active organization. Linked alias emails are folded to the canonical identity, so one person is one row. A target with no detections in the organization is not_found.
+   */
+  async listAIDetectionUsers(
+    request: ListAIDetectionUsersRequest,
+    security?: ListAIDetectionUsersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAIDetectionUsersResult> {
+    return unwrapAsync(accessListAIDetectionUsers(
       this,
       request,
       security,

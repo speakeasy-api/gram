@@ -12,18 +12,38 @@ func TestBuildSkillVersionMetricsQueryRestrictsTelemetryToMappedSessions(t *test
 
 	now := time.Now().UTC()
 	query, _, err := buildSkillVersionMetricsQuery(AttributeMetricsQueryParams{
-		ProjectIDs:           []string{"00000000-0000-0000-0000-000000000001"},
-		TimeStart:            now.Add(-24 * time.Hour).UnixNano(),
-		TimeEnd:              now.UnixNano(),
-		GroupBy:              skillVersionDimension,
-		SortBy:               "total_cost",
-		Filters:              nil,
-		CanonicalIdentityOrg: "",
-		IntervalSeconds:      int64(time.Hour.Seconds()),
+		ProjectIDs:             []string{"00000000-0000-0000-0000-000000000001"},
+		TimeStart:              now.Add(-24 * time.Hour).UnixNano(),
+		TimeEnd:                now.UnixNano(),
+		GroupBy:                skillVersionDimension,
+		SortBy:                 "total_cost",
+		Filters:                nil,
+		CanonicalIdentityOrg:   "",
+		IntervalSeconds:        int64(time.Hour.Seconds()),
+		IncludeDimensionValues: true,
 	}, false)
 	require.NoError(t, err)
 
 	require.Contains(t, query, "chat_id IN (SELECT session_id FROM skill_session_versions")
+	require.Contains(t, query, "AS dimension_values")
+}
+
+func TestBuildSkillVersionMetricsQueryCanOmitDimensionValues(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	query, _, err := buildSkillVersionMetricsQuery(AttributeMetricsQueryParams{
+		ProjectIDs:             []string{"00000000-0000-0000-0000-000000000001"},
+		TimeStart:              now.Add(-24 * time.Hour).UnixNano(),
+		TimeEnd:                now.UnixNano(),
+		GroupBy:                skillVersionDimension,
+		SortBy:                 "total_cost",
+		IntervalSeconds:        int64(time.Hour.Seconds()),
+		IncludeDimensionValues: false,
+	}, false)
+	require.NoError(t, err)
+
+	require.NotContains(t, query, "AS dimension_values")
 }
 
 func TestBuildSkillInsightsQueryRestrictsTelemetryToMappedSessions(t *testing.T) {

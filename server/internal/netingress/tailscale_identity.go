@@ -78,6 +78,9 @@ func parseTailscaleIdentityValue(headers http.Header, name string, decodeWord bo
 		return "", fmt.Errorf("multiple %s values", name)
 	}
 	raw := values[0]
+	if raw == "" && name == TailscaleUserProfilePicHeader {
+		return "", nil
+	}
 	if raw == "" || strings.TrimSpace(raw) != raw || strings.ContainsAny(raw, "\r\n\x00") {
 		return "", fmt.Errorf("invalid %s value", name)
 	}
@@ -123,16 +126,26 @@ func validateEncodedWordMarkers(raw string) error {
 			return nil
 		}
 		start := offset + relativeStart
-		relativeEnd := strings.Index(raw[start+2:], "?=")
+		// Skip the charset and encoding separators before looking for the
+		// terminator: a Q-encoded payload can begin with an equals sign.
+		payloadStart := start + 2
+		for range 2 {
+			separator := strings.IndexByte(raw[payloadStart:], '?')
+			if separator < 0 {
+				return fmt.Errorf("malformed encoded word")
+			}
+			payloadStart += separator + 1
+		}
+		relativeEnd := strings.Index(raw[payloadStart:], "?=")
 		if relativeEnd < 0 {
 			return fmt.Errorf("unterminated encoded word")
 		}
-		end := start + 2 + relativeEnd + 2
+		end := payloadStart + relativeEnd + 2
 		candidate := raw[start:end]
 		if !looksLikeCompleteEncodedWord(candidate) {
 			return fmt.Errorf("malformed encoded word")
 		}
-		if _, err := decoder.DecodeHeader(candidate); err != nil {
+		if _, err := decoder.Decode(candidate); err != nil {
 			return fmt.Errorf("decode encoded word: %w", err)
 		}
 		offset = end
