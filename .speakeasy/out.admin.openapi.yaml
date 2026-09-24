@@ -4977,10 +4977,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdminOnboardingTask'
+        workstreams:
+          type: array
+          items:
+            $ref: '#/components/schemas/SetupWorkstream'
+          description: Canonical workstreams in display order, including hidden task keys.
       required:
         - organization_id
         - tasks
         - presets
+        - workstreams
     AdminOnboardingPreset:
       type: object
       properties:
@@ -6533,6 +6539,25 @@ components:
       required:
         - organization_id
         - stripe_customer_id
+    SetupWorkstream:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Stable workstream identifier used for assignment.
+        task_keys:
+          type: array
+          items:
+            type: string
+          description: Ordered task keys available in this response. Hidden tasks are included only in authorized responses.
+        title:
+          type: string
+          description: Workstream display title.
+      description: Canonical onboarding workstream. Task keys define task display order; the containing workstreams array defines workstream display order.
+      required:
+        - id
+        - title
+        - task_keys
     SpendBucket:
       type: object
       properties:

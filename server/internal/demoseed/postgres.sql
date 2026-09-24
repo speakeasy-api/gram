@@ -517,14 +517,16 @@ BEGIN
 
   -- Customized Security selection: defer Anthropic admin controls and include
   -- server distribution. Both views read this same explicit selection.
+  -- MCP Gateway has one owner across its visible and hidden tasks. Observe
+  -- retains mixed legacy assignments so the column shows that state honestly.
   INSERT INTO organization_setup_tasks
     (organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at)
   VALUES
     (demo_org, 'identity-provider', 'todo', NULL, NULL, now()),
     (demo_org, 'connect-idp', 'todo', NULL, NULL, NULL),
     (demo_org, 'directory-sync', 'todo', NULL, NULL, NULL),
-    (demo_org, 'create-marketplace', 'todo', NULL, NULL, NULL),
-    (demo_org, 'distribute-servers', 'todo', NULL, NULL, NULL),
+    (demo_org, 'create-marketplace', 'todo', 'user_demo_priya', NULL, NULL),
+    (demo_org, 'distribute-servers', 'todo', 'user_demo_priya', NULL, NULL),
     (demo_org, 'enable-logging', 'todo', NULL, NULL, NULL),
     (demo_org, 'anthropic-observability', 'todo', NULL, NULL, NULL),
     (demo_org, 'confirm-traffic', 'todo', NULL, NULL, NULL),
@@ -533,7 +535,7 @@ BEGIN
     (demo_org, 'additional-agent-config', 'awaiting_support', NULL,
      'security-owner@demo.getgram.ai', NULL),
     (demo_org, 'configure-policies', 'done', NULL, NULL, NULL),
-    (demo_org, 'platform-mcp', 'todo', NULL, NULL, now());
+    (demo_org, 'platform-mcp', 'todo', 'user_demo_priya', NULL, now());
 
   -- Memberships: fake, credential-less members so team/enrollment/facepile
   -- surfaces render. Real users still never join the demo org — access is by

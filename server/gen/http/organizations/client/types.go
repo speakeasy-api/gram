@@ -58,6 +58,17 @@ type GenerateWorkOSAdminPortalLinkRequestBody struct {
 	IntentOptions *WorkOSIntentOptionsRequestBody `form:"intent_options,omitempty" json:"intent_options,omitempty" xml:"intent_options,omitempty"`
 }
 
+// AssignSetupWorkstreamRequestBody is the type of the "organizations" service
+// "assignSetupWorkstream" endpoint HTTP request body.
+type AssignSetupWorkstreamRequestBody struct {
+	// Setup workstream ID from the onboarding workstream catalog.
+	Workstream string `form:"workstream" json:"workstream" xml:"workstream"`
+	// Replacement workstream assignee; mutually exclusive with clear_assignee=true.
+	Assignee *SetupTaskAssigneeInputRequestBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
+	// Clear all workstream task assignees.
+	ClearAssignee *bool `form:"clear_assignee,omitempty" json:"clear_assignee,omitempty" xml:"clear_assignee,omitempty"`
+}
+
 // UpdateSetupTaskRequestBody is the type of the "organizations" service
 // "updateSetupTask" endpoint HTTP request body.
 type UpdateSetupTaskRequestBody struct {
@@ -214,6 +225,17 @@ type GenerateWorkOSAdminPortalLinkResponseBody struct {
 type ListSetupTasksResponseBody struct {
 	// Setup tasks in catalog order.
 	Tasks []*SetupTaskResponseBody `form:"tasks,omitempty" json:"tasks,omitempty" xml:"tasks,omitempty"`
+	// Canonical workstreams in display order, including hidden task keys.
+	Workstreams []*SetupWorkstreamResponseBody `form:"workstreams,omitempty" json:"workstreams,omitempty" xml:"workstreams,omitempty"`
+}
+
+// AssignSetupWorkstreamResponseBody is the type of the "organizations" service
+// "assignSetupWorkstream" endpoint HTTP response body.
+type AssignSetupWorkstreamResponseBody struct {
+	// Setup tasks in catalog order.
+	Tasks []*SetupTaskResponseBody `form:"tasks,omitempty" json:"tasks,omitempty" xml:"tasks,omitempty"`
+	// Canonical workstreams in display order, including hidden task keys.
+	Workstreams []*SetupWorkstreamResponseBody `form:"workstreams,omitempty" json:"workstreams,omitempty" xml:"workstreams,omitempty"`
 }
 
 // UpdateSetupTaskResponseBody is the type of the "organizations" service
@@ -3046,6 +3068,196 @@ type ListSetupTasksGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// AssignSetupWorkstreamUnauthorizedResponseBody is the type of the
+// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
+// for the "unauthorized" error.
+type AssignSetupWorkstreamUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AssignSetupWorkstreamForbiddenResponseBody is the type of the
+// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
+// for the "forbidden" error.
+type AssignSetupWorkstreamForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AssignSetupWorkstreamBadRequestResponseBody is the type of the
+// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
+// for the "bad_request" error.
+type AssignSetupWorkstreamBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AssignSetupWorkstreamNotFoundResponseBody is the type of the "organizations"
+// service "assignSetupWorkstream" endpoint HTTP response body for the
+// "not_found" error.
+type AssignSetupWorkstreamNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AssignSetupWorkstreamConflictResponseBody is the type of the "organizations"
+// service "assignSetupWorkstream" endpoint HTTP response body for the
+// "conflict" error.
+type AssignSetupWorkstreamConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AssignSetupWorkstreamUnsupportedMediaResponseBody is the type of the
+// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
+// for the "unsupported_media" error.
+type AssignSetupWorkstreamUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AssignSetupWorkstreamInvalidResponseBody is the type of the "organizations"
+// service "assignSetupWorkstream" endpoint HTTP response body for the
+// "invalid" error.
+type AssignSetupWorkstreamInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AssignSetupWorkstreamInvariantViolationResponseBody is the type of the
+// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
+// for the "invariant_violation" error.
+type AssignSetupWorkstreamInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AssignSetupWorkstreamUnexpectedResponseBody is the type of the
+// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
+// for the "unexpected" error.
+type AssignSetupWorkstreamUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// AssignSetupWorkstreamGatewayErrorResponseBody is the type of the
+// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
+// for the "gateway_error" error.
+type AssignSetupWorkstreamGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // UpdateSetupTaskUnauthorizedResponseBody is the type of the "organizations"
 // service "updateSetupTask" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -3364,6 +3576,17 @@ type SetupTaskAssigneeResponseBody struct {
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
 }
 
+// SetupWorkstreamResponseBody is used to define fields on response body types.
+type SetupWorkstreamResponseBody struct {
+	// Stable workstream identifier used for assignment.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Workstream display title.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Ordered task keys available in this response. Hidden tasks are included only
+	// in authorized responses.
+	TaskKeys []string `form:"task_keys,omitempty" json:"task_keys,omitempty" xml:"task_keys,omitempty"`
+}
+
 // SetupTaskAssigneeInputRequestBody is used to define fields on request body
 // types.
 type SetupTaskAssigneeInputRequestBody struct {
@@ -3427,6 +3650,20 @@ func NewGenerateWorkOSAdminPortalLinkRequestBody(p *organizations.GenerateWorkOS
 	}
 	if p.IntentOptions != nil {
 		body.IntentOptions = marshalOrganizationsWorkOSIntentOptionsToWorkOSIntentOptionsRequestBody(p.IntentOptions)
+	}
+	return body
+}
+
+// NewAssignSetupWorkstreamRequestBody builds the HTTP request body from the
+// payload of the "assignSetupWorkstream" endpoint of the "organizations"
+// service.
+func NewAssignSetupWorkstreamRequestBody(p *organizations.AssignSetupWorkstreamPayload) *AssignSetupWorkstreamRequestBody {
+	body := &AssignSetupWorkstreamRequestBody{
+		Workstream:    p.Workstream,
+		ClearAssignee: p.ClearAssignee,
+	}
+	if p.Assignee != nil {
+		body.Assignee = marshalOrganizationsSetupTaskAssigneeInputToSetupTaskAssigneeInputRequestBody(p.Assignee)
 	}
 	return body
 }
@@ -5710,6 +5947,14 @@ func NewListSetupTasksResultOK(body *ListSetupTasksResponseBody) *organizations.
 		}
 		v.Tasks[i] = unmarshalSetupTaskResponseBodyToOrganizationsSetupTask(val)
 	}
+	v.Workstreams = make([]*types.SetupWorkstream, len(body.Workstreams))
+	for i, val := range body.Workstreams {
+		if val == nil {
+			v.Workstreams[i] = nil
+			continue
+		}
+		v.Workstreams[i] = unmarshalSetupWorkstreamResponseBodyToTypesSetupWorkstream(val)
+	}
 
 	return v
 }
@@ -5852,6 +6097,180 @@ func NewListSetupTasksUnexpected(body *ListSetupTasksUnexpectedResponseBody) *go
 // NewListSetupTasksGatewayError builds a organizations service listSetupTasks
 // endpoint gateway_error error.
 func NewListSetupTasksGatewayError(body *ListSetupTasksGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAssignSetupWorkstreamListSetupTasksResultOK builds a "organizations"
+// service "assignSetupWorkstream" endpoint result from a HTTP "OK" response.
+func NewAssignSetupWorkstreamListSetupTasksResultOK(body *AssignSetupWorkstreamResponseBody) *organizations.ListSetupTasksResult {
+	v := &organizations.ListSetupTasksResult{}
+	v.Tasks = make([]*organizations.SetupTask, len(body.Tasks))
+	for i, val := range body.Tasks {
+		if val == nil {
+			v.Tasks[i] = nil
+			continue
+		}
+		v.Tasks[i] = unmarshalSetupTaskResponseBodyToOrganizationsSetupTask(val)
+	}
+	v.Workstreams = make([]*types.SetupWorkstream, len(body.Workstreams))
+	for i, val := range body.Workstreams {
+		if val == nil {
+			v.Workstreams[i] = nil
+			continue
+		}
+		v.Workstreams[i] = unmarshalSetupWorkstreamResponseBodyToTypesSetupWorkstream(val)
+	}
+
+	return v
+}
+
+// NewAssignSetupWorkstreamUnauthorized builds a organizations service
+// assignSetupWorkstream endpoint unauthorized error.
+func NewAssignSetupWorkstreamUnauthorized(body *AssignSetupWorkstreamUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAssignSetupWorkstreamForbidden builds a organizations service
+// assignSetupWorkstream endpoint forbidden error.
+func NewAssignSetupWorkstreamForbidden(body *AssignSetupWorkstreamForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAssignSetupWorkstreamBadRequest builds a organizations service
+// assignSetupWorkstream endpoint bad_request error.
+func NewAssignSetupWorkstreamBadRequest(body *AssignSetupWorkstreamBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAssignSetupWorkstreamNotFound builds a organizations service
+// assignSetupWorkstream endpoint not_found error.
+func NewAssignSetupWorkstreamNotFound(body *AssignSetupWorkstreamNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAssignSetupWorkstreamConflict builds a organizations service
+// assignSetupWorkstream endpoint conflict error.
+func NewAssignSetupWorkstreamConflict(body *AssignSetupWorkstreamConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAssignSetupWorkstreamUnsupportedMedia builds a organizations service
+// assignSetupWorkstream endpoint unsupported_media error.
+func NewAssignSetupWorkstreamUnsupportedMedia(body *AssignSetupWorkstreamUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAssignSetupWorkstreamInvalid builds a organizations service
+// assignSetupWorkstream endpoint invalid error.
+func NewAssignSetupWorkstreamInvalid(body *AssignSetupWorkstreamInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAssignSetupWorkstreamInvariantViolation builds a organizations service
+// assignSetupWorkstream endpoint invariant_violation error.
+func NewAssignSetupWorkstreamInvariantViolation(body *AssignSetupWorkstreamInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAssignSetupWorkstreamUnexpected builds a organizations service
+// assignSetupWorkstream endpoint unexpected error.
+func NewAssignSetupWorkstreamUnexpected(body *AssignSetupWorkstreamUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewAssignSetupWorkstreamGatewayError builds a organizations service
+// assignSetupWorkstream endpoint gateway_error error.
+func NewAssignSetupWorkstreamGatewayError(body *AssignSetupWorkstreamGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -6272,9 +6691,45 @@ func ValidateListSetupTasksResponseBody(body *ListSetupTasksResponseBody) (err e
 	if body.Tasks == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tasks", "body"))
 	}
+	if body.Workstreams == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workstreams", "body"))
+	}
 	for _, e := range body.Tasks {
 		if e != nil {
 			if err2 := ValidateSetupTaskResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Workstreams {
+		if e != nil {
+			if err2 := ValidateSetupWorkstreamResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAssignSetupWorkstreamResponseBody runs the validations defined on
+// AssignSetupWorkstreamResponseBody
+func ValidateAssignSetupWorkstreamResponseBody(body *AssignSetupWorkstreamResponseBody) (err error) {
+	if body.Tasks == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tasks", "body"))
+	}
+	if body.Workstreams == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workstreams", "body"))
+	}
+	for _, e := range body.Tasks {
+		if e != nil {
+			if err2 := ValidateSetupTaskResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Workstreams {
+		if e != nil {
+			if err2 := ValidateSetupWorkstreamResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -9936,6 +10391,247 @@ func ValidateListSetupTasksGatewayErrorResponseBody(body *ListSetupTasksGatewayE
 	return
 }
 
+// ValidateAssignSetupWorkstreamUnauthorizedResponseBody runs the validations
+// defined on assignSetupWorkstream_unauthorized_response_body
+func ValidateAssignSetupWorkstreamUnauthorizedResponseBody(body *AssignSetupWorkstreamUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAssignSetupWorkstreamForbiddenResponseBody runs the validations
+// defined on assignSetupWorkstream_forbidden_response_body
+func ValidateAssignSetupWorkstreamForbiddenResponseBody(body *AssignSetupWorkstreamForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAssignSetupWorkstreamBadRequestResponseBody runs the validations
+// defined on assignSetupWorkstream_bad_request_response_body
+func ValidateAssignSetupWorkstreamBadRequestResponseBody(body *AssignSetupWorkstreamBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAssignSetupWorkstreamNotFoundResponseBody runs the validations
+// defined on assignSetupWorkstream_not_found_response_body
+func ValidateAssignSetupWorkstreamNotFoundResponseBody(body *AssignSetupWorkstreamNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAssignSetupWorkstreamConflictResponseBody runs the validations
+// defined on assignSetupWorkstream_conflict_response_body
+func ValidateAssignSetupWorkstreamConflictResponseBody(body *AssignSetupWorkstreamConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAssignSetupWorkstreamUnsupportedMediaResponseBody runs the
+// validations defined on assignSetupWorkstream_unsupported_media_response_body
+func ValidateAssignSetupWorkstreamUnsupportedMediaResponseBody(body *AssignSetupWorkstreamUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAssignSetupWorkstreamInvalidResponseBody runs the validations
+// defined on assignSetupWorkstream_invalid_response_body
+func ValidateAssignSetupWorkstreamInvalidResponseBody(body *AssignSetupWorkstreamInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAssignSetupWorkstreamInvariantViolationResponseBody runs the
+// validations defined on
+// assignSetupWorkstream_invariant_violation_response_body
+func ValidateAssignSetupWorkstreamInvariantViolationResponseBody(body *AssignSetupWorkstreamInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAssignSetupWorkstreamUnexpectedResponseBody runs the validations
+// defined on assignSetupWorkstream_unexpected_response_body
+func ValidateAssignSetupWorkstreamUnexpectedResponseBody(body *AssignSetupWorkstreamUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateAssignSetupWorkstreamGatewayErrorResponseBody runs the validations
+// defined on assignSetupWorkstream_gateway_error_response_body
+func ValidateAssignSetupWorkstreamGatewayErrorResponseBody(body *AssignSetupWorkstreamGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateUpdateSetupTaskUnauthorizedResponseBody runs the validations defined
 // on updateSetupTask_unauthorized_response_body
 func ValidateUpdateSetupTaskUnauthorizedResponseBody(body *UpdateSetupTaskUnauthorizedResponseBody) (err error) {
@@ -10310,6 +11006,21 @@ func ValidateSetupTaskResponseBody(body *SetupTaskResponseBody) (err error) {
 func ValidateSetupTaskAssigneeResponseBody(body *SetupTaskAssigneeResponseBody) (err error) {
 	if body.Email == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
+	}
+	return
+}
+
+// ValidateSetupWorkstreamResponseBody runs the validations defined on
+// SetupWorkstreamResponseBody
+func ValidateSetupWorkstreamResponseBody(body *SetupWorkstreamResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.TaskKeys == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("task_keys", "body"))
 	}
 	return
 }

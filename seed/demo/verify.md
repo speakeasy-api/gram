@@ -164,14 +164,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Gateway (not Shadow MCP) and link back to the gateway, and each member
     dispatch carries a "via Acme Agent Gateway" marker. Back on the MCP
     listing, the gateway card shows no "never used" marker.
-17. **Organization setup board** — with the `gram-setup-board` flag enabled,
-    open `/acme-demo/setup/board`. Confirm all four columns render, Priya owns
-    Set up observability in other platforms, `security-owner@demo.getgram.ai` owns Configure
-    integrations in Awaiting Support, and Set up identity provider and Set up
-    Anthropic observability sit in To Do. Distribute MCP servers, Configure
-    policies, and Set up Platform MCP are hidden by default, so the board shows
-    four tasks. As a platform admin, enable **Show hidden tasks** and confirm
-    all three appear with a Hidden badge.
+17. **Organization onboarding** — open `/acme-demo/setup`. Workstreams is the only board; customer and support sessions have no Kanban or audience-specific board defaults. Authorized admins can switch between Workstreams and Wizard using the header links. Priya owns Set up observability in other platforms, and `security-owner@demo.getgram.ai` owns Configure integrations in Awaiting Support. Identity provider and Anthropic observability start in To Do. Hidden and optional tasks do not count toward required progress. Confirm that showing hidden tasks does not change the required total and that completing the optional Platform MCP task does not change required progress. Authenticated platform staff can enable **Show hidden tasks**; ordinary readers cannot. Verify writes against the writable local seed; do not use the shared demo for destructive checks. Task dialogs retain the original guided configuration; Anthropic observability uses inference hooks. Legacy task URLs and explicit `task`, `step`, and `projectSlug` parameters preserve the requested destination through login and Workstreams/Wizard switching. Verify switching both ways on desktop and narrow screens. The independent `/setup/wizard` route remains admin-only. Customized-preset controls and seed data are inherited from the staff preset layer (#6328).
 
 18. **Managed agents (local rewritten seed only)** — run `mise run seed` and
     use an ordinary human session in the local organization, with permission to
@@ -428,3 +421,18 @@ and exact remote-session attachment checks, or
 and commit the SQL change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
 the PR, don't commit them.
+
+### Workstream ownership and invitations
+
+- In an authorized local admin session, check existing mixed-owner setup data: headers show **Mixed owners** or **Partially assigned**, never a suggested role for existing ownership. Open the picker for owner counts and the notice that bulk assignment includes hidden and optional tasks.
+- Reassign a workstream and verify one atomic workstream assignment request, not one write per card. Clear ownership and verify the suggested role returns.
+- Assign an external email without a team invite: task notification does not grant membership. Enable **Send a team invite**, select a role, and verify assignment completes before the membership invitation request.
+- Simulate invitation failure: assignment remains saved and **Retry team invite** retries only the invitation. Simulate assignment failure: no membership invite is sent. Use fictional addresses in local verification; do not send test invitations from the public demo.
+
+### Canonical onboarding catalog
+
+Compare `organizations.listSetupTasks` and Admin `getOrganizationOnboarding` for the same organization: their `workstreams` arrays must have identical IDs, titles, task keys, and ordering. The customer board and Admin selection headings and task ordering follow those arrays; hidden tasks remain in catalog membership without becoming visible to ordinary customers. Existing mixed-owner and hidden seed rows still exercise assignment and visibility. No reseed is necessary for a catalog metadata-only change.
+
+To add or move a workstream, edit `server/internal/organizations/setup_workstreams.go`, not either frontend. New interactive tasks also need a task definition and dashboard rendering entry. Run the catalog coverage test and regenerate the API/SDK if its schema changes.
+
+Platform MCP assessment: this change exposes existing organization onboarding grouping metadata to session-authorized customers and staff; it introduces no new management action or permission. Existing Platform MCP setup handoff/onboarding tools cover upstream MCP registration and distribution, not the organization's staff-selected board. No MCP tool change is needed for this presentation-only catalog consolidation. Backend parity/partition tests and frontend response-driven grouping tests verify the shared contract; assignment authorization and hidden-task behavior remain unchanged.

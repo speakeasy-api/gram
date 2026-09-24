@@ -390,6 +390,8 @@ type AdminOnboardingConfiguration struct {
 	Preset  *string
 	Tasks   []*AdminOnboardingTask
 	Presets []*AdminOnboardingPreset
+	// Canonical workstreams in display order, including hidden task keys.
+	Workstreams []*types.SetupWorkstream
 }
 
 type AdminOnboardingPreset struct {

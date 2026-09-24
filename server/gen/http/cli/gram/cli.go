@@ -154,7 +154,7 @@ func UsageCommands() []string {
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
 		"okta-resource-connections (list|confirm|reset)",
-		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task)",
+		"organizations (get|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|assign-setup-workstream|update-setup-task)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-assets upload-platform-image",
@@ -1963,6 +1963,10 @@ func ParseEndpoint(
 		organizationsListSetupTasksFlags             = flag.NewFlagSet("list-setup-tasks", flag.ExitOnError)
 		organizationsListSetupTasksIncludeHiddenFlag = organizationsListSetupTasksFlags.String("include-hidden", "", "")
 		organizationsListSetupTasksSessionTokenFlag  = organizationsListSetupTasksFlags.String("session-token", "", "")
+
+		organizationsAssignSetupWorkstreamFlags            = flag.NewFlagSet("assign-setup-workstream", flag.ExitOnError)
+		organizationsAssignSetupWorkstreamBodyFlag         = organizationsAssignSetupWorkstreamFlags.String("body", "REQUIRED", "")
+		organizationsAssignSetupWorkstreamSessionTokenFlag = organizationsAssignSetupWorkstreamFlags.String("session-token", "", "")
 
 		organizationsUpdateSetupTaskFlags            = flag.NewFlagSet("update-setup-task", flag.ExitOnError)
 		organizationsUpdateSetupTaskBodyFlag         = organizationsUpdateSetupTaskFlags.String("body", "REQUIRED", "")
@@ -4833,6 +4837,7 @@ func ParseEndpoint(
 	organizationsSendEnterpriseAdminOnboardingEmailFlags.Usage = organizationsSendEnterpriseAdminOnboardingEmailUsage
 	organizationsGenerateWorkOSAdminPortalLinkFlags.Usage = organizationsGenerateWorkOSAdminPortalLinkUsage
 	organizationsListSetupTasksFlags.Usage = organizationsListSetupTasksUsage
+	organizationsAssignSetupWorkstreamFlags.Usage = organizationsAssignSetupWorkstreamUsage
 	organizationsUpdateSetupTaskFlags.Usage = organizationsUpdateSetupTaskUsage
 
 	otelFlags.Usage = otelUsage
@@ -6722,6 +6727,9 @@ func ParseEndpoint(
 
 			case "list-setup-tasks":
 				epf = organizationsListSetupTasksFlags
+
+			case "assign-setup-workstream":
+				epf = organizationsAssignSetupWorkstreamFlags
 
 			case "update-setup-task":
 				epf = organizationsUpdateSetupTaskFlags
@@ -9410,6 +9418,9 @@ func ParseEndpoint(
 			case "list-setup-tasks":
 				endpoint = c.ListSetupTasks()
 				data, err = organizationsc.BuildListSetupTasksPayload(*organizationsListSetupTasksIncludeHiddenFlag, *organizationsListSetupTasksSessionTokenFlag)
+			case "assign-setup-workstream":
+				endpoint = c.AssignSetupWorkstream()
+				data, err = organizationsc.BuildAssignSetupWorkstreamPayload(*organizationsAssignSetupWorkstreamBodyFlag, *organizationsAssignSetupWorkstreamSessionTokenFlag)
 			case "update-setup-task":
 				endpoint = c.UpdateSetupTask()
 				data, err = organizationsc.BuildUpdateSetupTaskPayload(*organizationsUpdateSetupTaskBodyFlag, *organizationsUpdateSetupTaskSessionTokenFlag)
@@ -18629,6 +18640,7 @@ func organizationsUsage() {
 	fmt.Fprintln(os.Stderr, `    send-enterprise-admin-onboarding-email: Send the enterprise admin onboarding email to one or more recipients. The email links each recipient to the wizard for the active organization. Used by the Platform Admin onboarding tools.`)
 	fmt.Fprintln(os.Stderr, `    generate-work-os-admin-portal-link: Generate a WorkOS Admin Portal link for the given intent (e.g. dsync, sso).`)
 	fmt.Fprintln(os.Stderr, `    list-setup-tasks: List the fixed setup task catalog projected with organization state and completion evidence.`)
+	fmt.Fprintln(os.Stderr, `    assign-setup-workstream: Atomically assign or clear every task in a setup workstream, including hidden tasks. Requires organization administrator access. Sends one notification when the assignee changes.`)
 	fmt.Fprintln(os.Stderr, `    update-setup-task: Update one fixed setup task. The request must include at least one effective update: status, assignee, hidden, or clear_assignee=true. Assignee is mutually exclusive with clear_assignee=true.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -18918,6 +18930,26 @@ func organizationsListSetupTasksUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations list-setup-tasks --include-hidden false --session-token \"abc123\"")
+}
+
+func organizationsAssignSetupWorkstreamUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] organizations assign-setup-workstream", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Atomically assign or clear every task in a setup workstream, including hidden tasks. Requires organization administrator access. Sends one notification when the assignee changes.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations assign-setup-workstream --body '{\n      \"assignee\": {\n         \"email\": \"alice@example.com\",\n         \"user_id\": \"abc123\"\n      },\n      \"clear_assignee\": false,\n      \"workstream\": \"abc123\"\n   }' --session-token \"abc123\"")
 }
 
 func organizationsUpdateSetupTaskUsage() {

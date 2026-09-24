@@ -337,6 +337,26 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListSetupTasks"}`)
 	})
 
+	Method("assignSetupWorkstream", func() {
+		Description("Atomically assign or clear every task in a setup workstream, including hidden tasks. Requires organization administrator access. Sends one notification when the assignee changes.")
+		Payload(func() {
+			Attribute("workstream", String, "Setup workstream ID from the onboarding workstream catalog.")
+			Attribute("assignee", SetupTaskAssigneeInput, "Replacement workstream assignee; mutually exclusive with clear_assignee=true.")
+			Attribute("clear_assignee", Boolean, "Clear all workstream task assignees.")
+			Required("workstream")
+			security.SessionPayload()
+		})
+		Result(ListSetupTasksResult)
+		HTTP(func() {
+			POST("/rpc/organizations.assignSetupWorkstream")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "assignSetupWorkstream")
+		Meta("openapi:extension:x-speakeasy-name-override", "assignSetupWorkstream")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AssignSetupWorkstream"}`)
+	})
+
 	Method("updateSetupTask", func() {
 		Description("Update one fixed setup task. The request must include at least one effective update: status, assignee, hidden, or clear_assignee=true. Assignee is mutually exclusive with clear_assignee=true.")
 
@@ -534,5 +554,6 @@ var SetupTask = Type("SetupTask", func() {
 
 var ListSetupTasksResult = Type("ListSetupTasksResult", func() {
 	Attribute("tasks", ArrayOf(SetupTask), "Setup tasks in catalog order.")
-	Required("tasks")
+	Attribute("workstreams", ArrayOf(shared.SetupWorkstream), "Canonical workstreams in display order, including hidden task keys.")
+	Required("tasks", "workstreams")
 })

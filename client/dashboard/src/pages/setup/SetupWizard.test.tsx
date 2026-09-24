@@ -1,20 +1,28 @@
+import { ONBOARDING_WORKSTREAMS } from "./components/board/workstream-fixtures";
 import type { ReactNode } from "react";
 import {
   cleanup,
   fireEvent,
-  render,
+  render as renderView,
+  within,
   screen,
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
+import { MemoryRouter, Routes, Route, useLocation } from "react-router";
 import SetupWizard from "./SetupWizard";
+import SetupTaskPage from "./SetupTaskPage";
+import { OnboardingBoard } from "./components/board/onboarding-board";
+import { resolveBoardTasks } from "./components/board/board-store";
 import { StepSection } from "./components/step-section";
 
 const mocks = vi.hoisted(() => ({
   setupQuery: vi.fn(),
   update: vi.fn(),
   updatePending: false,
+  platformAdmin: false,
+  realRouter: false,
   invalidate: vi.fn(),
   goToBoard: vi.fn(),
   showPylonChat: vi.fn(),
@@ -25,22 +33,49 @@ const mocks = vi.hoisted(() => ({
   setSearchParams: vi.fn(),
 }));
 
-vi.mock("react-router", () => ({
-  useParams: () => ({ orgSlug: "org" }),
-  useSearchParams: () => [mocks.searchParams, mocks.setSearchParams],
-  useNavigate: () => mocks.navigate,
-}));
+vi.mock("react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router")>();
+  return {
+    ...actual,
+    useParams: () =>
+      mocks.realRouter ? actual.useParams() : { orgSlug: "org" },
+    useSearchParams: () =>
+      mocks.realRouter
+        ? actual.useSearchParams()
+        : [mocks.searchParams, mocks.setSearchParams],
+    useNavigate: () =>
+      mocks.realRouter ? actual.useNavigate() : mocks.navigate,
+  };
+});
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     setup: { goTo: mocks.goToBoard, href: () => "/org/setup" },
+    setupWizard: { href: () => "/org/setup/wizard" },
   }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-vi.mock("./components/setup-shell", () => ({
-  SetupShell: ({ children }: { children: ReactNode }) => <>{children}</>,
+vi.mock("./components/onboarding-header", () => ({
+  OnboardingHeader: ({ children }: { children: ReactNode }) => (
+    <header>{children}</header>
+  ),
 }));
+vi.mock("./components/onboarding-footer", () => ({
+  OnboardingFooter: () => null,
+}));
+
+function render(view: ReactNode) {
+  return renderView(view, {
+    wrapper: ({ children }) => (
+      <MemoryRouter
+        initialEntries={[`/org/setup/wizard?${mocks.searchParams}`]}
+      >
+        {children}
+      </MemoryRouter>
+    ),
+  });
+}
 // A stand-in card with two real StepSections, so the rail is fed the same
 // way the real cards feed it.
 vi.mock("./components/setup-task-content", () => ({
@@ -85,6 +120,10 @@ vi.mock("@gram/client/react-query/_context.js", () => ({
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-one" }),
+  useSession: () => ({
+    organization: { id: "org-one" },
+    user: { id: "user-one", isAdmin: mocks.platformAdmin },
+  }),
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({}),
@@ -139,14 +178,14 @@ function rail(): HTMLElement {
 
 /** The ?task= / ?step= the last navigation would have written. */
 function lastParams(): URLSearchParams {
-  const calls = mocks.setSearchParams.mock.calls;
-  const [updater] = calls[calls.length - 1]!;
-  return updater(new URLSearchParams("step=confirm-traffic"));
+  return new URLSearchParams(mocks.navigate.mock.calls.at(-1)?.[0].search);
 }
 
 afterEach(cleanup);
 beforeEach(() => {
   mocks.updatePending = false;
+  mocks.platformAdmin = false;
+  mocks.realRouter = false;
   mocks.searchParams = new URLSearchParams();
   mocks.setSearchParams.mockReset();
   mocks.navigate.mockReset();
@@ -204,13 +243,14 @@ describe("SetupWizard", () => {
     expect(screen.getByText("Content for instrument-agents")).toBeTruthy();
   });
 
-  it("falls back to the first open card when ?task= names nothing here", () => {
+  it("reports an unavailable explicit task instead of falling back", () => {
     mocks.searchParams = new URLSearchParams("task=no-such-card");
     render(<SetupWizard />);
 
+    expect(screen.getByText("Setup task unavailable")).toBeTruthy();
     expect(
-      screen.getByText("Content for anthropic-observability"),
-    ).toBeTruthy();
+      screen.queryByText("Content for anthropic-observability"),
+    ).toBeNull();
   });
 
   it("lands on the last card once every card is done", () => {
@@ -233,7 +273,7 @@ describe("SetupWizard", () => {
     const params = lastParams();
     expect(params.get("task")).toBe("idp");
     expect(params.get("step")).toBeNull();
-    const [, options] = mocks.setSearchParams.mock.calls.at(-1)!;
+    const [, options] = mocks.navigate.mock.calls.at(-1)!;
     expect(options).toEqual({ replace: true });
   });
 
@@ -263,7 +303,11 @@ describe("SetupWizard", () => {
     view.rerender(<SetupWizard />);
 
     fireEvent.click(screen.getByRole("button", { name: "Skip to dashboard" }));
-    expect(mocks.navigate).toHaveBeenCalledWith("/org");
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      pathname: "/org",
+      search: "",
+      hash: "",
+    });
   });
 
   it("completes the card and moves on to the next one", async () => {
@@ -295,7 +339,13 @@ describe("SetupWizard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Complete" }));
 
-    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith("/org"));
+    await waitFor(() =>
+      expect(mocks.navigate).toHaveBeenCalledWith({
+        pathname: "/org",
+        search: "",
+        hash: "",
+      }),
+    );
   });
 
   it("holds the reader's own moves while a completion is settling", () => {
@@ -320,7 +370,7 @@ describe("SetupWizard", () => {
     expect(subStep.hasAttribute("disabled")).toBe(true);
     fireEvent.click(subStep);
 
-    expect(mocks.setSearchParams).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it("advances a verified task without rewriting its server-derived status", () => {
@@ -369,13 +419,13 @@ describe("SetupWizard", () => {
       screen.queryByRole("button", { name: /Set up identity provider/ }),
     ).toBeNull();
     fireEvent.click(screen.getByText("Set up identity provider"));
-    expect(mocks.setSearchParams).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
 
     finishInvalidate();
     await waitFor(() =>
       expect(lastParams().get("task")).toBe("other-platforms"),
     );
-    expect(mocks.setSearchParams).toHaveBeenCalledOnce();
+    expect(mocks.navigate).toHaveBeenCalledOnce();
   });
 
   it("stays put when completing fails", async () => {
@@ -385,7 +435,6 @@ describe("SetupWizard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Complete" }));
 
     await waitFor(() => expect(mocks.toastError).toHaveBeenCalledWith("nope"));
-    expect(mocks.setSearchParams).not.toHaveBeenCalled();
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
@@ -410,7 +459,7 @@ describe("SetupWizard", () => {
     expect(
       screen.getByText("Content for anthropic-observability"),
     ).toBeTruthy();
-    expect(mocks.setSearchParams).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
   it("points at the board when every card is hidden", () => {
@@ -419,7 +468,11 @@ describe("SetupWizard", () => {
 
     expect(screen.getByText("Nothing to set up")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Setup board" }));
-    expect(mocks.goToBoard).toHaveBeenCalledOnce();
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      pathname: "/org/setup",
+      search: "",
+      hash: "",
+    });
   });
 
   it("offers a retry when the list fails to load", () => {
@@ -437,3 +490,274 @@ describe("SetupWizard", () => {
     expect(refetch).toHaveBeenCalledOnce();
   });
 });
+
+it("places the workstreams return above rail progress and keeps only a mobile header return", () => {
+  mocks.searchParams = new URLSearchParams(
+    "from=workstreams&task=anthropic-observability&step=confirm-traffic&projectSlug=selected&filter=mine",
+  );
+  render(<SetupWizard />);
+  const progress = screen.getByText("1 of 3 tasks complete");
+  const railReturn = within(progress.parentElement!).getByRole("link", {
+    name: "Workstreams",
+  });
+  expect(
+    railReturn.compareDocumentPosition(progress) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(railReturn.querySelector("svg.lucide-arrow-left")).not.toBeNull();
+  expect(railReturn.classList.contains("px-3")).toBe(true);
+  expect(railReturn.classList.contains("-ms-3")).toBe(true);
+  expect(railReturn.getAttribute("href")).toBe(
+    "/org/setup?projectSlug=selected&filter=mine",
+  );
+  expect(railReturn.closest(".md\\:block")?.classList.contains("hidden")).toBe(
+    true,
+  );
+  const headerReturns = within(screen.getByRole("banner")).getAllByRole(
+    "link",
+    { name: "Workstreams" },
+  );
+  expect(headerReturns).toHaveLength(1);
+  expect(headerReturns[0]!.classList.contains("pl-0")).toBe(false);
+  expect(headerReturns[0]!.parentElement!.className).toBe("md:hidden");
+});
+
+it("keeps the ordinary wizard view switch in the desktop header only", () => {
+  render(<SetupWizard />);
+  const link = screen.getByRole("link", { name: "Workstreams" });
+  expect(
+    within(screen.getByRole("banner")).getByRole("link", {
+      name: "Workstreams",
+    }),
+  ).toBe(link);
+  expect(link.closest(".md\\:hidden")).toBeNull();
+  expect(link.querySelector("svg.lucide-arrow-left")).toBeNull();
+});
+
+it("disables both rail and mobile return controls while a write is pending", () => {
+  mocks.searchParams = new URLSearchParams("from=workstreams");
+  mocks.updatePending = true;
+  render(<SetupWizard />);
+  expect(screen.queryByRole("link", { name: "Workstreams" })).toBeNull();
+  const controls = screen.getAllByRole("button", { name: "Workstreams" });
+  expect(controls).toHaveLength(2);
+  const progress = screen.getByText("1 of 3 tasks complete");
+  const railReturn = within(progress.parentElement!).getByRole("button", {
+    name: "Workstreams",
+  });
+  expect(railReturn.classList.contains("px-3")).toBe(true);
+  expect(railReturn.classList.contains("-ms-3")).toBe(true);
+  for (const control of controls)
+    expect(control.hasAttribute("disabled")).toBe(true);
+});
+
+function RouterLocation() {
+  const location = useLocation();
+  return (
+    <output data-testid="router-location">
+      {location.pathname + location.search + location.hash}
+    </output>
+  );
+}
+
+function renderNavigation(path: string) {
+  mocks.realRouter = true;
+  return renderView(
+    <MemoryRouter initialEntries={[path]}>
+      <RouterLocation />
+      <Routes>
+        <Route path="/:orgSlug/setup/wizard" element={<SetupWizard />} />
+        <Route path="/:orgSlug/setup" element={<p>Workstreams board</p>} />
+        <Route path="/:orgSlug" element={<p>Dashboard</p>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+describe("composed wizard navigation", () => {
+  it.each([false, true])(
+    "returns board-origin completion to Workstreams (verified: %s)",
+    async (verified) => {
+      mocks.setupQuery.mockReturnValue(
+        loaded(tasks.map((task) => ({ ...task, completedByFact: verified }))),
+      );
+      renderNavigation(
+        "/org/setup/wizard?task=anthropic-observability&step=confirm-traffic&from=workstreams&projectSlug=selected&filter=mine#details",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+      await screen.findByText("Workstreams board");
+      expect(screen.getByTestId("router-location").textContent).toBe(
+        "/org/setup?projectSlug=selected&filter=mine#details",
+      );
+      expect(mocks.update).toHaveBeenCalledTimes(verified ? 0 : 1);
+    },
+  );
+
+  it("advances standalone completion without losing project context or hash", async () => {
+    renderNavigation(
+      "/org/setup/wizard?task=anthropic-observability&step=confirm-traffic&projectSlug=selected&filter=mine#details",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+    await screen.findByText("Content for instrument-agents");
+    expect(screen.getByTestId("router-location").textContent).toBe(
+      "/org/setup/wizard?task=other-platforms&projectSlug=selected&filter=mine#details",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+    await screen.findByText("Dashboard");
+    expect(screen.getByTestId("router-location").textContent).toBe(
+      "/org?projectSlug=selected&filter=mine#details",
+    );
+  });
+
+  it("keeps a failed board-origin completion in its task", async () => {
+    mocks.update.mockRejectedValue(new Error("Save failed"));
+    const path =
+      "/org/setup/wizard?task=anthropic-observability&from=workstreams&projectSlug=selected#details";
+    renderNavigation(path);
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith("Save failed"),
+    );
+    expect(screen.getByTestId("router-location").textContent).toBe(path);
+  });
+
+  it.each(["", "&from=other", "&from=workstreams"])(
+    "Workstreams leaves the selected task even with provenance %s",
+    (from) => {
+      renderNavigation(
+        `/org/setup/wizard?task=idp&step=connect&projectSlug=selected&filter=mine${from}#details`,
+      );
+      fireEvent.click(screen.getAllByRole("link", { name: "Workstreams" })[0]!);
+      expect(screen.getByText("Workstreams board")).toBeTruthy();
+      expect(screen.getByTestId("router-location").textContent).toBe(
+        "/org/setup?projectSlug=selected&filter=mine#details",
+      );
+    },
+  );
+
+  it("lets a platform admin inspect an explicitly selected hidden task outside the walk", async () => {
+    mocks.platformAdmin = true;
+    mocks.setupQuery.mockReturnValue(
+      loaded(tasks.map((task, index) => ({ ...task, hidden: index === 1 }))),
+    );
+    renderNavigation(
+      "/org/setup/wizard?task=anthropic-observability&projectSlug=selected#details",
+    );
+    expect(screen.getByText("Inspecting a hidden task")).toBeTruthy();
+    expect(rail().querySelector("[aria-current=step]")).toBeNull();
+    expect(
+      screen.getByText("Content for anthropic-observability"),
+    ).toBeTruthy();
+    expect(
+      within(rail()).queryByRole("button", {
+        name: /Set up Anthropic observability/,
+      }),
+    ).toBeNull();
+    expect(mocks.setupQuery).toHaveBeenCalledWith("client", "org-one", true, {
+      retry: false,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Complete" }));
+    await screen.findByText("Workstreams board");
+    expect(screen.getByTestId("router-location").textContent).toBe(
+      "/org/setup?projectSlug=selected#details",
+    );
+  });
+
+  it("excludes hidden tasks from an admin's normal walk", () => {
+    mocks.platformAdmin = true;
+    mocks.setupQuery.mockReturnValue(
+      loaded(tasks.map((task, index) => ({ ...task, hidden: index === 1 }))),
+    );
+    renderNavigation("/org/setup/wizard");
+    expect(screen.getByText("Content for instrument-agents")).toBeTruthy();
+    expect(
+      screen.queryByText("Content for anthropic-observability"),
+    ).toBeNull();
+  });
+
+  it.each(["anthropic-observability", "not-real", ""])(
+    "never reveals a hidden task or falls back for non-platform-admin selector %s",
+    (selector) => {
+      mocks.setupQuery.mockReturnValue(
+        loaded(tasks.map((task, index) => ({ ...task, hidden: index === 1 }))),
+      );
+      renderNavigation(`/org/setup/wizard?task=${selector}`);
+      expect(screen.getByText("Setup task unavailable")).toBeTruthy();
+      expect(
+        screen.queryByText("Content for anthropic-observability"),
+      ).toBeNull();
+      expect(screen.queryByText("Content for instrument-agents")).toBeNull();
+      expect(screen.queryByText("Inspecting a hidden task")).toBeNull();
+      expect(mocks.setupQuery).toHaveBeenCalledWith(
+        "client",
+        "org-one",
+        false,
+        { retry: false },
+      );
+    },
+  );
+});
+
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({ hasScope: () => true, isLoading: false, error: null }),
+}));
+vi.mock("@/hooks/useOrgSetupStarted", () => ({
+  useOrgSetupStarted: () => ({ markSetupStarted: () => {} }),
+}));
+vi.mock("./components/board/use-onboarding-board", () => ({
+  useOnboardingBoard: () => ({
+    tasks: resolveBoardTasks(tasks),
+    workstreams: ONBOARDING_WORKSTREAMS,
+    canAssign: true,
+    canHideTasks: false,
+    canSetStatus: () => true,
+    isLoading: false,
+    isPending: false,
+  }),
+}));
+vi.mock("./components/board/workstream-column", () => ({
+  WorkstreamColumn: () => null,
+}));
+
+it("composes legacy task, board redirect, wizard and return without losing hash or reopening the task", async () => {
+  mocks.realRouter = true;
+  renderView(
+    <MemoryRouter
+      initialEntries={[
+        "/org/setup/anthropic-observability?step=confirm-traffic&projectSlug=selected&filter=mine#details",
+      ]}
+    >
+      <RouterLocation />
+      <Routes>
+        <Route path="/:orgSlug/setup/:taskSlug" element={<SetupTaskPage />} />
+        <Route path="/:orgSlug/setup" element={<OnboardingBoard />} />
+        <Route path="/:orgSlug/setup/wizard" element={<SetupWizard />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  await screen.findByText("Content for anthropic-observability");
+  expect(screen.getByTestId("router-location").textContent).toBe(
+    "/org/setup/wizard?step=confirm-traffic&projectSlug=selected&filter=mine&task=anthropic-observability#details",
+  );
+  fireEvent.click(screen.getAllByRole("link", { name: "Workstreams" })[0]!);
+  await screen.findByText("Onboarding");
+  expect(screen.queryByText("Content for anthropic-observability")).toBeNull();
+  expect(screen.getByTestId("router-location").textContent).toBe(
+    "/org/setup?projectSlug=selected&filter=mine#details",
+  );
+});
+
+vi.mock("@/components/page-layout", () => {
+  const Container = ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  );
+  return {
+    Page: {
+      Toolbar: Object.assign(Container, {
+        Leading: Container,
+        Actions: Container,
+      }),
+    },
+  };
+});
+vi.mock("./components/board/task-card", () => ({ TaskCard: () => null }));

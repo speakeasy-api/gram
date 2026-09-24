@@ -37788,6 +37788,94 @@ paths:
       x-speakeasy-name-override: update
       x-speakeasy-react-hook:
         name: UpdateOrganizationUserSessionIssuer
+  /rpc/organizations.assignSetupWorkstream:
+    post:
+      description: Atomically assign or clear every task in a setup workstream, including hidden tasks. Requires organization administrator access. Sends one notification when the assignee changes.
+      operationId: assignSetupWorkstream
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignSetupWorkstreamRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSetupTasksResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: assignSetupWorkstream organizations
+      tags:
+        - organizations
+      x-speakeasy-name-override: assignSetupWorkstream
+      x-speakeasy-react-hook:
+        name: AssignSetupWorkstream
   /rpc/organizations.createPortalSession:
     post:
       description: Create a webhook portal session.
@@ -73072,6 +73160,19 @@ components:
         - content_length
         - created_at
         - updated_at
+    AssignSetupWorkstreamRequestBody:
+      type: object
+      properties:
+        assignee:
+          $ref: '#/components/schemas/SetupTaskAssigneeInput'
+        clear_assignee:
+          type: boolean
+          description: Clear all workstream task assignees.
+        workstream:
+          type: string
+          description: Setup workstream ID from the onboarding workstream catalog.
+      required:
+        - workstream
     Assistant:
       type: object
       properties:
@@ -83732,8 +83833,14 @@ components:
           items:
             $ref: '#/components/schemas/SetupTask'
           description: Setup tasks in catalog order.
+        workstreams:
+          type: array
+          items:
+            $ref: '#/components/schemas/SetupWorkstream'
+          description: Canonical workstreams in display order, including hidden task keys.
       required:
         - tasks
+        - workstreams
     ListShadowMCPInventoryResult:
       type: object
       properties:
@@ -92990,6 +93097,25 @@ components:
           type: string
           description: Active organization member to assign. Mutually exclusive with email.
       description: Assignee selector. Exactly one of user_id or email must be present and non-empty.
+    SetupWorkstream:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Stable workstream identifier used for assignment.
+        task_keys:
+          type: array
+          items:
+            type: string
+          description: Ordered task keys available in this response. Hidden tasks are included only in authorized responses.
+        title:
+          type: string
+          description: Workstream display title.
+      description: Canonical onboarding workstream. Task keys define task display order; the containing workstreams array defines workstream display order.
+      required:
+        - id
+        - title
+        - task_keys
     ShadowMCPAccessSummary:
       type: object
       properties:

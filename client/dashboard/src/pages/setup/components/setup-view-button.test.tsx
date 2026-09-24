@@ -1,69 +1,129 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
-}));
-
-// The footer's ThemeSwitcher needs a ConfigProvider; this suite is about the
-// header, so stub it out rather than dragging in app-wide context.
-vi.mock("./onboarding-footer", () => ({
-  OnboardingFooter: () => null,
-}));
-
-import { SetupShell } from "./setup-shell";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router";
+import { afterEach, expect, it, vi } from "vitest";
 import { SetupViewButton } from "./setup-view-button";
 
-function renderAt(path: string, element: JSX.Element) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/:orgSlug/setup" element={element} />
-        <Route path="/:orgSlug/setup/wizard" element={element} />
-        <Route path="/:orgSlug/setup/:taskSlug" element={element} />
-      </Routes>
-    </MemoryRouter>,
-  );
-}
-
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({
+    setup: { href: () => "/org/setup" },
+    setupWizard: { href: () => "/org/setup/wizard" },
+  }),
+}));
 afterEach(cleanup);
 
-describe("SetupViewButton", () => {
-  it("offers the wizard from the board", () => {
-    renderAt("/org/setup", <SetupViewButton view="board" />);
-
-    const link = screen.getByRole("link", { name: "Wizard" });
-    expect(link.getAttribute("href")).toBe("/org/setup/wizard");
-  });
-
-  it("carries the open card into the wizard from its page", () => {
-    renderAt("/org/setup/idp", <SetupViewButton view="board" />);
-
-    expect(
-      screen.getByRole("link", { name: "Wizard" }).getAttribute("href"),
-    ).toBe("/org/setup/wizard?task=idp");
-  });
-
-  it("offers the board from the wizard", () => {
-    renderAt("/org/setup/wizard", <SetupViewButton view="wizard" />);
-
-    expect(
-      screen.getByRole("link", { name: "Board" }).getAttribute("href"),
-    ).toBe("/org/setup");
-  });
+it("does not expose navigation while a task write is settling", () => {
+  render(
+    <MemoryRouter>
+      <SetupViewButton wizard disabled />
+    </MemoryRouter>,
+  );
+  expect(screen.queryByRole("link")).toBeNull();
+  expect(
+    screen
+      .getByRole("button", { name: "Workstreams" })
+      .hasAttribute("disabled"),
+  ).toBe(true);
 });
 
-describe("SetupShell", () => {
-  it("puts the view button in the setup header", () => {
-    renderAt(
-      "/org/setup",
-      <SetupShell view="board">
-        <div>content</div>
-      </SetupShell>,
-    );
+function View() {
+  const location = useLocation();
+  return <SetupViewButton wizard={location.pathname.endsWith("/wizard")} />;
+}
 
-    expect(screen.getByRole("banner").textContent).toContain("Wizard");
-    expect(screen.getByText("content")).toBeTruthy();
-  });
+it("opens a selected wizard but clears selectors when returning to Workstreams", () => {
+  render(
+    <MemoryRouter
+      initialEntries={[
+        "/org/setup?task=anthropic-observability&step=confirm-traffic&projectSlug=selected&view=kanban#details",
+      ]}
+    >
+      <View />
+    </MemoryRouter>,
+  );
+  const wizard = screen.getByRole("link", { name: "Wizard" });
+  expect(wizard.getAttribute("href")).toBe(
+    "/org/setup/wizard?task=anthropic-observability&step=confirm-traffic&projectSlug=selected#details",
+  );
+  fireEvent.click(wizard);
+  const workstreams = screen.getByRole("link", { name: "Workstreams" });
+  expect(workstreams.getAttribute("href")).toBe(
+    "/org/setup?projectSlug=selected#details",
+  );
+  fireEvent.click(workstreams);
+  expect(screen.getByRole("link", { name: "Wizard" })).toBeTruthy();
+});
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output>{location.pathname + location.search + location.hash}</output>;
+}
+
+it("returns from a board card without reopening its wizard and consumes only board context", () => {
+  render(
+    <MemoryRouter
+      initialEntries={[
+        "/org/setup/wizard?task=litellm&step=connect&projectSlug=selected&filter=mine&from=workstreams#details",
+      ]}
+    >
+      <View />
+      <LocationProbe />
+    </MemoryRouter>,
+  );
+  const back = screen.getByRole("link", { name: "Workstreams" });
+  expect(back.querySelector("svg.lucide-arrow-left")).not.toBeNull();
+  expect(back.getAttribute("href")).toBe(
+    "/org/setup?projectSlug=selected&filter=mine#details",
+  );
+  fireEvent.click(back);
+  expect(screen.getByRole("status").textContent).toBe(
+    "/org/setup?projectSlug=selected&filter=mine#details",
+  );
+  fireEvent.click(screen.getByRole("link", { name: "Wizard" }));
+  expect(
+    screen
+      .getByRole("link", { name: "Workstreams" })
+      .querySelector("svg.lucide-arrow-left"),
+  ).toBeNull();
+});
+
+it.each(["", "?from=other&task=litellm&step=connect"])(
+  "clears selectors even without board provenance: %s",
+  (search) => {
+    render(
+      <MemoryRouter initialEntries={[`/org/setup/wizard${search}`]}>
+        <View />
+      </MemoryRouter>,
+    );
+    const link = screen.getByRole("link", { name: "Workstreams" });
+    expect(link.querySelector("svg.lucide-arrow-left")).toBeNull();
+    expect(link.getAttribute("href")).toBe("/org/setup");
+  },
+);
+
+it.each([false, true])(
+  "uses shared edge alignment when disabled is %s",
+  (disabled) => {
+    render(
+      <MemoryRouter initialEntries={["/org/setup/wizard?from=workstreams"]}>
+        <SetupViewButton wizard disabled={disabled} edge="start" />
+      </MemoryRouter>,
+    );
+    const control = screen.getByRole(disabled ? "button" : "link", {
+      name: "Workstreams",
+    });
+    expect(control.classList.contains("px-3")).toBe(true);
+    expect(control.classList.contains("-ms-3")).toBe(true);
+    expect(control.querySelector("svg.lucide-arrow-left")).not.toBeNull();
+  },
+);
+
+it("preserves default header padding without an override", () => {
+  render(
+    <MemoryRouter>
+      <SetupViewButton wizard />
+    </MemoryRouter>,
+  );
+  const control = screen.getByRole("link", { name: "Workstreams" });
+  expect(control.classList.contains("px-3")).toBe(true);
+  expect(control.classList.contains("pl-0")).toBe(false);
 });

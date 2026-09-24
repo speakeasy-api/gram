@@ -1073,6 +1073,8 @@ type GetOrganizationOnboardingResponseBody struct {
 	Preset  *string                              `form:"preset,omitempty" json:"preset,omitempty" xml:"preset,omitempty"`
 	Tasks   []*AdminOnboardingTaskResponseBody   `form:"tasks,omitempty" json:"tasks,omitempty" xml:"tasks,omitempty"`
 	Presets []*AdminOnboardingPresetResponseBody `form:"presets,omitempty" json:"presets,omitempty" xml:"presets,omitempty"`
+	// Canonical workstreams in display order, including hidden task keys.
+	Workstreams []*SetupWorkstreamResponseBody `form:"workstreams,omitempty" json:"workstreams,omitempty" xml:"workstreams,omitempty"`
 }
 
 // SetOrganizationOnboardingResponseBody is the type of the "admin" service
@@ -1083,6 +1085,8 @@ type SetOrganizationOnboardingResponseBody struct {
 	Preset  *string                              `form:"preset,omitempty" json:"preset,omitempty" xml:"preset,omitempty"`
 	Tasks   []*AdminOnboardingTaskResponseBody   `form:"tasks,omitempty" json:"tasks,omitempty" xml:"tasks,omitempty"`
 	Presets []*AdminOnboardingPresetResponseBody `form:"presets,omitempty" json:"presets,omitempty" xml:"presets,omitempty"`
+	// Canonical workstreams in display order, including hidden task keys.
+	Workstreams []*SetupWorkstreamResponseBody `form:"workstreams,omitempty" json:"workstreams,omitempty" xml:"workstreams,omitempty"`
 }
 
 // CreateGlobalIssuerResponseBody is the type of the "admin" service
@@ -12566,6 +12570,17 @@ type AdminOnboardingPresetResponseBody struct {
 	VisibleTaskKeys []string `form:"visible_task_keys,omitempty" json:"visible_task_keys,omitempty" xml:"visible_task_keys,omitempty"`
 }
 
+// SetupWorkstreamResponseBody is used to define fields on response body types.
+type SetupWorkstreamResponseBody struct {
+	// Stable workstream identifier used for assignment.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Workstream display title.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Ordered task keys available in this response. Hidden tasks are included only
+	// in authorized responses.
+	TaskKeys []string `form:"task_keys,omitempty" json:"task_keys,omitempty" xml:"task_keys,omitempty"`
+}
+
 // RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
 // response body types.
 type RemoteSessionIssuerDuplicateMatchResponseBody struct {
@@ -19300,6 +19315,14 @@ func NewGetOrganizationOnboardingAdminOnboardingConfigurationOK(body *GetOrganiz
 		}
 		v.Presets[i] = unmarshalAdminOnboardingPresetResponseBodyToAdminAdminOnboardingPreset(val)
 	}
+	v.Workstreams = make([]*types.SetupWorkstream, len(body.Workstreams))
+	for i, val := range body.Workstreams {
+		if val == nil {
+			v.Workstreams[i] = nil
+			continue
+		}
+		v.Workstreams[i] = unmarshalSetupWorkstreamResponseBodyToTypesSetupWorkstream(val)
+	}
 
 	return v
 }
@@ -19477,6 +19500,14 @@ func NewSetOrganizationOnboardingAdminOnboardingConfigurationOK(body *SetOrganiz
 			continue
 		}
 		v.Presets[i] = unmarshalAdminOnboardingPresetResponseBodyToAdminAdminOnboardingPreset(val)
+	}
+	v.Workstreams = make([]*types.SetupWorkstream, len(body.Workstreams))
+	for i, val := range body.Workstreams {
+		if val == nil {
+			v.Workstreams[i] = nil
+			continue
+		}
+		v.Workstreams[i] = unmarshalSetupWorkstreamResponseBodyToTypesSetupWorkstream(val)
 	}
 
 	return v
@@ -24215,6 +24246,9 @@ func ValidateGetOrganizationOnboardingResponseBody(body *GetOrganizationOnboardi
 	if body.Presets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("presets", "body"))
 	}
+	if body.Workstreams == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workstreams", "body"))
+	}
 	if body.Preset != nil {
 		if !(*body.Preset == "gateway" || *body.Preset == "security") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.preset", *body.Preset, []any{"gateway", "security"}))
@@ -24230,6 +24264,13 @@ func ValidateGetOrganizationOnboardingResponseBody(body *GetOrganizationOnboardi
 	for _, e := range body.Presets {
 		if e != nil {
 			if err2 := ValidateAdminOnboardingPresetResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Workstreams {
+		if e != nil {
+			if err2 := ValidateSetupWorkstreamResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -24249,6 +24290,9 @@ func ValidateSetOrganizationOnboardingResponseBody(body *SetOrganizationOnboardi
 	if body.Presets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("presets", "body"))
 	}
+	if body.Workstreams == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workstreams", "body"))
+	}
 	if body.Preset != nil {
 		if !(*body.Preset == "gateway" || *body.Preset == "security") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.preset", *body.Preset, []any{"gateway", "security"}))
@@ -24264,6 +24308,13 @@ func ValidateSetOrganizationOnboardingResponseBody(body *SetOrganizationOnboardi
 	for _, e := range body.Presets {
 		if e != nil {
 			if err2 := ValidateAdminOnboardingPresetResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Workstreams {
+		if e != nil {
+			if err2 := ValidateSetupWorkstreamResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -39197,6 +39248,21 @@ func ValidateAdminOnboardingPresetResponseBody(body *AdminOnboardingPresetRespon
 		if !(*body.Key == "gateway" || *body.Key == "security") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.key", *body.Key, []any{"gateway", "security"}))
 		}
+	}
+	return
+}
+
+// ValidateSetupWorkstreamResponseBody runs the validations defined on
+// SetupWorkstreamResponseBody
+func ValidateSetupWorkstreamResponseBody(body *SetupWorkstreamResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Title == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("title", "body"))
+	}
+	if body.TaskKeys == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("task_keys", "body"))
 	}
 	return
 }

@@ -1081,6 +1081,8 @@ type GetOrganizationOnboardingResponseBody struct {
 	Preset  *string                              `form:"preset,omitempty" json:"preset,omitempty" xml:"preset,omitempty"`
 	Tasks   []*AdminOnboardingTaskResponseBody   `form:"tasks" json:"tasks" xml:"tasks"`
 	Presets []*AdminOnboardingPresetResponseBody `form:"presets" json:"presets" xml:"presets"`
+	// Canonical workstreams in display order, including hidden task keys.
+	Workstreams []*SetupWorkstreamResponseBody `form:"workstreams" json:"workstreams" xml:"workstreams"`
 }
 
 // SetOrganizationOnboardingResponseBody is the type of the "admin" service
@@ -1091,6 +1093,8 @@ type SetOrganizationOnboardingResponseBody struct {
 	Preset  *string                              `form:"preset,omitempty" json:"preset,omitempty" xml:"preset,omitempty"`
 	Tasks   []*AdminOnboardingTaskResponseBody   `form:"tasks" json:"tasks" xml:"tasks"`
 	Presets []*AdminOnboardingPresetResponseBody `form:"presets" json:"presets" xml:"presets"`
+	// Canonical workstreams in display order, including hidden task keys.
+	Workstreams []*SetupWorkstreamResponseBody `form:"workstreams" json:"workstreams" xml:"workstreams"`
 }
 
 // CreateGlobalIssuerResponseBody is the type of the "admin" service
@@ -12574,6 +12578,17 @@ type AdminOnboardingPresetResponseBody struct {
 	VisibleTaskKeys []string `form:"visible_task_keys" json:"visible_task_keys" xml:"visible_task_keys"`
 }
 
+// SetupWorkstreamResponseBody is used to define fields on response body types.
+type SetupWorkstreamResponseBody struct {
+	// Stable workstream identifier used for assignment.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Workstream display title.
+	Title string `form:"title" json:"title" xml:"title"`
+	// Ordered task keys available in this response. Hidden tasks are included only
+	// in authorized responses.
+	TaskKeys []string `form:"task_keys" json:"task_keys" xml:"task_keys"`
+}
+
 // RemoteSessionIssuerDuplicateMatchResponseBody is used to define fields on
 // response body types.
 type RemoteSessionIssuerDuplicateMatchResponseBody struct {
@@ -13531,6 +13546,18 @@ func NewGetOrganizationOnboardingResponseBody(res *admin.AdminOnboardingConfigur
 	} else {
 		body.Presets = []*AdminOnboardingPresetResponseBody{}
 	}
+	if res.Workstreams != nil {
+		body.Workstreams = make([]*SetupWorkstreamResponseBody, len(res.Workstreams))
+		for i, val := range res.Workstreams {
+			if val == nil {
+				body.Workstreams[i] = nil
+				continue
+			}
+			body.Workstreams[i] = marshalTypesSetupWorkstreamToSetupWorkstreamResponseBody(val)
+		}
+	} else {
+		body.Workstreams = []*SetupWorkstreamResponseBody{}
+	}
 	return body
 }
 
@@ -13565,6 +13592,18 @@ func NewSetOrganizationOnboardingResponseBody(res *admin.AdminOnboardingConfigur
 		}
 	} else {
 		body.Presets = []*AdminOnboardingPresetResponseBody{}
+	}
+	if res.Workstreams != nil {
+		body.Workstreams = make([]*SetupWorkstreamResponseBody, len(res.Workstreams))
+		for i, val := range res.Workstreams {
+			if val == nil {
+				body.Workstreams[i] = nil
+				continue
+			}
+			body.Workstreams[i] = marshalTypesSetupWorkstreamToSetupWorkstreamResponseBody(val)
+		}
+	} else {
+		body.Workstreams = []*SetupWorkstreamResponseBody{}
 	}
 	return body
 }

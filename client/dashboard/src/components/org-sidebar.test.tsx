@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   features: vi.fn(() => ({})),
   active: "agents",
   isPlatformAdmin: false,
+  canViewOrgSetup: false,
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () =>
@@ -17,7 +18,12 @@ vi.mock("@/routes", () => ({
         get: (_, key: string) => ({
           title: key === "identity" ? "IDP and SSO" : key,
           active: key === mocks.active,
-          href: () => (key === "identity" ? "/example/identity" : `/${key}`),
+          href: () =>
+            key === "identity"
+              ? "/example/identity"
+              : key === "setup"
+                ? "/example/setup"
+                : `/${key}`,
         }),
       },
     ),
@@ -29,7 +35,9 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ isLoading: false, hasScope: () => false }),
 }));
-vi.mock("@/hooks/useCanSetUpOrg", () => ({ useCanSetUpOrg: () => false }));
+vi.mock("@/hooks/useCanSetUpOrg", () => ({
+  useCanViewOrgSetup: () => mocks.canViewOrgSetup,
+}));
 
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => false }),
@@ -93,7 +101,11 @@ vi.mock("@/components/scope-gated-nav-group", () => ({
     </>
   ),
 }));
-vi.mock("./sidebar-footer-action", () => ({ SidebarFooterAction: () => null }));
+vi.mock("./sidebar-footer-action", () => ({
+  SidebarFooterAction: ({ to, label }: { to: string; label: string }) => (
+    <a href={to}>{label}</a>
+  ),
+}));
 vi.mock("./sidebar-user-menu", () => ({ SidebarUserMenu: () => null }));
 vi.mock("./trial-status-card", () => ({ TrialStatusCard: () => null }));
 
@@ -101,6 +113,7 @@ afterEach(() => {
   cleanup();
   mocks.active = "agents";
   mocks.isPlatformAdmin = false;
+  mocks.canViewOrgSetup = false;
 });
 
 it("lists one IDP and SSO entry under Team and no vendor entry", () => {
@@ -162,3 +175,19 @@ it("does not request organization features for baseline project users", () => {
     expect.objectContaining({ enabled: false }),
   );
 });
+
+it.each([false, true])(
+  "shows shared onboarding only when visible=%s",
+  (canViewOrgSetup) => {
+    mocks.canViewOrgSetup = canViewOrgSetup;
+    render(<OrgSidebar />);
+    const onboarding = screen.queryByRole("link", {
+      name: "Organization onboarding",
+    });
+    if (canViewOrgSetup) {
+      expect(onboarding?.getAttribute("href")).toBe("/example/setup");
+    } else {
+      expect(onboarding).toBeNull();
+    }
+  },
+);

@@ -55,6 +55,10 @@ type Service interface {
 	// List the fixed setup task catalog projected with organization state and
 	// completion evidence.
 	ListSetupTasks(context.Context, *ListSetupTasksPayload) (res *ListSetupTasksResult, err error)
+	// Atomically assign or clear every task in a setup workstream, including
+	// hidden tasks. Requires organization administrator access. Sends one
+	// notification when the assignee changes.
+	AssignSetupWorkstream(context.Context, *AssignSetupWorkstreamPayload) (res *ListSetupTasksResult, err error)
 	// Update one fixed setup task. The request must include at least one effective
 	// update: status, assignee, hidden, or clear_assignee=true. Assignee is
 	// mutually exclusive with clear_assignee=true.
@@ -81,7 +85,19 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [16]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask"}
+var MethodNames = [17]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "assignSetupWorkstream", "updateSetupTask"}
+
+// AssignSetupWorkstreamPayload is the payload type of the organizations
+// service assignSetupWorkstream method.
+type AssignSetupWorkstreamPayload struct {
+	// Setup workstream ID from the onboarding workstream catalog.
+	Workstream string
+	// Replacement workstream assignee; mutually exclusive with clear_assignee=true.
+	Assignee *SetupTaskAssigneeInput
+	// Clear all workstream task assignees.
+	ClearAssignee *bool
+	SessionToken  *string
+}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -173,6 +189,8 @@ type ListSetupTasksPayload struct {
 type ListSetupTasksResult struct {
 	// Setup tasks in catalog order.
 	Tasks []*SetupTask
+	// Canonical workstreams in display order, including hidden task keys.
+	Workstreams []*types.SetupWorkstream
 }
 
 // ListUsersPayload is the payload type of the organizations service listUsers

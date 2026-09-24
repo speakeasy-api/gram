@@ -5,6 +5,7 @@ import {
   fireEvent,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { organizationOnboardingQuery } from "@/lib/gramAdminClient";
@@ -22,6 +23,14 @@ const fixture = {
     {
       key: "security",
       visible_task_keys: ["create-marketplace", "enable-logging"],
+    },
+  ],
+  workstreams: [
+    { id: "observe", title: "Observe agents", task_keys: ["enable-logging"] },
+    {
+      id: "distribute",
+      title: "MCP Gateway",
+      task_keys: ["create-marketplace", "distribute-servers"],
     },
   ],
   tasks: [
@@ -80,6 +89,69 @@ const writes = () =>
     .filter((request) => request.method === "POST");
 
 describe("Onboarding", () => {
+  it("uses response titles, membership, and ordering while keeping unknown tasks editable", async () => {
+    saved.workstreams = [
+      {
+        id: "server-first",
+        title: "Server-defined first group",
+        task_keys: ["distribute-servers", "enable-logging", "missing-task"],
+      },
+      { id: "empty", title: "Empty group", task_keys: [] },
+      {
+        id: "server-second",
+        title: "Server-defined second group",
+        task_keys: ["create-marketplace"],
+      },
+    ];
+    saved.tasks.push({
+      key: "future-task",
+      title: "Future task",
+      description: "New task",
+      hidden: true,
+    });
+    await renderWithApp(
+      <Onboarding organizationId={fixture.organization_id} />,
+    );
+    await screen.findByRole("group", { name: "Server-defined first group" });
+    const groups = screen.getAllByRole("group");
+    expect(
+      groups.map((group) => group.querySelector("legend")?.textContent),
+    ).toEqual([
+      "Server-defined first group",
+      "Server-defined second group",
+      "Other tasks",
+    ]);
+    expect(within(groups[0]!).getAllByRole("checkbox")).toEqual([
+      screen.getByRole("checkbox", { name: "Distribute servers" }),
+      screen.getByRole("checkbox", { name: "Enable logging" }),
+    ]);
+    expect(within(groups[1]!).getAllByRole("checkbox")).toEqual([
+      screen.getByRole("checkbox", { name: "Create marketplace" }),
+    ]);
+    fireEvent.click(
+      within(groups[2]!).getByRole("checkbox", { name: "Future task" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save onboarding" }));
+    await screen.findByText("Onboarding saved.");
+    expect((await writes()[0]!.clone().json()).visible_task_keys).toContain(
+      "future-task",
+    );
+  });
+
+  it("updates workstream counts in the draft and restores them on discard", async () => {
+    await renderWithApp(
+      <Onboarding organizationId={fixture.organization_id} />,
+    );
+    const gateway = await screen.findByRole("group", { name: "MCP Gateway" });
+    expect(within(gateway).getByText("1 of 2 tasks included")).toBeTruthy();
+    fireEvent.click(
+      within(gateway).getByRole("checkbox", { name: "Distribute servers" }),
+    );
+    expect(within(gateway).getByText("2 of 2 tasks included")).toBeTruthy();
+    expect(writes()).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(within(gateway).getByText("1 of 2 tasks included")).toBeTruthy();
+  });
   it("shows the saved preset after saving a draft with an unapplied dropdown choice", async () => {
     await renderWithApp(
       <Onboarding organizationId={fixture.organization_id} />,

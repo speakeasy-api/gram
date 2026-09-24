@@ -82,6 +82,11 @@ func ListSetupTasksOrganizationsPath() string {
 	return "/rpc/organizations.listSetupTasks"
 }
 
+// AssignSetupWorkstreamOrganizationsPath returns the URL path to the organizations service assignSetupWorkstream HTTP endpoint.
+func AssignSetupWorkstreamOrganizationsPath() string {
+	return "/rpc/organizations.assignSetupWorkstream"
+}
+
 // UpdateSetupTaskOrganizationsPath returns the URL path to the organizations service updateSetupTask HTTP endpoint.
 func UpdateSetupTaskOrganizationsPath() string {
 	return "/rpc/organizations.updateSetupTask"

@@ -1,5 +1,10 @@
 import { useRef, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router";
+import {
+  useLocation,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router";
 import type {
   SetupTask,
   SetupTaskStatus,
@@ -13,7 +18,7 @@ import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { RequireScope } from "@/components/require-scope";
-import { useOrganization } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import {
   buildOrganizationSetupTasksQuery,
   invalidateOrganizationSetupTasks,
@@ -25,6 +30,7 @@ import { JourneyLayout } from "./components/journey-layout";
 import { JourneyStepsProvider } from "./components/journey-steps-provider";
 import { useJourneyView } from "./components/journey-steps";
 import { OnboardingStepper, type Step } from "./components/onboarding-stepper";
+import { SetupViewButton } from "./components/setup-view-button";
 import { SetupShell } from "./components/setup-shell";
 import { SetupTaskContent } from "./components/setup-task-content";
 import { setupTaskKeyForSlug, setupTaskSlug } from "./task-slugs";
@@ -39,7 +45,7 @@ const STEP_PARAM = "step";
 // at /setup stays the default and the map; this page is the same cards walked
 // front to back. Nothing here is a second copy of a card — each one renders
 // through SetupTaskContent exactly as it does on its own page, and only what
-// "done" leads to changes: the next card rather than the board.
+// "done" leads to depends on whether the reader arrived from Workstreams.
 export default function SetupWizard(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -111,6 +117,7 @@ function WizardRail({
   disabled: boolean;
   onPick: (task: SetupTask) => void;
 }): JSX.Element {
+  const [searchParams] = useSearchParams();
   const railSteps: Step[] = tasks.map((task) => ({
     id: task.key,
     title: task.title,
@@ -126,12 +133,17 @@ function WizardRail({
 
   return (
     <div>
+      {searchParams.get("from") === "workstreams" && (
+        <div className="mb-4">
+          <SetupViewButton wizard disabled={disabled} edge="start" />
+        </div>
+      )}
       <p className="text-eyebrow mb-4">
         {doneCount} of {tasks.length} tasks complete
       </p>
       <OnboardingStepper
         steps={railSteps}
-        currentStep={currentStep === -1 ? 0 : currentStep}
+        currentStep={currentStep}
         disabled={disabled}
         onStepClick={(position) => {
           const task = tasks[position];
@@ -148,12 +160,14 @@ function WizardRail({
 function WizardNav({
   previous,
   isLast,
+  returnsToBoard,
   disabled,
   onPrevious,
   onSkip,
 }: {
   previous: SetupTask | undefined;
   isLast: boolean;
+  returnsToBoard: boolean;
   /** While a completion is in flight its own advance is about to land. */
   disabled: boolean;
   onPrevious: () => void;
@@ -182,7 +196,11 @@ function WizardNav({
         disabled={disabled}
         className="text-muted-foreground hover:text-foreground gap-1.5"
       >
-        {isLast ? "Skip to dashboard" : "Skip task"}
+        {returnsToBoard
+          ? "Return to Workstreams"
+          : isLast
+            ? "Skip to dashboard"
+            : "Skip task"}
         <ArrowRight className="h-4 w-4" />
       </Button>
     </div>
@@ -191,17 +209,24 @@ function WizardNav({
 
 function SetupWizardInner(): JSX.Element {
   const { orgSlug } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const canInspectHidden = useSession().user.isAdmin;
   const navigate = useNavigate();
   const orgRoutes = useOrgRoutes();
   const organization = useOrganization();
   const queryClient = useQueryClient();
-  // Same list the board shows by default: hidden cards stay out of the walk.
+  // Platform admins can inspect hidden tasks, but they never join the walk.
   const client = useGramContext();
   const setupTasks = useQuery(
-    buildOrganizationSetupTasksQuery(client, organization.id, false, {
-      retry: false,
-    }),
+    buildOrganizationSetupTasksQuery(
+      client,
+      organization.id,
+      canInspectHidden,
+      {
+        retry: false,
+      },
+    ),
   );
   const updateTask = useUpdateSetupTaskMutation();
   // Complete and support await a round trip; a second click while the first
@@ -212,16 +237,17 @@ function SetupWizardInner(): JSX.Element {
   const actionInFlight = useRef(false);
   const [actionSettling, setActionSettling] = useState(false);
 
-  const tasks = setupTasks.data?.tasks ?? [];
-
-  // ?task= names the card on screen, as a URL slug so the address bar reads
-  // like the card's own page. Without one — or with one that names nothing
-  // here — resume at the first card still open; every card done lands on the
-  // last so the reader can see they are finished.
+  const availableTasks = (setupTasks.data?.tasks ?? []).filter(
+    (task) => !task.hidden || canInspectHidden,
+  );
+  const tasks = availableTasks.filter((task) => !task.hidden);
+  // An explicit selector must never silently open a different task.
   const requestedKey = setupTaskKeyForSlug(searchParams.get(TASK_PARAM) ?? "");
-  const requested = tasks.find((task) => task.key === requestedKey);
+  const requested = availableTasks.find((task) => task.key === requestedKey);
   const firstOpen = tasks.find((task) => task.status !== "done");
-  const current = requested ?? firstOpen ?? tasks[tasks.length - 1];
+  const current = searchParams.has(TASK_PARAM)
+    ? requested
+    : (firstOpen ?? tasks[tasks.length - 1]);
   const currentIndex = current
     ? tasks.findIndex((task) => task.key === current.key)
     : -1;
@@ -236,12 +262,14 @@ function SetupWizardInner(): JSX.Element {
   // replaces rather than pushes: Back belongs to wherever the reader came
   // from, not to each card passed through.
   const goToTask = (task: SetupTask) => {
-    setSearchParams(
-      (prev) => {
-        const params = new URLSearchParams(prev);
-        params.set(TASK_PARAM, setupTaskSlug(task.key));
-        params.delete(STEP_PARAM);
-        return params;
+    const params = new URLSearchParams(searchParams);
+    params.set(TASK_PARAM, setupTaskSlug(task.key));
+    params.delete(STEP_PARAM);
+    void navigate(
+      {
+        pathname: location.pathname,
+        search: params.toString(),
+        hash: location.hash,
       },
       { replace: true },
     );
@@ -256,10 +284,19 @@ function SetupWizardInner(): JSX.Element {
     goToTask(task);
   };
 
-  const leave = () => void navigate(`/${orgSlug}`);
+  const exitTo = (pathname: string) => {
+    const params = new URLSearchParams(searchParams);
+    for (const selector of [TASK_PARAM, STEP_PARAM, "from", "view"])
+      params.delete(selector);
+    void navigate({ pathname, search: params.toString(), hash: location.hash });
+  };
+  const returnToBoard = () => exitTo(orgRoutes.setup.href());
+  const leave = () => exitTo(`/${orgSlug}`);
 
   const advance = () => {
-    if (next) goToTask(next);
+    if (searchParams.get("from") === "workstreams" || current?.hidden)
+      returnToBoard();
+    else if (next) goToTask(next);
     else leave();
   };
 
@@ -330,10 +367,24 @@ function SetupWizardInner(): JSX.Element {
             >
               Retry
             </Button>
-            <Button variant="tertiary" onClick={() => orgRoutes.setup.goTo()}>
+            <Button variant="tertiary" onClick={returnToBoard}>
               Setup board
             </Button>
           </div>
+        </div>
+      </Alert>
+    );
+  } else if (setupTasks.isSuccess && searchParams.has(TASK_PARAM) && !current) {
+    content = (
+      <Alert variant="info">
+        <div>
+          <AlertTitle>Setup task unavailable</AlertTitle>
+          <AlertDescription>
+            This task is not available. Return to Workstreams to choose a task.
+          </AlertDescription>
+          <Button className="mt-3" variant="secondary" onClick={returnToBoard}>
+            Workstreams
+          </Button>
         </div>
       </Alert>
     );
@@ -343,14 +394,10 @@ function SetupWizardInner(): JSX.Element {
         <div>
           <AlertTitle>Nothing to set up</AlertTitle>
           <AlertDescription>
-            Every setup task is hidden. Restore one from the board to walk it
-            here.
+            No setup tasks are available. Return to Workstreams to review your
+            organization setup.
           </AlertDescription>
-          <Button
-            className="mt-3"
-            variant="secondary"
-            onClick={() => orgRoutes.setup.goTo()}
-          >
+          <Button className="mt-3" variant="secondary" onClick={returnToBoard}>
             Setup board
           </Button>
         </div>
@@ -359,9 +406,23 @@ function SetupWizardInner(): JSX.Element {
   } else if (current) {
     content = (
       <>
+        {current.hidden && (
+          <Alert variant="info">
+            <div>
+              <AlertTitle>Inspecting a hidden task</AlertTitle>
+              <AlertDescription>
+                This task is hidden from the setup walk. Restore it from
+                Workstreams to include it.
+              </AlertDescription>
+            </div>
+          </Alert>
+        )}
         <WizardNav
           previous={previous}
           isLast={!next}
+          returnsToBoard={
+            searchParams.get("from") === "workstreams" || current.hidden
+          }
           disabled={settling}
           onPrevious={() => {
             if (previous) pick(previous);
@@ -373,7 +434,7 @@ function SetupWizardInner(): JSX.Element {
         />
         <SetupTaskContent
           taskKey={current.key}
-          projectSlug="default"
+          projectSlug={searchParams.get("projectSlug") ?? "default"}
           onComplete={() => void complete()}
           onSupport={() => void requestSupport()}
           onClose={() => {
@@ -385,7 +446,7 @@ function SetupWizardInner(): JSX.Element {
   }
 
   return (
-    <SetupShell view="wizard">
+    <SetupShell isPending={settling}>
       {/* Keyed by the card: each one has its own sub-steps, so carrying the
           previous card's active step into the next would land the reader on
           an unrelated section. The rail lives inside the provider too, so it

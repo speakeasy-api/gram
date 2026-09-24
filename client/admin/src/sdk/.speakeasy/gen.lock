@@ -164,6 +164,7 @@ trackedFiles:
   src/models/components/setorganizationfeaturerequestbody.ts: {}
   src/models/components/setorganizationonboardingrequestbody.ts: {}
   src/models/components/setstripecustomerrequestbody.ts: {}
+  src/models/components/setupworkstream.ts: {}
   src/models/components/spendbucket.ts: {}
   src/models/components/spendproduct.ts: {}
   src/models/components/starttrialrequestbody.ts: {}
@@ -612,7 +613,7 @@ examples:
           organization_id: "<id>"
       responses:
         "200":
-          application/json: {"organization_id": "<id>", "presets": [], "tasks": [{"description": "ashamed ugh cemetery interestingly quizzically switchboard", "hidden": true, "key": "<key>", "title": "<value>"}]}
+          application/json: {"organization_id": "<id>", "presets": [], "tasks": [{"description": "ashamed ugh cemetery interestingly quizzically switchboard", "hidden": true, "key": "<key>", "title": "<value>"}], "workstreams": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -940,7 +941,7 @@ examples:
         application/json: {"organization_id": "<id>", "visible_task_keys": []}
       responses:
         "200":
-          application/json: {"organization_id": "<id>", "presets": [], "tasks": [{"description": "lovely amid ew lest wherever another splurge aside smoothly never", "hidden": false, "key": "<key>", "title": "<value>"}]}
+          application/json: {"organization_id": "<id>", "presets": [], "tasks": [{"description": "lovely amid ew lest wherever another splurge aside smoothly never", "hidden": false, "key": "<key>", "title": "<value>"}], "workstreams": []}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

@@ -12251,6 +12251,26 @@ func marshalAdminAdminOnboardingPresetToAdminOnboardingPresetResponseBody(v *adm
 	return res
 }
 
+// marshalTypesSetupWorkstreamToSetupWorkstreamResponseBody builds a value of
+// type *SetupWorkstreamResponseBody from a value of type
+// *types.SetupWorkstream.
+func marshalTypesSetupWorkstreamToSetupWorkstreamResponseBody(v *types.SetupWorkstream) *SetupWorkstreamResponseBody {
+	res := &SetupWorkstreamResponseBody{
+		ID:    v.ID,
+		Title: v.Title,
+	}
+	if v.TaskKeys != nil {
+		res.TaskKeys = make([]string, len(v.TaskKeys))
+		for i, val := range v.TaskKeys {
+			res.TaskKeys[i] = val
+		}
+	} else {
+		res.TaskKeys = []string{}
+	}
+
+	return res
+}
+
 // marshalTypesRemoteSessionIssuerDuplicateMatchToRemoteSessionIssuerDuplicateMatchResponseBody
 // builds a value of type *RemoteSessionIssuerDuplicateMatchResponseBody from a
 // value of type *types.RemoteSessionIssuerDuplicateMatch.

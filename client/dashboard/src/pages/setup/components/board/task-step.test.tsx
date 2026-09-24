@@ -6,7 +6,7 @@ import { StepSupportProvider } from "../step-container";
 import { AnthropicInferenceHooksStep } from "../steps/anthropic-inference-hooks-step";
 import { DomainVerificationStep } from "../steps";
 import { TaskStep, TaskStepContent, type TaskStepProps } from "./task-step";
-import { ONBOARDING_TASKS, ONBOARDING_WORKSTREAMS } from "./tasks";
+import { ONBOARDING_TASKS } from "./tasks";
 import { SETUP_TASK_SLUGS } from "../../task-slugs";
 const protectedHook = vi.hoisted(() => vi.fn());
 const access = vi.hoisted(() => ({
@@ -147,7 +147,7 @@ describe("workstream task coverage", () => {
     expect(step.type).toBe(AnthropicInferenceHooksStep);
     expect(step.props.onComplete).toBe(onComplete);
   });
-  it("routes domain verification to its step in Connect identity", () => {
+  it("routes domain verification to its step", () => {
     const onComplete = vi.fn<TaskStepProps["onComplete"]>();
     const step = TaskStepContent({
       taskId: "domain-verification",
@@ -156,9 +156,6 @@ describe("workstream task coverage", () => {
     });
     expect(step.type).toBe(DomainVerificationStep);
     expect(step.props.onComplete).toBe(onComplete);
-    expect(
-      ONBOARDING_WORKSTREAMS.find((stream) => stream.id === "connect")?.taskIds,
-    ).toContain("domain-verification");
     expect(SETUP_TASK_SLUGS["domain-verification"]).toBe("domain");
   });
   it("includes every main task and every server-supported key", () => {
@@ -182,21 +179,13 @@ describe("workstream task coverage", () => {
     for (const key of [...Object.keys(SETUP_TASK_SLUGS), ...serverKeys])
       expect(ids).toContain(key);
   });
-  it.each(ONBOARDING_TASKS)(
-    "renders $id and places it in exactly one workstream",
-    (task) => {
-      expect(
-        ONBOARDING_WORKSTREAMS.flatMap((stream) => stream.taskIds).filter(
-          (id) => id === task.id,
-        ),
-      ).toHaveLength(1);
-      expect(
-        TaskStepContent({
-          taskId: task.id,
-          onComplete: vi.fn<TaskStepProps["onComplete"]>(),
-          onClose: vi.fn<TaskStepProps["onClose"]>(),
-        }),
-      ).toBeTruthy();
-    },
-  );
+  it.each(ONBOARDING_TASKS)("renders $id", (task) => {
+    expect(
+      TaskStepContent({
+        taskId: task.id,
+        onComplete: vi.fn<TaskStepProps["onComplete"]>(),
+        onClose: vi.fn<TaskStepProps["onClose"]>(),
+      }),
+    ).toBeTruthy();
+  });
 });

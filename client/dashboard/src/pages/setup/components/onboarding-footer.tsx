@@ -4,7 +4,7 @@ import { SETUP_CONTAINER } from "./setup-container";
 
 export function OnboardingFooter(): JSX.Element {
   return (
-    <footer className="border-border bg-background w-full border-t">
+    <footer className="border-border bg-background w-full shrink-0 border-t">
       <div
         className={cn(
           SETUP_CONTAINER,

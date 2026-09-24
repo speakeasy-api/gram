@@ -3,6 +3,8 @@ import { useState, type JSX } from "react";
 import type { AdminOnboardingConfiguration } from "@gram/admin-client/models/components/adminonboardingconfiguration";
 import type { SetOrganizationOnboardingRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingrequestbody";
 
+import { groupOnboardingTasks } from "./onboarding-workstreams";
+
 import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -160,37 +162,59 @@ function OnboardingEditor({
             Apply preset
           </Button>
         </div>
-        <div className="space-y-3">
-          {data.tasks.map((task) => (
-            <label
-              key={task.key}
-              className="flex cursor-pointer items-start gap-3"
+        <div className="grid gap-4 lg:grid-cols-2">
+          {groupOnboardingTasks(data.tasks, data.workstreams).map((group) => (
+            <fieldset
+              key={group.id}
+              className="min-w-0 space-y-3 rounded-lg border p-4"
             >
-              <Checkbox
-                aria-label={task.title}
-                checked={current.visibleTaskKeys.includes(task.key)}
-                disabled={mutation.isPending}
-                onCheckedChange={(checked) => {
-                  mutation.reset();
-                  setPresetChoice("");
-                  setDraft({
-                    ...current,
-                    visibleTaskKeys:
-                      checked === true
-                        ? [...current.visibleTaskKeys, task.key]
-                        : current.visibleTaskKeys.filter(
-                            (key) => key !== task.key,
-                          ),
-                  });
-                }}
-              />
-              <span>
-                <span className="block text-sm font-medium">{task.title}</span>
-                <span className="text-muted-foreground text-sm">
-                  {task.description}
-                </span>
-              </span>
-            </label>
+              <legend className="px-1 text-sm font-semibold">
+                {group.title}
+              </legend>
+              <p className="text-muted-foreground text-xs">
+                {
+                  group.tasks.filter((task) =>
+                    current.visibleTaskKeys.includes(task.key),
+                  ).length
+                }{" "}
+                of {group.tasks.length} tasks included
+              </p>
+              <div className="space-y-3">
+                {group.tasks.map((task) => (
+                  <label
+                    key={task.key}
+                    className="flex cursor-pointer items-start gap-3"
+                  >
+                    <Checkbox
+                      aria-label={task.title}
+                      checked={current.visibleTaskKeys.includes(task.key)}
+                      disabled={mutation.isPending}
+                      onCheckedChange={(checked) => {
+                        mutation.reset();
+                        setPresetChoice("");
+                        setDraft({
+                          ...current,
+                          visibleTaskKeys:
+                            checked === true
+                              ? [...current.visibleTaskKeys, task.key]
+                              : current.visibleTaskKeys.filter(
+                                  (key) => key !== task.key,
+                                ),
+                        });
+                      }}
+                    />
+                    <span>
+                      <span className="block text-sm font-medium">
+                        {task.title}
+                      </span>
+                      <span className="text-muted-foreground text-sm">
+                        {task.description}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
           ))}
         </div>
         <p className="text-muted-foreground text-sm">

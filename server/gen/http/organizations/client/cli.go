@@ -354,6 +354,43 @@ func BuildListSetupTasksPayload(organizationsListSetupTasksIncludeHidden string,
 	return v, nil
 }
 
+// BuildAssignSetupWorkstreamPayload builds the payload for the organizations
+// assignSetupWorkstream endpoint from CLI flags.
+func BuildAssignSetupWorkstreamPayload(organizationsAssignSetupWorkstreamBody string, organizationsAssignSetupWorkstreamSessionToken string) (*organizations.AssignSetupWorkstreamPayload, error) {
+	var err error
+	var body AssignSetupWorkstreamRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationsAssignSetupWorkstreamBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"assignee\": {\n         \"email\": \"alice@example.com\",\n         \"user_id\": \"abc123\"\n      },\n      \"clear_assignee\": false,\n      \"workstream\": \"abc123\"\n   }'")
+		}
+		if body.Assignee != nil {
+			if err2 := ValidateSetupTaskAssigneeInputRequestBody(body.Assignee); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationsAssignSetupWorkstreamSessionToken != "" {
+			sessionToken = &organizationsAssignSetupWorkstreamSessionToken
+		}
+	}
+	v := &organizations.AssignSetupWorkstreamPayload{
+		Workstream:    body.Workstream,
+		ClearAssignee: body.ClearAssignee,
+	}
+	if body.Assignee != nil {
+		v.Assignee = marshalSetupTaskAssigneeInputRequestBodyToOrganizationsSetupTaskAssigneeInput(body.Assignee)
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildUpdateSetupTaskPayload builds the payload for the organizations
 // updateSetupTask endpoint from CLI flags.
 func BuildUpdateSetupTaskPayload(organizationsUpdateSetupTaskBody string, organizationsUpdateSetupTaskSessionToken string) (*organizations.UpdateSetupTaskPayload, error) {

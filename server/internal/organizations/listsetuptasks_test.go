@@ -220,6 +220,14 @@ func TestService_ListSetupTasksHiddenTaskPlatformVisibility(t *testing.T) {
 	normalResult, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{IncludeHidden: &includeHidden})
 	require.NoError(t, err)
 	require.Nil(t, setupTask(normalResult.Tasks, "instrument-agents"))
+	require.Contains(t, platformResult.Workstreams[1].TaskKeys, "instrument-agents")
+	require.Contains(t, platformResult.Workstreams[1].TaskKeys, "enable-logging")
+	require.Equal(t, []string{"anthropic-observability", "additional-agent-config"}, normalResult.Workstreams[1].TaskKeys)
+	for _, payload := range []*gen.ListSetupTasksPayload{{}, {IncludeHidden: new(false)}} {
+		defaultResult, err := ti.service.ListSetupTasks(platformCtx, payload)
+		require.NoError(t, err)
+		require.Equal(t, normalResult.Workstreams, defaultResult.Workstreams, "platform admin must opt in to hidden membership")
+	}
 }
 
 // Restoring a default-hidden task has to actually reveal it: the board offers

@@ -112,7 +112,7 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 		tasks = slices.DeleteFunc(tasks, func(task *gen.SetupTask) bool { return task.Hidden })
 	}
 
-	return &gen.ListSetupTasksResult{Tasks: tasks}, nil
+	return &gen.ListSetupTasksResult{Tasks: tasks, Workstreams: setupWorkstreamViewsForTasks(tasks)}, nil
 }
 
 func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupTaskPayload) (*gen.SetupTask, error) {
@@ -276,7 +276,10 @@ func (s *Service) sendSetupTaskAssignmentEmail(ctx context.Context, ac *contextv
 	}
 
 	recipient := conv.NormalizeEmail(task.Assignee.Email)
-	setupLink := fmt.Sprintf("%s/%s/setup?task=%s", strings.TrimRight(s.siteURL, "/"), organizationSlug, task.Key)
+	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.siteURL, "/"), organizationSlug)
+	if setupTaskDefinitionForKey(task.Key) != nil {
+		setupLink += "?task=" + task.Key
+	}
 	idempotencyMaterial := fmt.Sprintf("%s\x00%s\x00%s\x00%s", ac.ActiveOrganizationID, task.Key, assignmentTime.UTC().Format(time.RFC3339Nano), recipient)
 	idempotencyKey := fmt.Sprintf("setup-task-assignment:%x", sha256.Sum256([]byte(idempotencyMaterial)))
 	tmpl := email.SetupTaskAssignment{
