@@ -2,15 +2,12 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -18,12 +15,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
-	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
 
 type tunnelManager struct {
-	db           database.DBTX
 	routes       route.Store
 	forwardToken string
 	proxyManager *remotemcp.ProxyManager
@@ -36,9 +31,8 @@ type tunnelManager struct {
 	gatewayCIDRs []string
 }
 
-func newTunnelManager(db database.DBTX, routes route.Store, forwardToken string, proxyManager *remotemcp.ProxyManager, gatewayCIDRs []string) *tunnelManager {
+func newTunnelManager(routes route.Store, forwardToken string, proxyManager *remotemcp.ProxyManager, gatewayCIDRs []string) *tunnelManager {
 	return &tunnelManager{
-		db:           db,
 		routes:       routes,
 		forwardToken: forwardToken,
 		proxyManager: proxyManager,
@@ -91,21 +85,6 @@ func (m *tunnelManager) buildProxy(
 	gatewayURL, err := tunnelrouting.GatewayURL(addr)
 	if err != nil {
 		return nil, oops.E(oops.CodeGatewayError, err, "tunnel route is invalid").LogError(ctx, logger)
-	}
-
-	if m.proxyManager.IssuesCallerAssertions(mcpServer.Visibility, true) {
-		server, err := tunneledmcprepo.New(m.db).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{
-			ID:        mcpServer.TunneledMcpServerID.UUID,
-			ProjectID: projectID,
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, oops.E(oops.CodeNotFound, err, "tunneled mcp server not found")
-		}
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "load tunnel caller assertion resource").LogError(ctx, logger)
-		}
-		// Use the saved value exactly; credential routing may normalize its copy.
-		options = append(options, remotemcp.WithCallerAssertionResource(server.ResourceIdentifier.String))
 	}
 
 	p := m.proxyManager.BuildTarget(

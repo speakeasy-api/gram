@@ -10,7 +10,10 @@ AICP issues the assertions. Pin these values in your verifier:
 - Public JWKS: `https://tunnel.speakeasy.com/.well-known/jwks.json`
 
 The tunnel gateway serves the JWKS endpoint from its public-key bundle. The
-application serving tiers hold the private key and sign assertions.
+application serving tiers hold the private key and sign assertions when
+`GRAM_AUTHZ_PRIVATE_KEY`, `GRAM_AUTHZ_PUBLIC_KEYS` and `GRAM_AUTHZ_ISSUER_URL`
+are all present. Missing settings disable signing; invalid keys or an invalid
+issuer in a complete configuration cause startup to fail.
 
 The issuer and JWKS URL are independent of your server's OAuth provider and
 custom domain. You do not need to configure a per-server assertion issuer in Gram.
@@ -18,7 +21,8 @@ custom domain. You do not need to configure a per-server assertion issuer in Gra
 ## Wire contract
 
 The HTTP header is `SPEAKEASY_AUTHZ: <JWT>`, without a `Bearer` prefix. Gram
-removes client-supplied variants of this header and the `Speakeasy-Authz` alias.
+removes client-supplied variants of this header and the `Speakeasy-Authz` alias
+in the forwarding proxy, before adding its own assertion.
 The tunnel gateway and agent forward the assertion to your server. Upstream
 OAuth uses its own `Authorization` header.
 
@@ -42,7 +46,7 @@ seconds, capped by the source credential's expiry where available.
 | `mcp_server_id`                 | MCP wrapper serving this request.                                                                          |
 | `tunneled_mcp_server_id`        | Underlying tunneled MCP source.                                                                            |
 | `purpose`                       | Context in which Gram issued the assertion.                                                                |
-| `allowed_methods`               | Present for consent discovery; limits the assertion to the listed MCP methods.                             |
+| `allowed_methods`               | Methods Gram permits during consent discovery.                                                             |
 | `iat`, `exp`                    | Issuance and expiry, Unix seconds.                                                                         |
 | `jti`                           | Unique assertion identifier for correlation.                                                               |
 
@@ -61,8 +65,6 @@ a trailing slash. Restoring a path slash before a query also changes credential
 routing, for example `/mcp?tenant=example` to `/mcp/?tenant=example`. Reconnect
 upstream OAuth credentials for the new resource; credentials qualified to the
 old resource are not forwarded. Existing saved settings are unchanged by deployment.
-Continue validating the organization, project and server bindings: a resource
-identifier alone does not distinguish tenants that choose the same value.
 
 Runtime requests use `purpose=mcp_request`. Supported subjects are `user:<USER_ID>`,
 `api_key:<API_KEY_ID>` and `agent:<AGENT_ID>`, with matching `principal_type`
@@ -75,12 +77,12 @@ not make an `email_verified` claim.
 A human authenticated into a live OAuth consent challenge can receive a
 discovery assertion before granting tool access. It has `purpose=mcp_discovery`
 and `allowed_methods=["server/discover", "initialize", "notifications/initialized", "ping", "tools/list"]`.
-The receiver must reject it for `tools/call` and any other method. The server's
+Gram enforces this method list and blocks tool calls during consent. The server's
 discovery policy still determines which tools that user may see. Discovery is
 limited to ten minutes from the challenge's creation; restart login if that
 window expires. Impersonated or unknown authorizers and agent-selected consent
 flows do not receive a discovery assertion. HTTP `DELETE` used to close the
-discovery session also carries it; a receiver may permit that session cleanup.
+discovery session also carries it.
 
 Runtime user assertions identify the effective user of the validated Gram
 session. Session credentials do not record whether support impersonation
@@ -112,15 +114,14 @@ Your server must:
 2. Verify the signature with an explicit RS256 allowlist and require
    `typ=speakeasy-authz+jwt` and `version=1`.
 3. Require `iss=https://tunnel.speakeasy.com` and the exact destination audience.
-   Require `organization_id`, `project_id`, `mcp_server_id` and
-   `tunneled_mcp_server_id` to match your configured bindings. Audience matching
-   alone cannot distinguish tenants that configure the same resource identifier.
 4. Require `iat` and `exp`, reject expired/future-dated tokens, and enforce a
    maximum 60-second lifetime with at most five seconds of clock tolerance.
-5. Check the principal type and purpose before applying your access policy.
-   Require `purpose=mcp_request` for tool calls; accept `mcp_discovery`
-   only for the discovery methods listed above and in `allowed_methods`. Reject
-   unknown purposes. A valid signature alone does not authorize a tool call.
+
+Gram enforces its consent and tool-access rules before forwarding. Use the
+verified caller claims for your server's own access policy.
+
+For policies that restrict access to a specific Gram organization, project or
+server, also check the corresponding ID claims.
 
 Treat a missing assertion as unauthenticated. A captured bearer token can be
 reused until it expires, even with a unique `jti`, unless your server adds replay
