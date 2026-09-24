@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
 import { Route as OrganizationsRouteImport } from './routes/organizations'
 import { Route as ProjectsRouteImport } from './routes/projects'
+import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RemoteSessionIssuersRouteImport } from './routes/remote-session-issuers'
 import { Route as StokenCalculatorRouteImport } from './routes/stoken-calculator'
 import { Route as OrganizationsIndexRouteImport } from './routes/organizations.index'
@@ -50,6 +51,11 @@ const OrganizationsRoute = OrganizationsRouteImport.update({
 const ProjectsRoute = ProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegistryRoute = RegistryRouteImport.update({
+  id: '/registry',
+  path: '/registry',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RemoteSessionIssuersRoute = RemoteSessionIssuersRouteImport.update({
@@ -160,6 +166,7 @@ export interface FileRoutesByFullPath {
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/organizations': typeof OrganizationsRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
+  '/registry': typeof RegistryRoute
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
@@ -182,6 +189,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
+  '/registry': typeof RegistryRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/organizations': typeof OrganizationsIndexRoute
@@ -204,6 +212,7 @@ export interface FileRoutesById {
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/organizations': typeof OrganizationsRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
+  '/registry': typeof RegistryRoute
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
@@ -230,6 +239,7 @@ export interface FileRouteTypes {
     | '/integration-coverage'
     | '/organizations'
     | '/projects'
+    | '/registry'
     | '/remote-session-issuers'
     | '/stoken-calculator'
     | '/organizations/$idOrSlug'
@@ -252,6 +262,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/integration-coverage'
+    | '/registry'
     | '/stoken-calculator'
     | '/projects/$idOrSlug'
     | '/organizations'
@@ -273,6 +284,7 @@ export interface FileRouteTypes {
     | '/integration-coverage'
     | '/organizations'
     | '/projects'
+    | '/registry'
     | '/remote-session-issuers'
     | '/stoken-calculator'
     | '/organizations/$idOrSlug'
@@ -298,6 +310,7 @@ export interface RootRouteChildren {
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
   OrganizationsRoute: typeof OrganizationsRouteWithChildren
   ProjectsRoute: typeof ProjectsRouteWithChildren
+  RegistryRoute: typeof RegistryRoute
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
   StokenCalculatorRoute: typeof StokenCalculatorRoute
 }
@@ -330,6 +343,13 @@ declare module '@tanstack/react-router' {
       path: '/projects'
       fullPath: '/projects'
       preLoaderRoute: typeof ProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/registry': {
+      id: '/registry'
+      path: '/registry'
+      fullPath: '/registry'
+      preLoaderRoute: typeof RegistryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/remote-session-issuers': {
@@ -556,6 +576,7 @@ const rootRouteChildren: RootRouteChildren = {
   IntegrationCoverageRoute: IntegrationCoverageRoute,
   OrganizationsRoute: OrganizationsRouteWithChildren,
   ProjectsRoute: ProjectsRouteWithChildren,
+  RegistryRoute: RegistryRoute,
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,
   StokenCalculatorRoute: StokenCalculatorRoute,
 }

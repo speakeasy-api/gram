@@ -650,3 +650,48 @@ it("serves issuer logos through the generated same-origin image operation", asyn
   expect(request.headers.has("gram-session")).toBe(false);
   expect(request.headers.has("Authorization")).toBe(false);
 });
+
+it.each([
+  ["useCreateRegistryEntryMutation", { dataJson: "{}" }],
+  [
+    "useSaveRegistryEntryMutation",
+    {
+      id: "00000000-0000-4000-8000-000000000001",
+      dataJson: "{}",
+      updatedAt: "opaque",
+    },
+  ],
+  [
+    "useSetRegistryEntryPublishedMutation",
+    {
+      id: "00000000-0000-4000-8000-000000000001",
+      updatedAt: "opaque",
+      published: false,
+    },
+  ],
+] as const)(
+  "redirects expired registry sessions for %s",
+  async (hook, request) => {
+    vi.resetModules();
+    const fresh = await import("@/lib/gramAdminClient");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(unauthorizedBody, {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    const href = vi.spyOn(window.location, "href", "set");
+    fresh[hook]();
+    const options = useMutation.mock.lastCall![0];
+    await expect(
+      options.mutationFn({
+        request,
+      }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+    expect(fresh.isRedirectingToLogin()).toBe(true);
+    expect(href).toHaveBeenCalledOnce();
+  },
+);
