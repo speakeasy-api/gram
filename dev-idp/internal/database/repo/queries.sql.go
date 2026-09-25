@@ -181,6 +181,21 @@ func (q *Queries) ConsumeAuthCodeForClient(ctx context.Context, arg ConsumeAuthC
 	return i, err
 }
 
+const countDirectoryGroups = `-- name: CountDirectoryGroups :one
+
+SELECT COUNT(*) FROM directory_groups WHERE organization_id = ?1
+`
+
+// =============================================================================
+// WorkOS emulation: directory sync
+// =============================================================================
+func (q *Queries) CountDirectoryGroups(ctx context.Context, organizationID uuid.UUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countDirectoryGroups, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAuthCode = `-- name: CreateAuthCode :one
 
 INSERT INTO auth_codes (
@@ -1048,6 +1063,45 @@ func (q *Queries) GetCurrentUser(ctx context.Context, mode string) (CurrentUser,
 	return i, err
 }
 
+const getDirectoryGroup = `-- name: GetDirectoryGroup :one
+SELECT id, organization_id, name, created_at, updated_at FROM directory_groups WHERE id = ?1
+`
+
+func (q *Queries) GetDirectoryGroup(ctx context.Context, id uuid.UUID) (DirectoryGroup, error) {
+	row := q.db.QueryRowContext(ctx, getDirectoryGroup, id)
+	var i DirectoryGroup
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDirectoryUser = `-- name: GetDirectoryUser :one
+SELECT id, organization_id, email, first_name, last_name, job_title, state, custom_attributes, created_at, updated_at FROM directory_users WHERE id = ?1
+`
+
+func (q *Queries) GetDirectoryUser(ctx context.Context, id uuid.UUID) (DirectoryUser, error) {
+	row := q.db.QueryRowContext(ctx, getDirectoryUser, id)
+	var i DirectoryUser
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.FirstName,
+		&i.LastName,
+		&i.JobTitle,
+		&i.State,
+		&i.CustomAttributes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getEmaApp = `-- name: GetEmaApp :one
 SELECT id, client_id, client_secret, jwks, name, enabled, created_at, updated_at FROM ema_apps WHERE id = ?1
 `
@@ -1438,6 +1492,189 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const insertDirectoryGroup = `-- name: InsertDirectoryGroup :exec
+INSERT OR IGNORE INTO directory_groups (id, organization_id, name)
+VALUES (?1, ?2, ?3)
+`
+
+type InsertDirectoryGroupParams struct {
+	ID             uuid.UUID
+	OrganizationID uuid.UUID
+	Name           string
+}
+
+func (q *Queries) InsertDirectoryGroup(ctx context.Context, arg InsertDirectoryGroupParams) error {
+	_, err := q.db.ExecContext(ctx, insertDirectoryGroup, arg.ID, arg.OrganizationID, arg.Name)
+	return err
+}
+
+const insertDirectoryGroupMember = `-- name: InsertDirectoryGroupMember :exec
+INSERT OR IGNORE INTO directory_group_members (group_id, user_id)
+VALUES (?1, ?2)
+`
+
+type InsertDirectoryGroupMemberParams struct {
+	GroupID uuid.UUID
+	UserID  uuid.UUID
+}
+
+func (q *Queries) InsertDirectoryGroupMember(ctx context.Context, arg InsertDirectoryGroupMemberParams) error {
+	_, err := q.db.ExecContext(ctx, insertDirectoryGroupMember, arg.GroupID, arg.UserID)
+	return err
+}
+
+const insertDirectoryUser = `-- name: InsertDirectoryUser :exec
+INSERT OR IGNORE INTO directory_users (
+  id, organization_id, email, first_name, last_name, job_title, custom_attributes
+) VALUES (
+  ?1, ?2, ?3, ?4, ?5, ?6, ?7
+)
+`
+
+type InsertDirectoryUserParams struct {
+	ID               uuid.UUID
+	OrganizationID   uuid.UUID
+	Email            string
+	FirstName        string
+	LastName         string
+	JobTitle         string
+	CustomAttributes string
+}
+
+func (q *Queries) InsertDirectoryUser(ctx context.Context, arg InsertDirectoryUserParams) error {
+	_, err := q.db.ExecContext(ctx, insertDirectoryUser,
+		arg.ID,
+		arg.OrganizationID,
+		arg.Email,
+		arg.FirstName,
+		arg.LastName,
+		arg.JobTitle,
+		arg.CustomAttributes,
+	)
+	return err
+}
+
+const listDirectoryGroups = `-- name: ListDirectoryGroups :many
+SELECT g.id, g.organization_id, g.name, g.created_at, g.updated_at FROM directory_groups g
+WHERE g.organization_id = ?1
+  AND g.id > ?2
+  AND (
+    ?3 IS NULL
+    OR EXISTS (
+      SELECT 1 FROM directory_group_members m
+      WHERE m.group_id = g.id AND m.user_id = ?3
+    )
+  )
+ORDER BY g.id ASC
+LIMIT ?4
+`
+
+type ListDirectoryGroupsParams struct {
+	OrganizationID uuid.UUID
+	After          uuid.UUID
+	UserID         interface{}
+	MaxRows        int64
+}
+
+// ListDirectoryGroups keyset-paginates an org's groups, optionally narrowed
+// to the groups a directory user belongs to.
+func (q *Queries) ListDirectoryGroups(ctx context.Context, arg ListDirectoryGroupsParams) ([]DirectoryGroup, error) {
+	rows, err := q.db.QueryContext(ctx, listDirectoryGroups,
+		arg.OrganizationID,
+		arg.After,
+		arg.UserID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DirectoryGroup
+	for rows.Next() {
+		var i DirectoryGroup
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryUsers = `-- name: ListDirectoryUsers :many
+SELECT u.id, u.organization_id, u.email, u.first_name, u.last_name, u.job_title, u.state, u.custom_attributes, u.created_at, u.updated_at FROM directory_users u
+WHERE u.organization_id = ?1
+  AND u.id > ?2
+  AND (
+    ?3 IS NULL
+    OR EXISTS (
+      SELECT 1 FROM directory_group_members m
+      WHERE m.user_id = u.id AND m.group_id = ?3
+    )
+  )
+ORDER BY u.id ASC
+LIMIT ?4
+`
+
+type ListDirectoryUsersParams struct {
+	OrganizationID uuid.UUID
+	After          uuid.UUID
+	GroupID        interface{}
+	MaxRows        int64
+}
+
+// ListDirectoryUsers keyset-paginates an org's directory users, optionally
+// narrowed to the members of one group.
+func (q *Queries) ListDirectoryUsers(ctx context.Context, arg ListDirectoryUsersParams) ([]DirectoryUser, error) {
+	rows, err := q.db.QueryContext(ctx, listDirectoryUsers,
+		arg.OrganizationID,
+		arg.After,
+		arg.GroupID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DirectoryUser
+	for rows.Next() {
+		var i DirectoryUser
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Email,
+			&i.FirstName,
+			&i.LastName,
+			&i.JobTitle,
+			&i.State,
+			&i.CustomAttributes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listEmaAppAssignments = `-- name: ListEmaAppAssignments :many
