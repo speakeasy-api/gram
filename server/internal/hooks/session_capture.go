@@ -16,7 +16,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -123,11 +122,11 @@ func isConversationEvent(eventName string) bool {
 func (s *Service) defaultChatTitleForSession(ctx context.Context, metadata *SessionMetadata) string {
 	switch s.claudeSessionSurface(ctx, metadata) {
 	case agentVariantCowork:
-		return activities.DefaultCoworkChatTitle
+		return chat.DefaultCoworkChatTitle
 	case agentVariantClaudeCode, surfaceClaudeCodeDesktop:
-		return activities.DefaultClaudeChatTitle
+		return chat.DefaultClaudeChatTitle
 	default:
-		return activities.DefaultClaudeAmbiguous
+		return chat.DefaultClaudeAmbiguous
 	}
 }
 

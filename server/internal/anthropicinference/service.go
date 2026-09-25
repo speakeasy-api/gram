@@ -65,6 +65,11 @@ type scanner interface {
 	ScanForInferenceEnforcement(context.Context, risk.RealtimeScanRequest) (*risk.InferenceScanOutcome, error)
 }
 
+// ChatTitleGenerator schedules async chat title generation.
+type ChatTitleGenerator interface {
+	ScheduleChatTitleGeneration(ctx context.Context, chatID, orgID, projectID string) error
+}
+
 type transcriptStore interface {
 	ResolveActor(context.Context, Config, Frame) (string, error)
 	Begin(context.Context, Config, Frame, string) (checkpointSession, error)
@@ -83,8 +88,10 @@ type Service struct {
 
 // NewService uses the shared chat writer so captured messages receive the same
 // storage, metering, and asynchronous analysis as other imported conversations.
-func NewService(logger *slog.Logger, db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner) *Service {
-	return &Service{logger: logger, store: &postgresStore{db: db, writer: writer}, scanner: scanner}
+// titles may be nil, in which case archived conversations keep the placeholder
+// title they are stored with.
+func NewService(logger *slog.Logger, db *pgxpool.Pool, writer *chat.ChatMessageWriter, scanner scanner, titles ChatTitleGenerator) *Service {
+	return &Service{logger: logger, store: &postgresStore{db: db, writer: writer, titles: titles, logger: logger}, scanner: scanner}
 }
 
 // Process archives attempts independently of enforcement. Only a successfully
@@ -300,6 +307,8 @@ func policyInputs(messages []Message) ([]policyInput, error) {
 type postgresStore struct {
 	db     *pgxpool.Pool
 	writer *chat.ChatMessageWriter
+	titles ChatTitleGenerator
+	logger *slog.Logger
 }
 
 func (s *postgresStore) ResolveActor(ctx context.Context, config Config, frame Frame) (string, error) {
@@ -356,7 +365,7 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 		UserID:            conv.ToPGTextEmpty(userID),
 		ExternalUserID:    conv.ToPGTextEmpty(externalUserIDLabel),
 		ExternalChatID:    conv.ToPGText(externalChatID),
-		Title:             conv.ToPGText("Claude inference conversation"),
+		Title:             conv.ToPGText(chat.DefaultInferenceChatTitle),
 		CreatedAt:         conv.ToPGTimestamptz(now),
 		UpdatedAt:         conv.ToPGTimestamptz(now),
 		PreferStoredTitle: true,
@@ -481,7 +490,33 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	if _, err := s.writer.WriteExternalWithContentParts(ctx, config.ProjectID, writes, parts); err != nil {
 		return 0, fmt.Errorf("write inference messages: %w", err)
 	}
+	if len(writes) > 0 {
+		s.scheduleTitle(ctx, config, chatID)
+	}
 	return start, nil
+}
+
+// scheduleTitle asks the title generator to replace the placeholder every
+// archived inference conversation is stored with. "Claude inference
+// conversation" reads the same on every row, and these conversations show up
+// in the same session lists as natively captured ones.
+func (s *postgresStore) scheduleTitle(ctx context.Context, config Config, chatID uuid.UUID) {
+	if s.titles == nil {
+		return
+	}
+	// The enforcement verdict this archive rides along with is on a tight
+	// budget; scheduling must not inherit its deadline or its cancellation.
+	if err := s.titles.ScheduleChatTitleGeneration(
+		context.WithoutCancel(ctx),
+		chatID.String(),
+		config.OrganizationID,
+		config.ProjectID.String(),
+	); err != nil && s.logger != nil {
+		s.logger.WarnContext(ctx, "failed to schedule inference conversation title generation",
+			attr.SlogError(err),
+			attr.SlogChatID(chatID.String()),
+		)
+	}
 }
 
 // alignFrame locates the incoming transcript within stored history. A frame

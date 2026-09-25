@@ -66,7 +66,7 @@ func testConcurrentCheckpoints(t *testing.T, singleConnection bool) {
 		})
 	}
 	first := &Service{logger: testenv.NewLogger(t), store: store, scanner: scan(firstEntered, firstRelease, &firstCalls)}
-	second := NewService(testenv.NewLogger(t), db, store.writer, scan(secondEntered, secondRelease, &secondCalls))
+	second := NewService(testenv.NewLogger(t), db, store.writer, scan(secondEntered, secondRelease, &secondCalls), nil)
 	firstResult, secondResult := make(chan error, 1), make(chan error, 1)
 	firstVerdict, secondVerdict := make(chan Verdict, 1), make(chan Verdict, 1)
 	go func() {
@@ -155,7 +155,7 @@ func TestPostgresCheckpointRequiresSuccessfulEvaluation(t *testing.T) {
 			return &risk.ScanResult{Action: "block"}, nil
 		}
 		return nil, nil
-	}))
+	}), nil)
 	for range 2 {
 		promptScanned = make(chan struct{})
 		verdict, err := service.Process(t.Context(), config, frame)
@@ -237,7 +237,7 @@ func TestPostgresCanceledEvaluationPreservesPreviousCheckpoint(t *testing.T) {
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
 	frame.Messages = []Message{textMessage("user", "first prompt"), textMessage("assistant", "first reply")}
-	service := NewService(testenv.NewLogger(t), db, store.writer, &recordingScanner{})
+	service := NewService(testenv.NewLogger(t), db, store.writer, &recordingScanner{}, nil)
 	_, err := service.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	previous := transcriptHashes(frame.Messages)
@@ -299,7 +299,7 @@ func TestPostgresLastKnownGoodPreservesDeniedAttempts(t *testing.T) {
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
 	scanned := &recordingScanner{}
-	service := NewService(testenv.NewLogger(t), db, store.writer, scanned)
+	service := NewService(testenv.NewLogger(t), db, store.writer, scanned, nil)
 	verdict, err := service.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	require.Equal(t, "allow", verdict.Action)
