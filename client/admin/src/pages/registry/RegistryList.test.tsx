@@ -25,7 +25,7 @@ afterEach(() => {
 it("bounds pages, sends search and publication filters, resets cursor and shows invalid summaries", async () => {
   list.mockImplementation(
     ({ cursor }) =>
-      new Promise((resolve) =>
+      new Promise((resolve) => {
         setTimeout(
           () =>
             resolve({
@@ -41,8 +41,8 @@ it("bounds pages, sends search and publication filters, resets cursor and shows 
               nextCursor: cursor ? undefined : "next-page",
             }),
           cursor ? 100 : 0,
-        ),
-      ),
+        );
+      }),
   );
   await renderWithApp(<RegistryList />);
   await screen.findByText("1 issues");
