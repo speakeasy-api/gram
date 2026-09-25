@@ -29,6 +29,7 @@ const (
 	subjectTypeAiScanTarget                subjectType = "device_agent_ai_scan_target"
 	subjectTypeAIToolDecision              subjectType = "ai_tool_decision"
 	subjectTypeDeviceIntegration           subjectType = "device_integration_config"
+	subjectTypeDirectoryRoleMapping        subjectType = "directory_role_mapping"
 	subjectTypeEnvironment                 subjectType = "environment"
 	subjectTypeGcpIamCredential            subjectType = "gcp_iam_credential"
 	subjectTypeGcpKmsKey                   subjectType = "gcp_kms_key"
@@ -74,6 +75,10 @@ const (
 	subjectTypeUserSessionIssuer           subjectType = "user_session_issuer"
 	subjectTypeUserSessionIssuerCimdClient subjectType = "user_session_issuer_cimd_client"
 	subjectTypeVariation                   subjectType = "variation"
+	// The admitted subject, not the machine it admits: the row is the grant, so
+	// it is audited under its own subject rather than under the issuer's.
+	subjectTypeWorkloadAdmission subjectType = "workload_admission"
+	subjectTypeWorkloadIssuer    subjectType = "workload_issuer"
 )
 
 type Action string

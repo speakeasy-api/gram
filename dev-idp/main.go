@@ -160,7 +160,7 @@ func run() error {
 	service.AttachMemberships(goaMux, service.NewMembershipsService(logger, tp, db))
 	service.AttachOrganizationRoles(goaMux, service.NewOrganizationRolesService(logger, tp, db))
 	service.AttachInvitations(goaMux, service.NewInvitationsService(logger, tp, db))
-	service.AttachDevIdp(goaMux, service.NewDevIdpService(logger, tp, db))
+	service.AttachDevIdp(goaMux, service.NewDevIdpService(logger, tp, db, backend))
 	service.AttachEmaApps(goaMux, service.NewEmaAppsService(logger, tp, db))
 	service.AttachEmaResources(goaMux, service.NewEmaResourcesService(logger, tp, db, pubURL))
 	service.AttachEmaAppAssignments(goaMux, service.NewEmaAppAssignmentsService(logger, tp, db))

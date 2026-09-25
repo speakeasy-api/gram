@@ -3080,6 +3080,23 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 	require.Equal(t, base["plugin-b"], changedFP["plugin-b"], "untouched plugin's fingerprint must be stable")
 }
 
+func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const skill = "skills/configure-private-mcp-access/SKILL.md"
+	content := files["speakeasy/"+skill]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+skill])
+	workflow := string(content)
+	for _, name := range []string{"list_projects", "list_plugins", "get_plugin", "get_mcp_connection_settings", "set_mcp_address", "set_mcp_network_access"} {
+		require.Contains(t, workflow, name)
+	}
+	require.Contains(t, workflow, "explicit confirmation")
+	require.Contains(t, workflow, "An enqueued request is not a published package")
+	require.NotContains(t, workflow, "speakeasy-skill-feedback")
+}
+
 func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	t.Parallel()
 	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
@@ -3128,6 +3145,37 @@ func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	require.NotContains(t, workflow, "speakeasy-skill-feedback")
 	require.NotContains(t, workflow, "claude mcp add")
 	require.NotContains(t, workflow, "claude mcp remove")
+}
+
+// Diagnostics are opt-in field tooling: the packaged instructions must keep the
+// consent, the user-visible section and the "never blocks the import" boundary.
+func TestGeneratePlatformMCPExistingServersDiagnosticsAreOptIn(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const path = "skills/add-existing-mcp-servers/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	for _, required := range []string{
+		"record_workflow_run",
+		"The trigger is the literal string `with diagnostics`",
+		"never your own initiative",
+		"ask them to repeat the request with `with diagnostics` in it",
+		"**Run diagnostics** section",
+		"the table and the payload carry the same rows and the same reasons",
+		"Proceed only after they agree",
+		"Never send raw discovery output",
+		"carries scheme, host and path only",
+		"Drop the query string and the fragment before writing it",
+		"Diagnostics never gate the import",
+		"`added_unverified`",
+		"Never report a completed add as `blocked`",
+		"omit it unless it is an `https` URL",
+	} {
+		require.Contains(t, workflow, required)
+	}
 }
 
 // These are packaged-instruction regressions, not simulated agent/tool executions.

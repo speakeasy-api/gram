@@ -29,6 +29,27 @@ type CurrentUser struct {
 	UpdatedAt  time.Time
 }
 
+type DirectoryGroup struct {
+	ID             uuid.UUID
+	OrganizationID uuid.UUID
+	Name           string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type DirectoryUser struct {
+	ID               uuid.UUID
+	OrganizationID   uuid.UUID
+	Email            string
+	FirstName        string
+	LastName         string
+	JobTitle         string
+	State            string
+	CustomAttributes string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
 type EmaApp struct {
 	ID           uuid.UUID
 	ClientID     string

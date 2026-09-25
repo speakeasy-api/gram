@@ -36,6 +36,7 @@ var (
 	AiScanTargetV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_agent_ai_scan_target_event_v1", "Emitted when an organization changes the Shadow AI scan targets its device agents probe for")
 	AIToolDecisionV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_tool_decision_event_v1", "Emitted when an organization decides whether a detected AI tool may reach its MCP gateway")
 	DeviceIntegrationV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.device_integration_event_v1", "Emitted when changes to device integration configs are made")
+	DirectoryRoleMappingV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.directory_role_mapping_event_v1", "Emitted when changes to directory role mappings are made")
 	DeploymentV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.deployment_event_v1", "Emitted when changes to deployments are made")
 	EnvironmentV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.environment_event_v1", "Emitted when changes to environments are made")
 	GcpIamCredentialV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.gcp_iam_credential_event_v1", "Emitted when changes to GCP IAM external credentials are made")
@@ -59,9 +60,9 @@ var (
 	OrganizationDeviceAgentConfigurationV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_device_agent_configuration_event_v1", "Emitted when the organization's device-agent configuration is changed")
 	OrganizationEnterpriseTrialV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_enterprise_trial_event_v1", "Emitted when the organization's enterprise trial is armed, started, extended, given a new end date, demoted, re-armed, or converted")
 	OrganizationInviteV1                   = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_invite_event_v1", "Emitted when changes to organization invites are made")
+	OrganizationOnboardingV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_onboarding_event_v1", "Emitted when an organization's onboarding selection is saved")
 	OrganizationProductFeatureV1           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_product_feature_event_v1", "Emitted when an organization product feature flag is toggled")
 	OrganizationSetupTaskV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_setup_task_event_v1", "Emitted when an organization setup task is changed")
-	OrganizationOnboardingV1               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_onboarding_event_v1", "Emitted when an organization's onboarding selection is saved")
 	OrganizationWebhooksV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.organization_webhooks_event_v1", "Emitted when changes to organization webhooks are made")
 	OtelDestinationV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.otel_destination_event_v1", "Emitted when changes to OTEL destinations are made")
 	OtelForwardingV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.otel_forwarding_event_v1", "Emitted when changes to OTEL forwarding configs are made")
@@ -96,6 +97,8 @@ var (
 	UserSessionIssuerV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_issuer_event_v1", "Emitted when changes to user session issuers are made")
 	UserSessionIssuerCimdClientV1          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.user_session_issuer_cimd_client_event_v1", "Emitted when the CIMD client URLs a user session issuer admits are changed")
 	VariationV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.variation_event_v1", "Emitted when changes to tool names and other properties are made")
+	WorkloadAdmissionV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.workload_admission_event_v1", "Emitted when a workload subject is admitted or withdrawn, which grants or revokes machine access")
+	WorkloadIssuerV1                       = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.workload_issuer_event_v1", "Emitted when the external issuers an organization trusts to vouch for its workloads are changed")
 )
 
 // AuditLogCreatedPayloadV1 is the webhook payload for audit_log.created events.

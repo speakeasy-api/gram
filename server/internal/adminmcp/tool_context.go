@@ -16,7 +16,7 @@ type AdminContext struct {
 	Workflows []string `json:"available_workflows"`
 }
 
-func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, usageReadsAvailable bool) {
+func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, usageReadsAvailable, coverageReadsAvailable bool) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_admin_context",
 		Title:       "Get Staff Admin Context",
@@ -42,6 +42,9 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 		}
 		if usageReadsAvailable {
 			workflows = append(workflows, "inspect current-cycle organization usage estimate")
+		}
+		if coverageReadsAvailable {
+			workflows = append(workflows, "inspect which agent surfaces Gram observes for an organization")
 		}
 		return nil, AdminContext{
 			Email:     principal.Email,

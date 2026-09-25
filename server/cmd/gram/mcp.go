@@ -251,6 +251,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return fmt.Errorf("create publishers: %w", err)
 	}
+	publishersShutdown := len(shutdown.funcs)
 	shutdown.funcs = append(shutdown.funcs, stop)
 
 	logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
@@ -270,6 +271,20 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), nil, telemLogger)
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
+	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
+	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
+		c, logger, tracerProvider, meterProvider, db, redisClient, featureFlags, completions, publishers, shadowMCPClient,
+	)
+	if err != nil {
+		return err
+	}
+	shutdown.funcs = append(shutdown.funcs, mcpRiskScanner.Shutdown)
+	// Shutdown funcs run concurrently, so flag findings drain inside the
+	// publishers' stop instead of racing it.
+	stopPublishers := shutdown.funcs[publishersShutdown]
+	shutdown.funcs[publishersShutdown] = func(ctx context.Context) error {
+		return errors.Join(mcpRiskEvaluator.Drain(ctx), stopPublishers(ctx))
+	}
 	slackClient := slack_client.NewSlackClient(guardianPolicy)
 	// Listing and reading triggers works without Temporal; scheduling one
 	// returns an error from the trigger tool instead of dispatching.
@@ -301,7 +316,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		Encryption: enc, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 		BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,
 		RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager,
-		ShadowMCP: shadowmcp.NewClient(logger, db, cacheImpl, serverURL), Audit: auditLogger,
+		ShadowMCP: shadowMCPClient, MCPRisk: mcpRiskEvaluator, Audit: auditLogger,
 		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
 		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: remoteSessionDeps.Challenges,
 	})
@@ -425,8 +440,12 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	mux.Use(middleware.MCPProtocolVersionTelemetry)
 	mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 	mux.Use(middleware.NewRecovery(logger))
-	mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessions))
-	mcpSecurity, err := middleware.MCPSecurity(logger, []string{c.String("server-url"), c.String("site-url")})
+	platformHosts, err := parsePlatformHosts(c, authenticationHost)
+	if err != nil {
+		return nil, err
+	}
+	mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), platformOrigins(platformHosts), chatSessions))
+	mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{c.String("server-url"), c.String("site-url")}, platformOrigins(platformHosts)...))
 	if err != nil {
 		return nil, fmt.Errorf("configure mcp security middleware: %w", err)
 	}
@@ -436,7 +455,7 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	// which refuses hosts it does not know.
 	mux.Use(authenticationHost.Middleware)
 	mux.Use(mcpSecurity)
-	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
+	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL, platformHosts))
 	mux.Use(metering.NewMCPBandwidthMiddleware(logger, publishers.MeterReadings))
 	mux.Use(middleware.SessionMiddleware)
 	return mux, nil

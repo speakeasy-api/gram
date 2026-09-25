@@ -39,6 +39,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/jsonwebkeysets"
 	_ "github.com/speakeasy-api/gram/server/design/keys"
 	_ "github.com/speakeasy-api/gram/server/design/killswitches"
+	_ "github.com/speakeasy-api/gram/server/design/launcher"
 	_ "github.com/speakeasy-api/gram/server/design/litellm"
 	_ "github.com/speakeasy-api/gram/server/design/mcpapproval"
 	_ "github.com/speakeasy-api/gram/server/design/mcpendpoints"
@@ -85,6 +86,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/usersessionissuerscimdclients"
 	_ "github.com/speakeasy-api/gram/server/design/usersessions"
 	_ "github.com/speakeasy-api/gram/server/design/variations"
+	_ "github.com/speakeasy-api/gram/server/design/workloadpolicy"
 )
 
 var _ = API("gram", func() {

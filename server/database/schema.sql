@@ -3077,6 +3077,27 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   -- verify nothing and should not be creatable.
   jwks_uri TEXT NOT NULL,
 
+  -- Whether this issuer's admissions and agent assignments may match a subject
+  -- by a trailing wildcard rather than in full. Off unless an operator turns it
+  -- on when the issuer is created.
+  --
+  -- The gate lives here, not on the admission, because whether a wildcard can
+  -- ever be safe is a property of the platform rather than of one row. It is
+  -- sound only where the varying part of sub is minted by the issuer and cannot
+  -- be forged by the caller: Claude Tag's agent id, or a SPIFFE path assigned by
+  -- a registration entry. It is unsound where the caller controls that part
+  -- (GitHub Actions puts the git ref in sub, so `repo:org/repo:*` admits every
+  -- branch and so everyone who can open a pull request) and meaningless where
+  -- sub is an opaque identifier (Entra's GUID, Google's numeric id), because a
+  -- leading portion of those is a truncation that collides with unrelated
+  -- principals.
+  --
+  -- A per-admission confirmation cannot make that judgement: it asks whoever is
+  -- admitting a subject to re-derive their platform's sub semantics every time.
+  -- Recorded once here, an issuer whose subjects are opaque or caller-influenced
+  -- simply cannot carry a wildcard rule, whatever a later operator ticks.
+  allow_wildcard_admission boolean NOT NULL DEFAULT false,
+
   -- The last discovery document captured for this issuer, verbatim. The typed
   -- columns above model only what Gram acts on; the rest of a document is kept
   -- because a platform preset needs claims_supported to tell an operator what
@@ -3163,13 +3184,44 @@ CREATE TABLE IF NOT EXISTS workload_identity_admissions (
   -- discovery refresh must not silently repoint an existing admission.
   workload_issuer_id uuid NOT NULL,
 
-  -- The sub claim the issuer must assert, matched EXACTLY. There is
-  -- deliberately no pattern, prefix or wildcard column: these platforms put
-  -- declared, bounded resources in sub, and wildcarding a CI subject is the
-  -- misconfiguration that hands production credentials to anyone able to push a
-  -- branch. Widening this is an additive match_kind column if a customer ever
-  -- needs it.
+  -- What the issuer's sub claim is matched against. The whole value when
+  -- match_kind is exact. When wildcard, the value ends in a single `*` and
+  -- everything before it must be a leading portion of the presented subject;
+  -- the `*` is stored rather than stripped, so a row states its own breadth to
+  -- anyone reading this table.
   subject TEXT NOT NULL CHECK (subject <> ''),
+
+  -- How subject is compared. 'exact' is the default and the safe choice, and
+  -- the only one an admission gets without the operator asking for the other.
+  --
+  -- 'wildcard' exists because a platform that mints an identity per resource
+  -- does not let the operator know the subject in advance: Claude Tag's agent ID
+  -- is created with a Slack channel, is never shown in Anthropic's console, and
+  -- changes when a channel is recreated. Without it the only way to admit one is
+  -- to let an exchange fail and read the subject out of a log line, which is not
+  -- an onboarding flow.
+  --
+  -- The `*` is required, and required to be last. A bare leading portion would
+  -- match the same subjects while hiding that it does: `system:serviceaccount:ns`
+  -- reads as one service account and also matches `ns-two`, where
+  -- `system:serviceaccount:ns:*` states what it covers. Requiring the terminator
+  -- also avoids inventing a delimiter rule, since subjects are `/`-separated on
+  -- some platforms, `:`-separated on others, and unstructured on the rest. Only a
+  -- trailing `*` is accepted: an interior one would allow matching a suffix while
+  -- leaving the middle open, which is strictly more dangerous and buys nothing.
+  --
+  -- The risk this column carries, and why it is opt-in per issuer rather
+  -- than a field every issuer can set by accident: where sub encodes something
+  -- the caller controls, a wildcard admits far more than its author intends.
+  -- GitHub Actions puts `repo:org/repo:ref:refs/heads/main` in sub, so
+  -- `repo:org/repo:*` admits any branch, which is anyone who can open a pull
+  -- request. Wildcard admission is only sound where the varying segment is minted
+  -- by the issuer and unforgeable by the caller. See
+  -- workload_issuers.allow_wildcard_admission, which is what actually permits it.
+  --
+  -- Deliberately unconstrained in the schema: allowed values are validated in
+  -- application code so a new kind does not need a migration.
+  match_kind TEXT NOT NULL DEFAULT 'exact',
 
   -- Optional. The subject is already the identifier and is self-describing on
   -- most platforms; a label helps where it is not, such as Google's numeric
@@ -3197,9 +3249,15 @@ CREATE TABLE IF NOT EXISTS workload_identity_admissions (
   CONSTRAINT workload_identity_admissions_workload_issuer_fkey FOREIGN KEY (organization_id, workload_issuer_id) REFERENCES workload_issuers (organization_id, id) ON DELETE CASCADE
 );
 
--- The admission lookup is an exact match on the whole key, and this is the
--- index it rides. Not partial on project_id and not unique, because resolution
--- reads both tiers at once: a project's own admissions and the organization's.
+-- Serves the exact arm of the admission lookup, which compares subject with no
+-- expression around the column so this index stays usable. The wildcard arm
+-- cannot use it — it asks whether a stored stem leads the parameter,
+-- which is the opposite of what a btree on subject answers — so it scans the
+-- issuer's rows instead. That is bounded by the (organization, issuer) prefix of
+-- this index and by how few admissions an issuer has.
+--
+-- Not partial on project_id and not unique, because resolution reads both tiers
+-- at once: a project's own admissions and the organization's.
 CREATE INDEX IF NOT EXISTS workload_identity_admissions_lookup_idx
 ON workload_identity_admissions (organization_id, workload_issuer_id, subject)
 WHERE deleted IS FALSE;
@@ -3207,14 +3265,18 @@ WHERE deleted IS FALSE;
 -- Uniqueness is per tier, so re-admitting a subject restores rather than
 -- silently creating a second row, while two projects admitting the same subject
 -- stay independent of each other and of the organization tier.
+--
+-- match_kind is part of the key because the pair is what an admission names: a
+-- wildcard and an exact subject are different admissions even where one covers
+-- the other, and the narrower one exists precisely to sit alongside the broader.
 CREATE UNIQUE INDEX IF NOT EXISTS workload_identity_admissions_project_key
-ON workload_identity_admissions (project_id, workload_issuer_id, subject)
+ON workload_identity_admissions (project_id, workload_issuer_id, match_kind, subject)
 WHERE deleted IS FALSE;
 
 -- The organization tier's key, kept distinct from the project tier's because
 -- project_id IS NULL does not collide in the index above.
 CREATE UNIQUE INDEX IF NOT EXISTS workload_identity_admissions_organization_key
-ON workload_identity_admissions (organization_id, workload_issuer_id, subject)
+ON workload_identity_admissions (organization_id, workload_issuer_id, match_kind, subject)
 WHERE deleted IS FALSE AND project_id IS NULL;
 
 -- Backs the issuer delete preflight: naming the workloads that would stop
@@ -4620,6 +4682,11 @@ ON directory_groups (organization_id);
 CREATE UNIQUE INDEX IF NOT EXISTS directory_groups_workos_directory_group_id_key
 ON directory_groups (workos_directory_group_id);
 
+-- Composite-FK target so tenant-scoped children (directory_role_mappings) can
+-- pin a group reference to their own organization.
+CREATE UNIQUE INDEX IF NOT EXISTS directory_groups_organization_id_id_key
+ON directory_groups (organization_id, id);
+
 CREATE TABLE IF NOT EXISTS directory_users (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,
@@ -4804,6 +4871,110 @@ WHERE workos_user_id IS NOT NULL AND deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS organization_user_relationships_user_org_active_idx
 ON organization_user_relationships (user_id, organization_id)
 WHERE deleted IS FALSE;
+
+-- Slack directory data belongs to the organization. Disconnecting a workspace
+-- or deactivating a member preserves its source IDs. To hard-delete a parent,
+-- remove its dependent rows first; the required foreign keys prevent deletion.
+CREATE TABLE IF NOT EXISTS slack_directory_connections (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  slack_team_id TEXT NOT NULL,
+  slack_team_name TEXT,
+  -- Store a versioned token bundle encrypted by the application, including
+  -- refresh credentials when present. Clear it on disconnect and exclude it
+  -- from directory API responses.
+  credentials_encrypted TEXT,
+  granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  -- Replace this value on disconnect, reconnect, or replacement authorization
+  -- so an earlier sync cannot write into the new connection state.
+  generation uuid NOT NULL DEFAULT generate_uuidv7(),
+  health TEXT NOT NULL DEFAULT 'pending',
+  disconnected_at timestamptz,
+  last_sync_started_at timestamptz,
+  -- Set these together after publishing a complete directory snapshot. After
+  -- reconnect, require a completed sync whose generation matches the connection.
+  last_full_sync_generation uuid,
+  last_full_sync_succeeded_at timestamptz,
+  last_sync_failed_at timestamptz,
+  -- Store a typed failure code and omit the raw provider response.
+  last_error_code TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT slack_directory_connections_pkey PRIMARY KEY (id),
+  CONSTRAINT slack_directory_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL
+);
+
+-- Reconnect the same workspace in place; disconnection does not release its key.
+CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_connections_org_team_key
+ON slack_directory_connections (organization_id, slack_team_id);
+
+-- Store verified members of the connected workspace. Seeing an external Slack
+-- Connect user in a shared channel does not establish membership. Full syncs
+-- upsert these rows in place and preserve mapping_revision.
+CREATE TABLE IF NOT EXISTS slack_directory_memberships (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  slack_team_id TEXT NOT NULL,
+  slack_user_id TEXT NOT NULL,
+  display_name TEXT,
+  -- The profile email can change. Use it to suggest matches for an administrator
+  -- to confirm; it cannot identify an account or prove ownership.
+  email TEXT,
+  -- The application validates directory state and member type. Missing provider
+  -- fields stay unknown and cannot establish eligibility for delegation.
+  status TEXT NOT NULL DEFAULT 'unknown',
+  member_type TEXT NOT NULL DEFAULT 'unknown',
+  provider_updated_at timestamptz,
+  last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  -- Increment under the membership row lock on every mapping change. This
+  -- rejects stale dialogs even if an account was mapped and then unmapped again.
+  mapping_revision bigint NOT NULL DEFAULT 0,
+  mapping_conflict_reason TEXT,
+  mapping_conflict_detected_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT slack_directory_memberships_pkey PRIMARY KEY (id),
+  CONSTRAINT slack_directory_memberships_connection_fkey FOREIGN KEY (organization_id, slack_team_id) REFERENCES slack_directory_connections (organization_id, slack_team_id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_memberships_org_team_user_key
+ON slack_directory_memberships (organization_id, slack_team_id, slack_user_id);
+
+-- Map a Slack member to an existing person in the same organization. Reassign
+-- by revoking the old row and inserting a new one to preserve the previous owner.
+-- created_at records confirmation. Write the actor and reason to the audit log
+-- in the same transaction. A mapping does not grant permissions.
+CREATE TABLE IF NOT EXISTS slack_identity_mappings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  slack_team_id TEXT NOT NULL,
+  slack_user_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  revoked_at timestamptz,
+
+  CONSTRAINT slack_identity_mappings_pkey PRIMARY KEY (id),
+  CONSTRAINT slack_identity_mappings_membership_fkey FOREIGN KEY (organization_id, slack_team_id, slack_user_id) REFERENCES slack_directory_memberships (organization_id, slack_team_id, slack_user_id) ON DELETE SET NULL,
+  CONSTRAINT slack_identity_mappings_user_id_fkey FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL,
+  -- The relationship's user_id has no FK to users, so check both references.
+  CONSTRAINT slack_identity_mappings_organization_id_user_id_fkey FOREIGN KEY (organization_id, user_id) REFERENCES organization_user_relationships (organization_id, user_id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS slack_identity_mappings_current_key
+ON slack_identity_mappings (organization_id, slack_team_id, slack_user_id)
+WHERE revoked_at IS NULL;
+
+-- History reads and membership FK checks also need revoked rows.
+CREATE INDEX IF NOT EXISTS slack_identity_mappings_membership_history_idx
+ON slack_identity_mappings (organization_id, slack_team_id, slack_user_id, created_at DESC);
+
+-- Supports personal identity lookups and FK checks against users and their
+-- organization relationships.
+CREATE INDEX IF NOT EXISTS slack_identity_mappings_user_org_idx
+ON slack_identity_mappings (user_id, organization_id);
 
 CREATE TABLE IF NOT EXISTS agents (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
@@ -4994,6 +5165,49 @@ CREATE INDEX IF NOT EXISTS organization_role_assignments_org_user_idx
 ON organization_role_assignments (organization_id, user_id)
 WHERE user_id IS NOT NULL;
 
+-- directory_role_mappings grants a role to every member of a directory group,
+-- or to every directory user whose attribute key has a given value. The roles
+-- are added to a user's principals at access-check time, on top of the roles
+-- WorkOS assigns, and are never written back to WorkOS. `source_kind` is
+-- 'group' (directory_group_id set) or 'attribute' (attribute_key and
+-- attribute_value set). Each group or attribute value maps to one role. The
+-- group reference is pinned to the mapping's organization by a composite FK.
+-- Directory sync soft-deletes groups, and a mapping to a soft-deleted group
+-- stops matching; the FK cascade only fires when the organization is removed.
+CREATE TABLE IF NOT EXISTS directory_role_mappings (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT NOT NULL,
+  source_kind TEXT NOT NULL,
+  directory_group_id UUID,
+  attribute_key TEXT,
+  attribute_value TEXT,
+  role_urn TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT directory_role_mappings_pkey PRIMARY KEY (id),
+  CONSTRAINT directory_role_mappings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT directory_role_mappings_directory_group_fkey FOREIGN KEY (organization_id, directory_group_id) REFERENCES directory_groups (organization_id, id) ON DELETE CASCADE,
+  -- Structural shape only; which kinds exist is validated in application code.
+  -- An attribute rule needs both key and value, and a row never carries both a
+  -- group and an attribute.
+  CONSTRAINT directory_role_mappings_source_columns_check CHECK (
+    (attribute_key IS NULL) = (attribute_value IS NULL)
+    AND NOT (directory_group_id IS NOT NULL AND attribute_key IS NOT NULL)
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_group_key
+ON directory_role_mappings (organization_id, directory_group_id)
+WHERE deleted IS FALSE AND directory_group_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS directory_role_mappings_org_attribute_key
+ON directory_role_mappings (organization_id, attribute_key, attribute_value)
+WHERE deleted IS FALSE AND attribute_key IS NOT NULL;
+
 -- agent_role_assignments stores which roles each agent principal holds within an org.
 -- It is the agent counterpart to organization_role_assignments. Agents have no WorkOS
 -- identity, so membership here is local only and is never reconciled outward.
@@ -5043,6 +5257,16 @@ CREATE TABLE IF NOT EXISTS workload_agent_assignments (
   workload_issuer_id uuid NOT NULL,
   subject TEXT NOT NULL CHECK (subject <> ''),
 
+  -- Matched the same way as an admission's, and for the same reason: a platform
+  -- that mints an identity per resource cannot have every one of them assigned
+  -- ahead of time. Admission and assignment must widen together, because a
+  -- subject admitted by wildcard with no assignment reaching it is refused at
+  -- the token endpoint for having no agent.
+  --
+  -- See workload_identity_admissions.match_kind for the `*` rules, what wildcard
+  -- matching costs, and where it is unsound.
+  match_kind TEXT NOT NULL DEFAULT 'exact',
+
   agent_id uuid NOT NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -5057,10 +5281,19 @@ CREATE TABLE IF NOT EXISTS workload_agent_assignments (
   CONSTRAINT workload_agent_assignments_agent_fkey FOREIGN KEY (organization_id, agent_id) REFERENCES agents (organization_id, id) ON DELETE CASCADE
 );
 
--- One live agent per workload principal. Also serves looking up a workload's
--- agent.
+-- One live assignment per (principal or wildcard, kind). Also serves looking up a
+-- workload's agent.
+--
+-- Deliberately does NOT make at most one row match a given subject: a wildcard
+-- assignment and an exact one can both cover it, which is the point — a
+-- fleet-wide default with individual principals pinned elsewhere. "One agent per
+-- workload" is therefore resolved rather than stored, by
+-- workloadidentity.ResolveWorkloadAgentAssignment taking the most specific match
+-- (exact before wildcard, longer wildcard stem before shorter). Uniqueness here
+-- only stops the same rule being written twice, so any read that resolves an
+-- agent from this table must apply that ordering.
 CREATE UNIQUE INDEX IF NOT EXISTS workload_agent_assignments_workload_key
-ON workload_agent_assignments (organization_id, workload_issuer_id, subject)
+ON workload_agent_assignments (organization_id, workload_issuer_id, match_kind, subject)
 WHERE deleted IS FALSE;
 
 -- Serves listing an agent's workloads and the agent foreign-key cascade, which
@@ -5263,6 +5496,25 @@ CREATE TABLE IF NOT EXISTS agent_executions (
 CREATE INDEX IF NOT EXISTS agent_executions_project_id_started_at_idx
 ON agent_executions (project_id, started_at)
 WHERE deleted IS FALSE;
+
+CREATE TABLE IF NOT EXISTS mcp_registry_entries (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  data jsonb NOT NULL,
+  published boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mcp_registry_entries_name_check CHECK (
+    COALESCE(
+      jsonb_typeof(data #> '{server,name}') = 'string'
+      AND (data #>> '{server,name}') <> '',
+      false
+    )
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_registry_entries_name_key
+  ON mcp_registry_entries ((data #>> '{server,name}'));
 
 -- Public/external MCP registries (e.g. PulseMCP) — seeded into the DB.
 -- These are distinct from org-level collection registries in organization_mcp_collection_registries.

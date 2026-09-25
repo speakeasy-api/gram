@@ -273,6 +273,7 @@ func AttachToExistingPluginAudited(ctx context.Context, tx pgx.Tx, auditLogger *
 		ServerSortOrder:   attached.Server.SortOrder,
 		ToolsetURN:        nil,
 		McpServerURN:      &mcpServerURN,
+		MetaMcpServerURN:  nil,
 	}); err != nil {
 		return nil, fmt.Errorf("audit existing default plugin server add: %w", err)
 	}
@@ -464,6 +465,7 @@ func AttachToDefaultPluginAudited(ctx context.Context, dbtx pgx.Tx, auditLogger 
 		ServerSortOrder:   attached.Server.SortOrder,
 		ToolsetURN:        toolsetURN,
 		McpServerURN:      mcpServerURN,
+		MetaMcpServerURN:  nil,
 	}); err != nil {
 		return false, fmt.Errorf("audit log default plugin server add: %w", err)
 	}

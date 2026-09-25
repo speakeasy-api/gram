@@ -4166,6 +4166,97 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getSession
+  /admin/supportCoverage.get:
+    get:
+      description: 'Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.'
+      operationId: adminGetSupportCoverage
+      parameters:
+        - allowEmptyValue: true
+          description: Organization to report coverage for.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Organization to report coverage for.
+            type: string
+        - allowEmptyValue: true
+          description: Observation window in days.
+          in: query
+          name: window_days
+          schema:
+            default: 30
+            description: Observation window in days.
+            format: int64
+            maximum: 90
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupportCoverageResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getSupportCoverage admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getSupportCoverage
+      x-speakeasy-react-hook:
+        name: AdminGetSupportCoverage
   /admin/supportMatrix.get:
     get:
       description: Read the shared support catalog and product coverage.
@@ -6620,6 +6711,99 @@ components:
         - id
         - name
         - group
+    SupportCoverageCell:
+      type: object
+      properties:
+        capability:
+          type: string
+          description: Capability the cell reports on.
+          enum:
+            - session
+            - blocking
+            - identity
+            - cost
+            - shadow
+        detail:
+          type: string
+          description: Short qualifier rendered under the value. Empty when there is nothing to qualify.
+        last_seen:
+          type: string
+          description: RFC3339 timestamp of the most recent supporting evidence. Absent unless observed.
+          format: date-time
+        status:
+          type: string
+          description: Whether evidence was found, absent, or not answerable yet.
+          enum:
+            - observed
+            - none
+            - pending
+        surface:
+          type: string
+          description: Consuming surface the cell reports on.
+          enum:
+            - claude_code
+            - claude_chat
+            - cowork
+            - codex
+            - cursor
+            - other
+        value:
+          type: integer
+          description: 'Primary measure: sessions, tokens, blocks, attributed sessions or distinct shadow servers depending on the capability. Zero unless observed.'
+          format: int64
+      description: Observed evidence for one capability on one surface.
+      required:
+        - capability
+        - surface
+        - status
+        - value
+        - detail
+    SupportCoverageResult:
+      type: object
+      properties:
+        cells:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportCoverageCell'
+          description: One cell per (capability, surface) pair. Always fully populated.
+        from:
+          type: string
+          description: RFC3339 start of the observation window.
+          format: date-time
+        to:
+          type: string
+          description: RFC3339 end of the observation window.
+          format: date-time
+        unmapped:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportCoverageUnmapped'
+          description: Activity whose hook_source folded to no surface.
+        window_days:
+          type: integer
+          description: Length of the observation window in days.
+          format: int64
+      description: Observed support coverage for one organization over a fixed window.
+      required:
+        - cells
+        - unmapped
+        - window_days
+        - from
+        - to
+    SupportCoverageUnmapped:
+      type: object
+      properties:
+        hook_source:
+          type: string
+          description: The raw, unrecognized hook_source.
+        sessions:
+          type: integer
+          description: Sessions observed under it inside the window.
+          format: int64
+      description: A hook_source the surface fold did not recognize.
+      required:
+        - hook_source
+        - sessions
     SupportDraft:
       type: object
       properties:

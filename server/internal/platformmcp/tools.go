@@ -109,9 +109,25 @@ type MCPReadiness struct {
 }
 
 type MCPDistribution struct {
-	PluginID         string `json:"plugin_id"`
-	State            string `json:"state"`
-	PublicationState string `json:"publication_state"`
+	// PluginID identifies the plugin carrying this MCP.
+	PluginID string `json:"plugin_id"`
+
+	// PluginName is the plugin's display name, so naming the plugin needs no
+	// separate list_plugins call.
+	PluginName string `json:"plugin_name"`
+
+	// PluginSlug is the plugin's stable slug, the value to pass back to a tool
+	// that takes a plugin by slug.
+	PluginSlug string `json:"plugin_slug"`
+
+	// State is the lifecycle state of a membership this flow created. It is
+	// empty for a membership created elsewhere, which has no lifecycle record;
+	// empty means unknown, never "not attached".
+	State string `json:"state,omitempty"`
+
+	// PublicationState reports whether that membership has been published. It
+	// is empty on the same terms as State, and empty never means "unpublished".
+	PublicationState string `json:"publication_state,omitempty"`
 }
 
 type MCP struct {
@@ -169,11 +185,11 @@ type operationBudgetResult struct {
 // registrar alongside the server so another admitted audience — the project
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
-func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
-	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate, nil, nil)
+func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
+	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, nil, candidate, nil, nil)
 }
 
-func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService) (*mcp.Server, *Registrar) {
+func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService, connectionMutations ...*MCPConnectionMutationService) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
@@ -193,6 +209,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization.",
 			"Setup also decides which MCP clients may sign in to the new server: read get_mcp_client_admission, explain in plain words which apps that lets in, and only change it with set_mcp_client_admission after the user explicitly confirms.",
 			"Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default.",
+			"To change an existing MCP server or gateway address or network access, first read its exact connection settings in the selected project. Show the current and proposed address or mode, and wait for explicit confirmation before changing it. Re-read that same target afterwards. A publication request means the plugin update was requested, not that its packages or downstream users have converged; verify the publication evidence before reporting completion.",
 			"Creating a data export is a mutation: first show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask for explicit confirmation. Never request or accept authorization header values in chat; create the export without headers and send the user to the returned management URL to add authentication securely.",
 		}, "\n\n"),
 		PageSize: 32,
@@ -201,7 +218,13 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	reg := newRegistrar(server)
 
 	registerReadTools(reg, reader, cursorKeyMaterial)
+	var connectionMutationService *MCPConnectionMutationService
+	if len(connectionMutations) > 0 {
+		connectionMutationService = connectionMutations[0]
+	}
 	if postgresReader, ok := reader.(*PostgresReader); ok {
+		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db))
+		registerMCPConnectionMutationTools(reg, connectionMutationService)
 		if postgresReader.reviewRequests == nil {
 			registerUnavailableReviewRequestTools(reg)
 		} else {
@@ -233,6 +256,8 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerShadowDecisionTool(reg, postgresReader.shadowDecisions)
 		registerShadowAITools(reg, postgresReader.shadowAI)
 	} else {
+		registerUnavailableMCPConnectionSettingsTool(reg)
+		registerMCPConnectionMutationTools(reg, nil)
 		registerUnavailableReviewRequestTools(reg)
 		registerRiskAnalysisStatusTool(reg, nil)
 		registerRiskFindingsTool(reg, nil)
@@ -362,6 +387,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	} else {
 		registerFeedbackTool(reg, feedback)
 	}
+	registerWorkflowRunTool(reg, workflowRun)
 	return server, reg
 }
 

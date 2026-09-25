@@ -75,6 +75,11 @@ type UsageReader interface {
 	GetPaygBillingSummary(context.Context, *gen.GetPaygBillingSummaryPayload) (*gen.AdminPaygBillingSummary, error)
 }
 
+// CoverageReader exposes the dashboard's observed support coverage matrix.
+type CoverageReader interface {
+	GetSupportCoverage(context.Context, *gen.GetSupportCoveragePayload) (*gen.SupportCoverageResult, error)
+}
+
 func NewRuntime(authenticator Authenticator, resourceURL string, reads ...OrganizationReader) *Runtime {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "admin-mcp",
@@ -92,12 +97,14 @@ func NewRuntime(authenticator Authenticator, resourceURL string, reads ...Organi
 	configurationReader, _ := reader.(ConfigurationReader)
 	activityReader, _ := reader.(ActivityReader)
 	usageReader, _ := reader.(UsageReader)
-	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, usageReader != nil)
+	coverageReader, _ := reader.(CoverageReader)
+	registerContextTool(server, reader != nil, projectReader != nil, configurationReader != nil, activityReader != nil, usageReader != nil, coverageReader != nil)
 	registerOrganizationTools(server, reader)
 	registerProjectTools(server, reader, projectReader)
 	registerConfigurationTools(server, reader, configurationReader)
 	registerActivityTools(server, reader, activityReader)
 	registerUsageTools(server, reader, usageReader)
+	registerCoverageTools(server, reader, coverageReader)
 	return &Runtime{authenticator: authenticator, server: server, resourceURL: resourceURL}
 }
 

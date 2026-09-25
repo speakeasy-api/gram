@@ -21,7 +21,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type TrialFixtureHandler func(context.Context, string) (bool, error)
+
 type DemoteExpiredTrials struct {
+	fixtureHandler  TrialFixtureHandler
 	logger          *slog.Logger
 	db              *pgxpool.Pool
 	repo            *trialsrepo.Queries
@@ -38,6 +41,7 @@ func NewDemoteExpiredTrials(
 	auditLogger *audit.Logger,
 	notifier trialemails.Notifier,
 	productFeatures *productfeatures.Client,
+	fixtureHandler TrialFixtureHandler,
 ) *DemoteExpiredTrials {
 	return &DemoteExpiredTrials{
 		logger:          logger.With(attr.SlogComponent("demote_expired_trials")),
@@ -47,6 +51,7 @@ func NewDemoteExpiredTrials(
 		audit:           auditLogger,
 		notifier:        notifier,
 		productFeatures: productFeatures,
+		fixtureHandler:  fixtureHandler,
 	}
 }
 
@@ -55,6 +60,10 @@ func (d *DemoteExpiredTrials) List(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("query trials due for demotion: %w", err)
 	}
+
+	// Listing must remain read-only. The per-organization activity retains its
+	// org ID in Temporal history, so a post-commit cache failure can retry even
+	// after the trial no longer matches the expired-trials query.
 
 	return organizationIDs, nil
 }
@@ -69,6 +78,16 @@ type trialDemotionOpenRouter interface {
 }
 
 func (d *DemoteExpiredTrials) Demote(ctx context.Context, args DemoteExpiredTrialArgs) error {
+	if d.fixtureHandler != nil {
+		handled, err := d.fixtureHandler(ctx, args.OrganizationID)
+		if err != nil {
+			return fmt.Errorf("handle local trial fixture: %w", err)
+		}
+		if handled {
+			return nil
+		}
+	}
+
 	// A scheduled demotion has no request behind it, so mark the surface
 	// rather than leaving the audit row indistinguishable from one whose
 	// surface we failed to classify.

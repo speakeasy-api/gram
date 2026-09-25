@@ -29,6 +29,7 @@ import { adminGetSession } from "../funcs/adminGetSession.js";
 import { adminGetSpendBreakdown } from "../funcs/adminGetSpendBreakdown.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
 import { adminGetStripeSubscription } from "../funcs/adminGetStripeSubscription.js";
+import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
@@ -104,6 +105,7 @@ import { SetOrganizationFeatureRequestBody } from "../models/components/setorgan
 import { SetOrganizationOnboardingRequestBody } from "../models/components/setorganizationonboardingrequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
 import { StartTrialRequestBody } from "../models/components/starttrialrequestbody.js";
+import { SupportCoverageResult } from "../models/components/supportcoverageresult.js";
 import { SupportMatrix } from "../models/components/supportmatrix.js";
 import { TriggerOrganizationChatAnalysisRequestBody } from "../models/components/triggerorganizationchatanalysisrequestbody.js";
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
@@ -126,6 +128,7 @@ import { AdminGetProjectRequest } from "../models/operations/admingetproject.js"
 import { AdminGetSpendBreakdownRequest } from "../models/operations/admingetspendbreakdown.js";
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
+import { AdminGetSupportCoverageRequest } from "../models/operations/admingetsupportcoverage.js";
 import {
   AdminListGlobalIssuerConvergenceCandidatesRequest,
   AdminListGlobalIssuerConvergenceCandidatesResponse,
@@ -909,6 +912,23 @@ export class Admin extends ClientSDK {
   ): Promise<AdminSession> {
     return unwrapAsync(adminGetSession(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * getSupportCoverage admin
+   *
+   * @remarks
+   * Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.
+   */
+  async getSupportCoverage(
+    request: AdminGetSupportCoverageRequest,
+    options?: RequestOptions,
+  ): Promise<SupportCoverageResult> {
+    return unwrapAsync(adminGetSupportCoverage(
+      this,
+      request,
       options,
     ));
   }

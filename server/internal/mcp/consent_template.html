@@ -635,7 +635,7 @@
               data-self-label="Give access"
               data-agent-label="Authorize agent"
               data-consent-self-ready="{{if and (not .ShowToolsIsland) .ConsentEnabled}}true{{else}}false{{end}}"
-              class="bg-primary text-primary-foreground interact:bg-foreground disabled:bg-muted disabled:text-muted-foreground h-10 w-full px-6 text-sm sm:w-auto disabled:cursor-not-allowed"
+              class="bg-primary text-primary-foreground enabled:interact:bg-foreground disabled:bg-muted disabled:text-muted-foreground h-10 w-full px-6 text-sm sm:w-auto disabled:cursor-not-allowed"
               {{if or .ShowToolsIsland (not .ConsentEnabled)}}disabled{{end}}
             >
               Give access

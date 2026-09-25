@@ -66,6 +66,8 @@ export const AUDIT_ACTIONS = [
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
   "device_integration:upsert",
+  "directory_role_mapping:delete",
+  "directory_role_mapping:set",
   "environment:create",
   "environment:delete",
   "environment:update",
@@ -267,6 +269,10 @@ export const AUDIT_ACTIONS = [
   "wake:cancelled",
   "wake:fired",
   "wake:scheduled",
+  "workload-admission:admit",
+  "workload-admission:withdraw",
+  "workload-issuer:create",
+  "workload-issuer:delete",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -468,6 +474,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated device integration schedule";
     case "device_integration:retry_schedule":
       return "retried device integration sync";
+
+    case "directory_role_mapping:set":
+      return "set directory role mapping";
+    case "directory_role_mapping:delete":
+      return "removed directory role mapping";
 
     case "environment:create":
       return "created environment";
@@ -850,6 +861,17 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated a global variation for";
     case "variation:delete_global":
       return "deleted a global variation for";
+
+    case "workload-issuer:create":
+      return "started trusting workload issuer";
+    case "workload-issuer:delete":
+      return "stopped trusting workload issuer";
+    // Named for what they do, because the row is the grant of machine access
+    // rather than a record about one.
+    case "workload-admission:admit":
+      return "admitted workload";
+    case "workload-admission:withdraw":
+      return "withdrew workload";
 
     default:
       return assertNever(action);

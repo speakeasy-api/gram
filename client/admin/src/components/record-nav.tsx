@@ -8,6 +8,7 @@ import {
   FolderIcon,
   HistoryIcon,
   ServerIcon,
+  LayoutGridIcon,
   SlidersHorizontalIcon,
   UsersIcon,
 } from "lucide-react";
@@ -114,6 +115,10 @@ export function RecordNav({
   });
   const onFeatures = !!matchRoute({
     to: "/organizations/$idOrSlug/features",
+    params: { idOrSlug },
+  });
+  const onCoverage = !!matchRoute({
+    to: "/organizations/$idOrSlug/coverage",
     params: { idOrSlug },
   });
 
@@ -277,6 +282,23 @@ export function RecordNav({
                 >
                   <SlidersHorizontalIcon />
                   <span>Features</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onCoverage}
+                tooltip="Coverage"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/coverage"
+                  params={{ idOrSlug }}
+                  {...currentProps(onCoverage)}
+                >
+                  <LayoutGridIcon />
+                  <span>Coverage</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

@@ -1329,6 +1329,12 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	redirectBaseURL := m.serverURL.String()
 	if state.Authority.IsPrivate() {
 		redirectBaseURL = state.Authority.BaseURL
+	} else if state.Authority.Surface == requestorigin.SurfacePlatform && state.Authority.BaseURL != "" {
+		// A platform authority's origin is the server URL or an extra platform
+		// host (GRAM_PLATFORM_HOSTS), stamped by request middleware at mint.
+		// Consent revalidates it on arrival, so return to the host the flow
+		// started on rather than the configured server URL.
+		redirectBaseURL = state.Authority.BaseURL
 	} else if state.Authority.Surface == requestorigin.SurfaceCustomDomain && state.Authority.CustomDomainID.Valid {
 		domain, derr := customdomainsrepo.New(m.db).GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
 			ID: state.Authority.CustomDomainID.UUID, OrganizationID: state.Authority.OrganizationID,

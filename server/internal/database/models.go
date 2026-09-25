@@ -858,6 +858,20 @@ type DirectoryGroup struct {
 	WorkosLastEventID      pgtype.Text
 }
 
+type DirectoryRoleMapping struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	SourceKind       string
+	DirectoryGroupID uuid.NullUUID
+	AttributeKey     pgtype.Text
+	AttributeValue   pgtype.Text
+	RoleUrn          string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+}
+
 type DirectoryUser struct {
 	ID                    uuid.UUID
 	OrganizationID        string
@@ -1430,6 +1444,14 @@ type McpRegistry struct {
 	UpdatedAt            pgtype.Timestamptz
 	DeletedAt            pgtype.Timestamptz
 	Deleted              bool
+}
+
+type McpRegistryEntry struct {
+	ID        uuid.UUID
+	Data      []byte
+	Published bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
 }
 
 // Research-agent output for an approval request. Findings are gathered and cited, never adjudicated — the admin decides.
@@ -2999,6 +3021,54 @@ type SlackAppToolset struct {
 	CreatedAt  pgtype.Timestamptz
 }
 
+type SlackDirectoryConnection struct {
+	ID                      uuid.UUID
+	OrganizationID          string
+	SlackTeamID             string
+	SlackTeamName           pgtype.Text
+	CredentialsEncrypted    pgtype.Text
+	GrantedScopes           []string
+	Generation              uuid.UUID
+	Health                  string
+	DisconnectedAt          pgtype.Timestamptz
+	LastSyncStartedAt       pgtype.Timestamptz
+	LastFullSyncGeneration  uuid.NullUUID
+	LastFullSyncSucceededAt pgtype.Timestamptz
+	LastSyncFailedAt        pgtype.Timestamptz
+	LastErrorCode           pgtype.Text
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+}
+
+type SlackDirectoryMembership struct {
+	ID                        uuid.UUID
+	OrganizationID            string
+	SlackTeamID               string
+	SlackUserID               string
+	DisplayName               pgtype.Text
+	Email                     pgtype.Text
+	Status                    string
+	MemberType                string
+	ProviderUpdatedAt         pgtype.Timestamptz
+	LastSeenAt                pgtype.Timestamptz
+	MappingRevision           int64
+	MappingConflictReason     pgtype.Text
+	MappingConflictDetectedAt pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+type SlackIdentityMapping struct {
+	ID             uuid.UUID
+	OrganizationID string
+	SlackTeamID    string
+	SlackUserID    string
+	UserID         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	RevokedAt      pgtype.Timestamptz
+}
+
 type SlackRegistration struct {
 	ID             uuid.UUID
 	SlackAppID     uuid.UUID
@@ -3633,6 +3703,7 @@ type WorkloadAgentAssignment struct {
 	OrganizationID   string
 	WorkloadIssuerID uuid.UUID
 	Subject          string
+	MatchKind        string
 	AgentID          uuid.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
@@ -3646,6 +3717,7 @@ type WorkloadIdentityAdmission struct {
 	ProjectID        uuid.NullUUID
 	WorkloadIssuerID uuid.UUID
 	Subject          string
+	MatchKind        string
 	Name             pgtype.Text
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
@@ -3654,18 +3726,19 @@ type WorkloadIdentityAdmission struct {
 }
 
 type WorkloadIssuer struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	Name           string
-	Tags           []string
-	Issuer         string
-	JwksUri        string
-	Metadata       []byte
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.NullUUID
+	Name                   string
+	Tags                   []string
+	Issuer                 string
+	JwksUri                string
+	AllowWildcardAdmission bool
+	Metadata               []byte
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 type WorkosOrganizationSync struct {

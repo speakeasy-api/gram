@@ -576,6 +576,7 @@ func newBillingProvider(
 	redisClient *redis.Client,
 	posthogClient *posthog.Posthog,
 	stripeClient stripeclient.Client,
+	db *pgxpool.Pool,
 	c *cli.Context,
 ) (billing.Repository, billing.Tracker, error) {
 	switch {
@@ -615,6 +616,9 @@ func newBillingProvider(
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")
 		stub := billing.NewStubClient(logger, tracerProvider)
+		if db != nil {
+			stub = billing.NewStubClientWithLocalProfiles(logger, tracerProvider, db)
+		}
 		return stub, stub, nil
 	case stripeClient != nil:
 		logger.InfoContext(ctx, "using Stripe billing provider with legacy billing operations disabled")

@@ -603,6 +603,71 @@ func (q *Queries) ListSkillObservations(ctx context.Context, projectID uuid.UUID
 	return items, nil
 }
 
+const listToolCallBlockSurfaceEvidence = `-- name: ListToolCallBlockSurfaceEvidence :many
+SELECT
+    provider
+  , chat_id
+  , count(*) AS block_count
+  , max(created_at)::timestamptz AS last_block_at
+FROM tool_call_blocks
+WHERE organization_id = $1
+  AND project_id = ANY($2::uuid[])
+  AND deleted IS FALSE
+  AND created_at >= $3
+  AND created_at <= $4
+GROUP BY provider, chat_id
+`
+
+type ListToolCallBlockSurfaceEvidenceParams struct {
+	OrganizationID string
+	ProjectIds     []uuid.UUID
+	FromTime       pgtype.Timestamptz
+	ToTime         pgtype.Timestamptz
+}
+
+type ListToolCallBlockSurfaceEvidenceRow struct {
+	Provider    string
+	ChatID      uuid.NullUUID
+	BlockCount  int64
+	LastBlockAt pgtype.Timestamptz
+}
+
+// Per-provider, per-chat block counts inside a window, used to attribute
+// synchronous policy decisions to the consuming surface they were returned to.
+// chat_id is the join key onto the ClickHouse session summaries that carry
+// hook_source: blocks whose chat was never resolved (enforcement can run
+// before the chat row is persisted) come back under a NULL chat_id and are
+// attributed at the coarser provider granularity instead of being dropped.
+func (q *Queries) ListToolCallBlockSurfaceEvidence(ctx context.Context, arg ListToolCallBlockSurfaceEvidenceParams) ([]ListToolCallBlockSurfaceEvidenceRow, error) {
+	rows, err := q.db.Query(ctx, listToolCallBlockSurfaceEvidence,
+		arg.OrganizationID,
+		arg.ProjectIds,
+		arg.FromTime,
+		arg.ToTime,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListToolCallBlockSurfaceEvidenceRow
+	for rows.Next() {
+		var i ListToolCallBlockSurfaceEvidenceRow
+		if err := rows.Scan(
+			&i.Provider,
+			&i.ChatID,
+			&i.BlockCount,
+			&i.LastBlockAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserAccountsByEmails = `-- name: ListUserAccountsByEmails :many
 SELECT id, user_id, provider, email, account_type, external_org_id, last_seen_at
 FROM user_accounts

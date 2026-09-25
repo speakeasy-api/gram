@@ -1,11 +1,5 @@
 import { useMemo, useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  ExternalLink,
-  Loader2,
-  Search,
-} from "lucide-react";
+import { Check, ChevronDown, ExternalLink, Loader2 } from "lucide-react";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
@@ -212,7 +206,13 @@ function SingleSignOnSection({
       },
       {
         onSuccess: (data) => {
-          if (openSafeExternalUrl(data.url)) setPortalOpened(true);
+          if (openSafeExternalUrl(data.url)) {
+            setPortalOpened(true);
+          } else {
+            toast.error(
+              "Unable to open the WorkOS portal. Allow popups and try again.",
+            );
+          }
         },
       },
     );
@@ -253,14 +253,13 @@ function SingleSignOnSection({
           <label className="text-foreground text-sm font-medium">
             Select provider<span className="text-accent">*</span>
           </label>
-          <div className="relative mt-3">
-            <Search className="text-muted-foreground pointer-events-none absolute top-[18px] left-3 h-4 w-4 -translate-y-1/2" />
+          <div className="mt-3">
             <Input
               type="search"
               value={query}
               onChange={setQuery}
               placeholder="Search providers"
-              className="pl-9"
+              icon="search"
               disabled={isPending}
             />
           </div>
@@ -414,7 +413,13 @@ function DirectorySyncSection({
       },
       {
         onSuccess: (data) => {
-          if (openSafeExternalUrl(data.url)) setPortalOpened(true);
+          if (openSafeExternalUrl(data.url)) {
+            setPortalOpened(true);
+          } else {
+            toast.error(
+              "Unable to open the WorkOS portal. Allow popups and try again.",
+            );
+          }
         },
       },
     );
