@@ -13,6 +13,9 @@ const (
 	// FeatureGatewayDiscoveryModes enables new gateway defaults and per-session
 	// discovery choices. Stored choices remain effective when it is disabled.
 	FeatureGatewayDiscoveryModes Feature = "gateway_discovery_modes"
+	// FeatureGatewayFrozenToolsets enables new frozen approvals and reviews.
+	// Enforcement of previously approved tool definitions is always active.
+	FeatureGatewayFrozenToolsets Feature = "gateway_frozen_toolsets"
 
 	FeatureLogs           Feature = "logs"
 	FeatureToolIOLogs     Feature = "tool_io_logs"

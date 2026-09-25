@@ -173,10 +173,13 @@ function GatewayInspectConnection({
           <GatewayFrozenToolset
             gatewayId={metaMcpServer.id}
             approved={approvedFrozen}
+            hasUnappliedFreeze={!!frozen && frozen !== approvedFrozen}
             pending={isMintingToken}
             onApply={(value) => {
               setFrozen(value);
-              applyMode(modeDraft);
+              applyMode(
+                metaMcpServer.discoveryModesEnabled ? modeDraft : "default",
+              );
             }}
           />
         )}

@@ -90749,6 +90749,9 @@ components:
         gateway_discovery_modes_enabled:
           type: boolean
           description: Whether gateway defaults and per-connection discovery choices can be configured
+        gateway_frozen_toolsets_enabled:
+          type: boolean
+          description: Whether new gateway connections can freeze reviewed tool definitions
         hooks_browser_login_enabled:
           type: boolean
           description: Whether generated hook plugins may mint per-user keys via the interactive browser login
@@ -90812,6 +90815,7 @@ components:
         - session_portability_enabled
         - network_ingress_enabled
         - gateway_discovery_modes_enabled
+        - gateway_frozen_toolsets_enabled
         - device_agent
     Project:
       type: object
@@ -95839,6 +95843,7 @@ components:
             - session_portability
             - network_ingress
             - gateway_discovery_modes
+            - gateway_frozen_toolsets
           maxLength: 60
         organization_id:
           type: string

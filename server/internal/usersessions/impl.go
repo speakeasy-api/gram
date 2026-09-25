@@ -50,14 +50,14 @@ import (
 // Service struct lets handlers share dependencies.
 type Service struct {
 	gatewayInventory toolfilter.GatewayInventoryProvider
-	productFeatures *productfeatures.Client
-	tracer          trace.Tracer
-	logger          *slog.Logger
-	db              *pgxpool.Pool
-	auth            *auth.Auth
-	authz           *authz.Engine
-	chatSessions    TokenRevoker
-	audit           *audit.Logger
+	productFeatures  *productfeatures.Client
+	tracer           trace.Tracer
+	logger           *slog.Logger
+	db               *pgxpool.Pool
+	auth             *auth.Auth
+	authz            *authz.Engine
+	chatSessions     TokenRevoker
+	audit            *audit.Logger
 	// signer mints the user-session JWT returned by mintUserSession. Same
 	// signer the /mcp/{slug}/token handler uses, so the resulting JWTs
 	// validate through the runtime gateway by the existing user-session
@@ -117,18 +117,18 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 
 	return &Service{
 		gatewayInventory: gatewayInventory,
-		productFeatures: productFeatures,
-		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usersessions"),
-		logger:          logger,
-		db:              db,
-		auth:            auth.New(logger, db, sessionManager, authzEngine),
-		authz:           authzEngine,
-		chatSessions:    chatSessionsManager,
-		audit:           auditLogger,
-		signer:          signer,
-		serverURL:       serverURL,
-		cimdResolver:    cimd.NewResolver(guardianPolicy, meterProvider, logger),
-		revoker:         remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, assertionSigners...),
+		productFeatures:  productFeatures,
+		tracer:           tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usersessions"),
+		logger:           logger,
+		db:               db,
+		auth:             auth.New(logger, db, sessionManager, authzEngine),
+		authz:            authzEngine,
+		chatSessions:     chatSessionsManager,
+		audit:            auditLogger,
+		signer:           signer,
+		serverURL:        serverURL,
+		cimdResolver:     cimd.NewResolver(guardianPolicy, meterProvider, logger),
+		revoker:          remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, assertionSigners...),
 		verifyLimiter: ratelimit.New(verifyStore, "cimd-url-verify",
 			ratelimit.PerMinute(verifyRatePerMin).WithBurst(verifyRateBurst),
 			ratelimit.WithMetrics(meterProvider)),

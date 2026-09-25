@@ -20,12 +20,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -294,12 +294,13 @@ func TestFrozenConsentKeepsApprovalWhenInventoryUnavailable(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 		return w.Body.String()
 	}
-	ti.features.SetFlag(feature.FlagGatewayFrozenToolsets, authCtx.ActiveOrganizationID, true)
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayFrozenToolsets, true))
 	body := render()
 	require.Contains(t, body, "The full tool list is unavailable")
 	require.Regexp(t, `name="gateway_freeze"[^>]*checked[^>]*>`, body)
 	require.NotRegexp(t, `name="gateway_freeze"[^>]*disabled`, body)
-	ti.features.SetFlag(feature.FlagGatewayFrozenToolsets, authCtx.ActiveOrganizationID, false)
+	require.Regexp(t, `id="consent-approve-button"[^>]*\sdisabled(?:\s|>)`, body)
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayFrozenToolsets, false))
 	body = render()
 	require.Contains(t, body, "Your existing connection stays frozen")
 	require.Regexp(t, `name="gateway_freeze"[^>]*checked[^>]*>`, body)
@@ -321,8 +322,8 @@ func TestFrozenConsentIssuesDirectSessionEndToEnd(t *testing.T) {
 		CodeChallenge: pkceChallenge(verifier), CodeChallengeMethod: "S256", CSRFToken: "csrf",
 		Subject: &subject, AuthorizerUserID: authCtx.UserID, AuthorizerImpersonated: new(bool), CreatedAt: time.Now(),
 	}))
-	ti.features.SetFlag(feature.FlagGatewayFrozenToolsets, authCtx.ActiveOrganizationID, true)
-	ti.features.SetFlag(feature.FlagGatewayDiscoveryModes, authCtx.ActiveOrganizationID, true)
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayFrozenToolsets, true))
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayDiscoveryModes, true))
 	route := chi.NewRouteContext()
 	route.URLParams.Add("mcpSlug", slug)
 	ctx = context.WithValue(ctx, chi.RouteCtxKey, route)
@@ -364,8 +365,21 @@ func TestFrozenConsentIssuesDirectSessionEndToEnd(t *testing.T) {
 		AccessToken string `json:"access_token"`
 	}
 	require.NoError(t, json.Unmarshal(tokenResponse.Body.Bytes(), &token))
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayFrozenToolsets, false))
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayDiscoveryModes, false))
 	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), token.AccessToken, nil)
 	require.NoError(t, err)
 	require.Contains(t, w.Body.String(), `"tools":[]`)
-	require.NotEqual(t, uuid.Nil, gateway.ID)
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(token.AccessToken, urn.NewUserSessionIssuer(issuer.ID).String())
+	require.NoError(t, err)
+	row, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer.ID, Jti: claims.ID})
+	require.NoError(t, err)
+	policy, err := toolfilter.ParseSessionPolicy(row.ToolSelection)
+	require.NoError(t, err)
+	require.NotNil(t, policy)
+	require.Equal(t, "meta_mcp_server:"+gateway.ID.String(), policy.Resource)
+	require.NotNil(t, policy.Gateway)
+	require.Equal(t, metamcp.DiscoveryModeDirect, *policy.Gateway.DiscoveryMode)
+	require.NotNil(t, policy.Gateway.Frozen)
+	require.Empty(t, policy.Gateway.Frozen.Tools)
 }

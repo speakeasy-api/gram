@@ -99,3 +99,34 @@ assert.equal(render('challenge-one').value, '');
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "consent discovery persistence: %s", out)
 }
+
+func TestConsentScriptRequiresExplicitUnfreezeWhenReviewIsUnavailable(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	require.NoError(t, err)
+	cmd := exec.CommandContext(t.Context(), node, "-e", `
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const script = require('node:fs').readFileSync(0, 'utf8');
+function render(ready) {
+ const events = {};
+ const button = { disabled: false, value: 'approve', getAttribute: name => name === 'data-consent-self-ready' ? String(ready) : null };
+ const frozen = { checked: true, disabled: false, hasAttribute: name => name === 'data-review-unavailable', addEventListener: (name, listener) => { events[name] = listener; } };
+ const form = { elements: { state: { value: 'review-state' } }, querySelector: () => button, addEventListener() {} };
+ const document = { body: { hasAttribute: () => false }, readyState: 'complete', querySelector: selector => selector === 'form[data-approve-form]' ? form : selector === 'input[name="gateway_freeze"]' ? frozen : null, querySelectorAll: () => [], addEventListener() {} };
+ vm.runInNewContext(script, { document, sessionStorage: { getItem: () => null, setItem() {} }, setTimeout() {}, clearTimeout() {}, console });
+ assert.equal(button.disabled, true);
+ assert.equal(button.value, 'approve_frozen');
+ frozen.checked = false; events.change();
+ assert.equal(button.value, 'approve');
+ assert.equal(button.disabled, !ready);
+ frozen.checked = true; events.change();
+ assert.equal(button.disabled, true);
+}
+render(true);
+render(false);
+`)
+	cmd.Stdin = bytes.NewReader(consentScriptData)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "consent unavailable frozen review: %s", out)
+}

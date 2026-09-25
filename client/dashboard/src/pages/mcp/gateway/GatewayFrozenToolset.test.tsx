@@ -18,8 +18,13 @@ const state = vi.hoisted(() => ({
   enabled: true,
   preview: vi.fn<() => Promise<GramGatewayToolsetReview>>(),
 }));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: state.enabled ? "enabled" : "disabled" }),
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-test" }),
+}));
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: () => ({
+    data: { gatewayFrozenToolsetsEnabled: state.enabled },
+  }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
@@ -133,6 +138,33 @@ it("clears an old review before a new preview and keeps an issued freeze visible
     (
       screen.getByRole("button", {
         name: "Review changes",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Use live tools and reconnect" }),
+  );
+  expect(onApply).toHaveBeenCalledWith(undefined);
+});
+it("keeps live recovery available after a first freeze fails and the feature is disabled", () => {
+  const onApply = vi.fn();
+  const props = {
+    gatewayId: "gateway",
+    approved: undefined,
+    hasUnappliedFreeze: true,
+    pending: false,
+    onApply,
+  };
+  const { rerender } = renderReview(<GatewayFrozenToolset {...props} />);
+  state.enabled = false;
+  rerender(<GatewayFrozenToolset {...props} />);
+  expect(
+    screen.getByText("Freeze not applied to this connection"),
+  ).toBeTruthy();
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Review and freeze",
       }) as HTMLButtonElement
     ).disabled,
   ).toBe(true);

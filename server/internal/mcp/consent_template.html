@@ -559,7 +559,7 @@
             <div data-agent-self-only>
               <dt class="text-eyebrow">Toolset</dt>
               <dd class="mt-1 ml-0">
-                <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="gateway_freeze" value="on" form="consent-approve-form" {{if .GatewayReview.Frozen}}checked{{end}} {{if and .GatewayReview.Error (not .GatewayReview.Frozen)}}disabled data-unavailable{{end}} />Freeze reviewed tool definitions</label>
+                <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="gateway_freeze" value="on" {{if .GatewayReview.Error}}data-review-unavailable{{end}} form="consent-approve-form" {{if .GatewayReview.Frozen}}checked{{end}} {{if and .GatewayReview.Error (not .GatewayReview.Frozen)}}disabled data-unavailable{{end}} />Freeze reviewed tool definitions</label>
                 {{if .GatewayReview.Frozen}}<p class="text-sm text-muted-foreground">Uncheck to create a connection with live tools.</p>{{end}}
                 <p class="text-xs text-muted-foreground mt-2">Optional. Changed or new tools stay unavailable until you approve them. Access can still be revoked. Tool definitions do not prove unchanged upstream behavior.</p>
                 {{if .GatewayReview.Error}}<p class="text-sm text-default-warning mt-2">{{.GatewayReview.Error}}</p>{{else}}
@@ -681,7 +681,7 @@
               data-agent-label="Authorize agent"
               data-consent-self-ready="{{if and (not .ShowToolsIsland) .ConsentEnabled}}true{{else}}false{{end}}"
               class="bg-primary text-primary-foreground enabled:interact:bg-foreground disabled:bg-muted disabled:text-muted-foreground h-10 w-full px-6 text-sm sm:w-auto disabled:cursor-not-allowed"
-              {{if or .ShowToolsIsland (not .ConsentEnabled)}}disabled{{end}}
+              {{if or .ShowToolsIsland (not .ConsentEnabled) (and .GatewayReview .GatewayReview.Frozen .GatewayReview.Error)}}disabled{{end}}
             >
               Give access
             </button>
