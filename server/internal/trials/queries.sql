@@ -39,6 +39,27 @@ VALUES (
     sqlc.narg('demoted_at')::timestamptz
 );
 
+-- name: DemoteTrialFixture :exec
+-- Test-only fixture: marks the trial demoted regardless of its end date.
+UPDATE trials
+SET demoted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id;
+
+-- name: ExpireAndDemoteTrialFixture :exec
+-- Test-only fixture: moves the trial into the ended and demoted state that
+-- RearmTrial accepts.
+UPDATE trials
+SET ends_at = clock_timestamp() - interval '1 hour',
+    demoted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id;
+
+-- name: DeleteTrialFixture :exec
+-- Test-only fixture: removes the trial row entirely.
+DELETE FROM trials
+WHERE organization_id = @organization_id;
+
 -- name: ListExpiredTrials :many
 SELECT organization_id
 FROM trials

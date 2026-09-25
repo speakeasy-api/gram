@@ -1,4 +1,3 @@
-//nolint:glint // This lock-race test needs concurrent transactions against owner-domain rows.
 package mcptoolexecution
 
 import (
@@ -21,6 +20,7 @@ func TestCustomerLifecycleValidatorLocksLivenessUpdatesUntilCommit(t *testing.T)
 	projectID := insertProject(t, db, orgID, "project-lock", nil)
 	serverID := insertMCPServer(t, db, orgID, projectID, nil)
 
+	//nolint:glint // notestingrawsql: transaction runs only the validator's SQLc queries and holds the row locks the concurrent soft deletes must wait on
 	tx, err := db.Begin(t.Context())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
@@ -43,11 +43,13 @@ func TestCustomerLifecycleValidatorLocksLivenessUpdatesUntilCommit(t *testing.T)
 	serverUpdate := make(chan error, 1)
 	go func() {
 		started <- "user"
+		//nolint:glint // notestingrawsql: concurrent owner-domain soft delete that must block on the validator's row lock
 		_, updateErr := userConn.Exec(t.Context(), `UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND user_id = $2`, orgID, userID)
 		userUpdate <- updateErr
 	}()
 	go func() {
 		started <- "server"
+		//nolint:glint // notestingrawsql: concurrent owner-domain soft delete that must block on the validator's row lock
 		_, updateErr := serverConn.Exec(t.Context(), `UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = $1`, serverID)
 		serverUpdate <- updateErr
 	}()
@@ -62,6 +64,7 @@ func TestCustomerLifecycleValidatorLocksLivenessUpdatesUntilCommit(t *testing.T)
 	for name, pid := range map[string]uint32{"user": userConn.Conn().PgConn().PID(), "server": serverConn.Conn().PgConn().PID()} {
 		require.Eventually(t, func() bool {
 			var waiting bool
+			//nolint:glint // notestingrawsql: pg_stat_activity probe observes the soft delete waiting on the row lock
 			err := db.QueryRow(t.Context(), `SELECT COALESCE(wait_event_type = 'Lock', false) FROM pg_stat_activity WHERE pid = $1`, pid).Scan(&waiting)
 			return err == nil && waiting
 		}, 2*time.Second, 10*time.Millisecond, "%s soft delete never reached the row lock", name)

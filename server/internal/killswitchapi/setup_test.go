@@ -1,4 +1,3 @@
-//nolint:glint // Integration fixtures intentionally use isolated raw SQL.
 package killswitchapi
 
 import (
@@ -48,10 +47,13 @@ func newIntegrationServiceWithAdmin(t *testing.T, grantAdmin bool) (*Service, *p
 	require.NoError(t, err)
 	orgID := "org_" + uuid.NewString()
 	userID := "user_" + uuid.NewString()
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 	_, err = db.Exec(t.Context(), `INSERT INTO organization_metadata (id, name, slug) VALUES ($1, 'Test Organization', $1)`, orgID)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 	_, err = db.Exec(t.Context(), `INSERT INTO users (id, email, display_name) VALUES ($1, $1 || '@example.test', 'Test User')`, userID)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 	_, err = db.Exec(t.Context(), `INSERT INTO organization_user_relationships (organization_id, user_id) VALUES ($1, $2)`, orgID, userID)
 	require.NoError(t, err)
 	if grantAdmin {
@@ -63,12 +65,15 @@ func newIntegrationServiceWithAdmin(t *testing.T, grantAdmin bool) (*Service, *p
 		require.NoError(t, grantErr)
 	}
 	var projectID uuid.UUID
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO projects (name, slug, organization_id) VALUES ('project', $1, $2) RETURNING id`, "p-"+uuid.NewString()[:12], orgID).Scan(&projectID))
 	servers := make([]uuid.UUID, 2)
 	for i := range servers {
 		slug := "ts-" + uuid.NewString()[:12]
 		var toolsetID uuid.UUID
+		//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 		require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO toolsets (organization_id, project_id, name, slug) VALUES ($1, $2, $3, $3) RETURNING id`, orgID, projectID, slug).Scan(&toolsetID))
+		//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 		require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO mcp_servers (project_id, name, toolset_id, visibility) VALUES ($1, $2, $3, 'private') RETURNING id`, projectID, "Server", toolsetID).Scan(&servers[i]))
 	}
 	registry, err := mcptoolexecution.NewRegistry(db)
@@ -90,14 +95,18 @@ func newIntegrationServiceWithAdmin(t *testing.T, grantAdmin bool) (*Service, *p
 func insertForeignServer(t *testing.T, db *pgxpool.Pool) uuid.UUID {
 	t.Helper()
 	orgID := "org_" + uuid.NewString()
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 	_, err := db.Exec(t.Context(), `INSERT INTO organization_metadata (id, name, slug) VALUES ($1, 'Other Organization', $1)`, orgID)
 	require.NoError(t, err)
 	var projectID uuid.UUID
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO projects (name, slug, organization_id) VALUES ('other', $1, $2) RETURNING id`, "p-"+uuid.NewString()[:12], orgID).Scan(&projectID))
 	slug := "ts-" + uuid.NewString()[:12]
 	var toolsetID uuid.UUID
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO toolsets (organization_id, project_id, name, slug) VALUES ($1, $2, $3, $3) RETURNING id`, orgID, projectID, slug).Scan(&toolsetID))
 	var serverID uuid.UUID
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO mcp_servers (project_id, name, toolset_id, visibility) VALUES ($1, 'Foreign Server', $2, 'private') RETURNING id`, projectID, toolsetID).Scan(&serverID))
 	return serverID
 }

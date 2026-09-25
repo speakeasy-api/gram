@@ -372,7 +372,7 @@ func TestCreateOrganization_SyncCommittingUnderTheSlugLockKeepsItsSlug(t *testin
 	// The competing writer takes the slug lock first and holds it in its own
 	// transaction, exactly as the sync activity does. The handler will park on
 	// that lock until this transaction commits.
-	blocker, err := conn.Begin(ctx) //nolint:glint // the raw-SQL rule catches tx.Exec with a query string; this transaction only ever runs SQLc-generated methods, and it exists to hold an advisory lock the handler must wait on
+	blocker, err := conn.Begin(ctx) //nolint:glint // notestingrawsql: the raw-SQL rule catches tx.Exec with a query string; this transaction only ever runs SQLc-generated methods, and it exists to hold an advisory lock the handler must wait on
 	require.NoError(t, err)
 	defer func() { _ = blocker.Rollback(ctx) }()
 
@@ -487,7 +487,7 @@ func TestCreateOrganization_FailureAfterTheUpsertLeavesNothing(t *testing.T) {
 	// organization_features carries no foreign key, and its only CHECK is on a
 	// feature name the handler supplies as a constant. Each test holds its own
 	// database clone, dropped when the test ends, so this reaches nothing else.
-	_, err := conn.Exec(ctx, "DROP TABLE organization_features;") //nolint:glint // no generated query can drop a table, and this database is a per-test clone
+	_, err := conn.Exec(ctx, "DROP TABLE organization_features;") //nolint:glint // notestingrawsql: no generated query can drop a table, and this database is a per-test clone
 	require.NoError(t, err)
 
 	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "rollback.example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
@@ -546,7 +546,7 @@ func TestCreateOrganization_PostCommitReadFailureIsUncertain(t *testing.T) {
 	fake := newFakeWorkOS(workosOrgID)
 	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
 	// Billing is read only by the response query, not the creation transaction.
-	_, err := conn.Exec(ctx, "ALTER TABLE billing_metadata RENAME TO unavailable_billing_metadata") //nolint:glint // DDL fault injection in an isolated per-test database; SQLc cannot rename a table.
+	_, err := conn.Exec(ctx, "ALTER TABLE billing_metadata RENAME TO unavailable_billing_metadata") //nolint:glint // notestingrawsql: DDL fault injection in an isolated per-test database; SQLc cannot rename a table.
 	require.NoError(t, err)
 	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{URL: "example.com", OwnershipConfirmed: true, AdminSessionToken: nil})
 	require.Nil(t, res)

@@ -63,7 +63,7 @@ func TestEnqueuePersistsDeterministicReadings(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tx, err := conn.Begin(ctx) //nolint:glint // transaction contains only package APIs and SQLc-generated queries
+	tx, err := conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction contains only package APIs and SQLc-generated queries
 	require.NoError(t, err)
 	require.NoError(t, metering.Enqueue(ctx, tx, []metering.Reading{ordinary, positiveAdjustment, negativeAdjustment}))
 	require.NoError(t, tx.Commit(ctx))
@@ -145,7 +145,7 @@ func TestEnqueueRejectsMixedOrganizationBatchAtomically(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tx, err := conn.Begin(ctx) //nolint:glint // transaction contains only package APIs and SQLc-generated queries
+	tx, err := conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction contains only package APIs and SQLc-generated queries
 	require.NoError(t, err)
 	require.Error(t, metering.Enqueue(ctx, tx, []metering.Reading{first, second}))
 	require.NoError(t, tx.Commit(ctx))
@@ -161,7 +161,7 @@ func TestEnqueueRejectsZeroReading(t *testing.T) {
 	ctx := t.Context()
 	var reading metering.Reading
 
-	tx, err := conn.Begin(ctx) //nolint:glint // transaction contains only package APIs and SQLc-generated queries
+	tx, err := conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction contains only package APIs and SQLc-generated queries
 	require.NoError(t, err)
 	require.Error(t, metering.Enqueue(ctx, tx, []metering.Reading{reading}))
 	require.NoError(t, tx.Commit(ctx))
@@ -188,7 +188,7 @@ func TestEnqueueRollsBackWithCallerTransaction(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tx, err := conn.Begin(ctx) //nolint:glint // transaction contains only package APIs and SQLc-generated queries
+	tx, err := conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction contains only package APIs and SQLc-generated queries
 	require.NoError(t, err)
 	require.NoError(t, metering.Enqueue(ctx, tx, []metering.Reading{reading}))
 	require.NoError(t, tx.Rollback(ctx))

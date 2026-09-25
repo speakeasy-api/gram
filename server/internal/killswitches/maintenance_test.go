@@ -1,4 +1,3 @@
-//nolint:glint // Integration tests fabricate and inspect private rows directly.
 package killswitches
 
 import (
@@ -23,11 +22,13 @@ import (
 func insertVersionRow(t *testing.T, conn *pgxpool.Pool, orgID, state, expiresAtSQL, supersededAtSQL string) PrescriptionID {
 	t.Helper()
 	var id uuid.UUID
+	//nolint:glint // notestingrawsql: fabricates private killswitch rows with SQL-computed timestamps that production lifecycle writes cannot produce
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		INSERT INTO killswitch_prescriptions (organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
 		VALUES ($1, 'block-tools', 'user', 'user:fabricated', 'tool', 1)
 		RETURNING id
 	`, orgID).Scan(&id))
+	//nolint:glint // notestingrawsql: fabricates private killswitch rows with SQL-computed timestamps that production lifecycle writes cannot produce
 	_, err := conn.Exec(t.Context(), fmt.Sprintf(`
 		INSERT INTO killswitch_prescription_versions (organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, superseded_at, internal_note, external_note)
 		VALUES ($1, $2, 1, $3, 'all', clock_timestamp() - interval '3 hours', %s, clock_timestamp() - interval '3 hours', %s, $4, 'Access paused.')
@@ -39,6 +40,7 @@ func insertVersionRow(t *testing.T, conn *pgxpool.Pool, orgID, state, expiresAtS
 func countExpiryMarkers(t *testing.T, conn *pgxpool.Pool, orgID string) int {
 	t.Helper()
 	var count int
+	//nolint:glint // notestingrawsql: reads private maintenance state that no production query exposes
 	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_expiry_events WHERE organization_id = $1`, orgID).Scan(&count))
 	return count
 }
@@ -46,6 +48,7 @@ func countExpiryMarkers(t *testing.T, conn *pgxpool.Pool, orgID string) int {
 func markerExists(t *testing.T, conn *pgxpool.Pool, prescriptionID PrescriptionID) bool {
 	t.Helper()
 	var count int
+	//nolint:glint // notestingrawsql: reads private maintenance state that no production query exposes
 	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_expiry_events WHERE prescription_id = $1`, string(prescriptionID)).Scan(&count))
 	return count > 0
 }
@@ -65,6 +68,7 @@ func TestExpirySweepRecordsOnlyGenuinelyExpiredVersions(t *testing.T) {
 	unbounded := insertVersionRow(t, conn, orgID, "active", "NULL", "NULL")
 	// Force the equality boundary to exact identity: interval arithmetic above
 	// evaluates clock_timestamp() per call.
+	//nolint:glint // notestingrawsql: forces superseded_at to equal expires_at exactly to test the expiry boundary
 	_, err := conn.Exec(t.Context(), `UPDATE killswitch_prescription_versions SET superseded_at = expires_at WHERE prescription_id = $1`, string(expiryEqualsSupersession))
 	require.NoError(t, err)
 
@@ -123,6 +127,7 @@ func TestExpirySweepDoesNotAlterEffectiveState(t *testing.T) {
 	var state string
 	var supersededAt *time.Time
 	var currentVersion int64
+	//nolint:glint // notestingrawsql: reads private maintenance state that no production query exposes
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT version.state, version.superseded_at, prescription.current_version
 		FROM killswitch_prescription_versions AS version
@@ -172,9 +177,11 @@ func TestExpirySweepSerializesWithLifecycleHeaderLock(t *testing.T) {
 	prescriptionID := uuid.MustParse(string(prescription))
 	maintenance := NewMaintenanceService(conn, audit.NewLogger())
 
+	//nolint:glint // notestingrawsql: transaction holds the prescription header lock the expiry sweep must wait on
 	tx, err := conn.Begin(t.Context())
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
+	//nolint:glint // notestingrawsql: takes the lifecycle header row lock inside the blocking transaction
 	_, err = tx.Exec(t.Context(), `
 		SELECT id FROM killswitch_prescriptions
 		WHERE organization_id = $1 AND id = $2
@@ -198,6 +205,7 @@ func TestExpirySweepSerializesWithLifecycleHeaderLock(t *testing.T) {
 	case <-time.After(150 * time.Millisecond):
 	}
 
+	//nolint:glint // notestingrawsql: forces superseded_at to equal expires_at exactly to test the expiry boundary
 	_, err = tx.Exec(t.Context(), `
 		UPDATE killswitch_prescription_versions
 		SET superseded_at = expires_at
@@ -249,6 +257,7 @@ func TestExpiryRetryRecovery(t *testing.T) {
 func insertOperationReceipt(t *testing.T, conn *pgxpool.Pool, orgID, expiresAtSQL string) uuid.UUID {
 	t.Helper()
 	operationID := uuid.New()
+	//nolint:glint // notestingrawsql: fabricates private killswitch rows with SQL-computed timestamps that production lifecycle writes cannot produce
 	_, err := conn.Exec(t.Context(), fmt.Sprintf(`
 		INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, expires_at)
 		VALUES ($1, $2, 'user:test', 'activate', 'hash', %s)
@@ -260,6 +269,7 @@ func insertOperationReceipt(t *testing.T, conn *pgxpool.Pool, orgID, expiresAtSQ
 func countOperations(t *testing.T, conn *pgxpool.Pool, orgID string) int {
 	t.Helper()
 	var count int
+	//nolint:glint // notestingrawsql: reads private maintenance state that no production query exposes
 	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_operations WHERE organization_id = $1`, orgID).Scan(&count))
 	return count
 }
@@ -290,6 +300,7 @@ func TestOperationCleanupBoundaryAndBatching(t *testing.T) {
 	require.Equal(t, 1, countOperations(t, conn, orgID))
 	require.Zero(t, countOperations(t, conn, otherOrgID))
 	var remaining uuid.UUID
+	//nolint:glint // notestingrawsql: reads private maintenance state that no production query exposes
 	require.NoError(t, conn.QueryRow(t.Context(), `SELECT operation_id FROM killswitch_operations WHERE organization_id = $1`, orgID).Scan(&remaining))
 	require.Equal(t, retained, remaining)
 

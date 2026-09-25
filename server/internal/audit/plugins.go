@@ -41,7 +41,7 @@ type LogPluginCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
 }
@@ -80,7 +80,7 @@ type LogPluginUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID       uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID       uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName     string
 	PluginSlug     string
 	SnapshotBefore *PluginSnapshot
@@ -132,7 +132,7 @@ type LogPluginDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
 }
@@ -185,11 +185,11 @@ type LogPluginServerAddEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
 
-	ServerID          uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
+	ServerID          uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
 	ServerDisplayName string
 	ServerPolicy      string
 	ServerSortOrder   int32
@@ -243,11 +243,11 @@ type LogPluginServerUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
 
-	ServerID          uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
+	ServerID          uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
 	ServerDisplayName string
 	ServerPolicy      string
 	ServerSortOrder   int32
@@ -298,11 +298,11 @@ type LogPluginServerRemoveEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
 
-	ServerID         uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
+	ServerID         uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.PluginServer and migrate to ServerURN; pending team discussion
 	ToolsetURN       *urn.Toolset
 	McpServerURN     *urn.McpServer
 	MetaMcpServerURN *urn.MetaMcpServer
@@ -350,7 +350,7 @@ type LogPluginAssignmentsSetEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	PluginID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
+	PluginID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.Plugin and migrate to PluginURN; pending team discussion
 	PluginName string
 	PluginSlug string
 

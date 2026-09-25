@@ -1,4 +1,3 @@
-//nolint:glint // These focused transaction tests open caller-owned transactions to exercise the write seam.
 package mcpendpoints_test
 
 import (
@@ -36,7 +35,7 @@ func TestUpdateMcpEndpointAddressInTransaction(t *testing.T) {
 
 	beforeAuditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpEndpointUpdate)
 	require.NoError(t, err)
-	tx, err := ti.conn.Begin(ctx)
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -73,7 +72,7 @@ func TestUpdateMcpEndpointAddressInTransactionRejectsSlugCollision(t *testing.T)
 	second, err := ti.service.CreateMcpEndpoint(ctx, &gen.CreateMcpEndpointPayload{McpServerID: conv.PtrEmpty(serverID.String()), Slug: types.McpEndpointSlug(authCtx.OrganizationSlug + "-second")})
 	require.NoError(t, err)
 
-	tx, err := ti.conn.Begin(ctx)
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, _, err = ti.service.UpdateMcpEndpointAddressInTransaction(ctx, tx, mcpendpoints.UpdateMcpEndpointAddressInput{
@@ -95,7 +94,7 @@ func TestUpdateMcpEndpointAddressInTransactionRejectsForeignDomain(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	tx, err := ti.conn.Begin(ctx)
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, _, err = ti.service.UpdateMcpEndpointAddressInTransaction(ctx, tx, mcpendpoints.UpdateMcpEndpointAddressInput{
@@ -120,7 +119,7 @@ func TestUpdateMcpEndpointAddressInTransactionPreservesRoot(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, customdomainsrepo.New(ti.conn).SetRootMcpEndpoint(ctx, customdomainsrepo.SetRootMcpEndpointParams{McpEndpointID: endpoint.ID, CustomDomainID: domain.ID}))
 
-	tx, err := ti.conn.Begin(ctx)
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam
 	require.NoError(t, err)
 	updated, reconcileDomains, err := ti.service.UpdateMcpEndpointAddressInTransaction(ctx, tx, mcpendpoints.UpdateMcpEndpointAddressInput{
 		AuthContext: authCtx, EndpointID: endpoint.ID, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}, Slug: "after",
@@ -142,7 +141,7 @@ func TestCreateMcpEndpointInTransactionDoesNotAttachDefaultPlugin(t *testing.T) 
 	serverID := seedMcpServerWithVisibility(t, ctx, ti.conn, *authCtx.ProjectID, "public")
 	plugin, err := pluginsrepo.New(ti.conn).CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	tx, err := ti.conn.Begin(ctx)
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -179,7 +178,7 @@ func TestUpdateMcpEndpointAddressConcurrentWritersSerializeSlugClaims(t *testing
 	results := make(chan error, 2)
 	for _, endpointID := range []uuid.UUID{firstID, secondID} {
 		go func() {
-			tx, err := ti.conn.Begin(ctx)
+			tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam
 			if err != nil {
 				results <- err
 				return

@@ -1,4 +1,3 @@
-//nolint:glint // Integration tests inspect audit and outbox rows directly.
 package killswitches
 
 import (
@@ -34,6 +33,7 @@ type auditRow struct {
 
 func listAuditRows(t *testing.T, conn *pgxpool.Pool, orgID string) []auditRow {
 	t.Helper()
+	//nolint:glint // notestingrawsql: scans full audit_logs rows to prove the internal note never leaks into any column
 	rows, err := conn.Query(t.Context(), `
 		SELECT action, actor_id, coalesce(actor_display_name, ''), subject_id, subject_type, coalesce(after_snapshot, 'null'::jsonb), coalesce(metadata, 'null'::jsonb), coalesce(acting_surface, '')
 		FROM audit_logs
@@ -54,6 +54,7 @@ func listAuditRows(t *testing.T, conn *pgxpool.Pool, orgID string) []auditRow {
 
 func listOutboxMessages(t *testing.T, conn *pgxpool.Pool, orgID string) [][]byte {
 	t.Helper()
+	//nolint:glint // notestingrawsql: reads raw outbox message bytes to assert the published payload
 	rows, err := conn.Query(t.Context(), `SELECT message FROM publish_outbox WHERE organization_id = $1 ORDER BY id`, orgID)
 	require.NoError(t, err)
 	defer rows.Close()
@@ -70,6 +71,7 @@ func listOutboxMessages(t *testing.T, conn *pgxpool.Pool, orgID string) [][]byte
 func requireNoSentinelLeak(t *testing.T, conn *pgxpool.Pool, orgID string) {
 	t.Helper()
 	var leaked int
+	//nolint:glint // notestingrawsql: scans full audit_logs rows to prove the internal note never leaks into any column
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT count(*) FROM audit_logs WHERE organization_id = $1 AND audit_logs::text LIKE '%' || $2 || '%'
 	`, orgID, sentinelInternalNote).Scan(&leaked))
@@ -241,6 +243,7 @@ func TestLifecycleAuditRollback(t *testing.T) {
 
 	for _, table := range []string{"killswitch_prescriptions", "killswitch_prescription_versions", "killswitch_operations", "audit_logs", "publish_outbox"} {
 		var count int
+		//nolint:glint // notestingrawsql: counts rows across a dynamic table list to prove rollback atomicity; SQLc cannot parameterize table names
 		require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM `+table+` WHERE organization_id = $1`, orgID).Scan(&count))
 		require.Zero(t, count, "a failed lifecycle transaction must roll back %s together with the mutation", table)
 	}

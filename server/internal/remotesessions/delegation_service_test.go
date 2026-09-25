@@ -1,4 +1,3 @@
-//nolint:glint // Production delegation adapter regressions require tenant-scoped database fixtures.
 package remotesessions
 
 import (
@@ -76,16 +75,22 @@ func newDelegationUnitFixture(t *testing.T) (*delegationAdapterFixture, *delegat
 	require.NoError(t, err)
 	p := federatedFixture(t)
 	b := delegationBinding(p, "human-test")
+	//nolint:glint // notestingrawsql: tenant fixtures for the delegation adapter across owner domains; the fixtures need caller-chosen ids
 	_, err = db.Exec(ctx, `INSERT INTO organization_metadata (id,name,slug) VALUES ($1,'Test organization','delegation-adapter')`, b.OrganizationID)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: tenant fixtures for the delegation adapter across owner domains; the fixtures need caller-chosen ids
 	_, err = db.Exec(ctx, `INSERT INTO users (id,email,display_name) VALUES ($1,'delegation@example.test','Test user')`, b.HumanID)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: tenant fixtures for the delegation adapter across owner domains; the fixtures need caller-chosen ids
 	_, err = db.Exec(ctx, `INSERT INTO organization_user_relationships (organization_id,user_id) VALUES ($1,$2)`, b.OrganizationID, b.HumanID)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: tenant fixtures for the delegation adapter across owner domains; the fixtures need caller-chosen ids
 	_, err = db.Exec(ctx, `INSERT INTO remote_session_issuers (id,organization_id,slug,issuer) VALUES ($1,$2,'delegation-adapter',$3)`, b.IssuerID, b.OrganizationID, p.issuer.Issuer)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: tenant fixtures for the delegation adapter across owner domains; the fixtures need caller-chosen ids
 	_, err = db.Exec(ctx, `INSERT INTO remote_session_clients (id,organization_id,remote_session_issuer_id,client_id) VALUES ($1,$2,$3,'test-client')`, b.ClientID, b.OrganizationID, b.IssuerID)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: tenant fixtures for the delegation adapter across owner domains; the fixtures need caller-chosen ids
 	_, err = db.Exec(ctx, `INSERT INTO user_session_issuers (organization_id,slug,authn_challenge_mode,session_duration,trusted_remote_session_issuer_id,trusted_remote_session_client_id) VALUES ($1,'delegation-adapter','interactive',interval '1 hour',$2,$3)`, b.OrganizationID, b.IssuerID, b.ClientID)
 	require.NoError(t, err)
 	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))

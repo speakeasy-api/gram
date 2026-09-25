@@ -81,7 +81,7 @@ func TestConfirm_AgentChangesWhileWaitingForConnectionLock(t *testing.T) {
 			ctx, si := newTestService(t)
 			recordAgent(t, ctx, si, "wlp1")
 			f := capableServer(t, ctx, si, "Concurrent")
-			tx, err := si.conn.Begin(ctx) //nolint:glint // runs only SQLc-generated queries; it exists to hold the connection lock Confirm must wait on
+			tx, err := si.conn.Begin(ctx) //nolint:glint // notestingrawsql: runs only SQLc-generated queries; it exists to hold the connection lock Confirm must wait on
 			require.NoError(t, err)
 			defer func() { _ = tx.Rollback(ctx) }()
 			_, err = repo.New(tx).LockLiveConnection(ctx, repo.LockLiveConnectionParams{ID: si.connectionID, OrganizationID: si.orgID})
@@ -94,7 +94,7 @@ func TestConfirm_AgentChangesWhileWaitingForConnectionLock(t *testing.T) {
 			// Wait until Confirm has read its snapshot and is blocked on our lock.
 			require.Eventually(t, func() bool {
 				var waiting bool
-				//nolint:glint // sqlc cannot analyse pg_stat_activity; this only observes that Confirm is blocked on our lock
+				//nolint:glint // notestingrawsql: sqlc cannot analyse pg_stat_activity; this only observes that Confirm is blocked on our lock
 				err := si.conn.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND $1 = ANY(pg_blocking_pids(pid)))", int32(tx.Conn().PgConn().PID())).Scan(&waiting)
 				return err == nil && waiting
 			}, 5*time.Second, 10*time.Millisecond)

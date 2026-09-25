@@ -498,7 +498,7 @@ func TestChatMessageWriterWriteInTxRollsBackMessageAndReading(t *testing.T) {
 		},
 		UserEmail: "",
 	}}
-	tx, err := ti.conn.Begin(ctx) //nolint:glint // transaction contains only package APIs and SQLc-generated queries
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction contains only package APIs and SQLc-generated queries
 	require.NoError(t, err)
 	_, err = writer.WriteInTx(ctx, tx, writes)
 	require.NoError(t, err)

@@ -1,4 +1,3 @@
-//nolint:glint // Integration fixtures intentionally create tenant rows with raw SQL in isolated databases.
 package mcptoolexecution
 
 import (
@@ -46,6 +45,7 @@ func newTestDatabase(t *testing.T, name string) (*pgxpool.Pool, string) {
 
 func insertOrganization(t *testing.T, conn *pgxpool.Pool, organizationID string) {
 	t.Helper()
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture with optional deleted_at state; mcptoolexecution has no queries.sql
 	_, err := conn.Exec(t.Context(), `
 		INSERT INTO organization_metadata (id, name, slug)
 		VALUES ($1, 'Test Organization', $1)
@@ -55,6 +55,7 @@ func insertOrganization(t *testing.T, conn *pgxpool.Pool, organizationID string)
 
 func insertUser(t *testing.T, conn *pgxpool.Pool, userID string, deletedAt *time.Time) {
 	t.Helper()
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture with optional deleted_at state; mcptoolexecution has no queries.sql
 	_, err := conn.Exec(t.Context(), `
 		INSERT INTO users (id, email, display_name, deleted_at)
 		VALUES ($1, $1 || '@example.test', 'Test User', $2)
@@ -64,6 +65,7 @@ func insertUser(t *testing.T, conn *pgxpool.Pool, userID string, deletedAt *time
 
 func insertMembership(t *testing.T, conn *pgxpool.Pool, organizationID, userID string, deletedAt *time.Time) {
 	t.Helper()
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture with optional deleted_at state; mcptoolexecution has no queries.sql
 	_, err := conn.Exec(t.Context(), `
 		INSERT INTO organization_user_relationships (organization_id, user_id, deleted_at)
 		VALUES ($1, $2, $3)
@@ -74,6 +76,7 @@ func insertMembership(t *testing.T, conn *pgxpool.Pool, organizationID, userID s
 func insertProject(t *testing.T, conn *pgxpool.Pool, organizationID, slug string, deletedAt *time.Time) uuid.UUID {
 	t.Helper()
 	var id uuid.UUID
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture with optional deleted_at state; mcptoolexecution has no queries.sql
 	err := conn.QueryRow(t.Context(), `
 		INSERT INTO projects (name, slug, organization_id, deleted_at)
 		VALUES ($1, $1, $2, $3)
@@ -89,6 +92,7 @@ func insertMCPServer(t *testing.T, conn *pgxpool.Pool, organizationID string, pr
 	t.Helper()
 	slug := "ts-" + uuid.NewString()[:26]
 	var toolsetID uuid.UUID
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture with optional deleted_at state; mcptoolexecution has no queries.sql
 	err := conn.QueryRow(t.Context(), `
 		INSERT INTO toolsets (organization_id, project_id, name, slug)
 		VALUES ($1, $2, $3, $3)
@@ -97,6 +101,7 @@ func insertMCPServer(t *testing.T, conn *pgxpool.Pool, organizationID string, pr
 	require.NoError(t, err)
 
 	var id uuid.UUID
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture with optional deleted_at state; mcptoolexecution has no queries.sql
 	err = conn.QueryRow(t.Context(), `
 		INSERT INTO mcp_servers (project_id, toolset_id, visibility, deleted_at)
 		VALUES ($1, $2, 'private', $3)
@@ -115,6 +120,7 @@ func clearPrescriptions(t *testing.T, conn *pgxpool.Pool, organizationID string)
 		"killswitch_prescription_versions",
 		"killswitch_prescriptions",
 	} {
+		//nolint:glint // notestingrawsql: cleans up across a dynamic table list; SQLc cannot parameterize table names
 		_, err := conn.Exec(t.Context(), "DELETE FROM "+table+" WHERE organization_id = $1", organizationID)
 		require.NoError(t, err)
 	}

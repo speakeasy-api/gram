@@ -1,4 +1,3 @@
-//nolint:glint // Integration state transitions use isolated raw SQL to exercise deleted historical references.
 package killswitchapi
 
 import (
@@ -33,11 +32,14 @@ func TestListMCPServersIncludesProjectNames(t *testing.T) {
 	ctx := customerContext(t, orgID, userID)
 
 	var secondProjectID uuid.UUID
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO projects (name, slug, organization_id) VALUES ('Second Project', $1, $2) RETURNING id`, "p-"+uuid.NewString()[:12], orgID).Scan(&secondProjectID))
 	slug := "ts-" + uuid.NewString()[:12]
 	var toolsetID uuid.UUID
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO toolsets (organization_id, project_id, name, slug) VALUES ($1, $2, $3, $3) RETURNING id`, orgID, secondProjectID, slug).Scan(&toolsetID))
 	var secondServerID uuid.UUID
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO mcp_servers (project_id, name, toolset_id, visibility) VALUES ($1, 'Second Server', $2, 'private') RETURNING id`, secondProjectID, toolsetID).Scan(&secondServerID))
 
 	listed, err := service.ListMCPServers(ctx, &gen.ListMCPServersPayload{})
@@ -62,8 +64,10 @@ func TestCustomerKillswitchLifecycleAndReadModels(t *testing.T) {
 	service, db, orgID, userID, servers := newIntegrationService(t)
 	ctx := customerContext(t, orgID, userID)
 	subjectUserID := "user_" + uuid.NewString()
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 	_, err := db.Exec(t.Context(), `INSERT INTO users (id, email, display_name) VALUES ($1, $1 || '@example.test', 'Affected User')`, subjectUserID)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
 	_, err = db.Exec(t.Context(), `INSERT INTO organization_user_relationships (organization_id, user_id) VALUES ($1, $2)`, orgID, subjectUserID)
 	require.NoError(t, err)
 	endsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339Nano)
@@ -123,8 +127,10 @@ func TestCustomerKillswitchLifecycleAndReadModels(t *testing.T) {
 	require.Len(t, overlaps.Overlaps, 1)
 	require.False(t, overlaps.Truncated)
 
+	//nolint:glint // notestingrawsql: soft-deletes owner-domain rows to exercise deleted historical references
 	_, err = db.Exec(t.Context(), `UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND user_id = $2`, orgID, subjectUserID)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: soft-deletes owner-domain rows to exercise deleted historical references
 	_, err = db.Exec(t.Context(), `UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = ANY($1::uuid[])`, servers)
 	require.NoError(t, err)
 	_, err = service.Get(ctx, &gen.GetPayload{ID: created.ID})
@@ -272,6 +278,7 @@ func TestCustomerCreateAndEditRequireScheduledStartAfterDatabaseTime(t *testing.
 	ctx := customerContext(t, orgID, userID)
 
 	var databaseNow time.Time
+	//nolint:glint // notestingrawsql: reads the database clock so assertions align with server-side transition timestamps
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&databaseNow))
 	notFuture := databaseNow.UTC().Format(time.RFC3339Nano)
 	schedule := &gen.KillswitchSchedule{Start: "scheduled", StartsAt: &notFuture, End: "until_lifted"}
@@ -289,6 +296,7 @@ func TestCustomerCreateAndEditRequireScheduledStartAfterDatabaseTime(t *testing.
 	})
 	require.NoError(t, err)
 
+	//nolint:glint // notestingrawsql: reads the database clock so assertions align with server-side transition timestamps
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&databaseNow))
 	notFuture = databaseNow.UTC().Format(time.RFC3339Nano)
 	_, err = service.Edit(ctx, &gen.EditPayload{
@@ -337,6 +345,7 @@ func TestCustomerAuthorizationUsesLiveOrgAdminGrant(t *testing.T) {
 	_, err = service.ListCapabilities(prepared, &gen.ListCapabilitiesPayload{})
 	require.NoError(t, err)
 
+	//nolint:glint // notestingrawsql: revokes the user's grants out of band to simulate lost access
 	result, err := db.Exec(t.Context(), `DELETE FROM principal_grants WHERE organization_id = $1 AND principal_urn = $2`, orgID, urn.NewPrincipal(urn.PrincipalTypeUser, userID))
 	require.NoError(t, err)
 	require.Equal(t, int64(1), result.RowsAffected())
@@ -425,6 +434,7 @@ func TestCustomerHistoryUsesEventTimeStatus(t *testing.T) {
 	service, db, orgID, userID, _ := newIntegrationService(t)
 	ctx := customerContext(t, orgID, userID)
 	var transitionAt time.Time
+	//nolint:glint // notestingrawsql: reads the database clock so assertions align with server-side transition timestamps
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp() + interval '2 seconds'`).Scan(&transitionAt))
 	transitionAt = transitionAt.UTC()
 	startText := transitionAt.Format(time.RFC3339Nano)
@@ -445,6 +455,7 @@ func TestCustomerHistoryUsesEventTimeStatus(t *testing.T) {
 	require.Equal(t, int64(2), edited.Version)
 	require.Eventually(t, func() bool {
 		var transitioned bool
+		//nolint:glint // notestingrawsql: reads the database clock so assertions align with server-side transition timestamps
 		err := db.QueryRow(t.Context(), `SELECT clock_timestamp() > $1`, transitionAt).Scan(&transitioned)
 		return err == nil && transitioned
 	}, 5*time.Second, 20*time.Millisecond)

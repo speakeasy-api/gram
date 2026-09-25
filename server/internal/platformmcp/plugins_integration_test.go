@@ -808,7 +808,7 @@ func TestConcurrentVersionProtectedAssignmentWritesSerialize(t *testing.T) {
 	write := func(principalURN string) {
 		defer wg.Done()
 		<-start
-		tx, beginErr := conn.Begin(ctx) //nolint:glint // transaction contains only package APIs and SQLc-generated queries
+		tx, beginErr := conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction contains only package APIs and SQLc-generated queries
 		if beginErr != nil {
 			results <- beginErr
 			return

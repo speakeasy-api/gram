@@ -126,7 +126,7 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	})
 	require.NoError(t, err)
 	var liveEndpoints int
-	//nolint:glint // Verify the test has removed every live gateway endpoint before publishing.
+	//nolint:glint // notestingrawsql: Verify the test has removed every live gateway endpoint before publishing.
 	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM mcp_endpoints WHERE meta_mcp_server_id = $1 AND deleted IS FALSE`, gateway.ID).Scan(&liveEndpoints))
 	require.Zero(t, liveEndpoints)
 	gatewayRows, err := pluginsrepo.New(ti.conn).ListPluginsWithGatewaysForProject(ctx, pluginsrepo.ListPluginsWithGatewaysForProjectParams{ProjectID: *ac.ProjectID})
@@ -157,7 +157,7 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	require.Equal(t, "https://app.getgram.ai/mcp/gateway-test", config.MCPServers["Gateway"].URL)
 
 	domain := inactiveDomain
-	//nolint:glint // This test needs an addressable domain without exercising domain provisioning.
+	//nolint:glint // notestingrawsql: This test needs an addressable domain without exercising domain provisioning.
 	result, err := ti.conn.Exec(ctx, `UPDATE custom_domains SET domain = $1, verified = TRUE, activated = TRUE WHERE id = $2`, "gateway.example.test", domain.ID)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, result.RowsAffected())
@@ -166,7 +166,7 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 		MetaMcpServerID: uuid.NullUUID{UUID: gateway.ID, Valid: true}, Slug: "gateway-root",
 	})
 	require.NoError(t, err)
-	//nolint:glint // Gateway root endpoints are not supported by the public root setter yet.
+	//nolint:glint // notestingrawsql: Gateway root endpoints are not supported by the public root setter yet.
 	result, err = ti.conn.Exec(ctx, `UPDATE mcp_endpoints SET is_domain_root = TRUE WHERE id = $1`, root.ID)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, result.RowsAffected())
@@ -204,16 +204,16 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	require.Equal(t, oops.CodeConflict, privateAudience.Code)
 	require.ErrorIs(t, err, admission.ErrPrivateGatewayAudience)
 
-	//nolint:glint // Model a pre-existing incompatible assignment, which must also block package publication.
+	//nolint:glint // notestingrawsql: Model a pre-existing incompatible assignment, which must also block package publication.
 	_, err = ti.conn.Exec(ctx, `INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn) VALUES ($1, $2, $3)`, uuid.MustParse(plugin.ID), ac.ActiveOrganizationID, "*")
 	require.NoError(t, err)
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.ErrorIs(t, err, admission.ErrPrivateGatewayAudience)
-	//nolint:glint // Restore the scoped assignment for the remaining publication checks.
+	//nolint:glint // notestingrawsql: Restore the scoped assignment for the remaining publication checks.
 	_, err = ti.conn.Exec(ctx, `DELETE FROM plugin_assignments WHERE plugin_id = $1 AND principal_urn = $2`, uuid.MustParse(plugin.ID), "*")
 	require.NoError(t, err)
 
-	//nolint:glint // Exercise a persisted gateway whose required issuer disappeared after attachment.
+	//nolint:glint // notestingrawsql: Exercise a persisted gateway whose required issuer disappeared after attachment.
 	result, err = ti.conn.Exec(ctx, `UPDATE meta_mcp_servers SET user_session_issuer_id = NULL WHERE id = $1`, gateway.ID)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, result.RowsAffected())
@@ -221,7 +221,7 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	var missingIssuer *oops.ShareableError
 	require.ErrorAs(t, err, &missingIssuer)
 	require.Equal(t, oops.CodeUnavailable, missingIssuer.Code)
-	//nolint:glint // Restore the test gateway for the missing-admission-guard assertion below.
+	//nolint:glint // notestingrawsql: Restore the test gateway for the missing-admission-guard assertion below.
 	result, err = ti.conn.Exec(ctx, `UPDATE meta_mcp_servers SET user_session_issuer_id = $1 WHERE id = $2`, issuer.ID, gateway.ID)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, result.RowsAffected())

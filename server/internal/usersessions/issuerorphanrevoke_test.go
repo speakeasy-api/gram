@@ -590,7 +590,7 @@ func TestDeleteUserSessionIssuer_ConcurrentSiblingDeleteStillRevokes(t *testing.
 		UserSessionIssuerID:   siblingID,
 	}))
 
-	tx, err := ti.conn.Begin(ctx) //nolint:glint // the raw-SQL rule catches tx.Exec with a query string; this transaction only ever runs SQLc-generated methods, and it exists to hold the client-row lock the cascade must wait on
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: the raw-SQL rule catches tx.Exec with a query string; this transaction only ever runs SQLc-generated methods, and it exists to hold the client-row lock the cascade must wait on
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
 

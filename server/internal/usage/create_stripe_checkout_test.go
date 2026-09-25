@@ -688,15 +688,14 @@ func TestCreateStripeCheckoutRejectsConcurrentTrialLifecycleChanges(t *testing.T
 		}},
 		{name: "rearm", mutate: func(t *testing.T, ti *stripeCheckoutTestInstance) {
 			t.Helper()
-			_, err := ti.db.Exec(t.Context(), `UPDATE trials SET ends_at = clock_timestamp() - interval '1 hour', demoted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE organization_id = $1`, ti.orgID)
+			err := trialsrepo.New(ti.db).ExpireAndDemoteTrialFixture(t.Context(), ti.orgID)
 			require.NoError(t, err)
 			_, err = trialsrepo.New(ti.db).RearmTrial(t.Context(), trialsrepo.RearmTrialParams{OrganizationID: ti.orgID, RearmForDays: 7})
 			require.NoError(t, err)
 		}},
 		{name: "demote", mutate: func(t *testing.T, ti *stripeCheckoutTestInstance) {
 			t.Helper()
-			_, err := ti.db.Exec(t.Context(), `UPDATE trials SET demoted_at = clock_timestamp(), updated_at = clock_timestamp() WHERE organization_id = $1`, ti.orgID)
-			require.NoError(t, err)
+			require.NoError(t, trialsrepo.New(ti.db).DemoteTrialFixture(t.Context(), ti.orgID))
 		}},
 		{name: "convert", mutate: func(t *testing.T, ti *stripeCheckoutTestInstance) {
 			t.Helper()
@@ -706,13 +705,11 @@ func TestCreateStripeCheckoutRejectsConcurrentTrialLifecycleChanges(t *testing.T
 		}},
 		{name: "delete", mutate: func(t *testing.T, ti *stripeCheckoutTestInstance) {
 			t.Helper()
-			_, err := ti.db.Exec(t.Context(), `DELETE FROM trials WHERE organization_id = $1`, ti.orgID)
-			require.NoError(t, err)
+			require.NoError(t, trialsrepo.New(ti.db).DeleteTrialFixture(t.Context(), ti.orgID))
 		}},
 		{name: "replace row", mutate: func(t *testing.T, ti *stripeCheckoutTestInstance) {
 			t.Helper()
-			_, err := ti.db.Exec(t.Context(), `DELETE FROM trials WHERE organization_id = $1`, ti.orgID)
-			require.NoError(t, err)
+			require.NoError(t, trialsrepo.New(ti.db).DeleteTrialFixture(t.Context(), ti.orgID))
 			require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
 				OrganizationID: ti.orgID, Tier: "enterprise",
 				EndsAt: pgtype.Timestamptz{Time: time.Now().UTC().Add(8 * 24 * time.Hour), InfinityModifier: pgtype.Finite, Valid: true},

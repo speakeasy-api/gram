@@ -69,6 +69,17 @@ func (q *Queries) CreateTrial(ctx context.Context, arg CreateTrialParams) error 
 	return err
 }
 
+const deleteTrialFixture = `-- name: DeleteTrialFixture :exec
+DELETE FROM trials
+WHERE organization_id = $1
+`
+
+// Test-only fixture: removes the trial row entirely.
+func (q *Queries) DeleteTrialFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, deleteTrialFixture, organizationID)
+	return err
+}
+
 const demoteOrganizationToFree = `-- name: DemoteOrganizationToFree :one
 WITH previous AS (
     SELECT organization_metadata.id, organization_metadata.gram_account_type
@@ -100,6 +111,34 @@ func (q *Queries) DemoteOrganizationToFree(ctx context.Context, organizationID s
 	var i DemoteOrganizationToFreeRow
 	err := row.Scan(&i.Name, &i.Slug, &i.PreviousAccountType)
 	return i, err
+}
+
+const demoteTrialFixture = `-- name: DemoteTrialFixture :exec
+UPDATE trials
+SET demoted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+`
+
+// Test-only fixture: marks the trial demoted regardless of its end date.
+func (q *Queries) DemoteTrialFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, demoteTrialFixture, organizationID)
+	return err
+}
+
+const expireAndDemoteTrialFixture = `-- name: ExpireAndDemoteTrialFixture :exec
+UPDATE trials
+SET ends_at = clock_timestamp() - interval '1 hour',
+    demoted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+`
+
+// Test-only fixture: moves the trial into the ended and demoted state that
+// RearmTrial accepts.
+func (q *Queries) ExpireAndDemoteTrialFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, expireAndDemoteTrialFixture, organizationID)
+	return err
 }
 
 const extendTrial = `-- name: ExtendTrial :one

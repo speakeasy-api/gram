@@ -1,4 +1,3 @@
-//nolint:glint // Raw SQL invalidates agent fixtures in isolated test databases.
 package mcptoolexecution
 
 import (
@@ -15,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -104,13 +104,14 @@ func TestAgentPrincipalAdapterDerivationFailsClosed(t *testing.T) {
 		`UPDATE agents SET suspended_at = NULL, revoked_at = now() WHERE id = $1`,
 		`UPDATE agents SET revoked_at = NULL, owner_reassignment_required_at = now(), owner_reassignment_reason = 'owner_left' WHERE id = $1`,
 	} {
+		//nolint:glint // notestingrawsql: applies a table of agent lifecycle mutations the agents package intentionally does not expose
 		_, err := conn.Exec(t.Context(), mutation, id)
 		require.NoError(t, err)
 		valid, err := adapter.ValidateCurrentOrganization(t.Context(), organization, killswitches.PrincipalKey(id.String()))
 		require.NoError(t, err)
 		require.False(t, valid, "inactive and reassignment-latched identities are not current principals")
 	}
-	_, err = conn.Exec(t.Context(), `UPDATE agents SET deleted_at = now() WHERE id = $1`, id)
+	err = testrepo.New(conn).SoftDeleteAgentFixture(t.Context(), id)
 	require.NoError(t, err)
 	_, err = adapter.DeriveCandidates(t.Context(), organization, identity)
 	require.Error(t, err)
@@ -191,7 +192,7 @@ func TestAgentCheckpointsUseRealEvaluator(t *testing.T) {
 				require.Equal(t, killswitches.TransportDispositionInfrastructureRejection, disposition.Kind())
 			}
 			// The same stamped identity must be revalidated after deletion, not cached.
-			_, err = conn.Exec(t.Context(), `UPDATE agents SET deleted_at = now() WHERE id = $1`, id)
+			err = testrepo.New(conn).SoftDeleteAgentFixture(t.Context(), id)
 			require.NoError(t, err)
 			for name, ctx := range map[string]context.Context{
 				"stale API key": contexts[0], "stale session": contexts[1],

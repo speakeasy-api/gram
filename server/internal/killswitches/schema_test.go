@@ -1,4 +1,3 @@
-//nolint:glint // Constraint tests require invalid raw writes that production SQLc methods cannot express.
 package killswitches
 
 import (
@@ -25,6 +24,7 @@ func TestKillswitchSchemaConstraintsAndCascade(t *testing.T) {
 	insertOrganization(t, conn, orgID)
 
 	prescriptionID := uuid.New()
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescriptions (
 			id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version
@@ -32,6 +32,7 @@ func TestKillswitchSchemaConstraintsAndCascade(t *testing.T) {
 	`, prescriptionID, orgID)
 	require.NoError(t, err)
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescription_versions (
 			organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
@@ -39,12 +40,14 @@ func TestKillswitchSchemaConstraintsAndCascade(t *testing.T) {
 	`, orgID, prescriptionID)
 	require.NoError(t, err)
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
 		VALUES ($1, $2, 1, 'resource_1')
 	`, orgID, prescriptionID)
 	require.NoError(t, err)
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_expiry_events (organization_id, prescription_id, version)
 		VALUES ($1, $2, 1)
@@ -52,16 +55,19 @@ func TestKillswitchSchemaConstraintsAndCascade(t *testing.T) {
 	require.NoError(t, err)
 
 	operationID := uuid.New()
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, expires_at)
 		VALUES ($1, $2, 'user_1', 'activate', 'request_hash', clock_timestamp() + interval '30 days')
 	`, orgID, operationID)
 	require.NoError(t, err)
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `DELETE FROM organization_metadata WHERE id = $1`, orgID)
 	require.NoError(t, err)
 
 	var remainingRows int
+	//nolint:glint // notestingrawsql: counts killswitch rows directly to assert the cascade or rollback left nothing behind
 	err = conn.QueryRow(ctx, `
 		SELECT
 		  (SELECT count(*) FROM killswitch_prescriptions)
@@ -99,6 +105,7 @@ func TestKillswitchSchemaRejectsInvalidRows(t *testing.T) {
 		{"test_capability", "user", "user_1", "test_resource", 0, "killswitch_prescriptions_current_version_check"},
 	}
 	for _, tc := range prescriptionCases {
+		//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 		_, err := conn.Exec(ctx, `
 			INSERT INTO killswitch_prescriptions (organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
 			VALUES ($1, $2, $3, $4, $5, $6)
@@ -107,6 +114,7 @@ func TestKillswitchSchemaRejectsInvalidRows(t *testing.T) {
 	}
 
 	prescriptionID := uuid.New()
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescriptions (id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
 		VALUES ($1, $2, 'test_capability', 'user', 'user_1', 'test_resource', 1)
@@ -133,6 +141,7 @@ func TestKillswitchSchemaRejectsInvalidRows(t *testing.T) {
 		{1, "active", "selected", nil, "internal", strings.Repeat("e", 501), "killswitch_prescription_versions_external_note_check"},
 	}
 	for _, tc := range versionCases {
+		//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 		_, err := conn.Exec(ctx, `
 			INSERT INTO killswitch_prescription_versions (
 				organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, internal_note, external_note
@@ -143,6 +152,7 @@ func TestKillswitchSchemaRejectsInvalidRows(t *testing.T) {
 
 	// PostgreSQL text cannot represent NUL. Application normalization rejects it first, and this
 	// assertion documents the persistence boundary in case unnormalized input reaches the driver.
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescription_versions (
 			organization_id, prescription_id, version, state, resource_scope, starts_at, internal_note, external_note
@@ -150,6 +160,7 @@ func TestKillswitchSchemaRejectsInvalidRows(t *testing.T) {
 	`, orgID, prescriptionID, startsAt, "internal\x00note")
 	require.Error(t, err)
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescription_versions (
 			organization_id, prescription_id, version, state, resource_scope, starts_at, internal_note, external_note
@@ -157,6 +168,7 @@ func TestKillswitchSchemaRejectsInvalidRows(t *testing.T) {
 	`, orgID, prescriptionID, startsAt)
 	require.NoError(t, err)
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
 		VALUES ($1, $2, 1, '')
@@ -174,6 +186,7 @@ func TestKillswitchSchemaRejectsInvalidRows(t *testing.T) {
 		{"user_1", "activate", "", "killswitch_operations_request_hash_check"},
 	}
 	for _, tc := range operationCases {
+		//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 		_, err := conn.Exec(ctx, `
 			INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, expires_at)
 			VALUES ($1, $2, $3, $4, $5, $6)
@@ -181,10 +194,13 @@ func TestKillswitchSchemaRejectsInvalidRows(t *testing.T) {
 		requireConstraint(t, err, tc.constraint)
 	}
 
+	//nolint:glint // notestingrawsql: transaction scopes the constraint drop below so it rolls back
 	tx, err := conn.Begin(ctx)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: drops a check constraint to isolate the status constraint; SQLc cannot express DDL
 	_, err = tx.Exec(ctx, `ALTER TABLE killswitch_operations DROP CONSTRAINT killswitch_operations_completed_response_check`)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = tx.Exec(ctx, `
 		INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, status, expires_at)
 		VALUES ($1, $2, 'user_1', 'activate', 'request_hash', 'unknown', $3)
@@ -192,12 +208,14 @@ func TestKillswitchSchemaRejectsInvalidRows(t *testing.T) {
 	requireConstraint(t, err, "killswitch_operations_status_check")
 	require.NoError(t, tx.Rollback(ctx))
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, status, response, expires_at)
 		VALUES ($1, $2, 'user_1', 'activate', 'request_hash', 'completed', NULL, $3)
 	`, orgID, uuid.New(), startsAt.Add(30*24*time.Hour))
 	requireConstraint(t, err, "killswitch_operations_completed_response_check")
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, status, response, expires_at)
 		VALUES ($1, $2, 'user_1', 'activate', 'request_hash', 'pending', jsonb_build_object('ok', true), $3)
@@ -218,12 +236,14 @@ func TestKillswitchSchemaPinsTenancyAndIdempotency(t *testing.T) {
 	insertOrganization(t, conn, orgB)
 
 	prescriptionID := uuid.New()
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescriptions (id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
 		VALUES ($1, $2, 'test_capability', 'user', 'user_1', 'test_resource', 1)
 	`, prescriptionID, orgA)
 	require.NoError(t, err)
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescription_versions (
 			organization_id, prescription_id, version, state, resource_scope, starts_at, internal_note, external_note
@@ -231,6 +251,7 @@ func TestKillswitchSchemaPinsTenancyAndIdempotency(t *testing.T) {
 	`, orgB, prescriptionID)
 	requireConstraint(t, err, "killswitch_prescription_versions_prescription_fkey")
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescription_versions (
 			organization_id, prescription_id, version, state, resource_scope, starts_at, internal_note, external_note
@@ -238,6 +259,7 @@ func TestKillswitchSchemaPinsTenancyAndIdempotency(t *testing.T) {
 	`, orgA, prescriptionID)
 	require.NoError(t, err)
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescription_versions (
 			organization_id, prescription_id, version, state, resource_scope, starts_at, internal_note, external_note
@@ -245,36 +267,42 @@ func TestKillswitchSchemaPinsTenancyAndIdempotency(t *testing.T) {
 	`, orgA, prescriptionID)
 	requireConstraint(t, err, "killswitch_prescription_versions_pkey")
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
 		VALUES ($1, $2, 1, 'resource_1')
 	`, orgB, prescriptionID)
 	requireConstraint(t, err, "killswitch_prescription_version_resources_version_fkey")
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
 		VALUES ($1, $2, 1, 'resource_1')
 	`, orgA, prescriptionID)
 	require.NoError(t, err)
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
 		VALUES ($1, $2, 1, 'resource_1')
 	`, orgA, prescriptionID)
 	requireConstraint(t, err, "killswitch_prescription_version_resources_pkey")
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_expiry_events (organization_id, prescription_id, version)
 		VALUES ($1, $2, 1)
 	`, orgB, prescriptionID)
 	requireConstraint(t, err, "killswitch_expiry_events_prescription_version_fkey")
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_expiry_events (organization_id, prescription_id, version)
 		VALUES ($1, $2, 1)
 	`, orgA, prescriptionID)
 	require.NoError(t, err)
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_expiry_events (organization_id, prescription_id, version)
 		VALUES ($1, $2, 1)
@@ -283,6 +311,7 @@ func TestKillswitchSchemaPinsTenancyAndIdempotency(t *testing.T) {
 
 	operationID := uuid.New()
 	for _, orgID := range []string{orgA, orgB} {
+		//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 		_, err = conn.Exec(ctx, `
 			INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, expires_at)
 			VALUES ($1, $2, 'user_1', 'activate', 'request_hash', clock_timestamp() + interval '30 days')
@@ -290,6 +319,7 @@ func TestKillswitchSchemaPinsTenancyAndIdempotency(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
 	_, err = conn.Exec(ctx, `
 		INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, expires_at)
 		VALUES ($1, $2, 'user_1', 'activate', 'request_hash', clock_timestamp() + interval '30 days')
@@ -308,6 +338,7 @@ func TestKillswitchExpiryDiscoveryIndexMatchesEligibilityAndOrder(t *testing.T) 
 		indexPredicate    string
 		indexAccessMethod string
 	)
+	//nolint:glint // notestingrawsql: inspects index metadata in the system catalogs
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT ARRAY(
 			SELECT pg_get_indexdef(index_metadata.indexrelid, position, true)
@@ -370,6 +401,7 @@ func TestInsertKillswitchPrescriptionFixtureValidatesResourceScope(t *testing.T)
 
 			require.Error(t, err)
 			var prescriptions int
+			//nolint:glint // notestingrawsql: counts killswitch rows directly to assert the cascade or rollback left nothing behind
 			require.NoError(t, conn.QueryRow(t.Context(), `
 				SELECT count(*)
 				FROM killswitch_prescriptions

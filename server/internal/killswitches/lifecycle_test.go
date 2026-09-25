@@ -1,4 +1,4 @@
-//nolint:glint,paralleltest,tparallel // Integration tests intentionally inspect and corrupt private rows; subtests share one database.
+//nolint:paralleltest,tparallel // Subtests share one database.
 package killswitches
 
 import (
@@ -174,11 +174,14 @@ func TestLifecycleReplayConflictAndBoundedReceipt(t *testing.T) {
 	require.ErrorIs(t, err, ErrOperationConflict, "operation type is part of the receipt identity")
 
 	var prescriptions, operations int
+	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
 	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_prescriptions WHERE organization_id = $1`, orgID).Scan(&prescriptions))
+	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
 	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_operations WHERE organization_id = $1`, orgID).Scan(&operations))
 	require.Equal(t, 1, prescriptions)
 	require.Equal(t, 1, operations)
 	var exactRetention, boundedResponse bool
+	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT expires_at = created_at + interval '30 days',
 		       response ?& ARRAY['response_version', 'prescription_id', 'prescription_version', 'state']
@@ -284,6 +287,7 @@ func TestLifecycleAuthoritativeValidationUsesMutationTransaction(t *testing.T) {
 	t.Parallel()
 
 	conn, orgID := newLifecycleDatabase(t, "killswitch_validation_tx")
+	//nolint:glint // notestingrawsql: creates a test-only validation source table; SQLc cannot express DDL
 	_, err := conn.Exec(t.Context(), `
 		CREATE TABLE killswitch_validation_sources (
 		  organization_id text NOT NULL,
@@ -293,6 +297,7 @@ func TestLifecycleAuthoritativeValidationUsesMutationTransaction(t *testing.T) {
 		)
 	`)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: uses the test-only killswitch_validation_sources table, which has no SQLc schema
 	_, err = conn.Exec(t.Context(), `
 		INSERT INTO killswitch_validation_sources (organization_id, reference_kind, reference_key)
 		VALUES ($1, 'principal', $2), ($1, 'resource', $3)
@@ -330,6 +335,7 @@ func TestLifecycleAuthoritativeValidationUsesMutationTransaction(t *testing.T) {
 
 	deleteDone := make(chan error, 1)
 	go func() {
+		//nolint:glint // notestingrawsql: uses the test-only killswitch_validation_sources table, which has no SQLc schema
 		_, err := conn.Exec(t.Context(), `
 			DELETE FROM killswitch_validation_sources
 			WHERE organization_id = $1 AND reference_kind = 'resource' AND reference_key = $2
@@ -379,7 +385,9 @@ func TestLifecycleOrganizationIsolationAndCrossProjectResources(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidReference)
 
 	var countA, countB int
+	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
 	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_prescriptions WHERE organization_id = $1`, orgA).Scan(&countA))
+	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
 	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_prescriptions WHERE organization_id = $1`, orgB).Scan(&countB))
 	require.Equal(t, 1, countA)
 	require.Zero(t, countB)
@@ -434,6 +442,7 @@ func TestLifecycleDynamicAllIntervalsRollbackCleanupAndReclaim(t *testing.T) {
 	require.Equal(t, int64(0), resourceValidations.Load())
 	for _, table := range []string{"killswitch_prescriptions", "killswitch_prescription_versions", "killswitch_prescription_version_resources", "killswitch_operations"} {
 		var count int
+		//nolint:glint // notestingrawsql: counts rows across a dynamic table list to prove partial writes rolled back; SQLc cannot parameterize table names
 		require.NoError(t, conn.QueryRow(t.Context(), "SELECT count(*) FROM "+table+" WHERE organization_id = $1", orgID).Scan(&count))
 		require.Zero(t, count, table)
 	}
@@ -451,6 +460,7 @@ func TestLifecycleDynamicAllIntervalsRollbackCleanupAndReclaim(t *testing.T) {
 	require.Empty(t, v1.SelectedResourceKeys)
 	require.Nil(t, v1.ExpiresAt)
 
+	//nolint:glint // notestingrawsql: corrupts private operation state to exercise idempotency recovery paths production writes cannot reach
 	_, err = conn.Exec(t.Context(), `UPDATE killswitch_operations SET expires_at = clock_timestamp() - interval '1 second' WHERE organization_id = $1 AND operation_id = $2`, orgID, operationID)
 	require.NoError(t, err)
 	reusedOperation := request
@@ -475,6 +485,7 @@ func TestLifecycleDynamicAllIntervalsRollbackCleanupAndReclaim(t *testing.T) {
 		{organizationID: otherOrgID, operationID: uuid.New()},
 	}
 	for _, expired := range expiredOperations {
+		//nolint:glint // notestingrawsql: fabricates already-expired operations for the cleanup sweep
 		_, err = conn.Exec(t.Context(), `
 			INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, expires_at)
 			VALUES ($1, $2, 'user:test', 'change', 'sha256:test', clock_timestamp() - interval '1 second')
@@ -488,6 +499,7 @@ func TestLifecycleDynamicAllIntervalsRollbackCleanupAndReclaim(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), deleted)
 	var otherOrgOperations int
+	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
 	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_operations WHERE organization_id = $1`, otherOrgID).Scan(&otherOrgOperations))
 	require.Equal(t, 3, otherOrgOperations, "organization cleanup must not sweep another organization")
 	_, err = service.CleanupExpiredOperations(t.Context(), OrganizationID(orgID), 0)
@@ -507,6 +519,7 @@ func TestLifecycleCollaboratorsCannotCompleteTransaction(t *testing.T) {
 		{
 			name: "validator commit through exec",
 			validator: lifecycleValidatorFunc(func(ctx context.Context, queries LifecycleTransactionQueries, _ CurrentReferenceBatch) error {
+				//nolint:glint // notestingrawsql: deliberately issues transaction-control SQL through the lifecycle queries to prove it is rejected
 				_, err := queries.Exec(ctx, " /* leading comment */ COMMIT")
 				return fmt.Errorf("validator commit: %w", err)
 			}),
@@ -514,6 +527,7 @@ func TestLifecycleCollaboratorsCannotCompleteTransaction(t *testing.T) {
 		{
 			name: "validator commit through query rewriter",
 			validator: lifecycleValidatorFunc(func(ctx context.Context, queries LifecycleTransactionQueries, _ CurrentReferenceBatch) error {
+				//nolint:glint // notestingrawsql: deliberately issues transaction-control SQL through the lifecycle queries to prove it is rejected
 				_, err := queries.Exec(ctx, "SELECT 1", rewritingLifecycleQuery{sql: "COMMIT"})
 				return fmt.Errorf("validator query rewriter commit: %w", err)
 			}),
@@ -521,6 +535,7 @@ func TestLifecycleCollaboratorsCannotCompleteTransaction(t *testing.T) {
 		{
 			name: "validator rollback through query",
 			validator: lifecycleValidatorFunc(func(ctx context.Context, queries LifecycleTransactionQueries, _ CurrentReferenceBatch) error {
+				//nolint:glint // notestingrawsql: deliberately issues transaction-control SQL through the lifecycle queries to prove it is rejected
 				rows, err := queries.Query(ctx, "-- leading comment\nROLLBACK")
 				if err != nil {
 					return fmt.Errorf("validator rollback: %w", err)
@@ -533,6 +548,7 @@ func TestLifecycleCollaboratorsCannotCompleteTransaction(t *testing.T) {
 			name:      "hook commit through query row",
 			validator: fakeLifecycleValidator{},
 			hook: func(ctx context.Context, queries LifecycleTransactionQueries, _ MutationEvent) error {
+				//nolint:glint // notestingrawsql: deliberately issues transaction-control SQL through the lifecycle queries to prove it is rejected
 				return fmt.Errorf("hook commit: %w", queries.QueryRow(ctx, "/* leading comment */ COMMIT").Scan())
 			},
 		},
@@ -540,6 +556,7 @@ func TestLifecycleCollaboratorsCannotCompleteTransaction(t *testing.T) {
 			name:      "hook multi-statement after non-ASCII identifier",
 			validator: fakeLifecycleValidator{},
 			hook: func(ctx context.Context, queries LifecycleTransactionQueries, _ MutationEvent) error {
+				//nolint:glint // notestingrawsql: deliberately issues transaction-control SQL through the lifecycle queries to prove it is rejected
 				_, err := queries.Exec(ctx, "SELECT 1 AS fooα$tag$; COMMIT -- $tag$")
 				return fmt.Errorf("hook multiple statements: %w", err)
 			},
@@ -548,6 +565,7 @@ func TestLifecycleCollaboratorsCannotCompleteTransaction(t *testing.T) {
 			name:      "hook rollback through exec",
 			validator: fakeLifecycleValidator{},
 			hook: func(ctx context.Context, queries LifecycleTransactionQueries, _ MutationEvent) error {
+				//nolint:glint // notestingrawsql: deliberately issues transaction-control SQL through the lifecycle queries to prove it is rejected
 				_, err := queries.Exec(ctx, "\n ROLLBACK")
 				return fmt.Errorf("hook rollback: %w", err)
 			},
@@ -566,6 +584,7 @@ func TestLifecycleCollaboratorsCannotCompleteTransaction(t *testing.T) {
 			require.ErrorIs(t, err, errLifecycleTransactionQueryRejected)
 			for _, table := range []string{"killswitch_prescriptions", "killswitch_prescription_versions", "killswitch_prescription_version_resources", "killswitch_operations"} {
 				var count int
+				//nolint:glint // notestingrawsql: counts rows across a dynamic table list to prove partial writes rolled back; SQLc cannot parameterize table names
 				require.NoError(t, conn.QueryRow(t.Context(), "SELECT count(*) FROM "+table+" WHERE organization_id = $1", orgID).Scan(&count))
 				require.Zero(t, count, table+" must not be partially durable")
 			}
@@ -596,6 +615,7 @@ func TestLifecycleSuccessorRollbackRestoresCurrentVersion(t *testing.T) {
 	require.Equal(t, []ResourceKey{ResourceKey(orgID + ":tool:a")}, v1.SelectedResourceKeys)
 
 	var operationCount int
+	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
 	require.NoError(t, conn.QueryRow(t.Context(), `
 		SELECT count(*)
 		FROM killswitch_operations
@@ -624,6 +644,7 @@ func TestLifecycleRejectsInvalidTransitionsAndReceiptPayload(t *testing.T) {
 	badRequest := testActivateRequest(orgID, badOperation)
 	_, err = service.ActivatePrescription(t.Context(), badRequest)
 	require.NoError(t, err)
+	//nolint:glint // notestingrawsql: corrupts private operation state to exercise idempotency recovery paths production writes cannot reach
 	_, err = conn.Exec(t.Context(), `
 		UPDATE killswitch_operations
 		SET status = 'pending', response = NULL
@@ -633,6 +654,7 @@ func TestLifecycleRejectsInvalidTransitionsAndReceiptPayload(t *testing.T) {
 	_, err = service.ActivatePrescription(t.Context(), badRequest)
 	require.ErrorIs(t, err, ErrOperationUnavailable)
 
+	//nolint:glint // notestingrawsql: corrupts private operation state to exercise idempotency recovery paths production writes cannot reach
 	_, err = conn.Exec(t.Context(), `
 		UPDATE killswitch_operations
 		SET status = 'completed',
@@ -658,6 +680,7 @@ type lockingLifecycleValidator struct{}
 func (lockingLifecycleValidator) ValidateCurrent(ctx context.Context, queries LifecycleTransactionQueries, batch CurrentReferenceBatch) error {
 	if batch.Principal != nil {
 		var key string
+		//nolint:glint // notestingrawsql: uses the test-only killswitch_validation_sources table, which has no SQLc schema
 		err := queries.QueryRow(ctx, `
 			SELECT reference_key
 			FROM killswitch_validation_sources
@@ -678,6 +701,7 @@ func (lockingLifecycleValidator) ValidateCurrent(ctx context.Context, queries Li
 	for i, key := range batch.Resources.Keys {
 		keys[i] = string(key)
 	}
+	//nolint:glint // notestingrawsql: uses the test-only killswitch_validation_sources table, which has no SQLc schema
 	rows, err := queries.Query(ctx, `
 		SELECT reference_key
 		FROM killswitch_validation_sources
@@ -782,6 +806,7 @@ func getPrescriptionForTest(ctx context.Context, conn *pgxpool.Pool, organizatio
 		return testPrescription{}, fmt.Errorf("parse test prescription ID: %w", err)
 	}
 	var result testPrescription
+	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
 	err = conn.QueryRow(ctx, `
 		SELECT current_version
 		FROM killswitch_prescriptions
@@ -793,6 +818,7 @@ func getPrescriptionForTest(ctx context.Context, conn *pgxpool.Pool, organizatio
 	if err != nil {
 		return testPrescription{}, fmt.Errorf("get test prescription: %w", err)
 	}
+	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
 	rows, err := conn.Query(ctx, `
 		SELECT
 		  version.version,
