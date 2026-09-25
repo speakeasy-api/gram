@@ -3,7 +3,6 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Stack } from "@/components/ui/Stack";
-import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useEffect, useState } from "react";
 
@@ -11,7 +10,6 @@ export interface RegisterIssuerValues {
   name: string;
   issuer: string;
   jwksUri: string;
-  allowWildcardAdmission: boolean;
 }
 
 interface RegisterIssuerDialogProps {
@@ -25,7 +23,6 @@ const EMPTY: RegisterIssuerValues = {
   name: "",
   issuer: "",
   jwksUri: "",
-  allowWildcardAdmission: false,
 };
 
 // Mirrors what the server refuses on the write path, so the reason appears next
@@ -176,37 +173,6 @@ export function RegisterIssuerDialog({
                 field Gram reads when verifying an assertion.
               </Text>
             )}
-          </Stack>
-
-          <Stack gap={2}>
-            <Stack direction="horizontal" align="center" gap={3}>
-              <Switch
-                aria-labelledby="workload-issuer-wildcard-label"
-                checked={values.allowWildcardAdmission}
-                onCheckedChange={(checked) =>
-                  setValues({ ...values, allowWildcardAdmission: checked })
-                }
-              />
-              <Label
-                id="workload-issuer-wildcard-label"
-                className="cursor-pointer"
-                onClick={() =>
-                  setValues({
-                    ...values,
-                    allowWildcardAdmission: !values.allowWildcardAdmission,
-                  })
-                }
-              >
-                Allow wildcard admission
-              </Label>
-            </Stack>
-            <Text muted small>
-              Only turn this on where the varying part of a subject is minted by
-              the issuer and cannot be influenced by the caller. On a platform
-              that puts a branch name in the subject, a wildcard admits anyone
-              who can push a branch. Turning it back off makes existing wildcard
-              rules inert immediately.
-            </Text>
           </Stack>
         </Stack>
 

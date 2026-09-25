@@ -95,7 +95,7 @@ func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, wor
 	{
 		var zero bool
 		if v.AllowWildcardAdmission == zero {
-			v.AllowWildcardAdmission = false
+			v.AllowWildcardAdmission = true
 		}
 	}
 	{

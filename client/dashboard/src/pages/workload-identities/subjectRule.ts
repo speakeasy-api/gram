@@ -8,6 +8,23 @@ const WILDCARD_SUFFIX = "*";
 export type MatchKind = "exact" | "wildcard";
 
 /**
+ * The match kind a subject states, read off the value itself.
+ *
+ * There is no separate control for this. An operator writes the rule they mean
+ * and the terminator says how broad it is — which is what the stored value has
+ * always meant, so nothing is inferred that was not already there.
+ *
+ * Lossless, because an exact subject may never contain a `*`: ValidateSubjectRule
+ * refuses one outright, so there is no legitimate exact value this could
+ * misread. A `*` anywhere therefore means a wildcard was intended, and a
+ * misplaced one is reported as a misplaced terminator rather than as a literal
+ * star, which is the more useful of the two messages.
+ */
+export function inferMatchKind(subject: string): MatchKind {
+  return subject.trim().includes(WILDCARD_SUFFIX) ? "wildcard" : "exact";
+}
+
+/**
  * Advisory problems with a subject as typed. The server refuses all of these;
  * surfacing them next to the field is what stops an operator submitting a rule
  * that is accepted into the table and then matches nothing.
@@ -67,10 +84,10 @@ export function canAdmit(input: {
    */
   issuerExists: boolean;
   /**
-   * Whether the rule as typed is permitted by that issuer. The picker disables
-   * the wildcard option, but the selected match kind is held in state: switching
-   * issuers, or the issuer's permission being cleared elsewhere, can leave a
-   * wildcard selected under an issuer that forbids it.
+   * Whether the kind this subject states is permitted by the selected issuer.
+   * An issuer that forbids wildcards is a state the operator can reach — an
+   * older row, or one cleared during an incident — so a rule stating one has to
+   * be refused here rather than only by the server.
    */
   matchKindPermitted: boolean;
 }): boolean {

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { subjectRuleWarning } from "./subjectRule";
+import { inferMatchKind, subjectRuleWarning } from "./subjectRule";
 
 const STEM = "wimse://identity.example.com/org/acme/agent/";
 
@@ -52,4 +52,26 @@ it("warns when the stem ends in whitespace before its star", () => {
   const warning = subjectRuleWarning("wildcard", `${STEM} *`);
 
   expect(warning).toContain("whitespace");
+});
+
+it("reads the match kind off the subject", () => {
+  // No control states this: the terminator is how a rule states its own breadth,
+  // so a separate selector could only disagree with the value.
+  expect(inferMatchKind(`${STEM}a-1`)).toBe("exact");
+  expect(inferMatchKind(`${STEM}*`)).toBe("wildcard");
+  expect(inferMatchKind("")).toBe("exact");
+  expect(inferMatchKind("  ")).toBe("exact");
+});
+
+it("reads a misplaced star as a wildcard, so the message names the real problem", () => {
+  // Lossless, because an exact subject may never contain a star — the server
+  // refuses one outright. So a star anywhere means a wildcard was intended, and
+  // reporting a misplaced terminator is more useful than reporting a literal.
+  expect(inferMatchKind("wimse://x/*/agent/a-1")).toBe("wildcard");
+  expect(subjectRuleWarning("wildcard", "wimse://x/*/agent/a-1")).toContain(
+    'must end in "*"',
+  );
+  // A bare star still says what it would do, rather than being read as exact.
+  expect(inferMatchKind("*")).toBe("wildcard");
+  expect(subjectRuleWarning("wildcard", "*")).toContain("bare");
 });

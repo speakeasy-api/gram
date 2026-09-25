@@ -25,8 +25,10 @@ type RegisterIssuerRequestBody struct {
 	// an https URL on a fully qualified domain name.
 	JwksURI string `form:"jwks_uri" json:"jwks_uri" xml:"jwks_uri"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
-	// Defaults to false, and is re-checked on every lookup, so clearing it revokes
-	// wildcard rules already written.
+	// Defaults to true. Re-checked on every lookup rather than at write time, so
+	// clearing it makes wildcard rules already written inert immediately — an
+	// incident control rather than a setup step, which is why the dashboard does
+	// not ask for it at registration.
 	AllowWildcardAdmission bool `form:"allow_wildcard_admission" json:"allow_wildcard_admission" xml:"allow_wildcard_admission"`
 	// Register the issuer for the selected project alone rather than the whole
 	// organization. Defaults to false.
@@ -1104,7 +1106,7 @@ func NewRegisterIssuerRequestBody(p *workloadidentities.RegisterIssuerPayload) *
 	{
 		var zero bool
 		if body.AllowWildcardAdmission == zero {
-			body.AllowWildcardAdmission = false
+			body.AllowWildcardAdmission = true
 		}
 	}
 	{

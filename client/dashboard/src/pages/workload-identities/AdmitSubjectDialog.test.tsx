@@ -46,23 +46,53 @@ function subjectField(): HTMLElement {
   return screen.getByLabelText("Subject");
 }
 
+// The message bound to the subject field, as opposed to the wildcard caution —
+// the shared Alert renders role="alert" too, so the role alone no longer tells
+// them apart.
+function subjectWarning(): HTMLElement | null {
+  return document.getElementById("admit-subject-warning");
+}
+
 function admitButton(): HTMLButtonElement {
   return screen.getByRole("button", {
     name: "Admit workload",
   }) as HTMLButtonElement;
 }
 
-it("warns when an exact subject contains a star, and blocks the submit", () => {
-  const { onSubmit } = renderDialog([issuer({ allowWildcardAdmission: true })]);
+it("reads a terminated subject as a wildcard, with no separate control", () => {
+  // There is no Match selector: the terminator states the breadth, so a rule
+  // written with one is simply a wildcard rule. The value is kept literally,
+  // which is what gets stored.
+  renderDialog([issuer({ allowWildcardAdmission: true })]);
 
   fireEvent.change(subjectField(), {
     target: { value: "wimse://identity.example.com/org/acme/agent/*" },
   });
 
-  // Advisory in the sense that the server also refuses it — but the submit is
-  // blocked, because a rule that matches nothing reads as correct afterwards.
-  const warning = screen.getByRole("alert");
-  expect(warning.textContent).toContain("in full, literally");
+  // No validation message: the rule is well formed. The caution is a separate
+  // Alert and is asserted in its own test.
+  expect(subjectWarning()).toBeNull();
+  expect((subjectField() as HTMLInputElement).value).toBe(
+    "wimse://identity.example.com/org/acme/agent/*",
+  );
+  expect(screen.queryByLabelText("Match")).toBeNull();
+});
+
+it("still warns about a literal star where the issuer forbids wildcards", () => {
+  // The switch above is only available when the issuer permits wildcards. Where
+  // it does not there is nothing to switch to, so the rule really would be an
+  // exact subject containing a star — which matches nothing — and the warning has
+  // to stand.
+  const { onSubmit } = renderDialog([
+    issuer({ allowWildcardAdmission: false }),
+  ]);
+
+  fireEvent.change(subjectField(), {
+    target: { value: "wimse://identity.example.com/org/acme/agent/*" },
+  });
+
+  const warning = subjectWarning();
+  expect(warning?.textContent).toContain("does not permit wildcard matching");
   expect(admitButton().disabled).toBe(true);
   expect(onSubmit).not.toHaveBeenCalled();
 });
@@ -97,10 +127,12 @@ it("does not warn about an exact subject with no star", () => {
     target: { value: "wimse://identity.example.com/org/acme/agent/a-1" },
   });
 
-  expect(screen.queryByRole("alert")).toBeNull();
+  expect(subjectWarning()).toBeNull();
 });
 
-it("marks the subject field invalid while the rule would match nothing", () => {
+it("marks the subject field invalid while the rule cannot be admitted", () => {
+  // The default fixture issuer forbids wildcards, so a terminated subject is a
+  // rule this issuer cannot carry.
   renderDialog([issuer()]);
 
   fireEvent.change(subjectField(), { target: { value: "repo:acme/deploy:*" } });
@@ -108,17 +140,53 @@ it("marks the subject field invalid while the rule would match nothing", () => {
   expect(subjectField().getAttribute("aria-invalid")).toBe("true");
 });
 
-it("says so when the sole trusted issuer forbids wildcard matching", () => {
-  // Two gates, neither implied by the other: the issuer has to permit wildcard
-  // matching before a rule can ask for it, and the dialog says which state it is
-  // in rather than only refusing on submit.
-  renderDialog([issuer({ allowWildcardAdmission: false })]);
-
-  expect(screen.getByText(/does not permit wildcard matching/)).toBeTruthy();
-});
-
-it("stays quiet about wildcards when the issuer permits them", () => {
+it("marks it invalid for a malformed wildcard too", () => {
   renderDialog([issuer({ allowWildcardAdmission: true })]);
 
+  // An interior star: read as a wildcard whose terminator is misplaced, which is
+  // the more useful of the two possible messages.
+  fireEvent.change(subjectField(), { target: { value: "repo:acme/*/deploy" } });
+
+  expect(subjectField().getAttribute("aria-invalid")).toBe("true");
+  expect(subjectWarning()?.textContent).toContain('must end in "*"');
+});
+
+it("says nothing about wildcards until the subject asks for one", () => {
+  // The old dialog announced the issuer's wildcard permission up front, beside a
+  // Match control. With no control and no terminator typed there is nothing to
+  // report, and a standing notice would be noise.
+  renderDialog([issuer({ allowWildcardAdmission: false })]);
+
   expect(screen.queryByText(/does not permit wildcard matching/)).toBeNull();
+});
+
+it("names the subjects a wildcard rule would admit", () => {
+  // The caution replaces the setup-time switch on the issuer. It has to be
+  // concrete to be worth reading, so it names the stem rather than warning in
+  // the abstract.
+  renderDialog([issuer({ allowWildcardAdmission: true })]);
+
+  // Pasting a terminated rule is what switches the match kind — the Match control
+  // is a Radix Select, so there is no native change event to fire at it.
+  fireEvent.change(subjectField(), {
+    target: { value: "wimse://identity.example.com/org/acme/agent/*" },
+  });
+
+  const caution = screen.getByRole("status");
+  expect(caution.textContent).toContain(
+    "wimse://identity.example.com/org/acme/agent/",
+  );
+  expect(caution.textContent).toContain("assigned by the issuer");
+});
+
+it("says nothing about breadth for an exact rule", () => {
+  // An exact subject admits one identity, so there is nothing to caution about
+  // and a standing warning would train the operator to ignore it.
+  renderDialog([issuer({ allowWildcardAdmission: true })]);
+
+  fireEvent.change(subjectField(), {
+    target: { value: "wimse://identity.example.com/org/acme/agent/a-1" },
+  });
+
+  expect(screen.queryByRole("status")).toBeNull();
 });

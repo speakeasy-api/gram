@@ -164,7 +164,6 @@ function WorkloadIdentitiesOverview(): JSX.Element {
           name: values.name.trim(),
           issuer: values.issuer.trim(),
           jwksUri: values.jwksUri.trim(),
-          allowWildcardAdmission: values.allowWildcardAdmission,
         },
       },
     });
