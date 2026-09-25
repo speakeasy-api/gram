@@ -459,7 +459,7 @@ func newStreamsCommand() *cli.Command {
 			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
 			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
 			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
-			promptPolicyScanner := promptpolicy.NewScanner(logger, newPromptPolicyCascade(ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter), guardianPolicy, openRouter, featureFlags, replicaDB))
+			promptPolicyScanner := promptpolicy.NewScanner(logger, newPromptPolicyJevJudge(ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter), guardianPolicy, openRouter, featureFlags, replicaDB))
 			promptPolicyStubScanner := promptpolicy.NewScanner(logger, promptpolicy.NoopEvaluator)
 			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
 

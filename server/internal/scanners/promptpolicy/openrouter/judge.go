@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -114,10 +113,6 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 // client or an empty prompt/text yields (nil, nil). On judge error or timeout it
 // returns a non-nil error so callers can apply policy fail-mode.
 func (j *Judge) Evaluate(ctx context.Context, in promptpolicy.Input) (*promptpolicy.Verdict, error) {
-	return j.evaluate(ctx, in, judgeModel, nil)
-}
-
-func (j *Judge) evaluate(ctx context.Context, in promptpolicy.Input, model string, window *judgemessage.Window) (*promptpolicy.Verdict, error) {
 	if j == nil || j.client == nil {
 		return nil, nil
 	}
@@ -138,7 +133,7 @@ func (j *Judge) evaluate(ctx context.Context, in promptpolicy.Input, model strin
 	))
 	defer span.End()
 
-	bucket := openrouter.ResolveJudgeRateLimitKey(ctx, j.logger, j.client, in.OrgID, in.ProjectID, billing.ModelUsageSourceRiskPolicy, model)
+	bucket := openrouter.ResolveJudgeRateLimitKey(ctx, j.logger, j.client, in.OrgID, in.ProjectID, billing.ModelUsageSourceRiskPolicy, judgeModel)
 
 	// A throttled call is treated like a judge error: the policy's fail-mode
 	// decides. A Store outage is not a throttle, so proceed rather than let
@@ -167,11 +162,8 @@ func (j *Judge) evaluate(ctx context.Context, in promptpolicy.Input, model strin
 	}
 
 	judgePrompt, countContent := prepareJudgePrompt(in)
-	if window != nil {
-		judgePrompt, countContent = prepareContextJudgePrompt(in, *window)
-	}
 	start := time.Now()
-	callResult, err := j.call(ctx, in, judgePrompt, model, window != nil)
+	callResult, err := j.call(ctx, in, judgePrompt)
 	outcome := o11y.OutcomeFromErrorWithTimeout(err)
 	j.metrics.RecordEvaluation(ctx, in.OrgID, outcome, time.Since(start))
 	if err != nil {
@@ -205,7 +197,7 @@ func (j *Judge) evaluate(ctx context.Context, in promptpolicy.Input, model strin
 		TotalTokens:      callResult.totalTokens,
 		STokens:          int64(stokenCount),
 		Completed:        countErr == nil,
-		Model:            model,
+		Model:            judgeModel,
 		Provider:         "openrouter",
 	}, nil
 }
@@ -233,7 +225,7 @@ type judgeCallResult struct {
 	totalTokens      int
 }
 
-func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt, model string, contextual bool) (judgeCallResult, error) {
+func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt string) (judgeCallResult, error) {
 	strict := true
 	jsonSchema := or.ChatJSONSchemaConfig{
 		Name:        "risk_policy_judge_verdict",
@@ -246,20 +238,14 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt, mo
 	if in.Config.Temperature != nil {
 		temperature = *in.Config.Temperature
 	}
-	timeout := judgeTimeout
-	systemPrompt := SystemPrompt
-	if contextual {
-		timeout = 30 * time.Second
-		systemPrompt = ContextSystemPrompt
-	}
-	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	callCtx, cancel := context.WithTimeout(ctx, judgeTimeout)
 	defer cancel()
 
 	response, err := j.client.GetObjectCompletion(callCtx, openrouter.ObjectCompletionRequest{
 		OrgID:                  in.OrgID,
 		ProjectID:              in.ProjectID,
-		Model:                  model,
-		SystemPrompt:           systemPrompt,
+		Model:                  judgeModel,
+		SystemPrompt:           SystemPrompt,
 		Prompt:                 judgePrompt,
 		Temperature:            &temperature,
 		UsageSource:            billing.ModelUsageSourceRiskAnalysis,
@@ -285,21 +271,18 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt, mo
 	}
 
 	var verdict struct {
-		Matched    *bool    `json:"matched"`
-		Confidence *float64 `json:"confidence"`
-		Rationale  *string  `json:"rationale"`
+		Matched    bool    `json:"matched"`
+		Confidence float64 `json:"confidence"`
+		Rationale  string  `json:"rationale"`
 	}
 	if err := json.Unmarshal([]byte(raw), &verdict); err != nil {
 		return judgeCallResult{}, fmt.Errorf("parse judge response: %w", err)
-	}
-	if verdict.Matched == nil || verdict.Confidence == nil || verdict.Rationale == nil || math.IsNaN(*verdict.Confidence) || math.IsInf(*verdict.Confidence, 0) {
-		return judgeCallResult{}, fmt.Errorf("incomplete judge verdict")
 	}
 	// Clamp confidence and cap rationale length in code - the schema no longer
 	// enforces these (see the schema note above re: Anthropic route 400s).
 	// Truncate by rune, not byte, so a multi-byte character can't be split into
 	// invalid UTF-8 that later flows into stored finding descriptions.
-	rationale := *verdict.Rationale
+	rationale := verdict.Rationale
 	if utf8.RuneCountInString(rationale) > maxRationaleLen {
 		rationale = string([]rune(rationale)[:maxRationaleLen])
 	}
@@ -308,8 +291,8 @@ func (j *Judge) call(ctx context.Context, in promptpolicy.Input, judgePrompt, mo
 		costUSD = *response.Usage.Cost
 	}
 	return judgeCallResult{
-		matched:          *verdict.Matched,
-		confidence:       max(0, min(1, *verdict.Confidence)),
+		matched:          verdict.Matched,
+		confidence:       max(0, min(1, verdict.Confidence)),
 		rationale:        rationale,
 		costUSD:          costUSD,
 		promptTokens:     response.Usage.PromptTokens,

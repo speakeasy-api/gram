@@ -253,7 +253,7 @@ func RiskLLMAnalyzerVariant(variant Variant, legacyEnabled bool) Variant {
 	}
 }
 
-// FlagRiskPromptPolicyCascade gates Jev screening followed by Opus confirmation.
+// FlagRiskPromptPolicyJev gates direct Jev evaluation of prompt policies.
 // Evaluated server-side using organization and project group keys; unavailable
 // local evaluations retain the baseline judge. Remove after rollout completes.
-const FlagRiskPromptPolicyCascade Flag = "risk-prompt-policy-cascade"
+const FlagRiskPromptPolicyJev Flag = "risk-prompt-policy-jev"

@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
-
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -75,14 +73,7 @@ func (h *Handler) Handle(ctx context.Context, m *riskv1.PromptPolicyAnalysis, _ 
 	}
 
 	startedAt := time.Now().UTC()
-	msg := promptPolicyJudgeMessage(m)
-	if chatID, err := uuid.Parse(m.GetChatId()); err == nil {
-		msg.ChatID = chatID
-	}
-	if anchor, err := uuid.Parse(m.GetChatMessageId()); err == nil {
-		msg.AnchorID = anchor
-	}
-	result, verdict := scanner.ScanWithVerdict(ctx, m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), m.GetPrompt(), cfg, msg)
+	result, verdict := scanner.ScanWithVerdict(ctx, m.GetOrganizationId(), m.GetProjectId(), m.GetUserId(), m.GetPrompt(), cfg, promptPolicyJudgeMessage(m))
 	findings := result.Findings
 
 	_, _, err := scanners.PublishFindings(ctx, h.logger, h.findingsPub, scanners.FindingMetadata{

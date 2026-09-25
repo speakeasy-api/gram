@@ -1276,10 +1276,7 @@ func (s *Scanner) scanPromptPolicy(ctx context.Context, policy repo.RiskPolicy, 
 		// text is the type-appropriate body the hook layer already flattened:
 		// the prompt for user messages, tool-input JSON for tool_request,
 		// tool-output JSON for tool_response.
-		msg := judgemessage.New(messageType, toolName, text)
-		msg.AnchorID = baseProvenance.ChatMessageID
-		msg.ChatID = baseProvenance.ChatID
-		scanResult, verdict = s.promptPolicy.ScanWithVerdict(ctx, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, prompt, cfg, msg)
+		scanResult, verdict = s.promptPolicy.ScanWithVerdict(ctx, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, prompt, cfg, judgemessage.New(messageType, toolName, text))
 	} else {
 		scanResult = scanners.Result{Findings: promptpolicy.FindingsFromEvaluation(cfg, nil, nil, true), STokens: 0, Completed: false}
 	}
