@@ -7,12 +7,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func TestToolsetsService_PrivateMCPNeverRetainsExternalOAuthDuringConcurrentUpdates(t *testing.T) {
@@ -30,10 +32,10 @@ func TestToolsetsService_PrivateMCPNeverRetainsExternalOAuthDuringConcurrentUpda
 			var blockerPID int32
 			//nolint:glint // notestingrawsql: backend identity is a PostgreSQL test synchronization primitive
 			require.NoError(t, blocker.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&blockerPID))
-			//nolint:glint // notestingrawsql: intentionally holds the row lock shared by the two service operations
-			_, err := blocker.Exec(ctx, `
-SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 FOR UPDATE
-`, toolset.ProjectID, toolset.Slug)
+			_, err := toolsetsrepo.New(blocker).GetToolsetForUpdate(ctx, toolsetsrepo.GetToolsetForUpdateParams{
+				Slug:      string(toolset.Slug),
+				ProjectID: uuid.MustParse(toolset.ProjectID),
+			})
 			require.NoError(t, err)
 
 			add := func() error {
@@ -114,10 +116,10 @@ func TestToolsetsService_ExternalOAuthWritersTakeToolsetLock(t *testing.T) {
 			var blockerPID int32
 			//nolint:glint // notestingrawsql: backend identity is a PostgreSQL test synchronization primitive
 			require.NoError(t, blocker.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&blockerPID))
-			//nolint:glint // notestingrawsql: intentionally holds the row lock shared by external OAuth writers
-			_, err = blocker.Exec(ctx, `
-SELECT id FROM toolsets WHERE project_id = $1 AND slug = $2 FOR UPDATE
-`, toolset.ProjectID, toolset.Slug)
+			_, err = toolsetsrepo.New(blocker).GetToolsetForUpdate(ctx, toolsetsrepo.GetToolsetForUpdateParams{
+				Slug:      string(toolset.Slug),
+				ProjectID: uuid.MustParse(toolset.ProjectID),
+			})
 			require.NoError(t, err)
 
 			result := make(chan error, 1)

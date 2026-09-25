@@ -617,7 +617,7 @@ func TestAdminReconciliationRangeIsBoundedAndUsesOrganizationSequenceIndex(t *te
 	require.Equal(t, matching, advanced)
 	require.Equal(t, before+1, ti.provisioner.ReconcileCalls(), "a recent matching event must PATCH")
 
-	//nolint:glint // This regression intentionally inspects PostgreSQL's plan for the production query.
+	//nolint:glint // notestingrawsql: This regression intentionally inspects PostgreSQL's plan for the production query.
 	rows, err := ti.conn.Query(ctx, `
 EXPLAIN (COSTS OFF)
 SELECT seq

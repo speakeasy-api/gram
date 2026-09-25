@@ -1,4 +1,3 @@
-//nolint:glint // Caller-owned transaction tests directly exercise network-mode-only writes.
 package mcpservers_test
 
 import (
@@ -47,7 +46,7 @@ func TestUpdateMcpServer_NetworkModeOnlyTransaction(t *testing.T) {
 
 	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
 	require.NoError(t, err)
-	tx, err := ti.conn.Begin(ctx)
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the network-mode-only write
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -80,7 +79,7 @@ func TestUpdateMcpServer_LifecycleRejectsUnproxiedPrivateMode(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tx, err := ti.conn.Begin(ctx)
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the network-mode-only write
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	existing, err := mcpserversrepo.New(tx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{

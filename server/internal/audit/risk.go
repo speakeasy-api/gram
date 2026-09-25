@@ -71,7 +71,7 @@ type LogRiskPolicyCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 
@@ -109,7 +109,7 @@ type LogRiskPolicyUpdateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 
 	SnapshotBefore *types.RiskPolicy
@@ -161,7 +161,7 @@ type LogRiskPolicyDeleteEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 
@@ -199,7 +199,7 @@ type LogRiskPolicyTriggerEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 
@@ -237,7 +237,7 @@ type LogRiskPolicyEvalReviewEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 	Metadata       *RiskPolicyEvalReviewMetadata
 }
@@ -288,7 +288,7 @@ type LogRiskPolicyBypassRequestEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 
 	PolicyBypassRequestSnapshotBefore *RiskPolicyBypassRequestSnapshot
@@ -360,7 +360,7 @@ type LogRiskPolicyChallengeAcknowledgeEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskPolicyID   uuid.UUID //nolint:glint // TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
+	RiskPolicyID   uuid.UUID //nolint:glint // auditeventurnnaming: TODO(AGE-1954): introduce urn.RiskPolicy and migrate to RiskPolicyURN; pending team discussion
 	RiskPolicyName string
 }
 

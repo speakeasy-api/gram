@@ -47,7 +47,7 @@ func TestPublicationRequestsProjectRequiresExistingMarketplace(t *testing.T) {
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	tx, err := ti.conn.Begin(ctx) //nolint:glint // transaction boundary for SQLc outbox checks
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary for SQLc outbox checks
 	require.NoError(t, err)
 	defer func() { require.NoError(t, tx.Rollback(ctx)) }()
 
@@ -73,7 +73,7 @@ func TestPublicationRequestsOrganization(t *testing.T) {
 	ctx, ti := newTestPluginsService(t)
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	tx, err := ti.conn.Begin(ctx) //nolint:glint // transaction boundary for SQLc outbox checks
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary for SQLc outbox checks
 	require.NoError(t, err)
 	defer func() { require.NoError(t, tx.Rollback(ctx)) }()
 
@@ -118,7 +118,7 @@ func TestPublicationRequestsCommitAndRollbackWithMutation(t *testing.T) {
 		require.Equal(t, baseline+additional, count)
 	}
 
-	tx, err := ti.conn.Begin(ctx) //nolint:glint // transaction boundary for SQLc outbox checks
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary for SQLc outbox checks
 	require.NoError(t, err)
 	outcome, err := requester.ProjectWithOutcome(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID)
 	require.NoError(t, err)
@@ -127,7 +127,7 @@ func TestPublicationRequestsCommitAndRollbackWithMutation(t *testing.T) {
 	require.NoError(t, tx.Rollback(ctx))
 	assertCount(0)
 
-	tx, err = ti.conn.Begin(ctx) //nolint:glint // transaction boundary for SQLc outbox checks
+	tx, err = ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary for SQLc outbox checks
 	require.NoError(t, err)
 	require.NoError(t, requester.Project(ctx, tx, ac.ActiveOrganizationID, *ac.ProjectID, ac.UserID))
 	require.NoError(t, tx.Commit(ctx))
@@ -150,7 +150,7 @@ func TestPublicationRequestsCommitAndRollbackWithMutation(t *testing.T) {
 	require.Equal(t, ac.ProjectID.String(), published.GetProjectId())
 	require.Equal(t, ac.UserID, published.GetCreatedByUserId())
 
-	tx, err = ti.conn.Begin(ctx) //nolint:glint // transaction boundary for SQLc outbox checks
+	tx, err = ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction boundary for SQLc outbox checks
 	require.NoError(t, err)
 	require.NoError(t, requester.Project(ctx, tx, "another-organization", *ac.ProjectID, ac.UserID))
 	require.NoError(t, tx.Commit(ctx))
