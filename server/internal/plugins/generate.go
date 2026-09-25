@@ -1785,6 +1785,7 @@ const setup = async (ctx: any) => {
   const directory: string = ctx.location?.directory ?? ""
   // Bus events are service-wide; only sessions seen in this location are reported.
   const own = new Set<string>()
+  const announced = new Set<string>()
   const injected = new Map<string, string>()
   const finalText = new Map<string, { id: string; texts: string[] }>()
   const usage = new Map<string, any>()
@@ -1824,8 +1825,22 @@ const setup = async (ctx: any) => {
     return reply?.output
   }
 
+  const announce = async (sid: string, parentID?: string) => {
+    if (announced.has(sid)) return
+    announced.add(sid)
+    await send("session.created", { info: { id: sid, parentID, directory } }, null)
+  }
+
   await ctx.session.hook("prompt", async (ev: any) => {
-    own.add(ev.sessionID)
+    if (!own.has(ev.sessionID)) {
+      own.add(ev.sessionID)
+      // A location's first session can be created before we subscribe; no usage yet means it is new, not resumed.
+      try {
+        const s: any = await ctx.session.get({ sessionID: ev.sessionID })
+        const t = s?.tokens
+        if (t && !(t.input || t.output || t.cache?.read || t.cache?.write)) await announce(ev.sessionID, s?.parentID)
+      } catch {}
+    }
     turn.set(ev.sessionID, ev.messageID)
     injected.delete(ev.sessionID)
     finalText.delete(ev.sessionID)
@@ -1889,7 +1904,7 @@ const setup = async (ctx: any) => {
       case "session.created":
         if (!here || !sid) return
         own.add(sid)
-        return send("session.created", { info: { id: sid, parentID: d.parentID, directory } }, null)
+        return announce(sid, d.parentID)
       case "session.text.ended": {
         if (!sid || !own.has(sid)) return
         const cur = finalText.get(sid)
@@ -1903,6 +1918,7 @@ const setup = async (ctx: any) => {
       case "session.deleted":
         if (!sid) return
         own.delete(sid)
+        announced.delete(sid)
         turn.delete(sid)
         injected.delete(sid)
         finalText.delete(sid)
