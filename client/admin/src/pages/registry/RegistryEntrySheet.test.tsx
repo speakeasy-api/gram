@@ -408,7 +408,7 @@ it("opens create without fetching or retrying the disabled detail query", async 
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);
   await renderWithApp(
-    <RegistryEntrySheet id={null} open onOpenChange={vi.fn()} />,
+    <RegistryEntrySheet id={null} open onOpenChange={vi.fn<() => void>()} />,
     { queryClient: client },
   );
   await screen.findByLabelText("Record JSON");
