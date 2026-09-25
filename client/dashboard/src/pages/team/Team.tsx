@@ -73,7 +73,6 @@ import { cn } from "@/lib/utils";
 import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
-import { KillswitchUserStatusIcon } from "@/components/killswitch/KillswitchUserStatusIcon";
 import { killswitchCreateHref } from "@/components/killswitch/killswitch-routing";
 import { useKillswitchUserBadges } from "@/components/killswitch/KillswitchUserStatus";
 import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
@@ -594,13 +593,6 @@ function TeamInner() {
                   {member.name}
                 </IdentityLink>
               </Text>
-              <KillswitchUserStatusIcon
-                badge={killswitchBadges.badges.get(member.userId)}
-                unavailable={killswitchBadges.unavailableUserIds.has(
-                  member.userId,
-                )}
-                href={memberAccessHref(member.userId)}
-              />
             </div>
             <Text variant="body" className="text-muted-foreground text-sm">
               {member.email}
