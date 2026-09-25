@@ -77,7 +77,7 @@ export function useUserSessionToken({
 }): UseUserSessionTokenResult {
   const session = useSession();
   const project = useProject();
-  const mintMutation = useMintUserSessionMutation();
+  const mintMutation = useMintUserSessionMutation({ throwOnError: false });
 
   const { kind, id } = target;
   const isIssuerGated = !!userSessionIssuerId;
@@ -115,6 +115,7 @@ export function useUserSessionToken({
     refetchInterval: 1000 * 60 * 45,
     refetchOnWindowFocus: false,
     retry: false,
+    throwOnError: false,
   });
 
   return {
