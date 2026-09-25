@@ -59,6 +59,9 @@ func TestSlackDirectoryConnectionRejectsInvalidValues(t *testing.T) {
 	_, err = urn.ParseSlackDirectoryConnection("slack_directory_connection:not-a-uuid")
 	require.ErrorIs(t, err, urn.ErrInvalid)
 
+	_, err = urn.ParseSlackDirectoryConnection("slack_directory_connection:" + uuid.Nil.String())
+	require.ErrorIs(t, err, urn.ErrInvalid)
+
 	_, err = urn.NewSlackDirectoryConnection(uuid.Nil).MarshalJSON()
 	require.ErrorIs(t, err, urn.ErrInvalid)
 }
