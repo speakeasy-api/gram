@@ -54,6 +54,7 @@ import (
 	jsonwebkeysetsc "github.com/speakeasy-api/gram/server/gen/http/json_web_key_sets/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
 	killswitchesc "github.com/speakeasy-api/gram/server/gen/http/killswitches/client"
+	launcherc "github.com/speakeasy-api/gram/server/gen/http/launcher/client"
 	litellmc "github.com/speakeasy-api/gram/server/gen/http/litellm/client"
 	mcpapprovalc "github.com/speakeasy-api/gram/server/gen/http/mcp_approval/client"
 	mcpendpointsc "github.com/speakeasy-api/gram/server/gen/http/mcp_endpoints/client"
@@ -100,6 +101,7 @@ import (
 	usersessionissuerscimdclientsc "github.com/speakeasy-api/gram/server/gen/http/user_session_issuers_cimd_clients/client"
 	usersessionsc "github.com/speakeasy-api/gram/server/gen/http/user_sessions/client"
 	variationsc "github.com/speakeasy-api/gram/server/gen/http/variations/client"
+	workloadidentitiesc "github.com/speakeasy-api/gram/server/gen/http/workload_identities/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -145,6 +147,7 @@ func UsageCommands() []string {
 		"integrations (get|list)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
 		"keys (create-key|rotate-key|list-keys|revoke-key|verify-key)",
+		"launcher judge",
 		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
 		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|start-research|record-decision)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
@@ -168,14 +171,14 @@ func UsageCommands() []string {
 		"projects (get-project|create-project|update-project|list-projects|set-logo|list-allowed-origins|upsert-allowed-origin|delete-project|set-organization-whitelist)",
 		"remote-mcp (create-server|create-server-and-mcp-server|list-servers|get-server|update-server|discover-protected-resource-metadata|probe-url|verify-url|delete-server|list-server-headers|get-server-header|create-server-header|update-server-header|delete-server-header)",
 		"organization-remote-session-clients (list-clients|get-client|get-client-delegation-status|get-client-delete-preflight|list-client-mcp-servers|create-client|create-cimd-client|update-client|attach-client-key-set|detach-client-key-set|rotate-client|delete-client|remove-client-from-mcp-server)",
-		"remote-session-clients (create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|attach-key-set|detach-key-set|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
+		"remote-session-clients (prepare-ema|read-ema|unlink-ema|create-remote-session-client|create-cimd|update-remote-session-client|attach-user-session-issuer|detach-user-session-issuer|attach-key-set|detach-key-set|list-remote-session-clients|get-remote-session-client|delete-remote-session-client)",
 		"organization-remote-session-issuers (create-issuer|list-issuers|get-issuer|get-issuer-delete-preflight|get-issuer-duplicate-preflight|update-issuer|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|fetch-issuer-metadata|refresh-issuer-metadata)",
 		"remote-session-issuers (fetch-remote-session-issuer-metadata|refresh-remote-session-issuer-metadata|create-remote-session-issuer|update-remote-session-issuer|list-remote-session-issuers|get-remote-session-issuer|get-remote-session-issuer-duplicate-preflight|delete-remote-session-issuer)",
 		"admin-remote-sessions (create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|create-global-client|list-global-clients|get-global-client|update-global-client|delete-global-client|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer)",
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
-		"remote-sessions (list-bindings|attach-binding|detach-binding|list-remote-sessions|revoke-remote-session)",
+		"remote-sessions (list-bindings|attach-binding|detach-binding|commit-server-identity-configuration|list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"risk (create-risk-policy|list-risk-policies|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
@@ -188,13 +191,14 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|list-tools|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|get-organization-onboarding|set-organization-onboarding|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|get-organization-onboarding|set-organization-onboarding|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
 		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
+		"workload-identities (list|register-issuer|withdraw-issuer|admit-subject|withdraw-subject)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 	}
 }
@@ -1566,6 +1570,13 @@ func ParseEndpoint(
 		keysVerifyKeyFlags           = flag.NewFlagSet("verify-key", flag.ExitOnError)
 		keysVerifyKeyApikeyTokenFlag = keysVerifyKeyFlags.String("apikey-token", "", "")
 
+		launcherFlags = flag.NewFlagSet("launcher", flag.ContinueOnError)
+
+		launcherJudgeFlags                = flag.NewFlagSet("judge", flag.ExitOnError)
+		launcherJudgeBodyFlag             = launcherJudgeFlags.String("body", "REQUIRED", "")
+		launcherJudgeSessionTokenFlag     = launcherJudgeFlags.String("session-token", "", "")
+		launcherJudgeProjectSlugInputFlag = launcherJudgeFlags.String("project-slug-input", "", "")
+
 		litellmFlags = flag.NewFlagSet("litellm", flag.ContinueOnError)
 
 		litellmCreateInstanceFlags                = flag.NewFlagSet("create-instance", flag.ExitOnError)
@@ -2483,6 +2494,24 @@ func ParseEndpoint(
 
 		remoteSessionClientsFlags = flag.NewFlagSet("remote-session-clients", flag.ContinueOnError)
 
+		remoteSessionClientsPrepareEMAFlags                = flag.NewFlagSet("prepare-ema", flag.ExitOnError)
+		remoteSessionClientsPrepareEMABodyFlag             = remoteSessionClientsPrepareEMAFlags.String("body", "REQUIRED", "")
+		remoteSessionClientsPrepareEMASessionTokenFlag     = remoteSessionClientsPrepareEMAFlags.String("session-token", "", "")
+		remoteSessionClientsPrepareEMAApikeyTokenFlag      = remoteSessionClientsPrepareEMAFlags.String("apikey-token", "", "")
+		remoteSessionClientsPrepareEMAProjectSlugInputFlag = remoteSessionClientsPrepareEMAFlags.String("project-slug-input", "", "")
+
+		remoteSessionClientsReadEMAFlags                = flag.NewFlagSet("read-ema", flag.ExitOnError)
+		remoteSessionClientsReadEMABodyFlag             = remoteSessionClientsReadEMAFlags.String("body", "REQUIRED", "")
+		remoteSessionClientsReadEMASessionTokenFlag     = remoteSessionClientsReadEMAFlags.String("session-token", "", "")
+		remoteSessionClientsReadEMAApikeyTokenFlag      = remoteSessionClientsReadEMAFlags.String("apikey-token", "", "")
+		remoteSessionClientsReadEMAProjectSlugInputFlag = remoteSessionClientsReadEMAFlags.String("project-slug-input", "", "")
+
+		remoteSessionClientsUnlinkEMAFlags                = flag.NewFlagSet("unlink-ema", flag.ExitOnError)
+		remoteSessionClientsUnlinkEMABodyFlag             = remoteSessionClientsUnlinkEMAFlags.String("body", "REQUIRED", "")
+		remoteSessionClientsUnlinkEMASessionTokenFlag     = remoteSessionClientsUnlinkEMAFlags.String("session-token", "", "")
+		remoteSessionClientsUnlinkEMAApikeyTokenFlag      = remoteSessionClientsUnlinkEMAFlags.String("apikey-token", "", "")
+		remoteSessionClientsUnlinkEMAProjectSlugInputFlag = remoteSessionClientsUnlinkEMAFlags.String("project-slug-input", "", "")
+
 		remoteSessionClientsCreateRemoteSessionClientFlags                = flag.NewFlagSet("create-remote-session-client", flag.ExitOnError)
 		remoteSessionClientsCreateRemoteSessionClientBodyFlag             = remoteSessionClientsCreateRemoteSessionClientFlags.String("body", "REQUIRED", "")
 		remoteSessionClientsCreateRemoteSessionClientSessionTokenFlag     = remoteSessionClientsCreateRemoteSessionClientFlags.String("session-token", "", "")
@@ -2777,6 +2806,12 @@ func ParseEndpoint(
 		remoteSessionsDetachBindingSessionTokenFlag     = remoteSessionsDetachBindingFlags.String("session-token", "", "")
 		remoteSessionsDetachBindingProjectSlugInputFlag = remoteSessionsDetachBindingFlags.String("project-slug-input", "", "")
 
+		remoteSessionsCommitServerIdentityConfigurationFlags                = flag.NewFlagSet("commit-server-identity-configuration", flag.ExitOnError)
+		remoteSessionsCommitServerIdentityConfigurationBodyFlag             = remoteSessionsCommitServerIdentityConfigurationFlags.String("body", "REQUIRED", "")
+		remoteSessionsCommitServerIdentityConfigurationSessionTokenFlag     = remoteSessionsCommitServerIdentityConfigurationFlags.String("session-token", "", "")
+		remoteSessionsCommitServerIdentityConfigurationApikeyTokenFlag      = remoteSessionsCommitServerIdentityConfigurationFlags.String("apikey-token", "", "")
+		remoteSessionsCommitServerIdentityConfigurationProjectSlugInputFlag = remoteSessionsCommitServerIdentityConfigurationFlags.String("project-slug-input", "", "")
+
 		remoteSessionsListRemoteSessionsFlags                     = flag.NewFlagSet("list-remote-sessions", flag.ExitOnError)
 		remoteSessionsListRemoteSessionsPrincipalIDFlag           = remoteSessionsListRemoteSessionsFlags.String("principal-id", "", "")
 		remoteSessionsListRemoteSessionsUserSessionIssuerIDFlag   = remoteSessionsListRemoteSessionsFlags.String("user-session-issuer-id", "", "")
@@ -2815,6 +2850,13 @@ func ParseEndpoint(
 		riskListRiskPoliciesApikeyTokenFlag      = riskListRiskPoliciesFlags.String("apikey-token", "", "")
 		riskListRiskPoliciesSessionTokenFlag     = riskListRiskPoliciesFlags.String("session-token", "", "")
 		riskListRiskPoliciesProjectSlugInputFlag = riskListRiskPoliciesFlags.String("project-slug-input", "", "")
+
+		riskListRiskPoliciesForMcpServerFlags                = flag.NewFlagSet("list-risk-policies-for-mcp-server", flag.ExitOnError)
+		riskListRiskPoliciesForMcpServerMcpServerIDFlag      = riskListRiskPoliciesForMcpServerFlags.String("mcp-server-id", "REQUIRED", "")
+		riskListRiskPoliciesForMcpServerToolNameFlag         = riskListRiskPoliciesForMcpServerFlags.String("tool-name", "", "")
+		riskListRiskPoliciesForMcpServerApikeyTokenFlag      = riskListRiskPoliciesForMcpServerFlags.String("apikey-token", "", "")
+		riskListRiskPoliciesForMcpServerSessionTokenFlag     = riskListRiskPoliciesForMcpServerFlags.String("session-token", "", "")
+		riskListRiskPoliciesForMcpServerProjectSlugInputFlag = riskListRiskPoliciesForMcpServerFlags.String("project-slug-input", "", "")
 
 		riskListBuiltinExclusionsFlags                = flag.NewFlagSet("list-builtin-exclusions", flag.ExitOnError)
 		riskListBuiltinExclusionsApikeyTokenFlag      = riskListBuiltinExclusionsFlags.String("apikey-token", "", "")
@@ -3986,6 +4028,11 @@ func ParseEndpoint(
 		adminListOrganizationProjectsOrganizationIDFlag    = adminListOrganizationProjectsFlags.String("organization-id", "REQUIRED", "")
 		adminListOrganizationProjectsAdminSessionTokenFlag = adminListOrganizationProjectsFlags.String("admin-session-token", "", "")
 
+		adminListProjectMcpServersFlags                 = flag.NewFlagSet("list-project-mcp-servers", flag.ExitOnError)
+		adminListProjectMcpServersOrganizationIDFlag    = adminListProjectMcpServersFlags.String("organization-id", "REQUIRED", "")
+		adminListProjectMcpServersProjectIDFlag         = adminListProjectMcpServersFlags.String("project-id", "REQUIRED", "")
+		adminListProjectMcpServersAdminSessionTokenFlag = adminListProjectMcpServersFlags.String("admin-session-token", "", "")
+
 		adminListOrganizationActivityFlags                 = flag.NewFlagSet("list-organization-activity", flag.ExitOnError)
 		adminListOrganizationActivityOrganizationIDFlag    = adminListOrganizationActivityFlags.String("organization-id", "REQUIRED", "")
 		adminListOrganizationActivityCursorFlag            = adminListOrganizationActivityFlags.String("cursor", "", "")
@@ -4363,6 +4410,37 @@ func ParseEndpoint(
 		userSessionsRevokeUserSessionApikeyTokenFlag      = userSessionsRevokeUserSessionFlags.String("apikey-token", "", "")
 		userSessionsRevokeUserSessionProjectSlugInputFlag = userSessionsRevokeUserSessionFlags.String("project-slug-input", "", "")
 
+		workloadIdentitiesFlags = flag.NewFlagSet("workload-identities", flag.ContinueOnError)
+
+		workloadIdentitiesListFlags                = flag.NewFlagSet("list", flag.ExitOnError)
+		workloadIdentitiesListSessionTokenFlag     = workloadIdentitiesListFlags.String("session-token", "", "")
+		workloadIdentitiesListApikeyTokenFlag      = workloadIdentitiesListFlags.String("apikey-token", "", "")
+		workloadIdentitiesListProjectSlugInputFlag = workloadIdentitiesListFlags.String("project-slug-input", "", "")
+
+		workloadIdentitiesRegisterIssuerFlags                = flag.NewFlagSet("register-issuer", flag.ExitOnError)
+		workloadIdentitiesRegisterIssuerBodyFlag             = workloadIdentitiesRegisterIssuerFlags.String("body", "REQUIRED", "")
+		workloadIdentitiesRegisterIssuerSessionTokenFlag     = workloadIdentitiesRegisterIssuerFlags.String("session-token", "", "")
+		workloadIdentitiesRegisterIssuerApikeyTokenFlag      = workloadIdentitiesRegisterIssuerFlags.String("apikey-token", "", "")
+		workloadIdentitiesRegisterIssuerProjectSlugInputFlag = workloadIdentitiesRegisterIssuerFlags.String("project-slug-input", "", "")
+
+		workloadIdentitiesWithdrawIssuerFlags                = flag.NewFlagSet("withdraw-issuer", flag.ExitOnError)
+		workloadIdentitiesWithdrawIssuerIDFlag               = workloadIdentitiesWithdrawIssuerFlags.String("id", "REQUIRED", "")
+		workloadIdentitiesWithdrawIssuerSessionTokenFlag     = workloadIdentitiesWithdrawIssuerFlags.String("session-token", "", "")
+		workloadIdentitiesWithdrawIssuerApikeyTokenFlag      = workloadIdentitiesWithdrawIssuerFlags.String("apikey-token", "", "")
+		workloadIdentitiesWithdrawIssuerProjectSlugInputFlag = workloadIdentitiesWithdrawIssuerFlags.String("project-slug-input", "", "")
+
+		workloadIdentitiesAdmitSubjectFlags                = flag.NewFlagSet("admit-subject", flag.ExitOnError)
+		workloadIdentitiesAdmitSubjectBodyFlag             = workloadIdentitiesAdmitSubjectFlags.String("body", "REQUIRED", "")
+		workloadIdentitiesAdmitSubjectSessionTokenFlag     = workloadIdentitiesAdmitSubjectFlags.String("session-token", "", "")
+		workloadIdentitiesAdmitSubjectApikeyTokenFlag      = workloadIdentitiesAdmitSubjectFlags.String("apikey-token", "", "")
+		workloadIdentitiesAdmitSubjectProjectSlugInputFlag = workloadIdentitiesAdmitSubjectFlags.String("project-slug-input", "", "")
+
+		workloadIdentitiesWithdrawSubjectFlags                = flag.NewFlagSet("withdraw-subject", flag.ExitOnError)
+		workloadIdentitiesWithdrawSubjectIDFlag               = workloadIdentitiesWithdrawSubjectFlags.String("id", "REQUIRED", "")
+		workloadIdentitiesWithdrawSubjectSessionTokenFlag     = workloadIdentitiesWithdrawSubjectFlags.String("session-token", "", "")
+		workloadIdentitiesWithdrawSubjectApikeyTokenFlag      = workloadIdentitiesWithdrawSubjectFlags.String("apikey-token", "", "")
+		workloadIdentitiesWithdrawSubjectProjectSlugInputFlag = workloadIdentitiesWithdrawSubjectFlags.String("project-slug-input", "", "")
+
 		variationsFlags = flag.NewFlagSet("variations", flag.ContinueOnError)
 
 		variationsUpsertGlobalFlags                = flag.NewFlagSet("upsert-global", flag.ExitOnError)
@@ -4718,6 +4796,9 @@ func ParseEndpoint(
 	keysRevokeKeyFlags.Usage = keysRevokeKeyUsage
 	keysVerifyKeyFlags.Usage = keysVerifyKeyUsage
 
+	launcherFlags.Usage = launcherUsage
+	launcherJudgeFlags.Usage = launcherJudgeUsage
+
 	litellmFlags.Usage = litellmUsage
 	litellmCreateInstanceFlags.Usage = litellmCreateInstanceUsage
 	litellmListInstancesFlags.Usage = litellmListInstancesUsage
@@ -4940,6 +5021,9 @@ func ParseEndpoint(
 	organizationRemoteSessionClientsRemoveClientFromMcpServerFlags.Usage = organizationRemoteSessionClientsRemoveClientFromMcpServerUsage
 
 	remoteSessionClientsFlags.Usage = remoteSessionClientsUsage
+	remoteSessionClientsPrepareEMAFlags.Usage = remoteSessionClientsPrepareEMAUsage
+	remoteSessionClientsReadEMAFlags.Usage = remoteSessionClientsReadEMAUsage
+	remoteSessionClientsUnlinkEMAFlags.Usage = remoteSessionClientsUnlinkEMAUsage
 	remoteSessionClientsCreateRemoteSessionClientFlags.Usage = remoteSessionClientsCreateRemoteSessionClientUsage
 	remoteSessionClientsCreateCimdFlags.Usage = remoteSessionClientsCreateCimdUsage
 	remoteSessionClientsUpdateRemoteSessionClientFlags.Usage = remoteSessionClientsUpdateRemoteSessionClientUsage
@@ -5003,6 +5087,7 @@ func ParseEndpoint(
 	remoteSessionsListBindingsFlags.Usage = remoteSessionsListBindingsUsage
 	remoteSessionsAttachBindingFlags.Usage = remoteSessionsAttachBindingUsage
 	remoteSessionsDetachBindingFlags.Usage = remoteSessionsDetachBindingUsage
+	remoteSessionsCommitServerIdentityConfigurationFlags.Usage = remoteSessionsCommitServerIdentityConfigurationUsage
 	remoteSessionsListRemoteSessionsFlags.Usage = remoteSessionsListRemoteSessionsUsage
 	remoteSessionsRevokeRemoteSessionFlags.Usage = remoteSessionsRevokeRemoteSessionUsage
 
@@ -5012,6 +5097,7 @@ func ParseEndpoint(
 	riskFlags.Usage = riskUsage
 	riskCreateRiskPolicyFlags.Usage = riskCreateRiskPolicyUsage
 	riskListRiskPoliciesFlags.Usage = riskListRiskPoliciesUsage
+	riskListRiskPoliciesForMcpServerFlags.Usage = riskListRiskPoliciesForMcpServerUsage
 	riskListBuiltinExclusionsFlags.Usage = riskListBuiltinExclusionsUsage
 	riskGetRiskPolicyFlags.Usage = riskGetRiskPolicyUsage
 	riskUpdateRiskPolicyFlags.Usage = riskUpdateRiskPolicyUsage
@@ -5238,6 +5324,7 @@ func ParseEndpoint(
 	adminGetOrganizationFlags.Usage = adminGetOrganizationUsage
 	adminListOrganizationMembersFlags.Usage = adminListOrganizationMembersUsage
 	adminListOrganizationProjectsFlags.Usage = adminListOrganizationProjectsUsage
+	adminListProjectMcpServersFlags.Usage = adminListProjectMcpServersUsage
 	adminListOrganizationActivityFlags.Usage = adminListOrganizationActivityUsage
 	adminListOrganizationsFlags.Usage = adminListOrganizationsUsage
 	adminExtendTrialFlags.Usage = adminExtendTrialUsage
@@ -5321,6 +5408,13 @@ func ParseEndpoint(
 	userSessionsListFacetsFlags.Usage = userSessionsListFacetsUsage
 	userSessionsMintUserSessionFlags.Usage = userSessionsMintUserSessionUsage
 	userSessionsRevokeUserSessionFlags.Usage = userSessionsRevokeUserSessionUsage
+
+	workloadIdentitiesFlags.Usage = workloadIdentitiesUsage
+	workloadIdentitiesListFlags.Usage = workloadIdentitiesListUsage
+	workloadIdentitiesRegisterIssuerFlags.Usage = workloadIdentitiesRegisterIssuerUsage
+	workloadIdentitiesWithdrawIssuerFlags.Usage = workloadIdentitiesWithdrawIssuerUsage
+	workloadIdentitiesAdmitSubjectFlags.Usage = workloadIdentitiesAdmitSubjectUsage
+	workloadIdentitiesWithdrawSubjectFlags.Usage = workloadIdentitiesWithdrawSubjectUsage
 
 	variationsFlags.Usage = variationsUsage
 	variationsUpsertGlobalFlags.Usage = variationsUpsertGlobalUsage
@@ -5416,6 +5510,8 @@ func ParseEndpoint(
 			svcf = jsonWebKeySetsFlags
 		case "keys":
 			svcf = keysFlags
+		case "launcher":
+			svcf = launcherFlags
 		case "litellm":
 			svcf = litellmFlags
 		case "mcp-approval":
@@ -5516,6 +5612,8 @@ func ParseEndpoint(
 			svcf = organizationUserSessionIssuersFlags
 		case "user-sessions":
 			svcf = userSessionsFlags
+		case "workload-identities":
+			svcf = workloadIdentitiesFlags
 		case "variations":
 			svcf = variationsFlags
 		default:
@@ -6439,6 +6537,13 @@ func ParseEndpoint(
 
 			}
 
+		case "launcher":
+			switch epn {
+			case "judge":
+				epf = launcherJudgeFlags
+
+			}
+
 		case "litellm":
 			switch epn {
 			case "create-instance":
@@ -7058,6 +7163,15 @@ func ParseEndpoint(
 
 		case "remote-session-clients":
 			switch epn {
+			case "prepare-ema":
+				epf = remoteSessionClientsPrepareEMAFlags
+
+			case "read-ema":
+				epf = remoteSessionClientsReadEMAFlags
+
+			case "unlink-ema":
+				epf = remoteSessionClientsUnlinkEMAFlags
+
 			case "create-remote-session-client":
 				epf = remoteSessionClientsCreateRemoteSessionClientFlags
 
@@ -7237,6 +7351,9 @@ func ParseEndpoint(
 			case "detach-binding":
 				epf = remoteSessionsDetachBindingFlags
 
+			case "commit-server-identity-configuration":
+				epf = remoteSessionsCommitServerIdentityConfigurationFlags
+
 			case "list-remote-sessions":
 				epf = remoteSessionsListRemoteSessionsFlags
 
@@ -7259,6 +7376,9 @@ func ParseEndpoint(
 
 			case "list-risk-policies":
 				epf = riskListRiskPoliciesFlags
+
+			case "list-risk-policies-for-mcp-server":
+				epf = riskListRiskPoliciesForMcpServerFlags
 
 			case "list-builtin-exclusions":
 				epf = riskListBuiltinExclusionsFlags
@@ -7912,6 +8032,9 @@ func ParseEndpoint(
 			case "list-organization-projects":
 				epf = adminListOrganizationProjectsFlags
 
+			case "list-project-mcp-servers":
+				epf = adminListProjectMcpServersFlags
+
 			case "list-organization-activity":
 				epf = adminListOrganizationActivityFlags
 
@@ -8148,6 +8271,25 @@ func ParseEndpoint(
 
 			case "revoke-user-session":
 				epf = userSessionsRevokeUserSessionFlags
+
+			}
+
+		case "workload-identities":
+			switch epn {
+			case "list":
+				epf = workloadIdentitiesListFlags
+
+			case "register-issuer":
+				epf = workloadIdentitiesRegisterIssuerFlags
+
+			case "withdraw-issuer":
+				epf = workloadIdentitiesWithdrawIssuerFlags
+
+			case "admit-subject":
+				epf = workloadIdentitiesAdmitSubjectFlags
+
+			case "withdraw-subject":
+				epf = workloadIdentitiesWithdrawSubjectFlags
 
 			}
 
@@ -9113,6 +9255,13 @@ func ParseEndpoint(
 				endpoint = c.VerifyKey()
 				data, err = keysc.BuildVerifyKeyPayload(*keysVerifyKeyApikeyTokenFlag)
 			}
+		case "launcher":
+			c := launcherc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "judge":
+				endpoint = c.Judge()
+				data, err = launcherc.BuildJudgePayload(*launcherJudgeBodyFlag, *launcherJudgeSessionTokenFlag, *launcherJudgeProjectSlugInputFlag)
+			}
 		case "litellm":
 			c := litellmc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -9745,6 +9894,15 @@ func ParseEndpoint(
 		case "remote-session-clients":
 			c := remotesessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
+			case "prepare-ema":
+				endpoint = c.PrepareEMA()
+				data, err = remotesessionclientsc.BuildPrepareEMAPayload(*remoteSessionClientsPrepareEMABodyFlag, *remoteSessionClientsPrepareEMASessionTokenFlag, *remoteSessionClientsPrepareEMAApikeyTokenFlag, *remoteSessionClientsPrepareEMAProjectSlugInputFlag)
+			case "read-ema":
+				endpoint = c.ReadEMA()
+				data, err = remotesessionclientsc.BuildReadEMAPayload(*remoteSessionClientsReadEMABodyFlag, *remoteSessionClientsReadEMASessionTokenFlag, *remoteSessionClientsReadEMAApikeyTokenFlag, *remoteSessionClientsReadEMAProjectSlugInputFlag)
+			case "unlink-ema":
+				endpoint = c.UnlinkEMA()
+				data, err = remotesessionclientsc.BuildUnlinkEMAPayload(*remoteSessionClientsUnlinkEMABodyFlag, *remoteSessionClientsUnlinkEMASessionTokenFlag, *remoteSessionClientsUnlinkEMAApikeyTokenFlag, *remoteSessionClientsUnlinkEMAProjectSlugInputFlag)
 			case "create-remote-session-client":
 				endpoint = c.CreateRemoteSessionClient()
 				data, err = remotesessionclientsc.BuildCreateRemoteSessionClientPayload(*remoteSessionClientsCreateRemoteSessionClientBodyFlag, *remoteSessionClientsCreateRemoteSessionClientSessionTokenFlag, *remoteSessionClientsCreateRemoteSessionClientApikeyTokenFlag, *remoteSessionClientsCreateRemoteSessionClientProjectSlugInputFlag)
@@ -9924,6 +10082,9 @@ func ParseEndpoint(
 			case "detach-binding":
 				endpoint = c.DetachBinding()
 				data, err = remotesessionsc.BuildDetachBindingPayload(*remoteSessionsDetachBindingBodyFlag, *remoteSessionsDetachBindingSessionTokenFlag, *remoteSessionsDetachBindingProjectSlugInputFlag)
+			case "commit-server-identity-configuration":
+				endpoint = c.CommitServerIdentityConfiguration()
+				data, err = remotesessionsc.BuildCommitServerIdentityConfigurationPayload(*remoteSessionsCommitServerIdentityConfigurationBodyFlag, *remoteSessionsCommitServerIdentityConfigurationSessionTokenFlag, *remoteSessionsCommitServerIdentityConfigurationApikeyTokenFlag, *remoteSessionsCommitServerIdentityConfigurationProjectSlugInputFlag)
 			case "list-remote-sessions":
 				endpoint = c.ListRemoteSessions()
 				data, err = remotesessionsc.BuildListRemoteSessionsPayload(*remoteSessionsListRemoteSessionsPrincipalIDFlag, *remoteSessionsListRemoteSessionsUserSessionIssuerIDFlag, *remoteSessionsListRemoteSessionsSubjectUrnFlag, *remoteSessionsListRemoteSessionsRemoteSessionClientIDFlag, *remoteSessionsListRemoteSessionsCursorFlag, *remoteSessionsListRemoteSessionsLimitFlag, *remoteSessionsListRemoteSessionsSessionTokenFlag, *remoteSessionsListRemoteSessionsApikeyTokenFlag, *remoteSessionsListRemoteSessionsProjectSlugInputFlag)
@@ -9947,6 +10108,9 @@ func ParseEndpoint(
 			case "list-risk-policies":
 				endpoint = c.ListRiskPolicies()
 				data, err = riskc.BuildListRiskPoliciesPayload(*riskListRiskPoliciesApikeyTokenFlag, *riskListRiskPoliciesSessionTokenFlag, *riskListRiskPoliciesProjectSlugInputFlag)
+			case "list-risk-policies-for-mcp-server":
+				endpoint = c.ListRiskPoliciesForMcpServer()
+				data, err = riskc.BuildListRiskPoliciesForMcpServerPayload(*riskListRiskPoliciesForMcpServerMcpServerIDFlag, *riskListRiskPoliciesForMcpServerToolNameFlag, *riskListRiskPoliciesForMcpServerApikeyTokenFlag, *riskListRiskPoliciesForMcpServerSessionTokenFlag, *riskListRiskPoliciesForMcpServerProjectSlugInputFlag)
 			case "list-builtin-exclusions":
 				endpoint = c.ListBuiltinExclusions()
 				data, err = riskc.BuildListBuiltinExclusionsPayload(*riskListBuiltinExclusionsApikeyTokenFlag, *riskListBuiltinExclusionsSessionTokenFlag, *riskListBuiltinExclusionsProjectSlugInputFlag)
@@ -10598,6 +10762,9 @@ func ParseEndpoint(
 			case "list-organization-projects":
 				endpoint = c.ListOrganizationProjects()
 				data, err = adminc.BuildListOrganizationProjectsPayload(*adminListOrganizationProjectsOrganizationIDFlag, *adminListOrganizationProjectsAdminSessionTokenFlag)
+			case "list-project-mcp-servers":
+				endpoint = c.ListProjectMcpServers()
+				data, err = adminc.BuildListProjectMcpServersPayload(*adminListProjectMcpServersOrganizationIDFlag, *adminListProjectMcpServersProjectIDFlag, *adminListProjectMcpServersAdminSessionTokenFlag)
 			case "list-organization-activity":
 				endpoint = c.ListOrganizationActivity()
 				data, err = adminc.BuildListOrganizationActivityPayload(*adminListOrganizationActivityOrganizationIDFlag, *adminListOrganizationActivityCursorFlag, *adminListOrganizationActivityAdminSessionTokenFlag)
@@ -10838,6 +11005,25 @@ func ParseEndpoint(
 			case "revoke-user-session":
 				endpoint = c.RevokeUserSession()
 				data, err = usersessionsc.BuildRevokeUserSessionPayload(*userSessionsRevokeUserSessionIDFlag, *userSessionsRevokeUserSessionSessionTokenFlag, *userSessionsRevokeUserSessionApikeyTokenFlag, *userSessionsRevokeUserSessionProjectSlugInputFlag)
+			}
+		case "workload-identities":
+			c := workloadidentitiesc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "list":
+				endpoint = c.List()
+				data, err = workloadidentitiesc.BuildListPayload(*workloadIdentitiesListSessionTokenFlag, *workloadIdentitiesListApikeyTokenFlag, *workloadIdentitiesListProjectSlugInputFlag)
+			case "register-issuer":
+				endpoint = c.RegisterIssuer()
+				data, err = workloadidentitiesc.BuildRegisterIssuerPayload(*workloadIdentitiesRegisterIssuerBodyFlag, *workloadIdentitiesRegisterIssuerSessionTokenFlag, *workloadIdentitiesRegisterIssuerApikeyTokenFlag, *workloadIdentitiesRegisterIssuerProjectSlugInputFlag)
+			case "withdraw-issuer":
+				endpoint = c.WithdrawIssuer()
+				data, err = workloadidentitiesc.BuildWithdrawIssuerPayload(*workloadIdentitiesWithdrawIssuerIDFlag, *workloadIdentitiesWithdrawIssuerSessionTokenFlag, *workloadIdentitiesWithdrawIssuerApikeyTokenFlag, *workloadIdentitiesWithdrawIssuerProjectSlugInputFlag)
+			case "admit-subject":
+				endpoint = c.AdmitSubject()
+				data, err = workloadidentitiesc.BuildAdmitSubjectPayload(*workloadIdentitiesAdmitSubjectBodyFlag, *workloadIdentitiesAdmitSubjectSessionTokenFlag, *workloadIdentitiesAdmitSubjectApikeyTokenFlag, *workloadIdentitiesAdmitSubjectProjectSlugInputFlag)
+			case "withdraw-subject":
+				endpoint = c.WithdrawSubject()
+				data, err = workloadidentitiesc.BuildWithdrawSubjectPayload(*workloadIdentitiesWithdrawSubjectIDFlag, *workloadIdentitiesWithdrawSubjectSessionTokenFlag, *workloadIdentitiesWithdrawSubjectApikeyTokenFlag, *workloadIdentitiesWithdrawSubjectProjectSlugInputFlag)
 			}
 		case "variations":
 			c := variationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -17065,6 +17251,38 @@ func keysVerifyKeyUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys verify-key --apikey-token \"abc123\"")
 }
 
+// launcherUsage displays the usage of the launcher command and its subcommands.
+func launcherUsage() {
+	fmt.Fprintln(os.Stderr, `Rank command palette candidates by the intent behind the text the user typed.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] launcher COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    judge: Judge which of the supplied command palette candidates the typed query refers to, what kind of action it asks for, and whether the intent is settled enough to act on Enter. Returns probability distributions rather than text. When no intent service is configured the response carries disabled=true and the palette falls back to fuzzy ordering.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s launcher COMMAND --help\n", os.Args[0])
+}
+func launcherJudgeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] launcher judge", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Judge which of the supplied command palette candidates the typed query refers to, what kind of action it asks for, and whether the intent is settled enough to act on Enter. Returns probability distributions rather than text. When no intent service is configured the response carries disabled=true and the palette falls back to fuzzy ordering.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "launcher judge --body '{\n      \"candidates\": [\n         {\n            \"detail\": \"aaa\",\n            \"id\": \"aaa\",\n            \"kind\": \"aaa\",\n            \"title\": \"aaa\",\n            \"verbs\": [\n               \"aaa\",\n               \"aaa\",\n               \"aaa\"\n            ]\n         },\n         {\n            \"detail\": \"aaa\",\n            \"id\": \"aaa\",\n            \"kind\": \"aaa\",\n            \"title\": \"aaa\",\n            \"verbs\": [\n               \"aaa\",\n               \"aaa\",\n               \"aaa\"\n            ]\n         },\n         {\n            \"detail\": \"aaa\",\n            \"id\": \"aaa\",\n            \"kind\": \"aaa\",\n            \"title\": \"aaa\",\n            \"verbs\": [\n               \"aaa\",\n               \"aaa\",\n               \"aaa\"\n            ]\n         }\n      ],\n      \"context\": {\n         \"route\": \"aaa\"\n      },\n      \"query\": \"aaa\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 // litellmUsage displays the usage of the litellm command and its subcommands.
 func litellmUsage() {
 	fmt.Fprintln(os.Stderr, `Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.`)
@@ -20099,7 +20317,7 @@ func pluginsAddPluginServerUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins add-plugin-server --body '{\n      \"display_name\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"policy\": \"optional\",\n      \"sort_order\": 1,\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins add-plugin-server --body '{\n      \"display_name\": \"abc123\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"plugin_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"policy\": \"optional\",\n      \"sort_order\": 1,\n      \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsUpdatePluginServerUsage() {
@@ -21311,6 +21529,9 @@ func remoteSessionClientsUsage() {
 	fmt.Fprintln(os.Stderr, `Manage remote_session_client records — credentials Gram uses when acting as an OAuth client of a remote_session_issuer. client_secret_encrypted is never returned.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-session-clients COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    prepare-ema: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
+	fmt.Fprintln(os.Stderr, `    read-ema: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
+	fmt.Fprintln(os.Stderr, `    unlink-ema: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
 	fmt.Fprintln(os.Stderr, `    create-remote-session-client: Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.`)
 	fmt.Fprintln(os.Stderr, `    create-cimd: Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Gram generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.`)
 	fmt.Fprintln(os.Stderr, `    update-remote-session-client: Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.`)
@@ -21325,6 +21546,78 @@ func remoteSessionClientsUsage() {
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s remote-session-clients COMMAND --help\n", os.Args[0])
 }
+func remoteSessionClientsPrepareEMAUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-clients prepare-ema", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients prepare-ema --body '{\n      \"client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"confirm_grants\": [\n         \"abc123\"\n      ],\n      \"expected_generation\": 1,\n      \"mechanism\": \"cimd\",\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"resource\": \"aa\",\n      \"resource_metadata\": {\n         \"authorization_servers\": [\n            \"abc123\"\n         ],\n         \"resource\": \"abc123\"\n      },\n      \"scopes\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ],\n      \"token_endpoint_auth_method\": \"client_secret_post\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionClientsReadEMAUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-clients read-ema", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients read-ema --body '{\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"resource\": \"aa\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionClientsUnlinkEMAUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-clients unlink-ema", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-session-clients unlink-ema --body '{\n      \"expected_generation\": 1,\n      \"remote_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"resource\": \"aa\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
 func remoteSessionClientsCreateRemoteSessionClientUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] remote-session-clients create-remote-session-client", os.Args[0])
@@ -22576,12 +22869,13 @@ func organizationRemoteSessionsRevokeAllClientSessionsUsage() {
 // remoteSessionsUsage displays the usage of the remote-sessions command and
 // its subcommands.
 func remoteSessionsUsage() {
-	fmt.Fprintln(os.Stderr, `Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.`)
+	fmt.Fprintln(os.Stderr, `Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned. Also hosts composite dashboard operations that configure a single MCP server's identity in one atomic call.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] remote-sessions COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-bindings: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
 	fmt.Fprintln(os.Stderr, `    attach-binding: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
 	fmt.Fprintln(os.Stderr, `    detach-binding: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.`)
+	fmt.Fprintln(os.Stderr, `    commit-server-identity-configuration: Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.`)
 	fmt.Fprintln(os.Stderr, `    list-remote-sessions: List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).`)
 	fmt.Fprintln(os.Stderr, `    revoke-remote-session: Drop a remote_session row. The next /mcp call by that principal triggers a fresh authn challenge.`)
 	fmt.Fprintln(os.Stderr)
@@ -22654,6 +22948,30 @@ func remoteSessionsDetachBindingUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions detach-binding --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"principal_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"user_session_issuer_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func remoteSessionsCommitServerIdentityConfigurationUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] remote-sessions commit-server-identity-configuration", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions commit-server-identity-configuration --body '{\n      \"client_configuration\": {\n         \"audience\": \"aaa\",\n         \"client_id\": \"abc123\",\n         \"client_secret\": \"abc123\",\n         \"scope\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ],\n         \"token_endpoint_auth_method\": \"client_secret_post\"\n      },\n      \"client_mode\": \"existing\",\n      \"create_provider\": {\n         \"authorization_endpoint\": \"abc123\",\n         \"authorization_grant_profiles_supported\": [\n            \"abc123\"\n         ],\n         \"authorization_response_iss_parameter_supported\": false,\n         \"backchannel_logout_supported\": false,\n         \"claims_supported\": [\n            \"abc123\"\n         ],\n         \"client_id_metadata_document_supported\": false,\n         \"client_setup_documentation_url\": \"abc123\",\n         \"code_challenge_methods_supported\": [\n            \"abc123\"\n         ],\n         \"grant_types_supported\": [\n            \"abc123\"\n         ],\n         \"id_token_signing_alg_values_supported\": [\n            \"abc123\"\n         ],\n         \"introspection_endpoint\": \"abc123\",\n         \"introspection_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ],\n         \"issuer\": \"abc123\",\n         \"jwks_uri\": \"abc123\",\n         \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"name\": \"abc123\",\n         \"oidc\": false,\n         \"op_policy_uri\": \"abc123\",\n         \"op_tos_uri\": \"abc123\",\n         \"passthrough\": false,\n         \"registration_endpoint\": \"abc123\",\n         \"resource_indicator_supported\": false,\n         \"response_types_supported\": [\n            \"abc123\"\n         ],\n         \"revocation_endpoint\": \"abc123\",\n         \"scope_override\": [\n            \"abc123\"\n         ],\n         \"scopes_supported\": [\n            \"abc123\"\n         ],\n         \"service_documentation\": \"abc123\",\n         \"slug\": \"abc123\",\n         \"token_endpoint\": \"abc123\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ],\n         \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"userinfo_endpoint\": \"abc123\"\n      },\n      \"existing_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"provider_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionsListRemoteSessionsUsage() {
@@ -22758,6 +23076,7 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-risk-policy: Create a new risk analysis policy for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-policies: List all risk analysis policies for the current project.`)
+	fmt.Fprintln(os.Stderr, `    list-risk-policies-for-mcp-server: List enabled MCP-scoped risk policies that apply to an MCP server and optional tool. Policies without an MCP scope are excluded.`)
 	fmt.Fprintln(os.Stderr, `    list-builtin-exclusions: List the built-in exclusion library (known-safe values suppressed before they reach exclusions), grouped by category.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-policy: Get a risk analysis policy by ID.`)
 	fmt.Fprintln(os.Stderr, `    update-risk-policy: Update a risk analysis policy.`)
@@ -22831,7 +23150,7 @@ func riskCreateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"model_config\": {\n         \"fail_open\": false,\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"score\": 5,\n      \"shadow_mcp_allowed_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_blocked_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_disposition\": \"allow_all\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk create-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"mcp_scope\": {\n         \"all_servers\": false,\n         \"servers\": [\n            {\n               \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"tools\": [\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"tool_annotations\": [\n            \"readOnlyHint\"\n         ]\n      },\n      \"model_config\": {\n         \"fail_open\": false,\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"policy_type\": \"prompt_based\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"score\": 5,\n      \"shadow_mcp_allowed_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_blocked_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_disposition\": \"allow_all\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListRiskPoliciesUsage() {
@@ -22854,6 +23173,32 @@ func riskListRiskPoliciesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-policies --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskListRiskPoliciesForMcpServerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-policies-for-mcp-server", os.Args[0])
+	fmt.Fprint(os.Stderr, " -mcp-server-id STRING")
+	fmt.Fprint(os.Stderr, " -tool-name STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List enabled MCP-scoped risk policies that apply to an MCP server and optional tool. Policies without an MCP scope are excluded.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -mcp-server-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -tool-name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-policies-for-mcp-server --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --tool-name \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskListBuiltinExclusionsUsage() {
@@ -22923,7 +23268,7 @@ func riskUpdateRiskPolicyUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"model_config\": {\n         \"fail_open\": false,\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"score\": 5,\n      \"shadow_mcp_allowed_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_blocked_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_disposition\": \"allow_all\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"supersede_decisions\": false,\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk update-risk-policy --body '{\n      \"action\": \"warn\",\n      \"approved_email_domains\": [\n         \"abc123\"\n      ],\n      \"audience_principal_urns\": [\n         \"abc123\"\n      ],\n      \"audience_type\": \"targeted\",\n      \"auto_name\": false,\n      \"custom_rule_ids\": [\n         \"abc123\"\n      ],\n      \"detection_scopes\": [\n         {\n            \"category\": \"abc123\",\n            \"scope_exempt\": \"abc123\",\n            \"scope_include\": \"abc123\"\n         }\n      ],\n      \"disabled_rules\": [\n         \"abc123\"\n      ],\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_scope\": {\n         \"all_servers\": false,\n         \"servers\": [\n            {\n               \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n               \"tools\": [\n                  \"abc123\",\n                  \"abc123\"\n               ]\n            }\n         ],\n         \"tool_annotations\": [\n            \"readOnlyHint\"\n         ]\n      },\n      \"model_config\": {\n         \"fail_open\": false,\n         \"temperature\": 1\n      },\n      \"name\": \"abc123\",\n      \"presidio_entities\": [\n         \"abc123\"\n      ],\n      \"presidio_score_threshold\": 0.75,\n      \"prompt\": \"abc123\",\n      \"prompt_injection_rules\": [\n         \"abc123\"\n      ],\n      \"score\": 5,\n      \"shadow_mcp_allowed_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_blocked_urls\": [\n         \"abc123\"\n      ],\n      \"shadow_mcp_disposition\": \"allow_all\",\n      \"sources\": [\n         \"abc123\"\n      ],\n      \"supersede_decisions\": false,\n      \"user_message\": \"abc123\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskDeleteRiskPolicyUsage() {
@@ -27452,6 +27797,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-organization: Returns full admin details for a single organization by id or slug.`)
 	fmt.Fprintln(os.Stderr, `    list-organization-members: Lists members of an organization (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organization-projects: Lists projects belonging to an organization (admin view, no auth scoping).`)
+	fmt.Fprintln(os.Stderr, `    list-project-mcp-servers: Lists the MCP servers in a project (admin view, no auth scoping).`)
 	fmt.Fprintln(os.Stderr, `    list-organization-activity: Lists activity belonging to an organization for admin operators.`)
 	fmt.Fprintln(os.Stderr, `    list-organizations: Lists organizations for platform admin operations with optional search and filters. Defaults to created_at descending, with id ascending to break ties.`)
 	fmt.Fprintln(os.Stderr, `    extend-trial: Extends a running enterprise trial by adding days to its current end date. Only a running trial can be extended: one that has converted, has been demoted, or has already expired is rejected rather than re-armed.`)
@@ -27859,6 +28205,28 @@ func adminListOrganizationProjectsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-organization-projects --organization-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminListProjectMcpServersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-project-mcp-servers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Lists the MCP servers in a project (admin view, no auth scoping).`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-project-mcp-servers --organization-id \"abc123\" --project-id \"550e8400-e29b-41d4-a716-446655440000\" --admin-session-token \"abc123\"")
 }
 
 func adminListOrganizationActivityUsage() {
@@ -29539,6 +29907,139 @@ func userSessionsRevokeUserSessionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions revoke-user-session --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// workloadIdentitiesUsage displays the usage of the workload-identities
+// command and its subcommands.
+func workloadIdentitiesUsage() {
+	fmt.Fprintln(os.Stderr, `Configure which workloads an organization recognises as its own: the issuers it trusts, the subjects those issuers may present, and the agent each admitted workload inherits its policy from.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] workload-identities COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    list: Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.`)
+	fmt.Fprintln(os.Stderr, `    register-issuer: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
+	fmt.Fprintln(os.Stderr, `    withdraw-issuer: Stop trusting an issuer. Every subject admitted under it is withdrawn in the same transaction, so no admission can outlive the issuer it names. Requires workload:write.`)
+	fmt.Fprintln(os.Stderr, `    admit-subject: Admit a subject one of the trusted issuers asserts, and assign the agent it inherits its policy from. Both happen in one transaction: a subject admitted without an agent is refused at the token endpoint, so that half-configured state is not reachable. Requires workload:write.`)
+	fmt.Fprintln(os.Stderr, `    withdraw-subject: Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s workload-identities COMMAND --help\n", os.Args[0])
+}
+func workloadIdentitiesListUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities list", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities list --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func workloadIdentitiesRegisterIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities register-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities register-issuer --body '{\n      \"allow_wildcard_admission\": false,\n      \"issuer\": \"https://example.com/foo\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func workloadIdentitiesWithdrawIssuerUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities withdraw-issuer", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Stop trusting an issuer. Every subject admitted under it is withdrawn in the same transaction, so no admission can outlive the issuer it names. Requires workload:write.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities withdraw-issuer --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func workloadIdentitiesAdmitSubjectUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities admit-subject", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Admit a subject one of the trusted issuers asserts, and assign the agent it inherits its policy from. Both happen in one transaction: a subject admitted without an agent is refused at the token endpoint, so that half-configured state is not reachable. Requires workload:write.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities admit-subject --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"issuer\": \"https://example.com/foo\",\n      \"match_kind\": \"wildcard\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"subject\": \"abc123\"\n   }' --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func workloadIdentitiesWithdrawSubjectUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] workload-identities withdraw-subject", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "workload-identities withdraw-subject --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // variationsUsage displays the usage of the variations command and its

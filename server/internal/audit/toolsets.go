@@ -189,7 +189,7 @@ type LogToolsetAttachExternalOAuthEvent struct {
 	ToolsetSlug         string
 	ToolsetVersionAfter int64
 
-	ExternalOAuthServerID        string //nolint:glint // TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
+	ExternalOAuthServerID        string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
 	ExternalOAuthServerSlug      string
 	AuthorizationServerIssuerSet bool
 }
@@ -244,7 +244,7 @@ type LogToolsetUpdateExternalOAuthIssuerEvent struct {
 	ToolsetSlug         string
 	ToolsetVersionAfter int64
 
-	ExternalOAuthServerID        string //nolint:glint // TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
+	ExternalOAuthServerID        string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
 	ExternalOAuthServerSlug      string
 	AuthorizationServerIssuerSet bool
 }
@@ -294,7 +294,7 @@ type LogToolsetDetachExternalOAuthEvent struct {
 	ToolsetSlug         string
 	ToolsetVersionAfter int64
 
-	ExternalOAuthServerID   *string //nolint:glint // TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
+	ExternalOAuthServerID   *string //nolint:glint // auditeventurnnaming: TODO(AGE-1954): discuss URN treatment for external OAuth server identifiers; pending team discussion
 	ExternalOAuthServerSlug *string
 }
 

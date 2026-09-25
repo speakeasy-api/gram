@@ -590,13 +590,13 @@ func TestDeleteUserSessionIssuer_ConcurrentSiblingDeleteStillRevokes(t *testing.
 		UserSessionIssuerID:   siblingID,
 	}))
 
-	tx, err := ti.conn.Begin(ctx) //nolint:glint // the raw-SQL rule catches tx.Exec with a query string; this transaction only ever runs SQLc-generated methods, and it exists to hold the client-row lock the cascade must wait on
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	// This transaction only runs SQLc-generated methods; it exists to hold the
+	// client-row lock the cascade must wait on.
+	tx := testenv.BeginTx(t, ctx, ti.conn)
 
 	// Hold the client-row lock before the service delete starts, so it cannot
 	// scan for orphans until the sibling's delete below has committed.
-	_, err = remotesessionsrepo.New(tx).LockRemoteSessionClientsBoundToUserSessionIssuer(ctx, remotesessionsrepo.LockRemoteSessionClientsBoundToUserSessionIssuerParams{
+	_, err := remotesessionsrepo.New(tx).LockRemoteSessionClientsBoundToUserSessionIssuer(ctx, remotesessionsrepo.LockRemoteSessionClientsBoundToUserSessionIssuerParams{
 		UserSessionIssuerID: siblingID,
 		ProjectID:           *authCtx.ProjectID,
 		OrganizationID:      authCtx.ActiveOrganizationID,

@@ -601,6 +601,9 @@ type RefreshGlobalIssuerMetadataResponseBody struct {
 // CreateGlobalClientResponseBody is the type of the "adminRemoteSessions"
 // service "createGlobalClient" endpoint HTTP response body.
 type CreateGlobalClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -658,6 +661,9 @@ type ListGlobalClientsResponseBody struct {
 // GetGlobalClientResponseBody is the type of the "adminRemoteSessions" service
 // "getGlobalClient" endpoint HTTP response body.
 type GetGlobalClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -707,6 +713,9 @@ type GetGlobalClientResponseBody struct {
 // UpdateGlobalClientResponseBody is the type of the "adminRemoteSessions"
 // service "updateGlobalClient" endpoint HTTP response body.
 type UpdateGlobalClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -4004,6 +4013,9 @@ type RemoteSessionIssuerResponseBody struct {
 // RemoteSessionClientResponseBody is used to define fields on response body
 // types.
 type RemoteSessionClientResponseBody struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The owning project id. Empty for organization-level and global clients.
@@ -4481,6 +4493,12 @@ func NewCreateGlobalClientResponseBody(res *types.RemoteSessionClient) *CreateGl
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
+	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
 		for i, val := range res.UserSessionIssuerIds {
@@ -4540,6 +4558,12 @@ func NewGetGlobalClientResponseBody(res *types.RemoteSessionClient) *GetGlobalCl
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
 	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
+	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))
 		for i, val := range res.UserSessionIssuerIds {
@@ -4577,6 +4601,12 @@ func NewUpdateGlobalClientResponseBody(res *types.RemoteSessionClient) *UpdateGl
 		Audience:                        res.Audience,
 		CreatedAt:                       res.CreatedAt,
 		UpdatedAt:                       res.UpdatedAt,
+	}
+	if res.GrantTypes != nil {
+		body.GrantTypes = make([]string, len(res.GrantTypes))
+		for i, val := range res.GrantTypes {
+			body.GrantTypes[i] = val
+		}
 	}
 	if res.UserSessionIssuerIds != nil {
 		body.UserSessionIssuerIds = make([]string, len(res.UserSessionIssuerIds))

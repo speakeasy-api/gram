@@ -7,6 +7,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -68,10 +70,10 @@ func TestService_RemoveUser(t *testing.T) {
 	require.True(t, latched.OwnerReassignmentRequiredAt.Valid)
 	require.Equal(t, "organization_membership_lost", latched.OwnerReassignmentReason.String)
 
-	var actorID string
-	err = ti.conn.QueryRow(ctx, `SELECT actor_id FROM audit_logs WHERE subject_id = $1 AND action = 'agent:owner_loss'`, agent.ID).Scan(&actorID) //nolint:glint // notestingrawsql: verifies the management actor is attributed
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionAgentOwnerLoss)
 	require.NoError(t, err)
-	require.Equal(t, authCtx.UserID, actorID)
+	require.Equal(t, agent.ID.String(), record.SubjectID)
+	require.Equal(t, authCtx.UserID, record.ActorID)
 
 	ti.orgs.AssertExpectations(t)
 }
@@ -122,8 +124,7 @@ func TestService_RollsBackOnWorkOSError(t *testing.T) {
 	stored, err := agentrepo.New(ti.conn).GetAgentByID(ctx, agentrepo.GetAgentByIDParams{OrganizationID: authCtx.ActiveOrganizationID, ID: agent.ID})
 	require.NoError(t, err)
 	require.False(t, stored.OwnerReassignmentRequiredAt.Valid)
-	var auditCount int
-	err = ti.conn.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE subject_id = $1 AND action = 'agent:owner_loss'`, agent.ID).Scan(&auditCount) //nolint:glint // notestingrawsql: rollback must remove the audit side effect too
+	auditCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAgentOwnerLoss)
 	require.NoError(t, err)
 	require.Zero(t, auditCount)
 

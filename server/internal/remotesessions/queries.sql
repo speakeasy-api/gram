@@ -206,6 +206,36 @@ WHERE id = @id
   )
   AND deleted IS FALSE;
 
+-- name: GetRemoteSessionIssuerByIDForConfigurationCommit :one
+-- GetRemoteSessionIssuerByID holding a row lock until the transaction ends,
+-- for the atomic dashboard commit in dashboard.go. That handler reads the
+-- provider once before the transaction to learn the capabilities it registers
+-- against, performs the upstream registration, then re-reads here to confirm
+-- the provider still matches what it registered for.
+--
+-- Only the lock makes that confirmation authoritative. UpdateRemoteSessionIssuer
+-- takes no advisory lock, so without FOR UPDATE a concurrent edit can commit
+-- between the re-read and the client insert, and the credentials are persisted
+-- against configuration that no longer exists -- a client registered at the old
+-- registration_endpoint, or a CIMD client created after CIMD support was
+-- switched off. Registration has already finished by the time this is taken, so
+-- no lock is held across an upstream HTTP call.
+--
+-- Scoping matches GetRemoteSessionIssuerByID rather than the ProjectOwned
+-- variant: the commit may select an inherited organization-level or global
+-- provider, and locking only project-owned rows would leave exactly those
+-- unprotected.
+SELECT *
+FROM remote_session_issuers
+WHERE id = @id
+  AND (
+    project_id = @project_id
+    OR (@include_organizational::boolean AND project_id IS NULL AND organization_id = @organization_id)
+    OR (@include_global::boolean AND project_id IS NULL AND organization_id IS NULL)
+  )
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetRemoteSessionIssuerByIDProjectOwned :one
 -- Strictly project-owned read. Unlike GetRemoteSessionIssuerByID this does not
 -- resolve inherited organization-level issuers: it backs refreshMetadata, which
@@ -706,18 +736,33 @@ WHERE id = @id
 -- binding, since both of those endpoints are only reachable over the tunnel
 -- when one is set. Not locked: the rotation talks to the issuer between this
 -- read and its write, and the write compares the client_id it read here so a
--- concurrent rotation is detected rather than blocked.
+-- concurrent rotation is detected rather than blocked. The ID comes from an
+-- authorized client selection, not a caller-supplied issuer ID. Restrict the
+-- joined issuer to that client's project and inherited organization/global
+-- tiers; a stale or invalid binding must not expose another tenant's endpoints.
+-- Resolve legacy project clients' organization through projects.
 SELECT
     sqlc.embed(c),
-    i.issuer                   AS issuer_url,
-    i.token_endpoint           AS issuer_token_endpoint,
-    i.registration_endpoint    AS issuer_registration_endpoint,
-    i.tunneled_mcp_server_id   AS issuer_tunneled_mcp_server_id
+    i.issuer                 AS issuer_url,
+    i.token_endpoint         AS issuer_token_endpoint,
+    i.registration_endpoint  AS issuer_registration_endpoint,
+    i.updated_at             AS issuer_updated_at,
+    i.project_id             AS issuer_project_id,
+    i.organization_id        AS issuer_organization_id,
+    i.tunneled_mcp_server_id AS issuer_tunneled_mcp_server_id
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = @id
   AND c.deleted IS FALSE
-  AND i.deleted IS FALSE;
+  AND i.deleted IS FALSE
+  AND (
+    i.project_id = c.project_id
+    OR (i.project_id IS NULL AND i.organization_id IS NULL)
+    OR (i.project_id IS NULL AND i.organization_id = CASE
+      WHEN c.project_id IS NULL THEN c.organization_id
+      ELSE (SELECT p.organization_id FROM projects p WHERE p.id = c.project_id AND p.deleted IS FALSE)
+    END)
+  );
 
 -- name: ClearRemoteSessionClientUpstreamRejected :execrows
 -- The token endpoint authenticated the client (a probe, or a refresh that
@@ -759,6 +804,8 @@ SET client_id = @client_id,
     client_id_issued_at = @client_id_issued_at,
     client_secret_expires_at = @client_secret_expires_at,
     token_endpoint_auth_method = @token_endpoint_auth_method,
+    -- Grant evidence belongs to the old external registration, not this row ID.
+    grant_types = NULL,
     legacy_callback_url = FALSE,
     upstream_rejected_at = NULL,
     updated_at = clock_timestamp()
@@ -766,6 +813,8 @@ WHERE id = @id
   AND client_id = @expected_client_id
   AND updated_at = @expected_updated_at
   AND remote_session_issuer_id = @expected_issuer_id
+  AND project_id IS NOT DISTINCT FROM sqlc.narg('expected_project_id')::uuid
+  AND organization_id IS NOT DISTINCT FROM sqlc.narg('expected_organization_id')::text
   AND deleted IS FALSE
   AND client_id_metadata_uri IS NULL
   AND identity_provider_connection_id IS NULL
@@ -935,6 +984,7 @@ WHERE link.remote_session_client_id = c.id
 SELECT
     c.id,
     c.client_id_metadata_uri,
+    c.grant_types,
     COALESCE(c.token_endpoint_auth_method, 'none')::text AS token_endpoint_auth_method,
     CASE WHEN s.id IS NULL THEN false ELSE true END AS has_json_web_key_set,
     c.scope
@@ -1011,7 +1061,7 @@ WHERE c.id = @id
   AND c.deleted IS FALSE;
 
 -- name: GetUserSessionIssuerForProject :one
-SELECT id
+SELECT id, project_id
 FROM user_session_issuers
 WHERE id = @id
   AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
@@ -1154,7 +1204,6 @@ WHERE c.id = @id
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE
 FOR UPDATE OF c;
-
 
 -- Holds the key set while a client attaches to it, against DeleteSet's
 -- FOR UPDATE on the same row. Without it, attach-sees-live-set racing
@@ -1641,18 +1690,6 @@ WHERE s.id = @id
 -- lifetime. Scoped through the owning remote_session_client's project.
 UPDATE remote_sessions s
 SET access_expires_at = @access_expires_at
-FROM remote_session_clients c
-WHERE s.id = @id
-  AND s.remote_session_client_id = c.id
-  AND c.project_id = @project_id;
-
--- name: SetRemoteSessionValidationTrackingFixture :exec
--- Test helper for ageing a grant into the keepalive re-check window without
--- waiting for it. Scoped through the owning remote_session_client's project.
-UPDATE remote_sessions s
-SET last_validated_at = sqlc.narg('last_validated_at')::timestamptz,
-    last_refresh_attempt_at = sqlc.narg('last_refresh_attempt_at')::timestamptz,
-    created_at = COALESCE(sqlc.narg('created_at')::timestamptz, s.created_at)
 FROM remote_session_clients c
 WHERE s.id = @id
   AND s.remote_session_client_id = c.id
@@ -3204,15 +3241,33 @@ SET remote_session_issuer_id = @target_issuer_id,
 WHERE remote_session_issuer_id = @source_issuer_id
   AND deleted IS FALSE;
 
--- name: DetachRemoteSessionClientFromUserSessionIssuer :execrows
--- Remove the join-table binding between a remote_session_client and a
--- user_session_issuer. Used by the org-admin "remove client from MCP server"
--- action, where the user_session_issuer is the one the MCP server uses. Returns
--- the number of rows removed (0 means the client was not bound to that issuer).
--- Callers establish org ownership of the client upstream.
-DELETE FROM remote_session_client_user_session_issuers
+-- name: LockRemoteSessionClientUserSessionIssuerLink :exec
+-- Lock the join-table row an agent attachment's foreign key check reads, before
+-- the caller checks for attachments that deleting the row would cascade to. A
+-- concurrent attachment either commits first, and the check sees it, or waits
+-- for this transaction to end.
+SELECT 1
+FROM remote_session_client_user_session_issuers
 WHERE remote_session_client_id = @remote_session_client_id
-  AND user_session_issuer_id = @user_session_issuer_id;
+  AND user_session_issuer_id = @user_session_issuer_id
+FOR UPDATE;
+
+-- name: HasLivePrincipalRemoteSessionBindingsForClientBinding :one
+-- Report whether any unrevoked agent attachment goes through a client's binding
+-- to a user session issuer, which deleting that binding would cascade-delete.
+-- Only the caller's project can hold them: the caller refuses an
+-- organization-wide binding, and any other binding has a project-owned client
+-- or user session issuer, which pins every attachment through it to that
+-- project.
+SELECT EXISTS (
+  SELECT 1
+  FROM principal_remote_session_bindings
+  WHERE project_id = @project_id
+    AND organization_id = @organization_id
+    AND remote_session_client_id = @remote_session_client_id
+    AND user_session_issuer_id = @user_session_issuer_id
+    AND revoked_at IS NULL
+);
 
 -- name: ListOrganizationRemoteSessionsByClientID :many
 -- Sessions minted against a client. See the ORG REACHABILITY note on
@@ -3691,41 +3746,6 @@ WHERE link.remote_session_client_id = @remote_session_client_id
   AND c.project_id = @project_id
 ORDER BY link.user_session_issuer_id;
 
--- TEST FIXTURE ONLY. Redirects the issuer behind a tenant-owned client to a
--- local token endpoint so refresh behavior can be exercised without raw SQL.
--- name: ForceRemoteSessionIssuerTokenEndpointFixture :execrows
-UPDATE remote_session_issuers AS i
-SET token_endpoint = @token_endpoint
-FROM remote_session_clients AS c
-WHERE c.id = @remote_session_client_id
-  AND i.id = c.remote_session_issuer_id
-  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id::text));
-
--- TEST FIXTURE ONLY. Points a client's issuer at fake userinfo and
--- introspection endpoints so the consent page's Verify can be exercised
--- against an authorization server the test controls.
--- name: ForceRemoteSessionIssuerEnrichmentEndpointsFixture :execrows
-UPDATE remote_session_issuers AS i
-SET userinfo_endpoint = sqlc.narg('userinfo_endpoint')::text,
-    introspection_endpoint = sqlc.narg('introspection_endpoint')::text,
-    jwks_uri = COALESCE(sqlc.narg('jwks_uri')::text, i.jwks_uri)
-FROM remote_session_clients AS c
-WHERE c.id = @remote_session_client_id
-  AND i.id = c.remote_session_issuer_id
-  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id::text));
-
--- TEST FIXTURE ONLY. Writes a token_endpoint_auth_method the Goa enum does not
--- accept, which no production path can produce. private_key_jwt arrives with
--- AIM-156; until then planting the value directly is the only way to exercise
--- requireDetachableKeySet and requirePrivateKeyJWTKeySet, the rules that guard
--- it. Lives beside the invariant it bypasses rather than in shared testenv,
--- because only this package's tests construct the impossible state.
--- name: ForceRemoteSessionClientAuthMethodFixture :execrows
-UPDATE remote_session_clients
-SET token_endpoint_auth_method = @token_endpoint_auth_method
-WHERE id = @id
-  AND project_id = @project_id;
-
 -- name: GetRemoteSessionIssuerForMetadataRefresh :one
 -- Tier-agnostic read for the on-use refresh, scoped by the listed identity so a moved row matches nothing.
 SELECT *
@@ -3993,37 +4013,6 @@ WHERE project_id = @project_id AND organization_id = @organization_id
 ORDER BY id
 FOR UPDATE;
 
--- name: CountActiveEMABindingsForIssuer :one
-SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_issuer_id = @issuer_id AND state IS DISTINCT FROM 'unlinked'
-AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
-
--- name: CountActiveEMABindingsForUserIssuer :one
-SELECT count(*) FROM remote_session_ema_bindings WHERE user_session_issuer_id = @issuer_id AND state IS DISTINCT FROM 'unlinked'
-AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
-
--- name: LockEMAUserIssuer :one
-SELECT user_session_issuers.id FROM user_session_issuers WHERE user_session_issuers.id = @id AND user_session_issuers.deleted IS FALSE
-AND ((user_session_issuers.project_id = @project_id AND EXISTS (
-    SELECT 1 FROM projects p WHERE p.id = user_session_issuers.project_id
-    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE FOR SHARE
-)) OR (user_session_issuers.project_id IS NULL AND user_session_issuers.organization_id = sqlc.narg('organization_id'))) FOR UPDATE;
-
--- Lifecycle mutations target an exact ownership tier, not inherited objects.
--- A NULL organization on a legacy project-owned row is resolved via projects.
--- name: LockEMAIssuerForLifecycle :one
-SELECT id FROM remote_session_issuers i WHERE i.id = @id AND i.deleted IS FALSE
-AND ((i.project_id = @project_id::uuid AND EXISTS (
-    SELECT 1 FROM projects p WHERE p.id = i.project_id
-    AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE
-)) OR (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND i.project_id IS NULL
-    AND (i.organization_id = @organization_id::text OR (@organization_id::text = '' AND i.organization_id IS NULL))))
-FOR UPDATE;
-
--- Internal lifecycle callers may start from a legacy row without organization_id.
--- name: GetEMAProjectOrganization :one
-SELECT organization_id FROM projects WHERE id = @project_id AND deleted IS FALSE FOR SHARE;
-
-
 -- name: EnsureEMABinding :exec
 INSERT INTO remote_session_ema_bindings (project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, state, grant_source)
 SELECT @project_id, @organization_id, @user_session_issuer_id, @remote_session_issuer_id, @resource, 'configuration_required', 'unknown'
@@ -4036,6 +4025,11 @@ ON CONFLICT (project_id, user_session_issuer_id, remote_session_issuer_id, resou
 SELECT * FROM remote_session_ema_bindings
 WHERE project_id = @project_id AND organization_id = @organization_id
 AND user_session_issuer_id = @user_session_issuer_id AND remote_session_issuer_id = @remote_session_issuer_id AND resource = @resource;
+
+-- name: LockEMABinding :one
+SELECT * FROM remote_session_ema_bindings
+WHERE project_id = @project_id AND organization_id = @organization_id
+AND user_session_issuer_id = @user_session_issuer_id AND remote_session_issuer_id = @remote_session_issuer_id AND resource = @resource FOR UPDATE;
 
 -- name: SetEMABinding :one
 UPDATE remote_session_ema_bindings b SET remote_session_client_id = CASE WHEN @state::text = 'unlinked' THEN NULL ELSE sqlc.narg('remote_session_client_id')::uuid END,
@@ -4058,6 +4052,174 @@ AND (@state::text = 'unlinked' OR (
 ))
 RETURNING b.*;
 
+-- Global clients are platform-owned: tenant preparation must not mutate their
+-- credentials or grant evidence. Keep this lock scoped like SetEMAClientGrants.
+-- name: LockEMAClient :one
+SELECT * FROM remote_session_clients WHERE remote_session_clients.id = @id AND remote_session_clients.deleted IS FALSE
+AND ((remote_session_clients.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE FOR SHARE
+)) OR (remote_session_clients.project_id IS NULL AND remote_session_clients.organization_id = sqlc.narg('organization_id'))) FOR UPDATE;
+
+-- name: LockEMAIssuer :one
+SELECT * FROM remote_session_issuers WHERE remote_session_issuers.id = @id AND remote_session_issuers.deleted IS FALSE
+AND ((remote_session_issuers.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = remote_session_issuers.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE FOR SHARE
+)) OR (remote_session_issuers.project_id IS NULL AND (remote_session_issuers.organization_id = sqlc.narg('organization_id') OR remote_session_issuers.organization_id IS NULL))) FOR UPDATE;
+
+-- name: SetEMAClientGrants :one
+UPDATE remote_session_clients SET grant_types = sqlc.narg('grant_types')::text[], updated_at = clock_timestamp()
+WHERE remote_session_clients.id = @id AND remote_session_clients.deleted IS FALSE
+AND ((remote_session_clients.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE FOR SHARE
+)) OR (remote_session_clients.project_id IS NULL AND remote_session_clients.organization_id = sqlc.narg('organization_id'))) RETURNING *;
+
+-- name: CountActiveEMABindingsForClient :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_client_id = @client_id AND state IS DISTINCT FROM 'unlinked'
+AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
+
+-- name: CountActiveEMABindingsForClientUserIssuer :one
+SELECT count(*) FROM remote_session_ema_bindings
+WHERE remote_session_client_id = @client_id AND user_session_issuer_id = @user_session_issuer_id
+AND state IS DISTINCT FROM 'unlinked' AND organization_id = @organization_id
+AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
+
+-- name: CountActiveEMABindingsForIssuer :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE remote_session_issuer_id = @issuer_id AND state IS DISTINCT FROM 'unlinked'
+AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
+
+-- name: CountActiveEMABindingsForUserIssuer :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE user_session_issuer_id = @issuer_id AND state IS DISTINCT FROM 'unlinked'
+AND (@organization_id::text = '' OR organization_id = @organization_id) AND (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR project_id = @project_id);
+
+-- name: LockEMAUserIssuer :one
+SELECT user_session_issuers.id FROM user_session_issuers WHERE user_session_issuers.id = @id AND user_session_issuers.deleted IS FALSE
+AND ((user_session_issuers.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = user_session_issuers.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE FOR SHARE
+)) OR (user_session_issuers.project_id IS NULL AND user_session_issuers.organization_id = sqlc.narg('organization_id'))) FOR UPDATE;
+
+-- Lifecycle mutations target an exact ownership tier, not inherited objects.
+-- A NULL organization on a legacy project-owned row is resolved via projects.
+-- name: LockEMAClientForLifecycle :one
+SELECT id FROM remote_session_clients c WHERE c.id = @id AND c.deleted IS FALSE
+AND ((c.project_id = @project_id::uuid AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = c.project_id
+    AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE
+)) OR (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND c.project_id IS NULL
+    AND (c.organization_id = @organization_id::text OR (@organization_id::text = '' AND c.organization_id IS NULL))))
+FOR UPDATE;
+
+-- name: LockEMAIssuerForLifecycle :one
+SELECT id FROM remote_session_issuers i WHERE i.id = @id AND i.deleted IS FALSE
+AND ((i.project_id = @project_id::uuid AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = i.project_id
+    AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE
+)) OR (@project_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND i.project_id IS NULL
+    AND (i.organization_id = @organization_id::text OR (@organization_id::text = '' AND i.organization_id IS NULL))))
+FOR UPDATE;
+
+-- Internal lifecycle callers may start from a legacy row without organization_id.
+-- name: GetEMAProjectOrganization :one
+SELECT organization_id FROM projects WHERE id = @project_id AND deleted IS FALSE FOR SHARE;
+
+-- name: LockProjectUserIssuerForDetach :one
+SELECT id FROM user_session_issuers u WHERE u.id = @id AND u.deleted IS FALSE
+AND (u.project_id = @project_id::uuid OR (u.project_id IS NULL AND u.organization_id = @organization_id::text)) AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = @project_id::uuid
+    AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE
+) FOR UPDATE;
+
+-- name: DetachProjectRemoteSessionClientFromUserSessionIssuer :execrows
+DELETE FROM remote_session_client_user_session_issuers link
+USING remote_session_clients c, user_session_issuers u, projects p
+WHERE link.remote_session_client_id = @remote_session_client_id
+AND link.user_session_issuer_id = @user_session_issuer_id
+AND c.id = link.remote_session_client_id AND c.deleted IS FALSE
+AND u.id = link.user_session_issuer_id AND u.deleted IS FALSE
+AND (u.project_id = @project_id::uuid OR (u.project_id IS NULL AND u.organization_id = @organization_id::text))
+AND p.id = @project_id::uuid AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+AND (c.project_id = p.id OR (c.project_id IS NULL AND c.organization_id = p.organization_id));
+
+-- name: LockPreparationSubmission :exec
+-- Session-scoped: caller must unlock on the same reserved connection.
+SELECT pg_advisory_lock(hashtextextended(@binding_key::text, 0));
+
+-- name: UnlockPreparationSubmission :exec
+SELECT pg_advisory_unlock(hashtextextended(@binding_key::text, 0));
+
+-- name: LockOrganizationUserIssuerForDetach :one
+SELECT u.id FROM user_session_issuers u WHERE u.id = @id AND u.deleted IS FALSE
+AND ((u.project_id IS NULL AND u.organization_id = @organization_id::text) OR EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = u.project_id
+    AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE
+)) FOR UPDATE;
+
+-- name: LockOrganizationMCPServerForDetach :one
+SELECT s.id FROM mcp_servers s WHERE s.id = @id AND s.deleted IS FALSE
+AND s.project_id = @project_id AND s.user_session_issuer_id = @user_session_issuer_id
+AND EXISTS (SELECT 1 FROM projects p WHERE p.id = s.project_id
+    AND p.organization_id = @organization_id::text AND p.deleted IS FALSE FOR SHARE)
+FOR UPDATE;
+
+-- name: DetachOrganizationRemoteSessionClientFromUserSessionIssuer :execrows
+DELETE FROM remote_session_client_user_session_issuers link
+USING remote_session_clients c, user_session_issuers u
+WHERE link.remote_session_client_id = @remote_session_client_id
+AND link.user_session_issuer_id = @user_session_issuer_id
+AND c.id = link.remote_session_client_id AND c.deleted IS FALSE
+AND u.id = link.user_session_issuer_id AND u.deleted IS FALSE
+AND ((c.project_id IS NULL AND c.organization_id = @organization_id::text) OR EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = c.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+))
+AND ((u.project_id IS NULL AND u.organization_id = @organization_id::text) OR EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = u.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+));
+
+-- name: LockEMAProject :one
+SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE FOR SHARE;
+
+-- name: LockRotationIssuerSnapshot :one
+-- Lock only the exact pre-HTTP issuer identity and tenant. The client is locked
+-- next; publication rechecks both versions while these locks are held.
+SELECT id FROM remote_session_issuers
+WHERE id = @id AND project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+AND organization_id IS NOT DISTINCT FROM sqlc.narg('organization_id')::text
+AND deleted IS FALSE FOR UPDATE;
+
+-- name: ReadEMAProject :one
+SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE;
+
+-- name: ReadEMAUserIssuer :one
+SELECT user_session_issuers.id FROM user_session_issuers WHERE user_session_issuers.id = @id AND user_session_issuers.deleted IS FALSE
+AND ((user_session_issuers.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = user_session_issuers.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE
+)) OR (user_session_issuers.project_id IS NULL AND user_session_issuers.organization_id = sqlc.narg('organization_id')));
+
+-- name: ReadEMAIssuer :one
+SELECT * FROM remote_session_issuers WHERE remote_session_issuers.id = @id AND remote_session_issuers.deleted IS FALSE
+AND ((remote_session_issuers.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = remote_session_issuers.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE
+)) OR (remote_session_issuers.project_id IS NULL AND (remote_session_issuers.organization_id = sqlc.narg('organization_id') OR remote_session_issuers.organization_id IS NULL)));
+
+-- name: ReadEMAClient :one
+SELECT * FROM remote_session_clients WHERE remote_session_clients.id = @id AND remote_session_clients.deleted IS FALSE
+AND ((remote_session_clients.project_id = @project_id AND EXISTS (
+    SELECT 1 FROM projects p WHERE p.id = remote_session_clients.project_id
+    AND p.organization_id = sqlc.narg('organization_id') AND p.deleted IS FALSE
+)) OR (remote_session_clients.project_id IS NULL AND remote_session_clients.organization_id = sqlc.narg('organization_id')));
+
+-- name: ReadEMAJsonWebKeySet :one
+SELECT id
+FROM json_web_key_sets
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id IS NULL
+  AND deleted IS FALSE;
 -- Trusted delegation credentials are organization-scoped, never project-scoped.
 -- name: GetTrustedDelegationCredential :one
 SELECT s.* FROM trusted_issuer_sessions AS s
@@ -4461,3 +4623,12 @@ INSERT INTO trusted_issuer_sessions (
 -- Read-only enumeration for the privileged maintenance activity.
 SELECT DISTINCT organization_id FROM trusted_issuer_sessions
 ORDER BY organization_id NULLS FIRST;
+
+-- A failed completion must not leave a submitted registration retryable. This
+-- status-only CAS neither attaches credentials nor revives a replaced binding.
+-- name: MarkEMAClaimIndeterminate :execrows
+UPDATE remote_session_ema_bindings
+SET state = 'indeterminate', updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND organization_id = @organization_id
+  AND generation = @generation AND claim_id = sqlc.narg('claim_id')
+  AND state = 'in_progress';

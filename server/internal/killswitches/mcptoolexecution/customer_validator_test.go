@@ -1,4 +1,3 @@
-//nolint:glint // This lock-race test needs concurrent transactions against owner-domain rows.
 package mcptoolexecution
 
 import (
@@ -7,20 +6,24 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestCustomerLifecycleValidatorLocksLivenessUpdatesUntilCommit(t *testing.T) {
 	t.Parallel()
 	db, orgID := newTestDatabase(t, "ks_customer_lock")
 	userID := "user_" + uuid.NewString()
-	insertUser(t, db, userID, nil)
-	insertMembership(t, db, orgID, userID, nil)
-	projectID := insertProject(t, db, orgID, "project-lock", nil)
-	serverID := insertMCPServer(t, db, orgID, projectID, nil)
+	insertUser(t, db, userID, false)
+	insertMembership(t, db, orgID, userID, false)
+	projectID := insertProject(t, db, orgID, "project-lock", false)
+	serverID := insertMCPServer(t, db, orgID, projectID, false)
 
+	//nolint:glint // notestingrawsql: transaction runs only the validator's SQLc queries and holds the row locks the concurrent soft deletes must wait on
 	tx, err := db.Begin(t.Context())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
@@ -43,12 +46,14 @@ func TestCustomerLifecycleValidatorLocksLivenessUpdatesUntilCommit(t *testing.T)
 	serverUpdate := make(chan error, 1)
 	go func() {
 		started <- "user"
-		_, updateErr := userConn.Exec(t.Context(), `UPDATE organization_user_relationships SET deleted_at = clock_timestamp() WHERE organization_id = $1 AND user_id = $2`, orgID, userID)
+		updateErr := testrepo.New(userConn).ForceSoftDeleteOrganizationUserRelationship(t.Context(), testrepo.ForceSoftDeleteOrganizationUserRelationshipParams{
+			OrganizationID: orgID, UserID: pgtype.Text{String: userID, Valid: true},
+		})
 		userUpdate <- updateErr
 	}()
 	go func() {
 		started <- "server"
-		_, updateErr := serverConn.Exec(t.Context(), `UPDATE mcp_servers SET deleted_at = clock_timestamp() WHERE id = $1`, serverID)
+		_, updateErr := mcpserversrepo.New(serverConn).DeleteMCPServer(t.Context(), mcpserversrepo.DeleteMCPServerParams{ID: serverID, ProjectID: projectID})
 		serverUpdate <- updateErr
 	}()
 
@@ -59,10 +64,12 @@ func TestCustomerLifecycleValidatorLocksLivenessUpdatesUntilCommit(t *testing.T)
 			t.Fatal("soft-delete goroutine did not start")
 		}
 	}
-	for name, pid := range map[string]uint32{"user": userConn.Conn().PgConn().PID(), "server": serverConn.Conn().PgConn().PID()} {
+	// Each test runs in its own cloned database, so the sqlc query name
+	// identifies the one soft delete issued on each dedicated connection.
+	probe := testrepo.New(db)
+	for name, pattern := range map[string]string{"user": "%name: ForceSoftDeleteOrganizationUserRelationship :exec%", "server": "%name: DeleteMCPServer :one%"} {
 		require.Eventually(t, func() bool {
-			var waiting bool
-			err := db.QueryRow(t.Context(), `SELECT COALESCE(wait_event_type = 'Lock', false) FROM pg_stat_activity WHERE pid = $1`, pid).Scan(&waiting)
+			waiting, err := probe.IsQueryBlockedOnLockFixture(t.Context(), pattern)
 			return err == nil && waiting
 		}, 2*time.Second, 10*time.Millisecond, "%s soft delete never reached the row lock", name)
 	}

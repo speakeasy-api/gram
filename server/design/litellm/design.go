@@ -222,7 +222,7 @@ var _ = Service("litellm", func() {
 
 		HTTP(func() {
 			// LiteLLM appends this fixed Generic Guardrail suffix to its configured endpoint.
-			POST("/rpc/litellm.ingest/beta/litellm_basic_guardrail_api") //nolint:glint // LiteLLM requires its published Generic Guardrail route
+			POST("/rpc/litellm.ingest/beta/litellm_basic_guardrail_api") //nolint:glint // rpcendpointformat: LiteLLM requires its published Generic Guardrail route
 			security.ByKeyHeader()
 			security.ProjectHeader()
 		})
@@ -253,7 +253,7 @@ var _ = Service("litellm", func() {
 			// Served on the canonical hooks.otel base so every OTLP signal shares
 			// one customer-facing endpoint; provider semantics resolve from the
 			// API key, not the route.
-			POST("/rpc/hooks.otel/v1/traces") //nolint:glint // OTLP ingestion path must match OpenTelemetry conventions
+			POST("/rpc/hooks.otel/v1/traces") //nolint:glint // rpcendpointformat: OTLP ingestion path must match OpenTelemetry conventions
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusAccepted)

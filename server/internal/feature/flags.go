@@ -61,6 +61,8 @@ const (
 	// replacing a plugin's complete audience assignment set through Platform MCP.
 	// It is evaluated at invocation time and fails closed.
 	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
+	// FlagGatewayPluginMembership gates new gateway attachments to plugins.
+	FlagGatewayPluginMembership Flag = "gateway-plugin-membership"
 	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for
 	// creating and updating custom MCP-only access roles through Platform MCP.
 	// It is evaluated at invocation time and fails closed.

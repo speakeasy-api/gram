@@ -56,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -472,7 +473,8 @@ func newWorkerCommand() *cli.Command {
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags).
+					WithDistributionAdmission(admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger)))
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
@@ -538,7 +540,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -862,6 +864,7 @@ func newWorkerCommand() *cli.Command {
 				PluginPublisher:              pluginPublisher,
 				Publishers:                   publishers,
 				TrialEmailsService:           trialEmailsService,
+				TrialFixtureHandler:          newTrialFixtureHandler(c.String("environment"), db, productFeatures),
 				RiskFingerprinter:            riskFingerprinter,
 				DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
 				LLMAnalyzerEnabled:           llmAnalyzerConfigFromCLI(c).Enabled(),

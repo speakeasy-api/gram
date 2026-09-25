@@ -97,6 +97,11 @@ func ListOrganizationProjectsAdminPath() string {
 	return "/admin/organization.projects"
 }
 
+// ListProjectMcpServersAdminPath returns the URL path to the admin service listProjectMcpServers HTTP endpoint.
+func ListProjectMcpServersAdminPath() string {
+	return "/admin/project.mcpServers"
+}
+
 // ListOrganizationActivityAdminPath returns the URL path to the admin service listOrganizationActivity HTTP endpoint.
 func ListOrganizationActivityAdminPath() string {
 	return "/admin/organization.activity"

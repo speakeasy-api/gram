@@ -7,6 +7,7 @@ import {
   CreditCardIcon,
   FolderIcon,
   HistoryIcon,
+  ServerIcon,
   SlidersHorizontalIcon,
   UsersIcon,
 } from "lucide-react";
@@ -97,6 +98,10 @@ export function RecordNav({
   });
   const onActivity = !!matchRoute({
     to: "/organizations/$idOrSlug/activity",
+    params: { idOrSlug },
+  });
+  const onMcpServers = !!matchRoute({
+    to: "/organizations/$idOrSlug/mcp-servers",
     params: { idOrSlug },
   });
   const onBilling = !!matchRoute({
@@ -226,6 +231,24 @@ export function RecordNav({
               {projectCount !== undefined && projectCount !== 1 && (
                 <SidebarMenuBadge>{projectCount}</SidebarMenuBadge>
               )}
+            </SidebarMenuItem>
+
+            {/* No count badge: the picker on the page counts per project. */}
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onMcpServers}
+                tooltip="MCP Servers"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/mcp-servers"
+                  params={{ idOrSlug }}
+                  {...currentProps(onMcpServers)}
+                >
+                  <ServerIcon />
+                  <span>MCP Servers</span>
+                </Link>
+              </SidebarMenuButton>
             </SidebarMenuItem>
 
             <SidebarMenuItem>

@@ -21,10 +21,10 @@ func TestHostedCheckpoint_ReevaluatesAndFailsClosed(t *testing.T) {
 
 	conn, orgID := newTestDatabase(t, "ks_hosted_checkpoint")
 	userID := "user_" + uuid.NewString()
-	insertUser(t, conn, userID, nil)
-	insertMembership(t, conn, orgID, userID, nil)
-	projectID := insertProject(t, conn, orgID, "hosted-checkpoint", nil)
-	serverID := insertMCPServer(t, conn, orgID, projectID, nil)
+	insertUser(t, conn, userID, false)
+	insertMembership(t, conn, orgID, userID, false)
+	projectID := insertProject(t, conn, orgID, "hosted-checkpoint", false)
+	serverID := insertMCPServer(t, conn, orgID, projectID, false)
 	source := ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: true}}
 	recorder := &coverageRecorder{}
 	checkpoint, err := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), nil, recorder)
@@ -102,10 +102,10 @@ func TestHostedCheckpoint_DerivationErrorsTakePrecedenceOverUnsupportedInputs(t 
 
 	conn, orgID := newTestDatabase(t, "ks_hosted_checkpoint_derivation_errors")
 	userID := "user_" + uuid.NewString()
-	insertUser(t, conn, userID, nil)
-	insertMembership(t, conn, orgID, userID, nil)
-	projectID := insertProject(t, conn, orgID, "hosted-checkpoint-errors", nil)
-	serverID := insertMCPServer(t, conn, orgID, projectID, nil)
+	insertUser(t, conn, userID, false)
+	insertMembership(t, conn, orgID, userID, false)
+	projectID := insertProject(t, conn, orgID, "hosted-checkpoint-errors", false)
+	serverID := insertMCPServer(t, conn, orgID, projectID, false)
 	serverSource := ServerSource{FrontingServerID: uuid.NullUUID{UUID: serverID, Valid: true}}
 	recorder := &coverageRecorder{}
 	checkpoint, err := NewHostedCheckpoint(conn, testenv.NewMeterProvider(t), nil, recorder)
@@ -158,16 +158,16 @@ func TestMCPToolExecutionEvaluationAcrossProjects(t *testing.T) {
 	require.NoError(t, err)
 
 	pausedUser := "user_" + uuid.NewString()
-	insertUser(t, conn, pausedUser, nil)
-	insertMembership(t, conn, orgID, pausedUser, nil)
+	insertUser(t, conn, pausedUser, false)
+	insertMembership(t, conn, orgID, pausedUser, false)
 	freeUser := "user_" + uuid.NewString()
-	insertUser(t, conn, freeUser, nil)
-	insertMembership(t, conn, orgID, freeUser, nil)
+	insertUser(t, conn, freeUser, false)
+	insertMembership(t, conn, orgID, freeUser, false)
 
-	projectOne := insertProject(t, conn, orgID, "proj-one", nil)
-	projectTwo := insertProject(t, conn, orgID, "proj-two", nil)
-	serverA := insertMCPServer(t, conn, orgID, projectOne, nil)
-	serverB := insertMCPServer(t, conn, orgID, projectTwo, nil)
+	projectOne := insertProject(t, conn, orgID, "proj-one", false)
+	projectTwo := insertProject(t, conn, orgID, "proj-two", false)
+	serverA := insertMCPServer(t, conn, orgID, projectOne, false)
+	serverB := insertMCPServer(t, conn, orgID, projectTwo, false)
 
 	principalAdapter, ok := registry.PrincipalAdapter(PrincipalKindUser)
 	require.True(t, ok)
@@ -250,8 +250,8 @@ func TestMCPToolExecutionEvaluationAcrossProjects(t *testing.T) {
 	requireMatch(t, evaluate(t, pausedUser, serverA), "All servers paused.")
 	requireMatch(t, evaluate(t, pausedUser, serverB), "All servers paused.")
 
-	projectThree := insertProject(t, conn, orgID, "proj-three", nil)
-	serverC := insertMCPServer(t, conn, orgID, projectThree, nil)
+	projectThree := insertProject(t, conn, orgID, "proj-three", false)
+	serverC := insertMCPServer(t, conn, orgID, projectThree, false)
 	requireMatch(t, evaluate(t, pausedUser, serverC), "All servers paused.")
 	requireNoMatch(t, evaluate(t, freeUser, serverC))
 }

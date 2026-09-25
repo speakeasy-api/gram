@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -102,14 +104,13 @@ func TestPrincipalAPIKeyAdmissionRevalidatesCredentialActivity(t *testing.T) {
 
 			keyID := uuid.New()
 			keyHash := uuid.NewString()
-			created, err := keysrepo.New(fixture.db).CreateAPIKey(t.Context(), keysrepo.CreateAPIKeyParams{
+			created, err := keysrepo.New(fixture.db).CreateAgentAPIKey(t.Context(), keysrepo.CreateAgentAPIKeyParams{
 				OrganizationID: fixture.organizationID, CreatedByUserID: fixture.authorizerUserID,
-				Name: "admission-" + keyID.String(), KeyPrefix: "gram_test", KeyHash: keyHash, Scopes: []string{"producer"},
+				Name: "admission-" + keyID.String(), KeyPrefix: "gram_test", KeyHash: keyHash,
+				SubjectUrn: conv.ToPGText(actor.String()), DelegatedGrants: credential.DelegatedGrants,
+				DelegatedGrantsVersion: pgtype.Int4{Int32: credential.DelegatedGrantsVersion, Valid: true},
+				ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), InfinityModifier: 0, Valid: true},
 			})
-			require.NoError(t, err)
-			//nolint:glint // notestingrawsql: AIM-194 owns the principal-key writer; this seeds its immutable profile
-			_, err = fixture.db.Exec(t.Context(), `UPDATE api_keys SET scopes = '{}', subject_urn = $1, delegated_grants = $2, delegated_grants_version = $3, expires_at = statement_timestamp() + INTERVAL '1 day' WHERE id = $4`,
-				actor.String(), credential.DelegatedGrants, credential.DelegatedGrantsVersion, created.ID)
 			require.NoError(t, err)
 
 			keyAuth := *authCtx
@@ -171,9 +172,16 @@ func TestPrincipalCredentialAdmissionReloadsLivePolicies(t *testing.T) {
 			fixture := newCredentialAdmissionFixture(t)
 			check := authz.Check{Scope: authz.ScopeProjectRead, ResourceID: fixture.projectID}
 			principal := principalURN(fixture)
-			//nolint:glint // notestingrawsql: simulate an authoritative live-policy removal and restoration
-			_, err := fixture.db.Exec(t.Context(), `DELETE FROM principal_grants WHERE organization_id = $1 AND principal_urn = $2 AND scope = $3`, fixture.organizationID, principal, string(authz.ScopeProjectRead))
+			parsed, err := urn.ParsePrincipal(principal)
 			require.NoError(t, err)
+			// Simulate an authoritative live-policy removal, restored below.
+			selectors, err := authz.NewSelector(authz.ScopeProjectRead, fixture.projectID).MarshalJSON()
+			require.NoError(t, err)
+			removed, err := accessrepo.New(fixture.db).DeletePrincipalGrantByIdentity(t.Context(), accessrepo.DeletePrincipalGrantByIdentityParams{
+				OrganizationID: fixture.organizationID, PrincipalUrn: parsed, Scope: string(authz.ScopeProjectRead), Selectors: selectors,
+			})
+			require.NoError(t, err)
+			require.Equal(t, int64(1), removed)
 
 			prepared, err := fixture.engine.PrepareContext(fixture.requestContext)
 			require.NoError(t, err)
@@ -181,8 +189,6 @@ func TestPrincipalCredentialAdmissionReloadsLivePolicies(t *testing.T) {
 			require.ErrorAs(t, fixture.engine.Require(prepared, check), &denied)
 			require.Equal(t, oops.CodeForbidden, denied.Code)
 
-			parsed, err := urn.ParsePrincipal(principal)
-			require.NoError(t, err)
 			seedGrant(t, t.Context(), fixture.db, fixture.organizationID, parsed, authz.ScopeProjectRead, fixture.projectID)
 			prepared, err = fixture.engine.PrepareContext(fixture.requestContext)
 			require.NoError(t, err)
@@ -345,13 +351,13 @@ func TestPrincipalCredentialsHonorLiveServerRestriction(t *testing.T) {
 			authCtx := &contextvalues.AuthContext{ActiveOrganizationID: fixture.organizationID}
 			ctx := contextvalues.WithPrincipalCredentialAuthorization(t.Context(), authCtx, actor, credential)
 			if apiKey {
-				key, err := keysrepo.New(fixture.db).CreateAPIKey(t.Context(), keysrepo.CreateAPIKeyParams{
+				key, err := keysrepo.New(fixture.db).CreateAgentAPIKey(t.Context(), keysrepo.CreateAgentAPIKeyParams{
 					OrganizationID: fixture.organizationID, CreatedByUserID: fixture.authorizerUserID,
-					Name: "server-restriction", KeyPrefix: "gram_test", KeyHash: uuid.NewString(), Scopes: []string{"producer"},
+					Name: "server-restriction", KeyPrefix: "gram_test", KeyHash: uuid.NewString(),
+					SubjectUrn: conv.ToPGText(actor.String()), DelegatedGrants: raw,
+					DelegatedGrantsVersion: pgtype.Int4{Int32: credential.DelegatedGrantsVersion, Valid: true},
+					ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), InfinityModifier: 0, Valid: true},
 				})
-				require.NoError(t, err)
-				//nolint:glint // notestingrawsql: seed the immutable principal-key profile under test
-				_, err = fixture.db.Exec(t.Context(), `UPDATE api_keys SET scopes = '{}', subject_urn = $1, delegated_grants = $2, delegated_grants_version = $3, expires_at = statement_timestamp() + INTERVAL '1 day' WHERE id = $4`, actor.String(), raw, credential.DelegatedGrantsVersion, key.ID)
 				require.NoError(t, err)
 				authCtx.APIKeyID = key.ID.String()
 				ctx = contextvalues.WithPrincipalAPIKeyAuthorization(t.Context(), authCtx, actor, credential)

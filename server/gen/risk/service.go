@@ -21,6 +21,9 @@ type Service interface {
 	CreateRiskPolicy(context.Context, *CreateRiskPolicyPayload) (res *types.RiskPolicy, err error)
 	// List all risk analysis policies for the current project.
 	ListRiskPolicies(context.Context, *ListRiskPoliciesPayload) (res *ListRiskPoliciesResult, err error)
+	// List enabled MCP-scoped risk policies that apply to an MCP server and
+	// optional tool. Policies without an MCP scope are excluded.
+	ListRiskPoliciesForMcpServer(context.Context, *ListRiskPoliciesForMcpServerPayload) (res *ListRiskPoliciesResult, err error)
 	// List the built-in exclusion library (known-safe values suppressed before
 	// they reach exclusions), grouped by category.
 	ListBuiltinExclusions(context.Context, *ListBuiltinExclusionsPayload) (res *ListBuiltinExclusionsResult, err error)
@@ -204,7 +207,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [50]string{"createRiskPolicy", "listRiskPolicies", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskAnalysisStatus", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [51]string{"createRiskPolicy", "listRiskPolicies", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskAnalysisStatus", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -370,6 +373,9 @@ type CreateRiskPolicyPayload struct {
 	// Principal URNs this policy applies to. For audience_type=everyone, the
 	// server stores user:all.
 	AudiencePrincipalUrns []string
+	// Optional MCP server and tool restriction. Omit or send an empty server list
+	// to apply the policy to every MCP server.
+	McpScope *types.RiskMCPScope
 	// Complete desired canonical URL allow set for this policy. Omit or send empty
 	// to create no URL-specific allow decisions.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`
@@ -711,6 +717,18 @@ type ListRiskExclusionsPayload struct {
 type ListRiskExclusionsResult struct {
 	// The list of risk exclusions.
 	Exclusions []*types.RiskExclusion
+}
+
+// ListRiskPoliciesForMcpServerPayload is the payload type of the risk service
+// listRiskPoliciesForMcpServer method.
+type ListRiskPoliciesForMcpServerPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The MCP server ID.
+	McpServerID string
+	// Optional tool name used to apply per-server tool selections.
+	ToolName *string
 }
 
 // ListRiskPoliciesPayload is the payload type of the risk service
@@ -1594,6 +1612,9 @@ type UpdateRiskPolicyPayload struct {
 	// Principal URNs this policy applies to. Omit to preserve the current target
 	// principals.
 	AudiencePrincipalUrns []string
+	// Optional MCP server and tool restriction. Omit to preserve; send an empty
+	// server list to clear and apply the policy to every MCP server.
+	McpScope *types.RiskMCPScope
 	// Complete desired canonical URL allow set for this policy. Omit to preserve;
 	// send empty to clear.
 	ShadowMcpAllowedUrls []string `json:"shadow_mcp_allowed_urls"`

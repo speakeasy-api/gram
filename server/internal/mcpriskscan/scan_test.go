@@ -101,6 +101,7 @@ func TestNoop_MetricsCountUnsampledScansWithBoundedDimensions(t *testing.T) {
 		attrs := attribute.NewSet(
 			attribute.String("gram.mcp.risk.scan.surface", seam.surface),
 			attribute.String("gram.mcp.risk.scan.method", seam.method),
+			attribute.String("gram.mcp.risk.scan.decision", "allow"),
 		)
 		wantCounts[attrs] = 2
 		ctx := t.Context()

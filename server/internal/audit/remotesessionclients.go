@@ -34,7 +34,7 @@ type LogRemoteSessionClientCreateEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 }
 
 func (l *Logger) LogRemoteSessionClientCreate(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientCreateEvent) error {
@@ -72,7 +72,7 @@ type LogRemoteSessionClientUpdateEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 
 	SnapshotBefore *types.RemoteSessionClient
 	SnapshotAfter  *types.RemoteSessionClient
@@ -124,7 +124,7 @@ type LogRemoteSessionClientDeleteEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 }
 
 func (l *Logger) LogRemoteSessionClientDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionClientDeleteEvent) error {
@@ -162,7 +162,7 @@ type LogRemoteSessionClientDetachMcpServerEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 	McpServerURN           urn.McpServer
 	McpServerName          string
 }
@@ -220,7 +220,7 @@ type LogRemoteSessionClientUserSessionIssuerAttachmentEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 	UserSessionIssuerURN   urn.UserSessionIssuer
 }
 
@@ -276,7 +276,7 @@ type LogRemoteSessionClientJsonWebKeySetAttachmentEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 	JsonWebKeySetURN       urn.JsonWebKeySet
 }
 
@@ -325,7 +325,7 @@ type LogRemoteSessionClientRevokeSessionsEvent struct {
 	ActorSlug        *string
 
 	RemoteSessionClientURN urn.RemoteSessionClient
-	ClientID               string //nolint:glint // RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
+	ClientID               string //nolint:glint // auditeventurnnaming: RFC 7591 client_id (issuer-assigned opaque string), distinct from the resource's URN/UUID.
 	RevokedCount           int64
 }
 

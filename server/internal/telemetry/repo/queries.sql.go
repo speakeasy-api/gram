@@ -97,7 +97,7 @@ func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity, ca
 	if len(identity.Emails) > 0 {
 		match = append(match, squirrel.And{
 			squirrel.Eq{"telemetry_logs.user_id": ""},
-			squirrel.Eq{"lower(telemetry_logs.user_email)": identity.Emails}, //nolint:glint // legacy flag-off identity path; deleted at GA with the canonical fold rollout
+			squirrel.Eq{"lower(telemetry_logs.user_email)": identity.Emails}, //nolint:glint // norawuseremailfilter: legacy flag-off identity path; deleted at GA with the canonical fold rollout
 		})
 	}
 
@@ -7329,7 +7329,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		}
 	}
 
-	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source", "skill_name") //nolint:glint // fold-neutral: trace_id keys the group (one trace = one email) and the trace list deliberately displays the literal email; the drill filters above fold
+	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source", "skill_name") //nolint:glint // norawuseremailfilter: fold-neutral: trace_id keys the group (one trace = one email) and the trace list deliberately displays the literal email; the drill filters above fold
 
 	// Pagination based on trace_id cursor
 	if arg.Cursor != "" {

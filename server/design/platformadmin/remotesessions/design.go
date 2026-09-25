@@ -462,9 +462,8 @@ var ListIssuerConvergenceCandidatesResult = Type("ListIssuerConvergenceCandidate
 
 // IssuerMigratePreflight describes the impact of consolidating one
 // organization's issuer onto a global issuer. can_migrate is FALSE when
-// endpoint metadata differs, an MCP-server binding conflicts, or a
-// user-session issuer still trusts the source, or active identity-chaining
-// bindings reference the source — the same conditions the
+// endpoint metadata differs, an MCP-server binding conflicts, an EMA binding is
+// active, or a user-session issuer still trusts the source — the same conditions the
 // mutation rejects with 409.
 var IssuerMigratePreflight = Type("IssuerMigratePreflight", func() {
 	Description("Authoritative impact summary for consolidating a tenant remote_session_issuer onto a global one: how many clients move, which MCP servers are affected, every blocker that would make the migration fail, and how many tenant-owned clients the target already carries.")

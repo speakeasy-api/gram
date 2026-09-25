@@ -61,7 +61,7 @@ type PlatformContext struct {
 const platformOverview = "This session exposes a catalogue filtered to workflows supported by your current RBAC grants. Exact project or resource checks apply only when a call targets that project or resource. " +
 	"A workflow missing from the catalogue may be requestable; requestable_workflows names only broad categories and never reveals hidden resources. A denied admin-gated call names the required permission and, when safe, offers a request-access link; member reads may instead hide inaccessible resources or return a generic denial. " +
 	"A project is where MCP servers and skills are kept. A plugin is a bundle administrators share with people. MCP read access, MCP connection access, and skill permissions remain separate. " +
-	"Issuer migration and identity-chaining binding inspection, unlinking, and rebinding are not available through this server. Active identity-chaining bindings can block issuer configuration changes, deletion, and consolidation. Ask an authorized administrator to inspect the issuer preflight in the dashboard or management API, explicitly unlink affected bindings using a supported management workflow before changing the issuer, and prepare new bindings for the target provider afterward. If that workflow is unavailable, stop and contact support; never bypass the binding safeguard or claim that an MCP connection operation unlinks these bindings."
+	"Issuer migration and identity-chaining binding inspection, unlinking, and rebinding are not available through this server. Active identity-chaining bindings can block issuer configuration changes, deletion, and consolidation. Organization remote-session client deletion is also blocked when its management API deletion preflight reports blocking_reason=identity_chaining and ema_binding_count greater than zero (can_delete=false). An organization administrator must inspect that client preflight, identify affected projects, and have an authorized project administrator read each exact preparation binding and explicitly unlink or rebind it with its current generation before retrying deletion. Re-read the client preflight afterward; deleting an MCP connection does not remove this blocker. Client deletion and its live preflight are not exposed as Platform MCP tools; do not infer a live binding count or claim deletion is safe from this guidance. Ask an authorized administrator to inspect the issuer preflight in the dashboard or management API, explicitly unlink affected bindings using a supported management workflow before changing the issuer, and prepare new bindings for the target provider afterward. If that workflow is unavailable, stop and contact support; never bypass the binding safeguard or claim that an MCP connection operation unlinks these bindings."
 
 type ListProjectsInput struct {
 	Limit int `json:"limit,omitempty" jsonschema:"maximum number of projects to return; server clamps this to 100"`
@@ -173,7 +173,7 @@ func newServer(reader Reader, catalog Catalog, registrations *RegistrationServic
 	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate, nil, nil)
 }
 
-func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService) (*mcp.Server, *Registrar) {
+func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService, connectionMutations ...*MCPConnectionMutationService) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
@@ -193,6 +193,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Never request or accept OAuth codes, tokens, client secrets, passwords, API keys, or secret headers in chat. The registration dashboard_setup_url is the Authentication settings fallback, not the authorization page. Force a fresh readiness check after user authorization.",
 			"Setup also decides which MCP clients may sign in to the new server: read get_mcp_client_admission, explain in plain words which apps that lets in, and only change it with set_mcp_client_admission after the user explicitly confirms.",
 			"Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default.",
+			"To change an existing MCP server or gateway address or network access, first read its exact connection settings in the selected project. Show the current and proposed address or mode, and wait for explicit confirmation before changing it. Re-read that same target afterwards. A publication request means the plugin update was requested, not that its packages or downstream users have converged; verify the publication evidence before reporting completion.",
 			"Creating a data export is a mutation: first show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask for explicit confirmation. Never request or accept authorization header values in chat; create the export without headers and send the user to the returned management URL to add authentication securely.",
 		}, "\n\n"),
 		PageSize: 32,
@@ -201,7 +202,13 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	reg := newRegistrar(server)
 
 	registerReadTools(reg, reader, cursorKeyMaterial)
+	var connectionMutationService *MCPConnectionMutationService
+	if len(connectionMutations) > 0 {
+		connectionMutationService = connectionMutations[0]
+	}
 	if postgresReader, ok := reader.(*PostgresReader); ok {
+		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db))
+		registerMCPConnectionMutationTools(reg, connectionMutationService)
 		if postgresReader.reviewRequests == nil {
 			registerUnavailableReviewRequestTools(reg)
 		} else {
@@ -233,6 +240,8 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerShadowDecisionTool(reg, postgresReader.shadowDecisions)
 		registerShadowAITools(reg, postgresReader.shadowAI)
 	} else {
+		registerUnavailableMCPConnectionSettingsTool(reg)
+		registerMCPConnectionMutationTools(reg, nil)
 		registerUnavailableReviewRequestTools(reg)
 		registerRiskAnalysisStatusTool(reg, nil)
 		registerRiskFindingsTool(reg, nil)

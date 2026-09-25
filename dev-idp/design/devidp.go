@@ -20,6 +20,14 @@ var WorkosCurrentUser = Type("WorkosCurrentUser", func() {
 	Required("workos_sub")
 })
 
+// CurrentUserProvenance identifies the running local IdP and its opened storage.
+var CurrentUserProvenance = Type("CurrentUserProvenance", func() {
+	Attribute("backend", String, "Parsed running backend (local).")
+	Attribute("worktree_root", String, "Canonical absolute process worktree root.")
+	Attribute("database_path", String, "Canonical absolute opened SQLite main database path.")
+	Required("backend", "worktree_root", "database_path")
+})
+
 // CurrentUser is the discriminated payload returned by devIdp.getCurrentUser.
 // `mode` names the identity slot that was read. The oauth2-1 slot
 // populates `user`; the workos slot populates `workos`.
@@ -29,6 +37,8 @@ var CurrentUser = Type("CurrentUser", func() {
 	})
 	Attribute("user", User, "Local user record. Populated for the oauth2-1 slot.")
 	Attribute("workos", WorkosCurrentUser, "Live WorkOS profile. Populated for workos mode only.")
+
+	Attribute("provenance", CurrentUserProvenance, "Best-effort local provenance, only on getCurrentUser for the oauth2-1 slot with a local backend and verifiable disk storage and worktree origin.")
 
 	Required("mode")
 })

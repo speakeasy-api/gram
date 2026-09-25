@@ -20,6 +20,7 @@ func TestPluginAssignmentAdmissionErrorMappings(t *testing.T) {
 		code  string
 	}{
 		{cause: admission.ErrApprovalRequired, code: "approval_required"},
+		{cause: admission.ErrPrivateGatewayAudience, code: "conflict"},
 		{cause: admission.ErrDistributionDisabled, code: "distribution_disabled"},
 		{cause: admission.ErrUnavailable, code: "feature_unavailable"},
 	} {
