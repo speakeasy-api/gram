@@ -1624,6 +1624,21 @@ type UpdateSupportMatrixResponseBody struct {
 	Revision     string                           `json:"revision"`
 }
 
+// GetSupportCoverageResponseBody is the type of the "admin" service
+// "getSupportCoverage" endpoint HTTP response body.
+type GetSupportCoverageResponseBody struct {
+	// One cell per (capability, surface) pair. Always fully populated.
+	Cells []*SupportCoverageCellResponseBody `form:"cells" json:"cells" xml:"cells"`
+	// Activity whose hook_source folded to no surface.
+	Unmapped []*SupportCoverageUnmappedResponseBody `form:"unmapped" json:"unmapped" xml:"unmapped"`
+	// Length of the observation window in days.
+	WindowDays int `form:"window_days" json:"window_days" xml:"window_days"`
+	// RFC3339 start of the observation window.
+	From string `form:"from" json:"from" xml:"from"`
+	// RFC3339 end of the observation window.
+	To string `form:"to" json:"to" xml:"to"`
+}
+
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
 // endpoint HTTP response body for the "unauthorized" error.
 type LoginUnauthorizedResponseBody struct {
@@ -12417,6 +12432,190 @@ type UpdateSupportMatrixGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetSupportCoverageUnauthorizedResponseBody is the type of the "admin"
+// service "getSupportCoverage" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetSupportCoverageUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportCoverageForbiddenResponseBody is the type of the "admin" service
+// "getSupportCoverage" endpoint HTTP response body for the "forbidden" error.
+type GetSupportCoverageForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportCoverageBadRequestResponseBody is the type of the "admin" service
+// "getSupportCoverage" endpoint HTTP response body for the "bad_request" error.
+type GetSupportCoverageBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportCoverageNotFoundResponseBody is the type of the "admin" service
+// "getSupportCoverage" endpoint HTTP response body for the "not_found" error.
+type GetSupportCoverageNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportCoverageConflictResponseBody is the type of the "admin" service
+// "getSupportCoverage" endpoint HTTP response body for the "conflict" error.
+type GetSupportCoverageConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportCoverageUnsupportedMediaResponseBody is the type of the "admin"
+// service "getSupportCoverage" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetSupportCoverageUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportCoverageInvalidResponseBody is the type of the "admin" service
+// "getSupportCoverage" endpoint HTTP response body for the "invalid" error.
+type GetSupportCoverageInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportCoverageInvariantViolationResponseBody is the type of the "admin"
+// service "getSupportCoverage" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetSupportCoverageInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportCoverageUnexpectedResponseBody is the type of the "admin" service
+// "getSupportCoverage" endpoint HTTP response body for the "unexpected" error.
+type GetSupportCoverageUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetSupportCoverageGatewayErrorResponseBody is the type of the "admin"
+// service "getSupportCoverage" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetSupportCoverageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -12873,6 +13072,35 @@ type SupportMappingResponseBody struct {
 	Applicability string                              `json:"applicability"`
 	Conditions    string                              `json:"conditions"`
 	Facts         map[string]*SupportFactResponseBody `json:"facts"`
+}
+
+// SupportCoverageCellResponseBody is used to define fields on response body
+// types.
+type SupportCoverageCellResponseBody struct {
+	// Capability the cell reports on.
+	Capability string `form:"capability" json:"capability" xml:"capability"`
+	// Consuming surface the cell reports on.
+	Surface string `form:"surface" json:"surface" xml:"surface"`
+	// Whether evidence was found, absent, or not answerable yet.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Primary measure: sessions, tokens, blocks, attributed sessions or distinct
+	// shadow servers depending on the capability. Zero unless observed.
+	Value int64 `form:"value" json:"value" xml:"value"`
+	// Short qualifier rendered under the value. Empty when there is nothing to
+	// qualify.
+	Detail string `form:"detail" json:"detail" xml:"detail"`
+	// RFC3339 timestamp of the most recent supporting evidence. Absent unless
+	// observed.
+	LastSeen *string `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
+}
+
+// SupportCoverageUnmappedResponseBody is used to define fields on response
+// body types.
+type SupportCoverageUnmappedResponseBody struct {
+	// The raw, unrecognized hook_source.
+	HookSource string `form:"hook_source" json:"hook_source" xml:"hook_source"`
+	// Sessions observed under it inside the window.
+	Sessions int64 `form:"sessions" json:"sessions" xml:"sessions"`
 }
 
 // SupportDraftRequestBody is used to define fields on request body types.
@@ -14254,6 +14482,41 @@ func NewUpdateSupportMatrixResponseBody(res *admin.SupportMatrix) *UpdateSupport
 	}
 	if res.Draft != nil {
 		body.Draft = marshalAdminSupportDraftToSupportDraftResponseBody(res.Draft)
+	}
+	return body
+}
+
+// NewGetSupportCoverageResponseBody builds the HTTP response body from the
+// result of the "getSupportCoverage" endpoint of the "admin" service.
+func NewGetSupportCoverageResponseBody(res *admin.SupportCoverageResult) *GetSupportCoverageResponseBody {
+	body := &GetSupportCoverageResponseBody{
+		WindowDays: res.WindowDays,
+		From:       res.From,
+		To:         res.To,
+	}
+	if res.Cells != nil {
+		body.Cells = make([]*SupportCoverageCellResponseBody, len(res.Cells))
+		for i, val := range res.Cells {
+			if val == nil {
+				body.Cells[i] = nil
+				continue
+			}
+			body.Cells[i] = marshalAdminSupportCoverageCellToSupportCoverageCellResponseBody(val)
+		}
+	} else {
+		body.Cells = []*SupportCoverageCellResponseBody{}
+	}
+	if res.Unmapped != nil {
+		body.Unmapped = make([]*SupportCoverageUnmappedResponseBody, len(res.Unmapped))
+		for i, val := range res.Unmapped {
+			if val == nil {
+				body.Unmapped[i] = nil
+				continue
+			}
+			body.Unmapped[i] = marshalAdminSupportCoverageUnmappedToSupportCoverageUnmappedResponseBody(val)
+		}
+	} else {
+		body.Unmapped = []*SupportCoverageUnmappedResponseBody{}
 	}
 	return body
 }
@@ -22708,6 +22971,148 @@ func NewUpdateSupportMatrixGatewayErrorResponseBody(res *goa.ServiceError) *Upda
 	return body
 }
 
+// NewGetSupportCoverageUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getSupportCoverage" endpoint of the "admin" service.
+func NewGetSupportCoverageUnauthorizedResponseBody(res *goa.ServiceError) *GetSupportCoverageUnauthorizedResponseBody {
+	body := &GetSupportCoverageUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportCoverageForbiddenResponseBody builds the HTTP response body
+// from the result of the "getSupportCoverage" endpoint of the "admin" service.
+func NewGetSupportCoverageForbiddenResponseBody(res *goa.ServiceError) *GetSupportCoverageForbiddenResponseBody {
+	body := &GetSupportCoverageForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportCoverageBadRequestResponseBody builds the HTTP response body
+// from the result of the "getSupportCoverage" endpoint of the "admin" service.
+func NewGetSupportCoverageBadRequestResponseBody(res *goa.ServiceError) *GetSupportCoverageBadRequestResponseBody {
+	body := &GetSupportCoverageBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportCoverageNotFoundResponseBody builds the HTTP response body from
+// the result of the "getSupportCoverage" endpoint of the "admin" service.
+func NewGetSupportCoverageNotFoundResponseBody(res *goa.ServiceError) *GetSupportCoverageNotFoundResponseBody {
+	body := &GetSupportCoverageNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportCoverageConflictResponseBody builds the HTTP response body from
+// the result of the "getSupportCoverage" endpoint of the "admin" service.
+func NewGetSupportCoverageConflictResponseBody(res *goa.ServiceError) *GetSupportCoverageConflictResponseBody {
+	body := &GetSupportCoverageConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportCoverageUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getSupportCoverage" endpoint of the "admin"
+// service.
+func NewGetSupportCoverageUnsupportedMediaResponseBody(res *goa.ServiceError) *GetSupportCoverageUnsupportedMediaResponseBody {
+	body := &GetSupportCoverageUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportCoverageInvalidResponseBody builds the HTTP response body from
+// the result of the "getSupportCoverage" endpoint of the "admin" service.
+func NewGetSupportCoverageInvalidResponseBody(res *goa.ServiceError) *GetSupportCoverageInvalidResponseBody {
+	body := &GetSupportCoverageInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportCoverageInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getSupportCoverage" endpoint of the "admin"
+// service.
+func NewGetSupportCoverageInvariantViolationResponseBody(res *goa.ServiceError) *GetSupportCoverageInvariantViolationResponseBody {
+	body := &GetSupportCoverageInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportCoverageUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getSupportCoverage" endpoint of the "admin" service.
+func NewGetSupportCoverageUnexpectedResponseBody(res *goa.ServiceError) *GetSupportCoverageUnexpectedResponseBody {
+	body := &GetSupportCoverageUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetSupportCoverageGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getSupportCoverage" endpoint of the "admin" service.
+func NewGetSupportCoverageGatewayErrorResponseBody(res *goa.ServiceError) *GetSupportCoverageGatewayErrorResponseBody {
+	body := &GetSupportCoverageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -23491,6 +23896,17 @@ func NewUpdateSupportMatrixPayload(body *UpdateSupportMatrixRequestBody, adminSe
 		Revision: *body.Revision,
 	}
 	v.Draft = unmarshalSupportDraftRequestBodyToAdminSupportDraft(body.Draft)
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetSupportCoveragePayload builds a admin service getSupportCoverage
+// endpoint payload.
+func NewGetSupportCoveragePayload(organizationID string, windowDays int, adminSessionToken *string) *admin.GetSupportCoveragePayload {
+	v := &admin.GetSupportCoveragePayload{}
+	v.OrganizationID = organizationID
+	v.WindowDays = windowDays
 	v.AdminSessionToken = adminSessionToken
 
 	return v

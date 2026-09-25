@@ -7209,6 +7209,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getSupportCoverage:
+    speakeasy-default-get-support-coverage:
+      parameters:
+        query:
+          window_days: 30
+      responses:
+        "200":
+          application/json: {"cells": [], "from": "<value>", "to": "<value>", "unmapped": [], "window_days": 273709}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getTemplate:
     speakeasy-default-get-template:
       responses:
