@@ -13,7 +13,14 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import { useEffect, useMemo, useState } from "react";
-import { canAdmit, type MatchKind, subjectRuleWarning } from "./subjectRule";
+import {
+  canAdmit,
+  composeSubject,
+  type MatchKind,
+  shouldSwitchToWildcard,
+  subjectRuleWarning,
+  typedSubjectForMatchKind,
+} from "./subjectRule";
 
 export interface AdmitSubjectValues {
   issuer: string;
@@ -85,11 +92,17 @@ export function AdmitSubjectDialog({
   // The wildcard option is offered only where the issuer permits it, rather than
   // offered everywhere and refused on submit.
   const wildcardAvailable = selectedIssuer?.allowWildcardAdmission ?? false;
-  const warning = subjectRuleWarning(values.matchKind, values.subject);
+
+  // The terminator belongs to the match kind, not to the text: the field holds
+  // the stem and the "*" is rendered after it, so selecting Wildcard is the only
+  // place breadth is stated. Validate and submit the composed value, which is
+  // what the row will actually hold.
+  const storedSubject = composeSubject(values.matchKind, values.subject);
+  const warning = subjectRuleWarning(values.matchKind, storedSubject);
 
   const canSubmit = canAdmit({
     issuer: selectedIssuerUrl,
-    subject: values.subject,
+    subject: storedSubject,
     agentId: values.agentId,
     warning,
     issuerExists: selectedIssuer !== undefined,
@@ -144,7 +157,14 @@ export function AdmitSubjectDialog({
             <Select
               value={values.matchKind}
               onValueChange={(matchKind) =>
-                setValues({ ...values, matchKind: matchKind as MatchKind })
+                setValues({
+                  ...values,
+                  matchKind: matchKind as MatchKind,
+                  subject: typedSubjectForMatchKind(
+                    values.subject,
+                    matchKind as MatchKind,
+                  ),
+                })
               }
             >
               <SelectTrigger id="admit-match-kind">
@@ -167,26 +187,51 @@ export function AdmitSubjectDialog({
 
           <Stack gap={2}>
             <Label htmlFor="admit-subject">Subject</Label>
-            <Input
-              id="admit-subject"
-              value={values.subject}
-              placeholder={
-                values.matchKind === "wildcard"
-                  ? "wimse://identity.example.com/org/acme/agent/*"
-                  : "wimse://identity.example.com/org/acme/agent/a-1"
-              }
-              aria-describedby={warning ? "admit-subject-warning" : undefined}
-              aria-invalid={warning !== null}
-              onChange={(value) => setValues({ ...values, subject: value })}
-            />
+            <Stack direction="horizontal" align="center" gap={2}>
+              <Input
+                id="admit-subject"
+                className="flex-1"
+                value={values.subject}
+                placeholder={
+                  values.matchKind === "wildcard"
+                    ? "wimse://identity.example.com/org/acme/agent/"
+                    : "wimse://identity.example.com/org/acme/agent/a-1"
+                }
+                aria-describedby={warning ? "admit-subject-warning" : undefined}
+                aria-invalid={warning !== null}
+                onChange={(value) =>
+                  shouldSwitchToWildcard(
+                    value,
+                    values.matchKind,
+                    wildcardAvailable,
+                  )
+                    ? setValues({
+                        ...values,
+                        matchKind: "wildcard",
+                        subject: typedSubjectForMatchKind(value, "wildcard"),
+                      })
+                    : setValues({ ...values, subject: value })
+                }
+              />
+              {/* The terminator, shown rather than typed. It is part of the
+                  stored subject, so an operator can see the breadth of the rule
+                  they are about to create without having to keep it in step with
+                  the match kind themselves. */}
+              {values.matchKind === "wildcard" && (
+                <Text aria-hidden className="font-mono text-base">
+                  *
+                </Text>
+              )}
+            </Stack>
             {warning !== null ? (
               <Text id="admit-subject-warning" role="alert" small destructive>
                 {warning}
               </Text>
             ) : (
               <Text muted small>
-                Stored and compared exactly as entered. Gram does not normalize
-                it.
+                {values.matchKind === "wildcard"
+                  ? `Stored as ${storedSubject || "the value above plus *"}, and compared against anything beginning with it. Gram does not normalize it.`
+                  : "Stored and compared exactly as entered. Gram does not normalize it."}
               </Text>
             )}
           </Stack>
@@ -238,7 +283,13 @@ export function AdmitSubjectDialog({
             <Button.Text>Cancel</Button.Text>
           </Button>
           <Button
-            onClick={() => onSubmit({ ...values, issuer: selectedIssuerUrl })}
+            onClick={() =>
+              onSubmit({
+                ...values,
+                issuer: selectedIssuerUrl,
+                subject: storedSubject,
+              })
+            }
             disabled={!canSubmit || isPending}
           >
             <Button.Text>

@@ -52,15 +52,35 @@ function admitButton(): HTMLButtonElement {
   }) as HTMLButtonElement;
 }
 
-it("warns when an exact subject contains a star, and blocks the submit", () => {
-  const { onSubmit } = renderDialog([issuer({ allowWildcardAdmission: true })]);
+it("treats a pasted terminated rule as a wildcard rather than warning", () => {
+  // The dialog owns the terminator now, so a value arriving with one is read as
+  // intent rather than as the mistake it used to be: the match kind switches and
+  // the stem loses the star it would otherwise double.
+  renderDialog([issuer({ allowWildcardAdmission: true })]);
 
   fireEvent.change(subjectField(), {
     target: { value: "wimse://identity.example.com/org/acme/agent/*" },
   });
 
-  // Advisory in the sense that the server also refuses it — but the submit is
-  // blocked, because a rule that matches nothing reads as correct afterwards.
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect((subjectField() as HTMLInputElement).value).toBe(
+    "wimse://identity.example.com/org/acme/agent/",
+  );
+});
+
+it("still warns about a literal star where the issuer forbids wildcards", () => {
+  // The switch above is only available when the issuer permits wildcards. Where
+  // it does not there is nothing to switch to, so the rule really would be an
+  // exact subject containing a star — which matches nothing — and the warning has
+  // to stand.
+  const { onSubmit } = renderDialog([
+    issuer({ allowWildcardAdmission: false }),
+  ]);
+
+  fireEvent.change(subjectField(), {
+    target: { value: "wimse://identity.example.com/org/acme/agent/*" },
+  });
+
   const warning = screen.getByRole("alert");
   expect(warning.textContent).toContain("in full, literally");
   expect(admitButton().disabled).toBe(true);

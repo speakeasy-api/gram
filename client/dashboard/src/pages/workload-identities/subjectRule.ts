@@ -8,6 +8,71 @@ const WILDCARD_SUFFIX = "*";
 export type MatchKind = "exact" | "wildcard";
 
 /**
+ * The subject a rule will be stored with, given the match kind and what the
+ * operator typed.
+ *
+ * A wildcard rule's terminator is owned by the match kind rather than typed: the
+ * dialog shows it as a fixed suffix, so selecting Wildcard is the only place
+ * breadth is stated. Before this, an operator had to say it twice — pick Wildcard
+ * *and* type the `*` — and the warnings below existed largely to police the two
+ * disagreeing.
+ *
+ * An exact subject is passed through verbatim, including any `*`, so the warning
+ * about a literal star still fires. Silently stripping it would hide the mistake
+ * this function exists to surface.
+ */
+export function composeSubject(matchKind: MatchKind, typed: string): string {
+  const trimmed = typed.trim();
+  if (matchKind !== "wildcard" || trimmed.length === 0) {
+    return trimmed;
+  }
+  return trimmed.endsWith(WILDCARD_SUFFIX)
+    ? trimmed
+    : trimmed + WILDCARD_SUFFIX;
+}
+
+/**
+ * What the field should hold after switching to `next`.
+ *
+ * Switching to Wildcard lifts a typed terminator out of the field, so the suffix
+ * the dialog renders does not end up doubled. Switching to Exact leaves the text
+ * alone: the operator may have meant that star, and the warning will say so.
+ */
+export function typedSubjectForMatchKind(
+  typed: string,
+  next: MatchKind,
+): string {
+  if (next !== "wildcard") {
+    return typed;
+  }
+  const trimmedEnd = typed.trimEnd();
+  return trimmedEnd.endsWith(WILDCARD_SUFFIX)
+    ? trimmedEnd.slice(0, -WILDCARD_SUFFIX.length)
+    : typed;
+}
+
+/**
+ * Whether typing this value should switch the match kind to wildcard.
+ *
+ * Pasting a rule copied from elsewhere is the case that matters: it arrives with
+ * its terminator, and leaving the kind on Exact would store a literal star that
+ * matches nothing. Only offered where the issuer permits wildcards, so this
+ * cannot select a kind the server would refuse.
+ */
+export function shouldSwitchToWildcard(
+  typed: string,
+  current: MatchKind,
+  wildcardPermitted: boolean,
+): boolean {
+  return (
+    current === "exact" &&
+    wildcardPermitted &&
+    typed.trimEnd().endsWith(WILDCARD_SUFFIX) &&
+    typed.trimEnd().length > WILDCARD_SUFFIX.length
+  );
+}
+
+/**
  * Advisory problems with a subject as typed. The server refuses all of these;
  * surfacing them next to the field is what stops an operator submitting a rule
  * that is accepted into the table and then matches nothing.
