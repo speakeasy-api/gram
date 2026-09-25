@@ -78,6 +78,7 @@ type Service struct {
 	revoker                  *remotesessions.UpstreamRevoker
 	networkAccessEligibility networkaccess.EligibilityChecker
 	distributionAdmission    *admission.Guard
+	publicationRequests      plugins.PublicationRequests
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -113,7 +114,13 @@ func NewService(
 		revoker:                  revoker,
 		networkAccessEligibility: networkAccessEligibility,
 		distributionAdmission:    admission.NewGuard(nil, nil),
+		publicationRequests:      plugins.PublicationRequests{Enabled: false},
 	}
+}
+
+func (s *Service) WithPublicationRequests(enabled bool) *Service {
+	s.publicationRequests.Enabled = enabled
+	return s
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
@@ -850,6 +857,9 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		}
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "enqueue MCP server publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -1153,6 +1163,7 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 			ServerID:         pluginServer.ID,
 			ToolsetURN:       nil,
 			McpServerURN:     &deletedServerURN,
+			MetaMcpServerURN: nil,
 		}); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "log mcp server plugin detachment").LogError(ctx, logger)
 		}
@@ -1243,6 +1254,9 @@ func (s *Service) DeleteMcpServer(ctx context.Context, payload *gen.DeleteMcpSer
 		return oops.E(oops.CodeUnexpected, err, "log mcp server deletion").LogError(ctx, logger)
 	}
 
+	if err := s.publicationRequests.Project(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "enqueue MCP server publication").LogError(ctx, logger)
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}

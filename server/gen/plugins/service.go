@@ -106,14 +106,15 @@ type AddPluginServerPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	PluginID         string
-	// Gram toolset ID for a toolset-backed MCP server. Provide exactly one of
-	// toolset_id or mcp_server_id.
+	// Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
+	// meta_mcp_server_id.
 	ToolsetID *string
-	// Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of
-	// toolset_id or mcp_server_id.
+	// Gram MCP server ID. Provide exactly one backend ID.
 	McpServerID *string
-	// Display name for the server. Defaults to the backing toolset or mcp_server
-	// name when omitted.
+	// MCP gateway ID. Provide exactly one backend ID.
+	MetaMcpServerID *string
+	// Display name for the server. Defaults to the backing server name when
+	// omitted.
 	DisplayName *string
 	Policy      string
 	SortOrder   int32
@@ -338,12 +339,12 @@ type PluginAudience struct {
 type PluginServer struct {
 	// Unique plugin server identifier.
 	ID string
-	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
-	// toolset_id / mcp_server_id is set).
+	// Gram toolset ID. Exactly one backend ID is set.
 	ToolsetID *string
-	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
-	// of toolset_id / mcp_server_id is set).
+	// Gram MCP server ID. Exactly one backend ID is set.
 	McpServerID *string
+	// MCP gateway ID. Exactly one backend ID is set.
+	MetaMcpServerID *string
 	// Display name shown in generated plugin config.
 	DisplayName string
 	// Whether this server is required or optional.

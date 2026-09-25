@@ -24,9 +24,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -152,7 +155,10 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
 	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
 	require.NoError(t, err)
-	service := testPluginTargets(conn).WithAuthorization(engine)
+	service := testPluginTargets(conn).WithAuthorization(engine).
+		WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
+			PluginSlug: "direct-user", Packages: []plugindelivery.PublicationPackageAddress{{ServerName: "Assigned MCP", MCPURL: "https://private.example/mcp/member"}},
+		}}})
 
 	resolved, err := authz.ResolveUserPrincipals(prepared, conn, principal.OrganizationID, principal.UserID)
 	require.NoError(t, err)
@@ -241,7 +247,7 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	require.Len(t, detail.Servers, 1)
 	encoded, err := json.Marshal(detail)
 	require.NoError(t, err)
-	for _, forbidden := range []string{"secret-marketplace-token", "private-owner", "private-repository", `"assignments"`, "assignment_version", "principal_urn"} {
+	for _, forbidden := range []string{"secret-marketplace-token", "private-owner", "private-repository", `"assignments"`, "assignment_version", "principal_urn", "membership_id", "target_id", "publication_evidence", "private.example"} {
 		require.NotContains(t, string(encoded), forbidden)
 	}
 	_, err = service.GetAssignedPlugin(prepared, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: unpublished.ID.String()})
@@ -474,6 +480,15 @@ func TestGetPluginAssignmentVersionChangesAfterDashboardStyleEdit(t *testing.T) 
 	require.True(t, *after.AssignmentDetailsComplete)
 }
 
+type stubPluginPublicationEvidence struct {
+	items []plugindelivery.PublicationEvidence
+	err   error
+}
+
+func (s stubPluginPublicationEvidence) ResolvePublicationEvidence(_ context.Context, _ string, _ uuid.UUID, _ []string) ([]plugindelivery.PublicationEvidence, error) {
+	return s.items, s.err
+}
+
 func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
 	t.Parallel()
 
@@ -483,7 +498,11 @@ func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	admissionResult := DistributionAdmission{State: DistributionAdmissionNotApplicable, Mode: "legacy", MissingAudienceCounts: admission.MissingAudienceCounts{Everyone: 0, Roles: 0, Groups: 0, Attributes: 0, Users: 0}, CheckedAt: "2026-09-10T00:00:00Z", Complete: true}
-	service := testPluginTargets(conn).WithDistributionAdmissionReads(stubDistributionAdmissionReader{plugin: admissionResult})
+	service := testPluginTargets(conn).WithDistributionAdmissionReads(stubDistributionAdmissionReader{plugin: admissionResult}).
+		WithPublicationEvidence(stubPluginPublicationEvidence{items: []plugindelivery.PublicationEvidence{{
+			PluginSlug: "marketing", NotConfigured: false, Fresh: nil,
+			Packages: []plugindelivery.PublicationPackageAddress{{ServerName: "MCP", MCPURL: "https://private.example/mcp/first"}},
+		}}})
 	marketing := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Marketing Tools", "marketing")
 
 	// Named by slug, by exact name, and by id: one plugin, three ways to say it.
@@ -492,10 +511,102 @@ func TestGetPluginResolvesAnExactTargetAndReportsMembership(t *testing.T) {
 		require.NoError(t, err, target)
 		require.Equal(t, marketing.ID.String(), got.Plugin.ID)
 		require.Equal(t, &admissionResult, got.Plugin.DistributionAdmission)
+		require.NotNil(t, got.PublicationEvidence)
+		require.Nil(t, got.PublicationEvidence.Fresh, "missing fingerprint cannot establish freshness")
+		require.Equal(t, []PluginPublicationPackage{{ServerName: "MCP", MCPURL: "https://private.example/mcp/first"}}, got.PublicationEvidence.Packages)
 		require.Empty(t, got.Servers)
 		require.Empty(t, got.Skills)
 		require.False(t, got.Truncated)
 	}
+}
+
+func TestGetPluginRetainsInventoryWhenPublicationEvidenceIsUnavailable(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_evidence_unavailable")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Existing MCPs", "existing-mcps")
+	service := testPluginTargets(conn)
+	for _, evidence := range []stubPluginPublicationEvidence{
+		{items: nil},
+		{err: errors.New("publication resolution failed")},
+		{items: []plugindelivery.PublicationEvidence{{PluginSlug: "another-plugin", Packages: []plugindelivery.PublicationPackageAddress{{ServerName: "Wrong", MCPURL: "https://private.example/mcp/wrong"}}}}},
+	} {
+		service.WithPublicationEvidence(evidence)
+		got, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: "existing-mcps"})
+		require.NoError(t, err)
+		require.Equal(t, "existing-mcps", got.Plugin.Slug)
+		require.NotNil(t, got.PublicationEvidence)
+		require.True(t, got.PublicationEvidence.Unavailable)
+		require.Nil(t, got.PublicationEvidence.Fresh)
+		require.Empty(t, got.PublicationEvidence.Packages)
+	}
+}
+
+func TestGetPluginPagesTypedMembershipAndRejectsStaleCursor(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_member_pages")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := testPluginTargets(conn)
+	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Existing MCPs", "existing-mcps")
+	const memberCount = maxPluginMembers + 1
+	serverIDs := make([]uuid.UUID, memberCount)
+	for i := range serverIDs {
+		remoteID := uuid.New()
+		_, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+			ID: remoteID, ProjectID: project.ID, TransportType: "streamable-http", Url: "https://example.test/mcp",
+		})
+		require.NoError(t, err)
+		serverIDs[i] = uuid.New()
+		_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+			ID: serverIDs[i], ProjectID: project.ID, Name: conv.ToPGText(fmt.Sprintf("Existing %03d", i)),
+			Slug: conv.ToPGText(fmt.Sprintf("existing-%03d", i)), RemoteMcpServerID: uuid.NullUUID{UUID: remoteID, Valid: true}, Visibility: "private",
+		})
+		require.NoError(t, err)
+		_, err = pluginsrepo.New(conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+			PluginID: plugin.ID, McpServerID: uuid.NullUUID{UUID: serverIDs[i], Valid: true},
+			DisplayName: fmt.Sprintf("Existing %03d", i), Policy: "required", SortOrder: int32(i),
+		})
+		require.NoError(t, err)
+	}
+
+	first, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String()})
+	require.NoError(t, err)
+	require.Len(t, first.Servers, maxPluginMembers)
+	require.NotEmpty(t, first.MembershipVersion)
+	require.NotEmpty(t, first.MembershipNextCursor)
+	require.Equal(t, "mcp_server", first.Servers[0].Backend)
+	require.Equal(t, serverIDs[0].String(), first.Servers[0].TargetID)
+	require.NotEmpty(t, first.Servers[0].MembershipID)
+	second, err := service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String(), MembershipCursor: first.MembershipNextCursor})
+	require.NoError(t, err)
+	require.Len(t, second.Servers, 1)
+	require.Empty(t, second.MembershipNextCursor)
+	require.Equal(t, first.MembershipVersion, second.MembershipVersion)
+	require.NotEqual(t, first.Servers[0].MembershipID, second.Servers[0].MembershipID)
+
+	newRemoteID := uuid.New()
+	_, err = remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{
+		ID: newRemoteID, ProjectID: project.ID, TransportType: "streamable-http", Url: "https://example.test/mcp",
+	})
+	require.NoError(t, err)
+	newServerID := uuid.New()
+	_, err = mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: newServerID, ProjectID: project.ID, Name: conv.ToPGText("New existing MCP"),
+		Slug: conv.ToPGText("new-existing-mcp"), RemoteMcpServerID: uuid.NullUUID{UUID: newRemoteID, Valid: true}, Visibility: "private",
+	})
+	require.NoError(t, err)
+	_, err = pluginsrepo.New(conn).AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID: plugin.ID, McpServerID: uuid.NullUUID{UUID: newServerID, Valid: true},
+		DisplayName: "New existing MCP", Policy: "required", SortOrder: memberCount,
+	})
+	require.NoError(t, err)
+	_, err = service.GetPlugin(ctx, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID.String(), MembershipCursor: first.MembershipNextCursor})
+	require.ErrorIs(t, err, ErrPluginCursorInvalid)
 }
 
 func TestGetPluginRefusesAnUnmatchedTargetRatherThanFallingBackToDefault(t *testing.T) {

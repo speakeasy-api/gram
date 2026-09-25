@@ -11,10 +11,7 @@ import type {
   McpServerVisibility,
 } from "@gram/client/models/components/mcpserver.js";
 import { useDeleteMcpServerMutation } from "@gram/client/react-query/deleteMcpServer.js";
-import {
-  buildGetMcpServerQuery,
-  invalidateAllGetMcpServer,
-} from "@gram/client/react-query/getMcpServer.js";
+import { buildGetMcpServerQuery } from "@gram/client/react-query/getMcpServer.js";
 import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import {
   invalidateAllMcpServers,
@@ -31,6 +28,11 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { DangerSettingsSection } from "@/components/detail/settings-section";
+import {
+  invalidateMcpServerQueries,
+  mcpServerVisibilityToast,
+  mcpServerVisibilityUpdateForm,
+} from "@/lib/mcp-server-visibility";
 import { DeleteSourceBackedServerDialogContent } from "./DeleteSourceBackedServerDialogContent";
 import {
   linkedMcpServersFilter,
@@ -38,36 +40,6 @@ import {
   type SourceBackedDeleteTarget,
 } from "./sourceDelete";
 import { invalidateWrapperDeleteAuthViews } from "./sourceInvalidation";
-
-function mcpServerVisibilityUpdateForm(
-  mcpServer: McpServer,
-  visibility: McpServerVisibility,
-) {
-  return {
-    id: mcpServer.id,
-    name: mcpServer.name ?? undefined,
-    remoteMcpServerId: mcpServer.remoteMcpServerId ?? undefined,
-    tunneledMcpServerId: mcpServer.tunneledMcpServerId ?? undefined,
-    toolsetId: mcpServer.toolsetId ?? undefined,
-    unproxiedMcpServerId: mcpServer.unproxiedMcpServerId ?? undefined,
-    environmentId: mcpServer.environmentId ?? undefined,
-    toolVariationsGroupId: mcpServer.toolVariationsGroupId ?? undefined,
-    visibility,
-  };
-}
-
-function mcpServerVisibilityToast(visibility: McpServerVisibility) {
-  switch (visibility) {
-    case "disabled":
-      return "MCP server disabled";
-    case "private":
-      return "MCP server enabled";
-    case "public":
-      return "MCP server set to public";
-    default:
-      return "MCP server updated";
-  }
-}
 
 function ServerControlRow({
   title,
@@ -193,10 +165,7 @@ export function DangerZoneSection({
   };
   const updateVisibility = useUpdateMcpServerMutation({
     onSuccess: async (_data, variables) => {
-      await Promise.all([
-        invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
-        invalidateAllMcpServers(queryClient, { refetchType: "all" }),
-      ]);
+      await invalidateMcpServerQueries(queryClient);
       const next = variables.request.updateMcpServerForm.visibility;
       toast.success(mcpServerVisibilityToast(next));
     },
