@@ -422,7 +422,8 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 // Keep the dashboard's /admin session cookie unchanged. A successful MCP
-// login also needs the same session on /admin-mcp for browser consent.
+// login also needs the same session on /admin-mcp for browser consent. A
+// dashboard login clears any older MCP-scoped browser cookie.
 func scopeMCPAdminCookie(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		next.ServeHTTP(&adminCallbackWriter{ResponseWriter: w}, r)
@@ -432,19 +433,25 @@ func scopeMCPAdminCookie(next http.Handler) http.Handler {
 type adminCallbackWriter struct{ http.ResponseWriter }
 
 func (w *adminCallbackWriter) WriteHeader(status int) {
-	if status == http.StatusTemporaryRedirect && strings.HasPrefix(w.Header().Get("Location"), "/admin-mcp/connect?state=") {
+	if status == http.StatusTemporaryRedirect {
 		for _, cookie := range (&http.Response{Header: w.Header()}).Cookies() { //nolint:exhaustruct // Only response headers are needed to parse cookies.
-			if cookie.Name == constants.AdminSessionCookie && cookie.Value != "" {
-				http.SetCookie(w.ResponseWriter, &http.Cookie{ //nolint:exhaustruct // No Domain so middleware controls cookie sharing.
-					Name:     constants.AdminSessionCookie,
-					Value:    cookie.Value,
-					Path:     "/admin-mcp",
-					Secure:   true,
-					HttpOnly: true,
-					SameSite: http.SameSiteLaxMode,
-				})
-				break
+			if cookie.Name != constants.AdminSessionCookie || cookie.Value == "" {
+				continue
 			}
+			mcpCookie := &http.Cookie{ //nolint:exhaustruct // No Domain so middleware controls cookie sharing.
+				Name:     constants.AdminSessionCookie,
+				Path:     "/admin-mcp",
+				Secure:   true,
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			}
+			if strings.HasPrefix(w.Header().Get("Location"), "/admin-mcp/connect?state=") {
+				mcpCookie.Value = cookie.Value
+			} else {
+				mcpCookie.MaxAge = -1
+			}
+			http.SetCookie(w.ResponseWriter, mcpCookie)
+			break
 		}
 	}
 	w.ResponseWriter.WriteHeader(status)

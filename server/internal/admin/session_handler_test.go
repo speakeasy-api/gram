@@ -211,6 +211,7 @@ func TestAdminSessionCookieWorksForDashboardAndMCP(t *testing.T) {
 			t.Parallel()
 			jar, err := cookiejar.New(nil)
 			require.NoError(t, err)
+			jar.SetCookies(callback, []*http.Cookie{{Name: constants.AdminSessionCookie, Value: "previous-session", Path: "/admin-mcp"}})
 			response := httptest.NewRecorder()
 			var encodeErr error
 			scopeMCPAdminCookie(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -222,18 +223,26 @@ func TestAdminSessionCookieWorksForDashboardAndMCP(t *testing.T) {
 			require.NoError(t, encodeErr)
 			require.Equal(t, http.StatusTemporaryRedirect, response.Code)
 			cookies := response.Result().Cookies()
-			if tc.mcp {
-				require.Len(t, cookies, 2)
-				require.Equal(t, "/admin-mcp", cookies[1].Path)
-				require.True(t, cookies[1].Secure)
-				require.True(t, cookies[1].HttpOnly)
-			} else {
-				require.Len(t, cookies, 1)
-			}
-			require.Empty(t, cookies[0].Path, "dashboard cookie retains its default /admin scope")
 			if tc.sessionID == "" {
+				require.Len(t, cookies, 1, "failed login does not change MCP browser cookie")
+				jar.SetCookies(callback, cookies)
+				requestURL := *callback
+				requestURL.Path = "/admin-mcp/connect"
+				mcpCookies := jar.Cookies(&requestURL)
+				require.Len(t, mcpCookies, 1)
+				require.Equal(t, "previous-session", mcpCookies[0].Value)
 				return
 			}
+			require.Len(t, cookies, 2)
+			require.Equal(t, "/admin-mcp", cookies[1].Path)
+			require.True(t, cookies[1].Secure)
+			require.True(t, cookies[1].HttpOnly)
+			if tc.mcp {
+				require.Equal(t, "test-session", cookies[1].Value)
+			} else {
+				require.Negative(t, cookies[1].MaxAge)
+			}
+			require.Empty(t, cookies[0].Path, "dashboard cookie retains its default /admin scope")
 			jar.SetCookies(callback, cookies)
 			for _, path := range []string{"/admin/session.get", "/admin/auth.logout", "/admin-mcp/connect", "/"} {
 				requestURL := *callback
