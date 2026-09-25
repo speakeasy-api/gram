@@ -1929,6 +1929,13 @@ type OrganizationRoleAssignment struct {
 	DeletedAt          pgtype.Timestamptz
 }
 
+type OrganizationRoleProvisioningSetting struct {
+	OrganizationID string
+	Enabled        pgtype.Bool
+	ProjectID      uuid.NullUUID
+	Version        pgtype.Int8
+}
+
 type OrganizationSetupTask struct {
 	OrganizationID string
 	TaskKey        string
@@ -2836,6 +2843,30 @@ type RiskResult struct {
 	FalsePositiveAt     pgtype.Timestamptz
 	FalsePositiveReason pgtype.Text
 	CreatedAt           pgtype.Timestamptz
+}
+
+type RolePluginAssociation struct {
+	ID                        uuid.UUID
+	RoleProvisioningSettingID uuid.NullUUID
+	ProjectID                 uuid.NullUUID
+	PluginID                  uuid.NullUUID
+	IsCurrent                 bool
+	RetiredAt                 pgtype.Timestamptz
+	LastAutomaticName         pgtype.Text
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+type RoleProvisioningSetting struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+	RoleUrn        string
+	Enabled        bool
+	ProjectID      uuid.NullUUID
+	LastAttemptAt  pgtype.Timestamptz
+	LastErrorCode  pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type SessionHandoffLink struct {
