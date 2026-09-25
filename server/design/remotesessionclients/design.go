@@ -897,6 +897,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	})
 	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.")
 	Attribute("audience", String, "Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.")
+	Attribute("legacy_callback_url", Boolean, "Whether the client was registered upstream with the legacy callback URL. The authorize leg then sends that URL and a JSON state instead of the current callback. Cleared when the client is rotated.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -904,7 +905,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "legacy_callback_url", "created_at", "updated_at")
 })
 
 var ListRemoteSessionClientsResult = Type("ListRemoteSessionClientsResult", func() {
