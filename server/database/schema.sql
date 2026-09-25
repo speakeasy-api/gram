@@ -9589,6 +9589,71 @@ CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_client_idx ON remote_sess
 CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_issuer_idx ON remote_session_ema_bindings (remote_session_issuer_id);
 CREATE INDEX IF NOT EXISTS remote_session_ema_bindings_user_issuer_idx ON remote_session_ema_bindings (user_session_issuer_id);
 
+-- Downstream access credentials acquired by identity chaining, separate from
+-- interactive remote_sessions and their scheduled refresh/recheck selectors.
+-- Expand-only storage: no reader exists until the AIM-62 executor is deployed.
+-- Consumers require live tenant, issuer, client and delegation references;
+-- NULL required references or soft-deleted parents make a credential unusable.
+-- client_selection records the selection mode, not binding reference nullness:
+-- implicit selection needs no binding; binding selection requires a live binding
+-- with the recorded generation. Changed selection or requested scopes invalidate reuse.
+-- Writers must erase access_token_encrypted when soft-deleting. FK actions and
+-- deleted_at alone do not erase ciphertext; AIM-62 owns erasure and bounded cleanup.
+CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT,
+  project_id uuid,
+  user_session_issuer_id uuid,
+  remote_session_issuer_id uuid,
+  remote_session_client_id uuid,
+  -- Canonical RFC 9728 resource; preserve its trailing slash.
+  resource TEXT NOT NULL,
+  -- Provisioned Gram human (user:<id>), never an agent, workload or external sub.
+  subject_urn TEXT NOT NULL,
+  -- binding or implicit, validated by the application.
+  client_selection TEXT NOT NULL,
+  remote_session_ema_binding_id uuid,
+  ema_binding_generation bigint,
+  trusted_issuer_session_id uuid,
+  requested_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  granted_scopes TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  access_token_encrypted TEXT,
+  -- Consumers cap or skip unknown provider expiry; never store indefinite access.
+  access_expires_at timestamptz NOT NULL,
+  -- Capability observation only; downstream refresh tokens and ID-JAGs are discarded.
+  downstream_refresh_token_observed boolean NOT NULL DEFAULT FALSE,
+  last_used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  CONSTRAINT remote_session_ema_credentials_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_ema_credentials_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_remote_session_ema_binding_id_fkey FOREIGN KEY (remote_session_ema_binding_id) REFERENCES remote_session_ema_bindings (id) ON DELETE SET NULL,
+  CONSTRAINT remote_session_ema_credentials_trusted_issuer_session_id_fkey FOREIGN KEY (trusted_issuer_session_id) REFERENCES trusted_issuer_sessions (id) ON DELETE SET NULL
+);
+
+-- Selection mode does not create a second live slot; switching modes retires the old row.
+CREATE UNIQUE INDEX IF NOT EXISTS remote_session_ema_credentials_subject_key
+ON remote_session_ema_credentials (project_id, user_session_issuer_id, remote_session_client_id, resource, subject_urn)
+WHERE deleted IS FALSE;
+
+-- Non-partial indexes support FK actions on live and soft-deleted rows alike.
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_project_id_idx
+ON remote_session_ema_credentials (project_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_user_session_issuer_id_idx
+ON remote_session_ema_credentials (user_session_issuer_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_remote_session_client_id_idx
+ON remote_session_ema_credentials (remote_session_client_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_remote_session_ema_binding_id_idx
+ON remote_session_ema_credentials (remote_session_ema_binding_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_trusted_issuer_session_id_idx
+ON remote_session_ema_credentials (trusted_issuer_session_id);
+CREATE INDEX IF NOT EXISTS remote_session_ema_credentials_access_expires_at_idx
+ON remote_session_ema_credentials (access_expires_at, id);
+
 -- Global support matrix: admin catalog data, not project-owned configuration.
 -- Catalog identities are retained by soft deletion; required references prevent
 -- hard deletion while dependent records exist. Writers maintain updated_at.
