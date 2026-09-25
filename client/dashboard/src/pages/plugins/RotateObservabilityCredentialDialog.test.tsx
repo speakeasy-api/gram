@@ -11,6 +11,7 @@ type MutateVariables = {
 const testState = vi.hoisted(() => ({
   isPending: false,
   mutate: vi.fn(),
+  reset: vi.fn(),
   invalidateKeys: vi.fn(),
   invalidatePublish: vi.fn(),
 }));
@@ -19,7 +20,7 @@ vi.mock("@gram/client/react-query/rotateObservabilityCredential", () => ({
   useRotateObservabilityCredentialMutation: () => ({
     isPending: testState.isPending,
     mutate: testState.mutate,
-    reset: vi.fn(),
+    reset: testState.reset,
   }),
 }));
 
@@ -90,6 +91,7 @@ function requestedFate(): string {
 beforeEach(() => {
   testState.isPending = false;
   testState.mutate.mockReset();
+  testState.reset.mockReset();
   testState.invalidateKeys.mockReset();
   testState.invalidatePublish.mockReset();
 });
@@ -129,6 +131,9 @@ describe("RotateObservabilityCredentialDialog", () => {
       screen.getByRole("button", { name: "I have saved the key" }),
     );
     expect(onOpenChange).toHaveBeenCalledWith(false);
+    // The mutation cache holds the same plaintext key, so dismissing the
+    // one-time reveal has to clear it too.
+    expect(testState.reset).toHaveBeenCalled();
   });
 
   it("reports the chosen fate when the previous key is revoked immediately", async () => {

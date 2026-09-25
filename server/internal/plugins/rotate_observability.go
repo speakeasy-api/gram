@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -36,6 +37,15 @@ const (
 // reaches installs through a hooks-only republish of the marketplace when that
 // is possible; otherwise it is persisted locally and the caller is told the
 // marketplace still carries the previous credential.
+//
+// Platform MCP: intentionally omitted. The outcome is "replace this project's
+// observability ingest credential" for an org admin, and no existing tool
+// covers plugin marketplace credentials (the closest, get_my_install_instructions,
+// documents that it returns no API key). The only useful result here is a
+// plaintext secret, which the Platform MCP contract never returns, and an
+// agent-driven rotation would break installs without the dashboard's one-time
+// copy surface and explicit fate choice. Revisit if the product ever exposes a
+// credential-free rotation outcome (for example "republish with a fresh key").
 func (s *Service) RotateObservabilityCredential(ctx context.Context, payload *gen.RotateObservabilityCredentialPayload) (*gen.RotateObservabilityCredentialResult, error) {
 	ac, err := s.authContext(ctx)
 	if err != nil {
@@ -55,6 +65,24 @@ func (s *Service) RotateObservabilityCredential(ctx context.Context, payload *ge
 	case previousKeyFateRevokeImmediately, previousKeyFateGrace:
 	default:
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid previous key fate")
+	}
+
+	// A disabled project publishes no hooks subtree, so a rotation would mint and
+	// persist a credential nothing can ever use. Matches the download guard.
+	observabilityEnabled, err := s.projectObservabilityEnabled(ctx, *ac.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read observability plugin setting").LogError(ctx, s.logger)
+	}
+	if !observabilityEnabled {
+		return nil, oops.E(oops.CodeBadRequest, nil, "observability plugin is disabled for this project")
+	}
+
+	// The cutoff is read before the replacement is minted: every key that existed
+	// when this rotation began is retired, and any key minted after it — including
+	// an overlapping rotation's replacement — is left alone.
+	retireBefore, err := keysrepo.New(s.db).CurrentDatabaseTime(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read rotation cutoff").LogError(ctx, s.logger)
 	}
 
 	candidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeHooks, "hooks")
@@ -119,11 +147,9 @@ func (s *Service) RotateObservabilityCredential(ctx context.Context, payload *ge
 		expiresAt = &t
 	}
 
-	// The replacement is already persisted, so the fate is applied to every other
-	// hooks key of this project in one statement: a rotation that overlaps this
-	// one can win the race to be the newest key, but neither can leave a
-	// pre-rotation credential behind.
-	previous, err := s.applyPreviousHooksKeyFate(ctx, ac, candidate, payload.PreviousKeyFate, expiresAt)
+	// The replacement is already persisted, so the fate is applied to every hooks
+	// key that predates this rotation in one statement.
+	previous, err := s.applyPreviousHooksKeyFate(ctx, ac, candidate, retireBefore, payload.PreviousKeyFate, expiresAt)
 	if err != nil {
 		return nil, err
 	}
@@ -213,6 +239,7 @@ func (s *Service) applyPreviousHooksKeyFate(
 	ctx context.Context,
 	ac *contextvalues.AuthContext,
 	replacement pluginAPIKeyCandidate,
+	retireBefore pgtype.Timestamptz,
 	fate string,
 	expiresAt *time.Time,
 ) ([]*gen.RotatedObservabilityKey, error) {
@@ -237,9 +264,10 @@ func (s *Service) applyPreviousHooksKeyFate(
 	switch fate {
 	case previousKeyFateRevokeImmediately:
 		rows, err := keysQ.RevokePluginHooksAPIKeysByProject(ctx, keysrepo.RevokePluginHooksAPIKeysByProjectParams{
-			OrganizationID:     ac.ActiveOrganizationID,
-			ProjectID:          projectID,
-			ReplacementKeyHash: replacement.keyHash,
+			OrganizationID:          ac.ActiveOrganizationID,
+			ProjectID:               projectID,
+			ReplacementKeyHash:      replacement.keyHash,
+			RetireKeysCreatedBefore: retireBefore,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "revoke previous hooks keys").LogError(ctx, s.logger)
@@ -252,10 +280,11 @@ func (s *Service) applyPreviousHooksKeyFate(
 			return nil, oops.E(oops.CodeUnexpected, nil, "grace rotation missing expiry").LogError(ctx, s.logger)
 		}
 		rows, err := keysQ.ExpirePluginHooksAPIKeysByProject(ctx, keysrepo.ExpirePluginHooksAPIKeysByProjectParams{
-			ExpiresAt:          conv.ToPGTimestamptz(*expiresAt),
-			OrganizationID:     ac.ActiveOrganizationID,
-			ProjectID:          projectID,
-			ReplacementKeyHash: replacement.keyHash,
+			ExpiresAt:               conv.ToPGTimestamptz(*expiresAt),
+			OrganizationID:          ac.ActiveOrganizationID,
+			ProjectID:               projectID,
+			ReplacementKeyHash:      replacement.keyHash,
+			RetireKeysCreatedBefore: retireBefore,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "expire previous hooks keys").LogError(ctx, s.logger)

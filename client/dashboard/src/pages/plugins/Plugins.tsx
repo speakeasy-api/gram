@@ -752,7 +752,11 @@ function ObservabilityPluginCard({
                     ? undefined
                     : "Requires an organization admin",
                   onClick: () => {
-                    setIsRotateDialogOpen(true);
+                    // Defer until after the menu has fully closed to avoid a
+                    // Radix focus-trap/body-lock conflict between the closing
+                    // menu and the opening dialog (same pattern as the install
+                    // sheet above).
+                    setTimeout(() => setIsRotateDialogOpen(true), 0);
                   },
                 },
               ]}

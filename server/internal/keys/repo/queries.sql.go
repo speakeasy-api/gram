@@ -152,6 +152,19 @@ func (q *Queries) CreateAgentAPIKey(ctx context.Context, arg CreateAgentAPIKeyPa
 	return i, err
 }
 
+const currentDatabaseTime = `-- name: CurrentDatabaseTime :one
+SELECT clock_timestamp()::timestamptz
+`
+
+// The database clock, used as the cutoff a credential rotation retires keys
+// against so the comparison shares a clock with api_keys.created_at.
+func (q *Queries) CurrentDatabaseTime(ctx context.Context) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, currentDatabaseTime)
+	var column_1 pgtype.Timestamptz
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const deleteAPIKey = `-- name: DeleteAPIKey :one
 UPDATE api_keys
 SET deleted_at = NOW()
@@ -271,23 +284,26 @@ func (q *Queries) DeleteAgentAPIKey(ctx context.Context, arg DeleteAgentAPIKeyPa
 
 const expirePluginHooksAPIKeysByProject = `-- name: ExpirePluginHooksAPIKeysByProject :many
 UPDATE api_keys
-SET expires_at = $1
+SET expires_at = LEAST(COALESCE(expires_at, $1), $1)
   , updated_at = clock_timestamp()
 WHERE organization_id = $2
   AND project_id = $3
   AND deleted IS FALSE
   AND key_hash <> $4
+  AND created_at < $5
   AND (expires_at IS NULL OR expires_at > clock_timestamp())
   AND scopes @> ARRAY['hooks']::text[]
   AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+  AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
 RETURNING id, organization_id, project_id, name, key_prefix, scopes
 `
 
 type ExpirePluginHooksAPIKeysByProjectParams struct {
-	ExpiresAt          pgtype.Timestamptz
-	OrganizationID     string
-	ProjectID          uuid.NullUUID
-	ReplacementKeyHash string
+	ExpiresAt               pgtype.Timestamptz
+	OrganizationID          string
+	ProjectID               uuid.NullUUID
+	ReplacementKeyHash      string
+	RetireKeysCreatedBefore pgtype.Timestamptz
 }
 
 type ExpirePluginHooksAPIKeysByProjectRow struct {
@@ -299,14 +315,17 @@ type ExpirePluginHooksAPIKeysByProjectRow struct {
 	Scopes         []string
 }
 
-// Already-expired keys are left alone: handing a dead credential a fresh grace
-// window would resurrect it.
+// LEAST keeps the earliest deadline: an already-expired key is excluded
+// outright, and a key already inside a grace window keeps that window rather
+// than having it extended, so repeated rotations cannot keep one credential
+// alive indefinitely.
 func (q *Queries) ExpirePluginHooksAPIKeysByProject(ctx context.Context, arg ExpirePluginHooksAPIKeysByProjectParams) ([]ExpirePluginHooksAPIKeysByProjectRow, error) {
 	rows, err := q.db.Query(ctx, expirePluginHooksAPIKeysByProject,
 		arg.ExpiresAt,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.ReplacementKeyHash,
+		arg.RetireKeysCreatedBefore,
 	)
 	if err != nil {
 		return nil, err
@@ -688,15 +707,18 @@ WHERE organization_id = $1
   AND project_id = $2
   AND deleted IS FALSE
   AND key_hash <> $3
+  AND created_at < $4
   AND scopes @> ARRAY['hooks']::text[]
   AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+  AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
 RETURNING id, organization_id, project_id, name, key_prefix, scopes
 `
 
 type RevokePluginHooksAPIKeysByProjectParams struct {
-	OrganizationID     string
-	ProjectID          uuid.NullUUID
-	ReplacementKeyHash string
+	OrganizationID          string
+	ProjectID               uuid.NullUUID
+	ReplacementKeyHash      string
+	RetireKeysCreatedBefore pgtype.Timestamptz
 }
 
 type RevokePluginHooksAPIKeysByProjectRow struct {
@@ -710,13 +732,26 @@ type RevokePluginHooksAPIKeysByProjectRow struct {
 
 // Plugin distribution mints hooks keys as plugins-hooks-<timestamp>-<token>
 // (publish) or plugins-hooks-download-<timestamp>-<token> (ZIP download). The
-// name pattern below mirrors the shape auth.IsOrgWidePluginHooksAPIKey parses,
-// so a key that merely starts with the reserved plugins- prefix is not swept up
-// by a rotation. Both statements are set-based and exclude the replacement key
-// by hash, so two concurrent rotations can still race for "newest key" but
-// neither can leave a pre-rotation credential behind.
+// two retirement statements below select that set the same way:
+//
+//   - the name matches the generated shape auth.IsOrgWidePluginHooksAPIKey
+//     parses, and its six-character token marker agrees with the stored
+//     key_prefix, so provenance is proven from the minting material rather than
+//     from a name a user could once have typed;
+//   - the key was created before the rotation began, which retires every
+//     pre-rotation credential while leaving any replacement minted by an
+//     overlapping rotation alone -- two concurrent rotations can race for
+//     "newest key", but neither can revoke the other's replacement and neither
+//     can leave a pre-rotation credential valid;
+//   - the replacement of THIS rotation is excluded by hash as well, so the key
+//     just handed to the caller cannot be swept up by its own statement.
 func (q *Queries) RevokePluginHooksAPIKeysByProject(ctx context.Context, arg RevokePluginHooksAPIKeysByProjectParams) ([]RevokePluginHooksAPIKeysByProjectRow, error) {
-	rows, err := q.db.Query(ctx, revokePluginHooksAPIKeysByProject, arg.OrganizationID, arg.ProjectID, arg.ReplacementKeyHash)
+	rows, err := q.db.Query(ctx, revokePluginHooksAPIKeysByProject,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ReplacementKeyHash,
+		arg.RetireKeysCreatedBefore,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -15,6 +15,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -61,6 +62,17 @@ func listHooksKeys(t *testing.T, ctx context.Context, conn *pgxpool.Pool) []keys
 	})
 
 	return keys
+}
+
+// keyExpiry reads the grace deadline a rotation wrote for one key.
+func keyExpiry(t *testing.T, ctx context.Context, conn *pgxpool.Pool, keyHash string) time.Time {
+	t.Helper()
+
+	key, err := keysrepo.New(conn).GetAPIKeyByKeyHash(ctx, keyHash)
+	require.NoError(t, err)
+	require.True(t, key.ExpiresAt.Valid, "expected a grace deadline")
+
+	return key.ExpiresAt.Time
 }
 
 func setKeyExpiry(t *testing.T, ctx context.Context, conn *pgxpool.Pool, keyHash string, expiresAt time.Time) {
@@ -191,22 +203,121 @@ func TestRotateObservabilityCredential_ConcurrentRotationsRetireOriginalKey(t *t
 			results <- rotation{result: result, err: err}
 		}()
 	}
+
+	minted := make([]string, 0, 2)
 	for range 2 {
 		got := <-results
 		require.NoError(t, got.err)
 		require.NotEmpty(t, got.result.Key)
+		minted = append(minted, got.result.Key)
 	}
 
-	// Whichever rotation applied its fate last wins the "newest key" race, but
-	// the credential that existed before either of them must be gone.
+	// Each rotation retires only the keys that predate its own cutoff, so it can
+	// never revoke a replacement minted after that cutoff. Two rotations that
+	// genuinely overlap therefore both survive; two that serialize end with the
+	// later one winning, which is ordinary last-writer-wins. What must never
+	// happen is the pair cancelling out and leaving the project with no usable
+	// hooks credential.
+	surviving := 0
+	for _, key := range minted {
+		hash, err := auth.GetAPIKeyHash(key)
+		require.NoError(t, err)
+		if _, err := keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, hash); err == nil {
+			surviving++
+		}
+	}
+	require.NotZero(t, surviving, "overlapping rotations must not revoke every replacement")
+
+	// The credential that existed before either rotation must be gone.
 	_, err = keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, original[0].KeyHash)
 	require.ErrorIs(t, err, pgx.ErrNoRows, "overlapping rotations must not leave the pre-rotation key valid")
 
-	remaining := listHooksKeys(t, ctx, ti.conn)
-	require.NotEmpty(t, remaining, "a rotation must leave a usable hooks credential behind")
-	for _, key := range remaining {
-		require.NotEqual(t, original[0].ID, key.ID)
-	}
+	require.Len(t, listHooksKeys(t, ctx, ti.conn), surviving)
+}
+
+func TestRotateObservabilityCredential_GraceDoesNotExtendAnOpenWindow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	_, _, err := ti.service.DownloadObservabilityPlugin(ctx, &gen.DownloadObservabilityPluginPayload{Platform: "claude"})
+	require.NoError(t, err)
+
+	original := listHooksKeys(t, ctx, ti.conn)
+	require.Len(t, original, 1)
+
+	first, err := ti.service.RotateObservabilityCredential(ctx, rotateObservabilityPayload("grace"))
+	require.NoError(t, err)
+	require.NotNil(t, first.PreviousKeysExpireAt)
+	firstDeadline, err := time.Parse(time.RFC3339, *first.PreviousKeysExpireAt)
+	require.NoError(t, err)
+
+	// Rotating again must not push the original key's deadline further out;
+	// otherwise repeated rotations keep one credential alive indefinitely.
+	second, err := ti.service.RotateObservabilityCredential(ctx, rotateObservabilityPayload("grace"))
+	require.NoError(t, err)
+	require.NotEmpty(t, second.PreviousKeys)
+
+	deadline := keyExpiry(t, ctx, ti.conn, original[0].KeyHash)
+	require.WithinDuration(t, firstDeadline, deadline, time.Second,
+		"the original key must keep the deadline its first grace rotation set")
+}
+
+func TestRotateObservabilityCredential_RejectsDisabledObservability(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	disabled := false
+	_, err := ti.service.UpdateMarketplaceSettings(ctx, &gen.UpdateMarketplaceSettingsPayload{
+		MarketplaceName:      nil,
+		ObservabilityEnabled: &disabled,
+		SessionToken:         nil,
+		ProjectSlugInput:     nil,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.RotateObservabilityCredential(ctx, rotateObservabilityPayload("grace"))
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+
+	require.Empty(t, listHooksKeys(t, ctx, ti.conn), "a rejected rotation must not mint a credential")
+}
+
+func TestRotateObservabilityCredential_RefusesWhenPublishedMCPCannotBeCarried(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	features := &feature.InMemory{}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	features.SetFlagPayload(feature.FlagHooksRollout, authCtx.ActiveOrganizationID, []byte(`{"version": 9999}`))
+
+	publishTestObservabilityProject(t, ctx, ti, "rotate-uncarriable")
+
+	keysBefore, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	mcpCountBefore := countPluginMCPKeys(keysBefore)
+
+	// The published repo can no longer be read, so the MCP component cannot be
+	// carried. Regenerating it would mint a replacement consumer key and rewrite
+	// the packages customers installed, so the rotation must refuse instead.
+	mock.lastPushedFiles = nil
+
+	_, err = ti.service.RotateObservabilityCredential(ctx, rotateObservabilityPayload("grace"))
+	require.Error(t, err)
+
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeFailedPrecondition, oopsErr.Code)
+
+	keysAfter, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, mcpCountBefore, countPluginMCPKeys(keysAfter), "a refused rotation must not mint a consumer key")
 }
 
 func TestRotateObservabilityCredential_ForbiddenWithoutOrgAdmin(t *testing.T) {
