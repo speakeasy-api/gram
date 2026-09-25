@@ -5,6 +5,16 @@ export function validateRegistryText(
   dataJson: string,
   base?: { id: string; updatedAt: string },
 ): ValidationIssue[] {
+  // Check the raw text, not parsed JSON values: escaped surrogates are lossless.
+  if (/[\uD800-\uDFFF]/u.test(dataJson))
+    return [
+      {
+        path: "/",
+        message:
+          "Record contains an unpaired UTF-16 surrogate. Use a JSON escape (\\uXXXX) or a valid Unicode character.",
+      },
+    ];
+
   const bytes = new TextEncoder();
   if (bytes.encode(dataJson).length > 8 * 1024 * 1024)
     return [{ path: "/", message: "Record exceeds 8 MiB of UTF-8." }];
