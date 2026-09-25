@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -114,7 +115,7 @@ func seedProjectServers(t *testing.T, db *pgxpool.Pool, orgID string, projectNam
 		require.NoError(t, err)
 		server, err := mcpserversrepo.New(db).CreateMCPServer(t.Context(), mcpserversrepo.CreateMCPServerParams{
 			ID: uuid.Must(uuid.NewV7()), ProjectID: projectID, Name: pgtype.Text{String: name, Valid: true},
-			ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: "private",
+			ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: visibility.Private,
 		})
 		require.NoError(t, err)
 		servers[i] = server.ID

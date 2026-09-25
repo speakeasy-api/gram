@@ -56,7 +56,7 @@ func TestAgentSessionLegacyOrganizationFallback(t *testing.T) {
 			require.NoError(t, err)
 			var upstream uuid.UUID
 			if tc.projectOrg != "" {
-				upstream = seedManagedUpstream(t, db, "org-a", issuer, "agent:"+agent.ID.String())
+				upstream = seedManagedUpstreamWith(t, db, "org-a", issuer, "agent:"+agent.ID.String(), nil).ID
 				_, err = db.Exec(t.Context(), `UPDATE remote_session_clients SET project_id=$1 WHERE id=(SELECT remote_session_client_id FROM remote_sessions WHERE id=$2)`, project, upstream) //nolint:glint // notestingrawsql: cascade must use issuer project, not the different same-org session project
 				require.NoError(t, err)
 			}

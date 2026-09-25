@@ -51,7 +51,7 @@ func TestAgentPolicyCRUDIsExactAllowOnlyAndAudited(t *testing.T) {
 	// The list is allow-only and filtered to the agent principal, so finding the
 	// row proves both its principal and its effect.
 	persisted, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(t.Context(), accessrepo.ListPrincipalGrantsByOrgParams{
-		OrganizationID: "org-policy", PrincipalUrn: "agent:" + agent.ID.String(),
+		OrganizationID: "org-policy", PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String(),
 	})
 	require.NoError(t, err)
 	require.True(t, slices.ContainsFunc(persisted, func(row accessrepo.ListPrincipalGrantsByOrgRow) bool {

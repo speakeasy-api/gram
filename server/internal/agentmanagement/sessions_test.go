@@ -107,11 +107,6 @@ func liveUserSession(ctx context.Context, db *pgxpool.Pool, orgID string, sessio
 	return session, nil
 }
 
-func seedManagedUpstream(t *testing.T, db *pgxpool.Pool, orgID string, issuerID uuid.UUID, subject string) uuid.UUID {
-	t.Helper()
-	return seedManagedUpstreamWith(t, db, orgID, issuerID, subject, nil).ID
-}
-
 // seedManagedUpstreamWith seeds a minimal upstream cascade fixture. The
 // ciphertext is never decrypted by the cascade tests.
 func seedManagedUpstreamWith(t *testing.T, db *pgxpool.Pool, orgID string, issuerID uuid.UUID, subject string, customize func(*remoterepo.UpsertRemoteSessionParams)) remoterepo.RemoteSession {
@@ -170,8 +165,8 @@ func TestAgentSessionsScopeAndRevocationCascade(t *testing.T) {
 	human, _ := seedManagedSession(t, db, "org-a", "user:owner")
 	otherSession, _ := seedManagedSession(t, db, "org-a", "agent:"+other.ID.String())
 	crossTenant, _ := seedManagedSession(t, db, "org-b", subject)
-	upstream := seedManagedUpstream(t, db, "org-a", issuer, subject)
-	humanUpstream := seedManagedUpstream(t, db, "org-a", issuer, "user:owner")
+	upstream := seedManagedUpstreamWith(t, db, "org-a", issuer, subject, nil).ID
+	humanUpstream := seedManagedUpstreamWith(t, db, "org-a", issuer, "user:owner", nil).ID
 	service := newTestService(db, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "owner")
 	listed, err := service.ListSessions(ctx, &gen.ListSessionsPayload{AgentID: agent.ID.String(), Limit: 1})

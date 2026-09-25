@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
-
 	gen "github.com/speakeasy-api/gram/server/gen/organizations"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
@@ -324,13 +322,13 @@ func TestOnboardingStorageIsOrganizationScoped(t *testing.T) {
 	// so it fails if that unique index is missing and the organization keeps a
 	// single onboarding row.
 	for _, preset := range []string{"gateway", "security"} {
-		err = queries.SetOrganizationOnboardingPreset(ctx, orgrepo.SetOrganizationOnboardingPresetParams{OrganizationID: org.ID, Preset: pgtype.Text{String: preset, Valid: true}})
+		err = queries.SetOrganizationOnboardingPreset(ctx, orgrepo.SetOrganizationOnboardingPresetParams{OrganizationID: org.ID, Preset: conv.ToPGText(preset)})
 		require.NoError(t, err)
 	}
 	selection, err := queries.GetOrganizationOnboardingSelection(ctx, org.ID)
 	require.NoError(t, err)
 	require.Len(t, selection, 1)
-	require.Equal(t, pgtype.Text{String: "security", Valid: true}, selection[0].OnboardingPreset)
+	require.Equal(t, conv.ToPGText("security"), selection[0].OnboardingPreset)
 
 	// Onboarding state has no lifetime beyond its organization: deleting the
 	// organization cascades, so a recreated organization starts without a preset.

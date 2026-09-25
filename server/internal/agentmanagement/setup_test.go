@@ -108,9 +108,14 @@ func agentWebhookOutboxActions(t *testing.T, conn *pgxpool.Pool, organizationID 
 	return actions
 }
 
+// auditFeedPageSize is the page size of the ListAuditLogs feed query (its
+// LIMIT 51 in audit/queries.sql). A result this long may be truncated, so
+// auditLogs treats it as a failure.
+const auditFeedPageSize = 51
+
 // auditLogs returns every audit row for one subject in an organization, oldest
-// first. An empty subjectID lists the whole organization. The feed query pages
-// at 51 rows, so a full page fails rather than silently truncating.
+// first. An empty subjectID lists the whole organization. A full feed page
+// fails rather than silently truncating.
 func auditLogs(t *testing.T, conn *pgxpool.Pool, organizationID, subjectID string) []auditrepo.ListAuditLogsRow {
 	t.Helper()
 
@@ -122,7 +127,7 @@ func auditLogs(t *testing.T, conn *pgxpool.Pool, organizationID, subjectID strin
 		OrganizationID: organizationID, SubjectID: subject, IncludeAssistantEvents: true,
 	})
 	require.NoError(t, err)
-	require.Less(t, len(rows), 51, "audit rows exceed one feed page")
+	require.Less(t, len(rows), auditFeedPageSize, "audit rows exceed one feed page")
 	slices.Reverse(rows)
 
 	return rows

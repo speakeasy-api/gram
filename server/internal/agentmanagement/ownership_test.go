@@ -11,6 +11,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -62,9 +63,7 @@ func TestTransferAtomicallyReplacesOwnerAndPreservesDirectPolicy(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, transfers, 1)
-	var before, after struct {
-		OwnerUserID string `json:"owner_user_id"`
-	}
+	var before, after audit.AgentSnapshot
 	require.NoError(t, json.Unmarshal(transfers[0].BeforeSnapshot, &before))
 	require.NoError(t, json.Unmarshal(transfers[0].AfterSnapshot, &after))
 	require.Equal(t, "agent:transfer", transfers[0].Action)
