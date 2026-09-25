@@ -31,7 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistants"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	activitiespkg "github.com/speakeasy-api/gram/server/internal/background/activities"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -121,7 +121,7 @@ type WorkerOptions struct {
 	BuiltinPresets    *presetlib.Library
 	ShadowMCPClient   *shadowmcp.Client
 	AuditLogger       *audit.Logger
-	WorkOSClient      activities.WorkOSClient
+	WorkOSClient      activitiespkg.WorkOSClient
 	ProductFeatures   *productfeatures.Client
 	PluginPublisher   *plugins.Service
 	Publishers        *Publishers
@@ -135,6 +135,9 @@ type WorkerOptions struct {
 
 	// TrialEmailsService synchronizes trial lifecycle changes with Loops.
 	TrialEmailsService *trialemails.Service
+
+	// TrialFixtureHandler is installed exclusively by local worker wiring.
+	TrialFixtureHandler func(context.Context, string) (bool, error)
 
 	// RiskFingerprinter matches exact-value exclusions against the tenant
 	// fingerprints stored on ClickHouse findings during the retroactive
@@ -236,6 +239,7 @@ func ForDeploymentProcessing(
 			Outbox:                  topics.NewNoopPublisher(),
 		},
 		TrialEmailsService:        nil,
+		TrialFixtureHandler:       nil,
 		RiskFingerprinter:         risk.Fingerprinter{},
 		DisableRiskRetroReconcile: false,
 		LLMAnalyzerEnabled:        false,
@@ -314,6 +318,7 @@ func NewTemporalWorker(
 		PluginPublisher:              nil,
 		Publishers:                   nil,
 		TrialEmailsService:           nil,
+		TrialFixtureHandler:          nil,
 		RiskFingerprinter:            risk.Fingerprinter{},
 		DisableRiskRetroReconcile:    false,
 		LLMAnalyzerEnabled:           false,
@@ -368,9 +373,15 @@ func NewTemporalWorker(
 			PluginPublisher:              conv.Default(o.PluginPublisher, opts.PluginPublisher),
 			Publishers:                   conv.Default(o.Publishers, opts.Publishers),
 			TrialEmailsService:           conv.Default(o.TrialEmailsService, opts.TrialEmailsService),
-			RiskFingerprinter:            defaultFingerprinter(o.RiskFingerprinter, opts.RiskFingerprinter),
-			DisableRiskRetroReconcile:    conv.Default(o.DisableRiskRetroReconcile, opts.DisableRiskRetroReconcile),
-			LLMAnalyzerEnabled:           conv.Default(o.LLMAnalyzerEnabled, opts.LLMAnalyzerEnabled),
+			TrialFixtureHandler: func() func(context.Context, string) (bool, error) {
+				if o.TrialFixtureHandler != nil {
+					return o.TrialFixtureHandler
+				}
+				return opts.TrialFixtureHandler
+			}(),
+			RiskFingerprinter:         defaultFingerprinter(o.RiskFingerprinter, opts.RiskFingerprinter),
+			DisableRiskRetroReconcile: conv.Default(o.DisableRiskRetroReconcile, opts.DisableRiskRetroReconcile),
+			LLMAnalyzerEnabled:        conv.Default(o.LLMAnalyzerEnabled, opts.LLMAnalyzerEnabled),
 		}
 	}
 
@@ -472,6 +483,7 @@ func NewTemporalWorker(
 		judgeRateLimiter,
 		opts.BuiltinPresets,
 		opts.TrialEmailsService,
+		opts.TrialFixtureHandler,
 		opts.GitHubEvidenceToken,
 		opts.RiskFingerprinter,
 		opts.DisableRiskRetroReconcile,

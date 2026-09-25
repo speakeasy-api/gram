@@ -74,6 +74,10 @@ const (
 	subjectTypeUserSessionIssuer           subjectType = "user_session_issuer"
 	subjectTypeUserSessionIssuerCimdClient subjectType = "user_session_issuer_cimd_client"
 	subjectTypeVariation                   subjectType = "variation"
+	// The admitted subject, not the machine it admits: the row is the grant, so
+	// it is audited under its own subject rather than under the issuer's.
+	subjectTypeWorkloadAdmission subjectType = "workload_admission"
+	subjectTypeWorkloadIssuer    subjectType = "workload_issuer"
 )
 
 type Action string

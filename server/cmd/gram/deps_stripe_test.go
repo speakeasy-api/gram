@@ -381,6 +381,7 @@ func TestNewBillingProviderAcceptsStripeWithoutPolar(t *testing.T) {
 		nil,
 		nil,
 		stripeclient.NewStubClient(logger),
+		nil,
 		ctx,
 	)
 	require.NoError(t, err)
@@ -398,6 +399,7 @@ func TestNewBillingProviderRejectsNonLocalWithoutProvider(t *testing.T) {
 		t.Context(),
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
+		nil,
 		nil,
 		nil,
 		nil,

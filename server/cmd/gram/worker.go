@@ -541,7 +541,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -865,6 +865,7 @@ func newWorkerCommand() *cli.Command {
 				PluginPublisher:              pluginPublisher,
 				Publishers:                   publishers,
 				TrialEmailsService:           trialEmailsService,
+				TrialFixtureHandler:          newTrialFixtureHandler(c.String("environment"), db, productFeatures),
 				RiskFingerprinter:            riskFingerprinter,
 				DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
 				LLMAnalyzerEnabled:           llmAnalyzerConfigFromCLI(c).Enabled(),

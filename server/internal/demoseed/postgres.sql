@@ -317,6 +317,7 @@ E'---\nname: runbook\ndescription: General operational runbook for the Acme stac
   member_count int;
   tool_count int;
   stray int;
+  stray_detail text;
 BEGIN
   ------------------------------------------------------------------
   -- Preflight isolation asserts: refuse to run if the demo constants
@@ -1145,36 +1146,68 @@ BEGIN
   -- The payments workload is admitted at both tiers, so its row shows that
   -- withdrawing one admission still leaves it able to reconnect.
   ------------------------------------------------------------------
-  INSERT INTO workload_issuers (id, organization_id, project_id, name, issuer, jwks_uri)
+  -- Two issuers, deliberately of different shapes, because wildcard admission is
+  -- only sound on one of them. 'Acme CI' mints a subject that encodes a branch
+  -- ref, where a wildcard would admit anyone able to push a branch, so it does
+  -- NOT permit one. The agent platform mints an opaque identity per resource
+  -- that the caller cannot influence, which is the case the feature exists for.
+  INSERT INTO workload_issuers
+    (id, organization_id, project_id, name, issuer, jwks_uri,
+     allow_wildcard_admission)
   VALUES
-    (demo.det_uuid('gram-demo-workload-issuer-1'), demo_org, proj_a,
+    -- Organization tier. Two of the admissions below are organization-tier and
+    -- name this issuer, and an organization-tier admission may only bind an
+    -- organization-tier issuer, so a project row here would be a policy shape
+    -- the management API refuses to write.
+    (demo.det_uuid('gram-demo-workload-issuer-1'), demo_org, NULL,
      'Acme CI', 'https://ci-identity.example.com',
-     'https://ci-identity.example.com/.well-known/jwks.json');
+     'https://ci-identity.example.com/.well-known/jwks.json', FALSE),
+    (demo.det_uuid('gram-demo-workload-issuer-2'), demo_org, NULL,
+     'Acme Agent Platform', 'https://agents.example.com',
+     'https://agents.example.com/.well-known/jwks.json', TRUE);
 
   INSERT INTO workload_identity_admissions
-    (id, organization_id, project_id, workload_issuer_id, subject, name)
+    (id, organization_id, project_id, workload_issuer_id, subject, match_kind,
+     name)
   VALUES
     (demo.det_uuid('gram-demo-workload-admission-1'), demo_org, proj_a,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/payments-api:ref:refs/heads/main', 'Payments deploy'),
+     'repo:acme/payments-api:ref:refs/heads/main', 'exact', 'Payments deploy'),
     (demo.det_uuid('gram-demo-workload-admission-2'), demo_org, NULL,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/docs-site:environment:production', 'Docs publish'),
+     'repo:acme/docs-site:environment:production', 'exact', 'Docs publish'),
     (demo.det_uuid('gram-demo-workload-admission-3'), demo_org, NULL,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/payments-api:ref:refs/heads/main', 'Payments deploy (all projects)');
+     'repo:acme/payments-api:ref:refs/heads/main', 'exact',
+     'Payments deploy (all projects)'),
+    -- One rule standing for a whole fleet, which is what the trailing '*' is
+    -- for: this platform's agent id is minted per resource and is not known in
+    -- advance, so admitting each one exactly is not an onboarding flow.
+    (demo.det_uuid('gram-demo-workload-admission-4'), demo_org, NULL,
+     demo.det_uuid('gram-demo-workload-issuer-2'),
+     'wimse://agents.example.com/org/acme/agent/*', 'wildcard', 'Agent fleet');
 
+  -- Keyed on (issuer, match_kind, subject) exactly as the admission is, because
+  -- that is the tuple the lookup resolves: an assignment whose match_kind
+  -- disagreed with its admission would list as having no agent.
   INSERT INTO workload_agent_assignments
-    (id, organization_id, workload_issuer_id, subject, agent_id)
+    (id, organization_id, workload_issuer_id, subject, match_kind, agent_id)
   VALUES
     (demo.det_uuid('gram-demo-workload-assignment-1'), demo_org,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/payments-api:ref:refs/heads/main',
+     'repo:acme/payments-api:ref:refs/heads/main', 'exact',
      demo.det_uuid('gram-demo-managed-agent-1')),
     (demo.det_uuid('gram-demo-workload-assignment-2'), demo_org,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/docs-site:environment:production',
-     demo.det_uuid('gram-demo-managed-agent-2'));
+     'repo:acme/docs-site:environment:production', 'exact',
+     demo.det_uuid('gram-demo-managed-agent-2')),
+    -- An active agent on purpose: this is the one rule standing for a whole
+    -- fleet, so pointing it at a suspended or revoked agent would show a
+    -- workload that authenticates and then reaches nothing.
+    (demo.det_uuid('gram-demo-workload-assignment-3'), demo_org,
+     demo.det_uuid('gram-demo-workload-issuer-2'),
+     'wimse://agents.example.com/org/acme/agent/*', 'wildcard',
+     demo.det_uuid('gram-demo-managed-agent-4'));
 
   INSERT INTO user_sessions
     (id, project_id, organization_id, user_session_issuer_id,
@@ -3152,20 +3185,90 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- unnamed issuer with no agent, which is a real state but not the one seeded.
   SELECT count(*) INTO stray FROM workload_issuers
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 workload issuer, found %', stray;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 workload issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM workload_identity_admissions
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 3 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 3 workload admissions, found %', stray;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 workload admissions, found %', stray;
+  END IF;
+
+  -- The seed writes these tables in raw SQL, so it never passes through
+  -- workloadidentity.ValidateSubjectRule the way the management API does. This
+  -- assert is that validation, applied to what was actually written, over both
+  -- tables that carry a subject rule: an admission decides whether a machine is
+  -- recognised at all, an assignment decides what it inherits, and the two have
+  -- to widen together. Anything wrong here reseeds daily into the demo
+  -- organization and reads as working configuration.
+  WITH rules AS (
+    SELECT 'admission' AS source, a.subject, a.match_kind, i.allow_wildcard_admission
+    FROM workload_identity_admissions a
+    JOIN workload_issuers i ON i.id = a.workload_issuer_id
+    WHERE a.organization_id = demo_org AND a.deleted IS FALSE
+    UNION ALL
+    SELECT 'assignment', g.subject, g.match_kind, i.allow_wildcard_admission
+    FROM workload_agent_assignments g
+    JOIN workload_issuers i ON i.id = g.workload_issuer_id
+    WHERE g.organization_id = demo_org AND g.deleted IS FALSE
+  )
+  SELECT count(*), coalesce(string_agg(format('%s %L', source, subject), ', '), '')
+  INTO stray, stray_detail
+  FROM rules
+  WHERE CASE match_kind
+    -- A subject is otherwise opaque, so no character would be reserved. A "*"
+    -- is refused anyway: no platform puts one in a sub, so its presence means
+    -- the author wanted a wildcard and instead stored a literal matching
+    -- nothing at all.
+    WHEN 'exact' THEN subject LIKE '%*%'
+    WHEN 'wildcard' THEN
+      -- Enforced on read, so clearing the issuer flag is a kill switch. A rule
+      -- written under an issuer that forbids wildcards is already inert.
+      allow_wildcard_admission IS FALSE
+      -- The terminator is mandatory and is the only "*" permitted: everything
+      -- before it is the stem, which has to be a non-empty prefix rather than
+      -- "match anything".
+      OR subject NOT LIKE '%*'
+      OR left(subject, length(subject) - 1) = ''
+      OR left(subject, length(subject) - 1) LIKE '%*%'
+    ELSE TRUE
+  END;
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % workload subject rules ValidateSubjectRule would refuse: %', stray, stray_detail;
   END IF;
 
   SELECT count(*) INTO stray FROM workload_agent_assignments
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 workload agent assignments, found %', stray;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 workload agent assignments, found %', stray;
+  END IF;
+
+  -- An admission may not out-reach its issuer's tier: an organization-tier
+  -- admission has to name an organization-tier issuer. The management API refuses
+  -- the pairing and the admission lookup ignores it, so a seeded row in that shape
+  -- would be silently inert — the page would list it and no workload would match.
+  SELECT count(*) INTO stray
+  FROM workload_identity_admissions a
+  JOIN workload_issuers i ON i.organization_id = a.organization_id AND i.id = a.workload_issuer_id
+  WHERE a.organization_id = demo_org AND a.deleted IS FALSE AND i.deleted IS FALSE
+    AND i.project_id IS NOT NULL
+    AND (a.project_id IS NULL OR a.project_id <> i.project_id);
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % admissions whose tier out-reaches their issuer''s', stray;
+  END IF;
+
+  -- A wildcard rule standing for a fleet is the headline of this fixture, so its
+  -- agent has to be one a workload can actually inherit. A suspended or revoked
+  -- agent resolves and is then denied, which reads as a broken feature.
+  SELECT count(*) INTO stray
+  FROM workload_agent_assignments g
+  JOIN agents ag ON ag.organization_id = g.organization_id AND ag.id = g.agent_id
+  WHERE g.organization_id = demo_org AND g.deleted IS FALSE
+    AND g.match_kind = 'wildcard'
+    AND (ag.suspended_at IS NOT NULL OR ag.revoked_at IS NOT NULL);
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % wildcard assignments pointing at a suspended or revoked agent', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_sessions

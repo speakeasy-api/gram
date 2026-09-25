@@ -420,7 +420,20 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       `[~]` to `[x]`; API-only checks and the separate synthetic consolidation
       blocker demo do not complete this fixture's display verification.
 
-24. **Fleet and agent restriction recovery**
+24. **Workload Identities** — open `/<org>/projects/default/workload-identities`
+    (no sidebar entry yet; the page is pre-GA and reached by URL). Two trusted
+    issuers: `Acme Agent Platform` with Wildcards **ALLOWED**, and `Acme CI`
+    with **OFF** — the second must stay off, because its subjects encode a
+    branch ref where a wildcard would admit anyone able to push a branch. Four
+    admitted workloads, exactly one badged **WILDCARD**
+    (`wimse://agents.example.com/org/acme/agent/*`), each resolving to a named
+    agent with no row showing "None assigned". Open **Admit a workload**, pick
+    the agent platform, leave Match on _Exact_ and type a subject containing
+    `*`: the warning appears in destructive red and the submit is disabled.
+    Switching Match to _Wildcard_ clears it. Selecting `Acme CI` instead
+    disables the Wildcard option and says why.
+
+25. **Fleet and agent restriction recovery**
 
 Open Fleet in list and Directory modes at desktop and phone widths. Select a
 registered identity with recent credential authentication, then a captured
