@@ -25,24 +25,26 @@ export const Capability = {
 export type Capability = ClosedEnum<typeof Capability>;
 
 /**
- * Whether evidence was found, absent, or not answerable yet.
+ * Whether evidence was found, absent, not answerable yet, or impossible for this pair.
  */
 export const SupportCoverageCellStatus = {
   Observed: "observed",
   None: "none",
   Pending: "pending",
+  Na: "na",
 } as const;
 /**
- * Whether evidence was found, absent, or not answerable yet.
+ * Whether evidence was found, absent, not answerable yet, or impossible for this pair.
  */
 export type SupportCoverageCellStatus = ClosedEnum<
   typeof SupportCoverageCellStatus
 >;
 
 /**
- * Consuming surface the cell reports on.
+ * Surface the cell reports on: Gram's own MCP gateway, or a consuming agent surface.
  */
 export const Surface = {
+  McpGateway: "mcp_gateway",
   ClaudeCode: "claude_code",
   ClaudeChat: "claude_chat",
   Cowork: "cowork",
@@ -51,7 +53,7 @@ export const Surface = {
   Other: "other",
 } as const;
 /**
- * Consuming surface the cell reports on.
+ * Surface the cell reports on: Gram's own MCP gateway, or a consuming agent surface.
  */
 export type Surface = ClosedEnum<typeof Surface>;
 
@@ -72,13 +74,17 @@ export type SupportCoverageCell = {
    */
   lastSeen?: Date | undefined;
   /**
-   * Whether evidence was found, absent, or not answerable yet.
+   * Whether evidence was found, absent, not answerable yet, or impossible for this pair.
    */
   status: SupportCoverageCellStatus;
   /**
-   * Consuming surface the cell reports on.
+   * Surface the cell reports on: Gram's own MCP gateway, or a consuming agent surface.
    */
   surface: Surface;
+  /**
+   * Singular noun the value counts, when the capability's own unit does not apply. The gateway is measured in tool calls where an agent surface is measured in sessions. Empty when the capability's default unit stands.
+   */
+  unit: string;
   /**
    * Primary measure: sessions, tokens, blocks, attributed sessions or distinct shadow servers depending on the capability. Zero unless observed.
    */
@@ -112,6 +118,7 @@ export const SupportCoverageCell$inboundSchema: z.ZodMiniType<
     ),
     status: SupportCoverageCellStatus$inboundSchema,
     surface: Surface$inboundSchema,
+    unit: z.string(),
     value: z.int(),
   }),
   z.transform((v) => {

@@ -13093,13 +13093,19 @@ type SupportFactRequestBody struct {
 type SupportCoverageCellResponseBody struct {
 	// Capability the cell reports on.
 	Capability *string `form:"capability,omitempty" json:"capability,omitempty" xml:"capability,omitempty"`
-	// Consuming surface the cell reports on.
+	// Surface the cell reports on: Gram's own MCP gateway, or a consuming agent
+	// surface.
 	Surface *string `form:"surface,omitempty" json:"surface,omitempty" xml:"surface,omitempty"`
-	// Whether evidence was found, absent, or not answerable yet.
+	// Whether evidence was found, absent, not answerable yet, or impossible for
+	// this pair.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Primary measure: sessions, tokens, blocks, attributed sessions or distinct
 	// shadow servers depending on the capability. Zero unless observed.
 	Value *int64 `form:"value,omitempty" json:"value,omitempty" xml:"value,omitempty"`
+	// Singular noun the value counts, when the capability's own unit does not
+	// apply. The gateway is measured in tool calls where an agent surface is
+	// measured in sessions. Empty when the capability's default unit stands.
+	Unit *string `form:"unit,omitempty" json:"unit,omitempty" xml:"unit,omitempty"`
 	// Short qualifier rendered under the value. Empty when there is nothing to
 	// qualify.
 	Detail *string `form:"detail,omitempty" json:"detail,omitempty" xml:"detail,omitempty"`
@@ -40415,6 +40421,9 @@ func ValidateSupportCoverageCellResponseBody(body *SupportCoverageCellResponseBo
 	if body.Value == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("value", "body"))
 	}
+	if body.Unit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("unit", "body"))
+	}
 	if body.Detail == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("detail", "body"))
 	}
@@ -40424,13 +40433,13 @@ func ValidateSupportCoverageCellResponseBody(body *SupportCoverageCellResponseBo
 		}
 	}
 	if body.Surface != nil {
-		if !(*body.Surface == "claude_code" || *body.Surface == "claude_chat" || *body.Surface == "cowork" || *body.Surface == "codex" || *body.Surface == "cursor" || *body.Surface == "other") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.surface", *body.Surface, []any{"claude_code", "claude_chat", "cowork", "codex", "cursor", "other"}))
+		if !(*body.Surface == "mcp_gateway" || *body.Surface == "claude_code" || *body.Surface == "claude_chat" || *body.Surface == "cowork" || *body.Surface == "codex" || *body.Surface == "cursor" || *body.Surface == "other") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.surface", *body.Surface, []any{"mcp_gateway", "claude_code", "claude_chat", "cowork", "codex", "cursor", "other"}))
 		}
 	}
 	if body.Status != nil {
-		if !(*body.Status == "observed" || *body.Status == "none" || *body.Status == "pending") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"observed", "none", "pending"}))
+		if !(*body.Status == "observed" || *body.Status == "none" || *body.Status == "pending" || *body.Status == "na") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"observed", "none", "pending", "na"}))
 		}
 	}
 	if body.LastSeen != nil {

@@ -4168,7 +4168,7 @@ paths:
       x-speakeasy-name-override: getSession
   /admin/supportCoverage.get:
     get:
-      description: 'Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.'
+      description: 'Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure, across Gram''s MCP gateway and each consuming agent surface.'
       operationId: adminGetSupportCoverage
       parameters:
         - allowEmptyValue: true
@@ -6732,21 +6732,26 @@ components:
           format: date-time
         status:
           type: string
-          description: Whether evidence was found, absent, or not answerable yet.
+          description: Whether evidence was found, absent, not answerable yet, or impossible for this pair.
           enum:
             - observed
             - none
             - pending
+            - na
         surface:
           type: string
-          description: Consuming surface the cell reports on.
+          description: 'Surface the cell reports on: Gram''s own MCP gateway, or a consuming agent surface.'
           enum:
+            - mcp_gateway
             - claude_code
             - claude_chat
             - cowork
             - codex
             - cursor
             - other
+        unit:
+          type: string
+          description: Singular noun the value counts, when the capability's own unit does not apply. The gateway is measured in tool calls where an agent surface is measured in sessions. Empty when the capability's default unit stands.
         value:
           type: integer
           description: 'Primary measure: sessions, tokens, blocks, attributed sessions or distinct shadow servers depending on the capability. Zero unless observed.'
@@ -6757,6 +6762,7 @@ components:
         - surface
         - status
         - value
+        - unit
         - detail
     SupportCoverageResult:
       type: object

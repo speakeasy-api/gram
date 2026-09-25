@@ -6,20 +6,21 @@ import (
 )
 
 // SupportCoverageCell is one (capability, surface) cell of the matrix. status
-// is not a boolean so that "no evidence" and "cannot answer yet" stay
-// distinguishable.
+// is not a boolean so that "no evidence", "cannot answer yet" and "this pair
+// can never report" stay distinguishable.
 var SupportCoverageCell = Type("SupportCoverageCell", func() {
 	Description("Observed evidence for one capability on one surface.")
 	Attribute("capability", String, "Capability the cell reports on.", func() {
 		Enum("session", "blocking", "identity", "cost", "shadow")
 	})
-	Attribute("surface", String, "Consuming surface the cell reports on.", func() {
-		Enum("claude_code", "claude_chat", "cowork", "codex", "cursor", "other")
+	Attribute("surface", String, "Surface the cell reports on: Gram's own MCP gateway, or a consuming agent surface.", func() {
+		Enum("mcp_gateway", "claude_code", "claude_chat", "cowork", "codex", "cursor", "other")
 	})
-	Attribute("status", String, "Whether evidence was found, absent, or not answerable yet.", func() {
-		Enum("observed", "none", "pending")
+	Attribute("status", String, "Whether evidence was found, absent, not answerable yet, or impossible for this pair.", func() {
+		Enum("observed", "none", "pending", "na")
 	})
 	Attribute("value", Int64, "Primary measure: sessions, tokens, blocks, attributed sessions or distinct shadow servers depending on the capability. Zero unless observed.")
+	Attribute("unit", String, "Singular noun the value counts, when the capability's own unit does not apply. The gateway is measured in tool calls where an agent surface is measured in sessions. Empty when the capability's default unit stands.")
 	Attribute("detail", String, "Short qualifier rendered under the value. Empty when there is nothing to qualify.")
 	// Absent rather than empty when there is no evidence: the declared
 	// date-time format leaves no room for a sentinel, and one empty string
@@ -27,7 +28,7 @@ var SupportCoverageCell = Type("SupportCoverageCell", func() {
 	Attribute("last_seen", String, "RFC3339 timestamp of the most recent supporting evidence. Absent unless observed.", func() {
 		Format(FormatDateTime)
 	})
-	Required("capability", "surface", "status", "value", "detail")
+	Required("capability", "surface", "status", "value", "unit", "detail")
 })
 
 // SupportCoverageUnmapped reports activity that folded onto no surface, so it
@@ -62,7 +63,7 @@ func supportCoverageMethods() {
 		Meta("openapi:operationId", "adminGetSupportCoverage")
 		Meta("openapi:extension:x-speakeasy-name-override", "getSupportCoverage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminGetSupportCoverage"}`)
-		Description("Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.")
+		Description("Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure, across Gram's MCP gateway and each consuming agent surface.")
 		Payload(func() {
 			security.AdminAuthPayload()
 			Attribute("organization_id", String, "Organization to report coverage for.")

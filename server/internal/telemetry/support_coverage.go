@@ -17,6 +17,7 @@ import (
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -24,6 +25,16 @@ const defaultSupportCoverageWindowDays = 30
 
 // coverageCapabilities are the matrix rows, in render order.
 var coverageCapabilities = []string{"session", "blocking", "identity", "cost", "shadow"}
+
+// Cell statuses. "none" and "na" are deliberately distinct: the first is a gap
+// that evidence could close, the second is a pair that will never report and
+// must not be read as missing coverage.
+const (
+	statusObserved = "observed"
+	statusNone     = "none"
+	statusPending  = "pending"
+	statusNA       = "na"
+)
 
 // claudeProviderSurfaces are the surfaces a bare "claude" provider could mean.
 // The Claude hook path records one provider for three products, so a block it
@@ -45,6 +56,21 @@ func blockProviderSurfaces(provider string) []agentsurface.Surface {
 		return []agentsurface.Surface{surface}
 	}
 	return nil
+}
+
+// gatewayEvidence is the assembled evidence behind the MCP gateway column. It
+// is a separate type because the gateway is measured in tool calls and policy
+// decisions taken inside Gram, not in agent-reported chat sessions.
+type gatewayEvidence struct {
+	toolCalls       int64
+	attributedCalls int64
+	agentOnlyCalls  int64
+	lastSeen        time.Time
+
+	enforced      int64
+	scanned       int64
+	enforcedAt    time.Time
+	lastScannedAt time.Time
 }
 
 // surfaceEvidence is the assembled per-surface evidence behind one column.
@@ -69,6 +95,7 @@ type surfaceEvidence struct {
 // telemetry service carries.
 type SupportCoverage struct {
 	chRepo       *repo.Queries
+	riskRepo     *riskRepo.Queries
 	hooksRepo    *hooksRepo.Queries
 	projectsRepo *projectsRepo.Queries
 }
@@ -78,6 +105,7 @@ type SupportCoverage struct {
 func NewSupportCoverage(db *pgxpool.Pool, chConn clickhouse.Conn) *SupportCoverage {
 	return &SupportCoverage{
 		chRepo:       repo.New(chConn),
+		riskRepo:     riskRepo.New(chConn),
 		hooksRepo:    hooksRepo.New(db),
 		projectsRepo: projectsRepo.New(db),
 	}
@@ -100,8 +128,13 @@ type SupportCoverageCell struct {
 	Surface    string
 	Status     string
 	Value      int64
-	Detail     string
-	LastSeen   time.Time
+	// Unit names what Value counts when the capability's own unit does not
+	// apply. The gateway is measured in tool calls where an agent surface is
+	// measured in sessions, so the column, not the row, decides. Empty means
+	// the capability's default unit stands.
+	Unit     string
+	Detail   string
+	LastSeen time.Time
 }
 
 // SupportCoverageUnmapped is activity that folded onto no surface.
@@ -160,8 +193,13 @@ func (s *SupportCoverage) SupportCoverageForOrganization(ctx context.Context, or
 		return nil, err
 	}
 
+	gateway, err := s.collectGatewayEvidence(ctx, scope, organizationID, from, to)
+	if err != nil {
+		return nil, err
+	}
+
 	return &SupportCoverageResult{
-		Cells:      buildCoverageCells(evidence),
+		Cells:      buildCoverageCells(evidence, gateway),
 		Unmapped:   buildUnmappedList(unmapped),
 		WindowDays: windowDays,
 		From:       from,
@@ -295,26 +333,129 @@ func (s *SupportCoverage) collectBlockEvidence(ctx context.Context, scope orgQue
 	return nil
 }
 
+// collectGatewayEvidence assembles the MCP gateway column. None of it comes
+// from the hook stream: the gateway is Gram itself, so its traffic is read
+// from the gateway's own telemetry and its policy decisions from the findings
+// the mediation seams record.
+func (s *SupportCoverage) collectGatewayEvidence(ctx context.Context, scope orgQueryScope, orgID string, from, to time.Time) (*gatewayEvidence, error) {
+	item := &gatewayEvidence{} //exhaustruct:ignore
+
+	traffic, err := s.chRepo.GetGatewayEvidence(ctx, repoSurfaceEvidenceParams(scope, from, to))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read mcp gateway activity evidence")
+	}
+	item.toolCalls = clampCount(traffic.ToolCalls)
+	item.attributedCalls = clampCount(traffic.AttributedCalls)
+	item.agentOnlyCalls = clampCount(traffic.AgentOnlyCalls)
+	item.lastSeen = traffic.LastSeen
+
+	enforcement, err := s.riskRepo.GetMediatedEnforcementCounts(ctx, riskRepo.MediatedEnforcementParams{
+		OrganizationID: orgID,
+		From:           from,
+		To:             to,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to read mcp gateway enforcement evidence")
+	}
+	item.enforced = clampCount(enforcement.Enforced)
+	item.scanned = clampCount(enforcement.Scanned)
+	item.enforcedAt = enforcement.LastEnforcedAt
+	item.lastScannedAt = enforcement.LastScannedAt
+
+	return item, nil
+}
+
 func repoSurfaceEvidenceParams(scope orgQueryScope, from, to time.Time) repo.SurfaceEvidenceParams {
 	return repo.SurfaceEvidenceParams{GramProjectIDs: scope.projectIDs, From: from, To: to}
 }
 
-func buildCoverageCells(evidence map[agentsurface.Surface]*surfaceEvidence) []SupportCoverageCell {
-	cells := make([]SupportCoverageCell, 0, len(coverageCapabilities)*len(agentsurface.All))
+func buildCoverageCells(evidence map[agentsurface.Surface]*surfaceEvidence, gateway *gatewayEvidence) []SupportCoverageCell {
+	cells := make([]SupportCoverageCell, 0, len(coverageCapabilities)*len(agentsurface.Columns))
 	for _, capability := range coverageCapabilities {
-		for _, surface := range agentsurface.All {
+		for _, surface := range agentsurface.Columns {
+			if surface == agentsurface.SurfaceMCPGateway {
+				cells = append(cells, buildGatewayCell(capability, gateway))
+				continue
+			}
 			cells = append(cells, buildCoverageCell(capability, surface, evidence[surface]))
 		}
 	}
 	return cells
 }
 
+// buildGatewayCell reports one capability on Gram's own MCP gateway.
+//
+// Two rows can never report here and say so with "na" rather than an empty
+// cell: an operator reading a gap would otherwise go looking for an
+// integration that would close it, and none exists.
+func buildGatewayCell(capability string, item *gatewayEvidence) SupportCoverageCell {
+	cell := SupportCoverageCell{
+		Capability: capability,
+		Surface:    string(agentsurface.SurfaceMCPGateway),
+		Status:     statusNone,
+		Value:      0,
+		Unit:       "",
+		Detail:     "",
+		LastSeen:   time.Time{},
+	}
+
+	switch capability {
+	case "session":
+		cell.Value = item.toolCalls
+		cell.Unit = "tool call"
+		cell.LastSeen = item.lastSeen
+	case "identity":
+		cell.Value = item.attributedCalls
+		cell.Unit = "attributed tool call"
+		cell.LastSeen = item.lastSeen
+		// A call authenticated as a managed agent is bound to a runtime actor,
+		// not to a person, so the split is stated rather than summed.
+		switch {
+		case item.attributedCalls > 0 && item.agentOnlyCalls > 0:
+			cell.Detail = fmt.Sprintf("%d bound to a managed agent", item.agentOnlyCalls)
+		case item.attributedCalls == 0 && item.agentOnlyCalls > 0:
+			cell.Detail = fmt.Sprintf("%d tool calls bound to a managed agent only", item.agentOnlyCalls)
+		}
+	case "blocking":
+		cell.Value = item.enforced
+		cell.Unit = "block"
+		cell.LastSeen = item.enforcedAt
+		if item.enforced == 0 && item.scanned > 0 {
+			// Policies ran against mediated calls and let every one through,
+			// which evidences the seam working but not the block path.
+			cell.Status = statusPending
+			cell.Detail = fmt.Sprintf("%d mediated executions scanned, none stopped", item.scanned)
+			cell.LastSeen = time.Time{}
+			return cell
+		}
+	case "cost":
+		// The gateway brokers tool calls, never model calls, so no token
+		// accounting can appear here however much traffic it serves.
+		cell.Status = statusNA
+		cell.Detail = "the gateway brokers tool calls, not model calls"
+		return cell
+	case "shadow":
+		// Shadow MCP is by definition traffic that went around the gateway.
+		cell.Status = statusNA
+		cell.Detail = "shadow servers are reached off the gateway"
+		return cell
+	}
+
+	if cell.Value > 0 {
+		cell.Status = statusObserved
+	} else {
+		cell.LastSeen = time.Time{}
+	}
+	return cell
+}
+
 func buildCoverageCell(capability string, surface agentsurface.Surface, item *surfaceEvidence) SupportCoverageCell {
 	cell := SupportCoverageCell{
 		Capability: capability,
 		Surface:    string(surface),
-		Status:     "none",
+		Status:     statusNone,
 		Value:      0,
+		Unit:       "",
 		Detail:     "",
 		LastSeen:   time.Time{},
 	}
@@ -335,7 +476,7 @@ func buildCoverageCell(capability string, surface agentsurface.Surface, item *su
 		case item.attributedSessions > 0 && item.deviceOnlySessions > 0:
 			cell.Detail = fmt.Sprintf("%d device-only", item.deviceOnlySessions)
 		case item.attributedSessions == 0 && item.deviceOnlySessions > 0:
-			cell.Status = "none"
+			cell.Status = statusNone
 			cell.Detail = fmt.Sprintf("%d sessions bound to a device only", item.deviceOnlySessions)
 		}
 	case "blocking":
@@ -344,7 +485,7 @@ func buildCoverageCell(capability string, surface agentsurface.Surface, item *su
 		if item.blocks == 0 && item.blocksProviderOnly {
 			// Blocks happened for this provider but none could be pinned to
 			// this surface's sessions.
-			cell.Status = "pending"
+			cell.Status = statusPending
 			cell.Detail = "blocks recorded at provider granularity only"
 			return cell
 		}
@@ -357,7 +498,7 @@ func buildCoverageCell(capability string, surface agentsurface.Surface, item *su
 	}
 
 	if cell.Value > 0 {
-		cell.Status = "observed"
+		cell.Status = statusObserved
 	} else {
 		cell.LastSeen = time.Time{}
 	}
