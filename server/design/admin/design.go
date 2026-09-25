@@ -328,8 +328,7 @@ var AdminOnboardingConfiguration = Type("AdminOnboardingConfiguration", func() {
 	Attribute("preset", String, "Absent for legacy organizations.")
 	Attribute("tasks", ArrayOf(AdminOnboardingTask))
 	Attribute("presets", ArrayOf(AdminOnboardingPreset))
-	Attribute("workstreams", ArrayOf(shared.SetupWorkstream), "Canonical workstreams in display order, including hidden task keys.")
-	Required("organization_id", "tasks", "presets", "workstreams")
+	Required("organization_id", "tasks", "presets")
 })
 
 var AdminChatAnalysisSettings = Type("AdminChatAnalysisSettings", func() {

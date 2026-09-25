@@ -84,10 +84,6 @@ vi.mock("@gram/client/react-query/_context.js", () => ({
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-one" }),
-  useSession: () => ({
-    organization: { id: "org-one" },
-    user: { id: "user-one", email: "user@example.test", isAdmin: false },
-  }),
 }));
 // setup-cards pulls in every step, which needs the real module's exports.
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
@@ -101,22 +97,9 @@ vi.mock("@gram/client/react-query/updateSetupTask.js", () => ({
     isPending: mocks.updatePending,
   }),
 }));
-vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasScope: () => true }),
-}));
-vi.mock("@gram/client/react-query/assignSetupWorkstream.js", () => ({
-  useAssignSetupWorkstreamMutation: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-}));
 vi.mock("@/lib/pylon", () => ({ showPylonChat: mocks.showPylonChat }));
 vi.mock("sonner", () => ({
-  toast: {
-    success: mocks.toastSuccess,
-    error: mocks.toastError,
-    warning: vi.fn(),
-  },
+  toast: { success: mocks.toastSuccess, error: mocks.toastError },
 }));
 
 function task(
@@ -130,7 +113,6 @@ function task(
     description: `${title} description`,
     status,
     completedByFact: false,
-    countsTowardProgress: true,
     blockedBy: [],
     hidden: false,
   };
@@ -186,7 +168,7 @@ describe("SetupWizard", () => {
     expect(rail().textContent).toContain(
       "Set up observability in other platforms",
     );
-    expect(screen.getByText("1 of 3 required tasks complete")).toBeTruthy();
+    expect(screen.getByText("1 of 3 tasks complete")).toBeTruthy();
     expect(
       screen.getByText("Content for anthropic-observability"),
     ).toBeTruthy();
@@ -238,7 +220,7 @@ describe("SetupWizard", () => {
     render(<SetupWizard />);
 
     expect(screen.getByText("Content for instrument-agents")).toBeTruthy();
-    expect(screen.getByText("3 of 3 required tasks complete")).toBeTruthy();
+    expect(screen.getByText("3 of 3 tasks complete")).toBeTruthy();
   });
 
   it("moves between cards from the rail, dropping the outgoing card's step", () => {
@@ -342,7 +324,6 @@ describe("SetupWizard", () => {
   });
 
   it("advances a verified task without rewriting its server-derived status", () => {
-    mocks.searchParams = new URLSearchParams("task=anthropic-observability");
     mocks.setupQuery.mockReturnValue(
       loaded(tasks.map((t) => ({ ...t, completedByFact: true }))),
     );
@@ -441,42 +422,6 @@ describe("SetupWizard", () => {
     expect(mocks.navigate).toHaveBeenCalledWith("/org");
   });
 
-  it("keeps server selection order even when workstream grouping differs", () => {
-    const query = loaded([tasks[2]!, tasks[1]!]);
-    mocks.setupQuery.mockReturnValue({
-      ...query,
-      data: {
-        ...query.data,
-        workstreams: [
-          {
-            id: "observe",
-            title: "Observe",
-            taskKeys: [tasks[1]!.key, tasks[2]!.key],
-          },
-        ],
-      },
-    });
-    render(<SetupWizard />);
-    expect(screen.getByText("Content for instrument-agents")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Skip task" }));
-    expect(lastParams().get("task")).toBe("anthropic-observability");
-  });
-
-  it("includes optional cards in the walk but excludes them from required progress", () => {
-    mocks.setupQuery.mockReturnValue(
-      loaded([
-        tasks[0]!,
-        {
-          ...task("platform-mcp", "Platform MCP"),
-          countsTowardProgress: false,
-        },
-      ]),
-    );
-    render(<SetupWizard />);
-    expect(screen.getByText("1 of 1 required tasks complete")).toBeTruthy();
-    expect(screen.getByText("Content for platform-mcp")).toBeTruthy();
-  });
-
   it("offers a retry when the list fails to load", () => {
     const refetch = vi.fn();
     mocks.setupQuery.mockReturnValue({
@@ -484,7 +429,6 @@ describe("SetupWizard", () => {
       isPending: false,
       isSuccess: false,
       isError: true,
-      error: new Error("Read failed"),
       refetch,
     });
     render(<SetupWizard />);

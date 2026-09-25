@@ -25,7 +25,6 @@ export interface SetupCardProps {
 }
 
 export interface SetupCard {
-  suggestedOwner: string;
   /** URL name for ?task=. Defaults to the task key. */
   slug?: string;
   /**
@@ -44,20 +43,17 @@ export interface SetupCard {
  */
 export const SETUP_CARDS: Record<string, SetupCard> = {
   "domain-verification": {
-    suggestedOwner: "IT Admin",
     slug: "domain",
     Step: ({ onComplete }) => (
       <DomainVerificationStep onComplete={onComplete} />
     ),
   },
   "connect-idp": {
-    suggestedOwner: "IT Admin",
     Step: ({ onComplete, onClose }) => (
       <ConnectIdpStep onComplete={onComplete} onSkip={onClose} />
     ),
   },
   "directory-sync": {
-    suggestedOwner: "IT Admin",
     Step: ({ onComplete, onClose }) => (
       <DirectorySyncStep
         onComplete={onComplete}
@@ -67,13 +63,11 @@ export const SETUP_CARDS: Record<string, SetupCard> = {
     ),
   },
   "create-marketplace": {
-    suggestedOwner: "Engineering Lead",
     Step: ({ onComplete, onClose }) => (
       <CreateMarketplaceStep onComplete={onComplete} onBack={onClose} />
     ),
   },
   "enable-logging": {
-    suggestedOwner: "Engineering Lead",
     Step: ({ onComplete }) => (
       <StepContainer
         title="Enable logging"
@@ -86,55 +80,45 @@ export const SETUP_CARDS: Record<string, SetupCard> = {
     ),
   },
   "identity-provider": {
-    suggestedOwner: "IT Admin",
     slug: "idp",
     Step: ({ onComplete }) => <IdentityProviderStep onComplete={onComplete} />,
   },
   "anthropic-observability": {
-    suggestedOwner: "Engineering Lead",
     projectScopes: ["project:read"],
     Step: ({ onComplete }) => (
       <AnthropicInferenceHooksStep onComplete={onComplete} />
     ),
   },
   "anthropic-admin-controls": {
-    suggestedOwner: "IT Admin",
     Step: ({ onComplete }) => (
       <AnthropicAdminControlsStep onComplete={onComplete} />
     ),
   },
   "instrument-agents": {
-    suggestedOwner: "Engineering Lead",
     slug: "other-platforms",
     Step: ({ onComplete }) => <InstrumentAgentsStep onComplete={onComplete} />,
   },
   litellm: {
-    suggestedOwner: "Engineering Lead",
     Step: ({ onComplete }) => <LiteLLMSetupStep onComplete={onComplete} />,
   },
   "additional-agent-config": {
-    suggestedOwner: "Engineering Lead",
     slug: "integrations",
     Step: ({ onComplete }) => (
       <AdditionalAgentConfigStep onComplete={onComplete} />
     ),
   },
   "confirm-traffic": {
-    suggestedOwner: "Security Lead",
     Step: ({ onComplete }) => <ConfirmTrafficStep onComplete={onComplete} />,
   },
   "distribute-servers": {
-    suggestedOwner: "Engineering Lead",
     projectScopes: ["project:write", "mcp:write"],
     Step: ({ onComplete }) => <DistributeServersStep onComplete={onComplete} />,
   },
   "configure-policies": {
-    suggestedOwner: "Security Lead",
     slug: "policies",
     Step: ({ onComplete }) => <ConfigurePoliciesStep onComplete={onComplete} />,
   },
   "platform-mcp": {
-    suggestedOwner: "Engineering Lead",
     Step: ({ onComplete, projectSlug }) => (
       <PlatformMCPSetupStep
         onComplete={onComplete}

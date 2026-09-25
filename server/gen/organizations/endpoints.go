@@ -31,7 +31,6 @@ type Endpoints struct {
 	SendEnterpriseAdminOnboardingEmail goa.Endpoint
 	GenerateWorkOSAdminPortalLink      goa.Endpoint
 	ListSetupTasks                     goa.Endpoint
-	AssignSetupWorkstream              goa.Endpoint
 	UpdateSetupTask                    goa.Endpoint
 	SubmitOnboardingSurvey             goa.Endpoint
 }
@@ -56,7 +55,6 @@ func NewEndpoints(s Service) *Endpoints {
 		SendEnterpriseAdminOnboardingEmail: NewSendEnterpriseAdminOnboardingEmailEndpoint(s, a.APIKeyAuth),
 		GenerateWorkOSAdminPortalLink:      NewGenerateWorkOSAdminPortalLinkEndpoint(s, a.APIKeyAuth),
 		ListSetupTasks:                     NewListSetupTasksEndpoint(s, a.APIKeyAuth),
-		AssignSetupWorkstream:              NewAssignSetupWorkstreamEndpoint(s, a.APIKeyAuth),
 		UpdateSetupTask:                    NewUpdateSetupTaskEndpoint(s, a.APIKeyAuth),
 		SubmitOnboardingSurvey:             NewSubmitOnboardingSurveyEndpoint(s, a.APIKeyAuth),
 	}
@@ -80,7 +78,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SendEnterpriseAdminOnboardingEmail = m(e.SendEnterpriseAdminOnboardingEmail)
 	e.GenerateWorkOSAdminPortalLink = m(e.GenerateWorkOSAdminPortalLink)
 	e.ListSetupTasks = m(e.ListSetupTasks)
-	e.AssignSetupWorkstream = m(e.AssignSetupWorkstream)
 	e.UpdateSetupTask = m(e.UpdateSetupTask)
 	e.SubmitOnboardingSurvey = m(e.SubmitOnboardingSurvey)
 }
@@ -428,29 +425,6 @@ func NewListSetupTasksEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.ListSetupTasks(ctx, p)
-	}
-}
-
-// NewAssignSetupWorkstreamEndpoint returns an endpoint function that calls the
-// method "assignSetupWorkstream" of service "organizations".
-func NewAssignSetupWorkstreamEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*AssignSetupWorkstreamPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "session",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.SessionToken != nil {
-			key = *p.SessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.AssignSetupWorkstream(ctx, p)
 	}
 }
 

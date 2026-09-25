@@ -38,10 +38,6 @@ export type SetupTask = {
    */
   completedByFact: boolean;
   /**
-   * Whether the task counts toward onboarding completion progress. Optional tasks are excluded. This field is read-only.
-   */
-  countsTowardProgress: boolean;
-  /**
    * Task description.
    */
   description: string;
@@ -75,7 +71,6 @@ export const SetupTask$inboundSchema: z.ZodMiniType<SetupTask, unknown> = z
       assignee: z.optional(SetupTaskAssignee$inboundSchema),
       blocked_by: z.array(z.string()),
       completed_by_fact: z.boolean(),
-      counts_toward_progress: z.boolean(),
       description: z.string(),
       hidden: z.boolean(),
       key: z.string(),
@@ -86,7 +81,6 @@ export const SetupTask$inboundSchema: z.ZodMiniType<SetupTask, unknown> = z
       return remap$(v, {
         "blocked_by": "blockedBy",
         "completed_by_fact": "completedByFact",
-        "counts_toward_progress": "countsTowardProgress",
       });
     }),
   );

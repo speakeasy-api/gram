@@ -55,17 +55,6 @@ type GenerateWorkOSAdminPortalLinkRequestBody struct {
 	IntentOptions *WorkOSIntentOptionsRequestBody `form:"intent_options,omitempty" json:"intent_options,omitempty" xml:"intent_options,omitempty"`
 }
 
-// AssignSetupWorkstreamRequestBody is the type of the "organizations" service
-// "assignSetupWorkstream" endpoint HTTP request body.
-type AssignSetupWorkstreamRequestBody struct {
-	// Setup workstream ID from the onboarding workstream catalog.
-	Workstream *string `form:"workstream,omitempty" json:"workstream,omitempty" xml:"workstream,omitempty"`
-	// Replacement workstream assignee; mutually exclusive with clear_assignee=true.
-	Assignee *SetupTaskAssigneeInputRequestBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
-	// Clear all workstream task assignees.
-	ClearAssignee *bool `form:"clear_assignee,omitempty" json:"clear_assignee,omitempty" xml:"clear_assignee,omitempty"`
-}
-
 // UpdateSetupTaskRequestBody is the type of the "organizations" service
 // "updateSetupTask" endpoint HTTP request body.
 type UpdateSetupTaskRequestBody struct {
@@ -229,19 +218,6 @@ type GenerateWorkOSAdminPortalLinkResponseBody struct {
 type ListSetupTasksResponseBody struct {
 	// Setup tasks in catalog order.
 	Tasks []*SetupTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
-	// Canonical workstreams in display order. Membership is limited to the tasks
-	// present in this response.
-	Workstreams []*SetupWorkstreamResponseBody `form:"workstreams" json:"workstreams" xml:"workstreams"`
-}
-
-// AssignSetupWorkstreamResponseBody is the type of the "organizations" service
-// "assignSetupWorkstream" endpoint HTTP response body.
-type AssignSetupWorkstreamResponseBody struct {
-	// Setup tasks in catalog order.
-	Tasks []*SetupTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
-	// Canonical workstreams in display order. Membership is limited to the tasks
-	// present in this response.
-	Workstreams []*SetupWorkstreamResponseBody `form:"workstreams" json:"workstreams" xml:"workstreams"`
 }
 
 // UpdateSetupTaskResponseBody is the type of the "organizations" service
@@ -258,9 +234,6 @@ type UpdateSetupTaskResponseBody struct {
 	// Whether current organization facts force the effective status to done. This
 	// field is read-only.
 	CompletedByFact bool `form:"completed_by_fact" json:"completed_by_fact" xml:"completed_by_fact"`
-	// Whether the task counts toward onboarding completion progress. Optional
-	// tasks are excluded. This field is read-only.
-	CountsTowardProgress bool `form:"counts_toward_progress" json:"counts_toward_progress" xml:"counts_toward_progress"`
 	// Current resolved user or email assignee.
 	Assignee *SetupTaskAssigneeResponseBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
 	// Incomplete prerequisite task keys.
@@ -274,9 +247,6 @@ type UpdateSetupTaskResponseBody struct {
 type SubmitOnboardingSurveyResponseBody struct {
 	// Setup tasks in catalog order.
 	Tasks []*SetupTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
-	// Canonical workstreams in display order. Membership is limited to the tasks
-	// present in this response.
-	Workstreams []*SetupWorkstreamResponseBody `form:"workstreams" json:"workstreams" xml:"workstreams"`
 }
 
 // GetUnauthorizedResponseBody is the type of the "organizations" service "get"
@@ -3087,196 +3057,6 @@ type ListSetupTasksGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// AssignSetupWorkstreamUnauthorizedResponseBody is the type of the
-// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
-// for the "unauthorized" error.
-type AssignSetupWorkstreamUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// AssignSetupWorkstreamForbiddenResponseBody is the type of the
-// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
-// for the "forbidden" error.
-type AssignSetupWorkstreamForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// AssignSetupWorkstreamBadRequestResponseBody is the type of the
-// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
-// for the "bad_request" error.
-type AssignSetupWorkstreamBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// AssignSetupWorkstreamNotFoundResponseBody is the type of the "organizations"
-// service "assignSetupWorkstream" endpoint HTTP response body for the
-// "not_found" error.
-type AssignSetupWorkstreamNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// AssignSetupWorkstreamConflictResponseBody is the type of the "organizations"
-// service "assignSetupWorkstream" endpoint HTTP response body for the
-// "conflict" error.
-type AssignSetupWorkstreamConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// AssignSetupWorkstreamUnsupportedMediaResponseBody is the type of the
-// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
-// for the "unsupported_media" error.
-type AssignSetupWorkstreamUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// AssignSetupWorkstreamInvalidResponseBody is the type of the "organizations"
-// service "assignSetupWorkstream" endpoint HTTP response body for the
-// "invalid" error.
-type AssignSetupWorkstreamInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// AssignSetupWorkstreamInvariantViolationResponseBody is the type of the
-// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
-// for the "invariant_violation" error.
-type AssignSetupWorkstreamInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// AssignSetupWorkstreamUnexpectedResponseBody is the type of the
-// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
-// for the "unexpected" error.
-type AssignSetupWorkstreamUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// AssignSetupWorkstreamGatewayErrorResponseBody is the type of the
-// "organizations" service "assignSetupWorkstream" endpoint HTTP response body
-// for the "gateway_error" error.
-type AssignSetupWorkstreamGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // UpdateSetupTaskUnauthorizedResponseBody is the type of the "organizations"
 // service "updateSetupTask" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -3738,9 +3518,6 @@ type SetupTaskResponseBody struct {
 	// Whether current organization facts force the effective status to done. This
 	// field is read-only.
 	CompletedByFact bool `form:"completed_by_fact" json:"completed_by_fact" xml:"completed_by_fact"`
-	// Whether the task counts toward onboarding completion progress. Optional
-	// tasks are excluded. This field is read-only.
-	CountsTowardProgress bool `form:"counts_toward_progress" json:"counts_toward_progress" xml:"counts_toward_progress"`
 	// Current resolved user or email assignee.
 	Assignee *SetupTaskAssigneeResponseBody `form:"assignee,omitempty" json:"assignee,omitempty" xml:"assignee,omitempty"`
 	// Incomplete prerequisite task keys.
@@ -3760,17 +3537,6 @@ type SetupTaskAssigneeResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Resolved member photo URL.
 	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
-}
-
-// SetupWorkstreamResponseBody is used to define fields on response body types.
-type SetupWorkstreamResponseBody struct {
-	// Stable workstream identifier used for assignment.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Workstream display title.
-	Title string `form:"title" json:"title" xml:"title"`
-	// Ordered task keys, limited to the tasks present in the same response. Hidden
-	// tasks appear only when the reader is authorized to see them.
-	TaskKeys []string `form:"task_keys" json:"task_keys" xml:"task_keys"`
 }
 
 // WorkOSIntentOptionsRequestBody is used to define fields on request body
@@ -3988,50 +3754,6 @@ func NewListSetupTasksResponseBody(res *organizations.ListSetupTasksResult) *Lis
 	} else {
 		body.Tasks = []*SetupTaskResponseBody{}
 	}
-	if res.Workstreams != nil {
-		body.Workstreams = make([]*SetupWorkstreamResponseBody, len(res.Workstreams))
-		for i, val := range res.Workstreams {
-			if val == nil {
-				body.Workstreams[i] = nil
-				continue
-			}
-			body.Workstreams[i] = marshalTypesSetupWorkstreamToSetupWorkstreamResponseBody(val)
-		}
-	} else {
-		body.Workstreams = []*SetupWorkstreamResponseBody{}
-	}
-	return body
-}
-
-// NewAssignSetupWorkstreamResponseBody builds the HTTP response body from the
-// result of the "assignSetupWorkstream" endpoint of the "organizations"
-// service.
-func NewAssignSetupWorkstreamResponseBody(res *organizations.ListSetupTasksResult) *AssignSetupWorkstreamResponseBody {
-	body := &AssignSetupWorkstreamResponseBody{}
-	if res.Tasks != nil {
-		body.Tasks = make([]*SetupTaskResponseBody, len(res.Tasks))
-		for i, val := range res.Tasks {
-			if val == nil {
-				body.Tasks[i] = nil
-				continue
-			}
-			body.Tasks[i] = marshalOrganizationsSetupTaskToSetupTaskResponseBody(val)
-		}
-	} else {
-		body.Tasks = []*SetupTaskResponseBody{}
-	}
-	if res.Workstreams != nil {
-		body.Workstreams = make([]*SetupWorkstreamResponseBody, len(res.Workstreams))
-		for i, val := range res.Workstreams {
-			if val == nil {
-				body.Workstreams[i] = nil
-				continue
-			}
-			body.Workstreams[i] = marshalTypesSetupWorkstreamToSetupWorkstreamResponseBody(val)
-		}
-	} else {
-		body.Workstreams = []*SetupWorkstreamResponseBody{}
-	}
 	return body
 }
 
@@ -4039,13 +3761,12 @@ func NewAssignSetupWorkstreamResponseBody(res *organizations.ListSetupTasksResul
 // of the "updateSetupTask" endpoint of the "organizations" service.
 func NewUpdateSetupTaskResponseBody(res *organizations.SetupTask) *UpdateSetupTaskResponseBody {
 	body := &UpdateSetupTaskResponseBody{
-		Key:                  res.Key,
-		Title:                res.Title,
-		Description:          res.Description,
-		Status:               res.Status,
-		CompletedByFact:      res.CompletedByFact,
-		CountsTowardProgress: res.CountsTowardProgress,
-		Hidden:               res.Hidden,
+		Key:             res.Key,
+		Title:           res.Title,
+		Description:     res.Description,
+		Status:          res.Status,
+		CompletedByFact: res.CompletedByFact,
+		Hidden:          res.Hidden,
 	}
 	if res.Assignee != nil {
 		body.Assignee = marshalOrganizationsSetupTaskAssigneeToSetupTaskAssigneeResponseBody(res.Assignee)
@@ -4077,18 +3798,6 @@ func NewSubmitOnboardingSurveyResponseBody(res *organizations.ListSetupTasksResu
 		}
 	} else {
 		body.Tasks = []*SetupTaskResponseBody{}
-	}
-	if res.Workstreams != nil {
-		body.Workstreams = make([]*SetupWorkstreamResponseBody, len(res.Workstreams))
-		for i, val := range res.Workstreams {
-			if val == nil {
-				body.Workstreams[i] = nil
-				continue
-			}
-			body.Workstreams[i] = marshalTypesSetupWorkstreamToSetupWorkstreamResponseBody(val)
-		}
-	} else {
-		body.Workstreams = []*SetupWorkstreamResponseBody{}
 	}
 	return body
 }
@@ -6257,156 +5966,6 @@ func NewListSetupTasksGatewayErrorResponseBody(res *goa.ServiceError) *ListSetup
 	return body
 }
 
-// NewAssignSetupWorkstreamUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "assignSetupWorkstream" endpoint of the
-// "organizations" service.
-func NewAssignSetupWorkstreamUnauthorizedResponseBody(res *goa.ServiceError) *AssignSetupWorkstreamUnauthorizedResponseBody {
-	body := &AssignSetupWorkstreamUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewAssignSetupWorkstreamForbiddenResponseBody builds the HTTP response body
-// from the result of the "assignSetupWorkstream" endpoint of the
-// "organizations" service.
-func NewAssignSetupWorkstreamForbiddenResponseBody(res *goa.ServiceError) *AssignSetupWorkstreamForbiddenResponseBody {
-	body := &AssignSetupWorkstreamForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewAssignSetupWorkstreamBadRequestResponseBody builds the HTTP response body
-// from the result of the "assignSetupWorkstream" endpoint of the
-// "organizations" service.
-func NewAssignSetupWorkstreamBadRequestResponseBody(res *goa.ServiceError) *AssignSetupWorkstreamBadRequestResponseBody {
-	body := &AssignSetupWorkstreamBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewAssignSetupWorkstreamNotFoundResponseBody builds the HTTP response body
-// from the result of the "assignSetupWorkstream" endpoint of the
-// "organizations" service.
-func NewAssignSetupWorkstreamNotFoundResponseBody(res *goa.ServiceError) *AssignSetupWorkstreamNotFoundResponseBody {
-	body := &AssignSetupWorkstreamNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewAssignSetupWorkstreamConflictResponseBody builds the HTTP response body
-// from the result of the "assignSetupWorkstream" endpoint of the
-// "organizations" service.
-func NewAssignSetupWorkstreamConflictResponseBody(res *goa.ServiceError) *AssignSetupWorkstreamConflictResponseBody {
-	body := &AssignSetupWorkstreamConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewAssignSetupWorkstreamUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "assignSetupWorkstream" endpoint of the
-// "organizations" service.
-func NewAssignSetupWorkstreamUnsupportedMediaResponseBody(res *goa.ServiceError) *AssignSetupWorkstreamUnsupportedMediaResponseBody {
-	body := &AssignSetupWorkstreamUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewAssignSetupWorkstreamInvalidResponseBody builds the HTTP response body
-// from the result of the "assignSetupWorkstream" endpoint of the
-// "organizations" service.
-func NewAssignSetupWorkstreamInvalidResponseBody(res *goa.ServiceError) *AssignSetupWorkstreamInvalidResponseBody {
-	body := &AssignSetupWorkstreamInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewAssignSetupWorkstreamInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "assignSetupWorkstream" endpoint of the
-// "organizations" service.
-func NewAssignSetupWorkstreamInvariantViolationResponseBody(res *goa.ServiceError) *AssignSetupWorkstreamInvariantViolationResponseBody {
-	body := &AssignSetupWorkstreamInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewAssignSetupWorkstreamUnexpectedResponseBody builds the HTTP response body
-// from the result of the "assignSetupWorkstream" endpoint of the
-// "organizations" service.
-func NewAssignSetupWorkstreamUnexpectedResponseBody(res *goa.ServiceError) *AssignSetupWorkstreamUnexpectedResponseBody {
-	body := &AssignSetupWorkstreamUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewAssignSetupWorkstreamGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "assignSetupWorkstream" endpoint of the
-// "organizations" service.
-func NewAssignSetupWorkstreamGatewayErrorResponseBody(res *goa.ServiceError) *AssignSetupWorkstreamGatewayErrorResponseBody {
-	body := &AssignSetupWorkstreamGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewUpdateSetupTaskUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "updateSetupTask" endpoint of the "organizations"
 // service.
@@ -6862,21 +6421,6 @@ func NewListSetupTasksPayload(includeHidden *bool, sessionToken *string) *organi
 	return v
 }
 
-// NewAssignSetupWorkstreamPayload builds a organizations service
-// assignSetupWorkstream endpoint payload.
-func NewAssignSetupWorkstreamPayload(body *AssignSetupWorkstreamRequestBody, sessionToken *string) *organizations.AssignSetupWorkstreamPayload {
-	v := &organizations.AssignSetupWorkstreamPayload{
-		Workstream:    *body.Workstream,
-		ClearAssignee: body.ClearAssignee,
-	}
-	if body.Assignee != nil {
-		v.Assignee = unmarshalSetupTaskAssigneeInputRequestBodyToOrganizationsSetupTaskAssigneeInput(body.Assignee)
-	}
-	v.SessionToken = sessionToken
-
-	return v
-}
-
 // NewUpdateSetupTaskPayload builds a organizations service updateSetupTask
 // endpoint payload.
 func NewUpdateSetupTaskPayload(body *UpdateSetupTaskRequestBody, sessionToken *string) *organizations.UpdateSetupTaskPayload {
@@ -6957,20 +6501,6 @@ func ValidateGenerateWorkOSAdminPortalLinkRequestBody(body *GenerateWorkOSAdminP
 	}
 	if body.SuccessURL != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.success_url", *body.SuccessURL, goa.FormatURI))
-	}
-	return
-}
-
-// ValidateAssignSetupWorkstreamRequestBody runs the validations defined on
-// AssignSetupWorkstreamRequestBody
-func ValidateAssignSetupWorkstreamRequestBody(body *AssignSetupWorkstreamRequestBody) (err error) {
-	if body.Workstream == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("workstream", "body"))
-	}
-	if body.Assignee != nil {
-		if err2 := ValidateSetupTaskAssigneeInputRequestBody(body.Assignee); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
 	}
 	return
 }

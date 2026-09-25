@@ -93,17 +93,6 @@ func TestOnboardingPreservesLegacySelectionUntilExplicitSave(t *testing.T) {
 	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
 	require.Len(t, listed.Tasks, len(visible))
-	require.NotEmpty(t, config.Workstreams)
-	require.Len(t, listed.Workstreams, len(config.Workstreams))
-	var listedKeys []string
-	for i, workstream := range listed.Workstreams {
-		require.Equal(t, config.Workstreams[i].ID, workstream.ID, "workstream order is preserved")
-		require.Equal(t, config.Workstreams[i].Title, workstream.Title)
-		listedKeys = append(listedKeys, workstream.TaskKeys...)
-	}
-	require.ElementsMatch(t, visible, listedKeys, "customer membership matches visible tasks")
-	require.Contains(t, config.Workstreams[0].TaskKeys, "connect-idp", "staff retains hidden catalog members")
-	require.NotContains(t, listed.Workstreams[0].TaskKeys, "connect-idp")
 	for _, key := range visible {
 		require.NotNil(t, setupTask(listed.Tasks, key))
 	}

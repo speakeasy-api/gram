@@ -151,13 +151,6 @@ describe("generated admin boundary", () => {
     const body = {
       organization_id: "org_explicit",
       preset: "gateway",
-      workstreams: [
-        {
-          id: "gateway",
-          title: "AI Gateway",
-          task_keys: ["create-marketplace", "distribute-servers"],
-        },
-      ],
       tasks: [
         {
           key: "create-marketplace",
@@ -191,13 +184,6 @@ describe("generated admin boundary", () => {
     expect(config).toMatchObject({
       organizationId: "org_explicit",
       preset: "gateway",
-      workstreams: [
-        {
-          id: "gateway",
-          title: "AI Gateway",
-          taskKeys: ["create-marketplace", "distribute-servers"],
-        },
-      ],
       presets: [
         {
           key: "gateway",

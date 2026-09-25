@@ -34,7 +34,6 @@ type Server struct {
 	SendEnterpriseAdminOnboardingEmail http.Handler
 	GenerateWorkOSAdminPortalLink      http.Handler
 	ListSetupTasks                     http.Handler
-	AssignSetupWorkstream              http.Handler
 	UpdateSetupTask                    http.Handler
 	SubmitOnboardingSurvey             http.Handler
 }
@@ -81,7 +80,6 @@ func New(
 			{"SendEnterpriseAdminOnboardingEmail", "POST", "/rpc/organizations.sendEnterpriseAdminOnboardingEmail"},
 			{"GenerateWorkOSAdminPortalLink", "POST", "/rpc/organizations.generateWorkOSAdminPortalLink"},
 			{"ListSetupTasks", "GET", "/rpc/organizations.listSetupTasks"},
-			{"AssignSetupWorkstream", "POST", "/rpc/organizations.assignSetupWorkstream"},
 			{"UpdateSetupTask", "POST", "/rpc/organizations.updateSetupTask"},
 			{"SubmitOnboardingSurvey", "POST", "/rpc/organizations.submitOnboardingSurvey"},
 		},
@@ -100,7 +98,6 @@ func New(
 		SendEnterpriseAdminOnboardingEmail: NewSendEnterpriseAdminOnboardingEmailHandler(e.SendEnterpriseAdminOnboardingEmail, mux, decoder, encoder, errhandler, formatter),
 		GenerateWorkOSAdminPortalLink:      NewGenerateWorkOSAdminPortalLinkHandler(e.GenerateWorkOSAdminPortalLink, mux, decoder, encoder, errhandler, formatter),
 		ListSetupTasks:                     NewListSetupTasksHandler(e.ListSetupTasks, mux, decoder, encoder, errhandler, formatter),
-		AssignSetupWorkstream:              NewAssignSetupWorkstreamHandler(e.AssignSetupWorkstream, mux, decoder, encoder, errhandler, formatter),
 		UpdateSetupTask:                    NewUpdateSetupTaskHandler(e.UpdateSetupTask, mux, decoder, encoder, errhandler, formatter),
 		SubmitOnboardingSurvey:             NewSubmitOnboardingSurveyHandler(e.SubmitOnboardingSurvey, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -126,7 +123,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SendEnterpriseAdminOnboardingEmail = m(s.SendEnterpriseAdminOnboardingEmail)
 	s.GenerateWorkOSAdminPortalLink = m(s.GenerateWorkOSAdminPortalLink)
 	s.ListSetupTasks = m(s.ListSetupTasks)
-	s.AssignSetupWorkstream = m(s.AssignSetupWorkstream)
 	s.UpdateSetupTask = m(s.UpdateSetupTask)
 	s.SubmitOnboardingSurvey = m(s.SubmitOnboardingSurvey)
 }
@@ -151,7 +147,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSendEnterpriseAdminOnboardingEmailHandler(mux, h.SendEnterpriseAdminOnboardingEmail)
 	MountGenerateWorkOSAdminPortalLinkHandler(mux, h.GenerateWorkOSAdminPortalLink)
 	MountListSetupTasksHandler(mux, h.ListSetupTasks)
-	MountAssignSetupWorkstreamHandler(mux, h.AssignSetupWorkstream)
 	MountUpdateSetupTaskHandler(mux, h.UpdateSetupTask)
 	MountSubmitOnboardingSurveyHandler(mux, h.SubmitOnboardingSurvey)
 }
@@ -936,60 +931,6 @@ func NewListSetupTasksHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listSetupTasks")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountAssignSetupWorkstreamHandler configures the mux to serve the
-// "organizations" service "assignSetupWorkstream" endpoint.
-func MountAssignSetupWorkstreamHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/rpc/organizations.assignSetupWorkstream", f)
-}
-
-// NewAssignSetupWorkstreamHandler creates a HTTP handler which loads the HTTP
-// request and calls the "organizations" service "assignSetupWorkstream"
-// endpoint.
-func NewAssignSetupWorkstreamHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeAssignSetupWorkstreamRequest(mux, decoder)
-		encodeResponse = EncodeAssignSetupWorkstreamResponse(encoder)
-		encodeError    = EncodeAssignSetupWorkstreamError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "assignSetupWorkstream")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
 		payload, err := decodeRequest(r)
 		if err != nil {

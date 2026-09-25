@@ -55,10 +55,6 @@ type Service interface {
 	// List the fixed setup task catalog projected with organization state and
 	// completion evidence.
 	ListSetupTasks(context.Context, *ListSetupTasksPayload) (res *ListSetupTasksResult, err error)
-	// Atomically assign or clear every task in a setup workstream, including
-	// hidden tasks. Requires organization administrator access. Sends one
-	// notification when the assignee changes.
-	AssignSetupWorkstream(context.Context, *AssignSetupWorkstreamPayload) (res *ListSetupTasksResult, err error)
 	// Update one fixed setup task. The request must include at least one effective
 	// update: status, assignee, hidden, or clear_assignee=true. Assignee is
 	// mutually exclusive with clear_assignee=true.
@@ -89,19 +85,7 @@ const ServiceName = "organizations"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [18]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "assignSetupWorkstream", "updateSetupTask", "submitOnboardingSurvey"}
-
-// AssignSetupWorkstreamPayload is the payload type of the organizations
-// service assignSetupWorkstream method.
-type AssignSetupWorkstreamPayload struct {
-	// Setup workstream ID from the onboarding workstream catalog.
-	Workstream string
-	// Replacement workstream assignee; mutually exclusive with clear_assignee=true.
-	Assignee *SetupTaskAssigneeInput
-	// Clear all workstream task assignees.
-	ClearAssignee *bool
-	SessionToken  *string
-}
+var MethodNames = [17]string{"get", "sendInvite", "revokeInvite", "updateInviteRole", "listInvites", "listUsers", "removeUser", "enableWebhooks", "disableWebhooks", "createPortalSession", "getOnboardingStatus", "verifyOnboardingHooksSetup", "sendEnterpriseAdminOnboardingEmail", "generateWorkOSAdminPortalLink", "listSetupTasks", "updateSetupTask", "submitOnboardingSurvey"}
 
 // CreatePortalSessionPayload is the payload type of the organizations service
 // createPortalSession method.
@@ -193,9 +177,6 @@ type ListSetupTasksPayload struct {
 type ListSetupTasksResult struct {
 	// Setup tasks in catalog order.
 	Tasks []*SetupTask
-	// Canonical workstreams in display order. Membership is limited to the tasks
-	// present in this response.
-	Workstreams []*types.SetupWorkstream
 }
 
 // ListUsersPayload is the payload type of the organizations service listUsers
@@ -368,9 +349,6 @@ type SetupTask struct {
 	// Whether current organization facts force the effective status to done. This
 	// field is read-only.
 	CompletedByFact bool
-	// Whether the task counts toward onboarding completion progress. Optional
-	// tasks are excluded. This field is read-only.
-	CountsTowardProgress bool
 	// Current resolved user or email assignee.
 	Assignee *SetupTaskAssignee
 	// Incomplete prerequisite task keys.

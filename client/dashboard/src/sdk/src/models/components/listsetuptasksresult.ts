@@ -7,20 +7,12 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { SetupTask, SetupTask$inboundSchema } from "./setuptask.js";
-import {
-  SetupWorkstream,
-  SetupWorkstream$inboundSchema,
-} from "./setupworkstream.js";
 
 export type ListSetupTasksResult = {
   /**
    * Setup tasks in catalog order.
    */
   tasks: Array<SetupTask>;
-  /**
-   * Canonical workstreams in display order. Membership is limited to the tasks present in this response.
-   */
-  workstreams: Array<SetupWorkstream>;
 };
 
 /** @internal */
@@ -29,7 +21,6 @@ export const ListSetupTasksResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   tasks: z.array(SetupTask$inboundSchema),
-  workstreams: z.array(SetupWorkstream$inboundSchema),
 });
 
 export function listSetupTasksResultFromJSON(

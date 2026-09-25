@@ -76,10 +76,6 @@ type Client struct {
 	// listSetupTasks endpoint.
 	ListSetupTasksDoer goahttp.Doer
 
-	// AssignSetupWorkstream Doer is the HTTP client used to make requests to the
-	// assignSetupWorkstream endpoint.
-	AssignSetupWorkstreamDoer goahttp.Doer
-
 	// UpdateSetupTask Doer is the HTTP client used to make requests to the
 	// updateSetupTask endpoint.
 	UpdateSetupTaskDoer goahttp.Doer
@@ -124,7 +120,6 @@ func NewClient(
 		SendEnterpriseAdminOnboardingEmailDoer: doer,
 		GenerateWorkOSAdminPortalLinkDoer:      doer,
 		ListSetupTasksDoer:                     doer,
-		AssignSetupWorkstreamDoer:              doer,
 		UpdateSetupTaskDoer:                    doer,
 		SubmitOnboardingSurveyDoer:             doer,
 		RestoreResponseBody:                    restoreBody,
@@ -491,30 +486,6 @@ func (c *Client) ListSetupTasks() goa.Endpoint {
 		resp, err := c.ListSetupTasksDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "listSetupTasks", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// AssignSetupWorkstream returns an endpoint that makes HTTP requests to the
-// organizations service assignSetupWorkstream server.
-func (c *Client) AssignSetupWorkstream() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeAssignSetupWorkstreamRequest(c.encoder)
-		decodeResponse = DecodeAssignSetupWorkstreamResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildAssignSetupWorkstreamRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.AssignSetupWorkstreamDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("organizations", "assignSetupWorkstream", err)
 		}
 		return decodeResponse(resp)
 	}

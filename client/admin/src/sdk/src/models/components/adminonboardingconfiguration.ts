@@ -15,10 +15,6 @@ import {
   AdminOnboardingTask,
   AdminOnboardingTask$inboundSchema,
 } from "./adminonboardingtask.js";
-import {
-  SetupWorkstream,
-  SetupWorkstream$inboundSchema,
-} from "./setupworkstream.js";
 
 export type AdminOnboardingConfiguration = {
   organizationId: string;
@@ -28,10 +24,6 @@ export type AdminOnboardingConfiguration = {
   preset?: string | undefined;
   presets: Array<AdminOnboardingPreset>;
   tasks: Array<AdminOnboardingTask>;
-  /**
-   * Canonical workstreams in display order, including hidden task keys.
-   */
-  workstreams: Array<SetupWorkstream>;
 };
 
 /** @internal */
@@ -44,7 +36,6 @@ export const AdminOnboardingConfiguration$inboundSchema: z.ZodMiniType<
     preset: z.optional(z.string()),
     presets: z.array(AdminOnboardingPreset$inboundSchema),
     tasks: z.array(AdminOnboardingTask$inboundSchema),
-    workstreams: z.array(SetupWorkstream$inboundSchema),
   }),
   z.transform((v) => {
     return remap$(v, {

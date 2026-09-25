@@ -419,7 +419,6 @@ trackedFiles:
   src/funcs/organizationUserSessionIssuersMigrate.ts: {}
   src/funcs/organizationUserSessionIssuersMove.ts: {}
   src/funcs/organizationUserSessionIssuersUpdate.ts: {}
-  src/funcs/organizationsAssignSetupWorkstream.ts: {}
   src/funcs/organizationsCreatePortalSession.ts: {}
   src/funcs/organizationsDisableWebhooks.ts: {}
   src/funcs/organizationsEnableWebhooks.ts: {}
@@ -829,7 +828,6 @@ trackedFiles:
   src/models/components/approveskillsuggestionresult.ts: {}
   src/models/components/archiveskillrequestbody.ts: {}
   src/models/components/asset.ts: {}
-  src/models/components/assignsetupworkstreamrequestbody.ts: {}
   src/models/components/assistant.ts: {}
   src/models/components/assistantmcpserverref.ts: {}
   src/models/components/assistantmemory.ts: {}
@@ -1582,7 +1580,6 @@ trackedFiles:
   src/models/components/setuptask.ts: {}
   src/models/components/setuptaskassignee.ts: {}
   src/models/components/setuptaskassigneeinput.ts: {}
-  src/models/components/setupworkstream.ts: {}
   src/models/components/setusersessionissuerrequestbody.ts: {}
   src/models/components/shadowmcpaccesssummary.ts: {}
   src/models/components/shadowmcpinventoryapprovalrequest.ts: {}
@@ -1851,7 +1848,6 @@ trackedFiles:
   src/models/operations/approveskillsuggestion.ts: {}
   src/models/operations/archiveskill.ts: {}
   src/models/operations/archivespendrule.ts: {}
-  src/models/operations/assignsetupworkstream.ts: {}
   src/models/operations/attachbinding.ts: {}
   src/models/operations/attachorganizationremotesessionclientkeyset.ts: {}
   src/models/operations/attachremotesessionclientkeyset.ts: {}
@@ -2599,7 +2595,6 @@ trackedFiles:
   src/react-query/approveAllSkillSuggestions.ts: {}
   src/react-query/approveSkillSuggestion.ts: {}
   src/react-query/archiveSkill.ts: {}
-  src/react-query/assignSetupWorkstream.ts: {}
   src/react-query/assistantMemoriesDelete.ts: {}
   src/react-query/assistantSessionSummary.core.ts: {}
   src/react-query/assistantSessionSummary.ts: {}
@@ -3905,17 +3900,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
-  assignSetupWorkstream:
-    speakeasy-default-assign-setup-workstream:
-      requestBody:
-        application/json: {"workstream": "connect"}
-      responses:
-        "200":
-          application/json: {"tasks": [{"blocked_by": ["<value 1>"], "completed_by_fact": true, "counts_toward_progress": true, "description": "demonstrate huzzah well-made whoa", "hidden": true, "key": "<key>", "status": "awaiting_support", "title": "<value>"}], "workstreams": []}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   attachBinding:
     speakeasy-default-attach-binding:
       requestBody:
@@ -9016,7 +9000,7 @@ examples:
     speakeasy-default-list-setup-tasks:
       responses:
         "200":
-          application/json: {"tasks": [], "workstreams": []}
+          application/json: {"tasks": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -11793,7 +11777,7 @@ examples:
         application/json: {"task_key": "<value>"}
       responses:
         "200":
-          application/json: {"blocked_by": [], "completed_by_fact": true, "counts_toward_progress": true, "description": "ecliptic woot quarrelsomely destock wisely", "hidden": true, "key": "<key>", "status": "awaiting_support", "title": "<value>"}
+          application/json: {"blocked_by": [], "completed_by_fact": true, "description": "ecliptic woot quarrelsomely destock wisely", "hidden": true, "key": "<key>", "status": "awaiting_support", "title": "<value>"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

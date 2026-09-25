@@ -337,26 +337,6 @@ var _ = Service("organizations", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListSetupTasks"}`)
 	})
 
-	Method("assignSetupWorkstream", func() {
-		Description("Atomically assign or clear every task in a setup workstream, including hidden tasks. Requires organization administrator access. Sends one notification when the assignee changes.")
-		Payload(func() {
-			Attribute("workstream", String, "Setup workstream ID from the onboarding workstream catalog.")
-			Attribute("assignee", SetupTaskAssigneeInput, "Replacement workstream assignee; mutually exclusive with clear_assignee=true.")
-			Attribute("clear_assignee", Boolean, "Clear all workstream task assignees.")
-			Required("workstream")
-			security.SessionPayload()
-		})
-		Result(ListSetupTasksResult)
-		HTTP(func() {
-			POST("/rpc/organizations.assignSetupWorkstream")
-			security.SessionHeader()
-			Response(StatusOK)
-		})
-		Meta("openapi:operationId", "assignSetupWorkstream")
-		Meta("openapi:extension:x-speakeasy-name-override", "assignSetupWorkstream")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AssignSetupWorkstream"}`)
-	})
-
 	Method("updateSetupTask", func() {
 		Description("Update one fixed setup task. The request must include at least one effective update: status, assignee, hidden, or clear_assignee=true. Assignee is mutually exclusive with clear_assignee=true.")
 
@@ -568,15 +548,13 @@ var SetupTask = Type("SetupTask", func() {
 		Enum("todo", "in_progress", "awaiting_support", "done")
 	})
 	Attribute("completed_by_fact", Boolean, "Whether current organization facts force the effective status to done. This field is read-only.")
-	Attribute("counts_toward_progress", Boolean, "Whether the task counts toward onboarding completion progress. Optional tasks are excluded. This field is read-only.")
 	Attribute("assignee", SetupTaskAssignee, "Current resolved user or email assignee.")
 	Attribute("blocked_by", ArrayOf(String), "Incomplete prerequisite task keys.")
 	Attribute("hidden", Boolean, "Whether a platform administrator hid the task.")
-	Required("key", "title", "description", "status", "completed_by_fact", "counts_toward_progress", "blocked_by", "hidden")
+	Required("key", "title", "description", "status", "completed_by_fact", "blocked_by", "hidden")
 })
 
 var ListSetupTasksResult = Type("ListSetupTasksResult", func() {
 	Attribute("tasks", ArrayOf(SetupTask), "Setup tasks in catalog order.")
-	Attribute("workstreams", ArrayOf(shared.SetupWorkstream), "Canonical workstreams in display order. Membership is limited to the tasks present in this response.")
-	Required("tasks", "workstreams")
+	Required("tasks")
 })

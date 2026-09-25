@@ -86,7 +86,7 @@ func LoadOnboardingConfiguration(ctx context.Context, db repo.DBTX, organization
 		}
 		tasks = append(tasks, &gen.AdminOnboardingTask{Key: task.Key, Title: task.Title, Description: task.Description, Hidden: value})
 	}
-	return &gen.AdminOnboardingConfiguration{OrganizationID: organizationID, Preset: conv.FromPGText[string](rows[0].OnboardingPreset), Tasks: tasks, Presets: adminOnboardingPresets(), Workstreams: setupWorkstreamViews()}, nil
+	return &gen.AdminOnboardingConfiguration{OrganizationID: organizationID, Preset: conv.FromPGText[string](rows[0].OnboardingPreset), Tasks: tasks, Presets: adminOnboardingPresets()}, nil
 }
 
 // SaveOnboardingConfiguration changes selection only. Its caller authenticates

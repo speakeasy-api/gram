@@ -87,11 +87,6 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 		"distribute-servers", "configure-policies", "platform-mcp",
 	}, keys)
 	require.Empty(t, setupTask(result.Tasks, "distribute-servers").BlockedBy)
-	// Progress membership is server-owned; the dashboard must not re-derive it
-	// from a badge or a hardcoded key list.
-	for _, task := range result.Tasks {
-		require.Equal(t, task.Key != "platform-mcp", task.CountsTowardProgress, task.Key)
-	}
 }
 
 func TestService_ListSetupTasksAppliesCompletionFactsWithoutWriting(t *testing.T) {
@@ -225,14 +220,6 @@ func TestService_ListSetupTasksHiddenTaskPlatformVisibility(t *testing.T) {
 	normalResult, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{IncludeHidden: &includeHidden})
 	require.NoError(t, err)
 	require.Nil(t, setupTask(normalResult.Tasks, "instrument-agents"))
-	require.Contains(t, platformResult.Workstreams[1].TaskKeys, "instrument-agents")
-	require.Contains(t, platformResult.Workstreams[1].TaskKeys, "enable-logging")
-	require.Equal(t, []string{"anthropic-observability", "additional-agent-config"}, normalResult.Workstreams[1].TaskKeys)
-	for _, payload := range []*gen.ListSetupTasksPayload{{}, {IncludeHidden: new(false)}} {
-		defaultResult, err := ti.service.ListSetupTasks(platformCtx, payload)
-		require.NoError(t, err)
-		require.Equal(t, normalResult.Workstreams, defaultResult.Workstreams, "platform admin must opt in to hidden membership")
-	}
 }
 
 // Restoring a default-hidden task has to actually reveal it: the board offers

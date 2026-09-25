@@ -1196,21 +1196,7 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 				s.logger.ErrorContext(ctx, "setup callback: check domain verification", attr.SlogError(err))
 			}
 			if len(verified) > 0 {
-				config, err := LoadOnboardingConfiguration(ctx, s.db, org.ID)
-				if err != nil {
-					s.logger.ErrorContext(ctx, "setup callback: read onboarding configuration", attr.SlogError(err))
-					nextStepSlug = "identity-provider"
-				} else {
-					// Follow the effective selection: security uses split SSO,
-					// while untouched organizations retain the combined task.
-					nextStepSlug = ""
-					for _, task := range config.Tasks {
-						if !task.Hidden && (task.Key == "connect-idp" || task.Key == "identity-provider") {
-							nextStepSlug = task.Key
-							break
-						}
-					}
-				}
+				nextStepSlug = "identity-provider"
 			}
 		}
 	case "sso":

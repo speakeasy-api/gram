@@ -13779,22 +13779,6 @@ func unmarshalAdminOnboardingPresetResponseBodyToAdminAdminOnboardingPreset(v *A
 	return res
 }
 
-// unmarshalSetupWorkstreamResponseBodyToTypesSetupWorkstream builds a value of
-// type *types.SetupWorkstream from a value of type
-// *SetupWorkstreamResponseBody.
-func unmarshalSetupWorkstreamResponseBodyToTypesSetupWorkstream(v *SetupWorkstreamResponseBody) *types.SetupWorkstream {
-	res := &types.SetupWorkstream{
-		ID:    *v.ID,
-		Title: *v.Title,
-	}
-	res.TaskKeys = make([]string, len(v.TaskKeys))
-	for i, val := range v.TaskKeys {
-		res.TaskKeys[i] = val
-	}
-
-	return res
-}
-
 // unmarshalRemoteSessionIssuerDuplicateMatchResponseBodyToTypesRemoteSessionIssuerDuplicateMatch
 // builds a value of type *types.RemoteSessionIssuerDuplicateMatch from a value
 // of type *RemoteSessionIssuerDuplicateMatchResponseBody.

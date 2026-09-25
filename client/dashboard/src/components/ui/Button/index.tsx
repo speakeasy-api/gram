@@ -168,11 +168,6 @@ const buttonVariants = cva(
         "destructive-secondary":
           "bg-transparent text-btn-destructive-secondary hover:text-btn-destructive-secondary-hover active:text-btn-destructive-secondary-active disabled:text-btn-destructive-secondary-disabled",
       },
-      edge: {
-        none: "",
-        start: "",
-        end: "",
-      },
       size: {
         xs: "h-7 px-2 py-1 text-xs gap-1 [&_svg]:size-3",
         sm: "h-8 px-3 py-2 text-sm gap-1.5 [&_svg]:size-3.5",
@@ -181,14 +176,6 @@ const buttonVariants = cva(
       },
     },
     compoundVariants: [
-      { edge: "start", size: "xs", className: "-ms-2" },
-      { edge: "start", size: "sm", className: "-ms-3" },
-      { edge: "start", size: "md", className: "-ms-4" },
-      { edge: "start", size: "lg", className: "-ms-6" },
-      { edge: "end", size: "xs", className: "-me-2" },
-      { edge: "end", size: "sm", className: "-me-3" },
-      { edge: "end", size: "md", className: "-me-4" },
-      { edge: "end", size: "lg", className: "-me-6" },
       {
         variant: "brand",
         className:
@@ -220,9 +207,6 @@ interface BaseButtonProps extends Attributes {
   variant?: ButtonVariant;
   size?: ButtonSize;
   context?: ButtonContext;
-  /** Align content with a container edge while retaining the full padded hit area.
-   * Intended for tertiary buttons at the start or end of a content row. */
-  edge?: "none" | "start" | "end";
   className?: string;
   "aria-label"?: string;
 }
@@ -233,7 +217,6 @@ const BaseButton = React.forwardRef<HTMLButtonElement, BaseButtonProps>(
       variant = "primary",
       size = "md",
       context = "product",
-      edge = "none",
       asChild = false,
       className,
       onMouseEnter,
@@ -502,10 +485,7 @@ const BaseButton = React.forwardRef<HTMLButtonElement, BaseButtonProps>(
 
     return (
       <Comp
-        className={cn(
-          buttonVariants({ variant, size, context, edge }),
-          className,
-        )}
+        className={cn(buttonVariants({ variant, size, context }), className)}
         ref={combinedRef}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}

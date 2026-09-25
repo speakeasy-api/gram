@@ -47,9 +47,6 @@ type setupTaskDefinition struct {
 	// HiddenByDefault preserves legacy selection until staff explicitly save
 	// visibility. New tasks must not expand untouched organizations' boards.
 	HiddenByDefault bool
-	// Optional keeps the task off onboarding progress counts. It defaults to
-	// false so a new task counts unless it is deliberately opt-in.
-	Optional bool
 }
 
 // setupTaskCatalog lists every setup card in wizard order. To add a card:
@@ -75,7 +72,7 @@ var setupTaskCatalog = []setupTaskDefinition{
 	// Distribute
 	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: []string{"create-marketplace"}, HiddenByDefault: true},
-	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: true, Optional: true},
+	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: true},
 	// Secure
 	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: true},
@@ -126,7 +123,7 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 		tasks = slices.DeleteFunc(tasks, func(task *gen.SetupTask) bool { return task.Hidden })
 	}
 
-	return &gen.ListSetupTasksResult{Tasks: tasks, Workstreams: setupWorkstreamViewsForTasks(tasks)}, nil
+	return &gen.ListSetupTasksResult{Tasks: tasks}, nil
 }
 
 func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupTaskPayload) (*gen.SetupTask, error) {
@@ -290,10 +287,7 @@ func (s *Service) sendSetupTaskAssignmentEmail(ctx context.Context, ac *contextv
 	}
 
 	recipient := conv.NormalizeEmail(task.Assignee.Email)
-	setupLink := fmt.Sprintf("%s/%s/setup", strings.TrimRight(s.siteURL, "/"), organizationSlug)
-	if setupTaskDefinitionForKey(task.Key) != nil {
-		setupLink += "?task=" + task.Key
-	}
+	setupLink := fmt.Sprintf("%s/%s/setup?task=%s", strings.TrimRight(s.siteURL, "/"), organizationSlug, task.Key)
 	idempotencyMaterial := fmt.Sprintf("%s\x00%s\x00%s\x00%s", ac.ActiveOrganizationID, task.Key, assignmentTime.UTC().Format(time.RFC3339Nano), recipient)
 	idempotencyKey := fmt.Sprintf("setup-task-assignment:%x", sha256.Sum256([]byte(idempotencyMaterial)))
 	tmpl := email.SetupTaskAssignment{
@@ -400,7 +394,7 @@ func projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationI
 		if completedByFact {
 			status = setupTaskStatusDone
 		}
-		tasks = append(tasks, &gen.SetupTask{Key: definition.Key, Title: definition.Title, Description: definition.Description, Status: status, CompletedByFact: completedByFact, CountsTowardProgress: !definition.Optional, Assignee: assignee, BlockedBy: []string{}, Hidden: hidden})
+		tasks = append(tasks, &gen.SetupTask{Key: definition.Key, Title: definition.Title, Description: definition.Description, Status: status, CompletedByFact: completedByFact, Assignee: assignee, BlockedBy: []string{}, Hidden: hidden})
 	}
 
 	for index, definition := range setupTaskCatalog {

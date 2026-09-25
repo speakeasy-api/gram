@@ -277,17 +277,6 @@ func (q *Queries) CountOrganizationFeaturesFixture(ctx context.Context, organiza
 	return count, err
 }
 
-const countOrganizationOnboardingFixture = `-- name: CountOrganizationOnboardingFixture :one
-SELECT count(*) FROM organization_onboarding
-`
-
-func (q *Queries) CountOrganizationOnboardingFixture(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countOrganizationOnboardingFixture)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const countOrganizationsForWorkosIDFixture = `-- name: CountOrganizationsForWorkosIDFixture :one
 SELECT count(*)
 FROM organization_metadata
@@ -906,15 +895,6 @@ type DeleteOpenRouterSpendDayFixtureParams struct {
 // Test-only fixture: creates an incomplete historical month.
 func (q *Queries) DeleteOpenRouterSpendDayFixture(ctx context.Context, arg DeleteOpenRouterSpendDayFixtureParams) error {
 	_, err := q.db.Exec(ctx, deleteOpenRouterSpendDayFixture, arg.OrganizationID, arg.KeyType, arg.Day)
-	return err
-}
-
-const deleteOrganizationMetadataFixture = `-- name: DeleteOrganizationMetadataFixture :exec
-DELETE FROM organization_metadata WHERE id = $1
-`
-
-func (q *Queries) DeleteOrganizationMetadataFixture(ctx context.Context, id string) error {
-	_, err := q.db.Exec(ctx, deleteOrganizationMetadataFixture, id)
 	return err
 }
 
@@ -2419,18 +2399,6 @@ type InsertNetworkIngressFixtureParams struct {
 
 func (q *Queries) InsertNetworkIngressFixture(ctx context.Context, arg InsertNetworkIngressFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertNetworkIngressFixture, arg.ID, arg.OrganizationID, arg.DnsName)
-	return err
-}
-
-const insertOrganizationOnboardingFixture = `-- name: InsertOrganizationOnboardingFixture :exec
-INSERT INTO organization_onboarding (organization_id)
-VALUES ($1::text)
-`
-
-// Plain insert with no ON CONFLICT so schema tests can hit the NOT NULL and
-// unique constraints that SetOrganizationOnboardingPreset's upsert hides.
-func (q *Queries) InsertOrganizationOnboardingFixture(ctx context.Context, organizationID pgtype.Text) error {
-	_, err := q.db.Exec(ctx, insertOrganizationOnboardingFixture, organizationID)
 	return err
 }
 
