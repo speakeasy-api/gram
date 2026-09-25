@@ -1,16 +1,18 @@
 """Classifies Presidio PII findings as false positives.
 
 Holds the per-entity false-positive catalogs (reserved/placeholder IPs and
-emails, cloud/CDN ASN attribution, NHS number validity, retired recognizers) and
-the dispatch over them.
+emails, cloud/CDN ASN attribution, NHS number validity, payment-card test PANs
+and card context, retired recognizers) and the dispatch over them.
 """
 
+from .creditcard import card_context_reason, non_card_reason
 from .email import non_pii_email_reason
 from .ip import non_pii_ip_reason
 from .nhs import nhs_context_reason, non_nhs_reason
 from .retired import RETIRED_RECOGNIZERS, retired_reason
 
 # Presidio's UPPER_SNAKE entity names that have a false-positive catalog.
+ENTITY_TYPE_CREDIT_CARD = "CREDIT_CARD"
 ENTITY_TYPE_EMAIL_ADDRESS = "EMAIL_ADDRESS"
 ENTITY_TYPE_IP_ADDRESS = "IP_ADDRESS"
 ENTITY_TYPE_UK_NHS = "UK_NHS"
@@ -45,6 +47,8 @@ def reason_in_context(entity_type: str, match: str, text: str) -> str:
         return non_pii_email_reason(match)
     if entity_type == ENTITY_TYPE_UK_NHS:
         return non_nhs_reason(match) or nhs_context_reason(text)
+    if entity_type == ENTITY_TYPE_CREDIT_CARD:
+        return non_card_reason(match) or card_context_reason(text)
     return ""
 
 
@@ -69,6 +73,7 @@ def rule_ids() -> list[str]:
         _rule_id_for_entity(ENTITY_TYPE_IP_ADDRESS),
         _rule_id_for_entity(ENTITY_TYPE_EMAIL_ADDRESS),
         _rule_id_for_entity(ENTITY_TYPE_UK_NHS),
+        _rule_id_for_entity(ENTITY_TYPE_CREDIT_CARD),
     ] + [_rule_id_for_entity(entity) for entity in sorted(RETIRED_RECOGNIZERS)]
 
 
@@ -76,7 +81,10 @@ def context_rule_ids() -> list[str]:
     """Return the subset of ``rule_ids`` whose classification can change once the
     surrounding text is supplied.
     """
-    return [_rule_id_for_entity(ENTITY_TYPE_UK_NHS)]
+    return [
+        _rule_id_for_entity(ENTITY_TYPE_UK_NHS),
+        _rule_id_for_entity(ENTITY_TYPE_CREDIT_CARD),
+    ]
 
 
 def _rule_id_for_entity(entity: str) -> str:

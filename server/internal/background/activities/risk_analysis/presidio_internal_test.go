@@ -132,6 +132,44 @@ func TestConvertPresidioFindings_NHSNeedsContext(t *testing.T) {
 	assert.Equal(t, "4010232137", findings[0].Match)
 }
 
+// TestConvertPresidioFindings_CreditCardNeedsContext is the regression test for
+// AIS-720. Presidio's CreditCardRecognizer reports any Luhn-valid 13-19 digit
+// run at maximum confidence without consulting its own context words, so a
+// financial-data policy warned on published test PANs and on incidental digit
+// runs in coding-agent tool traffic. Both are dropped here; a plausible PAN
+// named as a card still reports.
+func TestConvertPresidioFindings_CreditCardNeedsContext(t *testing.T) {
+	t.Parallel()
+
+	cardRuleID := scanners.GuardRuleID(prefixPII + "credit_card")
+
+	// Four consecutive PR numbers printed by a `gh` command.
+	text := "gh pr view 6651 6652 6653 6654 --json title"
+	start := strings.Index(text, "6651")
+	findings := convertPresidioFindings(text, []presidioResult{
+		{EntityType: "CREDIT_CARD", Start: start, End: start + 19, Score: 1},
+	})
+	assert.Empty(t, findings, "a run of consecutive PR numbers is not cardholder data")
+
+	// A published test PAN inside a fixture file, re-shipped by an editing hook.
+	text = "INSERT INTO cards (pan) VALUES ('4111 1111 1111 1111');"
+	start = strings.Index(text, "4111")
+	findings = convertPresidioFindings(text, []presidioResult{
+		{EntityType: "CREDIT_CARD", Start: start, End: start + 19, Score: 1},
+	})
+	assert.Empty(t, findings, "a documented sandbox card number is not cardholder data")
+
+	// A plausible PAN in a payload that names it as a card still reports.
+	text = `{"payment_method": {"card": {"number": "4539172846305125"}}}`
+	start = strings.Index(text, "4539172846305125")
+	findings = convertPresidioFindings(text, []presidioResult{
+		{EntityType: "CREDIT_CARD", Start: start, End: start + 16, Score: 1},
+	})
+	require.Len(t, findings, 1, "a card number in payment context must still report")
+	assert.Equal(t, cardRuleID, findings[0].RuleID)
+	assert.Equal(t, "4539172846305125", findings[0].Match)
+}
+
 // isValueFalsePositive is the value-only view of isPresidioFalsePositive, for
 // the catalogs below that judge a match on its own. Passing no context is
 // never grounds for suppression, so this only ever reports what the value

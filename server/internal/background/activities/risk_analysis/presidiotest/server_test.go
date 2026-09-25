@@ -61,10 +61,13 @@ func TestMockServer_DetectsCreditCardWithLuhnCheck(t *testing.T) {
 	t.Parallel()
 	_, client := newClient(t)
 
+	// Synthetic, Luhn-valid PANs rather than the published test cards: the
+	// presidiofp catalog the client applies on the way out drops documented
+	// sandbox numbers, so using one here would prove nothing about the detector.
 	results, err := client.AnalyzeBatch(t.Context(), []string{
-		"My credit card is 4111111111111111",
-		"Card: 5500-0000-0000-0004",
-		"Bogus card 4111111111111112 not detected",
+		"My credit card is 4539172846305125",
+		"Card: 5534-1298-7600-4319",
+		"Bogus card 4539172846305126 not detected",
 	}, nil, 0, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 3)

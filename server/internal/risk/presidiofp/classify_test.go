@@ -31,11 +31,13 @@ func TestReason(t *testing.T) {
 	assert.NotEmpty(t, Reason(EntityTypeIPAddress, "  ::  "), "trimmed unspecified IP")
 	assert.NotEmpty(t, Reason(EntityTypeEmailAddress, "noreply@example.com"), "placeholder email")
 	assert.NotEmpty(t, Reason(EntityTypeUKNHS, "9434765919"), "NHS number outside the issued ranges")
+	assert.NotEmpty(t, Reason(EntityTypeCreditCard, "4111 1111 1111 1111"), "published test card")
 	assert.NotEmpty(t, Reason(EntityTypeUSDriverLicense, "N1234567"), "retired recognizer")
 
 	assert.Empty(t, Reason(EntityTypeIPAddress, "71.126.87.167"), "residential IP")
 	assert.Empty(t, Reason(EntityTypeEmailAddress, "ada@speakeasy.com"), "real email")
 	assert.Empty(t, Reason(EntityTypeUKNHS, "401 023 2137"), "issued NHS number, no context supplied")
+	assert.Empty(t, Reason(EntityTypeCreditCard, syntheticVisa), "real-shaped card, no context supplied")
 
 	// Uncatalogued entity types never fire, even on a match another lane would
 	// flag.
@@ -63,6 +65,16 @@ func TestReasonInContext(t *testing.T) {
 	assert.NotEmpty(t, ReasonInContext(EntityTypeUKNHS, "9434765919", "NHS number 9434765919"),
 		"unissued range, even in context")
 
+	// The same two layers for payment cards.
+	assert.Empty(t, ReasonInContext(EntityTypeCreditCard, syntheticVisa, "credit card "+syntheticVisa),
+		"real-shaped card in payment context")
+	assert.NotEmpty(t, ReasonInContext(EntityTypeCreditCard, syntheticVisa, "trace id "+syntheticVisa),
+		"real-shaped card with no payment signal")
+	assert.Empty(t, ReasonInContext(EntityTypeCreditCard, syntheticVisa, ""),
+		"empty text means context unknown, never suppress on it")
+	assert.NotEmpty(t, ReasonInContext(EntityTypeCreditCard, "4111111111111111", "credit card 4111111111111111"),
+		"published test card, even in context")
+
 	// Catalogs that ignore context behave identically either way.
 	assert.NotEmpty(t, ReasonInContext(EntityTypeIPAddress, "10.0.0.1", "ping 10.0.0.1"))
 	assert.Empty(t, ReasonInContext(EntityTypeEmailAddress, "ada@speakeasy.com", "mail ada@speakeasy.com"))
@@ -83,6 +95,8 @@ func TestReasonByRuleID(t *testing.T) {
 	// message a stored finding was anchored to.
 	assert.NotEmpty(t, ReasonByRuleIDInContext("pii.uk_nhs", "4010232137", "confluence page 4010232137"))
 	assert.Empty(t, ReasonByRuleIDInContext("pii.uk_nhs", "4010232137", "NHS number 4010232137"))
+	assert.NotEmpty(t, ReasonByRuleIDInContext("pii.credit_card", syntheticVisa, "order "+syntheticVisa))
+	assert.Empty(t, ReasonByRuleIDInContext("pii.credit_card", syntheticVisa, "credit card "+syntheticVisa))
 
 	// Rule ids without a catalog never fire, even when the match would match
 	// another lane's catalog.
@@ -96,9 +110,10 @@ func TestReasonByRuleID(t *testing.T) {
 		"pii.ip_address",
 		"pii.email_address",
 		"pii.uk_nhs",
+		"pii.credit_card",
 		"pii.us_driver_license",
 	}, RuleIDs())
-	assert.Equal(t, []string{"pii.uk_nhs"}, ContextRuleIDs())
+	assert.Equal(t, []string{"pii.uk_nhs", "pii.credit_card"}, ContextRuleIDs())
 	assert.Subset(t, RuleIDs(), ContextRuleIDs(), "a context rule must also be scanned for")
 	assert.Equal(t, "IP_ADDRESS", entityTypeForRuleID("pii.ip_address"))
 	assert.Equal(t, "EMAIL_ADDRESS", entityTypeForRuleID("pii.email_address"))

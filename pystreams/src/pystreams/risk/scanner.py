@@ -551,8 +551,9 @@ def _scan_to_detections(
     n = len(content)
     # Clamp each span to the content's bounds (guarding against an out-of-range
     # span) and drop catalog false positives (reserved/placeholder IPs and emails,
-    # cloud/CDN ASN attribution, NHS numbers with no health-care context) before
-    # they ever reach the handler. This pass works in character offsets, so a
+    # cloud/CDN ASN attribution, NHS numbers with no health-care context, test
+    # card PANs and card-shaped runs with no payment context) before they ever
+    # reach the handler. This pass works in character offsets, so a
     # discarded match never costs byte conversion.
     spans: list[tuple[Recognized, int, int, str]] = []
     for r in results:
@@ -565,10 +566,10 @@ def _scan_to_detections(
         end = max(start, min(r.end, n))
         match = content[start:end]
         # The whole payload goes in alongside the match: some catalogs need it.
-        # A ten-digit run only reads as a UK NHS number when the surrounding
-        # text talks about health care, because Presidio's recognizer pins any
-        # checksum-valid run at maximum confidence without consulting its own
-        # context words.
+        # A ten-digit run only reads as a UK NHS number, and a card-shaped run
+        # only reads as a payment card, when the surrounding text talks about
+        # health care or payments. Both recognizers pin any checksum-valid run at
+        # maximum confidence without consulting their own context words.
         if presidiofp.reason_in_context(r.entity_type, match, content):
             continue
         spans.append((r, start, end, match))

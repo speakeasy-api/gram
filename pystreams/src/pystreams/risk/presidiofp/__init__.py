@@ -1,8 +1,9 @@
 """Presidio false-positive classification.
 
 Classifies Presidio PII findings (reserved/placeholder IPs and emails, cloud/CDN
-ASN attribution, NHS number validity, retired recognizers) so the streaming
-scanner can drop the noise before publishing.
+ASN attribution, NHS number validity, payment-card test PANs and card context,
+retired recognizers) so the streaming scanner can drop the noise before
+publishing.
 """
 
 from .classify import (
