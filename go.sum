@@ -236,8 +236,8 @@ github.com/dimfeld/httppath v0.0.0-20170720192232-ee938bf73598 h1:MGKhKyiYrvMDZs
 github.com/dimfeld/httppath v0.0.0-20170720192232-ee938bf73598/go.mod h1:0FpDmbrt36utu8jEmeU05dPC9AB5tsLYVVi+ZHfyuwI=
 github.com/distribution/reference v0.6.0 h1:0IXCQ5g4/QMHHkarYzh5l+u8T3t73zM5QvfrDyIgxBk=
 github.com/distribution/reference v0.6.0/go.mod h1:BbU0aIcezP1/5jX/8MP0YiH4SdvB5Y4f/wlDRiLyi3E=
-github.com/dlclark/regexp2 v1.11.4 h1:rPYF9/LECdNymJufQKmri9gV604RvvABwgOA8un7yAo=
-github.com/dlclark/regexp2 v1.11.4/go.mod h1:DHkYz0B9wPfa6wondMfaivmHpzrQ3v9q8cnmRbL6yW8=
+github.com/dlclark/regexp2 v1.11.5 h1:Q/sSnsKerHeCkc/jSTNq1oCm7KiVgUMZRDUoRu0JQZQ=
+github.com/dlclark/regexp2 v1.11.5/go.mod h1:DHkYz0B9wPfa6wondMfaivmHpzrQ3v9q8cnmRbL6yW8=
 github.com/dlclark/regexp2/v2 v2.5.1 h1:E5Ug7Dh264W1ymdySmiHNcDG7fmsR307APCE5R07a20=
 github.com/dlclark/regexp2/v2 v2.5.1/go.mod h1:avUrQvPaLz2DrFNHJF0taWAFFX2C1GMSSoeiqFjcBmU=
 github.com/docker/go-connections v0.6.0 h1:LlMG9azAe1TqfR7sO+NJttz1gy6KO7VJBh+pMmjSD94=
@@ -694,8 +694,8 @@ github.com/speakeasy-api/agenthooks v0.7.3 h1:NjSq1NOhSTiVMw2mrVqXe+A5ILt0m47ZNO
 github.com/speakeasy-api/agenthooks v0.7.3/go.mod h1:AQgUKnaUl6icJT5IPp0tDinkEiwohfb1R2QWEwdNgBs=
 github.com/speakeasy-api/jsonpath v0.6.3 h1:c+QPwzAOdrWvzycuc9HFsIZcxKIaWcNpC+xhOW9rJxU=
 github.com/speakeasy-api/jsonpath v0.6.3/go.mod h1:2cXloNuQ+RSXi5HTRaeBh7JEmjRXTiaKpFTdZiL7URI=
-github.com/speakeasy-api/mcp-setup-docs/go v0.3.0 h1:y6/KsyZErJegJJR4P9l1PFXU+jyBWKKhnLmzl96ikgc=
-github.com/speakeasy-api/mcp-setup-docs/go v0.3.0/go.mod h1:epqh0bWWTc4FNmoRXGGv1pkuB9AetNJUzZHAsKuytW4=
+github.com/speakeasy-api/mcp-setup-docs/go v0.3.8 h1:N7eyngncssSkECt5z+wmEH7ZCP1wN18c8Emgf4kJpmQ=
+github.com/speakeasy-api/mcp-setup-docs/go v0.3.8/go.mod h1:AwRshgM3gDjtRKcGHiasariP+pcP78LEf4CVITWa7YY=
 github.com/speakeasy-api/openapi v1.24.0 h1:opoD27rupX7zBVPq1HkIGLeMOzNNA7JalhYP8q34i04=
 github.com/speakeasy-api/openapi v1.24.0/go.mod h1:g3+dIMe0AYgbbGvnlQZqesmjAVWSm9BmsjLevnefQrg=
 github.com/spf13/afero v1.15.0 h1:b/YBCLWAJdFWJTN9cLhiXXcD7mzKn9Dm86dNnfyQw1I=
