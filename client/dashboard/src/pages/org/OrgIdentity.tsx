@@ -465,7 +465,11 @@ function SingleSignOnTab(): JSX.Element {
           />
         }
       >
-        {scimActive && <DirectoryRoleMappings />}
+        {scimActive && (
+          <RequireScope scope="org:admin" level="component">
+            <DirectoryRoleMappings />
+          </RequireScope>
+        )}
       </IdentitySection>
     </div>
   );

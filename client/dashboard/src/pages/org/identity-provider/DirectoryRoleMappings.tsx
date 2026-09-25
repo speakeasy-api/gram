@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { InlineEmptyState } from "@/components/inline-empty-state";
-import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -65,6 +64,8 @@ function errorMessage(error: unknown, fallback: string): string {
 /**
  * Maps directory groups and attribute values to Gram roles. Members who match
  * a mapping get its role on top of the roles assigned to them directly.
+ * Render it only for org admins: the listing exposes directory attribute
+ * values and the server rejects anyone else.
  */
 export function DirectoryRoleMappings(): JSX.Element {
   const { data, isPending } = useDirectoryRoleMappings();
@@ -117,18 +118,16 @@ export function DirectoryRoleMappings(): JSX.Element {
       header: "",
       width: "150px",
       render: (mapping) => (
-        <RequireScope scope="org:admin" level="component">
-          <div className="flex justify-end gap-1">
-            <Button
-              variant="tertiary"
-              size="sm"
-              onClick={() => setEditing(mapping)}
-            >
-              Edit
-            </Button>
-            <DeleteMappingButton mapping={mapping} />
-          </div>
-        </RequireScope>
+        <div className="flex justify-end gap-1">
+          <Button
+            variant="tertiary"
+            size="sm"
+            onClick={() => setEditing(mapping)}
+          >
+            Edit
+          </Button>
+          <DeleteMappingButton mapping={mapping} />
+        </div>
       ),
     },
   ];
@@ -145,14 +144,12 @@ export function DirectoryRoleMappings(): JSX.Element {
             role.
           </Text>
         </div>
-        <RequireScope scope="org:admin" level="component">
-          <div className="flex shrink-0 gap-2">
-            <SyncGroupsButton />
-            <Button size="sm" onClick={() => setEditing("new")}>
-              Add mapping
-            </Button>
-          </div>
-        </RequireScope>
+        <div className="flex shrink-0 gap-2">
+          <SyncGroupsButton />
+          <Button size="sm" onClick={() => setEditing("new")}>
+            Add mapping
+          </Button>
+        </div>
       </div>
 
       {isPending && <SkeletonTable />}
