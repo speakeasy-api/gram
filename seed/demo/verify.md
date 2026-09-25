@@ -435,7 +435,7 @@ unavailable, labels fall back safely and Release remains available.
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
 the failed check: `mise run seed` for the local-only Killswitch, managed-agent,
-and exact remote-session attachment checks, or
+exact remote-session attachment, and Fleet restriction checks, or
 `mise run seed:demo` for shared demo-org checks. Re-check only the failed pages,
 and commit the SQL change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
