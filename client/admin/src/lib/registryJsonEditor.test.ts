@@ -45,3 +45,14 @@ it("keeps unknown error text and newlines; adapts the established semicolon form
     { path: "", message: "generic failure" },
   ]);
 });
+
+it("formats a near-8 MiB wide stored record without repeated document copies", () => {
+  const fields = Array.from(
+    { length: 95000 },
+    (_, i) => '"k' + i + '":"' + "x".repeat(75) + '"',
+  );
+  const raw = "{" + fields.join(",") + "}";
+  const formatted = formatRegistryJson(raw)!;
+  expect(formatted.startsWith('{\n  "k0": "')).toBe(true);
+  expect(formatted.replace(/\s/g, "") === raw).toBe(true);
+});

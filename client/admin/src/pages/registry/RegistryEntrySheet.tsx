@@ -21,7 +21,10 @@ import {
   validateRegistryText,
 } from "@/lib/registryValidation";
 
-import { serverValidationIssues } from "@/lib/registryJsonEditor";
+import {
+  formatRegistryJson,
+  serverValidationIssues,
+} from "@/lib/registryJsonEditor";
 
 const RegistryJsonEditor = lazy(() => import("./RegistryJsonEditor"));
 
@@ -62,6 +65,7 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
   const create = useCreateRegistryEntryMutation();
   const save = useSaveRegistryEntryMutation();
   const visibility = useSetRegistryEntryPublishedMutation();
+  const [baseline, setBaseline] = useState(EMPTY);
   const [text, setText] = useState(id ? "" : EMPTY);
   const [serverIssues, setServerIssues] = useState<ValidationIssue[]>([]);
   const [edited, setEdited] = useState(false);
@@ -72,11 +76,14 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
   const opener = useRef(document.activeElement as HTMLElement | null);
   if (id && !base && detail.data) {
     setBase(detail.data);
-    setText(detail.data.dataJson);
+    const formatted =
+      formatRegistryJson(detail.data.dataJson) ?? detail.data.dataJson;
+    setBaseline(formatted);
+    setText(formatted);
   }
 
   const loaded = id === null || base !== null;
-  const dirty = loaded && text !== (base?.dataJson ?? EMPTY);
+  const dirty = loaded && text !== baseline;
   useBlocker({
     shouldBlockFn: () =>
       busy || (dirty && !window.confirm("Discard unsaved registry edits?")),
@@ -97,7 +104,9 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
     });
     queryClient.setQueryData(registryEntryQuery(entry.id).queryKey, entry);
     setBase(entry);
-    setText(entry.dataJson);
+    const formatted = formatRegistryJson(entry.dataJson) ?? entry.dataJson;
+    setBaseline(formatted);
+    setText(formatted);
     setIssues([]);
     setServerIssues([]);
     setEdited(false);
@@ -134,7 +143,10 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
         if (result.error) throw result.error;
         if (result.data) {
           setBase(result.data);
-          setText(result.data.dataJson);
+          const formatted =
+            formatRegistryJson(result.data.dataJson) ?? result.data.dataJson;
+          setBaseline(formatted);
+          setText(formatted);
           setIssues([]);
           setServerIssues([]);
           setEdited(false);
@@ -295,7 +307,9 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
           )}
           <div className="flex flex-wrap gap-2">
             <Button
-              disabled={!loaded || busy || conflict}
+              disabled={
+                !loaded || busy || conflict || (base !== null && !dirty)
+              }
               onClick={() => void perform("save")}
             >
               Save
