@@ -275,6 +275,14 @@ export const PublishDialog = memo(function PublishDialog({
                 access to connect the generated repository with their coding
                 agents.
               </Dialog.Description>
+              <Dialog.Description>
+                <strong className="text-foreground font-semibold">
+                  Each collaborator receives an email from GitHub inviting them
+                  to the repository — sent to the address on their GitHub
+                  account. They must accept it before they can install the
+                  plugins.
+                </strong>
+              </Dialog.Description>
             </>
           )}
         </Dialog.Header>

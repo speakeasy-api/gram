@@ -47,16 +47,18 @@ export interface PlatformSetupStep {
   };
   /**
    * When set, the step renders a yes/no eligibility question instead of the
-   * standard instructional content. Answering "no" marks the platform as
-   * blocked and shows the supplied explanation.
+   * standard instructional content. "Yes" continues with the org rollout (the
+   * rest of `setupSteps`); "no" swaps in `personalSteps`, the per-user path for
+   * people on personal plans. Only valid on a platform's first step.
    */
   eligibility?: {
     question: string;
     yesLabel?: string;
     noLabel?: string;
-    blockedTitle: string;
-    blockedDescription: string;
+    personalSteps: PlatformSetupStep[];
   };
+  /** Renders a button that downloads this platform's observability plugin ZIP. */
+  download?: { platform: "claude" | "cursor"; label: string };
 }
 
 export interface AgentPlatform {

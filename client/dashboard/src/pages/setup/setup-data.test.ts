@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ACTIVE_AGENT_PROVIDER_IDS } from "@/components/agent-providers/agent-providers";
-import { AGENT_PLATFORMS } from "./setup-data";
+import { AGENT_PLATFORMS, platformSteps } from "./setup-data";
 
 describe("AGENT_PLATFORMS", () => {
   it("does not offer OpenClaw as a setup platform", () => {
@@ -123,4 +123,20 @@ describe("AGENT_PLATFORMS", () => {
       "OpenTelemetry logs, metrics, and traces",
     );
   });
+
+  it.each(["claude", "claude-cowork", "cursor"])(
+    "gives %s a per-user path for personal plans instead of the org rollout",
+    (id) => {
+      const platform = AGENT_PLATFORMS.find((p) => p.id === id)!;
+      const [gate, ...orgSteps] = platform.setupSteps;
+
+      expect(platformSteps(platform, null)).toBe(platform.setupSteps);
+      expect(platformSteps(platform, true)).toBe(platform.setupSteps);
+      const personal = platformSteps(platform, false);
+      expect(personal[0]).toBe(gate);
+      expect(personal.slice(1)).toEqual(gate!.eligibility!.personalSteps);
+      expect(personal.slice(1).length).toBeGreaterThan(0);
+      for (const step of orgSteps) expect(personal).not.toContain(step);
+    },
+  );
 });

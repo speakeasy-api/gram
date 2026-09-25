@@ -14,7 +14,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
 import { useFetcher } from "@/contexts/Fetcher";
+import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { cn } from "@/lib/utils";
+import { useObservabilityPluginDownload } from "./useObservabilityPluginDownload";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePlugins } from "@gram/client/react-query/plugins";
 import { Button as MoonshineButton } from "@/components/ui/Button";
@@ -26,7 +28,6 @@ import {
   Info,
 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { agentProvidersForSurface } from "@/components/agent-providers/agent-providers";
 
@@ -36,56 +37,12 @@ const COWORK_DOCS_URL =
 const CLAUDE_CODE_SETTINGS_DOCS_URL =
   "https://code.claude.com/docs/en/settings";
 
+const CLAUDE_PLUGINS_DOCS_URL =
+  "https://support.claude.com/en/articles/13837440-use-plugins-in-claude";
+
 const CURSOR_DASHBOARD_URL = "https://cursor.com/dashboard";
 
-/**
- * Downloads the server-generated observability plugin ZIP. opencode and copilot
- * differ only in the `platform` query value and the fallback filename.
- */
-function useObservabilityPluginDownload(
-  platform: string,
-  fallbackName: string,
-) {
-  const { fetch: authFetch } = useFetcher();
-  const [isDownloading, setIsDownloading] = useState(false);
-
-  const download = async () => {
-    setIsDownloading(true);
-    try {
-      const resp = await authFetch(
-        `/rpc/plugins.downloadObservabilityPlugin?platform=${platform}`,
-        {},
-      );
-      if (!resp.ok) {
-        toast.error(
-          resp.status === 403
-            ? "Downloading the observability plugin requires an org admin."
-            : "Failed to download observability plugin",
-        );
-        return;
-      }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        resp.headers
-          .get("Content-Disposition")
-          ?.match(/filename="(.+)"/)?.[1] ?? fallbackName;
-      a.click();
-      // Revoke on the next task: some browsers kick the blob download off
-      // asynchronously and a same-task revoke aborts it.
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-    } catch (err) {
-      toast.error("Failed to download observability plugin");
-      console.error("observability plugin download failed", err);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  return { isDownloading, download };
-}
+const CURSOR_PLUGINS_DOCS_URL = "https://cursor.com/docs/plugins";
 
 type ContentProps = {
   repoOwner: string;
@@ -407,6 +364,57 @@ function ClaudeCoworkInstallContent({
           links={[{ href: COWORK_DOCS_URL, label: "Cowork setup guide" }]}
         />
       </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          Using a personal Claude account
+        </h3>
+        <p className="text-muted-foreground mb-4 text-sm">
+          On a Pro or Max plan there is no organization to roll out to, and
+          Cowork can't sync a private GitHub marketplace to a personal account.
+          Install the plugin from a file instead.
+        </p>
+
+        <InstallSteps
+          steps={[
+            {
+              title: "Download the plugin",
+              description: (
+                <>
+                  Close this dialog, open the plugin's Install menu, and choose{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    Download as zip — Claude
+                  </code>
+                  .
+                </>
+              ),
+            },
+            {
+              title: "Upload it in Claude",
+              description: (
+                <>
+                  In Claude, open{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    Customize → Plugins
+                  </code>
+                  , choose the upload option, and select the ZIP. It doesn't
+                  update on its own, so repeat this after each publish.
+                </>
+              ),
+            },
+          ]}
+        />
+        <p className="text-muted-foreground mt-3 flex items-start gap-1.5 text-xs leading-relaxed">
+          <Info className="mt-0.5 size-3.5 shrink-0" />
+          <span>{PERSONAL_ACCOUNT_GOVERNANCE_NOTE}</span>
+        </p>
+
+        <RelatedLinks
+          links={[
+            { href: CLAUDE_PLUGINS_DOCS_URL, label: "Use plugins in Claude" },
+          ]}
+        />
+      </div>
     </div>
   );
 }
@@ -423,8 +431,19 @@ function CursorInstallContent({
   repoOwner,
   repoName,
   pluginName,
-}: Pick<ContentProps, "repoOwner" | "repoName" | "pluginName">) {
+  pluginSlug,
+}: Pick<ContentProps, "repoOwner" | "repoName" | "pluginName" | "pluginSlug">) {
   const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
+  // The download is named after the plugin slug (DownloadPluginPackage in
+  // server/internal/plugins/impl.go). Chained so a missing download never
+  // deletes the installed copy; re-runnable after each publish.
+  const slug = pluginSlug ?? "<plugin-slug>";
+  const localInstallCommand = [
+    `test -f ~/Downloads/${slug}.zip &&`,
+    `rm -rf ~/.cursor/plugins/local/${slug} &&`,
+    `mkdir -p ~/.cursor/plugins/local/${slug} &&`,
+    `unzip -q ~/Downloads/${slug}.zip -d ~/.cursor/plugins/local/${slug}`,
+  ].join("\n");
 
   return (
     <div className="min-w-0 space-y-6">
@@ -487,6 +506,69 @@ function CursorInstallContent({
         <RelatedLinks
           links={[
             { href: CURSOR_DASHBOARD_URL, label: "Open Cursor dashboard" },
+          ]}
+        />
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          Using a personal Cursor account
+        </h3>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Team marketplaces need a Cursor Teams or Enterprise plan. On an
+          individual plan, install the plugin as a local plugin instead.
+        </p>
+
+        <InstallSteps
+          steps={[
+            {
+              title: "Download the plugin",
+              description: (
+                <>
+                  Close this dialog, open the plugin's Install menu, and choose{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    Download as zip — Cursor
+                  </code>
+                  .
+                </>
+              ),
+            },
+            {
+              title: "Unzip it into Cursor's local plugins folder",
+              description: "Run this in a terminal:",
+              code: localInstallCommand,
+              language: "bash",
+              children: !pluginSlug ? (
+                <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
+                  Replace{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    &lt;plugin-slug&gt;
+                  </code>{" "}
+                  with the slug of the plugin you want to install.
+                </p>
+              ) : undefined,
+            },
+            {
+              title: "Reload Cursor",
+              description: (
+                <>
+                  Run{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    Developer: Reload Window
+                  </code>{" "}
+                  and check the plugin appears under Customize. If it doesn't,
+                  turn on Allow Local Plugin Imports in Cursor's settings. Local
+                  plugins don't update on their own, so repeat this after each
+                  publish.
+                </>
+              ),
+            },
+          ]}
+        />
+
+        <RelatedLinks
+          links={[
+            { href: CURSOR_PLUGINS_DOCS_URL, label: "Cursor plugins docs" },
           ]}
         />
       </div>
@@ -593,6 +675,13 @@ function CodexInstallContent({
 
         <InstallSteps
           steps={[
+            {
+              // The manual path reads the private repo with the user's own git
+              // credentials, so they must be a collaborator first.
+              title: "Accept the GitHub invite",
+              description:
+                "Ask an admin to add your GitHub username as a collaborator on this marketplace. GitHub emails an invite to the address on your GitHub account. Accept it before continuing.",
+            },
             {
               title: "Register the marketplace",
               code: addCommand,
@@ -1226,6 +1315,7 @@ export function InstallInstructionsDialog({
                   repoOwner={content.repoOwner}
                   repoName={content.repoName}
                   pluginName={effectivePluginName}
+                  pluginSlug={effectivePluginSlug}
                 />
               )}
               {selected === "codex" && (

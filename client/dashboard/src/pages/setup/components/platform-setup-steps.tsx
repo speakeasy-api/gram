@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, Check, Copy, Loader2 } from "lucide-react";
+import { AlertCircle, Check, Copy, Download, Loader2 } from "lucide-react";
 import { codeToHtml, type BundledLanguage } from "shiki";
 import { Button } from "@/components/ui/Button";
 import { Link } from "@/components/ui/Link";
+import { useObservabilityPluginDownload } from "@/pages/plugins/useObservabilityPluginDownload";
 import type { PlatformSetupStep } from "../types";
 import { usePlatformPlaceholders } from "./platform-setup-values";
 
@@ -134,6 +135,33 @@ interface PlatformSetupStepBodyProps {
   onEligibilityAnswer: (eligible: boolean) => void;
 }
 
+function ObservabilityDownloadButton({
+  platform,
+  label,
+}: NonNullable<PlatformSetupStep["download"]>): JSX.Element {
+  const { isDownloading, download } = useObservabilityPluginDownload(
+    platform,
+    `observability-${platform}.zip`,
+  );
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      disabled={isDownloading}
+      onClick={() => void download()}
+    >
+      <Button.LeftIcon>
+        {isDownloading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Download className="h-4 w-4" />
+        )}
+      </Button.LeftIcon>
+      <Button.Text>{label}</Button.Text>
+    </Button>
+  );
+}
+
 // One instruction in a platform's setup: the screenshot, prose, help link,
 // snippet and — for a platform that first has to establish it qualifies — the
 // eligibility question. Shared by the instrumentation sheet, which shows one
@@ -213,6 +241,8 @@ export function PlatformSetupStepBody({
             </p>
           );
         })()}
+
+      {step.download && <ObservabilityDownloadButton {...step.download} />}
 
       {step.eligibility && (
         <div className="bg-secondary/40 border-border !mt-6 space-y-4 border p-4">
