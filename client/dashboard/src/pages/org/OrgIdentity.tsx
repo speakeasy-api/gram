@@ -124,12 +124,15 @@ function WorkOSPortalButton({
   errorFallback,
   label = "Configure",
   external = false,
+  variant = "secondary",
 }: {
   intent: "sso" | "dsync" | "domain_verification";
   errorFallback: string;
   label?: string;
   /** Adds an external-link icon, for spots where leaving Gram is not obvious. */
   external?: boolean;
+  /** Primary when opening the portal is the card's first-run action. */
+  variant?: "primary" | "secondary";
 }) {
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
@@ -161,7 +164,7 @@ function WorkOSPortalButton({
   return (
     <RequireScope scope="org:admin" level="component">
       <Button
-        variant="secondary"
+        variant={variant}
         size="sm"
         onClick={launchPortal}
         disabled={generatePortalLink.isPending}
@@ -207,9 +210,10 @@ function SSOConfigureControl({
 }
 
 /**
- * Picks the Directory Sync card control: upsell or the in-product setup
- * wizard. A connected directory has none on the card; its connection is
- * managed from the secondary button under the role mappings.
+ * Picks the Directory Sync card control: upsell, or the WorkOS portal to
+ * connect a directory, as the card's primary action. A connected directory
+ * has none on the card; its connection is managed from the secondary button
+ * under the role mappings.
  */
 function DirectorySyncConfigureControl({
   featureEnabled,
@@ -220,7 +224,13 @@ function DirectorySyncConfigureControl({
 }) {
   if (active) return null;
   if (!featureEnabled) return <ConfigureButton sectionId="directory_sync" />;
-  return <SetupStepButton />;
+  return (
+    <WorkOSPortalButton
+      intent="dsync"
+      errorFallback="Failed to start Directory Sync setup"
+      variant="primary"
+    />
+  );
 }
 
 function IdentitySection({
