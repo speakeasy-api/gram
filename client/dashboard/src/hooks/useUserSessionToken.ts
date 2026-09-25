@@ -15,12 +15,19 @@ import { useQuery } from "@tanstack/react-query";
 export type UserSessionTokenTarget =
   | { kind: "toolset"; id: string | undefined }
   | { kind: "mcpServer"; id: string | undefined }
-  | { kind: "metaMcpServer"; id: string | undefined };
+  | {
+      kind: "metaMcpServer";
+      id: string | undefined;
+      discoveryMode?: "direct" | "progressive";
+      connectionVersion?: number;
+    };
 
 export interface UseUserSessionTokenResult {
   /** The minted user-session JWT, or undefined while loading / not gated. */
   accessToken: string | undefined;
   isLoading: boolean;
+  error: Error | null;
+  retry: () => void;
 }
 
 function mintRequestBody(
@@ -32,7 +39,10 @@ function mintRequestBody(
     case "mcpServer":
       return { mcpServerId: target.id };
     case "metaMcpServer":
-      return { metaMcpServerId: target.id };
+      return {
+        metaMcpServerId: target.id,
+        discoveryMode: target.discoveryMode,
+      };
   }
 }
 
@@ -81,6 +91,8 @@ export function useUserSessionToken({
       id,
       userSessionIssuerId,
       session.user.id,
+      target.kind === "metaMcpServer" ? target.discoveryMode : undefined,
+      target.kind === "metaMcpServer" ? target.connectionVersion : undefined,
     ],
     queryFn: async () => {
       if (!id) return null;
@@ -111,5 +123,9 @@ export function useUserSessionToken({
     // connection.
     accessToken: enabled ? query.data?.accessToken : undefined,
     isLoading: enabled && query.isLoading,
+    error: enabled ? query.error : null,
+    retry: () => {
+      if (enabled) void query.refetch();
+    },
   };
 }

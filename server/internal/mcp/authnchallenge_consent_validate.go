@@ -264,8 +264,9 @@ func (s *Service) metaValidationTarget(
 		client.RemoteSessionIssuerID: entry,
 	}
 	gate := metaGateContext{
-		projectID:    endpoint.ProjectID,
-		metaServerID: endpoint.MetaMcpServerID.UUID,
+		discoveryMode: "progressive",
+		projectID:     endpoint.ProjectID,
+		metaServerID:  endpoint.MetaMcpServerID.UUID,
 		// Consent probes a stored gateway; agent keys reach no consent page.
 		agentID:         uuid.Nil,
 		organizationID:  endpoint.OrganizationID,

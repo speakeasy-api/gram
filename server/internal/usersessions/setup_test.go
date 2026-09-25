@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -61,6 +62,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
+	features            *feature.InMemory
 	service             *usersessions.Service
 	conn                *pgxpool.Pool
 	sessionManager      *sessions.Manager
@@ -111,6 +113,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		tokenRevoker = revoker
 	}
 
+	flags := new(feature.InMemory)
 	svc := usersessions.NewService(
 		logger,
 		tracerProvider,
@@ -126,9 +129,11 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		usersessions.NewSigner("test-jwt-secret"),
 		"http://0.0.0.0",
 		ratelimit.NewRedisStore(redisClient),
+		flags,
 	)
 
 	return ctx, &testInstance{
+		features:            flags,
 		service:             svc,
 		conn:                conn,
 		sessionManager:      sessionManager,

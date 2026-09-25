@@ -29,6 +29,9 @@ type MetaMcpServer struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string
+	// The effective default discovery mode. Unconfigured connections follow this
+	// value.
+	DiscoveryMode string
 	// When the meta MCP server was created
 	CreatedAt string
 	// When the meta MCP server was last updated

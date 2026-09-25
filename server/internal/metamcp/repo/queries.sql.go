@@ -1266,26 +1266,28 @@ func (q *Queries) UpdateMetaMCPMemberSortOrder(ctx context.Context, arg UpdateMe
 const updateMetaMCPServer = `-- name: UpdateMetaMCPServer :one
 UPDATE meta_mcp_servers
 SET name = $1,
-    user_session_issuer_id = $2,
-    visibility = COALESCE($3, visibility),
+    discovery_mode = COALESCE($2, discovery_mode),
+    user_session_issuer_id = $3,
+    visibility = COALESCE($4, visibility),
     network_access_mode = CASE
-        WHEN $4::boolean THEN $5
+        WHEN $5::boolean THEN $6
         ELSE network_access_mode
     END,
     instructions = CASE
-        WHEN $6::boolean THEN $7
+        WHEN $7::boolean THEN $8
         ELSE instructions
     END,
     updated_at = clock_timestamp()
-WHERE id = $8
-  AND organization_id = $9
-  AND project_id = $10
+WHERE id = $9
+  AND organization_id = $10
+  AND project_id = $11
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, user_session_issuer_id, name, instructions, discovery_mode, visibility, network_access_mode, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMetaMCPServerParams struct {
 	Name                 string
+	DiscoveryMode        pgtype.Text
 	UserSessionIssuerID  uuid.NullUUID
 	Visibility           pgtype.Text
 	NetworkAccessModeSet bool
@@ -1307,6 +1309,7 @@ type UpdateMetaMCPServerParams struct {
 func (q *Queries) UpdateMetaMCPServer(ctx context.Context, arg UpdateMetaMCPServerParams) (MetaMcpServer, error) {
 	row := q.db.QueryRow(ctx, updateMetaMCPServer,
 		arg.Name,
+		arg.DiscoveryMode,
 		arg.UserSessionIssuerID,
 		arg.Visibility,
 		arg.NetworkAccessModeSet,

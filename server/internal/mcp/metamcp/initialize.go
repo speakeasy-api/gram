@@ -31,3 +31,15 @@ func ResolveInstructions(custom *string) string {
 	}
 	return *custom
 }
+
+// ResolveDiscoveryInstructions describes the active catalog unless the owner
+// supplies custom instructions.
+func ResolveDiscoveryInstructions(custom *string, mode DiscoveryMode) string {
+	if custom != nil && strings.TrimSpace(*custom) != "" {
+		return *custom
+	}
+	if mode == DiscoveryModeDirect {
+		return "This gateway exposes the tools from its MCP servers directly. Use tools/list to discover tool definitions, then call each tool by its qualified server--tool name."
+	}
+	return Instructions
+}
