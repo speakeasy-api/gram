@@ -13,6 +13,9 @@ export const FEATURE_FLAGS = {
   headlessModeSwitcher: "headless-mode-switcher",
   killswitches: "gram-killswitches",
   mcpResearch: "gram-mcp-research",
+  // UI-only rollout gate for the MCP server/tool scope picker in the risk
+  // policy editor. Policies that already carry a scope keep the picker.
+  mcpScopedPolicies: "gram-mcp-scoped-policies",
   newCostsPage: "gram-new-costs-page",
   oktaConnections: "okta-connections",
   paygSelfServeBilling: "gram-payg-self-serve-billing",

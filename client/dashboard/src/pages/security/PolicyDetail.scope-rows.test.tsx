@@ -1,4 +1,5 @@
 import { useSdkClient } from "@/contexts/Sdk";
+import type { FeatureFlagResult } from "@/hooks/useFeatureFlag";
 import type { RiskCategoryDefinition } from "@gram/client/models/components/riskcategorydefinition.js";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -19,6 +20,14 @@ import {
   policyMCPScopeValue,
   type PolicyMCPScopeValue,
 } from "./policy-mcp-scope";
+
+const mocks = vi.hoisted(() => ({
+  flagResult: vi.fn(),
+}));
+
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => mocks.flagResult() as FeatureFlagResult,
+}));
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -291,9 +300,40 @@ describe("StandardPolicyEditor scope rows", () => {
   afterEach(cleanup);
 
   beforeEach(() => {
+    mocks.flagResult.mockReturnValue({ status: "enabled" });
     vi.mocked(useSdkClient).mockReturnValue({
       access: { listShadowMCPInventory: vi.fn() },
     } as unknown as ReturnType<typeof useSdkClient>);
+  });
+
+  it.each<FeatureFlagResult>([
+    { status: "disabled" },
+    { status: "loading" },
+    { status: "missing" },
+    { status: "error" },
+  ])("hides the MCP scope picker when the flag is $status", (flag) => {
+    mocks.flagResult.mockReturnValue(flag);
+
+    renderEditor(policy());
+
+    expect(screen.queryByText("Selected MCP servers")).toBeNull();
+    expect(screen.getByText("Secrets")).toBeTruthy();
+  });
+
+  it("keeps the MCP scope picker for a stored scope when the flag is off", () => {
+    mocks.flagResult.mockReturnValue({ status: "disabled" });
+
+    renderEditor(
+      policy({
+        mcpScope: {
+          allServers: false,
+          toolAnnotations: [],
+          servers: [{ mcpServerId: "11111111-1111-4111-8111-111111111111" }],
+        },
+      }),
+    );
+
+    expect(screen.getByText("Selected MCP servers")).toBeTruthy();
   });
 
   it("renders one inspect row for every enabled detector", () => {
