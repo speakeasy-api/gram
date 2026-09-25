@@ -3,94 +3,120 @@ import type { SetDirectoryRoleMappingForm } from "@gram/client/models/components
 
 /**
  * The round trip from a directory role mapping to the role editor and back.
- * The mapping panel sends the source it was picking a role for; the editor
- * sends it back with the role it created, and the panel then saves the
- * mapping. Everything travels in the URL, so a reload mid-way keeps it.
+ *
+ * The mapping panel stores the source it was picking a role for in
+ * sessionStorage under a random key, and only that key travels in the URL.
+ * The editor records the role it created on the same entry, and the panel
+ * then saves the mapping and deletes the entry. Keeping the data out of the
+ * URL means a crafted link cannot trigger a mapping (it has no entry to point
+ * at), and directory attribute values never reach history, logs or referrers.
  */
 export const DIRECTORY_MAPPING_FLOW = "directory-mapping";
 
-const MAP_ROLE = "mapRole";
-const GROUP = "groupId";
-const ATTRIBUTE_KEY = "attributeKey";
-const ATTRIBUTE_VALUE = "attributeValue";
-const SUGGESTED_NAME = "name";
+const FLOW_PARAM = "mapping";
+const STORAGE_PREFIX = "gram.directoryRoleMappingFlow.";
 
 type MappingSource = Omit<SetDirectoryRoleMappingForm, "roleUrn">;
 
-function writeSource(params: URLSearchParams, source: MappingSource): void {
-  if (source.sourceKind === "group" && source.directoryGroupId) {
-    params.set(GROUP, source.directoryGroupId);
-    return;
-  }
-  if (source.attributeKey && source.attributeValue) {
-    params.set(ATTRIBUTE_KEY, source.attributeKey);
-    params.set(ATTRIBUTE_VALUE, source.attributeValue);
+type FlowRecord = {
+  source: MappingSource;
+  suggestedName: string;
+  roleUrn?: string;
+};
+
+function readRecord(key: string): FlowRecord | undefined {
+  try {
+    const raw = window.sessionStorage.getItem(STORAGE_PREFIX + key);
+    return raw ? (JSON.parse(raw) as FlowRecord) : undefined;
+  } catch {
+    return undefined;
   }
 }
 
-function readSource(params: URLSearchParams): MappingSource | undefined {
-  const groupId = params.get(GROUP);
-  if (groupId) return { sourceKind: "group", directoryGroupId: groupId };
-  const key = params.get(ATTRIBUTE_KEY);
-  const value = params.get(ATTRIBUTE_VALUE);
-  if (key && value) {
-    return {
-      sourceKind: "attribute",
-      attributeKey: key,
-      attributeValue: value,
-    };
+function writeRecord(key: string, record: FlowRecord): void {
+  try {
+    window.sessionStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(record));
+  } catch {
+    // Storage can be unavailable; the flow then just skips the auto-map.
   }
-  return undefined;
 }
 
 /**
- * Query string that opens the role editor for a mapping source, with the
- * name the new role should start with (the group name or attribute value).
+ * Starts the round trip and returns the query string that opens the role
+ * editor for it. The new role starts with `suggestedName`.
  */
-export function createRoleForMappingParams(
+export function startCreateRoleFlow(
   source: MappingSource,
   suggestedName: string,
 ): URLSearchParams {
-  const params = new URLSearchParams({ from: DIRECTORY_MAPPING_FLOW });
-  writeSource(params, source);
-  if (suggestedName) params.set(SUGGESTED_NAME, suggestedName);
-  return params;
+  const key = crypto.randomUUID();
+  writeRecord(key, { source, suggestedName });
+  return new URLSearchParams({
+    from: DIRECTORY_MAPPING_FLOW,
+    [FLOW_PARAM]: key,
+  });
+}
+
+/**
+ * Whether the role editor was opened by a round trip this tab started. A
+ * link without a stored entry is treated as a plain role editor visit.
+ */
+export function isCreateRoleFlow(params: URLSearchParams): boolean {
+  const key = params.get(FLOW_PARAM);
+  return (
+    params.get("from") === DIRECTORY_MAPPING_FLOW &&
+    key !== null &&
+    readRecord(key) !== undefined
+  );
 }
 
 /** The name the role editor should start with, if the flow suggested one. */
 export function suggestedRoleName(params: URLSearchParams): string {
-  return params.get(SUGGESTED_NAME) ?? "";
+  const key = params.get(FLOW_PARAM);
+  return key ? (readRecord(key)?.suggestedName ?? "") : "";
 }
 
-/** Query string that returns to the mapping panel with a created role. */
-export function directoryMappingReturnParams(
+/**
+ * Records the role the editor created and returns the query string that
+ * takes the panel back to save the mapping.
+ */
+export function completeCreateRoleFlow(
   editorParams: URLSearchParams,
   roleUrn: string,
 ): URLSearchParams {
-  const params = new URLSearchParams({ [MAP_ROLE]: roleUrn });
-  const source = readSource(editorParams);
-  if (source) writeSource(params, source);
-  return params;
+  const key = editorParams.get(FLOW_PARAM);
+  const record = key ? readRecord(key) : undefined;
+  if (!key || !record) return new URLSearchParams();
+  writeRecord(key, { ...record, roleUrn });
+  return new URLSearchParams({ [FLOW_PARAM]: key });
 }
 
-/** The mapping the panel should save on return, if the URL carries one. */
+/** The mapping to save on return, once the editor recorded a created role. */
 export function pendingMappingFromParams(
   params: URLSearchParams,
-): SetDirectoryRoleMappingForm | undefined {
-  const roleUrn = params.get(MAP_ROLE);
-  const source = readSource(params);
-  if (!roleUrn || !source) return undefined;
-  return { ...source, roleUrn };
+): { key: string; form: SetDirectoryRoleMappingForm } | undefined {
+  const key = params.get(FLOW_PARAM);
+  const record = key ? readRecord(key) : undefined;
+  if (!key || !record?.roleUrn) return undefined;
+  return { key, form: { ...record.source, roleUrn: record.roleUrn } };
 }
 
-/** Removes the round-trip parameters once the mapping is saved. */
-export function clearPendingMappingParams(
+/**
+ * Ends the round trip once the mapping is saved: drops the stored entry and
+ * returns the query string without the flow key. A failed save keeps the
+ * entry, so reloading the page retries it.
+ */
+export function finishCreateRoleFlow(
   params: URLSearchParams,
+  key: string,
 ): URLSearchParams {
-  const next = new URLSearchParams(params);
-  for (const key of [MAP_ROLE, GROUP, ATTRIBUTE_KEY, ATTRIBUTE_VALUE]) {
-    next.delete(key);
+  try {
+    window.sessionStorage.removeItem(STORAGE_PREFIX + key);
+  } catch {
+    // Nothing to clean up if storage is unavailable.
   }
+  const next = new URLSearchParams(params);
+  next.delete(FLOW_PARAM);
   return next;
 }
 

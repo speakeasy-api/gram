@@ -8,8 +8,8 @@ import { useRoles } from "@gram/client/react-query/roles.js";
 import { type JSX, useRef } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import {
-  DIRECTORY_MAPPING_FLOW,
-  directoryMappingReturnParams,
+  completeCreateRoleFlow,
+  isCreateRoleFlow,
   suggestedRoleName,
 } from "../org/identity-provider/directoryMappingFlow";
 import { CreateRoleDialog } from "./CreateRoleDialog";
@@ -28,7 +28,7 @@ export function RoleEditorPage(): JSX.Element {
   const orgRoutes = useOrgRoutes();
   const { data, isLoading } = useRoles();
 
-  const fromMapping = !roleId && params.get("from") === DIRECTORY_MAPPING_FLOW;
+  const fromMapping = !roleId && isCreateRoleFlow(params);
   // Creating a role also closes the editor; the close must not undo the
   // navigation that carries the new role back to the mapping.
   const created = useRef(false);
@@ -46,7 +46,7 @@ export function RoleEditorPage(): JSX.Element {
       leave();
       return;
     }
-    const back = directoryMappingReturnParams(params, createdRole.principalUrn);
+    const back = completeCreateRoleFlow(params, createdRole.principalUrn);
     void navigate(`${orgRoutes.identity.href()}?${back.toString()}`);
   };
 

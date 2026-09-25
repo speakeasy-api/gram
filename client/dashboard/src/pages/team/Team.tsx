@@ -317,8 +317,8 @@ function TeamInner() {
     safePage * MEMBERS_PAGE_SIZE,
     (safePage + 1) * MEMBERS_PAGE_SIZE,
   );
-  // Killswitches are managed on the person's own access tab, so both menu
-  // items go to the same page.
+  // Killswitches are managed on the person's own access tab, so every entry
+  // point here — both menu items — goes to the same page.
   const identityAccessHref = useIdentityHrefBuilder("access");
   const memberAccessHref = (userId: string) => identityAccessHref({ userId });
   const killswitchAccess = useKillswitchAccess();

@@ -332,6 +332,21 @@ describe("directory sync domain gate", () => {
     ).toBe(false);
     expect(dsync.getByText("Role mappings panel")).toBeTruthy();
   });
+
+  it("keeps role mappings from non-admins and shows them the SCIM card", () => {
+    mocks.features.mockImplementation(() => ({ data: { scimEnabled: true } }));
+    mocks.scimActive = true;
+    mocks.admin = false;
+    show();
+    const dsync = directorySyncSection();
+    expect(dsync.queryByText("Role mappings panel")).toBeNull();
+    expect(
+      dsync.queryByRole("button", { name: "Manage connection" }),
+    ).toBeNull();
+    expect(
+      dsync.getByText("Your directory provider is connected."),
+    ).toBeTruthy();
+  });
 });
 
 describe("domain gate before a status response", () => {

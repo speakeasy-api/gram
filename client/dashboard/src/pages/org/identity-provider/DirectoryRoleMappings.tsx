@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   ChevronRight,
@@ -47,7 +47,10 @@ import type { DirectoryRoleMapping } from "@gram/client/models/components/direct
 import type { ListDirectoryRoleMappingsResult } from "@gram/client/models/components/listdirectoryrolemappingsresult.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { SetDirectoryRoleMappingForm } from "@gram/client/models/components/setdirectoryrolemappingform.js";
-import { useDeleteDirectoryRoleMappingMutation } from "@gram/client/react-query/deleteDirectoryRoleMapping.js";
+import {
+  mutationKeyDeleteDirectoryRoleMapping,
+  useDeleteDirectoryRoleMappingMutation,
+} from "@gram/client/react-query/deleteDirectoryRoleMapping.js";
 import {
   invalidateAllDirectoryRoleMappings,
   useDirectoryRoleMappings,
@@ -60,10 +63,10 @@ import { useSetDirectoryRoleMappingMutation } from "@gram/client/react-query/set
 import { useSyncDirectoryGroupsMutation } from "@gram/client/react-query/syncDirectoryGroups.js";
 
 import {
-  clearPendingMappingParams,
-  createRoleForMappingParams,
+  finishCreateRoleFlow,
   availableRoleName,
   pendingMappingFromParams,
+  startCreateRoleFlow,
 } from "./directoryMappingFlow";
 
 const CREATE_ROLE = "__create_role";
@@ -156,34 +159,36 @@ export function DirectoryRoleMappings({
   );
   const rows = useMemo(() => (data ? groupRows(data) : []), [data]);
 
-  // Back from creating a role for a group or attribute: map it, then drop the
-  // round-trip parameters so a reload does not save it again.
+  // Back from creating a role for a group or attribute: map it. The round
+  // trip ends only once the save succeeds; a failed save keeps it so a reload
+  // retries. Only a round trip this tab started can get here.
   const [params, setParams] = useSearchParams();
   const pending = pendingMappingFromParams(params);
   const queryClient = useQueryClient();
   const savePending = useSetDirectoryRoleMappingMutation({
-    onSuccess: async () => {
-      await Promise.all([
-        invalidateAllDirectoryRoleMappings(queryClient),
-        invalidateAllRoles(queryClient),
-      ]);
-      toast.success("Role created and mapped");
-    },
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to map the new role"));
     },
   });
   const savedPending = useRef<string | null>(null);
   useEffect(() => {
-    if (!pending) return;
-    const pendingKey = JSON.stringify(pending);
-    if (savedPending.current === pendingKey) return;
-    savedPending.current = pendingKey;
-    setParams((previous) => clearPendingMappingParams(previous), {
-      replace: true,
-    });
-    savePending.mutate({ request: { setDirectoryRoleMappingForm: pending } });
-  }, [pending, savePending, setParams]);
+    if (!pending || savedPending.current === pending.key) return;
+    savedPending.current = pending.key;
+    savePending.mutate(
+      { request: { setDirectoryRoleMappingForm: pending.form } },
+      {
+        onSuccess: () => {
+          setParams((previous) => finishCreateRoleFlow(previous, pending.key), {
+            replace: true,
+          });
+          void Promise.all([
+            invalidateAllDirectoryRoleMappings(queryClient),
+            invalidateAllRoles(queryClient),
+          ]).then(() => toast.success("Role created and mapped"));
+        },
+      },
+    );
+  }, [pending, savePending, setParams, queryClient]);
 
   // Unmapped groups sort first. Each row's place is fixed by whether it was
   // mapped when it first loaded, so picking a role does not move the row
@@ -527,7 +532,11 @@ function RolePicker({
       toast.error(errorMessage(error, "Failed to remove role mapping"));
     },
   });
-  const saving = save.isPending || remove.isPending;
+  // Any mapping delete in flight locks the pickers, so a row cannot be
+  // re-mapped while its trash action is still removing it.
+  const deleting =
+    useIsMutating({ mutationKey: mutationKeyDeleteDirectoryRoleMapping() }) > 0;
+  const saving = save.isPending || remove.isPending || deleting;
 
   const current = roles.find(
     (role) => role.principalUrn === row.mapping?.roleUrn,
@@ -537,9 +546,17 @@ function RolePicker({
     label: role.name,
     description: role.description || undefined,
   }));
-  // A mapping to a deleted role keeps an item, so picking it clears the row.
-  if (row.mapping && !current) {
-    items.push({ value: row.mapping.roleUrn, label: "Deleted role" });
+  // A mapping can outlive its role. List that role so picking it again clears
+  // the stale mapping, like any other.
+  if (
+    row.mapping &&
+    !roles.some((role) => role.principalUrn === row.mapping?.roleUrn)
+  ) {
+    items.push({
+      value: row.mapping.roleUrn,
+      label: "Deleted role",
+      description: "Pick to remove this mapping",
+    });
   }
   items.unshift({
     value: CREATE_ROLE,
@@ -557,7 +574,7 @@ function RolePicker({
         row.form.sourceKind === "attribute"
           ? (row.form.attributeValue ?? "")
           : row.label;
-      const params = createRoleForMappingParams(
+      const params = startCreateRoleFlow(
         row.form,
         availableRoleName(baseName, roles),
       );

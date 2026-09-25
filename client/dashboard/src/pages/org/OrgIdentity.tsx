@@ -365,6 +365,10 @@ function SingleSignOnTab(): JSX.Element {
   const scimFeatureEnabled = features?.scimEnabled ?? false;
   const ssoActive = organization.ssoEnabled === true;
   const scimActive = organization.scimEnabled === true;
+  // Only org admins get the role mappings, which replace the SCIM card; every
+  // one else keeps the card so the section is never empty.
+  const { hasScope } = useRBAC();
+  const showRoleMappings = scimActive && hasScope("org:admin");
   // Active SSO proves a domain was verified, even for orgs set up before
   // verified domains were tracked. The server completes the setup task the
   // same way.
@@ -476,12 +480,14 @@ function SingleSignOnTab(): JSX.Element {
             active={scimActive}
           />
         }
-        // Once a directory is connected the role mappings are the section;
-        // the connection is managed from the button below them.
-        hideCard={scimActive}
+        // Once a directory is connected, an admin's section is the role
+        // mappings; the connection is managed from the button below them.
+        hideCard={showRoleMappings}
         below={
           scimActive && (
-            <RequireScope scope="org:admin" level="component">
+            // "section" renders nothing for non-admins, so the admin-only
+            // listing is never requested.
+            <RequireScope scope="org:admin" level="section">
               <DirectoryRoleMappings
                 footerAction={
                   <WorkOSPortalButton
