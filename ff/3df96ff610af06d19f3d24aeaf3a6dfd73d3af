@@ -1,0 +1,37 @@
+server/internal/adminmcp/tool_support_matrix.go
+  h_9630b74bdac540 1-184
+server/internal/adminmcp/tool_diagnostics.go
+  h_9630b74bdac540 1-165
+server/internal/adminmcp/tool_context.go
+  h_9630b74bdac540 19,49-62
+  h_9630b74bdac540 63
+server/internal/adminmcp/tool_diagnostics_test.go
+  h_9630b74bdac540 1-163
+server/internal/adminmcp/tool_billing_diagnostics_test.go
+  h_9630b74bdac540 1-88
+server/internal/adminmcp/authenticator_test.go
+  h_9630b74bdac540 88
+server/internal/adminmcp/runtime.go
+  h_9630b74bdac540 15,31,103-108,115-118,160-162
+server/internal/adminmcp/tool_billing_diagnostics.go
+  h_9630b74bdac540 1-178
+server/internal/adminmcp/tool_issuers_test.go
+  h_9630b74bdac540 1-165
+server/internal/adminmcp/authenticator.go
+  h_9630b74bdac540 100
+server/internal/adminmcp/tool_support_matrix_test.go
+  h_9630b74bdac540 1-118
+server/internal/adminmcp/tool_issuers.go
+  h_9630b74bdac540 1-282
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ff3df96ff610af06d19f3d24aeaf3a6dfd73d3af",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
