@@ -9,6 +9,7 @@ import {
 import type { CapabilityId, CoverageCell, SurfaceId } from "./coverageApi";
 
 export const surfaces: ReadonlyArray<{ id: SurfaceId; name: string }> = [
+  { id: "mcp_gateway", name: "MCP Gateway" },
   { id: "claude_code", name: "Claude Code" },
   { id: "claude_chat", name: "Claude Chat" },
   { id: "cowork", name: "Cowork" },
@@ -28,7 +29,7 @@ export const capabilities: ReadonlyArray<{
   {
     id: "session",
     name: "Session activity",
-    description: "Aggregate chat-session activity",
+    description: "Sessions observed, or calls served by the gateway",
     unit: "session",
     catalogId: "session",
   },
@@ -42,7 +43,7 @@ export const capabilities: ReadonlyArray<{
   {
     id: "identity",
     name: "Identity attribution",
-    description: "Sessions bound to a named user",
+    description: "Activity bound to a named user",
     unit: "attributed session",
   },
   {

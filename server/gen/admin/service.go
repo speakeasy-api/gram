@@ -213,7 +213,8 @@ type Service interface {
 	UpdateSupportMatrix(context.Context, *UpdateSupportMatrixPayload) (res *SupportMatrix, err error)
 	// Observed support coverage for one organization: per-surface evidence for
 	// session activity, policy enforcement, identity attribution, token usage and
-	// shadow MCP exposure.
+	// shadow MCP exposure, across Gram's MCP gateway and each consuming agent
+	// surface.
 	GetSupportCoverage(context.Context, *GetSupportCoveragePayload) (res *SupportCoverageResult, err error)
 }
 
@@ -1490,13 +1491,19 @@ type SupportCapability struct {
 type SupportCoverageCell struct {
 	// Capability the cell reports on.
 	Capability string
-	// Consuming surface the cell reports on.
+	// Surface the cell reports on: Gram's own MCP gateway, or a consuming agent
+	// surface.
 	Surface string
-	// Whether evidence was found, absent, or not answerable yet.
+	// Whether evidence was found, absent, not answerable yet, or impossible for
+	// this pair.
 	Status string
 	// Primary measure: sessions, tokens, blocks, attributed sessions or distinct
 	// shadow servers depending on the capability. Zero unless observed.
 	Value int64
+	// Singular noun the value counts, when the capability's own unit does not
+	// apply. The gateway is measured in tool calls where an agent surface is
+	// measured in sessions. Empty when the capability's default unit stands.
+	Unit string
 	// Short qualifier rendered under the value. Empty when there is nothing to
 	// qualify.
 	Detail string

@@ -57,13 +57,172 @@ func TestGetSupportCoverage_EmptyOrganization(t *testing.T) {
 	require.NoError(t, err)
 
 	// Always complete, so a client never has to interpret a missing cell.
-	require.Len(t, result.Cells, 5*6, "every capability/surface pair is returned")
+	require.Len(t, result.Cells, 5*7, "every capability/surface pair is returned")
 	require.Equal(t, 30, result.WindowDays)
 
 	require.Equal(t, "none", cellFor(t, result, "session", "claude_code").Status)
 	require.Equal(t, "none", cellFor(t, result, "identity", "claude_code").Status)
 
 	require.Equal(t, "none", cellFor(t, result, "shadow", "claude_code").Status)
+
+	require.Equal(t, "none", cellFor(t, result, "session", "mcp_gateway").Status)
+	require.Equal(t, "none", cellFor(t, result, "blocking", "mcp_gateway").Status)
+}
+
+// The gateway can never report tokens or shadow servers, and an operator must
+// not read either cell as a gap an integration could close.
+func TestGetSupportCoverage_GatewayReportsInapplicablePairs(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	result, err := ti.coverage.SupportCoverageForOrganization(ctx, ti.orgID, 30)
+	require.NoError(t, err)
+
+	cost := cellFor(t, result, "cost", "mcp_gateway")
+	require.Equal(t, "na", cost.Status)
+	require.NotEmpty(t, cost.Detail, "an inapplicable cell has to say why")
+
+	shadow := cellFor(t, result, "shadow", "mcp_gateway")
+	require.Equal(t, "na", shadow.Status)
+	require.NotEmpty(t, shadow.Detail)
+
+	// Only the gateway has inapplicable pairs; an agent surface with no
+	// activity is a genuine gap.
+	require.Equal(t, "none", cellFor(t, result, "cost", "cursor").Status)
+}
+
+func TestGetSupportCoverage_GatewayTrafficAndIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	now := time.Now().UTC().Add(-time.Hour)
+
+	// Three calls through Gram-hosted MCP: one carrying a person, one a
+	// managed agent, one anonymous. Plus one gateway-endpoint dispatch.
+	insertGatewayToolCall(t, ctx, ti.projectID, gatewayCall{
+		toolsetSlug: "sales", userEmail: "person@example.com", seenAt: now,
+	})
+	insertGatewayToolCall(t, ctx, ti.projectID, gatewayCall{
+		toolsetSlug: "sales", agentID: "agent-1", seenAt: now,
+	})
+	insertGatewayToolCall(t, ctx, ti.projectID, gatewayCall{
+		toolsetSlug: "sales", seenAt: now,
+	})
+	insertGatewayToolCall(t, ctx, ti.projectID, gatewayCall{
+		metaMCPServerID: uuid.NewString(), userID: "user-1", seenAt: now,
+	})
+
+	result, err := ti.coverage.SupportCoverageForOrganization(ctx, ti.orgID, 30)
+	require.NoError(t, err)
+
+	session := cellFor(t, result, "session", "mcp_gateway")
+	require.Equal(t, "observed", session.Status)
+	require.Equal(t, int64(4), session.Value)
+	// The gateway serves calls, not sessions, so it names its own unit rather
+	// than inheriting the row's.
+	require.Equal(t, "tool call", session.Unit)
+	require.False(t, session.LastSeen.IsZero())
+
+	// Only the emailed call and the user-id call are bound to a person; the
+	// agent-authenticated one is stated separately rather than summed in.
+	identity := cellFor(t, result, "identity", "mcp_gateway")
+	require.Equal(t, "observed", identity.Status)
+	require.Equal(t, int64(2), identity.Value)
+	require.Contains(t, identity.Detail, "managed agent")
+
+	// Gateway traffic carries no hook_source, so it must not appear as an
+	// agent surface or as an unmapped source.
+	require.Equal(t, "none", cellFor(t, result, "session", "other").Status)
+	require.Empty(t, result.Unmapped)
+}
+
+func TestGetSupportCoverage_GatewayIgnoresHookTraffic(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	now := time.Now().UTC().Add(-time.Hour)
+
+	// A hook report about an MCP call is the agent's observation of it, not
+	// the gateway serving it.
+	insertGatewayToolCall(t, ctx, ti.projectID, gatewayCall{
+		toolsetSlug: "sales", eventSource: "hook", hookSource: "cursor", seenAt: now,
+	})
+
+	result, err := ti.coverage.SupportCoverageForOrganization(ctx, ti.orgID, 30)
+	require.NoError(t, err)
+
+	require.Equal(t, "none", cellFor(t, result, "session", "mcp_gateway").Status)
+}
+
+func TestGetSupportCoverage_GatewayPolicyEnforcement(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	now := time.Now().UTC().Add(-time.Hour)
+
+	// Two rules fired on one denied call: that stopped one call, not two.
+	deniedExecution := uuid.NewString()
+	insertMediatedFinding(t, ctx, ti.orgID, mediatedFinding{
+		executionID: deniedExecution, outcome: "denied", createdAt: now,
+	})
+	insertMediatedFinding(t, ctx, ti.orgID, mediatedFinding{
+		executionID: deniedExecution, outcome: "denied", createdAt: now,
+	})
+	insertMediatedFinding(t, ctx, ti.orgID, mediatedFinding{
+		executionID: uuid.NewString(), outcome: "logged", createdAt: now,
+	})
+
+	result, err := ti.coverage.SupportCoverageForOrganization(ctx, ti.orgID, 30)
+	require.NoError(t, err)
+
+	blocking := cellFor(t, result, "blocking", "mcp_gateway")
+	require.Equal(t, "observed", blocking.Status)
+	require.Equal(t, int64(1), blocking.Value)
+	require.Equal(t, "block", blocking.Unit)
+	require.False(t, blocking.LastSeen.IsZero())
+
+	// Enforcement on the gateway is not enforcement on an agent surface.
+	require.Equal(t, "none", cellFor(t, result, "blocking", "cursor").Status)
+}
+
+func TestGetSupportCoverage_GatewayScannedButNeverStopped(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	now := time.Now().UTC().Add(-time.Hour)
+
+	insertMediatedFinding(t, ctx, ti.orgID, mediatedFinding{
+		executionID: uuid.NewString(), outcome: "logged", createdAt: now,
+	})
+
+	result, err := ti.coverage.SupportCoverageForOrganization(ctx, ti.orgID, 30)
+	require.NoError(t, err)
+
+	// The seam demonstrably ran, which is different from no policy being
+	// configured at all, so it does not read as an empty cell.
+	blocking := cellFor(t, result, "blocking", "mcp_gateway")
+	require.Equal(t, "pending", blocking.Status)
+	require.Contains(t, blocking.Detail, "none stopped")
+	require.True(t, blocking.LastSeen.IsZero())
+}
+
+func TestGetSupportCoverage_GatewayIgnoresChatOnlyFindings(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	now := time.Now().UTC().Add(-time.Hour)
+
+	// A finding from chat-message scanning carries no mediation surface: it
+	// is not evidence that the gateway enforced anything.
+	insertMediatedFinding(t, ctx, ti.orgID, mediatedFinding{
+		executionID: uuid.NewString(), outcome: "denied", chatOnly: true, createdAt: now,
+	})
+
+	result, err := ti.coverage.SupportCoverageForOrganization(ctx, ti.orgID, 30)
+	require.NoError(t, err)
+
+	require.Equal(t, "none", cellFor(t, result, "blocking", "mcp_gateway").Status)
 }
 
 func TestGetSupportCoverage_SessionAndIdentityEvidence(t *testing.T) {
@@ -191,6 +350,73 @@ func cellStatus(result *telemetry.SupportCoverageResult, capability, surface str
 		}
 	}
 	return ""
+}
+
+// gatewayCall is one trace as the MCP gateway would have written it.
+// eventSource defaults to the tool-call value the gateway stamps; a test sets
+// it to "hook" to write an agent-side observation instead.
+type gatewayCall struct {
+	toolsetSlug     string
+	metaMCPServerID string
+	eventSource     string
+	hookSource      string
+	userEmail       string
+	userID          string
+	agentID         string
+	seenAt          time.Time
+}
+
+func insertGatewayToolCall(t *testing.T, ctx context.Context, projectID string, call gatewayCall) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	eventSource := call.eventSource
+	if eventSource == "" {
+		eventSource = "tool_call"
+	}
+
+	traceID := strings.ReplaceAll(uuid.NewString(), "-", "")
+	err = conn.Exec(ctx, `
+		INSERT INTO trace_summaries
+			(gram_project_id, trace_id, event_source, hook_source, toolset_slug,
+			 meta_mcp_server_id, user_email, user_id, agent_id, start_time_unix_nano)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, projectID, traceID, eventSource, call.hookSource, call.toolsetSlug,
+		call.metaMCPServerID, call.userEmail, call.userID, call.agentID, call.seenAt.UnixNano())
+	require.NoError(t, err)
+}
+
+// mediatedFinding is one risk finding as a mediation seam would have written
+// it. It defaults to the hosted MCP seam; chatOnly writes the empty mediation
+// surface a chat-message scan produces instead.
+type mediatedFinding struct {
+	executionID string
+	outcome     string
+	chatOnly    bool
+	createdAt   time.Time
+}
+
+func insertMediatedFinding(t *testing.T, ctx context.Context, orgID string, finding mediatedFinding) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	surface := "hosted_mcp"
+	if finding.chatOnly {
+		surface = ""
+	}
+
+	err = conn.Exec(ctx, `
+		INSERT INTO risk_findings
+			(id, created_at, organization_id, rule_id, source, mediation_surface,
+			 mcp_method, enforcement_outcome, execution_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, uuid.New(), finding.createdAt, orgID, "pii.email_address", "presidio",
+		surface, "tools/call", finding.outcome, finding.executionID)
+	require.NoError(t, err)
 }
 
 // insertShadowSurfaceSighting writes the two rows coverage derives the

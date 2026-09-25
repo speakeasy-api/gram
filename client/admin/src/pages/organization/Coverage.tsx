@@ -62,8 +62,10 @@ export function Coverage({ org }: { org: AdminOrganization }): JSX.Element {
           <h2 className="text-lg font-medium">Observed coverage</h2>
           <p className="text-muted-foreground text-sm">
             Aggregate activity for this organization over the last{" "}
-            {coverage.data?.window_days ?? 30} days. An empty cell means no
-            evidence was found, not that the surface is unsupported.
+            {coverage.data?.window_days ?? 30} days, across Gram's own MCP
+            gateway and each agent surface it observes. An empty cell means no
+            evidence was found, not that the surface is unsupported; a cell
+            marked not applicable can never report.
           </p>
         </div>
         {coverage.isError ? (
@@ -218,15 +220,18 @@ function cellLabel(
 ): string {
   if (isPending) return "Loading…";
   if (isError || !cell) return "Evidence unavailable";
+  // A column can count something the row does not: the gateway serves tool
+  // calls where an agent surface has sessions.
+  const unit = cell.unit || unitFor(capability);
   switch (cell.status) {
-    case "observed": {
-      const unit = unitFor(capability);
+    case "observed":
       return `${cell.value.toLocaleString()} ${unit}${cell.value === 1 ? "" : "s"}`;
-    }
     case "pending":
       return cell.detail || "Not yet reportable";
+    case "na":
+      return "Not applicable";
     case "none":
-      return `No ${unitFor(capability)} evidence`;
+      return `No ${unit} evidence`;
   }
 }
 
@@ -248,6 +253,7 @@ function EvidenceCell({
   dimmed: boolean;
 }): JSX.Element {
   const observed = cell?.status === "observed";
+  const notApplicable = cell?.status === "na";
   const label = cellLabel(capability, cell, isPending, isError);
   const capabilityName =
     capabilities.find((item) => item.id === capability)?.name ?? capability;
@@ -262,11 +268,16 @@ function EvidenceCell({
           className={cn(
             "flex min-h-16 flex-col justify-center border px-3 py-2 transition-opacity",
             observed ? "border-emerald-600/40" : "border-border bg-muted/20",
+            // Dashed and muted so it never reads as a gap an integration
+            // could close.
+            notApplicable && "border-dashed bg-transparent",
             closesGap && "border-2 border-sky-600",
             dimmed && "opacity-40",
           )}
         >
-          <span className="text-xs">{label}</span>
+          <span className={cn("text-xs", notApplicable && "text-muted-foreground")}>
+            {label}
+          </span>
           {observed && cell?.last_seen && (
             <span className="text-muted-foreground mt-1 text-[10px] uppercase">
               Last seen {new Date(cell.last_seen).toLocaleDateString()}
