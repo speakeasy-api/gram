@@ -1890,6 +1890,8 @@ type OrganizationRoleProvisioningSetting struct {
 	Enabled        pgtype.Bool
 	ProjectID      uuid.NullUUID
 	Version        pgtype.Int8
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type OrganizationSetupTask struct {

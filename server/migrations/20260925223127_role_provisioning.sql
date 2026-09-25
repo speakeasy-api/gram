@@ -4,6 +4,8 @@ CREATE TABLE "organization_role_provisioning_settings" (
   "enabled" boolean NULL DEFAULT false,
   "project_id" uuid NULL,
   "version" bigint NULL DEFAULT 0,
+  "created_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("organization_id"),
   CONSTRAINT "organization_role_provisioning_settings_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organization_metadata" ("id") ON UPDATE NO ACTION ON DELETE CASCADE,
   CONSTRAINT "organization_role_provisioning_settings_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE SET NULL
