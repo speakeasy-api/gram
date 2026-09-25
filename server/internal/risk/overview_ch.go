@@ -52,7 +52,7 @@ func (s *Service) overviewFromClickHouse(ctx context.Context, authCtx *contextva
 // autovacuum pressure the PG queries create. Events Scanned and Active
 // Policies stay on Postgres: ClickHouse stores only true positives (clean
 // scans are never written) and policies are current-state config.
-func (s *Service) getRiskOverviewFromClickHouse(ctx context.Context, projectID uuid.UUID, organizationID string, from, to time.Time) (*gen.RiskOverviewResult, error) {
+func (s *Service) getRiskOverviewFromClickHouse(ctx context.Context, projectID uuid.UUID, organizationID, mcpServerID string, from, to time.Time) (*gen.RiskOverviewResult, error) {
 	window := riskOverviewWindowParams(from, to)
 	scanCounts, err := s.repo.GetRiskOverviewScanCounts(ctx, repo.GetRiskOverviewScanCountsParams{
 		ProjectID: projectID,
@@ -66,6 +66,7 @@ func (s *Service) getRiskOverviewFromClickHouse(ctx context.Context, projectID u
 	chWindow := chrepo.RiskOverviewWindowParams{
 		OrganizationID: organizationID,
 		ProjectID:      projectID.String(),
+		MCPServerID:    mcpServerID,
 		From:           from,
 		To:             to,
 	}

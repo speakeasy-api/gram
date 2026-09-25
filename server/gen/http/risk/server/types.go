@@ -20640,10 +20640,11 @@ func NewListDismissedRiskResultsPayload(cursor *string, limit *int, reasons []st
 
 // NewGetRiskOverviewPayload builds a risk service getRiskOverview endpoint
 // payload.
-func NewGetRiskOverviewPayload(from *string, to *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetRiskOverviewPayload {
+func NewGetRiskOverviewPayload(from *string, to *string, mcpServerID *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetRiskOverviewPayload {
 	v := &risk.GetRiskOverviewPayload{}
 	v.From = from
 	v.To = to
+	v.McpServerID = mcpServerID
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -20703,10 +20704,11 @@ func NewGetRiskRuleBreakdownPayload(category string, from *string, to *string, a
 
 // NewGetRiskSignalsPayload builds a risk service getRiskSignals endpoint
 // payload.
-func NewGetRiskSignalsPayload(from *string, to *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetRiskSignalsPayload {
+func NewGetRiskSignalsPayload(from *string, to *string, mcpServerID *string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *risk.GetRiskSignalsPayload {
 	v := &risk.GetRiskSignalsPayload{}
 	v.From = from
 	v.To = to
+	v.McpServerID = mcpServerID
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

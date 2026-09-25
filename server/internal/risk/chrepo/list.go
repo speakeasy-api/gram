@@ -159,13 +159,10 @@ func (r *RiskFindingListRow) scanTargets() []any {
 }
 
 // listRiskFindingsBase applies the filters shared by the list and count reads
-// that are immutable across an id's copies: tenancy, dead-letter sentinels,
-// the shadow marker and the enabled-policy pushdown. The exclusion / false-positive state is
-// deliberately NOT here: those flags change by appending a newer copy of the
-// row (the retroactive reconcile, the false-positive mirror), so filtering
-// them before the latest-copy-per-id dedup would drop the flagged copy and
-// let a stale live copy win — callers must gate on them AFTER dedup, the way
-// overview.go and signals.go do.
+// that are immutable across an id's copies: tenancy, MCP server, dead-letter
+// sentinels, the shadow marker and the enabled-policy pushdown. Suppression
+// state is deliberately NOT here: it changes by appending a newer copy, so
+// callers gate on it after latest-copy-per-id dedup.
 func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel.SelectBuilder, error) {
 	if len(p.PolicyIDs) == 0 {
 		return squirrel.SelectBuilder{}, errEmptyPolicyIDs
@@ -177,6 +174,9 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 		Where("dead_letter_reason = ''").
 		Where(notShadowCond).
 		Where(squirrel.Eq{"risk_policy_id": p.PolicyIDs})
+	if p.MCPServerID != "" {
+		sb = sb.Where("mcp_server_id = ?", p.MCPServerID)
+	}
 	if p.ChatID != "" {
 		sb = sb.Where("chat_id = ?", p.ChatID)
 	}
@@ -190,24 +190,11 @@ func listRiskFindingsBase(p ListRiskFindingsParams, columns ...string) (squirrel
 // Events listing, the Dismissed listing, the overview, signals, the Watchdog,
 // reveal and the retroactive exclusion reconcile applies this condition.
 //
-// Unlike the suppression state the marker is immutable across an id's copies:
-// the scanner stamps it, the retroactive reconcile's INSERT ... SELECT passes
-// it through verbatim, and the manual-dismissal mirror republishes Postgres
-// risk_results rows only, which never hold shadow findings. It is therefore
-// safe to apply BEFORE the per-id dedup, next to the tenancy filters, where it
-// also prunes the scan.
+// Unlike suppression state, the marker is immutable across copies: scanners
+// stamp it and every INSERT ... SELECT state transition passes it through.
+// It is therefore safe to apply before per-id dedup, next to tenancy filters,
+// where it also prunes the scan.
 const notShadowCond = "shadow = 0"
-
-// withMCPServerCond narrows to one concrete server AFTER the latest-copy
-// dedup. A suppression copy mirrored from Postgres carries no execution
-// metadata, so filtering before dedup would drop it and let the live scanner
-// copy win, resurfacing a dismissed finding under the filter.
-func withMCPServerCond(sb squirrel.SelectBuilder, p ListRiskFindingsParams) squirrel.SelectBuilder {
-	if p.MCPServerID == "" {
-		return sb
-	}
-	return sb.Where("mcp_server_id = ?", p.MCPServerID)
-}
 
 // liveStateCond gates the latest copy of a finding to live rows only — not
 // suppressed, not marked a false positive. Applied after the per-id dedup.
@@ -281,19 +268,18 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 	hasCursor := p.CursorTime != nil && p.CursorID.Valid
 
 	if p.UniqueMatch {
-		// Three layers, innermost first: (1) latest copy per id — the state
-		// flags on any older copy are stale; (2) live-state gate, then LIMIT 1
-		// BY the match group so each group resolves to its newest LIVE
-		// occurrence; (3) cursor + page over the deduped stream. Dedup stays
-		// before the cursor: applying the cursor first would remove a group's
-		// newest occurrence once it fell behind the cursor and let an older
-		// occurrence win LIMIT BY, repeating the group on a later page.
+		// Three layers, innermost first: (1) latest copy per id; (2)
+		// live-state gate, then LIMIT 1 BY the match group so each group
+		// resolves to its newest live occurrence; (3) cursor + page over the
+		// deduped stream. Dedup stays before the cursor: applying the cursor
+		// first would remove a group's newest occurrence once it fell behind
+		// the cursor and let an older occurrence win LIMIT BY.
 		sb = sb.Column("excluded_at").Column("false_positive_at").
 			Column("fingerprint_tenant_hs256").
 			Suffix("LIMIT 1 BY id")
-		grouped := withMCPServerCond(sq.Select(riskFindingListColumns...).
+		grouped := sq.Select(riskFindingListColumns...).
 			FromSelect(sb, "latest").
-			Where(liveStateCond), p).
+			Where(liveStateCond).
 			OrderBy("message_created_at DESC", "id DESC").
 			Suffix("LIMIT 1 BY (risk_policy_id, rule_id, " + uniqueMatchKey + ")")
 		outer := sq.Select(riskFindingListColumns...).FromSelect(grouped, "deduped")
@@ -316,9 +302,9 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 		// support, so it renders through the suffix.
 		sb = sb.Column("excluded_at").Column("false_positive_at").
 			Suffix("LIMIT 1 BY id")
-		sb = withMCPServerCond(sq.Select(riskFindingListColumns...).
+		sb = sq.Select(riskFindingListColumns...).
 			FromSelect(sb, "latest").
-			Where(liveStateCond), p).
+			Where(liveStateCond).
 			OrderBy("message_created_at DESC", "id DESC").
 			Limit(p.Limit)
 	}
@@ -356,14 +342,14 @@ func (q *Queries) ListRiskFindings(ctx context.Context, p ListRiskFindingsParams
 // table) and only then is the live-state gate applied, so a finding whose
 // newest copy carries an exclusion or false-positive flag is not counted.
 func (q *Queries) CountRiskFindings(ctx context.Context, p ListRiskFindingsParams) (uint64, error) {
-	inner, err := listRiskFindingsBase(p, "id", "excluded_at", "false_positive_at", "mcp_server_id")
+	inner, err := listRiskFindingsBase(p, "id", "excluded_at", "false_positive_at")
 	if err != nil {
 		return 0, err
 	}
 	inner = inner.OrderBy(latestCopyOrderSQL).Suffix("LIMIT 1 BY id")
-	sb := withMCPServerCond(sq.Select("count() AS findings").
+	sb := sq.Select("count() AS findings").
 		FromSelect(inner, "latest").
-		Where(liveStateCond), p)
+		Where(liveStateCond)
 
 	query, args, err := sb.ToSql()
 	if err != nil {

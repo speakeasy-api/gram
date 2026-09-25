@@ -30,6 +30,10 @@ export type GetRiskOverviewRequest = {
    */
   to?: Date | undefined;
   /**
+   * Optional concrete MCP server ID to match exactly.
+   */
+  mcpServerId?: string | undefined;
+  /**
    * API Key header
    */
   gramKey?: string | undefined;
@@ -148,6 +152,7 @@ export function getRiskOverviewSecurityToJSON(
 export type GetRiskOverviewRequest$Outbound = {
   from?: string | undefined;
   to?: string | undefined;
+  mcp_server_id?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
@@ -161,12 +166,14 @@ export const GetRiskOverviewRequest$outboundSchema: z.ZodMiniType<
   z.object({
     from: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     to: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
+    mcpServerId: z.optional(z.string()),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      mcpServerId: "mcp_server_id",
       gramKey: "Gram-Key",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",

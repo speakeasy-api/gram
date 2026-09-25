@@ -3967,6 +3967,7 @@ func DecodeGetRiskOverviewRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		var (
 			from             *string
 			to               *string
+			mcpServerID      *string
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
@@ -3987,6 +3988,13 @@ func DecodeGetRiskOverviewRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if to != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
 		}
+		mcpServerIDRaw := qp.Get("mcp_server_id")
+		if mcpServerIDRaw != "" {
+			mcpServerID = &mcpServerIDRaw
+		}
+		if mcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -4002,7 +4010,7 @@ func DecodeGetRiskOverviewRequest(mux goahttp.Muxer, decoder func(*http.Request)
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetRiskOverviewPayload(from, to, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewGetRiskOverviewPayload(from, to, mcpServerID, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -5130,6 +5138,7 @@ func DecodeGetRiskSignalsRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		var (
 			from             *string
 			to               *string
+			mcpServerID      *string
 			apikeyToken      *string
 			sessionToken     *string
 			projectSlugInput *string
@@ -5150,6 +5159,13 @@ func DecodeGetRiskSignalsRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if to != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
 		}
+		mcpServerIDRaw := qp.Get("mcp_server_id")
+		if mcpServerIDRaw != "" {
+			mcpServerID = &mcpServerIDRaw
+		}
+		if mcpServerID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
+		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
@@ -5165,7 +5181,7 @@ func DecodeGetRiskSignalsRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetRiskSignalsPayload(from, to, apikeyToken, sessionToken, projectSlugInput)
+		payload = NewGetRiskSignalsPayload(from, to, mcpServerID, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -16,6 +16,7 @@ import (
 type RiskSignalWindowParams struct {
 	OrganizationID string
 	ProjectID      string
+	MCPServerID    string
 	WideFrom       time.Time
 	From           time.Time
 	To             time.Time
@@ -33,6 +34,9 @@ func signalFindings(p RiskSignalWindowParams, columns ...squirrel.Sqlizer) squir
 		Where(notShadowCond).
 		Where("created_at >= toDateTime64(?, 9, 'UTC')", p.WideFrom.UTC().Format(watchdogTimeLayout)).
 		Where("created_at < toDateTime64(?, 9, 'UTC')", p.To.UTC().Format(watchdogTimeLayout))
+	if p.MCPServerID != "" {
+		latest = latest.Where("mcp_server_id = ?", p.MCPServerID)
+	}
 
 	sb := sq.Select()
 	for _, column := range columns {

@@ -19,13 +19,14 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
+import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useRowSelection, type RowSelection } from "@/hooks/useRowSelection";
 import { Loader2 } from "lucide-react";
 import { type DateRangePreset } from "@/elements";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useRiskCreateExclusionMutation } from "@gram/client/react-query/riskCreateExclusion.js";
 import { useRiskSignals } from "@gram/client/react-query/riskSignals.js";
 import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
@@ -64,6 +65,10 @@ const WATCHDOG_PRESETS: DateRangePreset[] = ["1d", "7d", "30d"];
 const WATCHDOG_FILTERS = defineFilters([
   { id: "severity", label: "Severity", kind: "multiselect", pinned: true },
   { id: "category", label: "Data type", kind: "multiselect", pinned: true },
+]);
+
+const WATCHDOG_SERVER_FILTERS = defineFilters([
+  { id: "mcp_server_id", label: "MCP server", kind: "select", pinned: true },
 ]);
 
 const GROUP_OPTIONS: { value: SignalGroupMode; label: string }[] = [
@@ -121,6 +126,7 @@ function WatchdogContent(): JSX.Element {
     setCustomRangeParam,
     clearCustomRange,
   } = useDateRangeFilter("1d");
+  const gramProject = useProjectSlugForRequests();
 
   const window = useMemo(() => ({ from, to }), [from, to]);
 
@@ -148,9 +154,43 @@ function WatchdogContent(): JSX.Element {
     () => values.category ?? [],
     [values.category],
   );
+  const { values: serverFilterValues } = useFilterState(
+    WATCHDOG_SERVER_FILTERS,
+  );
+  const mcpServerFilter = serverFilterValues.mcp_server_id ?? "";
+  const setMCPServerFilter = (value: string | null) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) {
+          next.set("mcp_server_id", value);
+        } else {
+          next.delete("mcp_server_id");
+        }
+        next.delete("signal");
+        return next;
+      },
+      { replace: true },
+    );
+  };
+  const { data: mcpServersData } = useMcpServers({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+  const mcpServerOptions = useMemo(
+    () =>
+      (mcpServersData?.mcpServers ?? []).map((server) => ({
+        label: server.name?.trim() || server.slug || server.id.slice(0, 8),
+        value: server.id,
+      })),
+    [mcpServersData?.mcpServers],
+  );
 
   const signalsQuery = useRiskSignals(
-    { from: window.from, to: window.to },
+    {
+      from: window.from,
+      to: window.to,
+      mcpServerId: mcpServerFilter || undefined,
+    },
     undefined,
     { placeholderData: keepPreviousData, throwOnError: false },
   );
@@ -207,7 +247,11 @@ function WatchdogContent(): JSX.Element {
       const results = await collectFindingsForRules(
         client,
         selected.map((signal) => signal.ruleId),
-        { from: undefined, to: undefined },
+        {
+          from: undefined,
+          to: undefined,
+          mcpServerId: mcpServerFilter || undefined,
+        },
       );
       if (results.length === 0) {
         // dismiss() ignores empty batches — fail loudly instead.
@@ -288,19 +332,31 @@ function WatchdogContent(): JSX.Element {
   const rangeLabel = formatDateRangeLabel(dateRange, customRangeLabel);
 
   const controls = (
-    <span className="flex items-center gap-2">
-      <TimeRangePicker
-        preset={customRange ? null : dateRange}
-        customRange={customRange}
-        customRangeLabel={customRangeLabel}
-        availablePresets={WATCHDOG_PRESETS}
-        onPresetChange={(preset) => setDateRangeParam(preset)}
-        onCustomRangeChange={(rangeFrom, rangeTo, label) =>
-          setCustomRangeParam(rangeFrom, rangeTo, label)
+    <Page.Toolbar>
+      <Page.Toolbar.Filters
+        schema={WATCHDOG_SERVER_FILTERS}
+        values={serverFilterValues}
+        optionsById={{ mcp_server_id: mcpServerOptions }}
+        onChange={(_id, value) =>
+          setMCPServerFilter(typeof value === "string" ? value : null)
         }
-        onClearCustomRange={clearCustomRange}
+        onClear={() => setMCPServerFilter(null)}
+        onClearAll={() => setMCPServerFilter(null)}
       />
-    </span>
+      <Page.Toolbar.Leading>
+        <TimeRangePicker
+          preset={customRange ? null : dateRange}
+          customRange={customRange}
+          customRangeLabel={customRangeLabel}
+          availablePresets={WATCHDOG_PRESETS}
+          onPresetChange={(preset) => setDateRangeParam(preset)}
+          onCustomRangeChange={(rangeFrom, rangeTo, label) =>
+            setCustomRangeParam(rangeFrom, rangeTo, label)
+          }
+          onClearCustomRange={clearCustomRange}
+        />
+      </Page.Toolbar.Leading>
+    </Page.Toolbar>
   );
 
   const criticalCount = data?.criticalSignals ?? 0;
@@ -320,9 +376,9 @@ function WatchdogContent(): JSX.Element {
         <Page.Section.Description>
           Your riskiest AI usage, clustered and ranked across {rangeLabel}.
         </Page.Section.Description>
-        <Page.Section.CTA>{controls}</Page.Section.CTA>
         <Page.Section.Body>
-          <div>
+          <div className="space-y-6">
+            {controls}
             <EnableLoggingOverlay
               onEnabled={() => {
                 void featuresQuery.refetch();
@@ -349,9 +405,9 @@ function WatchdogContent(): JSX.Element {
         Your riskiest AI usage, clustered and ranked
         {subtitleSummary ? ` — ${subtitleSummary}` : ""} across {rangeLabel}.
       </Page.Section.Description>
-      <Page.Section.CTA>{controls}</Page.Section.CTA>
       <Page.Section.Body>
         <div className="space-y-6">
+          {controls}
           {signalsQuery.error ? (
             <WatchdogError message={signalsQuery.error.message} />
           ) : (
@@ -471,6 +527,7 @@ function WatchdogContent(): JSX.Element {
               must live under a slot to render at all. */}
           <SignalDrawer
             signal={selectedSignal}
+            mcpServerId={mcpServerFilter || undefined}
             onClose={() => setUrlParam("signal", null)}
           />
           <SuppressFindingsDialog

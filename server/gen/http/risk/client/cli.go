@@ -1226,7 +1226,7 @@ func BuildListDismissedRiskResultsPayload(riskListDismissedRiskResultsCursor str
 
 // BuildGetRiskOverviewPayload builds the payload for the risk getRiskOverview
 // endpoint from CLI flags.
-func BuildGetRiskOverviewPayload(riskGetRiskOverviewFrom string, riskGetRiskOverviewTo string, riskGetRiskOverviewApikeyToken string, riskGetRiskOverviewSessionToken string, riskGetRiskOverviewProjectSlugInput string) (*risk.GetRiskOverviewPayload, error) {
+func BuildGetRiskOverviewPayload(riskGetRiskOverviewFrom string, riskGetRiskOverviewTo string, riskGetRiskOverviewMcpServerID string, riskGetRiskOverviewApikeyToken string, riskGetRiskOverviewSessionToken string, riskGetRiskOverviewProjectSlugInput string) (*risk.GetRiskOverviewPayload, error) {
 	var err error
 	var from *string
 	{
@@ -1243,6 +1243,16 @@ func BuildGetRiskOverviewPayload(riskGetRiskOverviewFrom string, riskGetRiskOver
 		if riskGetRiskOverviewTo != "" {
 			to = &riskGetRiskOverviewTo
 			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var mcpServerID *string
+	{
+		if riskGetRiskOverviewMcpServerID != "" {
+			mcpServerID = &riskGetRiskOverviewMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -1269,6 +1279,7 @@ func BuildGetRiskOverviewPayload(riskGetRiskOverviewFrom string, riskGetRiskOver
 	v := &risk.GetRiskOverviewPayload{}
 	v.From = from
 	v.To = to
+	v.McpServerID = mcpServerID
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -1457,7 +1468,7 @@ func BuildGetRiskRuleBreakdownPayload(riskGetRiskRuleBreakdownCategory string, r
 
 // BuildGetRiskSignalsPayload builds the payload for the risk getRiskSignals
 // endpoint from CLI flags.
-func BuildGetRiskSignalsPayload(riskGetRiskSignalsFrom string, riskGetRiskSignalsTo string, riskGetRiskSignalsApikeyToken string, riskGetRiskSignalsSessionToken string, riskGetRiskSignalsProjectSlugInput string) (*risk.GetRiskSignalsPayload, error) {
+func BuildGetRiskSignalsPayload(riskGetRiskSignalsFrom string, riskGetRiskSignalsTo string, riskGetRiskSignalsMcpServerID string, riskGetRiskSignalsApikeyToken string, riskGetRiskSignalsSessionToken string, riskGetRiskSignalsProjectSlugInput string) (*risk.GetRiskSignalsPayload, error) {
 	var err error
 	var from *string
 	{
@@ -1474,6 +1485,16 @@ func BuildGetRiskSignalsPayload(riskGetRiskSignalsFrom string, riskGetRiskSignal
 		if riskGetRiskSignalsTo != "" {
 			to = &riskGetRiskSignalsTo
 			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var mcpServerID *string
+	{
+		if riskGetRiskSignalsMcpServerID != "" {
+			mcpServerID = &riskGetRiskSignalsMcpServerID
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", *mcpServerID, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}
@@ -1500,6 +1521,7 @@ func BuildGetRiskSignalsPayload(riskGetRiskSignalsFrom string, riskGetRiskSignal
 	v := &risk.GetRiskSignalsPayload{}
 	v.From = from
 	v.To = to
+	v.McpServerID = mcpServerID
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput

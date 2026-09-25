@@ -50784,6 +50784,14 @@ paths:
             format: date-time
             type: string
         - allowEmptyValue: true
+          description: Optional concrete MCP server ID to match exactly.
+          in: query
+          name: mcp_server_id
+          schema:
+            description: Optional concrete MCP server ID to match exactly.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
           description: API Key header
           in: header
           name: Gram-Key
@@ -51326,6 +51334,14 @@ paths:
           schema:
             description: Exclusive end of the signals window. Defaults to now.
             format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Optional concrete MCP server ID to match exactly.
+          in: query
+          name: mcp_server_id
+          schema:
+            description: Optional concrete MCP server ID to match exactly.
+            format: uuid
             type: string
         - allowEmptyValue: true
           description: API Key header

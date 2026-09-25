@@ -209,10 +209,47 @@ func TestGetRiskOverview_ClickHouseParity(t *testing.T) {
 	require.Equal(t, int64(0), timeSeries["pii|"+bucket(109*time.Hour)])
 }
 
-// TestGetRiskOverview_ClickHouseDedupesAppendedDismissRow covers the case
-// enqueueFalsePositiveMirror actually produces: a finding's original row
-// (false_positive_at NULL) plus a later-inserted row sharing the SAME id with
-// false_positive_at set. A naive "row satisfies false_positive_at IS NULL"
+func TestGetRiskOverview_MCPServerFilterIncludesGatewayFindings(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	from := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
+	to := from.Add(time.Hour)
+	serverID := uuid.NewString()
+
+	gateway := chOverviewFinding(t, projectID, orgID, uuid.Nil, uuid.Nil, from.Add(10*time.Minute), "gitleaks", "secret.github_pat", "")
+	gateway.ChatID = ""
+	gateway.ChatMessageID = ""
+	gateway.MCPServerID = serverID
+	anchored := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), from.Add(20*time.Minute), "gitleaks", "secret.aws_access_token", "user@example.com")
+	anchored.MCPServerID = serverID
+	otherServer := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), from.Add(30*time.Minute), "presidio", "pii.email_address", "other@example.com")
+	otherServer.MCPServerID = uuid.NewString()
+
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{gateway, anchored, otherServer}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	nonCanonicalServerID := "{" + serverID + "}"
+	result, err := ti.service.GetRiskOverview(ctx, &gen.GetRiskOverviewPayload{
+		From:        new(from.Format(time.RFC3339)),
+		To:          new(to.Format(time.RFC3339)),
+		McpServerID: &nonCanonicalServerID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), result.Findings)
+	require.Equal(t, int64(1), result.FlaggedSessions, "gateway-only findings are not synthetic sessions")
+	require.Len(t, result.TopRules, 2)
+}
+
+// TestGetRiskOverview_ClickHouseDedupesAppendedDismissRow covers a finding's
+// original row (false_positive_at NULL) plus a later direct dismissal copy
+// sharing the same id. A naive "row satisfies false_positive_at IS NULL"
 // filter would still count the id via the stale original row; only picking
 // each id's most-recently-inserted row before filtering excludes it.
 func TestGetRiskOverview_ClickHouseDedupesAppendedDismissRow(t *testing.T) {

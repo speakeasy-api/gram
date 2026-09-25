@@ -61,7 +61,7 @@ export async function collectChatFindings(
 export async function collectFindingsForRules(
   client: ReturnType<typeof useSdkClient>,
   ruleIds: string[],
-  window: { from?: Date; to?: Date },
+  window: { from?: Date; to?: Date; mcpServerId?: string },
   cap: number = SIGNAL_DISMISS_CAP,
 ): Promise<RiskResult[]> {
   const all: RiskResult[] = [];
@@ -69,7 +69,12 @@ export async function collectFindingsForRules(
     const matches = (result: RiskResult) => result.ruleId === ruleId;
     const { results } = await pageRiskResults(
       client,
-      { ruleId, from: window.from, to: window.to },
+      {
+        ruleId,
+        from: window.from,
+        to: window.to,
+        mcpServerId: window.mcpServerId,
+      },
       (collected) => all.length + collected.filter(matches).length >= cap,
     );
     all.push(...results.filter(matches));
