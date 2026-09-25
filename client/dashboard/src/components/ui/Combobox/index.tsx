@@ -6,6 +6,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "@/components/ui/Command";
 import {
   Popover,
@@ -15,7 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Stack } from "@/components/ui/Stack";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { ReactNode, useState } from "react";
+import { Fragment, ReactNode, useState } from "react";
 import { Text } from "@/components/ui/Text";
 
 export type DropdownItem = {
@@ -26,6 +27,8 @@ export type DropdownItem = {
   onClick?: () => void;
   disabled?: boolean;
   description?: string;
+  /** Draws a divider under this item, to set an action apart from choices. */
+  separatorAfter?: boolean;
 };
 
 export function Combobox<T extends DropdownItem>({
@@ -112,39 +115,48 @@ export function Combobox<T extends DropdownItem>({
             <CommandEmpty>No items found.</CommandEmpty>
             <CommandGroup>
               {items.map((item) => (
-                <CommandItem
-                  key={item.value}
-                  value={item.value}
-                  keywords={[item.label, ...(item.keywords ?? [])]}
-                  disabled={item.disabled}
-                  className="cursor-pointer truncate"
-                  onSelect={(v) => {
-                    onSelectionChange(items.find((item) => item.value === v)!);
-                    setOpen(false);
-                  }}
-                >
-                  {item.icon}
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate">{item.label}</div>
-                    {item.description ? (
-                      <div className="text-muted-foreground truncate text-xs">
-                        {item.description}
-                      </div>
-                    ) : null}
-                  </div>
-                  <Check
+                <Fragment key={item.value}>
+                  <CommandItem
+                    value={item.value}
+                    keywords={[item.label, ...(item.keywords ?? [])]}
+                    disabled={item.disabled}
                     className={cn(
-                      "ml-auto",
-                      (
-                        typeof selected === "string"
-                          ? selected === item.value
-                          : selected?.value === item.value
-                      )
-                        ? "opacity-100"
-                        : "opacity-0",
+                      "cursor-pointer truncate",
+                      item.separatorAfter && "mb-1.5",
                     )}
-                  />
-                </CommandItem>
+                    onSelect={(v) => {
+                      onSelectionChange(
+                        items.find((item) => item.value === v)!,
+                      );
+                      setOpen(false);
+                    }}
+                  >
+                    {item.icon}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate">{item.label}</div>
+                      {item.description ? (
+                        <div className="text-muted-foreground truncate text-xs">
+                          {item.description}
+                        </div>
+                      ) : null}
+                    </div>
+                    <Check
+                      className={cn(
+                        "ml-auto",
+                        (
+                          typeof selected === "string"
+                            ? selected === item.value
+                            : selected?.value === item.value
+                        )
+                          ? "opacity-100"
+                          : "opacity-0",
+                      )}
+                    />
+                  </CommandItem>
+                  {item.separatorAfter && (
+                    <CommandSeparator className="mb-1.5" />
+                  )}
+                </Fragment>
               ))}
             </CommandGroup>
           </CommandList>

@@ -33,6 +33,14 @@ vi.mock("nuqs", async (importOriginal) => ({
   useQueryState: (await import("./identity-provider/nuqsRouterMock"))
     .useRouterQueryState,
 }));
+vi.mock("./identity-provider/DirectoryRoleMappings", () => ({
+  DirectoryRoleMappings: ({ footerAction }: { footerAction?: ReactNode }) => (
+    <div>
+      Role mappings panel
+      {footerAction}
+    </div>
+  ),
+}));
 vi.mock("./identity-provider/EnterpriseManagedAuth", () => ({
   EnterpriseManagedAuth: () => {
     mocks.ema();
@@ -317,7 +325,27 @@ describe("directory sync domain gate", () => {
     show();
     const dsync = directorySyncSection();
     expect(dsync.queryByText("Verify a domain first.")).toBeNull();
-    expect(configureButton().disabled).toBe(false);
+    expect(
+      dsync.getByRole<HTMLButtonElement>("button", {
+        name: "Manage connection",
+      }).disabled,
+    ).toBe(false);
+    expect(dsync.getByText("Role mappings panel")).toBeTruthy();
+  });
+
+  it("keeps role mappings from non-admins and shows them the SCIM card", () => {
+    mocks.features.mockImplementation(() => ({ data: { scimEnabled: true } }));
+    mocks.scimActive = true;
+    mocks.admin = false;
+    show();
+    const dsync = directorySyncSection();
+    expect(dsync.queryByText("Role mappings panel")).toBeNull();
+    expect(
+      dsync.queryByRole("button", { name: "Manage connection" }),
+    ).toBeNull();
+    expect(
+      dsync.getByText("Your directory provider is connected."),
+    ).toBeTruthy();
   });
 });
 
@@ -352,5 +380,41 @@ describe("domain verification portal", () => {
       mocks.portal.mutate.mock.calls[0]?.[0].request
         .generateWorkOSAdminPortalLinkRequestBody.intent,
     ).toBe("domain_verification");
+  });
+
+  it("opens the WorkOS portal to set up SSO", () => {
+    mocks.features.mockImplementation(() => ({ data: { ssoEnabled: true } }));
+    mocks.onboarding = {
+      domainVerified: true,
+      ssoConfigured: false,
+      verifiedDomains: ["example.com"],
+    };
+    show();
+    fireEvent.click(
+      section("Single Sign-On").getByRole("button", { name: "Configure" }),
+    );
+    expect(mocks.portal.mutate).toHaveBeenCalledOnce();
+    expect(
+      mocks.portal.mutate.mock.calls[0]?.[0].request
+        .generateWorkOSAdminPortalLinkRequestBody.intent,
+    ).toBe("sso");
+  });
+
+  it("opens the WorkOS portal to set up Directory Sync", () => {
+    mocks.features.mockImplementation(() => ({ data: { scimEnabled: true } }));
+    mocks.onboarding = {
+      domainVerified: true,
+      ssoConfigured: false,
+      verifiedDomains: ["example.com"],
+    };
+    show();
+    fireEvent.click(
+      section("Directory Sync").getByRole("button", { name: "Configure" }),
+    );
+    expect(mocks.portal.mutate).toHaveBeenCalledOnce();
+    expect(
+      mocks.portal.mutate.mock.calls[0]?.[0].request
+        .generateWorkOSAdminPortalLinkRequestBody.intent,
+    ).toBe("dsync");
   });
 });
