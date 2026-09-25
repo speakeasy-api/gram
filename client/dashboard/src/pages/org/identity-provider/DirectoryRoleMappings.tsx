@@ -5,6 +5,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Trash2,
   TriangleAlert,
 } from "lucide-react";
 import {
@@ -144,7 +145,14 @@ export function DirectoryRoleMappings({
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
 
-  const roles = useMemo(() => rolesData?.roles ?? [], [rolesData?.roles]);
+  // The API orders roles by slug; the picker lists them by name, ignoring case.
+  const roles = useMemo(
+    () =>
+      [...(rolesData?.roles ?? [])].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+      ),
+    [rolesData?.roles],
+  );
   const rows = useMemo(() => (data ? groupRows(data) : []), [data]);
 
   // Back from creating a role for a group or attribute: map it, then drop the
@@ -287,12 +295,18 @@ function MappingTable({
   sourceHeader,
   noResults,
   scrollable = false,
+  removable = false,
 }: {
   rows: SourceRow[];
   roles: Role[];
   sourceHeader: string;
   noResults: string;
   scrollable?: boolean;
+  /**
+   * Shows a remove button in place of the mark, for tables where every row is
+   * a mapping (attribute values), so the mark would say nothing.
+   */
+  removable?: boolean;
 }): JSX.Element {
   const columns: Column<SourceRow>[] = [
     {
@@ -316,8 +330,13 @@ function MappingTable({
     {
       key: "status",
       header: "",
-      width: "48px",
-      render: (row) => <MappedMark mapped={row.mapping !== undefined} />,
+      width: "64px",
+      render: (row) =>
+        removable && row.mapping ? (
+          <RemoveMappingButton mapping={row.mapping} label={row.label} />
+        ) : (
+          <MappedMark mapped={row.mapping !== undefined} />
+        ),
     },
   ];
 
@@ -393,6 +412,7 @@ function AttributeMappings({
             rows={rows}
             roles={roles}
             sourceHeader="Attribute value"
+            removable
             noResults="No attribute mappings"
           />
         )}
@@ -455,7 +475,7 @@ function AttributeMappings({
             />
           </div>
           {/* Keeps the role picker in line with the table's mark column. */}
-          <div className="w-12 shrink-0" />
+          <div className="w-16 shrink-0" />
         </div>
       </div>
     </>
@@ -514,6 +534,7 @@ function RolePicker({
     label: "Create role…",
     description: "Opens the role editor",
     icon: <Plus className="h-4 w-4" />,
+    separatorAfter: true,
   });
 
   const pick = (value: string) => {
@@ -589,6 +610,48 @@ function MappedMark({ mapped }: { mapped: boolean }): JSX.Element {
           </span>
         </SimpleTooltip>
       )}
+    </div>
+  );
+}
+
+/** Removes one mapping. */
+function RemoveMappingButton({
+  mapping,
+  label,
+}: {
+  mapping: DirectoryRoleMapping;
+  label: string;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const remove = useDeleteDirectoryRoleMappingMutation({
+    onSuccess: () =>
+      Promise.all([
+        invalidateAllDirectoryRoleMappings(queryClient),
+        invalidateAllRoles(queryClient),
+      ]),
+    onError: (error) => {
+      toast.error(errorMessage(error, "Failed to remove role mapping"));
+    },
+  });
+
+  return (
+    <div className="flex justify-center">
+      <SimpleTooltip tooltip="Remove this mapping">
+        <Button
+          variant="tertiary"
+          size="sm"
+          aria-label={`Remove mapping for ${label}`}
+          className="size-8 justify-center p-0"
+          disabled={remove.isPending}
+          onClick={() => remove.mutate({ request: { id: mapping.id } })}
+        >
+          {remove.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Trash2 className="size-4" />
+          )}
+        </Button>
+      </SimpleTooltip>
     </div>
   );
 }
