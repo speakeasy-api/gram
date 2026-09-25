@@ -1,3 +1,4 @@
+import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -224,16 +225,29 @@ export function AdmitSubjectDialog({
               workload inherits its policy in full.
             </Text>
             {showCaution && (
-              <Text role="status" small className="text-amber-700">
-                This admits <strong>any</strong> subject beginning{" "}
-                <code>{wildcardStem}</code>
-                {selectedAgentName
-                  ? `, and each will inherit ${selectedAgentName}'s policy. `
-                  : ". "}
-                Check that the varying part is assigned by the issuer rather
-                than chosen by the caller — where a caller can influence it,
-                this admits anyone who can.
-              </Text>
+              // alignTop because this body runs to several lines: a centred icon
+              // drifts into the middle of the text and stops reading as a marker.
+              <Alert variant="warning" alignTop>
+                <div role="status" className="break-words">
+                  <Text small className="font-medium">
+                    This rule admits more than one identity
+                  </Text>
+                  <Text small>
+                    Any subject beginning{" "}
+                    {/* A subject is one unbroken token, so it has to be told it
+                        may wrap: <code> will not on its own, and the dialog
+                        grows to fit it instead — off the side of the viewport
+                        for a realistic issuer URL. */}
+                    <code className="break-all">{wildcardStem}</code>
+                    {selectedAgentName
+                      ? ` is admitted, and each will inherit ${selectedAgentName}'s policy. `
+                      : " is admitted. "}
+                    Check that the varying part is assigned by the issuer rather
+                    than chosen by the caller — where a caller can influence it,
+                    this admits anyone who can.
+                  </Text>
+                </div>
+              </Alert>
             )}
           </Stack>
 

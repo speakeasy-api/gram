@@ -46,6 +46,13 @@ function subjectField(): HTMLElement {
   return screen.getByLabelText("Subject");
 }
 
+// The message bound to the subject field, as opposed to the wildcard caution —
+// the shared Alert renders role="alert" too, so the role alone no longer tells
+// them apart.
+function subjectWarning(): HTMLElement | null {
+  return document.getElementById("admit-subject-warning");
+}
+
 function admitButton(): HTMLButtonElement {
   return screen.getByRole("button", {
     name: "Admit workload",
@@ -62,7 +69,9 @@ it("reads a terminated subject as a wildcard, with no separate control", () => {
     target: { value: "wimse://identity.example.com/org/acme/agent/*" },
   });
 
-  expect(screen.queryByRole("alert")).toBeNull();
+  // No validation message: the rule is well formed. The caution is a separate
+  // Alert and is asserted in its own test.
+  expect(subjectWarning()).toBeNull();
   expect((subjectField() as HTMLInputElement).value).toBe(
     "wimse://identity.example.com/org/acme/agent/*",
   );
@@ -82,8 +91,8 @@ it("still warns about a literal star where the issuer forbids wildcards", () => 
     target: { value: "wimse://identity.example.com/org/acme/agent/*" },
   });
 
-  const warning = screen.getByRole("alert");
-  expect(warning.textContent).toContain("does not permit wildcard matching");
+  const warning = subjectWarning();
+  expect(warning?.textContent).toContain("does not permit wildcard matching");
   expect(admitButton().disabled).toBe(true);
   expect(onSubmit).not.toHaveBeenCalled();
 });
@@ -118,7 +127,7 @@ it("does not warn about an exact subject with no star", () => {
     target: { value: "wimse://identity.example.com/org/acme/agent/a-1" },
   });
 
-  expect(screen.queryByRole("alert")).toBeNull();
+  expect(subjectWarning()).toBeNull();
 });
 
 it("marks the subject field invalid while the rule cannot be admitted", () => {
@@ -139,7 +148,7 @@ it("marks it invalid for a malformed wildcard too", () => {
   fireEvent.change(subjectField(), { target: { value: "repo:acme/*/deploy" } });
 
   expect(subjectField().getAttribute("aria-invalid")).toBe("true");
-  expect(screen.getByRole("alert").textContent).toContain('must end in "*"');
+  expect(subjectWarning()?.textContent).toContain('must end in "*"');
 });
 
 it("says nothing about wildcards until the subject asks for one", () => {
