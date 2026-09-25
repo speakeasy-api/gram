@@ -30,6 +30,7 @@ export const FeatureName = {
   SessionPortability: "session_portability",
   NetworkIngress: "network_ingress",
   GatewayDiscoveryModes: "gateway_discovery_modes",
+  GatewayFrozenToolsets: "gateway_frozen_toolsets",
 } as const;
 /**
  * Name of the feature to update

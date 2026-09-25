@@ -11,9 +11,9 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -22,7 +22,7 @@ func (s *Service) reviewGatewayInventory(ctx context.Context, id string) (*toolf
 	if !ok || authCtx == nil || authCtx.UserID == "" || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagGatewayFrozenToolsets, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayFrozenToolsets)
 	if err != nil || !enabled || s.gatewayInventory == nil {
 		return nil, oops.E(oops.CodeForbidden, err, "frozen toolsets are not available")
 	}

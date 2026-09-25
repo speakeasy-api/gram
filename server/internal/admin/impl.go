@@ -259,6 +259,7 @@ func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *ge
 		AiPlatformPushIntegrationsEnabled: snapshot.AiPlatformPushIntegrationsEnabled, PlatformMcpEnabled: snapshot.PlatformMcpEnabled,
 		CustomerManagedEncryptionKeysEnabled: snapshot.CustomerManagedEncryptionKeysEnabled, RemoteSessionAutoRefreshEnabled: snapshot.RemoteSessionAutoRefreshEnabled,
 		RemoteSessionAutoRefreshEnforcedEnabled: snapshot.RemoteSessionAutoRefreshEnforcedEnabled, ConsentToolFilteringEnabled: snapshot.ConsentToolFilteringEnabled,
+		GatewayFrozenToolsetsEnabled: snapshot.GatewayFrozenToolsetsEnabled,
 		GatewayDiscoveryModesEnabled: snapshot.GatewayDiscoveryModesEnabled,
 		NetworkIngressEnabled:        snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled, DeviceAgent: snapshot.DeviceAgent,
 	}

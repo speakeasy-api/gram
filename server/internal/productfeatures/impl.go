@@ -250,6 +250,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		SessionPortabilityEnabled:               snapshot.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled,
 		GatewayDiscoveryModesEnabled:            snapshot.GatewayDiscoveryModesEnabled,
+		GatewayFrozenToolsetsEnabled:            snapshot.GatewayFrozenToolsetsEnabled,
 		DeviceAgent:                             snapshot.DeviceAgent,
 	}, nil
 }

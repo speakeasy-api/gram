@@ -47,14 +47,19 @@ func (t SchemaTool) MarshalJSON() ([]byte, error) {
 		}
 		return raw, nil
 	}
+	return MarshalToolDefinition(t.RawDefinition, t.Name)
+}
+
+// MarshalToolDefinition changes only the name, retaining every upstream field.
+func MarshalToolDefinition(rawDefinition json.RawMessage, qualifiedName string) ([]byte, error) {
 	var definition map[string]json.RawMessage
-	if err := json.Unmarshal(t.RawDefinition, &definition); err != nil {
+	if err := json.Unmarshal(rawDefinition, &definition); err != nil {
 		return nil, fmt.Errorf("decode described tool: %w", err)
 	}
 	if definition == nil {
 		return nil, fmt.Errorf("tool definition must be an object")
 	}
-	name, err := json.Marshal(t.Name)
+	name, err := json.Marshal(qualifiedName)
 	if err != nil {
 		return nil, fmt.Errorf("encode qualified name: %w", err)
 	}

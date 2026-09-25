@@ -320,7 +320,7 @@ type memberCatalog struct {
 	entries         []*toolListEntry
 	byName          map[string]*toolListEntry
 	routingIdentity string
-	incomplete bool
+	incomplete      bool
 }
 
 // describeMemberToolset loads the member's catalog via the same model view

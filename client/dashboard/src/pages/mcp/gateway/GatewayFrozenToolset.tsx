@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Text } from "@/components/ui/Text";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { useOrganization } from "@/contexts/Auth";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
 export type FrozenGatewayConnection = {
   review: GramGatewayToolsetReview;
@@ -17,16 +17,23 @@ export type FrozenGatewayConnection = {
 export function GatewayFrozenToolset({
   gatewayId,
   approved,
+  hasUnappliedFreeze = false,
   pending,
   onApply,
 }: {
   gatewayId: string;
   approved: FrozenGatewayConnection | undefined;
+  hasUnappliedFreeze?: boolean;
   pending: boolean;
   onApply: (value: FrozenGatewayConnection | undefined) => void;
 }): JSX.Element | null {
-  const flag = useFeatureFlag(FEATURE_FLAGS.gatewayFrozenToolsets);
-  const enabled = flag.status === "enabled";
+  const organization = useOrganization();
+  const { data: features } = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
+  const enabled = features?.gatewayFrozenToolsetsEnabled === true;
   const [review, setReview] = useState<GramGatewayToolsetReview>();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -56,7 +63,7 @@ export function GatewayFrozenToolset({
       );
     },
   });
-  if (!enabled && !approved) return null;
+  if (!enabled && !approved && !hasUnappliedFreeze) return null;
   const previous = new Map(
     approved?.review.tools
       .filter((tool) => approved.names.includes(tool.name))
@@ -75,7 +82,9 @@ export function GatewayFrozenToolset({
           <Text muted className="text-sm">
             {approved
               ? `${approved.names.length} ${approved.names.length === 1 ? "tool" : "tools"} frozen for this connection`
-              : "Live tools — definitions can change"}
+              : hasUnappliedFreeze
+                ? "Freeze not applied to this connection"
+                : "Live tools — definitions can change"}
           </Text>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -95,7 +104,7 @@ export function GatewayFrozenToolset({
                   : "Review and freeze"}
             </Button.Text>
           </Button>
-          {approved && (
+          {(approved || hasUnappliedFreeze) && (
             <Button
               variant="tertiary"
               disabled={pending}

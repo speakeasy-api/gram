@@ -66,6 +66,11 @@
         frozenInput && frozenInput.checked && !frozenInput.disabled
           ? "approve_frozen"
           : "approve";
+      if (frozenInput && frozenInput.hasAttribute("data-review-unavailable")) {
+        button.disabled =
+          frozenInput.checked ||
+          button.getAttribute("data-consent-self-ready") !== "true";
+      }
     }
     if (frozenInput) frozenInput.addEventListener("change", syncFrozenAction);
     syncFrozenAction();
@@ -407,10 +412,10 @@
             authorizingAgent ? "true" : "false",
           );
           button.value = authorizingAgent ? "approve_agent" : "approve";
-          syncFrozenAction();
           button.disabled = authorizingAgent
             ? true
             : button.getAttribute("data-consent-self-ready") !== "true";
+          syncFrozenAction();
         }
         var selectedID = authorizingAgent ? selected.value : "";
         try {

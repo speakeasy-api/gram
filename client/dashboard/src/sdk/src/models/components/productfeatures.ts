@@ -38,6 +38,10 @@ export type ProductFeatures = {
    */
   gatewayDiscoveryModesEnabled: boolean;
   /**
+   * Whether new gateway connections can freeze reviewed tool definitions
+   */
+  gatewayFrozenToolsetsEnabled: boolean;
+  /**
    * Whether generated hook plugins may mint per-user keys via the interactive browser login
    */
   hooksBrowserLoginEnabled: boolean;
@@ -108,6 +112,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     customer_managed_encryption_keys_enabled: z.boolean(),
     device_agent: z.boolean(),
     gateway_discovery_modes_enabled: z.boolean(),
+    gateway_frozen_toolsets_enabled: z.boolean(),
     hooks_browser_login_enabled: z.boolean(),
     hooks_fail_open_enabled: z.boolean(),
     logs_enabled: z.boolean(),
@@ -134,6 +139,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
         "customerManagedEncryptionKeysEnabled",
       "device_agent": "deviceAgent",
       "gateway_discovery_modes_enabled": "gatewayDiscoveryModesEnabled",
+      "gateway_frozen_toolsets_enabled": "gatewayFrozenToolsetsEnabled",
       "hooks_browser_login_enabled": "hooksBrowserLoginEnabled",
       "hooks_fail_open_enabled": "hooksFailOpenEnabled",
       "logs_enabled": "logsEnabled",

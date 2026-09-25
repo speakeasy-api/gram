@@ -306,6 +306,7 @@ func TestFeature_RequiresPlatformAdmin(t *testing.T) {
 	}
 
 	staffOnly := []productfeatures.Feature{
+		productfeatures.FeatureGatewayFrozenToolsets,
 		productfeatures.FeatureGatewayDiscoveryModes,
 		productfeatures.FeatureSSO,
 		productfeatures.FeatureSCIM,

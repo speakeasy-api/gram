@@ -64,7 +64,7 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	productFeatures     *productfeatures.Client
-	gatewayInventory *testGatewayInventory
+	gatewayInventory    *testGatewayInventory
 	service             *usersessions.Service
 	conn                *pgxpool.Pool
 	sessionManager      *sessions.Manager
@@ -138,7 +138,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 
 	return ctx, &testInstance{
 		productFeatures:     productFeatures,
-		gatewayInventory: inventory,
+		gatewayInventory:    inventory,
 		service:             svc,
 		conn:                conn,
 		sessionManager:      sessionManager,

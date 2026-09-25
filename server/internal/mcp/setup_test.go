@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 	productfeatures_repo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -114,6 +115,7 @@ type testInstance struct {
 	// features is the injectable flag provider wired into the service; tests
 	// enable flag-gated behavior (e.g. the Platform MCP assistant toolset
 	// variant) with SetFlagVariant.
+	productFeatures  *productfeatures.Client
 	features         *feature.InMemory
 	efficacySignaler *background.ThrottledSignaler
 }
@@ -393,7 +395,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 	chatClient := openrouter.NewUnifiedClient(logger, guardianPolicy, devProvisioner, &openrouter.PlatformKeyResolver{Provisioner: devProvisioner}, nil, nil, nil, nil)
 	vectorToolStore := rag.NewToolsetVectorStore(logger, tracerProvider, conn, chatClient)
 	chatSessions := chatsessions.NewManager(logger, redisClient, "test-jwt-secret")
-	featClient := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	featClient := productfeaturestest.NewClient(t, logger, tracerProvider, conn)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	_, err = productfeatures_repo.New(conn).EnableFeature(ctx, productfeatures_repo.EnableFeatureParams{
@@ -497,6 +499,7 @@ func newTestMCPServiceWithPoolConfigAndTemporal(
 		authzEngine:         authzEngine,
 		audit:               auditLogger,
 		tunnelRoutes:        tunnelRoutes,
+		productFeatures:     featClient,
 		features:            features,
 		efficacySignaler:    efficacySignaler,
 	}

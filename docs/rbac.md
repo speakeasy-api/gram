@@ -1038,7 +1038,9 @@ Gateway frozen-toolset preview and issuance require `mcp:connect` on the gateway
 
 | Gateway operation                    | Required permission                                 | Resource                     |
 | ------------------------------------ | --------------------------------------------------- | ---------------------------- |
-| `userSessions.previewGatewayToolset` | `mcp:connect` and each member’s current permissions | Gateway and admitted members |
+| `userSessions.previewGatewayToolset` | `mcp:connect` and each member's current permissions | Gateway and admitted members |
 | `userSessions.mintFrozenGateway`     | `mcp:connect` and a fresh, complete tool review     | Gateway and admitted members |
 
 Frozen review and session minting are intentionally human approval flows in consent and Inspect. Platform MCP cannot approve its own tools or mint a human connection; these endpoints are not exposed as agent tools.
+
+The staff-managed `gateway_frozen_toolsets` product feature enables new reviews and frozen approvals per organization, independently of discovery mode choices. Disabling it blocks new frozen approvals; stored restrictions, current permissions, and revocation continue to apply.

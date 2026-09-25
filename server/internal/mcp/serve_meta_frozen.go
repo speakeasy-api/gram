@@ -126,10 +126,10 @@ func (s *Service) captureGatewayToolset(ctx context.Context, logger *slog.Logger
 			if errors.As(err, &denied) && (denied.Code == oops.CodeNotFound || denied.Code == oops.CodeForbidden) {
 				continue
 			}
-			if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-				return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete: %s", memberErr.message)
-			}
 			return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again")
+		}
+		if catalog.incomplete {
+			return nil, oops.E(oops.CodeUnavailable, nil, "gateway tool inventory contains invalid definitions; try again")
 		}
 		for _, entry := range catalog.entries {
 			tool, err := frozenMemberTool(member, catalog.routingIdentity, entry)
@@ -154,7 +154,7 @@ func (s *Service) filterFrozenMemberCatalog(ctx context.Context, gate *metaGateC
 	if gate.frozen == nil {
 		return catalog, nil
 	}
-	filtered := &memberCatalog{entries: make([]*toolListEntry, 0), byName: map[string]*toolListEntry{}, routingIdentity: catalog.routingIdentity}
+	filtered := &memberCatalog{entries: make([]*toolListEntry, 0), byName: map[string]*toolListEntry{}, routingIdentity: catalog.routingIdentity, incomplete: catalog.incomplete}
 	for _, entry := range catalog.entries {
 		current, err := frozenMemberTool(member, catalog.routingIdentity, entry)
 		if err != nil {

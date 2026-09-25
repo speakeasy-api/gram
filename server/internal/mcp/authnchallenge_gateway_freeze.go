@@ -11,9 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -71,7 +71,7 @@ func (s *Service) gatewayConsentReview(ctx context.Context, endpoint *ResolvedMc
 			}
 		}
 	}
-	if !s.gatewayConnectionOptionsEnabled(ctx, endpoint, feature.FlagGatewayFrozenToolsets) {
+	if !s.gatewayConnectionOptionsEnabled(ctx, endpoint, productfeatures.FeatureGatewayFrozenToolsets) {
 		if !review.Frozen {
 			return nil, nil
 		}
@@ -110,7 +110,7 @@ func (s *Service) consentFrozenGatewayPolicy(ctx context.Context, endpoint *Reso
 	if form.Get("gateway_freeze") != "on" {
 		return policy, nil
 	}
-	if state.FirstParty || selectedAgentID != "" || !s.gatewayConnectionOptionsEnabled(ctx, endpoint, feature.FlagGatewayFrozenToolsets) {
+	if state.FirstParty || selectedAgentID != "" || !s.gatewayConnectionOptionsEnabled(ctx, endpoint, productfeatures.FeatureGatewayFrozenToolsets) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "frozen toolsets are not available for this connection")
 	}
 	if state.GatewayReviewFingerprint == "" || form.Get("gateway_review") != state.GatewayReviewFingerprint {

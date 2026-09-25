@@ -11,8 +11,8 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -35,7 +35,7 @@ func TestFrozenGatewayMintRechecksReviewedInventory(t *testing.T) {
 	previewPayload := &gen.PreviewGatewayToolsetPayload{MetaMcpServerID: gateway.ID.String()}
 	_, err = ti.service.PreviewGatewayToolset(ctx, previewPayload)
 	require.ErrorContains(t, err, "not available")
-	ti.features.SetFlag(feature.FlagGatewayFrozenToolsets, authCtx.ActiveOrganizationID, true)
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayFrozenToolsets, true))
 	review, err := ti.service.PreviewGatewayToolset(ctx, previewPayload)
 	require.NoError(t, err)
 	require.Len(t, review.Tools, 1)
@@ -58,7 +58,7 @@ func TestFrozenGatewayMintRechecksReviewedInventory(t *testing.T) {
 	ti.gatewayInventory.snapshot.Tools[0] = changed
 	_, err = ti.service.MintFrozenGatewaySession(ctx, payload)
 	require.ErrorContains(t, err, "review again")
-	ti.features.SetFlag(feature.FlagGatewayFrozenToolsets, authCtx.ActiveOrganizationID, false)
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayFrozenToolsets, false))
 	_, err = ti.service.MintFrozenGatewaySession(ctx, payload)
 	require.ErrorContains(t, err, "not available")
 }
@@ -67,7 +67,7 @@ func TestFrozenGatewayReviewRequiresConnectionPermission(t *testing.T) {
 	ctx, ti := newTestService(t)
 	gateway, _ := createIssuerGatedMintMetaServer(t, ctx, ti, "freeze-denied")
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ti.features.SetFlag(feature.FlagGatewayFrozenToolsets, authCtx.ActiveOrganizationID, true)
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayFrozenToolsets, true))
 	ctx = withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()))
 	_, err := ti.service.PreviewGatewayToolset(ctx, &gen.PreviewGatewayToolsetPayload{MetaMcpServerID: gateway.ID.String()})
 	require.ErrorContains(t, err, "connection permission required")

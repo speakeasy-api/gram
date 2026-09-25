@@ -13,14 +13,14 @@ import (
 // gatewayDiscoveryOptionsEnabled gates new settings only. Runtime policy
 // parsing and enforcement do not depend on this product feature.
 func (s *Service) gatewayDiscoveryOptionsEnabled(ctx context.Context, endpoint *ResolvedMcpEndpoint) bool {
-	return s.gatewayConnectionOptionsEnabled(ctx, endpoint, feature.FlagGatewayDiscoveryModes)
+	return s.gatewayConnectionOptionsEnabled(ctx, endpoint, productfeatures.FeatureGatewayDiscoveryModes)
 }
 
-func (s *Service) gatewayConnectionOptionsEnabled(ctx context.Context, endpoint *ResolvedMcpEndpoint, flag feature.Flag) bool {
+func (s *Service) gatewayConnectionOptionsEnabled(ctx context.Context, endpoint *ResolvedMcpEndpoint, capability productfeatures.Feature) bool {
 	if !endpoint.MetaMcpServerID.Valid {
 		return false
 	}
-	return s.platformFeatureChecker != nil && s.platformFeatureChecker(ctx, endpoint.OrganizationID, string(productfeatures.FeatureGatewayDiscoveryModes))
+	return s.platformFeatureChecker != nil && s.platformFeatureChecker(ctx, endpoint.OrganizationID, string(capability))
 }
 
 func (s *Service) consentGatewayPolicy(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, selectedAgentID, modeValue string, selection *toolfilter.SessionSelection) (*toolfilter.SessionPolicy, error) {

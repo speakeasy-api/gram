@@ -1341,6 +1341,8 @@ type ProductFeatures struct {
 	// Whether gateway defaults and per-connection discovery choices can be
 	// configured
 	GatewayDiscoveryModesEnabled bool
+	// Whether new gateway connections can freeze reviewed tool definitions
+	GatewayFrozenToolsetsEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -1783,6 +1785,9 @@ func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 	if vres.GatewayDiscoveryModesEnabled != nil {
 		res.GatewayDiscoveryModesEnabled = *vres.GatewayDiscoveryModesEnabled
 	}
+	if vres.GatewayFrozenToolsetsEnabled != nil {
+		res.GatewayFrozenToolsetsEnabled = *vres.GatewayFrozenToolsetsEnabled
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -1813,6 +1818,7 @@ func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesVie
 		SessionPortabilityEnabled:               &res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
 		GatewayDiscoveryModesEnabled:            &res.GatewayDiscoveryModesEnabled,
+		GatewayFrozenToolsetsEnabled:            &res.GatewayFrozenToolsetsEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
 	}
 	return vres
