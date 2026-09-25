@@ -261,30 +261,17 @@ export function PolicyMCPScopePicker({
       onChange({ ...value, allServers: true, servers: retained });
       return;
     }
-    const existingByID = new Map(
-      value.servers.map((entry) => [entry.mcpServerId, entry]),
-    );
-    const materialized = concreteServers.map(
-      (server) => existingByID.get(server.id) ?? { mcpServerId: server.id },
-    );
-    const gateways = value.servers.filter((entry) =>
-      pickerServers.some(
-        (server) =>
-          server.id === entry.mcpServerId && server.kind === "gateway",
-      ),
-    );
-    onChange({
-      ...value,
-      allServers: false,
-      servers: [...materialized, ...gateways],
-    });
+    onChange({ ...value, allServers: false, servers: [] });
   };
   const toggleTool = (server: PickerServer, toolName: string) => {
     const selection = selectionFor(server);
-    if (selection.kind === "off") return;
     const ruleSelection = ruleTools(server);
     const current =
-      selection.kind === "custom" ? selection.tools : ruleSelection;
+      selection.kind === "custom"
+        ? selection.tools
+        : selection.kind === "rule"
+          ? ruleSelection
+          : [];
     const next = current.includes(toolName)
       ? current.filter((name) => name !== toolName)
       : [...current, toolName];
@@ -803,7 +790,6 @@ function FocusedServerPane({
                   <Checkbox
                     aria-label={tool.name}
                     checked={checked}
-                    disabled={!selected}
                     className={cn(
                       !custom &&
                         checked &&
