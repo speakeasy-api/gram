@@ -14,6 +14,7 @@ import { useOrganizationRemoteSessionClient } from "@gram/client/react-query/org
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { ScopeBadge } from "./ScopeBadge";
+import { LegacyCallbackAlert } from "./clientAlerts";
 import { remoteSessionClientDisplayName } from "./clientDisplay";
 import { issuerDisplayName } from "./issuerDisplay";
 import { OverviewTab } from "./tabs/client/OverviewTab";
@@ -129,6 +130,11 @@ export default function RemoteSessionClientDetail(): JSX.Element {
             </div>
 
             <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
+              {client?.legacyCallbackUrl && (
+                <div className="mb-6 max-w-3xl">
+                  <LegacyCallbackAlert legacyCallbackUrl />
+                </div>
+              )}
               <TabsContent value="overview" className="mt-0">
                 {client && <OverviewTab client={client} />}
               </TabsContent>

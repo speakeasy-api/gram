@@ -49,6 +49,12 @@ export function SettingsTab({
   const [tunneledMcpServerId, setTunneledMcpServerId] = useState(
     issuer.tunneledMcpServerId ?? "",
   );
+  // Seeded from the saved override: buildUpdateIssuerForm always sends it and
+  // reads a blank field as "clear", so any other seed would drop the override
+  // on the next unrelated save.
+  const [scopeOverride, setScopeOverride] = useState(
+    (issuer.scopeOverride ?? []).join(", "),
+  );
   const [showDelete, setShowDelete] = useState(false);
   const isPlatformAdmin = useIsPlatformAdmin();
   const { hasAnyScope } = useRBAC();
@@ -219,6 +225,7 @@ export function SettingsTab({
           registrationEndpoint,
           jwksUri,
           discoveredSnapshot,
+          scopeOverride,
           tunneledMcpServerId:
             isPlatformAdmin && issuer.projectId
               ? tunneledMcpServerId
@@ -340,6 +347,17 @@ export function SettingsTab({
             </Text>
           </div>
         )}
+      </SettingsSection>
+
+      <SettingsSection
+        title="Scopes"
+        description="When set, every sign-in through this provider requests exactly these scopes, and the scopes set on its clients are ignored. Leave blank to request each client's scopes, or the provider's supported scopes when a client sets none."
+      >
+        <SettingsField
+          label="Scope override (comma-separated)"
+          value={scopeOverride}
+          onChange={setScopeOverride}
+        />
       </SettingsSection>
 
       <SettingsSection

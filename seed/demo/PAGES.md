@@ -139,6 +139,12 @@ integration. All IDs reuse `Spec.NameSeed` and retarget with the tenant.
 Reseeding deletes bindings before sessions, issuers, agents and projects.
 Browser verification: `[~]` (not yet verified); see check 18 in `verify.md`.
 
+The same **Fictional release account** provider carries a scope override
+(`releases:read offline_access`), shown on its Overview and editable on its
+Settings tab. Its client sets its own scopes and is flagged as a legacy callback
+client, so the client's pages show the legacy callback warning and its Settings
+tab warns that the client's scopes have no effect. Browser verification: `[~]`.
+
 ## Local only (RunLocalFixtures, never the demo org)
 
 These come from `server/internal/demoseed/local.go` after the seed, so they are

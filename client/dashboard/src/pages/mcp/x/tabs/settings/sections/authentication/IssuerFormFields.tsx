@@ -24,6 +24,7 @@ import {
   isPrivateKeyJwtAuthMethod,
   type ClientType,
 } from "./issuerFormUtils";
+import type { ReactNode } from "react";
 
 // remoteLoginCallbackURL is the single stable redirect_uri Gram uses for
 // every upstream OAuth provider, regardless of MCP server or slug (see
@@ -458,17 +459,20 @@ export function ClientCredentialsFields({
 // OverridesFields renders the per-client OAuth dance overrides. Both fields
 // are optional and apply in both DCR and manual modes — they control what
 // Gram sends at authorize/token time, independent of how the client was
-// registered.
+// registered. scopeWarning renders under the scope input, for callers whose
+// issuer pins the requested scopes and so makes this field inert.
 export function OverridesFields({
   scopeOverride,
   audienceOverride,
   onScopeOverrideChange,
   onAudienceOverrideChange,
+  scopeWarning,
 }: {
   scopeOverride: string;
   audienceOverride: string;
   onScopeOverrideChange: (value: string) => void;
   onAudienceOverrideChange: (value: string) => void;
+  scopeWarning?: ReactNode;
 }): JSX.Element {
   return (
     <Stack gap={4} className="border-t pt-6">
@@ -486,6 +490,7 @@ export function OverridesFields({
           during the OAuth dance; otherwise it falls back to the issuer's
           scopes_supported.
         </Text>
+        {scopeWarning}
       </Stack>
 
       <Stack gap={2}>
