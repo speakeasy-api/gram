@@ -6,13 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
-	"net/url"
 )
 
 type gatewayConsentTool struct {

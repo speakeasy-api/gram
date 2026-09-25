@@ -9,9 +9,9 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type GatewayReviewedTool = {
   /**
-   * Full MCP tool definition.
+   * Full MCP tool definition as formatted JSON text, preserving exact schema numbers for human review.
    */
-  definition: any;
+  definition: string;
   /**
    * Fingerprint of the full definition and routing identity.
    */
@@ -27,7 +27,7 @@ export const GatewayReviewedTool$inboundSchema: z.ZodMiniType<
   GatewayReviewedTool,
   unknown
 > = z.object({
-  definition: z.any(),
+  definition: z.string(),
   fingerprint: z.string(),
   name: z.string(),
 });

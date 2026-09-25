@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
+
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -20,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
-	"github.com/stretchr/testify/require"
 )
 
 func setGatewayMode(t *testing.T, ctx context.Context, ti *testInstance, id uuid.UUID, mode string) {

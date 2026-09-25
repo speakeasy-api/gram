@@ -746,8 +746,16 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// attacker-controllable bucket the guards above describe rather than
 	// counting against a config's health signal.
 	action := r.PostForm.Get("action")
-	if action != "approve" && action != "approve_agent" && action != "deny" {
-		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", or "deny"`).LogError(ctx, logger)
+	if action != "approve" && action != "approve_agent" && action != "approve_frozen" && action != "deny" {
+		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", "approve_frozen", or "deny"`).LogError(ctx, logger)
+	}
+
+	// Older readers reject this action instead of ignoring a frozen approval.
+	if action != "deny" && ((action == "approve_frozen") != (r.PostForm.Get("gateway_freeze") == "on")) {
+		return oops.E(oops.CodeBadRequest, nil, "frozen approval action and selection do not match")
+	}
+	if action == "approve_frozen" && !strings.HasSuffix(r.URL.Path, "/connect/frozen-v2") {
+		return oops.E(oops.CodeBadRequest, nil, "frozen approval requires the versioned consent route")
 	}
 
 	// The RFC 9207 `iss` both branches below emit, resolved once so the deny

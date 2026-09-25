@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 )
 

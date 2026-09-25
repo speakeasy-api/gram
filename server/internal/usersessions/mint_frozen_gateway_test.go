@@ -3,7 +3,11 @@ package usersessions_test
 import (
 	"context"
 	"encoding/json"
+	"testing"
+
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	gen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -12,8 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
-	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 type testGatewayInventory struct{ snapshot *toolfilter.FrozenToolset }
@@ -27,7 +29,7 @@ func TestFrozenGatewayMintRechecksReviewedInventory(t *testing.T) {
 	gateway, issuerID := createIssuerGatedMintMetaServer(t, ctx, ti, "freeze-mint")
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	ctx = withExactAuthzGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPConnect, gateway.ID.String()))
-	tool, err := toolfilter.NewFrozenTool("member--read", uuid.New(), "route", json.RawMessage(`{"name":"read","inputSchema":{"type":"object"}}`))
+	tool, err := toolfilter.NewFrozenTool("member--read", uuid.New(), "route", json.RawMessage(`{"name":"read","inputSchema":{"type":"object","maximum":9007199254740993}}`))
 	require.NoError(t, err)
 	ti.gatewayInventory.snapshot = &toolfilter.FrozenToolset{Tools: []toolfilter.FrozenTool{tool}}
 	previewPayload := &gen.PreviewGatewayToolsetPayload{MetaMcpServerID: gateway.ID.String()}
@@ -37,6 +39,9 @@ func TestFrozenGatewayMintRechecksReviewedInventory(t *testing.T) {
 	review, err := ti.service.PreviewGatewayToolset(ctx, previewPayload)
 	require.NoError(t, err)
 	require.Len(t, review.Tools, 1)
+	rawReview, err := json.Marshal(review.Tools[0].Definition)
+	require.NoError(t, err)
+	require.Contains(t, string(rawReview), "9007199254740993")
 	payload := &gen.MintFrozenGatewaySessionPayload{MetaMcpServerID: gateway.ID.String(), FrozenToolset: &gen.FrozenGatewayReview{Fingerprint: review.Fingerprint, Tools: []string{tool.Name}}}
 	minted, err := ti.service.MintFrozenGatewaySession(ctx, payload)
 	require.NoError(t, err)

@@ -4,11 +4,6 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
-import {
-  PreviewGatewayToolsetRequestBody,
-  PreviewGatewayToolsetRequestBody$Outbound,
-  PreviewGatewayToolsetRequestBody$outboundSchema,
-} from "../components/previewgatewaytoolsetrequestbody.js";
 
 export type PreviewGatewayToolsetSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -17,6 +12,10 @@ export type PreviewGatewayToolsetSecurity = {
 
 export type PreviewGatewayToolsetRequest = {
   /**
+   * The gateway to review.
+   */
+  metaMcpServerId: string;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -24,7 +23,6 @@ export type PreviewGatewayToolsetRequest = {
    * project header
    */
   gramProject?: string | undefined;
-  previewGatewayToolsetRequestBody: PreviewGatewayToolsetRequestBody;
 };
 
 /** @internal */
@@ -62,9 +60,9 @@ export function previewGatewayToolsetSecurityToJSON(
 
 /** @internal */
 export type PreviewGatewayToolsetRequest$Outbound = {
+  meta_mcp_server_id: string;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
-  PreviewGatewayToolsetRequestBody: PreviewGatewayToolsetRequestBody$Outbound;
 };
 
 /** @internal */
@@ -73,16 +71,15 @@ export const PreviewGatewayToolsetRequest$outboundSchema: z.ZodMiniType<
   PreviewGatewayToolsetRequest
 > = z.pipe(
   z.object({
+    metaMcpServerId: z.string(),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
-    previewGatewayToolsetRequestBody:
-      PreviewGatewayToolsetRequestBody$outboundSchema,
   }),
   z.transform((v) => {
     return remap$(v, {
+      metaMcpServerId: "meta_mcp_server_id",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
-      previewGatewayToolsetRequestBody: "PreviewGatewayToolsetRequestBody",
     });
   }),
 );

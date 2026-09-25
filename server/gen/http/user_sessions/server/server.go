@@ -56,7 +56,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"ListUserSessions", "GET", "/rpc/userSessions.list"},
 			{"ListFacets", "GET", "/rpc/userSessions.listFacets"},
-			{"PreviewGatewayToolset", "POST", "/rpc/userSessions.previewGatewayToolset"},
+			{"PreviewGatewayToolset", "GET", "/rpc/userSessions.previewGatewayToolset"},
 			{"MintFrozenGatewaySession", "POST", "/rpc/userSessions.mintFrozenGateway"},
 			{"MintUserSession", "POST", "/rpc/userSessions.mint"},
 			{"RevokeUserSession", "POST", "/rpc/userSessions.revoke"},
@@ -216,7 +216,7 @@ func MountPreviewGatewayToolsetHandler(mux goahttp.Muxer, h http.Handler) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("POST", "/rpc/userSessions.previewGatewayToolset", f)
+	mux.Handle("GET", "/rpc/userSessions.previewGatewayToolset", f)
 }
 
 // NewPreviewGatewayToolsetHandler creates a HTTP handler which loads the HTTP

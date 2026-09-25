@@ -51,6 +51,9 @@ func (t SchemaTool) MarshalJSON() ([]byte, error) {
 	if err := json.Unmarshal(t.RawDefinition, &definition); err != nil {
 		return nil, fmt.Errorf("decode described tool: %w", err)
 	}
+	if definition == nil {
+		return nil, fmt.Errorf("tool definition must be an object")
+	}
 	name, err := json.Marshal(t.Name)
 	if err != nil {
 		return nil, fmt.Errorf("encode qualified name: %w", err)

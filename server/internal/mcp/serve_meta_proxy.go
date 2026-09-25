@@ -160,7 +160,7 @@ func (s *Service) routeMetaMember(
 	// The backend used for dispatch must still be the one in the authorized
 	// member snapshot. In particular, a tunnel replacement cannot inherit
 	// the old tunnel's approval or credentials.
-	if serverRow.ToolsetID != member.toolsetID || serverRow.RemoteMcpServerID != member.remoteServerID || serverRow.TunneledMcpServerID != member.tunneledServerID || serverRow.EnvironmentID != member.environmentID || serverRow.Visibility != member.visibility {
+	if serverRow.ToolsetID != member.toolsetID || serverRow.RemoteMcpServerID != member.remoteServerID || serverRow.TunneledMcpServerID != member.tunneledServerID || serverRow.EnvironmentID != member.environmentID || serverRow.RemoteSessionIssuerID != member.remoteSessionIssuerID || serverRow.Visibility != member.visibility {
 		return memberDial{}, "", &metaMemberError{message: fmt.Sprintf("server %q configuration changed; retry discovery", member.slug)}
 	}
 

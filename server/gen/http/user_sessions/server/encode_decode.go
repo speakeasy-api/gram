@@ -530,29 +530,16 @@ func DecodePreviewGatewayToolsetRequest(mux goahttp.Muxer, decoder func(*http.Re
 	return func(r *http.Request) (*usersessions.PreviewGatewayToolsetPayload, error) {
 		var payload *usersessions.PreviewGatewayToolsetPayload
 		var (
-			body PreviewGatewayToolsetRequestBody
-			err  error
-		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return payload, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return payload, gerr
-			}
-			return payload, goa.DecodePayloadError(err.Error())
-		}
-		err = ValidatePreviewGatewayToolsetRequestBody(&body)
-		if err != nil {
-			return payload, err
-		}
-
-		var (
+			metaMcpServerID  string
 			sessionToken     *string
 			projectSlugInput *string
+			err              error
 		)
+		metaMcpServerID = r.URL.Query().Get("meta_mcp_server_id")
+		if metaMcpServerID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("meta_mcp_server_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", metaMcpServerID, goa.FormatUUID))
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -561,7 +548,10 @@ func DecodePreviewGatewayToolsetRequest(mux goahttp.Muxer, decoder func(*http.Re
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload = NewPreviewGatewayToolsetPayload(&body, sessionToken, projectSlugInput)
+		if err != nil {
+			return payload, err
+		}
+		payload = NewPreviewGatewayToolsetPayload(metaMcpServerID, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -1547,7 +1537,7 @@ func marshalUsersessionsviewsGatewayReviewedToolViewToGatewayReviewedToolRespons
 	res := &GatewayReviewedToolResponseBody{
 		Name:        *v.Name,
 		Fingerprint: *v.Fingerprint,
-		Definition:  v.Definition,
+		Definition:  *v.Definition,
 	}
 
 	return res

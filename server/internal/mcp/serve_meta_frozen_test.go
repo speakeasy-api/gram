@@ -5,9 +5,19 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/stretchr/testify/require"
+
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -21,12 +31,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
-	"github.com/stretchr/testify/require"
-	"net/http"
-	"net/http/httptest"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 func mintFrozenTestSession(t *testing.T, ctx context.Context, ti *testInstance, gatewayID, issuerID uuid.UUID, slug string, mode metamcp.DiscoveryMode, snapshot *toolfilter.FrozenToolset) string {
@@ -151,7 +155,12 @@ func testFrozenGatewayDefinitions(t *testing.T, mode metamcp.DiscoveryMode) {
 	}
 	onList.Store(&redirect)
 	require.Contains(t, call(), "pong")
-	require.NoError(t, <-routingErr)
+	select {
+	case err := <-routingErr:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("fresh catalog callback did not run")
+	}
 	require.EqualValues(t, 2, calls.Load(), "dispatch stays on the validated destination")
 	require.Contains(t, call(), "approved frozen toolset")
 	require.EqualValues(t, 2, calls.Load())
@@ -294,4 +303,69 @@ func TestFrozenConsentKeepsApprovalWhenInventoryUnavailable(t *testing.T) {
 	body = render()
 	require.Contains(t, body, "Your existing connection stays frozen")
 	require.Regexp(t, `name="gateway_freeze"[^>]*checked[^>]*>`, body)
+}
+
+func TestFrozenConsentIssuesDirectSessionEndToEnd(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "frozen-consent-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuer.ID)
+	subject := urn.NewUserSubject(authCtx.UserID)
+	verifier := pkceVerifier(t)
+	stateID := uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, mcp.AuthnChallengeState{
+		ID: stateID, UserSessionIssuerID: issuer.ID, Endpoint: mcp.EndpointRef{McpSlug: slug, RouteBase: "mcp"},
+		ClientID: client.ClientID, RedirectURI: client.RedirectUris[0], State: "client-state",
+		CodeChallenge: pkceChallenge(verifier), CodeChallengeMethod: "S256", CSRFToken: "csrf",
+		Subject: &subject, AuthorizerUserID: authCtx.UserID, AuthorizerImpersonated: new(bool), CreatedAt: time.Now(),
+	}))
+	ti.features.SetFlag(feature.FlagGatewayFrozenToolsets, authCtx.ActiveOrganizationID, true)
+	ti.features.SetFlag(feature.FlagGatewayDiscoveryModes, authCtx.ActiveOrganizationID, true)
+	route := chi.NewRouteContext()
+	route.URLParams.Add("mcpSlug", slug)
+	ctx = context.WithValue(ctx, chi.RouteCtxKey, route)
+	get := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect?state="+stateID, nil).WithContext(ctx)
+	page := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleConsent(page, get))
+	require.Equal(t, http.StatusOK, page.Code)
+	require.Contains(t, page.Body.String(), "/connect/frozen-v2")
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err)
+	require.NotEmpty(t, state.GatewayReviewFingerprint)
+	form := url.Values{"state": {stateID}, "csrf_token": {"csrf"}, "action": {"approve_frozen"}, "gateway_freeze": {"on"}, "gateway_review": {state.GatewayReviewFingerprint}, "discovery_mode": {"direct"}}
+	post := func(path string) (*httptest.ResponseRecorder, error) {
+		r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode())).WithContext(ctx)
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		w := httptest.NewRecorder()
+		return w, ti.service.HandleConsent(w, r)
+	}
+	_, err = post("/mcp/" + slug + "/connect")
+	require.ErrorContains(t, err, "versioned consent route")
+	form.Set("action", "approve")
+	_, err = post("/mcp/" + slug + "/connect/frozen-v2")
+	require.ErrorContains(t, err, "action and selection do not match")
+	form.Set("action", "approve_frozen")
+	approved, err := post("/mcp/" + slug + "/connect/frozen-v2")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, approved.Code)
+	redirect, err := url.Parse(approved.Header().Get("Location"))
+	require.NoError(t, err)
+	code := redirect.Query().Get("code")
+	require.True(t, strings.HasPrefix(code, "gateway-frozen-v2."))
+	tokenForm := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {client.RedirectUris[0]}, "client_id": {client.ClientID}, "code_verifier": {verifier}}
+	tokenRequest := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/token", strings.NewReader(tokenForm.Encode())).WithContext(ctx)
+	tokenRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	tokenResponse := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleToken(tokenResponse, tokenRequest))
+	require.Equal(t, http.StatusOK, tokenResponse.Code, tokenResponse.Body.String())
+	var token struct {
+		AccessToken string `json:"access_token"`
+	}
+	require.NoError(t, json.Unmarshal(tokenResponse.Body.Bytes(), &token))
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), token.AccessToken, nil)
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), `"tools":[]`)
+	require.NotEqual(t, uuid.Nil, gateway.ID)
 }

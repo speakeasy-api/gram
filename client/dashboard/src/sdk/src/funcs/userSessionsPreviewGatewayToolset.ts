@@ -4,7 +4,7 @@
 
 import * as z from "zod/v4-mini";
 import { GramCore } from "../core.js";
-import { encodeJSON, encodeSimple } from "../lib/encodings.js";
+import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
 import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
@@ -102,14 +102,15 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.PreviewGatewayToolsetRequestBody, {
-    explode: true,
-  });
+  const body = null;
 
   const path = pathToFunc("/rpc/userSessions.previewGatewayToolset")();
 
+  const query = encodeFormQuery({
+    "meta_mcp_server_id": payload.meta_mcp_server_id,
+  });
+
   const headers = new Headers(compactMap({
-    "Content-Type": "application/json",
     Accept: "application/json",
     "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
@@ -153,10 +154,11 @@ async function $do(
 
   const requestRes = client._createRequest(context, {
     security: requestSecurity,
-    method: "POST",
+    method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
+    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
