@@ -119,7 +119,6 @@ func submatchString(source []byte, match []int, group int) string {
 // name a file inside the skill directory.
 func normalizeSkillResourcePath(candidate string) (string, bool) {
 	candidate = strings.TrimSpace(candidate)
-	candidate = strings.TrimSuffix(candidate, "\\")
 	candidate = strings.TrimRight(candidate, `.,;:!?)]}>"'`)
 	if candidate == "" {
 		return "", false
@@ -133,10 +132,10 @@ func normalizeSkillResourcePath(candidate string) (string, bool) {
 
 	candidate, _, _ = strings.Cut(candidate, "#")
 	candidate, _, _ = strings.Cut(candidate, "?")
+	candidate = unescapeMarkdownPunctuation(candidate)
 	if decoded, err := url.PathUnescape(candidate); err == nil {
 		candidate = decoded
 	}
-	candidate = strings.ReplaceAll(candidate, `\`, "/")
 	// Spaces survive because an angle-bracket destination may name a file that
 	// contains them; control characters never legitimately appear in a path.
 	if candidate == "" || strings.ContainsAny(candidate, "\t\n\r") {
@@ -155,6 +154,40 @@ func normalizeSkillResourcePath(candidate string) (string, bool) {
 	}
 
 	return cleaned, true
+}
+
+// unescapeMarkdownPunctuation resolves the backslash escapes Markdown allows
+// before ASCII punctuation, so an escaped space or underscore in a link
+// destination resolves to the character the author meant.
+func unescapeMarkdownPunctuation(candidate string) string {
+	if !strings.Contains(candidate, `\`) {
+		return candidate
+	}
+
+	var unescaped strings.Builder
+	unescaped.Grow(len(candidate))
+	for i := 0; i < len(candidate); i++ {
+		if candidate[i] == '\\' && i+1 < len(candidate) && isASCIIPunctuation(candidate[i+1]) {
+			i++
+		}
+		unescaped.WriteByte(candidate[i])
+	}
+	return unescaped.String()
+}
+
+func isASCIIPunctuation(character byte) bool {
+	switch {
+	case character >= '!' && character <= '/':
+		return true
+	case character >= ':' && character <= '@':
+		return true
+	case character >= '[' && character <= '`':
+		return true
+	case character >= '{' && character <= '~':
+		return true
+	default:
+		return false
+	}
 }
 
 func skillResourceKind(resourcePath string) string {

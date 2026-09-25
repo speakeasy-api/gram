@@ -70,7 +70,8 @@ func TestParseSkillResourceReferencesNormalizesDestinations(t *testing.T) {
 	body := strings.Join([]string{
 		"[anchor](references/REFERENCE.md#usage)",
 		"[query](references/REFERENCE.md?v=2)",
-		"[escaped](assets/report%20template.docx)",
+		"[percent escaped](assets/report%20template.docx)",
+		"[backslash escaped](references/chapter\\_one.md)",
 		"[angle](<references/spaced name.md>)",
 		"[titled](scripts/run.sh \"How to run\")",
 		"[dot slash](./scripts/run.sh)",
@@ -80,6 +81,7 @@ func TestParseSkillResourceReferencesNormalizesDestinations(t *testing.T) {
 	require.Equal(t, []skillResourceReference{
 		{Path: "assets/report template.docx", Kind: skillResourceKindAsset},
 		{Path: "references/REFERENCE.md", Kind: skillResourceKindReference},
+		{Path: "references/chapter_one.md", Kind: skillResourceKindReference},
 		{Path: "references/spaced name.md", Kind: skillResourceKindReference},
 		{Path: "scripts/run.sh", Kind: skillResourceKindScript},
 	}, parseSkillResourceReferences(body))
