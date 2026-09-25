@@ -1,0 +1,26 @@
+server/internal/adminmcp/oauth_token.go
+  h_9630b74bdac540 61-63,66-68,100-103,106-112,114-131,135-139,141
+  h_9630b74bdac540 140
+.changeset/admin-mcp-public-clients.md
+  h_9630b74bdac540 1-5
+server/internal/adminmcp/oauth_clients_test.go
+  h_9630b74bdac540 43,77-92
+  h_9630b74bdac540 93-94
+server/internal/adminmcp/oauth_clients.go
+  h_9630b74bdac540 24-27,131-133,138-139,143-144
+  h_9630b74bdac540 23,134-137,140-142
+server/internal/adminmcp/oauth_token_test.go
+  h_9630b74bdac540 171-240
+  h_9630b74bdac540 169-170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b4875d4c3b862fc3d623b063eb7791805487a518",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
