@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"sync"
@@ -15,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -187,6 +190,65 @@ func TestAttach_MountsSessionRoute(t *testing.T) {
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/session.get", nil))
 
 	require.Equal(t, http.StatusUnauthorized, rec.Code)
+}
+
+func TestAdminSessionCookieWorksForDashboardAndMCP(t *testing.T) {
+	t.Parallel()
+
+	callback, err := url.Parse("https://gram-admin-dev.example.test/admin/auth.callback")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name      string
+		location  string
+		sessionID string
+		mcp       bool
+	}{
+		{name: "dashboard login", location: "/admin/organizations", sessionID: "test-session"},
+		{name: "MCP consent login", location: "/admin-mcp/connect?state=opaque", sessionID: "test-session", mcp: true},
+		{name: "MCP login fallback", location: "/admin-mcp/connect?state=opaque"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			jar, err := cookiejar.New(nil)
+			require.NoError(t, err)
+			response := httptest.NewRecorder()
+			var encodeErr error
+			scopeMCPAdminCookie(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				encodeErr = adminserver.EncodeCallbackResponse(nil)(t.Context(), w, &gen.CallbackResult{
+					Location:  tc.location,
+					SessionID: tc.sessionID,
+				})
+			})).ServeHTTP(response, httptest.NewRequest(http.MethodGet, callback.String(), nil))
+			require.NoError(t, encodeErr)
+			require.Equal(t, http.StatusTemporaryRedirect, response.Code)
+			cookies := response.Result().Cookies()
+			if tc.mcp {
+				require.Len(t, cookies, 2)
+				require.Equal(t, "/admin-mcp", cookies[1].Path)
+				require.True(t, cookies[1].Secure)
+				require.True(t, cookies[1].HttpOnly)
+			} else {
+				require.Len(t, cookies, 1)
+			}
+			require.Empty(t, cookies[0].Path, "dashboard cookie retains its default /admin scope")
+			if tc.sessionID == "" {
+				return
+			}
+			jar.SetCookies(callback, cookies)
+			for _, path := range []string{"/admin/session.get", "/admin/auth.logout", "/admin-mcp/connect", "/"} {
+				requestURL := *callback
+				requestURL.Path = path
+				cookies := jar.Cookies(&requestURL)
+				if path == "/" || (path == "/admin-mcp/connect" && !tc.mcp) {
+					require.Empty(t, cookies)
+					continue
+				}
+				require.Len(t, cookies, 1, path)
+				require.Equal(t, constants.AdminSessionCookie, cookies[0].Name)
+				require.Equal(t, "test-session", cookies[0].Value)
+			}
+		})
+	}
 }
 
 func TestGetSession_HTTPContract(t *testing.T) {
