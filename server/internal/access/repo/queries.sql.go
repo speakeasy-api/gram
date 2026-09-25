@@ -1662,8 +1662,7 @@ type ListDirectoryMappedRoleMemberCountsRow struct {
 // Per role, the active members who hold it only through a directory role
 // mapping. Members with a live direct assignment of the same role are left
 // out, so callers add this to the direct member count. Each member's
-// directory profile is chosen the same way as in
-// ListDirectoryRoleMappingPrincipalsByUser.
+// directory profile is chosen the same way as in ListUserRolePrincipals.
 func (q *Queries) ListDirectoryMappedRoleMemberCounts(ctx context.Context, organizationID string) ([]ListDirectoryMappedRoleMemberCountsRow, error) {
 	rows, err := q.db.Query(ctx, listDirectoryMappedRoleMemberCounts, organizationID)
 	if err != nil {
@@ -1677,98 +1676,6 @@ func (q *Queries) ListDirectoryMappedRoleMemberCounts(ctx context.Context, organ
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listDirectoryRoleMappingPrincipalsByUser = `-- name: ListDirectoryRoleMappingPrincipalsByUser :many
-WITH member AS (
-  SELECT u.id, u.email
-  FROM users AS u
-  WHERE u.id = $2
-),
-profile AS (
-  SELECT d.id, d.attributes
-  FROM directory_users AS d
-  CROSS JOIN member
-  WHERE d.organization_id = $1
-    AND d.deleted IS FALSE
-    AND d.workos_deleted IS FALSE
-    AND (d.user_id = member.id OR LOWER(d.email) = LOWER(member.email))
-  ORDER BY (d.user_id = member.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
-  LIMIT 1
-)
-SELECT DISTINCT drm.role_urn::text AS principal_urn
-FROM directory_role_mappings AS drm
-CROSS JOIN profile
-WHERE drm.organization_id = $1
-  AND drm.deleted IS FALSE
-  AND (
-    (
-      drm.source_kind = 'group'
-      AND EXISTS (
-        SELECT 1
-        FROM directory_user_group_memberships AS m
-        JOIN directory_groups AS dg
-          ON dg.id = m.directory_group_id
-          AND dg.organization_id = drm.organization_id
-          AND dg.deleted IS FALSE
-          AND dg.workos_deleted IS FALSE
-        WHERE m.directory_user_id = profile.id
-          AND m.directory_group_id = drm.directory_group_id
-          AND m.deleted IS FALSE
-      )
-    )
-    OR (
-      drm.source_kind = 'attribute'
-      AND profile.attributes ->> drm.attribute_key = drm.attribute_value
-    )
-  )
-  AND (
-    EXISTS (
-      SELECT 1
-      FROM organization_roles AS r
-      WHERE drm.role_urn = 'role:organization:' || r.id::text
-        AND r.organization_id = drm.organization_id
-        AND r.deleted IS FALSE
-        AND r.workos_deleted IS FALSE
-    )
-    OR EXISTS (
-      SELECT 1
-      FROM global_roles AS g
-      WHERE drm.role_urn = 'role:global:' || g.id::text
-        AND g.deleted IS FALSE
-        AND g.workos_deleted IS FALSE
-    )
-  )
-`
-
-type ListDirectoryRoleMappingPrincipalsByUserParams struct {
-	OrganizationID string
-	UserID         string
-}
-
-// Roles granted to a member through directory role mappings: every live
-// mapping whose group contains the member's directory profile, or whose
-// attribute value matches it. The profile is the directory user linked to the
-// member, falling back to an email match. Mappings that point at a deleted
-// role are skipped.
-func (q *Queries) ListDirectoryRoleMappingPrincipalsByUser(ctx context.Context, arg ListDirectoryRoleMappingPrincipalsByUserParams) ([]string, error) {
-	rows, err := q.db.Query(ctx, listDirectoryRoleMappingPrincipalsByUser, arg.OrganizationID, arg.UserID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var principal_urn string
-		if err := rows.Scan(&principal_urn); err != nil {
-			return nil, err
-		}
-		items = append(items, principal_urn)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2464,6 +2371,128 @@ func (q *Queries) ListRetainedResolvedChallengeIDs(ctx context.Context, organiza
 			return nil, err
 		}
 		items = append(items, challenge_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserRolePrincipals = `-- name: ListUserRolePrincipals :many
+WITH direct AS (
+  SELECT
+    COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+    ora.role_urn::text AS principal_urn
+  FROM organization_role_assignments AS ora
+  LEFT JOIN organization_roles
+    ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+    AND organization_roles.organization_id = ora.organization_id
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  LEFT JOIN global_roles
+    ON ora.role_urn = 'role:global:' || global_roles.id::text
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+  WHERE ora.organization_id = $1
+    AND ora.user_id = $2::text
+    AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+    AND ora.deleted_at IS NULL
+),
+member AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  WHERE u.id = $2::text
+),
+profile AS (
+  SELECT d.id, d.attributes
+  FROM directory_users AS d
+  CROSS JOIN member
+  WHERE d.organization_id = $1
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = member.id OR LOWER(d.email) = LOWER(member.email))
+  ORDER BY (d.user_id = member.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+),
+mapped AS (
+  SELECT DISTINCT drm.role_urn::text AS principal_urn
+  FROM directory_role_mappings AS drm
+  CROSS JOIN profile
+  WHERE drm.organization_id = $1
+    AND drm.deleted IS FALSE
+    AND (
+      (
+        drm.source_kind = 'group'
+        AND EXISTS (
+          SELECT 1
+          FROM directory_user_group_memberships AS m
+          JOIN directory_groups AS dg
+            ON dg.id = m.directory_group_id
+            AND dg.organization_id = drm.organization_id
+            AND dg.deleted IS FALSE
+            AND dg.workos_deleted IS FALSE
+          WHERE m.directory_user_id = profile.id
+            AND m.directory_group_id = drm.directory_group_id
+            AND m.deleted IS FALSE
+        )
+      )
+      OR (
+        drm.source_kind = 'attribute'
+        AND profile.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    )
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM organization_roles AS r
+        WHERE drm.role_urn = 'role:organization:' || r.id::text
+          AND r.organization_id = drm.organization_id
+          AND r.deleted IS FALSE
+          AND r.workos_deleted IS FALSE
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM global_roles AS g
+        WHERE drm.role_urn = 'role:global:' || g.id::text
+          AND g.deleted IS FALSE
+          AND g.workos_deleted IS FALSE
+      )
+    )
+)
+SELECT principal_urn::text AS principal_urn
+FROM (
+  SELECT 0 AS source_rank, role_slug AS sort_key, principal_urn FROM direct
+  UNION ALL
+  SELECT 1 AS source_rank, principal_urn AS sort_key, principal_urn FROM mapped
+) AS roles
+ORDER BY source_rank, sort_key
+`
+
+type ListUserRolePrincipalsParams struct {
+	OrganizationID string
+	UserID         string
+}
+
+// Every role principal a member holds, in one read: direct role assignments
+// first (the same rows as ListMemberRolePrincipalsByUser), then roles granted
+// through directory role mappings. A mapping applies when its group contains
+// the member's directory profile, or its attribute value matches it. The
+// profile is the directory user linked to the member, falling back to an
+// email match. Mappings that point at a deleted role are skipped. Callers
+// dedupe roles that come from both sources.
+func (q *Queries) ListUserRolePrincipals(ctx context.Context, arg ListUserRolePrincipalsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listUserRolePrincipals, arg.OrganizationID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var principal_urn string
+		if err := rows.Scan(&principal_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, principal_urn)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

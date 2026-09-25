@@ -92,8 +92,9 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 		urn.NewPrincipal(urn.PrincipalTypeUser, userID).String(): {},
 	}
 
-	q := repo.New(db)
-	roleRows, err := q.ListMemberRolePrincipalsByUser(ctx, repo.ListMemberRolePrincipalsByUserParams{
+	// Direct role assignments come first, then roles granted through
+	// directory role mappings.
+	roleURNs, err := repo.New(db).ListUserRolePrincipals(ctx, repo.ListUserRolePrincipalsParams{
 		OrganizationID: organizationID,
 		UserID:         userID,
 	})
@@ -101,29 +102,7 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 		return nil, fmt.Errorf("resolve role principals: %w", err)
 	}
 
-	for _, role := range roleRows {
-		principal, err := parseRolePrincipalURN(role.PrincipalUrn)
-		if err != nil {
-			return nil, err
-		}
-		key := principal.String()
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		principals = append(principals, principal)
-	}
-
-	// Directory role mappings add roles on top of the ones WorkOS assigns.
-	mappedRoleURNs, err := q.ListDirectoryRoleMappingPrincipalsByUser(ctx, repo.ListDirectoryRoleMappingPrincipalsByUserParams{
-		OrganizationID: organizationID,
-		UserID:         userID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("resolve directory role mapping principals: %w", err)
-	}
-
-	for _, raw := range mappedRoleURNs {
+	for _, raw := range roleURNs {
 		principal, err := parseRolePrincipalURN(raw)
 		if err != nil {
 			return nil, err

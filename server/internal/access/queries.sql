@@ -1225,16 +1225,37 @@ ORDER BY LOWER(name), id;
 -- global_roles and has no per-organization row to lock.
 SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || sqlc.arg(role_urn)::text, 0));
 
--- name: ListDirectoryRoleMappingPrincipalsByUser :many
--- Roles granted to a member through directory role mappings: every live
--- mapping whose group contains the member's directory profile, or whose
--- attribute value matches it. The profile is the directory user linked to the
--- member, falling back to an email match. Mappings that point at a deleted
--- role are skipped.
-WITH member AS (
+-- name: ListUserRolePrincipals :many
+-- Every role principal a member holds, in one read: direct role assignments
+-- first (the same rows as ListMemberRolePrincipalsByUser), then roles granted
+-- through directory role mappings. A mapping applies when its group contains
+-- the member's directory profile, or its attribute value matches it. The
+-- profile is the directory user linked to the member, falling back to an
+-- email match. Mappings that point at a deleted role are skipped. Callers
+-- dedupe roles that come from both sources.
+WITH direct AS (
+  SELECT
+    COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+    ora.role_urn::text AS principal_urn
+  FROM organization_role_assignments AS ora
+  LEFT JOIN organization_roles
+    ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+    AND organization_roles.organization_id = ora.organization_id
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  LEFT JOIN global_roles
+    ON ora.role_urn = 'role:global:' || global_roles.id::text
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+  WHERE ora.organization_id = @organization_id
+    AND ora.user_id = sqlc.arg(user_id)::text
+    AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+    AND ora.deleted_at IS NULL
+),
+member AS (
   SELECT u.id, u.email
   FROM users AS u
-  WHERE u.id = @user_id
+  WHERE u.id = sqlc.arg(user_id)::text
 ),
 profile AS (
   SELECT d.id, d.attributes
@@ -1246,57 +1267,65 @@ profile AS (
     AND (d.user_id = member.id OR LOWER(d.email) = LOWER(member.email))
   ORDER BY (d.user_id = member.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
   LIMIT 1
-)
-SELECT DISTINCT drm.role_urn::text AS principal_urn
-FROM directory_role_mappings AS drm
-CROSS JOIN profile
-WHERE drm.organization_id = @organization_id
-  AND drm.deleted IS FALSE
-  AND (
-    (
-      drm.source_kind = 'group'
-      AND EXISTS (
-        SELECT 1
-        FROM directory_user_group_memberships AS m
-        JOIN directory_groups AS dg
-          ON dg.id = m.directory_group_id
-          AND dg.organization_id = drm.organization_id
-          AND dg.deleted IS FALSE
-          AND dg.workos_deleted IS FALSE
-        WHERE m.directory_user_id = profile.id
-          AND m.directory_group_id = drm.directory_group_id
-          AND m.deleted IS FALSE
+),
+mapped AS (
+  SELECT DISTINCT drm.role_urn::text AS principal_urn
+  FROM directory_role_mappings AS drm
+  CROSS JOIN profile
+  WHERE drm.organization_id = @organization_id
+    AND drm.deleted IS FALSE
+    AND (
+      (
+        drm.source_kind = 'group'
+        AND EXISTS (
+          SELECT 1
+          FROM directory_user_group_memberships AS m
+          JOIN directory_groups AS dg
+            ON dg.id = m.directory_group_id
+            AND dg.organization_id = drm.organization_id
+            AND dg.deleted IS FALSE
+            AND dg.workos_deleted IS FALSE
+          WHERE m.directory_user_id = profile.id
+            AND m.directory_group_id = drm.directory_group_id
+            AND m.deleted IS FALSE
+        )
+      )
+      OR (
+        drm.source_kind = 'attribute'
+        AND profile.attributes ->> drm.attribute_key = drm.attribute_value
       )
     )
-    OR (
-      drm.source_kind = 'attribute'
-      AND profile.attributes ->> drm.attribute_key = drm.attribute_value
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM organization_roles AS r
+        WHERE drm.role_urn = 'role:organization:' || r.id::text
+          AND r.organization_id = drm.organization_id
+          AND r.deleted IS FALSE
+          AND r.workos_deleted IS FALSE
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM global_roles AS g
+        WHERE drm.role_urn = 'role:global:' || g.id::text
+          AND g.deleted IS FALSE
+          AND g.workos_deleted IS FALSE
+      )
     )
-  )
-  AND (
-    EXISTS (
-      SELECT 1
-      FROM organization_roles AS r
-      WHERE drm.role_urn = 'role:organization:' || r.id::text
-        AND r.organization_id = drm.organization_id
-        AND r.deleted IS FALSE
-        AND r.workos_deleted IS FALSE
-    )
-    OR EXISTS (
-      SELECT 1
-      FROM global_roles AS g
-      WHERE drm.role_urn = 'role:global:' || g.id::text
-        AND g.deleted IS FALSE
-        AND g.workos_deleted IS FALSE
-    )
-  );
+)
+SELECT principal_urn::text AS principal_urn
+FROM (
+  SELECT 0 AS source_rank, role_slug AS sort_key, principal_urn FROM direct
+  UNION ALL
+  SELECT 1 AS source_rank, principal_urn AS sort_key, principal_urn FROM mapped
+) AS roles
+ORDER BY source_rank, sort_key;
 
 -- name: ListDirectoryMappedRoleMemberCounts :many
 -- Per role, the active members who hold it only through a directory role
 -- mapping. Members with a live direct assignment of the same role are left
 -- out, so callers add this to the direct member count. Each member's
--- directory profile is chosen the same way as in
--- ListDirectoryRoleMappingPrincipalsByUser.
+-- directory profile is chosen the same way as in ListUserRolePrincipals.
 WITH members AS (
   SELECT u.id, u.email
   FROM users AS u
