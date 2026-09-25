@@ -6,6 +6,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 /** Ownership independently permits reads; let the server filter the inventory. */
 export function useReadableAgents(
   enabled: boolean,
+  refetchInterval?: number,
 ): UseQueryResult<ManagedAgent[], Error> {
   const organization = useOrganization();
   const sdk = useSdkClient();
@@ -17,5 +18,6 @@ export function useReadableAgents(
     enabled,
     throwOnError: false,
     retry: false,
+    refetchInterval,
   });
 }

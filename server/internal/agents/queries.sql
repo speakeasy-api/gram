@@ -228,6 +228,55 @@ JOIN organization_user_relationships AS membership
  AND membership.deleted_at IS NULL
 WHERE u.id = ANY(@owner_user_ids::text[]) AND u.deleted_at IS NULL;
 
+-- name: BatchManagedAgentCredentialLastUsed :many
+-- This aggregate retains historical authentication evidence after credential
+-- revocation or expiry. Inputs contain only subjects whose credentials the
+-- caller may manage. Session and API-key subjects use distinct URN formats.
+WITH session_use AS (
+  SELECT s.subject_urn::text AS subject, MAX(s.last_used_at)::timestamptz AS last_used_at
+  FROM user_sessions AS s
+  JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+  LEFT JOIN projects AS p ON p.id = iss.project_id
+  LEFT JOIN projects AS session_project ON session_project.id = s.project_id
+  WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id, session_project.organization_id) = @organization_id::text
+    AND (s.organization_id IS NULL OR s.organization_id = @organization_id::text)
+    AND (iss.organization_id IS NULL OR iss.organization_id = @organization_id::text)
+    AND (p.organization_id IS NULL OR p.organization_id = @organization_id::text)
+    AND (session_project.organization_id IS NULL OR session_project.organization_id = @organization_id::text)
+    AND s.subject_urn = ANY(@session_subjects::text[])
+    AND s.last_used_at IS NOT NULL
+  GROUP BY s.subject_urn
+), key_use AS (
+  SELECT k.subject_urn::text AS subject, MAX(k.last_accessed_at)::timestamptz AS last_used_at
+  FROM api_keys AS k
+  LEFT JOIN projects AS p ON p.id = k.project_id
+  WHERE k.organization_id = @organization_id::text
+    AND (p.organization_id IS NULL OR p.organization_id = @organization_id::text)
+    AND k.subject_urn = ANY(@key_subjects::text[])
+    AND k.last_accessed_at IS NOT NULL
+  GROUP BY k.subject_urn
+)
+SELECT 'session'::text AS source, subject, last_used_at FROM session_use
+UNION ALL
+SELECT 'key'::text AS source, subject, last_used_at FROM key_use;
+
+-- name: SeedAgentCredentialSessionActivityFixture :exec
+-- Synthetic credential history, including legacy tenancy and revoked rows.
+INSERT INTO user_sessions
+  (id, organization_id, project_id, user_session_issuer_id, subject_urn,
+   jti, expires_at, refresh_expires_at, last_used_at, deleted_at)
+VALUES (@id, sqlc.narg('organization_id'), sqlc.narg('project_id'), @issuer_id,
+        @subject, @jti, @expires_at, @expires_at, sqlc.narg('last_used_at'), sqlc.narg('deleted_at'));
+
+-- name: SeedAgentCredentialKeyActivityFixture :exec
+-- Synthetic key history; no usable credential is minted by this fixture.
+INSERT INTO api_keys
+  (id, organization_id, project_id, created_by_user_id, name, key_prefix,
+   key_hash, subject_urn, last_accessed_at, deleted_at, expires_at)
+VALUES (@id, @organization_id, sqlc.narg('project_id'), @owner_user_id, @name,
+        'fixture', @key_hash, sqlc.narg('subject'), sqlc.narg('last_used_at'),
+        sqlc.narg('deleted_at'), @expires_at);
+
 -- name: ListManagedAgentSessions :many
 -- All known tenancy sources must agree before legacy fallback.
 SELECT s.id, s.project_id, s.user_session_issuer_id, iss.slug AS issuer_slug,

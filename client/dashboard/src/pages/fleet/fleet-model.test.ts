@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { Assistant } from "@gram/client/models/components/assistant.js";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
-import { buildFleetRows, fleetDirectory } from "./fleet-model";
+import {
+  buildFleetRows,
+  fleetDirectory,
+  recentFleetRows,
+  FLEET_WINDOW_MS,
+} from "./fleet-model";
 
 const now = new Date("2026-09-01T12:00:00Z");
 const agent: ManagedAgent = {
@@ -136,5 +141,62 @@ describe("Fleet attribution", () => {
         .find((branch) => branch.id === "user:shared")
         ?.rows.map((row) => row.id),
     ).toEqual(["agent:shared", "session:directory"]);
+  });
+});
+
+describe("Fleet observed activity window", () => {
+  it("includes the boundary and server clock skew, excludes older and unknown activity", () => {
+    const boundary = new Date(now.getTime() - FLEET_WINDOW_MS);
+    const rows = buildFleetRows({
+      ...input,
+      sessions: [],
+      assistants: [],
+      agents: [
+        { ...agent, id: "boundary", lastCredentialUsedAt: boundary },
+        {
+          ...agent,
+          id: "old",
+          lastCredentialUsedAt: new Date(boundary.getTime() - 1),
+        },
+        {
+          ...agent,
+          id: "ahead",
+          lastCredentialUsedAt: new Date(now.getTime() + 60_000),
+        },
+        { ...agent, id: "profile-only" },
+      ],
+    });
+    const recent = recentFleetRows(rows, now.getTime());
+    expect(recent.map((row) => row.id)).toEqual([
+      "agent:boundary",
+      "agent:ahead",
+    ]);
+    expect(
+      fleetDirectory(recent).flatMap((department) =>
+        department.identities.flatMap((identity) =>
+          identity.rows.map((row) => row.id),
+        ),
+      ),
+    ).toEqual(["agent:boundary", "agent:ahead"]);
+  });
+  it("uses only explicit loaded captures for assistants after paging or searching", () => {
+    const firstPage = recentFleetRows(buildFleetRows(input), now.getTime());
+    expect(firstPage.map((row) => row.id)).toEqual([
+      "assistant:same-id",
+      "session:same-id",
+    ]);
+    const otherPage = recentFleetRows(
+      buildFleetRows({
+        ...input,
+        sessions: [{ ...session, id: "other", assistantId: undefined }],
+      }),
+      now.getTime(),
+    );
+    expect(otherPage.map((row) => row.id)).toEqual(["session:other"]);
+    const noSearchMatches = recentFleetRows(
+      buildFleetRows({ ...input, sessions: [] }),
+      now.getTime(),
+    );
+    expect(noSearchMatches).toEqual([]);
   });
 });

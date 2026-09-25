@@ -37,18 +37,20 @@ export function buildFleetRows({
   sessions,
   members,
   projectId,
+  observedAssistantActivity,
 }: {
   agents: ManagedAgent[];
   assistants: Assistant[];
   sessions: ChatOverview[];
   members: AccessMember[];
   projectId: string;
+  observedAssistantActivity?: ReadonlyMap<string, Date>;
 }): FleetRow[] {
   const people = new Map(members.map((member) => [member.id, member]));
   const assistantById = new Map(
     assistants.map((assistant) => [assistant.id, assistant]),
   );
-  const assistantActivity = new Map<string, Date>();
+  const assistantActivity = new Map(observedAssistantActivity);
   for (const session of sessions) {
     if (!session.assistantId) continue;
     const previous = assistantActivity.get(session.assistantId);
@@ -77,6 +79,7 @@ export function buildFleetRows({
         personRole: "Owner",
         ...owner(agent.ownerUserId, agent.ownerProfile?.displayName),
         actingIdentity: `agent:${agent.id}`,
+        lastActivity: agent.lastCredentialUsedAt,
         agent,
       })),
     ...assistants
@@ -127,6 +130,16 @@ export function buildFleetRows({
       };
     }),
   ];
+}
+
+export const FLEET_WINDOW_MS = 24 * 60 * 60 * 1_000;
+
+/** Both views use observed timestamps; profile creation/edits are not activity. */
+export function recentFleetRows(rows: FleetRow[], now: number): FleetRow[] {
+  return rows.filter((row) => {
+    const timestamp = row.lastActivity?.getTime();
+    return timestamp != null && timestamp >= now - FLEET_WINDOW_MS;
+  });
 }
 
 export type FleetDepartment = {

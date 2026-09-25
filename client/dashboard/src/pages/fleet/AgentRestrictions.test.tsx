@@ -1,6 +1,6 @@
 import { agentRestrictionLabel } from "./fleet-model";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter, useLocation } from "react-router";
+import { BrowserRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentRestrictions, AgentRestrictionRecord } from "./AgentRestrictions";
 
@@ -68,15 +68,17 @@ function Location() {
   return <output>{useLocation().search}</output>;
 }
 function list() {
+  window.history.replaceState(null, "", "/?selected=agent:a&source=agent");
   return render(
-    <MemoryRouter initialEntries={["/?selected=agent:a&source=agent"]}>
+    <BrowserRouter>
       <AgentRestrictions agents={[]} inventoryAvailable={false} />
       <Location />
-    </MemoryRouter>,
+    </BrowserRouter>,
   );
 }
 afterEach(cleanup);
 beforeEach(() => {
+  window.history.replaceState(null, "", "/");
   mocks.error = undefined;
   vi.clearAllMocks();
 });
@@ -110,7 +112,7 @@ describe("Agent restriction recovery", () => {
   it("refuses another agent's restriction in a scoped inspector", () => {
     const close = vi.fn();
     render(
-      <MemoryRouter>
+      <BrowserRouter>
         <AgentRestrictionRecord
           id="restriction-1"
           expectedAgentId="different"
@@ -121,7 +123,7 @@ describe("Agent restriction recovery", () => {
             close();
           }}
         />
-      </MemoryRouter>,
+      </BrowserRouter>,
     );
     expect(screen.getByRole("alert").textContent).toContain("different agent");
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
@@ -138,7 +140,7 @@ describe("Agent restriction recovery", () => {
       "Deleted or unavailable agent · agent-12",
     );
     render(
-      <MemoryRouter>
+      <BrowserRouter>
         <AgentRestrictionRecord
           id="restriction-1"
           agents={[]}
@@ -146,7 +148,7 @@ describe("Agent restriction recovery", () => {
           onSelect={() => {}}
           onClose={() => {}}
         />
-      </MemoryRouter>,
+      </BrowserRouter>,
     );
     expect(
       screen.getByRole("button", { name: "Release restriction" }),

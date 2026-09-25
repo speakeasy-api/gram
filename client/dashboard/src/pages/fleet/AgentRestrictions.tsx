@@ -1,3 +1,4 @@
+import { useFleetParamUpdate } from "./useFleetParamUpdate";
 import { agentRestrictionLabel } from "./fleet-model";
 import { useMemo } from "react";
 import { useSearchParams } from "react-router";
@@ -25,7 +26,8 @@ export function AgentRestrictions({
 }): JSX.Element {
   const session = useSession();
   const security = { sessionHeaderGramSession: session.session };
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
+  const update = useFleetParamUpdate();
   const selected = params.get("restriction");
   const list = useKillswitchesInfinite(
     security,
@@ -56,16 +58,7 @@ export function AgentRestrictions({
       ),
     [servers.data],
   );
-  const select = (id?: string) =>
-    setParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        if (id) next.set("restriction", id);
-        else next.delete("restriction");
-        return next;
-      },
-      { replace: true },
-    );
+  const select = (id?: string) => update({ restriction: id ?? null }, true);
   const columns: Column<KillswitchSummary>[] = [
     {
       key: "agent",

@@ -259,8 +259,14 @@ type ManagedAgent struct {
 	ProjectID   *string
 	Lifecycle   AgentLifecycle
 	Permissions *AgentPermissions
-	CreatedAt   string
-	UpdatedAt   string
+	// Most recent successful authentication of this agent's credential sessions or
+	// API keys at Gram in this organization, at 1–5 minute resolution. Includes
+	// credentials since revoked or expired. Populated by agents.list only for
+	// callers who can manage the agent's credentials; absent when unknown or
+	// unauthorized. Not run, process, or tool-call activity.
+	LastCredentialUsedAt *string
+	CreatedAt            string
+	UpdatedAt            string
 }
 
 // ReassignPayload is the payload type of the agents service reassign method.

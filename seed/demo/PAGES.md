@@ -224,8 +224,14 @@ dashboard, provider acceptance, or usable human access is demonstrated.
 
 ### Fleet and agent MCP restrictions — `[~]`
 
-Fleet combines registered identities (including those without observed runs),
-configured assistants when available, and paged captured sessions. Directory
+Fleet shows observed activity in the last 24 hours: registered agents with a
+permission-visible credential authentication timestamp, assistants linked explicitly
+from captured-session pages loaded during this visit, and paged captured sessions. Registration
+or profile edits do not count. The seeded release assistant has a credential
+authentication 20 minutes ago, retained even though its access token has expired;
+other registered identities without observed credential use are omitted from
+the collection. Credential timestamps are organization-wide and visible only
+to callers who can manage the agent’s credentials. Directory
 branches use owner, creator, and captured-user roles separately. Captured sessions
 have no registered-agent binding, even when a name or person matches. The existing
 assistant empty state is intentional.
@@ -239,7 +245,9 @@ credential sessions, independent of registration suspension and execution state.
 
 Verify phone rows, source selection, Directory branches, inspector Back focus,
 transcript/Security links, selected-server confirmation, overlap-preserving Release,
-and organization-wide restrictions. The exact `/killswitch/:id` record and the
+and organization-wide restrictions, which remain available regardless of activity
+age. Check that polling preserves selection, search focus and loaded rows while
+refreshing the time bound. The exact `/killswitch/:id` record and the
 no-project-read `/killswitch` recovery list need no agent inventory or rollout.
 A query failure must offer Retry rather than claim no restrictions.
 

@@ -7,8 +7,11 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -153,4 +156,26 @@ func newTestService(conn *pgxpool.Pool, engine authorizationEngine) *Service {
 		authorizer: NewAuthorizer(engine),
 		audit:      audit.NewLogger(),
 	}
+}
+
+type activityQueryCounter struct{ count atomic.Int64 }
+
+func (c *activityQueryCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	if strings.HasPrefix(data.SQL, "-- name: BatchManagedAgentCredentialLastUsed") {
+		c.count.Add(1)
+	}
+	return ctx
+}
+func (*activityQueryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
+func newActivityTracedTestDB(t *testing.T) (*pgxpool.Pool, *atomic.Int64) {
+	t.Helper()
+	base := newTestDB(t)
+	config := base.Config()
+	tracer := new(activityQueryCounter)
+	config.ConnConfig.Tracer = tracer
+	conn, err := pgxpool.NewWithConfig(t.Context(), config)
+	require.NoError(t, err)
+	t.Cleanup(conn.Close)
+	return conn, &tracer.count
 }

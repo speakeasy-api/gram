@@ -401,6 +401,7 @@ func (s *Service) ownerProfile(ctx context.Context, db repo.DBTX, organizationID
 func managedAgentView(agent repo.Agent, permissions AgentPermissions, ownerProfile *gen.AgentOwnerProfile) *gen.ManagedAgent {
 	result := &gen.ManagedAgent{
 		OwnerProfile:                ownerProfile,
+		LastCredentialUsedAt:        nil,
 		ID:                          agent.ID.String(),
 		OwnerUserID:                 agent.OwnerUserID,
 		OwnerReassignmentRequiredAt: nil,

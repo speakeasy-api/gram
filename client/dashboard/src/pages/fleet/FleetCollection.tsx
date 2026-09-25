@@ -104,7 +104,7 @@ export function FleetCollection({
         })}
         {!rows.length && (
           <p className="p-4 text-sm">
-            No agents or sessions match these filters.
+            No observed activity in the last 24 hours matches these filters.
           </p>
         )}
       </div>
@@ -154,7 +154,7 @@ export function FleetCollection({
       ))}
       {!rows.length && (
         <p className="p-4 text-sm">
-          No agents or sessions match these filters.
+          No observed activity in the last 24 hours matches these filters.
         </p>
       )}
     </div>
@@ -193,8 +193,9 @@ function LastActivity({ row }: { row: FleetRow }): JSX.Element {
     <time
       className="text-muted-foreground text-xs"
       dateTime={row.lastActivity.toISOString()}
-      title={row.lastActivity.toLocaleString()}
+      title={`${row.lastActivity.toLocaleString()}${row.agent ? " · Credential authenticated, organization-wide" : ""}`}
     >
+      {row.agent && "Credential authenticated · "}
       {formatDistanceToNow(row.lastActivity, { addSuffix: true })}
     </time>
   ) : (

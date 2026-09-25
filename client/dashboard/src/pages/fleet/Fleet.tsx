@@ -5,10 +5,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { restoreFleetFocus } from "./fleet-focus";
-import { useMemo, useRef } from "react";
+import {
+  restoreFleetFocus,
+  restoreFleetFocusAfterRemoval,
+} from "./fleet-focus";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Link, useSearchParams } from "react-router";
-import { useQuery } from "@tanstack/react-query";
+import { hashKey, keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ResourceListPage } from "@/components/page-templates";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
@@ -26,7 +29,10 @@ import { useRoutes } from "@/routes";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useMembers } from "@gram/client/react-query/members.js";
-import { buildFleetRows } from "./fleet-model";
+import { buildFleetRows, recentFleetRows } from "./fleet-model";
+import { useObservedAssistantActivity } from "./useObservedAssistantActivity";
+import { useFleetParamUpdate } from "./useFleetParamUpdate";
+import { useFleetWindow } from "./useFleetWindow";
 import { FleetCollection } from "./FleetCollection";
 import { FleetInspector } from "./FleetInspector";
 import { AgentRestrictions } from "./AgentRestrictions";
@@ -56,7 +62,7 @@ function FleetPage(): JSX.Element {
   const access = useKillswitchAccess();
   const agentFlag = useFeatureFlag(FEATURE_FLAGS.agentManagement);
   const assistantFlag = useFeatureFlag(FEATURE_FLAGS.assistants);
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const q = params.get("q") ?? "";
   const source = params.get("source") ?? "all";
   const view = params.get("view") === "directory" ? "directory" : "list";
@@ -66,41 +72,72 @@ function FleetPage(): JSX.Element {
   );
   const selected = params.get("selected");
   const restrictions = params.get("tab") === "restrictions";
+  const { now, from, refreshWindow } = useFleetWindow();
+  const activityContext = JSON.stringify([
+    organization.id,
+    session.user.id,
+    project.id,
+  ]);
+  const queryKeyHashFn = useCallback(
+    (key: readonly unknown[]) => hashKey([activityContext, key]),
+    [activityContext],
+  );
   const originatingRow = useRef<string | null>(null);
-  const update = (values: Record<string, string | null>, replace = false) =>
-    setParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        for (const [key, value] of Object.entries(values)) {
-          if (value == null) next.delete(key);
-          else next.set(key, value);
-        }
-        return next;
-      },
-      { replace },
-    );
-  const agents = useReadableAgents(agentFlag.status === "enabled");
-  const assistants = useAssistantsList(undefined, undefined, {
-    enabled: assistantFlag.status === "enabled" && hasScope("project:read"),
-    throwOnError: false,
-    retry: false,
-    refetchInterval: 30_000,
-  });
+  const update = useFleetParamUpdate();
+  const changeSearch = useCallback(
+    (value: string) => update({ q: value || null, offset: null }, true),
+    [update],
+  );
+  const agents = useReadableAgents(agentFlag.status === "enabled", 30_000);
+  const assistants = useAssistantsList(
+    { gramProject: project.slug },
+    undefined,
+    {
+      queryKeyHashFn,
+      enabled: assistantFlag.status === "enabled" && hasScope("project:read"),
+      throwOnError: false,
+      retry: false,
+      refetchInterval: 30_000,
+    },
+  );
   const members = useMembers(undefined, undefined, {
     enabled: hasScope("org:read"),
     throwOnError: false,
     retry: false,
   });
+  const chatContext = JSON.stringify([
+    organization.id,
+    session.user.id,
+    project.id,
+    q,
+    offset,
+  ]);
   const chats = useListChats(
     {
+      gramProject: project.slug,
       limit: PAGE_SIZE,
       offset,
+      from,
       search: q || undefined,
       sortBy: "last_message_timestamp",
       sortOrder: "desc",
     },
     undefined,
-    { throwOnError: false, retry: false, refetchInterval: 30_000 },
+    {
+      throwOnError: false,
+      retry: false,
+      queryKeyHashFn,
+      meta: { fleetContext: chatContext },
+      placeholderData: (previous, query) =>
+        query?.meta?.fleetContext === chatContext
+          ? keepPreviousData(previous)
+          : undefined,
+    },
+  );
+  const observedAssistantActivity = useObservedAssistantActivity(
+    activityContext,
+    chats.data?.chats,
+    now,
   );
   const rows = useMemo(
     () =>
@@ -110,10 +147,19 @@ function FleetPage(): JSX.Element {
         sessions: chats.data?.chats ?? [],
         members: members.data?.members ?? [],
         projectId: project.id,
+        observedAssistantActivity,
       }),
-    [agents.data, assistants.data, chats.data, members.data, project.id],
+    [
+      agents.data,
+      assistants.data,
+      chats.data,
+      members.data,
+      project.id,
+      observedAssistantActivity,
+    ],
   );
-  const filtered = rows.filter(
+  const recentRows = recentFleetRows(rows, now);
+  const filtered = recentRows.filter(
     (row) =>
       (source === "all" || row.source === source) &&
       (row.source === "session" ||
@@ -121,7 +167,7 @@ function FleetPage(): JSX.Element {
           .toLowerCase()
           .includes(q.toLowerCase())),
   );
-  const agentIds = rows
+  const agentIds = recentRows
     .flatMap((row) => (row.agent ? [row.agent.id] : []))
     .sort();
   const badges = useQuery({
@@ -157,6 +203,30 @@ function FleetPage(): JSX.Element {
       .map((badge) => `agent:${badge.agentId}`) ?? [],
   );
   const selectedRow = filtered.find((row) => row.id === selected);
+  const previousSelection = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (previousSelection.current && !selectedRow)
+      restoreFleetFocusAfterRemoval(previousSelection.current);
+    previousSelection.current = selectedRow?.id;
+  }, [selectedRow]);
+  useEffect(() => {
+    if (
+      chats.isSuccess &&
+      !chats.isFetching &&
+      !chats.isPlaceholderData &&
+      offset > 0 &&
+      offset >= chats.data.total
+    ) {
+      update({ offset: null }, true);
+    }
+  }, [
+    chats.isSuccess,
+    chats.isFetching,
+    chats.isPlaceholderData,
+    chats.data?.total,
+    offset,
+    update,
+  ]);
   const select = (id: string) => {
     originatingRow.current = id;
     update({ selected: id, detail: null, restriction: null });
@@ -167,6 +237,7 @@ function FleetPage(): JSX.Element {
     requestAnimationFrame(() => restoreFleetFocus(id));
   };
   const refresh = () => {
+    refreshWindow();
     void Promise.all([
       chats.refetch(),
       ...(agentFlag.status === "enabled" ? [agents.refetch()] : []),
@@ -186,7 +257,11 @@ function FleetPage(): JSX.Element {
     <ResourceListPage
       title="Fleet"
       area="Observability"
-      description={`Agents and captured sessions in ${project.name}. Organization-wide identities are included.`}
+      description={
+        restrictions
+          ? "Organization-wide agent restrictions, regardless of activity age."
+          : `Observed activity in ${project.name} over the last 24 hours. Agent credential use is organization-wide.`
+      }
       hideToolbar
       primaryAction={
         agentFlag.status === "enabled" ? (
@@ -201,9 +276,7 @@ function FleetPage(): JSX.Element {
           <Page.Toolbar.Row>
             <Page.Toolbar.Search
               value={q}
-              onChange={(value) =>
-                update({ q: value || null, offset: null }, true)
-              }
+              onChange={changeSearch}
               placeholder="Search Fleet"
               debounceMs={300}
             />
@@ -312,8 +385,10 @@ function FleetPage(): JSX.Element {
           <>
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
               <span>
-                {filtered.length} loaded items · {chats.data?.total ?? "…"}{" "}
-                captured sessions match the search
+                Last 24 hours · {filtered.length} loaded{" "}
+                {filtered.length === 1 ? "item" : "items"} ·{" "}
+                {chats.data?.total ?? "…"} captured sessions match the search
+                and time window
               </span>
               <span>
                 Last refresh{" "}
@@ -348,7 +423,7 @@ function FleetPage(): JSX.Element {
               {selectedRow && (
                 <FleetInspector
                   row={selectedRow}
-                  rows={rows}
+                  rows={recentRows}
                   onClose={close}
                   onSelect={select}
                   blocked={blocked.has(selectedRow.id)}
@@ -357,18 +432,31 @@ function FleetPage(): JSX.Element {
             </div>
             {selected && !selectedRow && !chats.isLoading && (
               <p role="status" className="text-sm">
-                The selected item is not in the loaded page or is no longer
-                available.{" "}
+                The selected item is outside the last 24 hours, not in the
+                loaded page or filter, or no longer available.{" "}
                 <Button variant="tertiary" size="sm" onClick={close}>
                   Clear selection
                 </Button>
+                {access.canAccess && (
+                  <Button
+                    variant="tertiary"
+                    size="sm"
+                    onClick={() =>
+                      update({ tab: "restrictions", restriction: null })
+                    }
+                  >
+                    Agent restrictions
+                  </Button>
+                )}
               </p>
             )}
             <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
               <span className="text-muted-foreground text-xs">
                 Captured sessions: {chats.data?.chats.length ?? 0} loaded of{" "}
-                {chats.data?.total ?? "…"}. Registered identities stay visible
-                without a captured session.
+                {chats.data?.total ?? "…"} in the last 24 hours. Assistants
+                reflect explicit captures loaded during this visit. Agents
+                require observed credential use you can view; missing timestamps
+                are excluded.
               </span>
               <div className="flex gap-2">
                 <Button

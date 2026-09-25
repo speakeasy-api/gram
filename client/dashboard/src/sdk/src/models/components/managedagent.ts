@@ -27,6 +27,10 @@ export type Lifecycle = ClosedEnum<typeof Lifecycle>;
 export type ManagedAgent = {
   createdAt: Date;
   id: string;
+  /**
+   * Most recent successful authentication of this agent's credential sessions or API keys at Gram in this organization, at 1–5 minute resolution. Includes credentials since revoked or expired. Populated by agents.list only for callers who can manage the agent's credentials; absent when unknown or unauthorized. Not run, process, or tool-call activity.
+   */
+  lastCredentialUsedAt?: Date | undefined;
   lifecycle: Lifecycle;
   name: string;
   ownerProfile?: AgentOwnerProfile | undefined;
@@ -61,6 +65,9 @@ export const ManagedAgent$inboundSchema: z.ZodMiniType<ManagedAgent, unknown> =
         z.transform(v => new Date(v)),
       ),
       id: z.string(),
+      last_credential_used_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       lifecycle: Lifecycle$inboundSchema,
       name: z.string(),
       owner_profile: z.optional(AgentOwnerProfile$inboundSchema),
@@ -79,6 +86,7 @@ export const ManagedAgent$inboundSchema: z.ZodMiniType<ManagedAgent, unknown> =
     z.transform((v) => {
       return remap$(v, {
         "created_at": "createdAt",
+        "last_credential_used_at": "lastCredentialUsedAt",
         "owner_profile": "ownerProfile",
         "owner_reassignment_reason": "ownerReassignmentReason",
         "owner_reassignment_required_at": "ownerReassignmentRequiredAt",

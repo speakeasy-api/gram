@@ -1,4 +1,4 @@
-import { useSearchParams } from "react-router";
+import { useFleetParamUpdate } from "./useFleetParamUpdate";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { KillswitchEditorSheet } from "@/components/killswitch/KillswitchEditorSheet";
@@ -22,7 +22,7 @@ export function AgentMCPControls({
 }: {
   agent: ManagedAgent;
 }): JSX.Element {
-  const [, setParams] = useSearchParams();
+  const update = useFleetParamUpdate();
   const [open, setOpen] = useState(false);
   const session = useSession();
   const sdk = useSdkClient();
@@ -83,14 +83,7 @@ export function AgentMCPControls({
         onRetryCapabilities={() => void capabilities.refetch()}
         onView={(id) => {
           setOpen(false);
-          setParams(
-            (previous) => {
-              const next = new URLSearchParams(previous);
-              next.set("restriction", id);
-              return next;
-            },
-            { replace: true },
-          );
+          update({ restriction: id }, true);
         }}
         onPreview={(draft) =>
           sdk.killswitches.previewOverlaps(security, {

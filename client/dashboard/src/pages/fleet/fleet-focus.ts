@@ -9,3 +9,14 @@ export function restoreFleetFocus(id: string | null): void {
     preventScroll: true,
   });
 }
+
+/** Aging out should repair removed inspector focus without stealing toolbar focus. */
+export function restoreFleetFocusAfterRemoval(id: string): void {
+  const active = document.activeElement;
+  if (
+    active === document.body ||
+    active?.closest(".fleet-inspector, [data-fleet-inspector]")
+  ) {
+    restoreFleetFocus(id);
+  }
+}

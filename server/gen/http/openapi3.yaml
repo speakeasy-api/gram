@@ -90774,6 +90774,10 @@ components:
                 id:
                     type: string
                     format: uuid
+                last_credential_used_at:
+                    type: string
+                    description: Most recent successful authentication of this agent's credential sessions or API keys at Gram in this organization, at 1–5 minute resolution. Includes credentials since revoked or expired. Populated by agents.list only for callers who can manage the agent's credentials; absent when unknown or unauthorized. Not run, process, or tool-call activity.
+                    format: date-time
                 lifecycle:
                     type: string
                     enum:

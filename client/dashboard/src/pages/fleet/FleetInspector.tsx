@@ -1,3 +1,4 @@
+import { useFleetParamUpdate } from "./useFleetParamUpdate";
 import { restoreFleetFocus } from "./fleet-focus";
 import { useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -59,6 +60,7 @@ export function FleetInspector({
         }}
       >
         <SheetContent
+          data-fleet-inspector
           className="w-full overflow-y-auto p-0 sm:max-w-none"
           onCloseAutoFocus={(event) => {
             event.preventDefault();
@@ -93,7 +95,8 @@ function InspectorContents({
   blocked: boolean;
 }): JSX.Element {
   const routes = useRoutes();
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
+  const update = useFleetParamUpdate();
   const access = useKillswitchAccess();
   const heading = useRef<HTMLHeadingElement>(null);
   const chatActions = useChatDetailSheet();
@@ -139,16 +142,7 @@ function InspectorContents({
         </dl>
         <Tabs
           value={tab}
-          onValueChange={(value) =>
-            setParams(
-              (previous) => {
-                const next = new URLSearchParams(previous);
-                next.set("detail", value);
-                return next;
-              },
-              { replace: true },
-            )
-          }
+          onValueChange={(value) => update({ detail: value }, true)}
         >
           <PageTabsList aria-label="Fleet item details">
             <PageTabsTrigger value="activity">Activity</PageTabsTrigger>
@@ -189,8 +183,14 @@ function InspectorContents({
             )}
             {row.agent && (
               <>
+                <dl className="fleet-facts">
+                  <Fact label="Last credential authentication (organization-wide)">
+                    {row.agent.lastCredentialUsedAt?.toLocaleString()}
+                  </Fact>
+                </dl>
                 <p className="text-muted-foreground text-sm">
-                  Credential sessions for this registered identity.
+                  Latest recorded credential authentication at Gram. Credential
+                  sessions for this identity:
                 </p>
                 <ManagedAgentSessions agent={row.agent} />
               </>

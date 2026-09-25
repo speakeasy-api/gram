@@ -423,8 +423,16 @@ Connector` appears under **Inactive** with no connections. Its row menu's
 24. **Fleet and agent restriction recovery**
 
 Open Fleet in list and Directory modes at desktop and phone widths. Select a
-registered identity with no observed run, then a captured session. Check person
+registered identity with recent credential authentication, then a captured
+session. Both list and Directory must show only observed activity in the last
+24 hours; profile edits and missing timestamps do not qualify. Assistants use
+only explicit assistantId links on session pages loaded during this visit,
+retaining recent timestamps across search and page changes. Check person
 roles, risk counts, transcript/Security links, URL selection, and Back focus.
+Leave an inspector open through a refresh: loaded data stays visible while the
+next window fetches. A row aging out keeps the URL and does not take focus from
+search. Verify that hidden tabs pause the rolling clock and refresh on return.
+Agent restrictions remain discoverable regardless of the target’s activity age.
 These browsing checks may run in the demo organization. The following restriction
 mutation checks are local only: use an ordinary human organization-admin session
 after `mise run seed`, without impersonation.

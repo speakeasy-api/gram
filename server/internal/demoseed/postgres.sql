@@ -1112,6 +1112,9 @@ BEGIN
   ------------------------------------------------------------------
   -- A display-only managed-agent credential: no signing token, an invalid
   -- refresh hash, and an empty delegation prevent usable programmatic access.
+  -- Recent authentication remains Fleet activity after access-token expiry.
+  -- The other managed identities have no credential-use evidence and remain
+  -- outside Fleet’s 24-hour collection; restriction recovery has no age limit.
   -- The issuer/project cascade above cleans this row on every reseed.
   INSERT INTO user_sessions
     (id, project_id, organization_id, user_session_issuer_id,
@@ -3037,6 +3040,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE organization_id = demo_org AND subject_urn LIKE 'agent:%';
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 1 managed agent session, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM user_sessions
+  WHERE organization_id = demo_org AND project_id = proj_a
+    AND subject_urn = 'agent:' || demo.det_uuid('gram-demo-managed-agent-1')::text
+    AND last_used_at >= now() - interval '24 hours' AND expires_at < now();
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected recent expired agent credential history, found %', stray;
   END IF;
 
   -- This External OAuth row drives the metadata recommendation. Keep its count

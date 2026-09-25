@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -115,13 +115,14 @@ vi.mock("@/components/killswitch/KillswitchRecord", () => ({
 }));
 
 function renderAt(element: JSX.Element, at = "/acme/killswitch/ks-1") {
+  window.history.replaceState(null, "", at);
   return render(
-    <MemoryRouter initialEntries={[at]}>
+    <BrowserRouter>
       <Routes>
         <Route path=":orgSlug/killswitch/:killswitchId" element={element} />
         <Route path="*" element={<Landed />} />
       </Routes>
-    </MemoryRouter>,
+    </BrowserRouter>,
   );
 }
 
