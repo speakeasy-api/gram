@@ -17,6 +17,9 @@ import (
 // maxIssuerPage bounds each inventory response independently of the admin API's cap.
 const maxIssuerPage = 50
 
+// maxIssuerCursor bounds opaque page cursors in both directions.
+const maxIssuerCursor = 2048
+
 var errIssuerUnavailable = errors.New("issuer information is unavailable")
 
 type IssuerReader interface {
@@ -117,7 +120,7 @@ func registerIssuerTools(server *mcp.Server, reads IssuerReader) {
 		if reads == nil || !verifiedStaff(ctx) {
 			return nil, out, errIssuerUnavailable
 		}
-		if !validIssuerID(input.TargetID) || input.Limit < 0 || input.Limit > maxIssuerPage || len(input.Cursor) > 2048 {
+		if !validIssuerID(input.TargetID) || input.Limit < 0 || input.Limit > maxIssuerPage || len(input.Cursor) > maxIssuerCursor {
 			return nil, out, errors.New("provide an exact global issuer ID, a cursor up to 2048 characters and a limit of 1 to 50")
 		}
 		limit := input.Limit
@@ -129,11 +132,11 @@ func registerIssuerTools(server *mcp.Server, reads IssuerReader) {
 			cursor = &input.Cursor
 		}
 		page, err := reads.ListGlobalIssuerConvergenceCandidates(ctx, &gen.ListGlobalIssuerConvergenceCandidatesPayload{TargetID: input.TargetID, Cursor: cursor, Limit: &limit})
-		if err != nil || page == nil || len(page.Items) > limit {
+		if err != nil || page == nil || len(page.Items) > limit || !validIssuerCursor(page.NextCursor) {
 			return nil, out, errIssuerUnavailable
 		}
 		for _, item := range page.Items {
-			if item == nil || item.Issuer == nil || !validIssuerID(item.Issuer.ID) || len(item.OrganizationID) > 128 || len(item.EndpointMismatches) > 64 || len(item.Warnings) > 64 {
+			if item == nil || item.Issuer == nil || !validIssuerID(item.Issuer.ID) || len(item.OrganizationID) > 128 || item.ClientCount < 0 || len(item.EndpointMismatches) > 64 || len(item.Warnings) > 64 {
 				return nil, IssuerConvergencePage{}, errIssuerUnavailable
 			}
 			candidate := IssuerConvergenceCandidate{SourceID: item.Issuer.ID, OrganizationID: item.OrganizationID, ClientCount: item.ClientCount, EndpointMismatchFields: []string{}, WarningFields: []string{}}
@@ -164,7 +167,7 @@ func registerIssuerTools(server *mcp.Server, reads IssuerReader) {
 		if reads == nil || !verifiedStaff(ctx) {
 			return nil, result, errIssuerUnavailable
 		}
-		if input.Limit < 0 || input.Limit > maxIssuerPage || len(input.Cursor) > 2048 {
+		if input.Limit < 0 || input.Limit > maxIssuerPage || len(input.Cursor) > maxIssuerCursor {
 			return nil, result, errors.New("invalid issuer page")
 		}
 		limit := input.Limit
@@ -176,7 +179,7 @@ func registerIssuerTools(server *mcp.Server, reads IssuerReader) {
 			cursor = &input.Cursor
 		}
 		page, err := reads.ListGlobalIssuers(ctx, &gen.ListGlobalIssuersPayload{Cursor: cursor, Limit: &limit})
-		if err != nil || page == nil || len(page.Items) > limit {
+		if err != nil || page == nil || len(page.Items) > limit || !validIssuerCursor(page.NextCursor) {
 			return nil, result, errIssuerUnavailable
 		}
 		for _, item := range page.Items {
@@ -272,8 +275,15 @@ func validIssuerID(id string) bool {
 	return err == nil && parsed.String() == id && strings.TrimSpace(id) == id
 }
 
+func validIssuerCursor(cursor *string) bool {
+	return cursor == nil || len(*cursor) <= maxIssuerCursor
+}
+
 func issuerSummary(item *gen.GlobalRemoteSessionIssuer) (IssuerSummary, bool) {
-	if item == nil || item.Issuer == nil || !validIssuerID(item.Issuer.ID) {
+	if item == nil || item.Issuer == nil || !validIssuerID(item.Issuer.ID) ||
+		len(item.Issuer.Slug) > 256 || len(item.Issuer.Issuer) > 2048 || (item.Issuer.Name != nil && len(*item.Issuer.Name) > 256) ||
+		item.GlobalClientCount < 0 || item.TenantClientCount < 0 || item.TrustedUserSessionIssuerCount < 0 ||
+		(item.EmaBindingCount != nil && *item.EmaBindingCount < 0) {
 		return IssuerSummary{}, false
 	}
 	return IssuerSummary{ID: item.Issuer.ID, Slug: item.Issuer.Slug, Name: item.Issuer.Name, Issuer: item.Issuer.Issuer,

@@ -36,8 +36,17 @@ func (r *recordingDiagnosticsReader) ListProjectMcpServers(_ context.Context, in
 
 func callDiagnosticReadTool(t *testing.T, reads *recordingDiagnosticsReader, name, args string) (int, string, json.RawMessage) {
 	t.Helper()
+	return callDiagnosticReadToolAs(t, reads, nil, name, args)
+}
+
+// callDiagnosticReadToolAs lets a test alter the authenticated principal before the call.
+func callDiagnosticReadToolAs(t *testing.T, reads *recordingDiagnosticsReader, alter func(*Principal), name, args string) (int, string, json.RawMessage) {
+	t.Helper()
 	principal := staffPrincipal()
 	principal.staff = &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: "staff-subject", Email: principal.Email}
+	if alter != nil {
+		alter(&principal)
+	}
 	auth := &testAuthenticator{principal: principal}
 	handler := NewRuntime(auth, "", reads).Handler()
 	request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"`+name+`","arguments":`+args+`}}`))
@@ -114,6 +123,25 @@ func TestListProjectMCPServersExactTargetAndRedactedProjection(t *testing.T) {
 	}, output)
 	require.NotContains(t, body, privateURL)
 	require.NotContains(t, body, `"url"`)
+}
+
+func TestDiagnosticsRequireVerifiedStaff(t *testing.T) {
+	t.Parallel()
+	for name, alter := range map[string]func(*Principal){
+		"missing staff context":  func(p *Principal) { p.staff = nil },
+		"mismatched staff email": func(p *Principal) { p.staff.Email = "someone-else@example.test" },
+	} {
+		for _, call := range []struct{ tool, args string }{
+			{"get_organization_onboarding", `{"organization_id":"org-a"}`},
+			{"list_project_mcp_servers", `{"organization_id":"org-a","project_id":"` + testProjectID + `"}`},
+		} {
+			reads := testDiagnosticsReads()
+			_, body, _ := callDiagnosticReadToolAs(t, reads, alter, call.tool, call.args)
+			require.Contains(t, body, `"isError":true`, name+": "+call.tool)
+			require.Nil(t, reads.onboardingInput, name+": "+call.tool)
+			require.Nil(t, reads.serversInput, name+": "+call.tool)
+		}
+	}
 }
 
 func TestDiagnosticsRejectInexactTargetsAndFailClosed(t *testing.T) {

@@ -99,7 +99,9 @@ func registerBillingDiagnosticTools(server *mcp.Server, organizations Organizati
 					return nil, InferenceKeyStates{}, errBillingDiagnosticsUnavailable
 				}
 			}
-			out.Keys = append(out.Keys, InferenceKeyState{KeyType: key.KeyType, CreditsUsed: key.CreditsUsed, MonthlyCredits: key.MonthlyCredits, Disabled: key.Disabled, DisableCauses: key.DisableCauses, DisableCausesClassified: key.DisableCausesClassified})
+			// Legacy unclassified keys have nil causes; disable_causes_classified carries that distinction.
+			causes := append([]string{}, key.DisableCauses...)
+			out.Keys = append(out.Keys, InferenceKeyState{KeyType: key.KeyType, CreditsUsed: key.CreditsUsed, MonthlyCredits: key.MonthlyCredits, Disabled: key.Disabled, DisableCauses: causes, DisableCausesClassified: key.DisableCausesClassified})
 		}
 		out.OrganizationID = org.ID
 		return nil, out, nil

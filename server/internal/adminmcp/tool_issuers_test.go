@@ -106,6 +106,12 @@ func TestIssuerReadsRequireVerifiedStaffAndBoundPage(t *testing.T) {
 		require.Contains(t, body, `"isError":true`)
 		require.Nil(t, reads.pageInput)
 	}
+
+	oversized := strings.Repeat("c", maxIssuerCursor+1)
+	reads.page.NextCursor = &oversized
+	body, _ = issuerToolCall(t, reads, "list_global_issuers", `{}`, true)
+	require.Contains(t, body, `"isError":true`)
+	require.NotContains(t, body, oversized)
 }
 
 func TestIssuerConvergenceCandidatesRedactAndBound(t *testing.T) {
@@ -125,10 +131,32 @@ func TestIssuerConvergenceCandidatesRedactAndBound(t *testing.T) {
 	require.Equal(t, testSourceID, page.Items[0].SourceID)
 	require.Equal(t, []string{"token_endpoint"}, page.Items[0].EndpointMismatchFields)
 	require.True(t, page.PossiblyIncomplete)
-	reads.candidateInput = nil
-	body, _ = issuerToolCall(t, reads, "list_global_issuer_convergence_candidates", `{"target_id":"not-a-uuid"}`, true)
+	oversized := strings.Repeat("c", maxIssuerCursor+1)
+	for _, args := range []string{
+		`{"target_id":"not-a-uuid"}`,
+		`{"target_id":"` + testIssuerID + `","limit":51}`,
+		`{"target_id":"` + testIssuerID + `","limit":-1}`,
+		`{"target_id":"` + testIssuerID + `","cursor":"` + oversized + `"}`,
+	} {
+		reads.candidateInput = nil
+		body, _ = issuerToolCall(t, reads, "list_global_issuer_convergence_candidates", args, true)
+		require.Contains(t, body, `"isError":true`, args)
+		require.Nil(t, reads.candidateInput, args)
+	}
+
+	body, _ = issuerToolCall(t, reads, "list_global_issuer_convergence_candidates", `{"target_id":"`+testIssuerID+`"}`, true)
+	require.NotContains(t, body, `"isError":true`)
+	require.Equal(t, 20, *reads.candidateInput.Limit)
+
+	reads.candidates.NextCursor = &oversized
+	body, _ = issuerToolCall(t, reads, "list_global_issuer_convergence_candidates", `{"target_id":"`+testIssuerID+`"}`, true)
 	require.Contains(t, body, `"isError":true`)
-	require.Nil(t, reads.candidateInput)
+	require.NotContains(t, body, oversized)
+
+	reads.candidates.NextCursor = &cursor
+	reads.candidates.Items[0].ClientCount = -1
+	body, _ = issuerToolCall(t, reads, "list_global_issuer_convergence_candidates", `{"target_id":"`+testIssuerID+`"}`, true)
+	require.Contains(t, body, `"isError":true`)
 }
 
 func TestIssuerDetailAndPreflightsValidateTargetsAndRedact(t *testing.T) {
@@ -162,4 +190,18 @@ func TestIssuerDetailAndPreflightsValidateTargetsAndRedact(t *testing.T) {
 	require.Nil(t, reads.detailInput)
 	require.Nil(t, reads.duplicate)
 	require.Nil(t, reads.migration)
+
+	longName := strings.Repeat("n", 257)
+	negative := -1
+	for _, malformed := range []*gen.GlobalRemoteSessionIssuer{
+		{Issuer: &types.RemoteSessionIssuer{ID: testIssuerID, Slug: strings.Repeat("s", 257)}},
+		{Issuer: &types.RemoteSessionIssuer{ID: testIssuerID, Name: &longName}},
+		{Issuer: &types.RemoteSessionIssuer{ID: testIssuerID, Issuer: "https://" + strings.Repeat("i", 2048)}},
+		{Issuer: &types.RemoteSessionIssuer{ID: testIssuerID}, TenantClientCount: -1},
+		{Issuer: &types.RemoteSessionIssuer{ID: testIssuerID}, EmaBindingCount: &negative},
+	} {
+		reads.detail = malformed
+		body, _ = issuerToolCall(t, reads, "get_global_issuer", `{"id":"`+testIssuerID+`"}`, true)
+		require.Contains(t, body, `"isError":true`)
+	}
 }
