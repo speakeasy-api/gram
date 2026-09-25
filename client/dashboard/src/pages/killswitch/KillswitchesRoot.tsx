@@ -14,7 +14,7 @@ import { withIdentityWindow } from "@/lib/identity-urn";
 import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 import { useRoutes } from "@/routes";
 import { useKillswitch } from "@gram/client/react-query/killswitch.js";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, Outlet, useLocation, useParams } from "react-router";
 
 /** A standing message on a route that no longer renders a page of its own. */
@@ -125,6 +125,7 @@ export function KillswitchRecordRedirect(): JSX.Element {
   const projectSlug = useProjectSlugForRequests();
   const fleetHref = useRoutes({ projectSlug }).fleet.href();
   const fleetFlag = useFeatureFlag(FEATURE_FLAGS.fleet);
+  const [pendingClose, setPendingClose] = useState(false);
   const session = useSession();
   const identityAccessHref = useIdentityHrefBuilder("access");
   const identitiesHref = useIdentitiesHref();
@@ -133,6 +134,17 @@ export function KillswitchRecordRedirect(): JSX.Element {
     { id: killswitchId, gramSession: session.session },
     { throwOnError: false, enabled: killswitchId !== "" },
   );
+
+  useEffect(() => {
+    if (!pendingClose || fleetFlag.status === "loading") return;
+    setPendingClose(false);
+    void navigate(
+      hasScope("project:read") && fleetFlag.status === "enabled"
+        ? `${fleetHref}?tab=restrictions`
+        : "..",
+      { relative: "path" },
+    );
+  }, [fleetFlag.status, fleetHref, hasScope, navigate, pendingClose]);
 
   if (detailQuery.isLoading) {
     return (
@@ -153,6 +165,10 @@ export function KillswitchRecordRedirect(): JSX.Element {
             void navigate(`../${id}`);
           }}
           onClose={() => {
+            if (fleetFlag.status === "loading") {
+              setPendingClose(true);
+              return;
+            }
             void navigate(
               hasScope("project:read") && fleetFlag.status === "enabled"
                 ? `${fleetHref}?tab=restrictions`

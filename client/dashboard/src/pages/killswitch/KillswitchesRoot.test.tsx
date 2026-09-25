@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -230,6 +236,49 @@ describe("agent restriction recovery routes", () => {
     renderAt(<KillswitchRecordRedirect />);
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.getByTestId("landed").textContent).toBe("/acme/killswitch");
+  });
+  it("defers Close while Fleet is loading, then returns to Fleet when enabled", async () => {
+    mocks.fleetStatus = "loading";
+    const view = renderAt(<KillswitchRecordRedirect />);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByTestId("landed")).toBeNull();
+    mocks.fleetStatus = "enabled";
+    view.rerender(
+      <BrowserRouter>
+        <Routes>
+          <Route
+            path=":orgSlug/killswitch/:killswitchId"
+            element={<KillswitchRecordRedirect />}
+          />
+          <Route path="*" element={<Landed />} />
+        </Routes>
+      </BrowserRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("landed").textContent).toBe(
+        "/acme/p/fleet?tab=restrictions",
+      ),
+    );
+  });
+  it("defers Close while Fleet is loading, then returns to the index when disabled", async () => {
+    mocks.fleetStatus = "loading";
+    const view = renderAt(<KillswitchRecordRedirect />);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    mocks.fleetStatus = "disabled";
+    view.rerender(
+      <BrowserRouter>
+        <Routes>
+          <Route
+            path=":orgSlug/killswitch/:killswitchId"
+            element={<KillswitchRecordRedirect />}
+          />
+          <Route path="*" element={<Landed />} />
+        </Routes>
+      </BrowserRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("landed").textContent).toBe("/acme/killswitch"),
+    );
   });
   it.each([
     { principalKind: "agent" },

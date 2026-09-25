@@ -423,6 +423,12 @@ it.each(["disabled", "missing", "error", "loading"])(
     expect(mocks.badges).not.toHaveBeenCalled();
     expect(screen.queryByRole("searchbox")).toBeNull();
     if (status !== "loading")
-      expect(screen.getByText("Fleet is not available")).toBeTruthy();
+      expect(
+        screen.getByText(
+          status === "disabled"
+            ? "Fleet is not enabled for this organization"
+            : "Fleet availability couldn’t be determined",
+        ),
+      ).toBeTruthy();
   },
 );

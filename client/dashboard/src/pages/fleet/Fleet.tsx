@@ -52,9 +52,15 @@ export default function Fleet(): JSX.Element {
   if (flag.status !== "enabled") {
     return (
       <div className="p-8">
-        <h1 className="text-xl font-semibold">Fleet is not available</h1>
+        <h1 className="text-xl font-semibold">
+          {flag.status === "disabled"
+            ? "Fleet is not enabled for this organization"
+            : "Fleet availability couldn’t be determined"}
+        </h1>
         <p className="text-muted-foreground text-sm">
-          Fleet is restricted during rollout.
+          {flag.status === "disabled"
+            ? "Fleet is restricted during rollout."
+            : "Try again later."}
         </p>
       </div>
     );
