@@ -8724,6 +8724,111 @@ CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_sessions_replaced_by_session_id_key
 ON admin_mcp_sessions (replaced_by_session_id)
 WHERE replaced_by_session_id IS NOT NULL;
 
+-- Staff Admin MCP write proposals. Each row binds one staff subject, client
+-- and connection generation to one exact target and change. The proposal ID is
+-- the execution idempotency key; the terminal result doubles as the receipt.
+-- Foreign keys cascade, matching the other admin_mcp tables: nulling
+-- organization_id on delete would make a tenant proposal look platform-global.
+CREATE TABLE IF NOT EXISTS admin_mcp_write_proposals (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  subject_urn TEXT NOT NULL,
+  oauth_client_id uuid NOT NULL,
+  connection_id uuid NOT NULL,
+  connection_generation uuid NOT NULL,
+  operation TEXT NOT NULL,
+  operation_schema_version INTEGER NOT NULL,
+  -- Global operations (issuers, support matrix) have no tenant target.
+  platform_global boolean NOT NULL,
+  organization_id TEXT,
+  project_id uuid,
+  resource_kind TEXT,
+  resource_id TEXT,
+  idempotency_key TEXT NOT NULL,
+  arguments JSONB NOT NULL,
+  expected_state_digest TEXT NOT NULL,
+  proposal_digest TEXT NOT NULL,
+  -- Safe, bounded before/after preview rendered by the approval UI.
+  preview JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending_approval',
+  expires_at timestamptz NOT NULL,
+  approved_by_subject_urn TEXT,
+  approved_at timestamptz,
+  rejected_at timestamptz,
+  invalidated_at timestamptz,
+  invalidation_reason TEXT,
+  executed_at timestamptz,
+  result_code TEXT,
+  result_payload JSONB,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT admin_mcp_write_proposals_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_write_proposals_target_scope_check CHECK (
+    (platform_global AND organization_id IS NULL AND project_id IS NULL)
+    OR (NOT platform_global AND organization_id IS NOT NULL)
+  ),
+  CONSTRAINT admin_mcp_write_proposals_resource_pair_check
+    CHECK ((resource_kind IS NULL) = (resource_id IS NULL)),
+  CONSTRAINT admin_mcp_write_proposals_subject_urn_check CHECK (subject_urn <> ''),
+  CONSTRAINT admin_mcp_write_proposals_operation_check CHECK (operation <> ''),
+  CONSTRAINT admin_mcp_write_proposals_idempotency_key_check CHECK (idempotency_key <> ''),
+  CONSTRAINT admin_mcp_write_proposals_proposal_digest_check CHECK (proposal_digest <> ''),
+  CONSTRAINT admin_mcp_write_proposals_status_check CHECK (status <> ''),
+  CONSTRAINT admin_mcp_write_proposals_connection_client_fkey
+    FOREIGN KEY (connection_id, oauth_client_id)
+    REFERENCES admin_mcp_connections (id, oauth_client_id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_write_proposals_organization_id_fkey
+    FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT admin_mcp_write_proposals_organization_project_fkey
+    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+);
+
+-- Retry keys belong to the stable staff subject and client, not the
+-- connection generation, so reconsent cannot mint a second proposal.
+CREATE UNIQUE INDEX IF NOT EXISTS admin_mcp_write_proposals_idempotency_key
+ON admin_mcp_write_proposals (subject_urn, oauth_client_id, operation, idempotency_key);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_pending_idx
+ON admin_mcp_write_proposals (subject_urn, oauth_client_id)
+WHERE status = 'pending_approval';
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_expires_at_idx
+ON admin_mcp_write_proposals (expires_at);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_organization_id_idx
+ON admin_mcp_write_proposals (organization_id) WHERE organization_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_connection_idx
+ON admin_mcp_write_proposals (connection_id);
+
+-- Staff-only lifecycle and refusal trail. Survives rolled-back writes. Stores
+-- bounded reason codes only: no prompts, arguments, results or credentials.
+CREATE TABLE IF NOT EXISTS admin_mcp_write_events (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  proposal_id uuid,
+  subject_urn TEXT NOT NULL,
+  oauth_client_id uuid,
+  event TEXT NOT NULL,
+  reason_code TEXT,
+  request_id TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT admin_mcp_write_events_pkey PRIMARY KEY (id),
+  CONSTRAINT admin_mcp_write_events_subject_urn_check CHECK (subject_urn <> ''),
+  CONSTRAINT admin_mcp_write_events_event_check CHECK (event <> ''),
+  CONSTRAINT admin_mcp_write_events_proposal_id_fkey
+    FOREIGN KEY (proposal_id) REFERENCES admin_mcp_write_proposals (id) ON DELETE SET NULL,
+  CONSTRAINT admin_mcp_write_events_oauth_client_id_fkey
+    FOREIGN KEY (oauth_client_id) REFERENCES admin_mcp_oauth_clients (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_events_proposal_id_idx
+ON admin_mcp_write_events (proposal_id);
+
+CREATE INDEX IF NOT EXISTS admin_mcp_write_events_subject_created_idx
+ON admin_mcp_write_events (subject_urn, created_at);
+
 -- Typed milestone rows are durable product evidence. Event names and allowed
 -- target fields are validated by the owning application contract, not SQL enums.
 CREATE TABLE IF NOT EXISTS platform_mcp_onboarding_milestones (
