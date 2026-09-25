@@ -14,10 +14,13 @@ export function normalizeOktaOrgUrl(input: string): string | undefined {
   const rawHost = match?.[1];
   if (!rawHost || !PLAIN_HOSTNAME.test(rawHost)) return undefined;
   const host = rawHost.toLowerCase();
-  const ok = OKTA_ORG_HOST_SUFFIXES.some((suffix) =>
-    host.endsWith(`.${suffix}`),
-  );
-  return ok ? `https://${host}` : undefined;
+  for (const suffix of OKTA_ORG_HOST_SUFFIXES) {
+    if (!host.endsWith(`.${suffix}`)) continue;
+    // The admin console address is the org hostname with -admin appended.
+    const tenant = host.slice(0, -(suffix.length + 1)).replace(/-admin$/, "");
+    return tenant ? `https://${tenant}.${suffix}` : undefined;
+  }
+  return undefined;
 }
 
 /** The Okta admin console for an org URL (`acme.okta.com` → `acme-admin.okta.com`). */

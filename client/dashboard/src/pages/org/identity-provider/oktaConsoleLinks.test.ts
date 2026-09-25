@@ -120,6 +120,13 @@ describe("normalizeOktaOrgUrl", () => {
     );
   });
 
+  it("maps the admin console address to the org", () => {
+    expect(normalizeOktaOrgUrl("https://example-admin.okta.com/")).toBe(
+      "https://example.okta.com",
+    );
+    expect(normalizeOktaOrgUrl("https://-admin.okta.com")).toBeUndefined();
+  });
+
   it("rejects paths, queries, fragments, http, and foreign hosts", () => {
     expect(
       normalizeOktaOrgUrl("https://example.okta.com/admin"),
