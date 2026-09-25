@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sigint/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -40,12 +41,13 @@ const (
 )
 
 type Service struct {
-	logger *slog.Logger
-	tracer trace.Tracer
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	authz  *authz.Engine
-	audit  *audit.Logger
+	logger          *slog.Logger
+	tracer          trace.Tracer
+	db              *pgxpool.Pool
+	auth            *auth.Auth
+	authz           *authz.Engine
+	audit           *audit.Logger
+	productFeatures *productfeatures.Client
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -58,15 +60,17 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
+	productFeatures *productfeatures.Client,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("sigint"))
 	return &Service{
-		logger: logger,
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/sigint"),
-		db:     db,
-		auth:   auth.New(logger, db, sessions, authzEngine),
-		authz:  authzEngine,
-		audit:  auditLogger,
+		logger:          logger,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/sigint"),
+		db:              db,
+		auth:            auth.New(logger, db, sessions, authzEngine),
+		authz:           authzEngine,
+		audit:           auditLogger,
+		productFeatures: productFeatures,
 	}
 }
 
@@ -81,12 +85,23 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
+func (s *Service) requireAccess(ctx context.Context, organizationID string, check authz.Check) error {
+	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureSignalsIntelligence)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "check signals intelligence availability").LogError(ctx, s.logger)
+	}
+	if !enabled {
+		return oops.E(oops.CodeForbidden, nil, "signals intelligence is not enabled for this organization")
+	}
+	return s.authz.Require(ctx, check)
+}
+
 func (s *Service) CreateSignal(ctx context.Context, payload *gen.CreateSignalPayload) (*types.SigintSignal, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	name, err := validateName(payload.Name)
@@ -139,7 +154,7 @@ func (s *Service) GetSignal(ctx context.Context, payload *gen.GetSignalPayload) 
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.ID)
@@ -161,7 +176,7 @@ func (s *Service) ListSignals(ctx context.Context, payload *gen.ListSignalsPaylo
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	cursor, err := parseCursor(payload.Cursor)
@@ -185,7 +200,7 @@ func (s *Service) UpdateSignal(ctx context.Context, payload *gen.UpdateSignalPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.ID)
@@ -257,7 +272,7 @@ func (s *Service) DeleteSignal(ctx context.Context, payload *gen.DeleteSignalPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.ID)
@@ -346,7 +361,7 @@ func (s *Service) CreateSensor(ctx context.Context, payload *gen.CreateSensorPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	name, err := validateName(payload.Name)
@@ -413,7 +428,7 @@ func (s *Service) GetSensor(ctx context.Context, payload *gen.GetSensorPayload) 
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.ID)
@@ -435,7 +450,7 @@ func (s *Service) ListSensors(ctx context.Context, payload *gen.ListSensorsPaylo
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	cursor, err := parseCursor(payload.Cursor)
@@ -459,7 +474,7 @@ func (s *Service) UpdateSensor(ctx context.Context, payload *gen.UpdateSensorPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.ID)
@@ -556,7 +571,7 @@ func (s *Service) DeleteSensor(ctx context.Context, payload *gen.DeleteSensorPay
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	id, err := uuid.Parse(payload.ID)

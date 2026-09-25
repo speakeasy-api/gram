@@ -16,7 +16,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sigint"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -38,8 +40,9 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service *sigint.Service
-	conn    *pgxpool.Pool
+	service  *sigint.Service
+	conn     *pgxpool.Pool
+	features *productfeatures.Client
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -55,9 +58,14 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	sessions := testenv.NewTestManager(t, logger, tracerProvider, conn, redisClient, cache.Suffix("sigint"), billingClient)
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessions)
 	engine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NoError(t, features.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureSignalsIntelligence, true))
 	return ctx, &testInstance{
-		service: sigint.NewService(logger, tracerProvider, conn, sessions, engine, audit.NewLogger()),
-		conn:    conn,
+		service:  sigint.NewService(logger, tracerProvider, conn, sessions, engine, audit.NewLogger(), features),
+		conn:     conn,
+		features: features,
 	}
 }
 
