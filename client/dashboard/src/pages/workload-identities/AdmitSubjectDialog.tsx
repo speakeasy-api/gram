@@ -152,11 +152,11 @@ export function AdmitSubjectDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Admit a workload</Dialog.Title>
+          <Dialog.Title>Allow a machine</Dialog.Title>
           <Dialog.Description>
-            Admitting a subject is the grant of machine access. The agent you
-            choose supplies the whole policy the workload acts under, so it is
-            assigned at the same time.
+            Allowing a machine is the grant of access. The agent you choose
+            supplies the whole policy that machine acts under, so it is chosen
+            at the same time.
           </Dialog.Description>
         </Dialog.Header>
 
@@ -222,7 +222,7 @@ export function AdmitSubjectDialog({
             </Select>
             <Text muted small>
               Choose the most narrowly scoped agent that can do the job. The
-              workload inherits its policy in full.
+              machine inherits its policy in full.
             </Text>
             {showCaution && (
               // alignTop because this body runs to several lines: a centred icon
@@ -286,7 +286,7 @@ export function AdmitSubjectDialog({
             disabled={!canSubmit || isPending}
           >
             <Button.Text>
-              {isPending ? "Admitting…" : "Admit workload"}
+              {isPending ? "Allowing…" : "Allow machine"}
             </Button.Text>
           </Button>
         </Dialog.Footer>

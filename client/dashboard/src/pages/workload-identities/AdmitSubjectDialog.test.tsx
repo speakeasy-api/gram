@@ -55,7 +55,7 @@ function subjectWarning(): HTMLElement | null {
 
 function admitButton(): HTMLButtonElement {
   return screen.getByRole("button", {
-    name: "Admit workload",
+    name: "Allow machine",
   }) as HTMLButtonElement;
 }
 

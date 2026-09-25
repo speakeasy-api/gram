@@ -108,9 +108,10 @@ import {
   RemoteIdentityProvidersRoot,
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
 import {
-  WorkloadIdentitiesPage,
-  WorkloadIdentitiesRoot,
-} from "./pages/workload-identities/WorkloadIdentities";
+  WorkloadIssuersPage,
+  WorkloadIssuersRoot,
+} from "./pages/workload-identities/WorkloadIssuers";
+import { WorkloadIssuerDetailPage } from "./pages/workload-identities/WorkloadIssuerDetail";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
@@ -701,13 +702,20 @@ const ROUTE_STRUCTURE = {
     },
   },
 
-  workloadIdentities: {
-    title: "Workload Identities",
-    url: "workload-identities",
+  workloadIssuers: {
+    title: "Access Hub",
+    url: "access-hub",
     icon: "cpu",
     stage: "preview",
-    component: WorkloadIdentitiesRoot,
-    indexComponent: WorkloadIdentitiesPage,
+    component: WorkloadIssuersRoot,
+    indexComponent: WorkloadIssuersPage,
+    subPages: {
+      issuerDetail: {
+        title: "Trusted Platform",
+        url: ":issuerId",
+        component: WorkloadIssuerDetailPage,
+      },
+    },
   },
 
   agents: {

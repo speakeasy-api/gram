@@ -94,9 +94,9 @@ export function RegisterIssuerDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Trust a workload issuer</Dialog.Title>
+          <Dialog.Title>Register new access</Dialog.Title>
           <Dialog.Description>
-            Both values come from the platform issuing your workloads&apos;
+            Both values come from the platform issuing your machines&apos;
             tokens. Gram stores them exactly as entered, because an assertion is
             matched against the spelling you register.
           </Dialog.Description>
@@ -108,7 +108,7 @@ export function RegisterIssuerDialog({
             <Input
               id="workload-issuer-name"
               value={values.name}
-              placeholder="Claude Tag"
+              placeholder="New platform"
               onChange={(value) => setValues({ ...values, name: value })}
             />
             <Text muted small>
