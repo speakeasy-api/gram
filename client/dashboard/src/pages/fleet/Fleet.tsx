@@ -185,7 +185,7 @@ function FleetPage(): JSX.Element {
   return (
     <ResourceListPage
       title="Fleet"
-      area="Identity"
+      area="Observability"
       description={`Agents and captured sessions in ${project.name}. Organization-wide identities are included.`}
       hideToolbar
       primaryAction={

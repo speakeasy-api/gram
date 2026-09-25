@@ -141,9 +141,8 @@ describe("useProjectNavRoutes", () => {
   it("lists Identity before MCP Gateway, Security and Policy, and Observability", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
     const navRoutes = result.current.map((entry) => entry.route);
-    expect(navRoutes.slice(2, 7)).toEqual([
+    expect(navRoutes.slice(2, 6)).toEqual([
       routes.identities,
-      routes.fleet,
       routes.agents,
       routes.mcpSessions,
       routes.remoteIdentityProviders,
@@ -154,6 +153,12 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes.indexOf(routes.shadowAI)).toBeLessThan(
       navRoutes.indexOf(routes.costs),
     );
+    const insightsIndex = navRoutes.indexOf(routes.insights);
+    expect(navRoutes.slice(insightsIndex, insightsIndex + 3)).toEqual([
+      routes.insights,
+      routes.fleet,
+      routes.agentSessions,
+    ]);
   });
 
   it("uses Shadow AI as the nav destination, with Shadow MCP folded into it", () => {

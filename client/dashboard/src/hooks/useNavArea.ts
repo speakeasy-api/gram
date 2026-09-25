@@ -16,13 +16,13 @@ const AREA_BY_PAGE_SLUG: Record<string, NavArea> = {
   costs: "Observability",
   explore: "Observability",
   insights: "Observability",
+  fleet: "Observability",
   "agent-sessions": "Observability",
   "org-memory": "Observability",
   logs: "Observability",
   // Identity
   identities: "Identity",
   "agent-management": "Identity",
-  fleet: "Identity",
   "mcp-sessions": "Identity",
   "remote-identity-providers": "Identity",
   // Security and Policy
