@@ -162,13 +162,15 @@ func TestUpdateServerRejectsInvalidResourceIdentifier(t *testing.T) {
 	writeCtx := authztest.WithExactGrants(t, ctx, projectScopedMCPGrant(authz.ScopeMCPWrite, *authCtx.ProjectID))
 
 	for _, invalid := range []string{
-		"tunneled.internal/mcp",              // not absolute
-		"ftp://tunneled.internal/mcp",        // wrong scheme
-		"https:///mcp",                       // no host
-		"https://tunneled.internal/mcp#frag", // fragment (RFC 8707)
-		"https://tunneled.internal/mcp#",     // bare fragment delimiter
-		"/",                                  // normalizes to nothing: an error, not a silent clear
-		"   x   ",                            // whitespace-padded garbage is not a clear either
+		"tunneled.internal/mcp",               // not absolute
+		"ftp://tunneled.internal/mcp",         // wrong scheme
+		"https:///mcp",                        // no host
+		"https://tunneled.internal/mcp#frag",  // fragment (RFC 8707)
+		"https://tunneled.internal/mcp#",      // bare fragment delimiter
+		"https://tunneled.internal/a b",       // unescaped path
+		"https://tunneled.internal/mcp?q=a b", // unescaped query
+		"/",                                   // normalizes to nothing: an error, not a silent clear
+		"   x   ",                             // whitespace-padded garbage is not a clear either
 	} {
 		_, err := ti.service.UpdateServer(writeCtx, &gen.UpdateServerPayload{
 			SessionToken:       nil,

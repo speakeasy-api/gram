@@ -97,7 +97,7 @@ func (s *Service) resolveConsentRouting(
 	clients []remotesessions.Client,
 	statuses map[uuid.UUID]remotesessions.RemoteSessionState,
 ) (consentRouting, error) {
-	r := consentRouting{backend: consentBackendNone, upstream: strings.TrimRight(endpoint.UpstreamResource, "/"), issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: map[string]int{}}
+	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, issuer: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, members: nil, grants: map[string]int{}}
 	for _, st := range statuses {
 		if st.Status == remotesessions.RemoteSessionActive && st.Resource != "" {
 			r.grants[strings.TrimRight(st.Resource, "/")]++

@@ -307,4 +307,7 @@ func TestServeConsent_TunneledServerAppliesRuleToOwnIssuerOnly(t *testing.T) {
 	grant(t, ctx, fx, own, strings.TrimRight(identifier, "/"))
 	expect(t, fx, 2, 2, false)
 	expectRechecks(t, fx, 1)
+	grant(t, ctx, fx, own, "https://mcp.example.test/a/b/")
+	expect(t, fx, 1, 2, true)
+	expectRechecks(t, fx, 0)
 }

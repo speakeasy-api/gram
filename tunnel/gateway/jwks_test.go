@@ -66,13 +66,15 @@ func TestPublicHandlerServesJWKSWithOnlyPublicKeys(t *testing.T) {
 		if method == http.MethodHead {
 			require.Empty(t, w.Body.String())
 		}
-		req.Header.Set("If-None-Match", etag)
-		w = httptest.NewRecorder()
-		handler.ServeHTTP(w, req)
-		require.Equal(t, http.StatusNotModified, w.Code)
-		require.Equal(t, etag, w.Header().Get("ETag"))
-		require.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
-		require.Empty(t, w.Body.String())
+		for _, validator := range []string{etag, "W/" + etag, `"other", ` + etag, "*"} {
+			req.Header.Set("If-None-Match", validator)
+			w = httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+			require.Equal(t, http.StatusNotModified, w.Code)
+			require.Equal(t, etag, w.Header().Get("ETag"))
+			require.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
+			require.Empty(t, w.Body.String())
+		}
 	}
 	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions} {
 		w := httptest.NewRecorder()
@@ -91,7 +93,7 @@ func TestPublicHandlerEmptyJWKS(t *testing.T) {
 	require.JSONEq(t, `{"keys":[]}`, w.Body.String())
 }
 
-func TestPublicHandlerJWKSStableAcrossOrderingAndDuplicates(t *testing.T) {
+func TestPublicHandlerJWKSChangesOnlyWithKeySet(t *testing.T) {
 	t.Parallel()
 	a, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -114,6 +116,17 @@ func TestPublicHandlerJWKSStableAcrossOrderingAndDuplicates(t *testing.T) {
 		}
 		previous = w
 	}
+	gw := newForwardTestGateway(t, Config{ForwardToken: "test-forward", AuthzPublicKeys: publicA})
+	req := httptest.NewRequest(http.MethodGet, jwks.Path, nil)
+	req.Header.Set("If-None-Match", previous.Header().Get("ETag"))
+	w := httptest.NewRecorder()
+	gw.PublicHandler().ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.NotEqual(t, previous.Header().Get("ETag"), w.Header().Get("ETag"))
+	require.NotEqual(t, previous.Body.String(), w.Body.String())
+	var keys jose.JSONWebKeySet
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &keys))
+	require.Len(t, keys.Keys, 1)
 }
 
 func TestGatewayRejectsPrivateOrMalformedJWKSPublicConfiguration(t *testing.T) {
