@@ -1393,19 +1393,25 @@ BEGIN
   -- makes this exact session reachable from the requesting session's issuer.
   -- Reserved .invalid endpoints, an invalid ciphertext and no refresh token
   -- prevent this display fixture from becoming a usable upstream credential.
+  -- The scope override and the legacy callback flag are display fixtures: the
+  -- issuer's page shows the pinned scopes, and the client's pages show both the
+  -- ignored-scopes warning and the legacy callback warning.
   INSERT INTO remote_session_issuers
-    (id, project_id, organization_id, slug, issuer, name, authorization_grant_profiles_supported)
+    (id, project_id, organization_id, slug, issuer, name, authorization_grant_profiles_supported,
+     scope_override)
   VALUES (demo.det_uuid('gram-demo-attachment-issuer'), proj_a, demo_org,
           'fictional-release-account', 'https://release.example.invalid',
           -- Administrator-declared capability only: not a discovery visit or client grant.
-          'Fictional release account', ARRAY['urn:ietf:params:oauth:grant-profile:id-jag']);
+          'Fictional release account', ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
+          ARRAY['releases:read', 'offline_access']);
 
   INSERT INTO remote_session_clients
     (id, project_id, organization_id, remote_session_issuer_id, client_id,
-     token_endpoint_auth_method)
+     token_endpoint_auth_method, scope, legacy_callback_url)
   VALUES (demo.det_uuid('gram-demo-attachment-client'), proj_a, demo_org,
           demo.det_uuid('gram-demo-attachment-issuer'),
-          demo.det_uuid('gram-demo-attachment-client')::text, 'none');
+          demo.det_uuid('gram-demo-attachment-client')::text, 'none',
+          ARRAY['releases:read', 'releases:write'], TRUE);
 
   INSERT INTO remote_session_client_user_session_issuers
     (remote_session_client_id, user_session_issuer_id)
