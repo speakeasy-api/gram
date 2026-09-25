@@ -1,4 +1,7 @@
-import { GatewayFrozenToolset, type FrozenGatewayConnection } from "./GatewayFrozenToolset";
+import {
+  GatewayFrozenToolset,
+  type FrozenGatewayConnection,
+} from "./GatewayFrozenToolset";
 import { useSession } from "@/contexts/Auth";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Page } from "@/components/page-layout";
@@ -172,6 +175,7 @@ function GatewayInspectConnection({
         {metaMcpServer.userSessionIssuerId && (
           <GatewayFrozenToolset
             gatewayId={metaMcpServer.id}
+            enabled={metaMcpServer.frozenToolsetsEnabled === true}
             approved={approvedFrozen}
             hasUnappliedFreeze={!!frozen && frozen !== approvedFrozen}
             pending={isMintingToken}

@@ -126,10 +126,10 @@ func (s *Service) captureGatewayToolset(ctx context.Context, logger *slog.Logger
 			if errors.As(err, &denied) && (denied.Code == oops.CodeNotFound || denied.Code == oops.CodeForbidden) {
 				continue
 			}
-			return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again")
+			return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
 		}
 		if catalog.incomplete {
-			return nil, oops.E(oops.CodeUnavailable, nil, "gateway tool inventory contains invalid definitions; try again")
+			return nil, oops.E(oops.CodeUnavailable, nil, "gateway tool inventory contains invalid definitions; try again").LogWarn(ctx, logger)
 		}
 		for _, entry := range catalog.entries {
 			tool, err := frozenMemberTool(member, catalog.routingIdentity, entry)

@@ -6,8 +6,6 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Text } from "@/components/ui/Text";
-import { useOrganization } from "@/contexts/Auth";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
 export type FrozenGatewayConnection = {
   review: GramGatewayToolsetReview;
@@ -16,24 +14,19 @@ export type FrozenGatewayConnection = {
 
 export function GatewayFrozenToolset({
   gatewayId,
+  enabled,
   approved,
   hasUnappliedFreeze = false,
   pending,
   onApply,
 }: {
   gatewayId: string;
+  enabled: boolean;
   approved: FrozenGatewayConnection | undefined;
   hasUnappliedFreeze?: boolean;
   pending: boolean;
   onApply: (value: FrozenGatewayConnection | undefined) => void;
 }): JSX.Element | null {
-  const organization = useOrganization();
-  const { data: features } = useProductFeatures(
-    { organizationId: organization.id },
-    undefined,
-    { throwOnError: false },
-  );
-  const enabled = features?.gatewayFrozenToolsetsEnabled === true;
   const [review, setReview] = useState<GramGatewayToolsetReview>();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   useEffect(() => {

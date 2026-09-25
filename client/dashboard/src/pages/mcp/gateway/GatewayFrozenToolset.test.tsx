@@ -18,14 +18,6 @@ const state = vi.hoisted(() => ({
   enabled: true,
   preview: vi.fn<() => Promise<GramGatewayToolsetReview>>(),
 }));
-vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ id: "org-test" }),
-}));
-vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({
-    data: { gatewayFrozenToolsetsEnabled: state.enabled },
-  }),
-}));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     userSessions: { previewGatewayToolset: state.preview },
@@ -59,6 +51,7 @@ it("leaves changed and new tools unchecked while preserving unchanged approvals"
   };
   renderReview(
     <GatewayFrozenToolset
+      enabled={state.enabled}
       gatewayId="gateway"
       pending={false}
       approved={{ review: old, names: old.tools.map((t) => t.name) }}
@@ -96,7 +89,7 @@ it("leaves changed and new tools unchecked while preserving unchanged approvals"
   );
   expect(onApply).toHaveBeenLastCalledWith({ review: next, names: [] });
 });
-it("clears an old review before a new preview and keeps an issued freeze visible with the flag off", async () => {
+it("clears an old review before a new preview and keeps an issued freeze visible with the feature disabled", async () => {
   const approved = {
     review: { fingerprint: "old", tools: [tool("same", "v1")] },
     names: ["same"],
@@ -104,6 +97,7 @@ it("clears an old review before a new preview and keeps an issued freeze visible
   const onApply = vi.fn<(value: FrozenGatewayConnection | undefined) => void>();
   const { rerender } = renderReview(
     <GatewayFrozenToolset
+      enabled={state.enabled}
       gatewayId="gateway"
       pending={false}
       approved={approved}
@@ -127,6 +121,7 @@ it("clears an old review before a new preview and keeps an issued freeze visible
   state.enabled = false;
   rerender(
     <GatewayFrozenToolset
+      enabled={state.enabled}
       gatewayId="gateway"
       pending={false}
       approved={approved}
@@ -147,7 +142,7 @@ it("clears an old review before a new preview and keeps an issued freeze visible
   expect(onApply).toHaveBeenCalledWith(undefined);
 });
 it("keeps live recovery available after a first freeze fails and the feature is disabled", () => {
-  const onApply = vi.fn();
+  const onApply = vi.fn<(value: FrozenGatewayConnection | undefined) => void>();
   const props = {
     gatewayId: "gateway",
     approved: undefined,
@@ -155,9 +150,11 @@ it("keeps live recovery available after a first freeze fails and the feature is 
     pending: false,
     onApply,
   };
-  const { rerender } = renderReview(<GatewayFrozenToolset {...props} />);
+  const { rerender } = renderReview(
+    <GatewayFrozenToolset {...props} enabled={state.enabled} />,
+  );
   state.enabled = false;
-  rerender(<GatewayFrozenToolset {...props} />);
+  rerender(<GatewayFrozenToolset {...props} enabled={state.enabled} />);
   expect(
     screen.getByText("Freeze not applied to this connection"),
   ).toBeTruthy();

@@ -12,5 +12,7 @@ import (
 func (s *Service) withGatewayCapabilities(ctx context.Context, view *types.MetaMcpServer) *types.MetaMcpServer {
 	enabled := s.productFeatures.PlatformFeatureCheck(ctx, view.OrganizationID, string(productfeatures.FeatureGatewayDiscoveryModes))
 	view.DiscoveryModesEnabled = &enabled
+	frozen := s.productFeatures.PlatformFeatureCheck(ctx, view.OrganizationID, string(productfeatures.FeatureGatewayFrozenToolsets))
+	view.FrozenToolsetsEnabled = &frozen
 	return view
 }
