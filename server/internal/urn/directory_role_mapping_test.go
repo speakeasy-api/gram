@@ -59,6 +59,9 @@ func TestDirectoryRoleMappingRejectsInvalidValues(t *testing.T) {
 	_, err = urn.ParseDirectoryRoleMapping("directory_role_mapping:not-a-uuid")
 	require.ErrorIs(t, err, urn.ErrInvalid)
 
+	_, err = urn.ParseDirectoryRoleMapping("directory_role_mapping:" + uuid.Nil.String())
+	require.ErrorIs(t, err, urn.ErrInvalid)
+
 	_, err = urn.NewDirectoryRoleMapping(uuid.Nil).MarshalJSON()
 	require.ErrorIs(t, err, urn.ErrInvalid)
 }

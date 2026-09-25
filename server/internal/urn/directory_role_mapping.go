@@ -47,6 +47,9 @@ func ParseDirectoryRoleMapping(value string) (DirectoryRoleMapping, error) {
 	if err != nil {
 		return DirectoryRoleMapping{}, fmt.Errorf("%w: invalid directory_role_mapping uuid", ErrInvalid)
 	}
+	if id == uuid.Nil {
+		return DirectoryRoleMapping{}, fmt.Errorf("%w: empty id", ErrInvalid)
+	}
 
 	return NewDirectoryRoleMapping(id), nil
 }
