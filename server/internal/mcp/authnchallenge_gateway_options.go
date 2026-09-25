@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -16,7 +18,18 @@ func (s *Service) gatewayDiscoveryOptionsEnabled(ctx context.Context, endpoint *
 	if !endpoint.MetaMcpServerID.Valid {
 		return false
 	}
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagGatewayDiscoveryModes, endpoint.OrganizationID, feature.OrgProjectGroups(endpoint.OrganizationID, endpoint.ProjectID.String()))
+	orgSlug := ""
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID == endpoint.OrganizationID {
+		orgSlug = authCtx.OrganizationSlug
+	}
+	if orgSlug == "" {
+		org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, endpoint.OrganizationID)
+		if err != nil {
+			return false
+		}
+		orgSlug = org.Slug
+	}
+	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagGatewayDiscoveryModes, endpoint.OrganizationID, feature.OrgProjectGroups(orgSlug, ""))
 	return err == nil && enabled
 }
 

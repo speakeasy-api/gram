@@ -19,7 +19,7 @@ export type UserSessionTokenTarget =
       kind: "metaMcpServer";
       id: string | undefined;
       discoveryMode?: "direct" | "progressive";
-      connectionVersion?: number;
+      connectionVersion?: string;
     };
 
 export interface UseUserSessionTokenResult {

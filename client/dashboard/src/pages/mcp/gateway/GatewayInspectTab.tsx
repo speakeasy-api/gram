@@ -59,7 +59,10 @@ export function GatewayInspectTab({
   const [modeDraft, setModeDraft] = useState<
     "default" | "direct" | "progressive"
   >("default");
-  const [connection, setConnection] = useState({ mode: modeDraft, version: 0 });
+  const [connection, setConnection] = useState(() => ({
+    mode: modeDraft,
+    version: crypto.randomUUID(),
+  }));
   const discoveryMode =
     connection.mode === "default" ? undefined : connection.mode;
   const configurationKey = `${connection.mode}:${connection.version}:${metaMcpServer.discoveryMode}`;
@@ -156,10 +159,10 @@ export function GatewayInspectTab({
                 variant="secondary"
                 disabled={isMintingToken}
                 onClick={() =>
-                  setConnection((current) => ({
+                  setConnection({
                     mode: modeDraft,
-                    version: current.version + 1,
-                  }))
+                    version: crypto.randomUUID(),
+                  })
                 }
               >
                 <Button.Text>Apply and reconnect</Button.Text>

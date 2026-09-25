@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -40,6 +41,13 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 	for _, member := range members {
 		catalog, err := s.describeMetaMember(ctx, logger, gate, member)
 		if err != nil {
+			var denied *oops.ShareableError
+			if errors.As(err, &denied) && (denied.Code == oops.CodeNotFound || denied.Code == oops.CodeForbidden) {
+				continue
+			}
+			if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
+				return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete: %s", memberErr.message).LogWarn(ctx, logger)
+			}
 			return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
 		}
 		for _, entry := range catalog.entries {
