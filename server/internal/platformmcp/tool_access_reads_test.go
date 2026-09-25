@@ -12,7 +12,7 @@ import (
 func TestAccessReadToolsAreExternalReadOnlyTools(t *testing.T) {
 	t.Parallel()
 
-	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	requireAccessReadToolDescriptors(t, registrar)
 }
 

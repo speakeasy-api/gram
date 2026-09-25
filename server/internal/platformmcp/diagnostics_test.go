@@ -45,7 +45,7 @@ func TestDelegatedDiagnosticsToolsRequireProjectReadDiscovery(t *testing.T) {
 	t.Parallel()
 
 	registrars := []*Registrar{}
-	_, unavailable := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	_, unavailable := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
 	registrars = append(registrars, unavailable)
 	live := newRegistrar(newTestMCPServer())
 	registerDiagnosticsTools(live, nil)

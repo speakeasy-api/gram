@@ -109,9 +109,25 @@ type MCPReadiness struct {
 }
 
 type MCPDistribution struct {
-	PluginID         string `json:"plugin_id"`
-	State            string `json:"state"`
-	PublicationState string `json:"publication_state"`
+	// PluginID identifies the plugin carrying this MCP.
+	PluginID string `json:"plugin_id"`
+
+	// PluginName is the plugin's display name, so naming the plugin needs no
+	// separate list_plugins call.
+	PluginName string `json:"plugin_name"`
+
+	// PluginSlug is the plugin's stable slug, the value to pass back to a tool
+	// that takes a plugin by slug.
+	PluginSlug string `json:"plugin_slug"`
+
+	// State is the lifecycle state of a membership this flow created. It is
+	// empty for a membership created elsewhere, which has no lifecycle record;
+	// empty means unknown, never "not attached".
+	State string `json:"state,omitempty"`
+
+	// PublicationState reports whether that membership has been published. It
+	// is empty on the same terms as State, and empty never means "unpublished".
+	PublicationState string `json:"publication_state,omitempty"`
 }
 
 type MCP struct {
@@ -169,11 +185,11 @@ type operationBudgetResult struct {
 // registrar alongside the server so another admitted audience — the project
 // assistant — can be composed from the same registration pass rather than from
 // a second list that would drift.
-func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
-	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, plugins, sessionRecall, nil, candidate, nil, nil)
+func newServer(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, candidate CatalogDescriptor) (*mcp.Server, *Registrar) {
+	return newServerWithRiskMutations(reader, catalog, registrations, cursorKeyMaterial, setupResources, feedback, onboarding, distributions, skills, diagnostics, workflowRun, plugins, sessionRecall, nil, candidate, nil, nil)
 }
 
-func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService, connectionMutations ...*MCPConnectionMutationService) (*mcp.Server, *Registrar) {
+func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *RegistrationService, cursorKeyMaterial string, setupResources []SetupResource, feedback *FeedbackService, onboarding *OnboardingService, distributions *DistributionService, skills *SkillsService, diagnostics *DiagnosticsService, workflowRun *WorkflowRunService, plugins *PluginsService, sessionRecall *SessionRecallService, riskMutations *RiskMutationHandlers, candidate CatalogDescriptor, accessRead *AccessReadService, accessRoleMutations *AccessRoleMutationService, connectionMutations ...*MCPConnectionMutationService) (*mcp.Server, *Registrar) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "platform-mcp",
 		Title:   "Platform MCP",
@@ -371,6 +387,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	} else {
 		registerFeedbackTool(reg, feedback)
 	}
+	registerWorkflowRunTool(reg, workflowRun)
 	return server, reg
 }
 

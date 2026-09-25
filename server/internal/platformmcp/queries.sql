@@ -1008,26 +1008,31 @@ FROM (
       AND m.deleted IS FALSE
 ) AS inventory;
 
--- name: ListPlatformMCPInventoryDistributions :many
+-- plugin_servers is the attachment authority, so plugin membership is read from
+-- it and keyed by MCP server. platform_mcp_distributions only records the
+-- lifecycle of memberships this flow created, so it joins in for state and
+-- leaves a dashboard-created membership with no lifecycle of its own.
+-- name: ListPlatformMCPInventoryPluginMemberships :many
 SELECT
-    distribution.registration_id,
-    COALESCE(distribution.plugin_id, distribution.default_plugin_id) AS plugin_id,
+    plugin_server.mcp_server_id,
+    plugin.id AS plugin_id,
+    plugin.name AS plugin_name,
+    plugin.slug AS plugin_slug,
     distribution.state,
     distribution.publication_state
-FROM platform_mcp_distributions AS distribution
-JOIN projects AS project
-  ON project.id = distribution.project_id
- AND project.organization_id = distribution.organization_id
- AND project.deleted IS FALSE
-JOIN platform_mcp_catalog_registrations AS registration
-  ON registration.id = distribution.registration_id
- AND registration.organization_id = distribution.organization_id
- AND registration.project_id = distribution.project_id
- AND registration.deleted IS FALSE
-WHERE distribution.organization_id = @organization_id
-  AND (sqlc.narg(project_id)::uuid IS NULL OR distribution.project_id = sqlc.narg(project_id)::uuid)
-  AND distribution.registration_id = ANY(@registration_ids::uuid[])
-ORDER BY distribution.registration_id, distribution.id ASC;
+FROM plugin_servers AS plugin_server
+JOIN plugins AS plugin
+  ON plugin.id = plugin_server.plugin_id
+ AND plugin.deleted IS FALSE
+LEFT JOIN platform_mcp_distributions AS distribution
+  ON distribution.plugin_server_id = plugin_server.id
+ AND distribution.organization_id = plugin.organization_id
+ AND distribution.project_id = plugin.project_id
+WHERE plugin_server.deleted IS FALSE
+  AND plugin_server.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND plugin.organization_id = @organization_id
+  AND (sqlc.narg(project_id)::uuid IS NULL OR plugin.project_id = sqlc.narg(project_id)::uuid)
+ORDER BY plugin_server.mcp_server_id, plugin_server.id ASC;
 
 -- name: GetPlatformMCPCatalogRegistrationForLifecycle :one
 -- Registrations are project desired state, not permanently owned by the OAuth
