@@ -1,4 +1,4 @@
-import { useRef, useState, type JSX } from "react";
+import { lazy, Suspense, useRef, useState, type JSX } from "react";
 import { useBlocker } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AdminRegistryEntry } from "@gram/admin-client/models/components/adminregistryentry";
@@ -20,6 +20,10 @@ import {
   type ValidationIssue,
   validateRegistryText,
 } from "@/lib/registryValidation";
+
+import { serverValidationIssues } from "@/lib/registryJsonEditor";
+
+const RegistryJsonEditor = lazy(() => import("./RegistryJsonEditor"));
 
 export const STAGE_A_NOTICE =
   "Edits affect the Gram catalog. Customer catalog reads still use Pulse.";
@@ -59,6 +63,8 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
   const save = useSaveRegistryEntryMutation();
   const visibility = useSetRegistryEntryPublishedMutation();
   const [text, setText] = useState(id ? "" : EMPTY);
+  const [serverIssues, setServerIssues] = useState<ValidationIssue[]>([]);
+  const [edited, setEdited] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState(false);
@@ -93,6 +99,8 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
     setBase(entry);
     setText(entry.dataJson);
     setIssues([]);
+    setServerIssues([]);
+    setEdited(false);
     setFailure(null);
     setConflict(false);
     await queryClient.invalidateQueries({
@@ -118,6 +126,7 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
     inFlight.current = true;
     setBusy(true);
     setFailure(null);
+    setServerIssues([]);
 
     try {
       if (kind === "reload") {
@@ -127,6 +136,8 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
           setBase(result.data);
           setText(result.data.dataJson);
           setIssues([]);
+          setServerIssues([]);
+          setEdited(false);
           setConflict(false);
         }
       } else if (kind === "visibility" && base && !dirty) {
@@ -154,6 +165,8 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
       }
     } catch (error) {
       setFailure(error);
+      if (errorStatus(error) === 422)
+        setServerIssues(serverValidationIssues(errorText(error)));
       if (errorStatus(error) === 409) setConflict(true);
     } finally {
       inFlight.current = false;
@@ -189,8 +202,22 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
             preserves publication status.
           </p>
           {failure !== null && (
-            <div id="registry-request-error" role="alert">
-              {errorText(failure)}{" "}
+            <div
+              id="registry-request-error"
+              role="alert"
+              className="whitespace-pre-wrap"
+            >
+              {serverIssues.length > 0 ? (
+                <ul>
+                  {serverIssues.map((issue, index) => (
+                    <li key={index}>
+                      {issue.path}: {issue.message}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                errorText(failure)
+              )}{" "}
               {conflict &&
                 "This entry changed. Reload explicitly before retrying."}
             </div>
@@ -212,35 +239,42 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
             )
           ) : (
             <>
-              <label
-                htmlFor="registry-json"
-                className="block text-sm font-medium"
-              >
-                Record JSON
-              </label>
-              <textarea
-                id="registry-json"
-                className="border-input min-h-96 w-full rounded-md border p-3 font-mono text-sm"
-                value={text}
-                onChange={(event) => {
-                  setText(event.target.value);
-                  setIssues([]);
-                }}
-                onBlur={() =>
-                  setIssues(validateRegistryText(text, base ?? undefined))
-                }
-                disabled={busy}
-                aria-invalid={issues.length > 0 || errorStatus(failure) === 422}
-                aria-describedby={
-                  failure !== null
-                    ? "registry-feedback registry-request-error"
-                    : "registry-feedback"
-                }
-              />
+              <p className="block text-sm font-medium">Record JSON</p>
+              <Suspense fallback={<p role="status">Loading JSON editor…</p>}>
+                <RegistryJsonEditor
+                  value={text}
+                  onChange={(value) => {
+                    setText(value);
+                    setIssues([]);
+                    setServerIssues([]);
+                    setEdited(true);
+                    if (errorStatus(failure) === 422) setFailure(null);
+                  }}
+                  onBlur={() =>
+                    setIssues(validateRegistryText(text, base ?? undefined))
+                  }
+                  disabled={busy}
+                  invalid={issues.length > 0 || serverIssues.length > 0}
+                  describedBy={
+                    failure !== null
+                      ? "registry-feedback registry-request-error"
+                      : "registry-feedback"
+                  }
+                  issues={
+                    serverIssues.length > 0
+                      ? serverIssues
+                      : !edited
+                        ? (base?.issues ?? [])
+                        : []
+                  }
+                />
+              </Suspense>
               <div id="registry-feedback" className="text-sm">
                 <p>
-                  JSON syntax and size are checked on blur and Save. The server
-                  validates record fields when you save.
+                  Syntax and schema feedback appear while editing. Suggestions
+                  are optional; values are never applied automatically. Size is
+                  checked on blur and Save. Browser schema checks can differ
+                  from the server, which validates records when you save.
                 </p>
                 {issues.length > 0 && (
                   <ul role="alert">

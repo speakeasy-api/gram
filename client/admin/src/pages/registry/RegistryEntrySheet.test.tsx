@@ -4,6 +4,21 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { renderWithApp } from "@/test/harness";
 import { registryEntryQuery } from "@/lib/gramAdminClient";
 
+vi.mock("./RegistryJsonEditor", () => ({
+  default: (props: import("./RegistryJsonEditor").RegistryJsonEditorProps) => (
+    <textarea
+      aria-label="Record JSON"
+      value={props.value}
+      disabled={props.disabled}
+      aria-invalid={props.invalid}
+      aria-describedby={props.describedBy}
+      data-server-issues={JSON.stringify(props.issues)}
+      onChange={(event) => props.onChange(event.target.value)}
+      onBlur={props.onBlur}
+    />
+  ),
+}));
+
 const mutations = vi.hoisted(() => ({
   save: vi.fn(),
   create: vi.fn(),
@@ -416,4 +431,61 @@ it("opens create without fetching or retrying the disabled detail query", async 
   expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   expect(fetch).not.toHaveBeenCalled();
   expect(mutations.create).not.toHaveBeenCalled();
+});
+
+it("maps server issues after Save and clears stale markers on edit", async () => {
+  mutations.save.mockRejectedValue(
+    Object.assign(
+      new Error("/server/name: required; /server/version: invalid"),
+      { statusCode: 422 },
+    ),
+  );
+  await mount();
+  const editor = await screen.findByLabelText("Record JSON");
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByRole("alert");
+  expect(JSON.parse(editor.getAttribute("data-server-issues")!)).toHaveLength(
+    2,
+  );
+  expect(screen.getByRole("list").textContent).toContain(
+    "/server/version: invalid",
+  );
+  fireEvent.change(editor, { target: { value: raw + " " } });
+  expect(editor.getAttribute("data-server-issues")).toBe("[]");
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("shows the latest request failure after retrying a validation failure", async () => {
+  mutations.save
+    .mockRejectedValueOnce(
+      Object.assign(new Error("/server/name: required"), { statusCode: 422 }),
+    )
+    .mockRejectedValueOnce(
+      Object.assign(new Error("Latest request unavailable"), {
+        statusCode: 500,
+      }),
+    );
+  await mount();
+  const editor = await screen.findByLabelText("Record JSON");
+  fireEvent.change(editor, { target: { value: raw + " " } });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  expect((await screen.findByRole("alert")).textContent).toContain(
+    "/server/name: required",
+  );
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Latest request unavailable",
+    ),
+  );
+  expect(screen.getByRole("alert").textContent).not.toContain("required");
+  expect(editor.getAttribute("data-server-issues")).toBe("[]");
+  expect((editor as HTMLTextAreaElement).value).toBe(raw + " ");
+  expect(mutations.save.mock.calls[1]![0].request.updatedAt).toBe(token);
 });
