@@ -5218,6 +5218,101 @@ paths:
             x-speakeasy-name-override: createRole
             x-speakeasy-react-hook:
                 name: CreateRole
+    /rpc/access.deleteDirectoryRoleMapping:
+        delete:
+            description: Remove a directory role mapping.
+            operationId: deleteDirectoryRoleMapping
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the mapping to remove.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the mapping to remove.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "204":
+                    description: No Content response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: deleteDirectoryRoleMapping access
+            tags:
+                - access
+            x-speakeasy-name-override: deleteDirectoryRoleMapping
+            x-speakeasy-react-hook:
+                name: DeleteDirectoryRoleMapping
+                type: mutation
     /rpc/access.deleteRole:
         delete:
             description: Delete a custom role (system roles cannot be deleted).
@@ -6105,6 +6200,95 @@ paths:
             x-speakeasy-name-override: listChallenges
             x-speakeasy-react-hook:
                 name: Challenges
+    /rpc/access.listDirectoryRoleMappings:
+        get:
+            description: List the organization's directory groups and attribute values, and the roles mapped to them.
+            operationId: listDirectoryRoleMappings
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListDirectoryRoleMappingsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listDirectoryRoleMappings access
+            tags:
+                - access
+            x-speakeasy-name-override: listDirectoryRoleMappings
+            x-speakeasy-react-hook:
+                name: DirectoryRoleMappings
     /rpc/access.listEmployeeAIDetections:
         get:
             description: List AI tools detected for one enrolled employee in the active organization. The employee email is required so project viewers cannot broaden the request into an organization-wide inventory. Linked alias emails are folded to the canonical identity. Requires project:read on the active project; the access decision on each row carries its state but not who recorded it, when, or why.
@@ -7465,6 +7649,102 @@ paths:
             x-speakeasy-react-hook:
                 name: SetAIToolDecision
                 type: mutation
+    /rpc/access.setDirectoryRoleMapping:
+        post:
+            description: Map a directory group or attribute value to a role, replacing any role it was mapped to before.
+            operationId: setDirectoryRoleMapping
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetDirectoryRoleMappingForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/DirectoryRoleMapping'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: setDirectoryRoleMapping access
+            tags:
+                - access
+            x-speakeasy-name-override: setDirectoryRoleMapping
+            x-speakeasy-react-hook:
+                name: SetDirectoryRoleMapping
+                type: mutation
     /rpc/access.setResourceAudience:
         post:
             description: Replace the rules that name one resource. Organization-wide rules are left untouched.
@@ -7560,6 +7840,96 @@ paths:
             x-speakeasy-name-override: setResourceAudience
             x-speakeasy-react-hook:
                 name: SetResourceAudience
+                type: mutation
+    /rpc/access.syncDirectoryGroups:
+        post:
+            description: Fetch the organization's directory groups from WorkOS and save any that are new or changed.
+            operationId: syncDirectoryGroups
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SyncDirectoryGroupsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: syncDirectoryGroups access
+            tags:
+                - access
+            x-speakeasy-name-override: syncDirectoryGroups
+            x-speakeasy-react-hook:
+                name: SyncDirectoryGroups
                 type: mutation
     /rpc/access.updateMemberRoles:
         put:
@@ -83899,6 +84269,82 @@ components:
                 - dimension
                 - from
                 - to
+        DirectoryAttributeOption:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: Directory attribute key, e.g. department_name.
+                member_count:
+                    type: integer
+                    description: Number of directory users with this value.
+                    format: int64
+                value:
+                    type: string
+                    description: Directory attribute value.
+            required:
+                - key
+                - value
+                - member_count
+        DirectoryGroupOption:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Directory group identifier.
+                    format: uuid
+                member_count:
+                    type: integer
+                    description: Number of directory users in the group.
+                    format: int64
+                name:
+                    type: string
+                    description: Directory group name.
+            required:
+                - id
+                - name
+                - member_count
+        DirectoryRoleMapping:
+            type: object
+            properties:
+                attribute_key:
+                    type: string
+                    description: The directory attribute key. Set when source_kind is attribute.
+                attribute_value:
+                    type: string
+                    description: The directory attribute value. Set when source_kind is attribute.
+                created_at:
+                    type: string
+                    format: date-time
+                directory_group_id:
+                    type: string
+                    description: The mapped directory group. Set when source_kind is group.
+                    format: uuid
+                directory_group_name:
+                    type: string
+                    description: Display name of the mapped directory group.
+                id:
+                    type: string
+                    description: Unique mapping identifier.
+                    format: uuid
+                role_urn:
+                    type: string
+                    description: Principal URN of the role granted to matching members.
+                source_kind:
+                    type: string
+                    description: 'What the mapping matches: a directory group or an attribute value.'
+                    enum:
+                        - group
+                        - attribute
+                updated_at:
+                    type: string
+                    format: date-time
+            required:
+                - id
+                - source_kind
+                - role_urn
+                - created_at
+                - updated_at
         DisableOpenRouterKeyRequestBody:
             type: object
             properties:
@@ -89370,6 +89816,28 @@ components:
                 - organization_id
                 - provider
                 - schedules
+        ListDirectoryRoleMappingsResult:
+            type: object
+            properties:
+                attributes:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryAttributeOption'
+                    description: Distinct attribute values set on active directory users.
+                groups:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryGroupOption'
+                    description: Active directory groups in the organization.
+                mappings:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DirectoryRoleMapping'
+                    description: Live directory role mappings.
+            required:
+                - groups
+                - attributes
+                - mappings
         ListDistributionPluginsResult:
             type: object
             properties:
@@ -99531,6 +99999,33 @@ components:
                     minimum: 0
             required:
                 - billing_cycle_anchor_day
+        SetDirectoryRoleMappingForm:
+            type: object
+            properties:
+                attribute_key:
+                    type: string
+                    description: Attribute key to match. Required when source_kind is attribute.
+                    minLength: 1
+                attribute_value:
+                    type: string
+                    description: Attribute value to match. Required when source_kind is attribute.
+                    minLength: 1
+                directory_group_id:
+                    type: string
+                    description: Directory group to map. Required when source_kind is group.
+                    format: uuid
+                role_urn:
+                    type: string
+                    description: Principal URN of the role to grant, from Role.principal_urn.
+                source_kind:
+                    type: string
+                    description: What the mapping matches.
+                    enum:
+                        - group
+                        - attribute
+            required:
+                - source_kind
+                - role_urn
         SetInferenceKeyMonthlyLimitRequestBody:
             type: object
             properties:
@@ -102456,6 +102951,15 @@ components:
                 - vendor
                 - family
                 - surface
+        SyncDirectoryGroupsResult:
+            type: object
+            properties:
+                group_count:
+                    type: integer
+                    description: Number of groups WorkOS returned across the organization's directories.
+                    format: int64
+            required:
+                - group_count
         SyncIdentityProviderConnectionApplicationsRequestBody:
             type: object
             properties:

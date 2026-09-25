@@ -92,8 +92,9 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 		urn.NewPrincipal(urn.PrincipalTypeUser, userID).String(): {},
 	}
 
-	q := repo.New(db)
-	roleRows, err := q.ListMemberRolePrincipalsByUser(ctx, repo.ListMemberRolePrincipalsByUserParams{
+	// Direct role assignments come first, then roles granted through
+	// directory role mappings.
+	roleURNs, err := repo.New(db).ListUserRolePrincipals(ctx, repo.ListUserRolePrincipalsParams{
 		OrganizationID: organizationID,
 		UserID:         userID,
 	})
@@ -101,8 +102,8 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 		return nil, fmt.Errorf("resolve role principals: %w", err)
 	}
 
-	for _, role := range roleRows {
-		principal, err := parseRolePrincipalURN(role.PrincipalUrn)
+	for _, raw := range roleURNs {
+		principal, err := parseRolePrincipalURN(raw)
 		if err != nil {
 			return nil, err
 		}

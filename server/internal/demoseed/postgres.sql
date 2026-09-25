@@ -701,6 +701,7 @@ BEGIN
 
   -- Directory profiles: feed spend-rule audiences, enrollment attributes, and
   -- mirror the user.attributes.* identity on the ClickHouse telemetry.
+  DELETE FROM directory_role_mappings WHERE organization_id = demo_org;
   DELETE FROM directory_user_group_memberships WHERE directory_group_id IN
     (SELECT id FROM directory_groups WHERE organization_id = demo_org);
   DELETE FROM directory_users WHERE organization_id = demo_org;
@@ -733,6 +734,23 @@ BEGIN
     WHERE du.workos_directory_user_id = 'demo_dir_' || demo_user_ids[i]
       AND dg.organization_id = demo_org AND dg.name = demo_teams[i];
   END LOOP;
+
+  -- Directory role mappings: one of each source kind, so the mapping page
+  -- shows a group row and an attribute row, each granting a custom role on
+  -- top of what its members already hold.
+  INSERT INTO directory_role_mappings
+    (organization_id, source_kind, directory_group_id, role_urn)
+  SELECT demo_org, 'group', dg.id, 'role:organization:' || r.id
+  FROM directory_groups dg, organization_roles r
+  WHERE dg.organization_id = demo_org AND dg.name = 'Infra'
+    AND r.organization_id = demo_org AND r.workos_slug = 'collaborator';
+
+  INSERT INTO directory_role_mappings
+    (organization_id, source_kind, attribute_key, attribute_value, role_urn)
+  SELECT demo_org, 'attribute', 'department_name', 'Support Engineering',
+         'role:organization:' || r.id
+  FROM organization_roles r
+  WHERE r.organization_id = demo_org AND r.workos_slug = 'analyst';
 
   -- AI provider accounts (the identity pages' Accounts column and panel):
   -- everyone has a team account under one shared fake provider org, and three
@@ -3252,6 +3270,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE organization_id = demo_org AND status NOT IN ('approved', 'blocked');
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % AI tool rows carry a status other than approved or blocked', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM directory_role_mappings
+  WHERE organization_id = demo_org AND deleted IS FALSE;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 directory role mappings, found %', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',

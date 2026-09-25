@@ -26,6 +26,17 @@ type Service interface {
 	UpdateRole(context.Context, *UpdateRolePayload) (res *Role, err error)
 	// Delete a custom role (system roles cannot be deleted).
 	DeleteRole(context.Context, *DeleteRolePayload) (err error)
+	// List the organization's directory groups and attribute values, and the roles
+	// mapped to them.
+	ListDirectoryRoleMappings(context.Context, *ListDirectoryRoleMappingsPayload) (res *ListDirectoryRoleMappingsResult, err error)
+	// Fetch the organization's directory groups from WorkOS and save any that are
+	// new or changed.
+	SyncDirectoryGroups(context.Context, *SyncDirectoryGroupsPayload) (res *SyncDirectoryGroupsResult, err error)
+	// Map a directory group or attribute value to a role, replacing any role it
+	// was mapped to before.
+	SetDirectoryRoleMapping(context.Context, *SetDirectoryRoleMappingPayload) (res *DirectoryRoleMapping, err error)
+	// Remove a directory role mapping.
+	DeleteDirectoryRoleMapping(context.Context, *DeleteDirectoryRoleMappingPayload) (err error)
 	// List all available scopes and their resource types.
 	ListScopes(context.Context, *ListScopesPayload) (res *ListScopesResult, err error)
 	// List all team members with their role assignments.
@@ -139,7 +150,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [27]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
+var MethodNames = [31]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "syncDirectoryGroups", "setDirectoryRoleMapping", "deleteDirectoryRoleMapping", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -420,6 +431,15 @@ type CreateRolePayload struct {
 	AgentIds []string
 }
 
+// DeleteDirectoryRoleMappingPayload is the payload type of the access service
+// deleteDirectoryRoleMapping method.
+type DeleteDirectoryRoleMappingPayload struct {
+	// The ID of the mapping to remove.
+	ID           string
+	ApikeyToken  *string
+	SessionToken *string
+}
+
 // DeleteRolePayload is the payload type of the access service deleteRole
 // method.
 type DeleteRolePayload struct {
@@ -427,6 +447,45 @@ type DeleteRolePayload struct {
 	ID           string
 	ApikeyToken  *string
 	SessionToken *string
+}
+
+type DirectoryAttributeOption struct {
+	// Directory attribute key, e.g. department_name.
+	Key string
+	// Directory attribute value.
+	Value string
+	// Number of directory users with this value.
+	MemberCount int64
+}
+
+type DirectoryGroupOption struct {
+	// Directory group identifier.
+	ID string
+	// Directory group name.
+	Name string
+	// Number of directory users in the group.
+	MemberCount int64
+}
+
+// DirectoryRoleMapping is the result type of the access service
+// setDirectoryRoleMapping method.
+type DirectoryRoleMapping struct {
+	// Unique mapping identifier.
+	ID string
+	// What the mapping matches: a directory group or an attribute value.
+	SourceKind string
+	// The mapped directory group. Set when source_kind is group.
+	DirectoryGroupID *string
+	// Display name of the mapped directory group.
+	DirectoryGroupName *string
+	// The directory attribute key. Set when source_kind is attribute.
+	AttributeKey *string
+	// The directory attribute value. Set when source_kind is attribute.
+	AttributeValue *string
+	// Principal URN of the role granted to matching members.
+	RoleUrn   string
+	CreatedAt string
+	UpdatedAt string
 }
 
 // GetRolePayload is the payload type of the access service getRole method.
@@ -565,6 +624,24 @@ type ListChallengesResult struct {
 	Challenges []*AuthzChallenge
 	// Total number of matching challenges for pagination.
 	Total int
+}
+
+// ListDirectoryRoleMappingsPayload is the payload type of the access service
+// listDirectoryRoleMappings method.
+type ListDirectoryRoleMappingsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// ListDirectoryRoleMappingsResult is the result type of the access service
+// listDirectoryRoleMappings method.
+type ListDirectoryRoleMappingsResult struct {
+	// Active directory groups in the organization.
+	Groups []*DirectoryGroupOption
+	// Distinct attribute values set on active directory users.
+	Attributes []*DirectoryAttributeOption
+	// Live directory role mappings.
+	Mappings []*DirectoryRoleMapping
 }
 
 // ListEmployeeAIDetectionsPayload is the payload type of the access service
@@ -909,6 +986,23 @@ type SetAIToolDecisionResult struct {
 	Access   *AIToolAccessSummary
 }
 
+// SetDirectoryRoleMappingPayload is the payload type of the access service
+// setDirectoryRoleMapping method.
+type SetDirectoryRoleMappingPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// What the mapping matches.
+	SourceKind string
+	// Directory group to map. Required when source_kind is group.
+	DirectoryGroupID *string
+	// Attribute key to match. Required when source_kind is attribute.
+	AttributeKey *string
+	// Attribute value to match. Required when source_kind is attribute.
+	AttributeValue *string
+	// Principal URN of the role to grant, from Role.principal_urn.
+	RoleUrn string
+}
+
 type SetResourceAudienceEntry struct {
 	// Principal to grant or block. Use '*' for everyone in the organization.
 	PrincipalUrn string
@@ -1083,6 +1177,20 @@ type ShadowMCPInventoryUser struct {
 type ShadowMCPInventoryUserSource struct {
 	Source           string
 	ObservedUseCount int
+}
+
+// SyncDirectoryGroupsPayload is the payload type of the access service
+// syncDirectoryGroups method.
+type SyncDirectoryGroupsPayload struct {
+	ApikeyToken  *string
+	SessionToken *string
+}
+
+// SyncDirectoryGroupsResult is the result type of the access service
+// syncDirectoryGroups method.
+type SyncDirectoryGroupsResult struct {
+	// Number of groups WorkOS returned across the organization's directories.
+	GroupCount int
 }
 
 // UpdateMemberRolesPayload is the payload type of the access service
