@@ -31,6 +31,11 @@ type ApiKeyScopeOption = {
 // declarations in security/api_key.go and the per-service and per-method gates
 // that decide which endpoints a scope reaches — including the one-way
 // implications (producer covers consumer and chat; agent covers agent_user).
+//
+// The `chat` scope is deliberately absent: nothing is provisioned against it any
+// more (the assistant runtime mints its own chat credentials server-side), so
+// offering it here only widens the choice. The server still honors the scope,
+// so keys that already carry it keep working.
 const GENERAL_SCOPE_OPTIONS: ApiKeyScopeOption[] = [
   {
     value: "consumer",
@@ -52,23 +57,13 @@ const GENERAL_SCOPE_OPTIONS: ApiKeyScopeOption[] = [
       "Upload OpenAPI documents and trigger deployments",
       "Create and edit projects, toolsets, and MCP servers",
       "Read chat transcripts, telemetry, and risk findings",
-      "Everything a Consumer or Chat key can do",
+      "Everything a Consumer key can do",
     ],
     excludes: "Sending AI traffic in, enrolling device agents",
   },
 ];
 
 const PURPOSE_BUILT_SCOPE_OPTIONS: ApiKeyScopeOption[] = [
-  {
-    value: "chat",
-    title: "Chat",
-    tagline: "For a chat client that sends messages to models through Gram.",
-    grants: [
-      "Create chat sessions and run agent workflows",
-      "Look up the tools in a toolset for an environment",
-    ],
-    excludes: "Project setup, deployments, past transcripts",
-  },
   {
     value: "hooks",
     title: "Hooks",

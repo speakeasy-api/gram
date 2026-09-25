@@ -187,6 +187,23 @@ describe("API key project binding", () => {
     ).toBeUndefined();
   });
 
+  it("lists projects alphabetically, not in the API's creation order", async () => {
+    mocks.organization = {
+      id: "org_test",
+      projects: [
+        { id: "p3", name: "zeta", slug: "zeta" },
+        { id: "p1", name: "Alpha", slug: "alpha" },
+        { id: "p2", name: "middle", slug: "middle" },
+      ],
+    };
+    render(<OrgApiKeys />);
+    const user = await openForm();
+    await user.click(screen.getByRole("combobox", { name: "Project" }));
+    expect(
+      screen.getAllByRole("option").map((option) => option.textContent),
+    ).toEqual(["Organization-wide", "Alpha", "middle", "zeta"]);
+  });
+
   it("does not silently broaden a no-longer-authorized project selection", async () => {
     const view = render(<OrgApiKeys />);
     const user = await openForm();
@@ -308,10 +325,12 @@ describe("API key scope options", () => {
     expect(
       screen
         .getAllByRole("radio", {
-          name: /^(Consumer|Producer|Chat|Hooks|Agent)/,
+          name: /^(Consumer|Producer|Hooks|Agent)/,
         })
         .map((radio) => radio.getAttribute("value")),
-    ).toEqual(["consumer", "producer", "chat", "hooks", "agent"]);
+    ).toEqual(["consumer", "producer", "hooks", "agent"]);
+    // The chat scope is no longer provisioned, so it must not be offered.
+    expect(screen.queryByRole("radio", { name: /^Chat/ })).toBeNull();
     expect(
       screen.getByRole("radio", { checked: true }).getAttribute("value"),
     ).toBe("consumer");
@@ -418,12 +437,12 @@ describe("API key scope options", () => {
     const user = await openForm();
     await user.click(
       screen.getByText(
-        "For a chat client that sends messages to models through Gram.",
+        "For rolling out the Speakeasy device agent across the organization.",
       ),
     );
     await user.click(screen.getByRole("button", { name: "Create" }));
     expect(
       mocks.mutate.mock.calls[0]?.[0].request.createKeyForm.scopes,
-    ).toEqual(["chat"]);
+    ).toEqual(["agent"]);
   });
 });

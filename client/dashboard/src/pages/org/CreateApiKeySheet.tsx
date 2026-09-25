@@ -24,7 +24,7 @@ import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { invalidateListAPIKeys } from "@gram/client/react-query/listAPIKeys";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Copy } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ApiKeyScopeField } from "./ApiKeyScopeField";
 import {
@@ -52,6 +52,15 @@ export function CreateApiKeySheet({
   const projectSelectionValid =
     projectId === ORGANIZATION_WIDE ||
     organization.projects.some((project) => project.id === projectId);
+
+  // The API lists an organization's projects newest first, which reads as
+  // arbitrary in a picker. Sorted by the name shown in the option, the way the
+  // audit log's project filter does it.
+  const sortedProjects = useMemo(
+    () =>
+      organization.projects.toSorted((a, b) => a.name.localeCompare(b.name)),
+    [organization.projects],
+  );
 
   const createKeyMutation = useCreateAPIKeyMutation({
     onSuccess: async (data) => {
@@ -206,7 +215,7 @@ export function CreateApiKeySheet({
                       <SelectItem value={ORGANIZATION_WIDE}>
                         Organization-wide
                       </SelectItem>
-                      {organization.projects.map((project) => (
+                      {sortedProjects.map((project) => (
                         <SelectItem key={project.id} value={project.id}>
                           {project.name}
                         </SelectItem>
