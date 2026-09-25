@@ -156,7 +156,6 @@ Call `s.repo.ListWidgets(ctx)` directly from `List`.
 
 ## Logging and observability
 
-- Log with `log/slog` through the context-aware methods (`DebugContext`, `InfoContext`, `WarnContext`, `ErrorContext`), never `Debug`, `Info`, `Warn`, or `Error`.
 - Build attributes with the tree's attribute helpers, not raw keys: `server/internal/attr/conventions.go` in `server/`, `functions/internal/attr` in `functions/`. Add a helper there when none fits. Always include the error: `logger.ErrorContext(ctx, "write to database", attr.SlogError(err))`.
 - Create child loggers with `logger.With(...)` to carry context into later calls (`logger.With(attr.SlogProjectID(projectID))`).
 - Log errors where they are handled and keep info-level logs rare.
