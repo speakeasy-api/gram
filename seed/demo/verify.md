@@ -21,7 +21,8 @@ Most checks below can also be run WITHOUT impersonation, straight against your
 own org after `mise run seed` — it seeds the same data. Use that for quick
 iteration; use the demo org itself before ticking a row, since only it exercises
 the demo grant set and the impersonation carve-outs. Exceptions are the explicitly
-local-only Killswitch, managed-agent, and exact remote-session attachment checks:
+local-only Killswitch, managed-agent, exact remote-session attachment, and Fleet
+restriction checks:
 verify those as an ordinary human in the local organization, not through impersonation.
 
 ## Checks
@@ -117,7 +118,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     demo-org impersonation flow. **Secure** carries no Killswitch entry: open
     **Identities**, then a subject's **Access** tab, where the Killswitches panel
     lists that person's rows and nobody else's, a page at a time behind **Load
-    more**. Across the seeded subjects the six fictional rows are three Active,
+    more**. Across the seeded user subjects the six fictional rows are three Active,
     one Scheduled, one Lifted, and one Expired, and scope labels include both
     selected servers and all current/future MCP servers. Amara's panel holds two
     simultaneously effective rows whose record overlap panels identify each
@@ -136,7 +137,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     `/<org>/killswitch` forwards to **Identities**; and
     `/<org>/killswitch/<killswitchId>?range=…` forwards onto its subject's
     Access tab with that record open and the range still applied.
-14. **Audit logs** — Killswitch history contributes nine rows: six
+14. **Audit logs** — Killswitch history contributes eleven rows: eight
     **activated**, one **changed**, one **lifted/deactivated**, and one
     **expired**. Mutation rows name the same fictional operator and prescription
     version as their Killswitch history entries; the expiry row is attributed to
@@ -424,7 +425,10 @@ Connector` appears under **Inactive** with no connections. Its row menu's
 Open Fleet in list and Directory modes at desktop and phone widths. Select a
 registered identity with no observed run, then a captured session. Check person
 roles, risk counts, transcript/Security links, URL selection, and Back focus.
-In a local writable admin session, release the selected-server restriction on the
+These browsing checks may run in the demo organization. The following restriction
+mutation checks are local only: use an ordinary human organization-admin session
+after `mise run seed`, without impersonation.
+Release the selected-server restriction on the
 release assistant: the all-server overlap must remain and MCP blocked must stay.
 Create a selected-server restriction, reviewing the exact agent, named servers,
 organization scope and tools/call effect. Verify Release after revoke/delete via
