@@ -205,6 +205,10 @@ func TestCustomerKillswitchScheduleOverlapPaginationAndStaleEdit(t *testing.T) {
 	cursorEnvelope, err := base64.RawURLEncoding.DecodeString(*page1.NextCursor)
 	require.NoError(t, err)
 	require.NotContains(t, string(cursorEnvelope), "as_of")
+	// The pre-agent v2 cursor format remains usable through deployment.
+	legacy, err := decodeCursor(*page1.NextCursor, listFilter(nil, nil))
+	require.NoError(t, err)
+	require.Equal(t, 2, legacy.Version)
 	page2, err := service.List(ctx, &gen.ListPayload{Limit: new(int32(1)), Cursor: page1.NextCursor})
 	require.NoError(t, err)
 	require.Len(t, page2.Items, 1)

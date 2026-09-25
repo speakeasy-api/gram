@@ -205,7 +205,12 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Kill
 		value := killswitches.CustomerStatus(*payload.Status)
 		status = &value
 	}
-	filter := string(kind) + "|" + listFilter(principalKey, status)
+	// Preserve deployed v2 user cursors. Their filter begins with a boolean,
+	// so an explicit agent prefix is disjoint from every legacy user filter.
+	filter := listFilter(principalKey, status)
+	if kind == mcptoolexecution.PrincipalKindAgent {
+		filter = string(kind) + "|" + filter
+	}
 
 	var cursor *killswitches.CustomerListCursor
 	if payload.Cursor != nil {

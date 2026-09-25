@@ -12,8 +12,9 @@ export type FleetRow = {
   ownerId?: string;
   createdById?: string;
   captureUserId?: string;
+  externalCaptureUserId?: string;
   personId?: string;
-  personRole: "Owner" | "Creator" | "Captured user";
+  personRole: "Owner" | "Creator" | "Captured user" | "Captured external user";
   personName: string;
   department: string;
   actingIdentity: string;
@@ -106,8 +107,17 @@ export function buildFleetRows({
           session.source ||
           "Unknown source",
         captureUserId: session.userId,
-        personRole: "Captured user",
-        ...owner(session.userId),
+        externalCaptureUserId: session.externalUserId,
+        personRole:
+          !session.userId && session.externalUserId
+            ? "Captured external user"
+            : "Captured user",
+        ...owner(
+          session.userId,
+          !session.userId && session.externalUserId
+            ? `External user (unverified) · ${session.externalUserId}`
+            : undefined,
+        ),
         actingIdentity: session.assistantId
           ? `assistant:${session.assistantId}`
           : "Not established by capture",
@@ -135,7 +145,11 @@ export function fleetDirectory(rows: FleetRow[]): FleetDepartment[] {
       departments.set(row.department, people);
     }
     // Unknown owners remain separate instead of collapsing unrelated sessions into one identity.
-    const key = row.personId ? `user:${row.personId}` : `unknown:${row.id}`;
+    const key = row.personId
+      ? `user:${row.personId}`
+      : row.externalCaptureUserId
+        ? `external:${row.externalCaptureUserId}`
+        : `unknown:${row.id}`;
     let person = people.get(key);
     if (!person) {
       person = { id: key, name: row.personName, roles: [], rows: [] };

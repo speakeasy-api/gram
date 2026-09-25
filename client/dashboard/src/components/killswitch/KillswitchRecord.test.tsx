@@ -36,6 +36,9 @@ const mocks = vi.hoisted(() => ({
   liftProps: undefined as Record<string, unknown> | undefined,
   renderRealLift: false,
   subjectUserId: undefined as string | undefined,
+  subjectAgent: undefined as
+    | { id: string; name: string; canEdit: boolean }
+    | undefined,
   selectKillswitch: vi.fn(),
   close: vi.fn(),
 }));
@@ -169,6 +172,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   mocks.subjectUserId = undefined;
+  mocks.subjectAgent = undefined;
   mocks.selectKillswitch.mockReset();
   mocks.close.mockReset();
   mocks.detailError = undefined;
@@ -248,7 +252,12 @@ function RecordAtRoute() {
   return (
     <KillswitchRecord
       killswitchId={killswitchId}
-      subjectUserId={mocks.subjectUserId ?? mocks.detail?.userId ?? "user-1"}
+      subjectUserId={
+        mocks.subjectAgent
+          ? undefined
+          : (mocks.subjectUserId ?? mocks.detail?.userId ?? "user-1")
+      }
+      subjectAgent={mocks.subjectAgent}
       onSelectKillswitch={(id) => {
         mocks.selectKillswitch(id);
       }}
@@ -1076,5 +1085,59 @@ describe("KillswitchRecord", () => {
     renderDetail();
     expect(screen.getByText("Killswitch unavailable")).not.toBeNull();
     expect(screen.getByText("read failed")).not.toBeNull();
+  });
+});
+
+describe("agent record authorization and attribution", () => {
+  it("renders agent recovery controls without a members query", async () => {
+    mocks.detail = activeDetail({
+      principalKind: "agent",
+      agentId: "agent-1",
+      userId: undefined,
+    });
+    mocks.subjectAgent = {
+      id: "agent-1",
+      name: "Synthetic agent",
+      canEdit: false,
+    };
+    renderDetail();
+    expect(await screen.findByText("Registered agent")).toBeTruthy();
+    expect(screen.getAllByText("Synthetic agent").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "Release restriction" }),
+    ).toBeTruthy();
+    expect(mocks.membersOptions).toMatchObject({ enabled: false });
+    expect(
+      screen.queryByRole("button", { name: "Edit killswitch" }),
+    ).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Release restriction" }),
+    );
+    await waitFor(() => expect(mocks.preview).toHaveBeenCalled());
+    expect(
+      mocks.preview.mock.lastCall?.[0].request.killswitchPreviewOverlapsRequest,
+    ).toMatchObject({ agentId: "agent-1" });
+    expect(
+      mocks.preview.mock.lastCall?.[0].request.killswitchPreviewOverlapsRequest
+        .userId,
+    ).toBeUndefined();
+  });
+  it.each([
+    { principalKind: "agent" as const, agentId: "another", userId: undefined },
+    { principalKind: "user" as const, userId: "agent-1", agentId: undefined },
+  ])("refuses a mismatched target %j", async (target) => {
+    mocks.detail = activeDetail(target);
+    mocks.subjectAgent = {
+      id: "agent-1",
+      name: "Synthetic agent",
+      canEdit: false,
+    };
+    renderDetail();
+    expect(
+      await screen.findByText("Killswitch belongs to someone else"),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Release restriction" }),
+    ).toBeNull();
   });
 });

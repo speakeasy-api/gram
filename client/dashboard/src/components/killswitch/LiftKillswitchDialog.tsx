@@ -143,7 +143,9 @@ export function LiftKillswitchDialog({
         )}
         {error && (
           <Alert variant="error">
-            <AlertTitle>Lift failed</AlertTitle>
+            <AlertTitle>
+              {targetDescription ? "Release failed" : "Lift failed"}
+            </AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -161,7 +163,9 @@ export function LiftKillswitchDialog({
             onClick={() => void lift()}
           >
             {isPending
-              ? "Lifting…"
+              ? targetDescription
+                ? "Releasing…"
+                : "Lifting…"
               : targetDescription
                 ? "Release restriction"
                 : "Lift killswitch"}

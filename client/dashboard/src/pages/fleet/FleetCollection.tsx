@@ -10,6 +10,11 @@ import {
 } from "lucide-react";
 import { fleetDirectory, sourceLabels, type FleetRow } from "./fleet-model";
 
+const lifecycleLabels = {
+  active: "Registered",
+  suspended: "Suspended",
+  revoked: "Revoked",
+};
 const glyphs = { agent: Bot, assistant: Bot, session: MessagesSquare };
 export function FleetStatus({
   row,
@@ -20,13 +25,7 @@ export function FleetStatus({
 }): JSX.Element {
   return (
     <div className="fleet-status">
-      {row.agent && (
-        <span>
-          {row.agent.lifecycle === "active"
-            ? "Registered"
-            : row.agent.lifecycle}
-        </span>
-      )}
+      {row.agent && <span>{lifecycleLabels[row.agent.lifecycle]}</span>}
       {row.source === "assistant" && (
         <span>
           {row.assistant?.status === "paused"

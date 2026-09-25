@@ -74,9 +74,11 @@ func newIntegrationServiceWithAdmin(t *testing.T, grantAdmin bool) (*Service, *p
 	require.NoError(t, err)
 	user, ok := registry.PrincipalAdapter(mcptoolexecution.PrincipalKindUser)
 	require.True(t, ok)
+	agent, ok := registry.PrincipalAdapter(mcptoolexecution.PrincipalKindAgent)
+	require.True(t, ok)
 	server, ok := registry.ResourceAdapter(mcptoolexecution.ResourceKindMCPServer)
 	require.True(t, ok)
-	return &Service{db: db, authorized: authorized, principals: map[killswitches.PrincipalKind]killswitches.PrincipalAdapter{mcptoolexecution.PrincipalKindUser: user, mcptoolexecution.PrincipalKindAgent: mcptoolexecution.NewAgentPrincipalAdapter(db)}, server: server}, db, orgID, userID, servers, authzEngine
+	return &Service{db: db, authorized: authorized, principals: map[killswitches.PrincipalKind]killswitches.PrincipalAdapter{mcptoolexecution.PrincipalKindUser: user, mcptoolexecution.PrincipalKindAgent: agent}, server: server}, db, orgID, userID, servers, authzEngine
 }
 
 func insertForeignServer(t *testing.T, db *pgxpool.Pool) uuid.UUID {

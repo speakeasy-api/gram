@@ -232,6 +232,6 @@ export function affectedServerNames(
   return (
     ids
       .map((id) => servers.get(id) ?? "Deleted or unavailable MCP server")
-      .join(", ") || "No current eligible servers"
+      .join(", ") || "No servers selected"
   );
 }

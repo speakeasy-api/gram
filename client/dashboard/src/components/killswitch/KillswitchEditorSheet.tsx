@@ -211,7 +211,13 @@ function EditorContents({
   const targetName = agentTarget?.name;
   const member = members.find((item) => item.id === draft.userId);
   const serverNames = useMemo(
-    () => new Map(servers.map((server) => [server.id, server.name])),
+    () =>
+      new Map(
+        servers.map((server) => [
+          server.id,
+          `${server.name} (${server.projectName})`,
+        ]),
+      ),
     [servers],
   );
   const diff = comparisonBaseline
@@ -426,11 +432,9 @@ function EditorContents({
               variant="secondary"
               onClick={() => {
                 const retainedUser = draft.userId;
-                const retainedAgent = draft.agentId;
                 const nextDraft = {
-                  ...initialDraft(undefined, createContext),
+                  ...initialDraft(undefined, createContext, agentTarget),
                   userId: retainedUser,
-                  agentId: retainedAgent,
                 };
                 draftRef.current = nextDraft;
                 draftGeneration.current += 1;

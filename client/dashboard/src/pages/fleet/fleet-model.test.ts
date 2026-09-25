@@ -103,4 +103,38 @@ describe("Fleet attribution", () => {
       rows.find((row) => row.source === "agent")?.lastActivity,
     ).toBeUndefined();
   });
+  it("keeps unverified external captures separate from equal user and agent identifiers", () => {
+    const rows = buildFleetRows({
+      ...input,
+      agents: [{ ...agent, id: "shared", ownerUserId: "shared" }],
+      sessions: [
+        {
+          ...session,
+          id: "external",
+          userId: undefined,
+          externalUserId: "shared",
+        },
+        { ...session, id: "directory", userId: "shared" },
+      ],
+    });
+    const external = rows.find((row) => row.id === "session:external");
+    expect(external?.externalCaptureUserId).toBe("shared");
+    expect(external?.personName).toBe("External user (unverified) · shared");
+    expect(external?.personId).toBeUndefined();
+    expect(external?.ownerId).toBeUndefined();
+    expect(external?.agent).toBeUndefined();
+    const branches = fleetDirectory(rows).flatMap(
+      (department) => department.identities,
+    );
+    expect(
+      branches
+        .find((branch) => branch.id === "external:shared")
+        ?.rows.map((row) => row.id),
+    ).toEqual(["session:external"]);
+    expect(
+      branches
+        .find((branch) => branch.id === "user:shared")
+        ?.rows.map((row) => row.id),
+    ).toEqual(["agent:shared", "session:directory"]);
+  });
 });

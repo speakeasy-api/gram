@@ -108,6 +108,7 @@ describe("Agent restriction recovery", () => {
     );
   });
   it("refuses another agent's restriction in a scoped inspector", () => {
+    const close = vi.fn();
     render(
       <MemoryRouter>
         <AgentRestrictionRecord
@@ -116,11 +117,15 @@ describe("Agent restriction recovery", () => {
           agents={[]}
           inventoryAvailable={false}
           onSelect={() => {}}
-          onClose={() => {}}
+          onClose={() => {
+            close();
+          }}
         />
       </MemoryRouter>,
     );
     expect(screen.getByRole("alert").textContent).toContain("different agent");
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(close).toHaveBeenCalledOnce();
     expect(
       screen.queryByRole("button", { name: "Release restriction" }),
     ).toBeNull();

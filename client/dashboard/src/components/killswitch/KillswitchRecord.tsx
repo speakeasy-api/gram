@@ -209,7 +209,13 @@ export function KillswitchRecord({
   const members = membersQuery.data?.members ?? EMPTY;
   const servers = serversQuery.data?.servers ?? EMPTY;
   const serverNames = useMemo(
-    () => new Map(servers.map((server) => [server.id, server.name])),
+    () =>
+      new Map(
+        servers.map((server) => [
+          server.id,
+          `${server.name} (${server.projectName})`,
+        ]),
+      ),
     [servers],
   );
   const memberName =
@@ -649,7 +655,11 @@ export function KillswitchRecord({
             </div>
             <p className="text-muted-foreground mt-1">
               <IdentityLink
-                identifier={detail.userId ? { userId: detail.userId } : null}
+                identifier={
+                  detail.principalKind === "user" && detail.userId
+                    ? { userId: detail.userId }
+                    : null
+                }
               >
                 {memberName ?? "Deleted member"}
               </IdentityLink>{" "}
@@ -686,7 +696,11 @@ export function KillswitchRecord({
           label={subjectAgent ? "Registered agent" : "Member"}
           value={
             <IdentityLink
-              identifier={detail.userId ? { userId: detail.userId } : null}
+              identifier={
+                detail.principalKind === "user" && detail.userId
+                  ? { userId: detail.userId }
+                  : null
+              }
             >
               {memberName ?? "Deleted member"}
             </IdentityLink>

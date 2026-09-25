@@ -77,7 +77,7 @@ export function AgentMCPControls({
         members={[]}
         servers={servers.data?.servers ?? []}
         capabilities={capabilities.data?.capabilities ?? []}
-        comingSoon={[]}
+        comingSoon={capabilities.data?.comingSoon ?? []}
         capabilitiesLoading={capabilities.isLoading}
         capabilitiesError={capabilities.error}
         onRetryCapabilities={() => void capabilities.refetch()}

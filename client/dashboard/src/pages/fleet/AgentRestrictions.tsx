@@ -165,7 +165,11 @@ export function AgentRestrictions({
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground text-xs">
             {items.length}{" "}
-            {list.hasNextPage ? "loaded restrictions" : "restrictions"}
+            {list.hasNextPage
+              ? "loaded restrictions"
+              : items.length === 1
+                ? "restriction"
+                : "restrictions"}
           </span>
           {list.hasNextPage && (
             <Button
@@ -217,10 +221,24 @@ export function AgentRestrictionRecord({
       </div>
     );
   if (detail.data.principalKind !== "agent" || !detail.data.agentId)
-    return <p>This is not an agent restriction.</p>;
+    return (
+      <div role="alert">
+        This is not an agent restriction.{" "}
+        <Button variant="tertiary" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+    );
   const agentId = expectedAgentId ?? detail.data.agentId;
   if (detail.data.agentId !== agentId)
-    return <p role="alert">This restriction belongs to a different agent.</p>;
+    return (
+      <div role="alert">
+        This restriction belongs to a different agent.{" "}
+        <Button variant="tertiary" onClick={onClose}>
+          Close
+        </Button>
+      </div>
+    );
   const agent = agents.find((item) => item.id === agentId);
   return (
     <KillswitchRecord

@@ -156,7 +156,7 @@ function FleetPage(): JSX.Element {
       ?.filter((badge) => badge.affectedNow)
       .map((badge) => `agent:${badge.agentId}`) ?? [],
   );
-  const selectedRow = rows.find((row) => row.id === selected);
+  const selectedRow = filtered.find((row) => row.id === selected);
   const select = (id: string) => {
     originatingRow.current = id;
     update({ selected: id, detail: null, restriction: null });

@@ -419,17 +419,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       `[~]` to `[x]`; API-only checks and the separate synthetic consolidation
       blocker demo do not complete this fixture's display verification.
 
-## On failure
-
-Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
-the failed check: `mise run seed` for the local-only Killswitch, managed-agent,
-and exact remote-session attachment checks, or
-`mise run seed:demo` for shared demo-org checks. Re-check only the failed pages,
-and commit the SQL change once green.
-Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
-the PR, don't commit them.
-
-## Fleet and agent restriction recovery
+24. **Fleet and agent restriction recovery**
 
 Open Fleet in list and Directory modes at desktop and phone widths. Select a
 registered identity with no observed run, then a captured session. Check person
@@ -440,3 +430,13 @@ Create a selected-server restriction, reviewing the exact agent, named servers,
 organization scope and tools/call effect. Verify Release after revoke/delete via
 the organization restrictions list or exact audit record link. With inventory
 unavailable, labels fall back safely and Release remains available.
+
+## On failure
+
+Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns
+the failed check: `mise run seed` for the local-only Killswitch, managed-agent,
+and exact remote-session attachment checks, or
+`mise run seed:demo` for shared demo-org checks. Re-check only the failed pages,
+and commit the SQL change once green.
+Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
+the PR, don't commit them.
