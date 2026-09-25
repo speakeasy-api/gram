@@ -19,8 +19,6 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { useOrganization } from "@/contexts/Auth";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
 
 export function GatewayDiscoverySection({
@@ -28,12 +26,6 @@ export function GatewayDiscoverySection({
 }: {
   metaMcpServer: MetaMcpServer;
 }): JSX.Element | null {
-  const organization = useOrganization();
-  const { data: features } = useProductFeatures(
-    { organizationId: organization.id },
-    undefined,
-    { throwOnError: false },
-  );
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
   const [mode, setMode] = useState(metaMcpServer.discoveryMode);
@@ -48,7 +40,7 @@ export function GatewayDiscoverySection({
       toast.success("Gateway discovery updated");
     },
   });
-  if (!features?.gatewayDiscoveryModesEnabled) return null;
+  if (!metaMcpServer.discoveryModesEnabled) return null;
   return (
     <SettingsSection id="discovery">
       <SettingsSection.Header>

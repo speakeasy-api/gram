@@ -63,6 +63,10 @@ export type MetaMcpServer = {
    */
   discoveryMode: DiscoveryMode;
   /**
+   * Whether the organization allows new discovery choices. Read through the gateway without requiring organization feature-management access.
+   */
+  discoveryModesEnabled?: boolean | undefined;
+  /**
    * The ID of the meta MCP server
    */
   id: string;
@@ -129,6 +133,7 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     discovery_mode: DiscoveryMode$inboundSchema,
+    discovery_modes_enabled: z.optional(z.boolean()),
     id: z.string(),
     instructions: z.optional(z.string()),
     member_count: z.optional(z.int()),
@@ -147,6 +152,7 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "created_at": "createdAt",
       "discovery_mode": "discoveryMode",
+      "discovery_modes_enabled": "discoveryModesEnabled",
       "member_count": "memberCount",
       "network_access_mode": "networkAccessMode",
       "organization_id": "organizationId",

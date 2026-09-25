@@ -1,5 +1,3 @@
-import { useOrganization } from "@/contexts/Auth";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/Badge";
@@ -55,12 +53,7 @@ export function GatewayInspectTab({
   isLoadingEndpoints: boolean;
 }): JSX.Element {
   const routes = useRoutes();
-  const organization = useOrganization();
-  const { data: features } = useProductFeatures(
-    { organizationId: organization.id },
-    undefined,
-    { throwOnError: false },
-  );
+
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedMode = searchParams.get("discovery_mode");
   const [modeDraft, setModeDraft] = useState<
@@ -153,7 +146,7 @@ export function GatewayInspectTab({
         </Button>
       </Page.Section.CTA>
       <Page.Section.Body>
-        {features?.gatewayDiscoveryModesEnabled &&
+        {metaMcpServer.discoveryModesEnabled &&
           metaMcpServer.userSessionIssuerId && (
             <Page.Toolbar>
               <Page.Toolbar.Leading>
@@ -192,7 +185,7 @@ export function GatewayInspectTab({
               </Page.Toolbar.Actions>
             </Page.Toolbar>
           )}
-        {!features?.gatewayDiscoveryModesEnabled &&
+        {!metaMcpServer.discoveryModesEnabled &&
           connection.mode !== "default" && (
             <Button
               variant="secondary"

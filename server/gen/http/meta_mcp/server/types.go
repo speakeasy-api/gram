@@ -97,6 +97,9 @@ type CreateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether the organization allows new discovery choices. Read through the
+	// gateway without requiring organization feature-management access.
+	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
@@ -130,6 +133,9 @@ type GetMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether the organization allows new discovery choices. Read through the
+	// gateway without requiring organization feature-management access.
+	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
@@ -169,6 +175,9 @@ type UpdateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether the organization allows new discovery choices. Read through the
+	// gateway without requiring organization feature-management access.
+	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
@@ -1912,6 +1921,9 @@ type MetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether the organization allows new discovery choices. Read through the
+	// gateway without requiring organization feature-management access.
+	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode string `form:"discovery_mode" json:"discovery_mode" xml:"discovery_mode"`
@@ -1941,18 +1953,19 @@ type MetaMcpMemberResponseBody struct {
 // result of the "createMetaMcpServer" endpoint of the "metaMcp" service.
 func NewCreateMetaMcpServerResponseBody(res *types.MetaMcpServer) *CreateMetaMcpServerResponseBody {
 	body := &CreateMetaMcpServerResponseBody{
-		ID:                  res.ID,
-		OrganizationID:      res.OrganizationID,
-		ProjectID:           res.ProjectID,
-		Name:                res.Name,
-		UserSessionIssuerID: res.UserSessionIssuerID,
-		Visibility:          string(res.Visibility),
-		NetworkAccessMode:   string(res.NetworkAccessMode),
-		Instructions:        res.Instructions,
-		DiscoveryMode:       res.DiscoveryMode,
-		CreatedAt:           res.CreatedAt,
-		UpdatedAt:           res.UpdatedAt,
-		MemberCount:         res.MemberCount,
+		ID:                    res.ID,
+		OrganizationID:        res.OrganizationID,
+		ProjectID:             res.ProjectID,
+		Name:                  res.Name,
+		UserSessionIssuerID:   res.UserSessionIssuerID,
+		Visibility:            string(res.Visibility),
+		NetworkAccessMode:     string(res.NetworkAccessMode),
+		Instructions:          res.Instructions,
+		DiscoveryModesEnabled: res.DiscoveryModesEnabled,
+		DiscoveryMode:         res.DiscoveryMode,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+		MemberCount:           res.MemberCount,
 	}
 	return body
 }
@@ -1961,18 +1974,19 @@ func NewCreateMetaMcpServerResponseBody(res *types.MetaMcpServer) *CreateMetaMcp
 // result of the "getMetaMcpServer" endpoint of the "metaMcp" service.
 func NewGetMetaMcpServerResponseBody(res *types.MetaMcpServer) *GetMetaMcpServerResponseBody {
 	body := &GetMetaMcpServerResponseBody{
-		ID:                  res.ID,
-		OrganizationID:      res.OrganizationID,
-		ProjectID:           res.ProjectID,
-		Name:                res.Name,
-		UserSessionIssuerID: res.UserSessionIssuerID,
-		Visibility:          string(res.Visibility),
-		NetworkAccessMode:   string(res.NetworkAccessMode),
-		Instructions:        res.Instructions,
-		DiscoveryMode:       res.DiscoveryMode,
-		CreatedAt:           res.CreatedAt,
-		UpdatedAt:           res.UpdatedAt,
-		MemberCount:         res.MemberCount,
+		ID:                    res.ID,
+		OrganizationID:        res.OrganizationID,
+		ProjectID:             res.ProjectID,
+		Name:                  res.Name,
+		UserSessionIssuerID:   res.UserSessionIssuerID,
+		Visibility:            string(res.Visibility),
+		NetworkAccessMode:     string(res.NetworkAccessMode),
+		Instructions:          res.Instructions,
+		DiscoveryModesEnabled: res.DiscoveryModesEnabled,
+		DiscoveryMode:         res.DiscoveryMode,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+		MemberCount:           res.MemberCount,
 	}
 	return body
 }
@@ -2000,18 +2014,19 @@ func NewListMetaMcpServersResponseBody(res *metamcp.ListMetaMcpServersResult) *L
 // result of the "updateMetaMcpServer" endpoint of the "metaMcp" service.
 func NewUpdateMetaMcpServerResponseBody(res *types.MetaMcpServer) *UpdateMetaMcpServerResponseBody {
 	body := &UpdateMetaMcpServerResponseBody{
-		ID:                  res.ID,
-		OrganizationID:      res.OrganizationID,
-		ProjectID:           res.ProjectID,
-		Name:                res.Name,
-		UserSessionIssuerID: res.UserSessionIssuerID,
-		Visibility:          string(res.Visibility),
-		NetworkAccessMode:   string(res.NetworkAccessMode),
-		Instructions:        res.Instructions,
-		DiscoveryMode:       res.DiscoveryMode,
-		CreatedAt:           res.CreatedAt,
-		UpdatedAt:           res.UpdatedAt,
-		MemberCount:         res.MemberCount,
+		ID:                    res.ID,
+		OrganizationID:        res.OrganizationID,
+		ProjectID:             res.ProjectID,
+		Name:                  res.Name,
+		UserSessionIssuerID:   res.UserSessionIssuerID,
+		Visibility:            string(res.Visibility),
+		NetworkAccessMode:     string(res.NetworkAccessMode),
+		Instructions:          res.Instructions,
+		DiscoveryModesEnabled: res.DiscoveryModesEnabled,
+		DiscoveryMode:         res.DiscoveryMode,
+		CreatedAt:             res.CreatedAt,
+		UpdatedAt:             res.UpdatedAt,
+		MemberCount:           res.MemberCount,
 	}
 	return body
 }

@@ -95,6 +95,9 @@ type CreateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether the organization allows new discovery choices. Read through the
+	// gateway without requiring organization feature-management access.
+	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
@@ -128,6 +131,9 @@ type GetMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether the organization allows new discovery choices. Read through the
+	// gateway without requiring organization feature-management access.
+	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
@@ -167,6 +173,9 @@ type UpdateMetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether the organization allows new discovery choices. Read through the
+	// gateway without requiring organization feature-management access.
+	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
@@ -1910,6 +1919,9 @@ type MetaMcpServerResponseBody struct {
 	// initialize response. Null when the gateway serves Gram's built-in
 	// instructions.
 	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Whether the organization allows new discovery choices. Read through the
+	// gateway without requiring organization feature-management access.
+	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
@@ -1999,18 +2011,19 @@ func NewUpdateMetaMcpMemberRequestBody(p *metamcp.UpdateMetaMcpMemberPayload) *U
 // "createMetaMcpServer" endpoint result from a HTTP "OK" response.
 func NewCreateMetaMcpServerMetaMcpServerOK(body *CreateMetaMcpServerResponseBody) *types.MetaMcpServer {
 	v := &types.MetaMcpServer{
-		ID:                  *body.ID,
-		OrganizationID:      *body.OrganizationID,
-		ProjectID:           *body.ProjectID,
-		Name:                *body.Name,
-		UserSessionIssuerID: body.UserSessionIssuerID,
-		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
-		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
-		Instructions:        body.Instructions,
-		DiscoveryMode:       *body.DiscoveryMode,
-		CreatedAt:           *body.CreatedAt,
-		UpdatedAt:           *body.UpdatedAt,
-		MemberCount:         body.MemberCount,
+		ID:                    *body.ID,
+		OrganizationID:        *body.OrganizationID,
+		ProjectID:             *body.ProjectID,
+		Name:                  *body.Name,
+		UserSessionIssuerID:   body.UserSessionIssuerID,
+		Visibility:            types.MetaMcpServerVisibility(*body.Visibility),
+		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
+		Instructions:          body.Instructions,
+		DiscoveryModesEnabled: body.DiscoveryModesEnabled,
+		DiscoveryMode:         *body.DiscoveryMode,
+		CreatedAt:             *body.CreatedAt,
+		UpdatedAt:             *body.UpdatedAt,
+		MemberCount:           body.MemberCount,
 	}
 
 	return v
@@ -2170,18 +2183,19 @@ func NewCreateMetaMcpServerGatewayError(body *CreateMetaMcpServerGatewayErrorRes
 // "getMetaMcpServer" endpoint result from a HTTP "OK" response.
 func NewGetMetaMcpServerMetaMcpServerOK(body *GetMetaMcpServerResponseBody) *types.MetaMcpServer {
 	v := &types.MetaMcpServer{
-		ID:                  *body.ID,
-		OrganizationID:      *body.OrganizationID,
-		ProjectID:           *body.ProjectID,
-		Name:                *body.Name,
-		UserSessionIssuerID: body.UserSessionIssuerID,
-		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
-		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
-		Instructions:        body.Instructions,
-		DiscoveryMode:       *body.DiscoveryMode,
-		CreatedAt:           *body.CreatedAt,
-		UpdatedAt:           *body.UpdatedAt,
-		MemberCount:         body.MemberCount,
+		ID:                    *body.ID,
+		OrganizationID:        *body.OrganizationID,
+		ProjectID:             *body.ProjectID,
+		Name:                  *body.Name,
+		UserSessionIssuerID:   body.UserSessionIssuerID,
+		Visibility:            types.MetaMcpServerVisibility(*body.Visibility),
+		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
+		Instructions:          body.Instructions,
+		DiscoveryModesEnabled: body.DiscoveryModesEnabled,
+		DiscoveryMode:         *body.DiscoveryMode,
+		CreatedAt:             *body.CreatedAt,
+		UpdatedAt:             *body.UpdatedAt,
+		MemberCount:           body.MemberCount,
 	}
 
 	return v
@@ -2507,18 +2521,19 @@ func NewListMetaMcpServersGatewayError(body *ListMetaMcpServersGatewayErrorRespo
 // "updateMetaMcpServer" endpoint result from a HTTP "OK" response.
 func NewUpdateMetaMcpServerMetaMcpServerOK(body *UpdateMetaMcpServerResponseBody) *types.MetaMcpServer {
 	v := &types.MetaMcpServer{
-		ID:                  *body.ID,
-		OrganizationID:      *body.OrganizationID,
-		ProjectID:           *body.ProjectID,
-		Name:                *body.Name,
-		UserSessionIssuerID: body.UserSessionIssuerID,
-		Visibility:          types.MetaMcpServerVisibility(*body.Visibility),
-		NetworkAccessMode:   types.NetworkAccessMode(*body.NetworkAccessMode),
-		Instructions:        body.Instructions,
-		DiscoveryMode:       *body.DiscoveryMode,
-		CreatedAt:           *body.CreatedAt,
-		UpdatedAt:           *body.UpdatedAt,
-		MemberCount:         body.MemberCount,
+		ID:                    *body.ID,
+		OrganizationID:        *body.OrganizationID,
+		ProjectID:             *body.ProjectID,
+		Name:                  *body.Name,
+		UserSessionIssuerID:   body.UserSessionIssuerID,
+		Visibility:            types.MetaMcpServerVisibility(*body.Visibility),
+		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
+		Instructions:          body.Instructions,
+		DiscoveryModesEnabled: body.DiscoveryModesEnabled,
+		DiscoveryMode:         *body.DiscoveryMode,
+		CreatedAt:             *body.CreatedAt,
+		UpdatedAt:             *body.UpdatedAt,
+		MemberCount:           body.MemberCount,
 	}
 
 	return v
