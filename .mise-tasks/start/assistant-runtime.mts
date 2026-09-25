@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Stream assistant runtime logs from local Docker and Fly.io runtimes"
 //MISE hide=true

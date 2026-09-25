@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Setup database migrations during development."
 //MISE dir="{{ config_root }}"
