@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/tooldisposition"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -242,7 +243,7 @@ func NewService(
 		logger: logger,
 		db:     db,
 		repo:   repo.New(db),
-		policies: policycore.New(db, policycore.MutationDependencies{
+		policies: policycore.NewWithToolAnnotations(db, tooldisposition.New(logger, db, cacheImpl), policycore.MutationDependencies{
 			Transactor:       db,
 			Auditor:          policyMutationAuditor{logger: auditLogger},
 			Approvals:        approvalIntake,
@@ -492,6 +493,14 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		}
 	}
 
+	mcpScope, mcpScopeJSON, err := s.normalizeMCPScope(ctx, *authCtx.ProjectID, payload.McpScope)
+	if err != nil {
+		return nil, err
+	}
+	if err := policycore.ValidateMCPScopeSources(mcpScope, sources); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+
 	result, err := s.policies.CreatePolicy(ctx, policycore.CreateMutation{
 		Params: repo.CreateRiskPolicyParams{
 			ID:                   id,
@@ -505,6 +514,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			PromptInjectionRules: createPolicyDetectionField(policyType, payload.PromptInjectionRules),
 			DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
 			CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
+			McpScope:             mcpScopeJSON,
 			Enabled:              enabled,
 			Action:               action,
 			AudienceType:         audienceType,
@@ -545,6 +555,37 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 	policies, err := s.policies.List(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk policies").LogError(ctx, s.logger)
+	}
+
+	result := make([]*types.RiskPolicy, 0, len(policies))
+	for _, policy := range policies {
+		result = append(result, policyToGoa(policy))
+	}
+	return &gen.ListRiskPoliciesResult{Policies: result}, nil
+}
+
+func (s *Service) ListRiskPoliciesForMcpServer(ctx context.Context, payload *gen.ListRiskPoliciesForMcpServerPayload) (*gen.ListRiskPoliciesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	serverID, err := uuid.Parse(payload.McpServerID)
+	if err != nil {
+		return nil, oops.C(oops.CodeInvalid)
+	}
+	policies, err := s.policies.ListEnabledForMCPServer(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		*authCtx.ProjectID,
+		serverID,
+		conv.PtrValOr(payload.ToolName, ""),
+	)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk policies for MCP server").LogError(ctx, s.logger)
 	}
 
 	result := make([]*types.RiskPolicy, 0, len(policies))
@@ -760,6 +801,15 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 
+	mcpScope := policycore.Project(current, nil, nil).MCPScope
+	mcpScopeJSON := current.McpScope
+	if payload.McpScope != nil {
+		mcpScope, mcpScopeJSON, err = s.normalizeMCPScope(ctx, *authCtx.ProjectID, payload.McpScope)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// policy_type is immutable; gate edits to prompt_based policies behind the flag.
 	if current.PolicyType == ra.PolicyTypePromptBased && !s.promptPoliciesEnabled(ctx, authCtx) {
 		return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
@@ -833,6 +883,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			return nil, err
 		}
 		customRuleIds = payload.CustomRuleIds
+	}
+	if err := policycore.ValidateMCPScopeSources(mcpScope, sources); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 
 	enabled := current.Enabled
@@ -986,6 +1039,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			PromptInjectionRules: promptInjectionRules,
 			DisabledRules:        disabledRules,
 			CustomRuleIds:        customRuleIds,
+			McpScope:             mcpScopeJSON,
 			Enabled:              enabled,
 			Action:               action,
 			AudienceType:         audienceType,
@@ -2632,6 +2686,59 @@ func validateDetectionScopes(eng *celenv.Engine, specs []*types.RiskDetectionSco
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 	return out, nil
+}
+
+func (s *Service) normalizeMCPScope(
+	ctx context.Context,
+	projectID uuid.UUID,
+	input *types.RiskMCPScope,
+) (*policycore.MCPScope, []byte, error) {
+	var coreInput *policycore.MCPScopeInput
+	if input != nil {
+		coreInput = &policycore.MCPScopeInput{
+			AllServers:      input.AllServers,
+			ToolAnnotations: input.ToolAnnotations,
+			Servers:         make([]*policycore.MCPServerScopeInput, 0, len(input.Servers)),
+		}
+		for _, server := range input.Servers {
+			if server == nil {
+				coreInput.Servers = append(coreInput.Servers, nil)
+				continue
+			}
+			coreInput.Servers = append(coreInput.Servers, &policycore.MCPServerScopeInput{
+				MCPServerID: server.McpServerID,
+				Tools:       server.Tools,
+			})
+		}
+	}
+
+	scope, err := policycore.NormalizeMCPScope(coreInput)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+	if scope == nil {
+		return nil, nil, nil
+	}
+
+	serverIDs := make([]uuid.UUID, 0, len(scope.Servers))
+	for _, server := range scope.Servers {
+		serverIDs = append(serverIDs, server.MCPServerID)
+	}
+	projectServerIDs, err := s.repo.ListRiskPolicyMCPScopeServerIDs(ctx, repo.ListRiskPolicyMCPScopeServerIDsParams{
+		ProjectID:    projectID,
+		McpServerIds: serverIDs,
+	})
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "validate MCP policy scope").LogError(ctx, s.logger)
+	}
+	if err := policycore.ValidateMCPScopeOwnership(scope, projectServerIDs); err != nil {
+		return nil, nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+	raw, err := json.Marshal(scope)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "encode MCP policy scope").LogError(ctx, s.logger)
+	}
+	return scope, raw, nil
 }
 
 func validateCustomDetectionRule(eng *celenv.Engine, ruleID, title, detectionExpr, severity string) error {

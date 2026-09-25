@@ -37,7 +37,7 @@ func (r *membershipLockRecorder) QueryRow(ctx context.Context, query string, arg
 			r.onAgent()
 		}
 	}
-	return r.DBTX.QueryRow(ctx, query, args...)
+	return r.DBTX.QueryRow(ctx, query, args...) //nolint:glint // notestingrawsql: wrapper forwards SQLc-generated SQL through the transaction while recording lock acquisition order
 }
 
 func TestMembershipLocksUseCanonicalOrderBeforeAgent(t *testing.T) {

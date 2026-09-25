@@ -56,7 +56,7 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 	if payload.mcpServerID != nil {
 		serverID = payload.mcpServerID.String()
 	}
-	scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
+	decision := scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:        mcpriskscan.SurfaceHostedMCP,
 		Method:         mcpriskscan.MethodPromptsGet,
 		OrganizationID: payload.organizationID,
@@ -69,6 +69,9 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		PromptName:     params.Name,
 		ChatID:         payload.chatID,
 	}, mcpriskscan.BorrowPayload(params.Arguments)))
+	if decision.Denied() {
+		return nil, oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+	}
 
 	promptData, err := templates.RenderTemplate(ctx, logger, prompt.Prompt, prompt.Kind.String, prompt.Engine.String, arguments)
 	if err != nil {

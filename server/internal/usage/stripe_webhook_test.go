@@ -1239,9 +1239,7 @@ func TestStripeCheckoutLocksConvertedTrialBeforeOpenRouterKeys(t *testing.T) {
 	_, err := trialsrepo.New(db).MarkTrialConverted(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
 
-	trialTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test must hold a trial-row transaction open while the webhook blocks
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = trialTx.Rollback(context.Background()) })
+	trialTx := testenv.BeginTx(t, t.Context(), db)
 	trialHolderPID := postgresBackendPID(t, trialTx)
 	_, err = trialsrepo.New(trialTx).LockTrialLifecycle(t.Context(), stripeWebhookOrganizationID)
 	require.NoError(t, err)
@@ -1250,8 +1248,7 @@ func TestStripeCheckoutLocksConvertedTrialBeforeOpenRouterKeys(t *testing.T) {
 	go func() { response <- serveStripeWebhook(service, "convert").Code }()
 	waitForStripeWebhookBlockedByPID(t, db, trialHolderPID)
 
-	probeTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the probe transaction proves the chat advisory lock remains available
-	require.NoError(t, err)
+	probeTx := testenv.BeginTx(t, t.Context(), db)
 	probeCtx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 	require.NoError(t, repo.New(probeTx).AcquireOpenRouterBillingLock(probeCtx, repo.AcquireOpenRouterBillingLockParams{
@@ -1270,9 +1267,7 @@ func TestStripeCheckoutAcquiresOpenRouterLocksInAllKeyTypesOrder(t *testing.T) {
 	configurePaygCheckout(t, service, "event_key_lock_order", "subscription_key_lock_order", "active")
 	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeChat, openrouter.KeyTypeInternal}, openrouter.AllKeyTypes)
 
-	chatTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test must hold the first advisory lock while the webhook blocks
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = chatTx.Rollback(context.Background()) })
+	chatTx := testenv.BeginTx(t, t.Context(), db)
 	chatHolderPID := postgresBackendPID(t, chatTx)
 	require.NoError(t, repo.New(chatTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
 		KeyType:        string(openrouter.KeyTypeChat),
@@ -1283,8 +1278,7 @@ func TestStripeCheckoutAcquiresOpenRouterLocksInAllKeyTypesOrder(t *testing.T) {
 	go func() { response <- serveStripeWebhook(service, "activate").Code }()
 	waitForStripeWebhookBlockedByPID(t, db, chatHolderPID)
 
-	probeTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the probe transaction proves the internal advisory lock remains available
-	require.NoError(t, err)
+	probeTx := testenv.BeginTx(t, t.Context(), db)
 	probeCtx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 	require.NoError(t, repo.New(probeTx).AcquireOpenRouterBillingLock(probeCtx, repo.AcquireOpenRouterBillingLockParams{
@@ -1304,9 +1298,7 @@ func TestStripeSubscriptionDeletionAcquiresEveryOpenRouterLockInOrder(t *testing
 	service.stripeHandler = service.serviceStripeWebhookHandler
 	require.Equal(t, []openrouter.KeyType{openrouter.KeyTypeChat, openrouter.KeyTypeInternal}, openrouter.AllKeyTypes)
 
-	internalTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the targeted backend holds the second canonical advisory lock
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = internalTx.Rollback(context.Background()) })
+	internalTx := testenv.BeginTx(t, t.Context(), db)
 	internalHolderPID := postgresBackendPID(t, internalTx)
 	require.NoError(t, repo.New(internalTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
 		KeyType:        string(openrouter.KeyTypeInternal),
@@ -1319,8 +1311,7 @@ func TestStripeSubscriptionDeletionAcquiresEveryOpenRouterLockInOrder(t *testing
 	go func() { response <- serveStripeWebhookWithContext(requestCtx, service, "delete").Code }()
 	waitForStripeWebhookBlockedByPID(t, db, internalHolderPID)
 
-	probeTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the probe proves deletion retained the first lock while waiting for the second
-	require.NoError(t, err)
+	probeTx := testenv.BeginTx(t, t.Context(), db)
 	probeCtx, cancelProbe := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	probeErr := repo.New(probeTx).AcquireOpenRouterBillingLock(probeCtx, repo.AcquireOpenRouterBillingLockParams{
 		KeyType:        string(openrouter.KeyTypeChat),
@@ -1347,9 +1338,7 @@ func TestReplacementCheckoutAndPriorSubscriptionDeletionAcquireOpenRouterBeforeB
 	checkoutService.stripeClient = &fakeStripeWebhookClient{}
 	configurePaygCheckout(t, &checkoutService, "event_replacement_checkout", "subscription_replacement", "active")
 
-	holderTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: the test queues both lifecycle transactions behind one targeted backend
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = holderTx.Rollback(context.Background()) })
+	holderTx := testenv.BeginTx(t, t.Context(), db)
 	holderPID := postgresBackendPID(t, holderTx)
 	require.NoError(t, repo.New(holderTx).AcquireOpenRouterBillingLock(t.Context(), repo.AcquireOpenRouterBillingLockParams{
 		KeyType:        string(openrouter.KeyTypeChat),
@@ -1371,8 +1360,7 @@ func TestReplacementCheckoutAndPriorSubscriptionDeletionAcquireOpenRouterBeforeB
 	waiters := waitForStripeWebhookWaitersBlockedByPID(t, db, holderPID, 2)
 	require.Contains(t, waiters, deletionWaiter[0])
 
-	probeTx, err := db.Begin(t.Context()) //nolint:glint // notestingrawsql: availability of the canonical next lock is the ordering assertion
-	require.NoError(t, err)
+	probeTx := testenv.BeginTx(t, t.Context(), db)
 	probeCtx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	probeErr := repo.New(probeTx).LockBillingMetadataOrganization(probeCtx, stripeWebhookOrganizationID)
 	cancel()

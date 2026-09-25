@@ -2276,6 +2276,125 @@ func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg Get
 	return i, err
 }
 
+const getPlatformMCPConnectionSettings = `-- name: GetPlatformMCPConnectionSettings :one
+SELECT
+    CASE WHEN $1::text = 'gateway' THEN gateway.name ELSE COALESCE(server.name, server.slug, '') END::text AS name,
+    CASE WHEN $1::text = 'gateway' THEN gateway.visibility ELSE server.visibility END::text AS visibility,
+    COALESCE(
+      CASE WHEN $1::text = 'gateway' THEN gateway.network_access_mode ELSE server.network_access_mode END,
+      'public_only'
+    )::text AS network_mode,
+    COALESCE(endpoints.items, '[]'::jsonb) AS endpoints,
+    ingress.state AS ingress,
+    COALESCE(memberships.items, '[]'::jsonb) AS plugin_memberships
+FROM projects project
+LEFT JOIN mcp_servers server
+  ON $1::text = 'mcp_server'
+ AND server.id = $2
+ AND server.project_id = project.id
+ AND server.deleted IS FALSE
+LEFT JOIN meta_mcp_servers gateway
+  ON $1::text = 'gateway'
+ AND gateway.id = $2
+ AND gateway.project_id = project.id
+ AND gateway.organization_id = project.organization_id
+ AND gateway.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT jsonb_agg(jsonb_build_object(
+        'id', endpoint.id,
+        'slug', endpoint.slug,
+        'custom_domain_id', endpoint.custom_domain_id,
+        'domain', domain.domain,
+        'is_domain_root', COALESCE(endpoint.is_domain_root, FALSE)
+    ) ORDER BY endpoint.id) AS items
+    FROM mcp_endpoints endpoint
+    LEFT JOIN custom_domains domain
+      ON domain.id = endpoint.custom_domain_id
+     AND domain.organization_id = $3
+     AND domain.deleted IS FALSE
+    WHERE endpoint.project_id = project.id
+      AND endpoint.deleted IS FALSE
+      AND (($1::text = 'mcp_server' AND endpoint.mcp_server_id = server.id)
+        OR ($1::text = 'gateway' AND endpoint.meta_mcp_server_id = gateway.id))
+) endpoints ON TRUE
+LEFT JOIN LATERAL (
+    SELECT jsonb_build_object(
+        'enabled', ingress.enabled,
+        'namespace_kind', ingress.endpoint_namespace_kind,
+        'hostname', ingress.hostname,
+        'custom_domain_id', ingress.custom_domain_id,
+        'status', ingress.status,
+        'dns_name', ingress.dns_name
+    ) AS state
+    FROM network_ingresses ingress
+    WHERE ingress.organization_id = $3
+      AND ingress.deleted IS FALSE
+    ORDER BY ingress.id
+    LIMIT 1
+) ingress ON TRUE
+LEFT JOIN LATERAL (
+    SELECT jsonb_agg(jsonb_build_object(
+        'id', membership.id,
+        'plugin_id', plugin.id,
+        'plugin_slug', plugin.slug,
+        'display_name', membership.display_name,
+        'policy', membership.policy,
+        'sort_order', membership.sort_order
+    ) ORDER BY plugin.id, membership.id) AS items
+    FROM plugin_servers membership
+    JOIN plugins plugin
+      ON plugin.id = membership.plugin_id
+     AND plugin.project_id = project.id
+     AND plugin.organization_id = $3
+     AND plugin.deleted IS FALSE
+    WHERE membership.deleted IS FALSE
+      AND (($1::text = 'mcp_server' AND membership.mcp_server_id = server.id)
+        OR ($1::text = 'gateway' AND membership.meta_mcp_server_id = gateway.id))
+) memberships ON TRUE
+WHERE project.id = $4
+  AND project.organization_id = $3
+  AND project.deleted IS FALSE
+  AND (($1::text = 'mcp_server' AND server.id IS NOT NULL)
+    OR ($1::text = 'gateway' AND gateway.id IS NOT NULL))
+`
+
+type GetPlatformMCPConnectionSettingsParams struct {
+	TargetKind     string
+	TargetID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPConnectionSettingsRow struct {
+	Name              string
+	Visibility        string
+	NetworkMode       string
+	Endpoints         []byte
+	Ingress           []byte
+	PluginMemberships []byte
+}
+
+// One exact organization/project-scoped target and its connection dependencies.
+// Deliberately returns no upstream URL, credentials, or provider resource data.
+func (q *Queries) GetPlatformMCPConnectionSettings(ctx context.Context, arg GetPlatformMCPConnectionSettingsParams) (GetPlatformMCPConnectionSettingsRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPConnectionSettings,
+		arg.TargetKind,
+		arg.TargetID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var i GetPlatformMCPConnectionSettingsRow
+	err := row.Scan(
+		&i.Name,
+		&i.Visibility,
+		&i.NetworkMode,
+		&i.Endpoints,
+		&i.Ingress,
+		&i.PluginMemberships,
+	)
+	return i, err
+}
+
 const getPlatformMCPDiagnosticsTarget = `-- name: GetPlatformMCPDiagnosticsTarget :one
 SELECT
     m.id AS mcp_server_id,
@@ -2964,6 +3083,32 @@ func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg Get
 		&i.Published,
 	)
 	return i, err
+}
+
+const getPlatformMCPPluginMembershipVersion = `-- name: GetPlatformMCPPluginMembershipVersion :one
+SELECT md5(COALESCE(jsonb_agg(
+  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+  ORDER BY ps.sort_order, ps.display_name, ps.id
+)::text, '[]'))::text AS membership_version
+FROM plugin_servers ps
+JOIN plugins p ON p.id = ps.plugin_id
+WHERE ps.plugin_id = $1
+  AND p.project_id = $2
+  AND p.organization_id = $3
+  AND ps.deleted IS FALSE
+`
+
+type GetPlatformMCPPluginMembershipVersionParams struct {
+	PluginID       uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetPlatformMCPPluginMembershipVersion(ctx context.Context, arg GetPlatformMCPPluginMembershipVersionParams) (string, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPPluginMembershipVersion, arg.PluginID, arg.ProjectID, arg.OrganizationID)
+	var membership_version string
+	err := row.Scan(&membership_version)
+	return membership_version, err
 }
 
 const getPlatformMCPReadiness = `-- name: GetPlatformMCPReadiness :one
@@ -4011,6 +4156,51 @@ func (q *Queries) IsPlatformMCPNewModelEligible(ctx context.Context, organizatio
 	return exists, err
 }
 
+const listDirectRemoteAdmissionAudiencesForGateway = `-- name: ListDirectRemoteAdmissionAudiencesForGateway :many
+SELECT DISTINCT plugin.id AS plugin_id, assignment.principal_urn
+FROM meta_mcp_servers gateway
+JOIN plugin_servers attachment ON attachment.meta_mcp_server_id = gateway.id
+  AND attachment.project_id = gateway.project_id AND attachment.deleted IS FALSE
+JOIN plugins plugin ON plugin.id = attachment.plugin_id AND plugin.project_id = gateway.project_id
+  AND plugin.organization_id = gateway.organization_id AND plugin.deleted IS FALSE
+LEFT JOIN plugin_assignments assignment ON assignment.plugin_id = plugin.id
+  AND assignment.organization_id = plugin.organization_id
+WHERE gateway.id = $1 AND gateway.project_id = $2
+  AND gateway.organization_id = $3 AND gateway.deleted IS FALSE
+ORDER BY plugin.id, assignment.principal_urn NULLS FIRST
+`
+
+type ListDirectRemoteAdmissionAudiencesForGatewayParams struct {
+	GatewayID      uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type ListDirectRemoteAdmissionAudiencesForGatewayRow struct {
+	PluginID     uuid.UUID
+	PrincipalUrn pgtype.Text
+}
+
+func (q *Queries) ListDirectRemoteAdmissionAudiencesForGateway(ctx context.Context, arg ListDirectRemoteAdmissionAudiencesForGatewayParams) ([]ListDirectRemoteAdmissionAudiencesForGatewayRow, error) {
+	rows, err := q.db.Query(ctx, listDirectRemoteAdmissionAudiencesForGateway, arg.GatewayID, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectRemoteAdmissionAudiencesForGatewayRow
+	for rows.Next() {
+		var i ListDirectRemoteAdmissionAudiencesForGatewayRow
+		if err := rows.Scan(&i.PluginID, &i.PrincipalUrn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDirectRemoteAdmissionAudiencesForMCPServer = `-- name: ListDirectRemoteAdmissionAudiencesForMCPServer :many
 SELECT
     plugin.id AS plugin_id,
@@ -4020,8 +4210,17 @@ JOIN mcp_servers AS server
   ON server.id = registration.mcp_server_id
  AND server.project_id = registration.project_id
  AND server.deleted IS FALSE
+LEFT JOIN meta_mcp_server_members AS member
+  ON member.mcp_server_id = server.id
+ AND member.project_id = registration.project_id
+ AND member.deleted IS FALSE
+LEFT JOIN meta_mcp_servers AS gateway
+  ON gateway.id = member.meta_mcp_server_id
+ AND gateway.project_id = member.project_id
+ AND gateway.organization_id = registration.organization_id
+ AND gateway.deleted IS FALSE
 LEFT JOIN plugin_servers AS attachment
-  ON attachment.mcp_server_id = server.id
+  ON (attachment.mcp_server_id = server.id OR attachment.meta_mcp_server_id = gateway.id)
  AND attachment.deleted IS FALSE
 LEFT JOIN plugins AS plugin
   ON plugin.id = attachment.plugin_id
@@ -4128,8 +4327,17 @@ JOIN remote_mcp_servers AS remote
   ON remote.id = server.remote_mcp_server_id
  AND remote.project_id = server.project_id
  AND remote.deleted IS FALSE
+LEFT JOIN meta_mcp_server_members AS member
+  ON member.mcp_server_id = server.id
+ AND member.project_id = registration.project_id
+ AND member.deleted IS FALSE
+LEFT JOIN meta_mcp_servers AS gateway
+  ON gateway.id = member.meta_mcp_server_id
+ AND gateway.project_id = member.project_id
+ AND gateway.organization_id = registration.organization_id
+ AND gateway.deleted IS FALSE
 JOIN plugin_servers AS attachment
-  ON attachment.mcp_server_id = server.id
+  ON (attachment.mcp_server_id = server.id OR attachment.meta_mcp_server_id = gateway.id)
  AND attachment.deleted IS FALSE
 JOIN plugins AS plugin
   ON plugin.id = attachment.plugin_id
@@ -4179,6 +4387,80 @@ func (q *Queries) ListDirectRemoteAdmissionTargetCandidates(ctx context.Context,
 	return items, nil
 }
 
+const listDirectRemoteAdmissionTargetsForGateway = `-- name: ListDirectRemoteAdmissionTargetsForGateway :many
+SELECT DISTINCT
+    member_server.id AS mcp_server_id,
+    remote.url AS remote_url
+FROM plugins AS plugin
+JOIN meta_mcp_servers AS gateway
+  ON gateway.id = $1
+ AND gateway.project_id = plugin.project_id
+ AND gateway.organization_id = plugin.organization_id
+ AND gateway.deleted IS FALSE
+JOIN meta_mcp_server_members AS member
+  ON member.meta_mcp_server_id = gateway.id
+ AND member.project_id = gateway.project_id
+ AND member.deleted IS FALSE
+JOIN mcp_servers AS member_server
+  ON member_server.id = member.mcp_server_id
+ AND member_server.project_id = gateway.project_id
+ AND member_server.deleted IS FALSE
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.mcp_server_id = member_server.id
+ AND registration.organization_id = plugin.organization_id
+ AND registration.project_id = gateway.project_id
+ AND registration.catalog_provider = 'direct-remote-url-v1'
+LEFT JOIN remote_mcp_servers AS remote
+  ON remote.id = member_server.remote_mcp_server_id
+ AND remote.project_id = member_server.project_id
+ AND remote.deleted IS FALSE
+WHERE plugin.id = $2
+  AND plugin.organization_id = $3
+  AND plugin.project_id = $4
+  AND plugin.deleted IS FALSE
+ORDER BY member_server.id
+`
+
+type ListDirectRemoteAdmissionTargetsForGatewayParams struct {
+	GatewayID      uuid.UUID
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ListDirectRemoteAdmissionTargetsForGatewayRow struct {
+	McpServerID uuid.UUID
+	RemoteUrl   pgtype.Text
+}
+
+// Return every distinct direct-remote member target reached by one exact live
+// gateway. The gateway and its members are bound to the caller's organization
+// and project, and traversal stops at the gateway's immediate members.
+func (q *Queries) ListDirectRemoteAdmissionTargetsForGateway(ctx context.Context, arg ListDirectRemoteAdmissionTargetsForGatewayParams) ([]ListDirectRemoteAdmissionTargetsForGatewayRow, error) {
+	rows, err := q.db.Query(ctx, listDirectRemoteAdmissionTargetsForGateway,
+		arg.GatewayID,
+		arg.PluginID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDirectRemoteAdmissionTargetsForGatewayRow
+	for rows.Next() {
+		var i ListDirectRemoteAdmissionTargetsForGatewayRow
+		if err := rows.Scan(&i.McpServerID, &i.RemoteUrl); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDirectRemoteAdmissionTargetsForPlugin = `-- name: ListDirectRemoteAdmissionTargetsForPlugin :many
 SELECT DISTINCT
     server.id AS mcp_server_id,
@@ -4186,9 +4468,18 @@ SELECT DISTINCT
 FROM plugins AS plugin
 JOIN plugin_servers AS attachment
   ON attachment.plugin_id = plugin.id
- AND attachment.deleted IS FALSE
+  AND attachment.deleted IS FALSE
+LEFT JOIN meta_mcp_servers AS gateway
+  ON gateway.id = attachment.meta_mcp_server_id
+ AND gateway.project_id = plugin.project_id
+ AND gateway.organization_id = plugin.organization_id
+ AND gateway.deleted IS FALSE
+LEFT JOIN meta_mcp_server_members AS member
+  ON member.meta_mcp_server_id = gateway.id
+ AND member.project_id = plugin.project_id
+ AND member.deleted IS FALSE
 JOIN mcp_servers AS server
-  ON server.id = attachment.mcp_server_id
+  ON server.id = COALESCE(attachment.mcp_server_id, member.mcp_server_id)
  AND server.project_id = plugin.project_id
  AND server.deleted IS FALSE
 JOIN platform_mcp_catalog_registrations AS registration
@@ -5338,6 +5629,143 @@ func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPl
 	return items, nil
 }
 
+const listPlatformMCPPluginMemberships = `-- name: ListPlatformMCPPluginMemberships :many
+WITH membership_version AS (
+  SELECT md5(COALESCE(jsonb_agg(
+    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+    ORDER BY ps.sort_order, ps.display_name, ps.id
+  )::text, '[]'))::text AS value
+  FROM plugin_servers ps
+  WHERE ps.plugin_id = $1
+    AND ps.deleted IS FALSE
+)
+SELECT
+    ps.id AS membership_id,
+    ps.display_name,
+    ps.policy,
+    ps.sort_order,
+    CASE
+      WHEN ps.toolset_id IS NOT NULL THEN 'toolset'
+      WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
+      WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
+    END::text AS target_kind,
+    COALESCE(ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
+    (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
+    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
+    membership_version.value AS membership_version
+FROM plugin_servers ps
+CROSS JOIN membership_version
+JOIN plugins p
+  ON p.id = ps.plugin_id
+  AND p.deleted IS FALSE
+LEFT JOIN toolsets t
+  ON t.id = ps.toolset_id
+  AND t.project_id = p.project_id
+  AND t.deleted IS FALSE
+LEFT JOIN mcp_servers s
+  ON s.id = ps.mcp_server_id
+  AND s.project_id = p.project_id
+  AND s.deleted IS FALSE
+LEFT JOIN meta_mcp_servers gateway
+  ON gateway.id = ps.meta_mcp_server_id
+  AND gateway.project_id = p.project_id
+  AND gateway.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT e.slug
+  FROM mcp_endpoints e
+  WHERE e.mcp_server_id = s.id
+    AND e.project_id = p.project_id
+    AND e.deleted IS FALSE
+  ORDER BY e.created_at, e.id
+  LIMIT 1
+) ep ON TRUE
+LEFT JOIN LATERAL (
+  SELECT e.slug
+  FROM mcp_endpoints e
+  WHERE e.meta_mcp_server_id = gateway.id
+    AND e.project_id = p.project_id
+    AND e.deleted IS FALSE
+  ORDER BY e.created_at, e.id
+  LIMIT 1
+) gateway_ep ON TRUE
+WHERE ps.plugin_id = $1
+  AND p.project_id = $2
+  AND p.organization_id = $3
+  AND ps.deleted IS FALSE
+  AND (NOT $4::boolean OR (ps.sort_order, ps.display_name, ps.id) > ($5::integer, $6::text, $7::uuid))
+ORDER BY ps.sort_order, ps.display_name, ps.id
+LIMIT $8
+`
+
+type ListPlatformMCPPluginMembershipsParams struct {
+	PluginID         uuid.UUID
+	ProjectID        uuid.UUID
+	OrganizationID   string
+	UseAfter         bool
+	AfterSortOrder   int32
+	AfterDisplayName string
+	AfterID          uuid.UUID
+	ResultLimit      int32
+}
+
+type ListPlatformMCPPluginMembershipsRow struct {
+	MembershipID      uuid.UUID
+	DisplayName       string
+	Policy            string
+	SortOrder         int32
+	TargetKind        string
+	TargetID          uuid.NullUUID
+	TargetResolved    bool
+	McpSlug           string
+	Enabled           bool
+	MembershipVersion string
+}
+
+// Administrative membership read. The opaque version is computed over the
+// complete live membership set, while the page itself uses a total keyset order.
+// Target IDs are typed; target_resolved guards against dangling or foreign
+// backend references before exposing them as actionable targets.
+func (q *Queries) ListPlatformMCPPluginMemberships(ctx context.Context, arg ListPlatformMCPPluginMembershipsParams) ([]ListPlatformMCPPluginMembershipsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPPluginMemberships,
+		arg.PluginID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UseAfter,
+		arg.AfterSortOrder,
+		arg.AfterDisplayName,
+		arg.AfterID,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPPluginMembershipsRow
+	for rows.Next() {
+		var i ListPlatformMCPPluginMembershipsRow
+		if err := rows.Scan(
+			&i.MembershipID,
+			&i.DisplayName,
+			&i.Policy,
+			&i.SortOrder,
+			&i.TargetKind,
+			&i.TargetID,
+			&i.TargetResolved,
+			&i.McpSlug,
+			&i.Enabled,
+			&i.MembershipVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPPluginServers = `-- name: ListPlatformMCPPluginServers :many
 SELECT
     ps.id,
@@ -5345,8 +5773,9 @@ SELECT
     ps.policy,
     ps.sort_order,
     (ps.toolset_id IS NOT NULL)::boolean AS toolset_backed,
-    COALESCE(t.mcp_slug, ep.slug, '')::text AS mcp_slug,
-    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', FALSE)::boolean AS enabled
+    (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
+    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
 JOIN plugins p
   ON p.id = ps.plugin_id
@@ -5359,6 +5788,10 @@ LEFT JOIN mcp_servers s
   ON s.id = ps.mcp_server_id
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
+LEFT JOIN meta_mcp_servers gateway
+  ON gateway.id = ps.meta_mcp_server_id
+  AND gateway.project_id = p.project_id
+  AND gateway.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT e.slug
   FROM mcp_endpoints e
@@ -5368,6 +5801,11 @@ LEFT JOIN LATERAL (
   ORDER BY e.created_at ASC
   LIMIT 1
 ) ep ON TRUE
+LEFT JOIN LATERAL (
+  SELECT e.slug FROM mcp_endpoints e
+  WHERE e.meta_mcp_server_id = gateway.id AND e.project_id = p.project_id AND e.deleted IS FALSE
+  ORDER BY e.created_at, e.id LIMIT 1
+) gateway_ep ON TRUE
 WHERE ps.plugin_id = $1
   AND p.project_id = $2
   AND p.organization_id = $3
@@ -5389,15 +5827,13 @@ type ListPlatformMCPPluginServersRow struct {
 	Policy        string
 	SortOrder     int32
 	ToolsetBacked bool
+	GatewayBacked bool
 	McpSlug       string
 	Enabled       bool
 }
 
-// One plugin's MCP server membership. A plugin server is backed by exactly one
-// of a toolset or an mcp_server (plugin_servers_backend_exclusivity_check), so
-// the slug and enabled state are resolved from whichever backend is set. No URL
-// is constructed here: this surface names servers, it does not hand out
-// endpoints.
+// Member-facing compatibility projection. It deliberately omits membership and
+// backend IDs, which are administrative identity and must not cross this path.
 func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlatformMCPPluginServersParams) ([]ListPlatformMCPPluginServersRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformMCPPluginServers,
 		arg.PluginID,
@@ -5418,6 +5854,7 @@ func (q *Queries) ListPlatformMCPPluginServers(ctx context.Context, arg ListPlat
 			&i.Policy,
 			&i.SortOrder,
 			&i.ToolsetBacked,
+			&i.GatewayBacked,
 			&i.McpSlug,
 			&i.Enabled,
 		); err != nil {

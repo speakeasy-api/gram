@@ -508,6 +508,36 @@ func BuildListOrganizationProjectsPayload(adminListOrganizationProjectsOrganizat
 	return v, nil
 }
 
+// BuildListProjectMcpServersPayload builds the payload for the admin
+// listProjectMcpServers endpoint from CLI flags.
+func BuildListProjectMcpServersPayload(adminListProjectMcpServersOrganizationID string, adminListProjectMcpServersProjectID string, adminListProjectMcpServersAdminSessionToken string) (*admin.ListProjectMcpServersPayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminListProjectMcpServersOrganizationID
+	}
+	var projectID string
+	{
+		projectID = adminListProjectMcpServersProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListProjectMcpServersAdminSessionToken != "" {
+			adminSessionToken = &adminListProjectMcpServersAdminSessionToken
+		}
+	}
+	v := &admin.ListProjectMcpServersPayload{}
+	v.OrganizationID = organizationID
+	v.ProjectID = projectID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListOrganizationActivityPayload builds the payload for the admin
 // listOrganizationActivity endpoint from CLI flags.
 func BuildListOrganizationActivityPayload(adminListOrganizationActivityOrganizationID string, adminListOrganizationActivityCursor string, adminListOrganizationActivityAdminSessionToken string) (*admin.ListOrganizationActivityPayload, error) {

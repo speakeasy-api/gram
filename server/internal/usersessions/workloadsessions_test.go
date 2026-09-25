@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -26,8 +27,7 @@ import (
 // fixed-segment parse of the session subject wrong.
 const workloadTestSubject = "repo:acme/payments-api:ref:refs/heads/main"
 
-// seedWorkloadIssuer registers a workload issuer directly. There is no create
-// query yet: writes belong to the workload identity management API.
+// seedWorkloadIssuer registers a workload issuer in the caller's organization.
 func seedWorkloadIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.NullUUID, name string) uuid.UUID {
 	t.Helper()
 
@@ -35,16 +35,31 @@ func seedWorkloadIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, p
 	require.True(t, ok)
 
 	issuer := "https://token.actions.example.com/" + uuid.NewString()
-	var id uuid.UUID
-	err := conn.QueryRow( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `
-		INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-	`, authCtx.ActiveOrganizationID, projectID, name, issuer, issuer+"/.well-known/jwks.json").Scan(&id)
+	id, err := testrepo.New(conn).CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+		Name:           name,
+		Issuer:         issuer,
+		JwksUri:        issuer + "/.well-known/jwks.json",
+	})
 	require.NoError(t, err)
 
 	return id
+}
+
+// softDeleteWorkloadIssuer tombstones a workload issuer in the caller's
+// organization.
+func softDeleteWorkloadIssuer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, id uuid.UUID) {
+	t.Helper()
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	deleted, err := testrepo.New(conn).SoftDeleteWorkloadIssuerFixture(ctx, testrepo.SoftDeleteWorkloadIssuerFixtureParams{
+		ID: id, OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
 }
 
 // seedWorkloadAgent creates an agent in the caller's organization, with the
@@ -305,9 +320,7 @@ func TestListUserSessions_AdmissionsUnderDeletedIssuerAreNotListed(t *testing.T)
 	issuerID := seedIssuer(t, ctx, ti, "workload-deleted-issuer")
 	workloadIssuerID := seedWorkloadIssuer(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "Deleted issuer")
 	seedWorkloadAdmission(t, ctx, ti.conn, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadIssuerID, workloadTestSubject, "Orphaned admission")
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `UPDATE workload_issuers SET deleted_at = clock_timestamp() WHERE id = $1`, workloadIssuerID)
-	require.NoError(t, err)
+	softDeleteWorkloadIssuer(t, ctx, ti.conn, workloadIssuerID)
 
 	session, err := seedUserSession(t, ctx, ti.conn, issuerID, urn.NewWorkloadSubject(workloadIssuerID, workloadTestSubject))
 	require.NoError(t, err)
@@ -336,9 +349,7 @@ func TestListUserSessions_DeletedIssuerDropsTheAssignedAgent(t *testing.T) {
 	live := sessionByID(t, listAllSessions(t, ctx, ti, nil), session.ID).Workload
 	require.NotNil(t, live.AgentID, "the assignment resolves while the issuer is live")
 
-	_, err = ti.conn.Exec( //nolint:glint // notestingrawsql: no delete query exists yet; writes belong to the management API milestone
-		ctx, `UPDATE workload_issuers SET deleted_at = clock_timestamp() WHERE id = $1`, workloadIssuerID)
-	require.NoError(t, err)
+	softDeleteWorkloadIssuer(t, ctx, ti.conn, workloadIssuerID)
 
 	got := sessionByID(t, listAllSessions(t, ctx, ti, nil), session.ID).Workload
 	require.NotNil(t, got)

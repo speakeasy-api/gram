@@ -512,3 +512,50 @@ func TestCalculateSubScopes_inverseOfScopeExpansions(t *testing.T) {
 		}
 	}
 }
+
+// The workload scope governs configuring an organization's trust policy: which
+// issuers it trusts, which subjects are admitted, and which agent each inherits
+// its policy from. Admitting a subject is itself the grant of machine access, so
+// these pin the shape rather than leaving it to the scope-count assertions in
+// the access package, which would pass for a scope wired up wrongly.
+func TestWorkloadScopeShape(t *testing.T) {
+	t.Parallel()
+
+	// write satisfies read, as in the mcp and skill families, so a holder of
+	// workload:write never needs workload:read granted alongside it.
+	require.Equal(t, []Scope{ScopeWorkloadWrite}, scopeExpansions[ScopeWorkloadRead])
+	require.Nil(t, scopeExpansions[ScopeWorkloadWrite])
+	require.Equal(t, []Scope{ScopeWorkloadBlockedRead}, scopeExpansions[ScopeWorkloadBlockedWrite])
+
+	// Each verb has a blocklist twin, so an exception can be carved out of a
+	// wildcard grant the same way it can for every other resource.
+	blockedRead, ok := ExclusionScopeFor(ScopeWorkloadRead)
+	require.True(t, ok)
+	require.Equal(t, ScopeWorkloadBlockedRead, blockedRead)
+	blockedWrite, ok := ExclusionScopeFor(ScopeWorkloadWrite)
+	require.True(t, ok)
+	require.Equal(t, ScopeWorkloadBlockedWrite, blockedWrite)
+
+	// The selector kind is its own, not org or project: a grant of
+	// workload:write is about the trust policy rather than the organization at
+	// large. It is deliberately the same string as urn.PrincipalTypeWorkload,
+	// which names the machine principal; the two never meet, because a
+	// selector's resource_kind is never compared against a principal type.
+	require.Equal(t, ResourceKindWorkload, ResourceKindForScope(ScopeWorkloadWrite))
+	require.Equal(t, ResourceKindWorkload, ResourceKindForScope(ScopeWorkloadRead))
+}
+
+func TestWorkloadScopeIsAdminDefaultAndNotMemberDefault(t *testing.T) {
+	t.Parallel()
+
+	// Administrators configure workload identity, beside agent:authorize: both
+	// hand a machine an agent's authority.
+	require.True(t, slices.Contains(adminScopes, ScopeWorkloadRead))
+	require.True(t, slices.Contains(adminScopes, ScopeWorkloadWrite))
+
+	// Not a member default in either direction. Read alone discloses which
+	// machines the organization recognises, which is its trust policy, so a
+	// member who needs it gets an explicit grant through a custom role.
+	require.False(t, slices.Contains(memberScopes, ScopeWorkloadRead))
+	require.False(t, slices.Contains(memberScopes, ScopeWorkloadWrite))
+}

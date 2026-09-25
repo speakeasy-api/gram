@@ -1,4 +1,3 @@
-//nolint:glint // Raw SQL invalidates agent fixtures in isolated test databases.
 package mcptoolexecution
 
 import (
@@ -15,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -54,8 +54,8 @@ func TestAgentPrincipalAdapterDerivationFailsClosed(t *testing.T) {
 	t.Parallel()
 	conn, orgID := newTestDatabase(t, "ks_agent_adapter")
 	ownerID := "user_" + uuid.NewString()
-	insertUser(t, conn, ownerID, nil)
-	insertMembership(t, conn, orgID, ownerID, nil)
+	insertUser(t, conn, ownerID, false)
+	insertMembership(t, conn, orgID, ownerID, false)
 	id := insertAgentPrincipal(t, conn, orgID, ownerID)
 	otherOrg := "org_" + uuid.NewString()
 	insertOrganization(t, conn, otherOrg)
@@ -99,18 +99,22 @@ func TestAgentPrincipalAdapterDerivationFailsClosed(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, valid)
 	}
-	for _, mutation := range []string{
-		`UPDATE agents SET suspended_at = now() WHERE id = $1`,
-		`UPDATE agents SET suspended_at = NULL, revoked_at = now() WHERE id = $1`,
-		`UPDATE agents SET revoked_at = NULL, owner_reassignment_required_at = now(), owner_reassignment_reason = 'owner_left' WHERE id = $1`,
+	fixtures := testrepo.New(conn)
+	for name, mutate := range map[string]func(context.Context, uuid.UUID) error{
+		"suspended":            fixtures.SetAgentSuspendedFixture,
+		"revoked":              fixtures.SetAgentRevokedFixture,
+		"reassignment latched": fixtures.SetAgentOwnerLatchFixture,
 	} {
-		_, err := conn.Exec(t.Context(), mutation, id)
+		agentID := insertAgentPrincipal(t, conn, orgID, ownerID)
+		valid, err := adapter.ValidateCurrentOrganization(t.Context(), organization, killswitches.PrincipalKey(agentID.String()))
 		require.NoError(t, err)
-		valid, err := adapter.ValidateCurrentOrganization(t.Context(), organization, killswitches.PrincipalKey(id.String()))
+		require.True(t, valid, "%s agent was current before its lifecycle mutation", name)
+		require.NoError(t, mutate(t.Context(), agentID))
+		valid, err = adapter.ValidateCurrentOrganization(t.Context(), organization, killswitches.PrincipalKey(agentID.String()))
 		require.NoError(t, err)
-		require.False(t, valid, "inactive and reassignment-latched identities are not current principals")
+		require.False(t, valid, "inactive and reassignment-latched identities are not current principals: %s", name)
 	}
-	_, err = conn.Exec(t.Context(), `UPDATE agents SET deleted_at = now() WHERE id = $1`, id)
+	err = testrepo.New(conn).SoftDeleteAgentFixture(t.Context(), id)
 	require.NoError(t, err)
 	_, err = adapter.DeriveCandidates(t.Context(), organization, identity)
 	require.Error(t, err)
@@ -126,16 +130,16 @@ func TestAgentCheckpointsUseRealEvaluator(t *testing.T) {
 			t.Parallel()
 			conn, orgID := newTestDatabase(t, "ks_agent_"+surface)
 			ownerID := "user_" + uuid.NewString()
-			insertUser(t, conn, ownerID, nil)
-			insertMembership(t, conn, orgID, ownerID, nil)
+			insertUser(t, conn, ownerID, false)
+			insertMembership(t, conn, orgID, ownerID, false)
 			id := insertAgentPrincipal(t, conn, orgID, ownerID)
 			otherAgentID := insertAgentPrincipal(t, conn, orgID, ownerID)
 			otherOrg := "org_" + uuid.NewString()
 			insertOrganization(t, conn, otherOrg)
-			insertMembership(t, conn, otherOrg, ownerID, nil)
+			insertMembership(t, conn, otherOrg, ownerID, false)
 			foreignID := insertAgentPrincipal(t, conn, otherOrg, ownerID)
-			projectID := insertProject(t, conn, orgID, "agent-project", nil)
-			serverID := insertMCPServer(t, conn, orgID, projectID, nil)
+			projectID := insertProject(t, conn, orgID, "agent-project", false)
+			serverID := insertMCPServer(t, conn, orgID, projectID, false)
 			registry, err := NewRegistry(conn)
 			require.NoError(t, err)
 			evaluator, err := killswitches.NewEvaluator(conn, registry, time.Second, nil, testenv.NewLogger(t))
@@ -191,7 +195,7 @@ func TestAgentCheckpointsUseRealEvaluator(t *testing.T) {
 				require.Equal(t, killswitches.TransportDispositionInfrastructureRejection, disposition.Kind())
 			}
 			// The same stamped identity must be revalidated after deletion, not cached.
-			_, err = conn.Exec(t.Context(), `UPDATE agents SET deleted_at = now() WHERE id = $1`, id)
+			err = testrepo.New(conn).SoftDeleteAgentFixture(t.Context(), id)
 			require.NoError(t, err)
 			for name, ctx := range map[string]context.Context{
 				"stale API key": contexts[0], "stale session": contexts[1],

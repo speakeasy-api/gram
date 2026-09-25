@@ -362,6 +362,17 @@ type Provisioner interface {
 	GetModelUsage(ctx context.Context, generationID string, orgID string, keyType KeyType) (*ModelUsage, error)
 }
 
+// ExistingKeyLookup reads an organization's already-provisioned platform key
+// without minting one. Read-only surfaces that must not create upstream keys
+// or spend on an organization's behalf, such as the command palette judge,
+// depend on this instead of Provisioner.
+type ExistingKeyLookup interface {
+	// LookupAPIKey returns the organization's key of the given type. ok is
+	// false, with no error, when no key has been provisioned yet. A disabled
+	// key fails with ErrPlatformKeyDisabled, as ProvisionAPIKey does.
+	LookupAPIKey(ctx context.Context, orgID string, keyType KeyType) (key string, ok bool, err error)
+}
+
 // DBTX is the database executor accepted by generated OpenRouter and
 // organization queries. It lets a caller that already owns a session-level
 // billing lock perform the associated reads and write on that same session.
@@ -495,6 +506,40 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string, keyType 
 	}
 
 	return openrouterKey, nil
+}
+
+// LookupAPIKey resolves an existing key row exactly as ProvisionAPIKey does,
+// except that a missing row reports ok=false instead of minting a key.
+func (o *OpenRouter) LookupAPIKey(ctx context.Context, orgID string, keyType KeyType) (string, bool, error) {
+	keyType = keyType.OrDefault()
+	if err := keyType.Validate(); err != nil {
+		return "", false, fmt.Errorf("lookup openrouter key: %w", err)
+	}
+	key, err := o.repo.GetOpenRouterAPIKey(ctx, repo.GetOpenRouterAPIKeyParams{
+		OrganizationID: orgID,
+		KeyType:        string(keyType),
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return "", false, nil
+	case err != nil:
+		return "", false, oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+	}
+
+	if EffectiveDisabled(key.Disabled, key.DisableCauses) {
+		return "", false, fmt.Errorf("resolve %s key: %w", keyType, ErrPlatformKeyDisabled)
+	}
+	plaintext, err := o.keyMaterial(key)
+	if err != nil {
+		return "", false, oops.E(oops.CodeUnexpected, err, "error reading open router key data").LogError(ctx, o.logger)
+	}
+	// A row that decrypts to nothing is unusable: ProvisionAPIKey refuses the
+	// same state, so a lookup must not report it as provisioned and hand
+	// callers an empty credential to send upstream.
+	if plaintext == "" {
+		return "", false, nil
+	}
+	return plaintext, true, nil
 }
 
 // createAndStoreAPIKey mints an upstream OpenRouter key and records it,
