@@ -476,9 +476,7 @@ var _ = Service("plugins", func() {
 
 // --- Models ---
 
-// PluginServerModel represents an MCP server included in a plugin. The server
-// is backed by exactly one of a Gram toolset (toolset_id) or a Remote
-// MCP-backed mcp_server (mcp_server_id).
+// PluginServerModel represents one toolset, MCP server, or gateway in a plugin.
 var PluginServerModel = Type("PluginServer", func() {
 	Required("id", "display_name", "policy", "sort_order", "created_at")
 
@@ -487,11 +485,15 @@ var PluginServerModel = Type("PluginServer", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID. Set when this server is toolset-backed (exactly one of toolset_id / mcp_server_id is set).")
+		Description("Gram toolset ID. Exactly one backend ID is set.")
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, func() {
-		Description("Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one of toolset_id / mcp_server_id is set).")
+		Description("Gram MCP server ID. Exactly one backend ID is set.")
+		Format(FormatUUID)
+	})
+	Attribute("meta_mcp_server_id", String, func() {
+		Description("MCP gateway ID. Exactly one backend ID is set.")
 		Format(FormatUUID)
 	})
 	Attribute("display_name", String, "Display name shown in generated plugin config.")
@@ -585,14 +587,18 @@ var AddPluginServerForm = Type("AddPluginServerForm", func() {
 		Format(FormatUUID)
 	})
 	Attribute("toolset_id", String, func() {
-		Description("Gram toolset ID for a toolset-backed MCP server. Provide exactly one of toolset_id or mcp_server_id.")
+		Description("Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.")
 		Format(FormatUUID)
 	})
 	Attribute("mcp_server_id", String, func() {
-		Description("Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of toolset_id or mcp_server_id.")
+		Description("Gram MCP server ID. Provide exactly one backend ID.")
 		Format(FormatUUID)
 	})
-	Attribute("display_name", String, "Display name for the server. Defaults to the backing toolset or mcp_server name when omitted.")
+	Attribute("meta_mcp_server_id", String, func() {
+		Description("MCP gateway ID. Provide exactly one backend ID.")
+		Format(FormatUUID)
+	})
+	Attribute("display_name", String, "Display name for the server. Defaults to the backing server name when omitted.")
 	Attribute("policy", String, func() {
 		Enum("required", "optional")
 		Default("required")

@@ -1101,3 +1101,47 @@ func (q *Queries) UpdateMCPEndpoint(ctx context.Context, arg UpdateMCPEndpointPa
 	)
 	return i, err
 }
+
+const updateMCPEndpointAddress = `-- name: UpdateMCPEndpointAddress :one
+UPDATE mcp_endpoints
+SET
+    custom_domain_id = $1,
+    slug = $2,
+    is_domain_root = $3,
+    updated_at = clock_timestamp()
+WHERE id = $4 AND project_id = $5 AND deleted IS FALSE
+RETURNING id, project_id, custom_domain_id, mcp_server_id, meta_mcp_server_id, slug, is_domain_root, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateMCPEndpointAddressParams struct {
+	CustomDomainID uuid.NullUUID
+	Slug           string
+	IsDomainRoot   pgtype.Bool
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) UpdateMCPEndpointAddress(ctx context.Context, arg UpdateMCPEndpointAddressParams) (McpEndpoint, error) {
+	row := q.db.QueryRow(ctx, updateMCPEndpointAddress,
+		arg.CustomDomainID,
+		arg.Slug,
+		arg.IsDomainRoot,
+		arg.ID,
+		arg.ProjectID,
+	)
+	var i McpEndpoint
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.CustomDomainID,
+		&i.McpServerID,
+		&i.MetaMcpServerID,
+		&i.Slug,
+		&i.IsDomainRoot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}

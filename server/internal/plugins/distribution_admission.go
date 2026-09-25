@@ -47,6 +47,8 @@ func mapDistributionAdmissionError(err error) error {
 	switch {
 	case errors.Is(err, admission.ErrApprovalRequired):
 		return oops.E(oops.CodeConflict, err, "plugin audience requires Shadow MCP approval")
+	case errors.Is(err, admission.ErrPrivateGatewayAudience):
+		return oops.E(oops.CodeConflict, err, "private-only gateway cannot be distributed to Everyone")
 	case errors.Is(err, admission.ErrDistributionDisabled):
 		return oops.E(oops.CodeConflict, err, "direct-remote distribution is temporarily disabled")
 	case errors.Is(err, admission.ErrUnavailable):

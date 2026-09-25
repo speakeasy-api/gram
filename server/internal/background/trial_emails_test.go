@@ -264,3 +264,40 @@ func TestTrialLifecycleEmailWorkflowChunksLongReminderTimer(t *testing.T) {
 	require.Equal(t, int32(1), lifecycleCalls.Load())
 	require.True(t, now.Add(trialReminderTimerChunk).Equal(env.Now()))
 }
+
+func TestTrialLifecycleEmailActivitiesExcludeLocalFixtures(t *testing.T) {
+	t.Parallel()
+	for _, gateErr := range []error{nil, errors.New("fixture projection failed")} {
+		a := &Activities{trialFixtureHandler: func(context.Context, string) (bool, error) { return true, gateErr }}
+		ctx := t.Context()
+		for _, kind := range []TrialLifecycleEmailKind{TrialStartedEmailKind, AdminAddedEmailKind, TrialInactiveEmailKind} {
+			err := a.SendTrialLifecycleEmail(ctx, TrialLifecycleEmailInput{Kind: kind, OrganizationID: "org_fixture"})
+			require.ErrorIs(t, err, gateErr)
+		}
+		state, err := a.ResolveTrialEndingReminder(ctx, "org_fixture")
+		require.ErrorIs(t, err, gateErr)
+		require.False(t, state.Active)
+		result, err := a.SendTrialEndingSoonEmail(ctx, billingnotifications.SendTrialEndingSoonInput{OrganizationID: "org_fixture"})
+		require.ErrorIs(t, err, gateErr)
+		require.False(t, result.Reschedule)
+	}
+}
+
+func TestTrialLifecycleEmailActivitiesContinueForNonFixtures(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	a := &Activities{trialFixtureHandler: func(_ context.Context, orgID string) (bool, error) {
+		require.Equal(t, "org_non_fixture", orgID)
+		calls++
+		return false, nil
+	}}
+	for _, kind := range []TrialLifecycleEmailKind{TrialStartedEmailKind, AdminAddedEmailKind, TrialInactiveEmailKind} {
+		err := a.SendTrialLifecycleEmail(t.Context(), TrialLifecycleEmailInput{Kind: kind, OrganizationID: "org_non_fixture"})
+		require.EqualError(t, err, "trial email service is not configured")
+	}
+	_, err := a.ResolveTrialEndingReminder(t.Context(), "org_non_fixture")
+	require.EqualError(t, err, "billing notification service is not configured")
+	_, err = a.SendTrialEndingSoonEmail(t.Context(), billingnotifications.SendTrialEndingSoonInput{OrganizationID: "org_non_fixture"})
+	require.EqualError(t, err, "billing notification service is not configured")
+	require.Equal(t, 5, calls)
+}

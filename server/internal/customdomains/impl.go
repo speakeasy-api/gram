@@ -41,14 +41,15 @@ import (
 )
 
 type Service struct {
-	tracer             trace.Tracer
-	logger             *slog.Logger
-	db                 *pgxpool.Pool
-	auth               *auth.Auth
-	authz              *authz.Engine
-	temporalClient     TemporalClient
-	audit              *audit.Logger
-	networkIngressPins NetworkIngressPinChecker
+	tracer              trace.Tracer
+	logger              *slog.Logger
+	db                  *pgxpool.Pool
+	auth                *auth.Auth
+	authz               *authz.Engine
+	temporalClient      TemporalClient
+	audit               *audit.Logger
+	networkIngressPins  NetworkIngressPinChecker
+	publicationRequests OrganizationPublicationRequester
 	// expectedTargetCNAME and expectedARecords are the DNS targets surfaced to
 	// customers: the CNAME target for subdomains and the static ingress IPs
 	// for apex domains, which cannot carry a CNAME.
@@ -93,9 +94,19 @@ func NewService(
 		temporalClient:      temporal,
 		audit:               auditLogger,
 		networkIngressPins:  networkIngressPins,
+		publicationRequests: nil,
 		expectedTargetCNAME: expectedTargetCNAME,
 		expectedARecords:    expectedARecords,
 	}
+}
+
+type OrganizationPublicationRequester interface {
+	Organization(context.Context, pgx.Tx, string, string) error
+}
+
+func (s *Service) WithPublicationRequests(requester OrganizationPublicationRequester) *Service {
+	s.publicationRequests = requester
+	return s
 }
 
 // domainView builds the API view of a custom domain, annotated with the DNS
@@ -600,6 +611,11 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 		return nil, oops.E(oops.CodeUnexpected, err, "log root endpoint update").LogError(ctx, s.logger)
 	}
 
+	if s.publicationRequests != nil && beforeRoute.RootMcpEndpointID != targetID {
+		if err := s.publicationRequests.Organization(ctx, dbtx, authCtx.ActiveOrganizationID, authCtx.UserID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "enqueue root endpoint publication").LogError(ctx, s.logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit root endpoint update").LogError(ctx, s.logger)
 	}
@@ -772,6 +788,11 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		return oops.E(oops.CodeUnexpected, err, "failed to create custom domain deletion audit log").LogError(ctx, s.logger)
 	}
 
+	if s.publicationRequests != nil && len(deletedEndpoints) > 0 {
+		if err := s.publicationRequests.Organization(ctx, dbtx, authCtx.ActiveOrganizationID, authCtx.UserID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "enqueue custom domain publication").LogError(ctx, s.logger)
+		}
+	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to commit custom domain deletion").LogError(ctx, s.logger)
 	}
