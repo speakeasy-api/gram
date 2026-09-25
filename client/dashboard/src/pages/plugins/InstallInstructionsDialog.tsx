@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
 import { useFetcher } from "@/contexts/Fetcher";
+import { PERSONAL_ACCOUNT_GOVERNANCE_NOTE } from "@/lib/personal-account-governance";
 import { cn } from "@/lib/utils";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePlugins } from "@gram/client/react-query/plugins";
@@ -36,7 +37,12 @@ const COWORK_DOCS_URL =
 const CLAUDE_CODE_SETTINGS_DOCS_URL =
   "https://code.claude.com/docs/en/settings";
 
+const CLAUDE_PLUGINS_DOCS_URL =
+  "https://support.claude.com/en/articles/13837440-use-plugins-in-claude";
+
 const CURSOR_DASHBOARD_URL = "https://cursor.com/dashboard";
+
+const CURSOR_PLUGINS_DOCS_URL = "https://cursor.com/docs/plugins";
 
 /**
  * Downloads the server-generated observability plugin ZIP. opencode and copilot
@@ -335,6 +341,32 @@ function ClaudeCodeInstallContent({
 }
 
 /**
+ * First step of every personal-account (manual) setup: the marketplace repo is
+ * private, so the user must be a collaborator before a personal Claude or
+ * Cursor account can read it. GitHub mails the invite to the email on the
+ * user's GitHub account, which is often a personal address, not a work one.
+ */
+const acceptGitHubInviteStep = {
+  title: "Accept the GitHub invite",
+  description: (
+    <>
+      Ask an admin to add your GitHub username as a collaborator on this
+      marketplace. GitHub emails an invite to the address on your GitHub account
+      — often a personal email, not your work one. Accept it before continuing.
+    </>
+  ),
+};
+
+function PersonalAccountNote() {
+  return (
+    <p className="text-muted-foreground mt-3 flex items-start gap-1.5 text-xs leading-relaxed">
+      <Info className="mt-0.5 size-3.5 shrink-0" />
+      <span>{PERSONAL_ACCOUNT_GOVERNANCE_NOTE}</span>
+    </p>
+  );
+}
+
+/**
  * Claude Cowork (org-managed) install. Cowork admins point their org at the
  * underlying private GitHub repo on Claude.ai's Organization Settings page;
  * Cowork's own GitHub App syncs from there and rolls the marketplace out to
@@ -407,6 +439,53 @@ function ClaudeCoworkInstallContent({
           links={[{ href: COWORK_DOCS_URL, label: "Cowork setup guide" }]}
         />
       </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          Using a personal Claude account
+        </h3>
+        <p className="text-muted-foreground mb-4 text-sm">
+          On a Pro or Max plan there is no organization to roll out to. Add the
+          marketplace to your own account instead.
+        </p>
+
+        <InstallSteps
+          steps={[
+            acceptGitHubInviteStep,
+            {
+              title: "Add the marketplace in Claude",
+              description: (
+                <>
+                  In Claude, open{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    Customize → Plugins
+                  </code>
+                  , click{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    Add → Add marketplace → Add from a repository
+                  </code>
+                  , and enter:
+                </>
+              ),
+              code: repoSlug,
+              language: "text",
+              children: (
+                <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
+                  If the sync fails, use the Claude Code tab instead — the CLI
+                  reads private repos with your local git credentials.
+                </p>
+              ),
+            },
+          ]}
+        />
+        <PersonalAccountNote />
+
+        <RelatedLinks
+          links={[
+            { href: CLAUDE_PLUGINS_DOCS_URL, label: "Use plugins in Claude" },
+          ]}
+        />
+      </div>
     </div>
   );
 }
@@ -423,8 +502,19 @@ function CursorInstallContent({
   repoOwner,
   repoName,
   pluginName,
-}: Pick<ContentProps, "repoOwner" | "repoName" | "pluginName">) {
+  pluginSlug,
+}: Pick<ContentProps, "repoOwner" | "repoName" | "pluginName" | "pluginSlug">) {
   const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
+  // Mirrors generateCursorPlugin in server/internal/plugins/generate.go:
+  // each Cursor plugin lives at cursor-plugins/<slug>-cursor.
+  const cursorPluginDir = `${pluginSlug ?? "<plugin-slug>"}-cursor`;
+  // Re-runnable as-is, since local plugins must be re-copied after each publish.
+  const localInstallCommand = [
+    `tmp=$(mktemp -d) && git clone --depth 1 ${repoUrl}.git "$tmp"`,
+    `mkdir -p ~/.cursor/plugins/local`,
+    `rm -rf ~/.cursor/plugins/local/${cursorPluginDir}`,
+    `cp -R "$tmp/cursor-plugins/${cursorPluginDir}" ~/.cursor/plugins/local/`,
+  ].join("\n");
 
   return (
     <div className="min-w-0 space-y-6">
@@ -487,6 +577,57 @@ function CursorInstallContent({
         <RelatedLinks
           links={[
             { href: CURSOR_DASHBOARD_URL, label: "Open Cursor dashboard" },
+          ]}
+        />
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">
+          Using a personal Cursor account
+        </h3>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Team marketplaces need a Cursor Teams or Enterprise plan. On an
+          individual plan, install the plugin as a local plugin instead.
+        </p>
+
+        <InstallSteps
+          steps={[
+            acceptGitHubInviteStep,
+            {
+              title: "Copy the plugin into Cursor's local plugins folder",
+              description: "Run this in a terminal:",
+              code: localInstallCommand,
+              language: "bash",
+              children: !pluginSlug ? (
+                <p className="text-muted-foreground mt-3 text-xs leading-relaxed">
+                  Replace{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    &lt;plugin-slug&gt;
+                  </code>{" "}
+                  with the slug of the plugin you want to install.
+                </p>
+              ) : undefined,
+            },
+            {
+              title: "Reload Cursor",
+              description: (
+                <>
+                  Run{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    Developer: Reload Window
+                  </code>{" "}
+                  and check the plugin appears under Customize. Local plugins do
+                  not update on their own — repeat the copy after each publish.
+                </>
+              ),
+            },
+          ]}
+        />
+        <PersonalAccountNote />
+
+        <RelatedLinks
+          links={[
+            { href: CURSOR_PLUGINS_DOCS_URL, label: "Cursor plugins docs" },
           ]}
         />
       </div>
@@ -1226,6 +1367,7 @@ export function InstallInstructionsDialog({
                   repoOwner={content.repoOwner}
                   repoName={content.repoName}
                   pluginName={effectivePluginName}
+                  pluginSlug={effectivePluginSlug}
                 />
               )}
               {selected === "codex" && (
