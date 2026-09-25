@@ -907,6 +907,84 @@ CREATE UNIQUE INDEX IF NOT EXISTS plugins_project_id_is_default_key
 
 COMMENT ON COLUMN plugins.is_default IS 'Marks the fallback plugin new servers land in when not explicitly routed to a named plugin. At most one true per project (see plugins_project_id_is_default_key).';
 
+-- Absence means unconfigured/off; setup creates organization-owned settings.
+-- A deleted project clears the default; application writers validate its tenancy.
+CREATE TABLE IF NOT EXISTS organization_role_provisioning_settings (
+  organization_id TEXT NOT NULL,
+  enabled boolean DEFAULT false,
+  project_id uuid,
+  version bigint DEFAULT 0,
+
+  CONSTRAINT organization_role_provisioning_settings_pkey PRIMARY KEY (organization_id),
+  CONSTRAINT organization_role_provisioning_settings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
+  CONSTRAINT organization_role_provisioning_settings_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+-- Organization-scoped provisioning intent may be pending without a project.
+-- NULL retention references are inert; live role and organization tenancy are
+-- validated by application writers, using canonical organization/global role URNs.
+CREATE TABLE IF NOT EXISTS role_provisioning_settings (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  organization_id TEXT,
+  role_urn TEXT NOT NULL,
+  enabled boolean NOT NULL DEFAULT true,
+  project_id uuid,
+  last_attempt_at timestamptz,
+  last_error_code TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT role_provisioning_settings_pkey PRIMARY KEY (id),
+  CONSTRAINT role_provisioning_settings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT role_provisioning_settings_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS role_provisioning_settings_organization_id_role_urn_key
+  ON role_provisioning_settings (organization_id, role_urn)
+  WHERE organization_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS role_provisioning_settings_project_id_idx
+  ON role_provisioning_settings (project_id)
+  WHERE project_id IS NOT NULL;
+
+-- Retain each plugin incarnation across remaps and replacement. Remapping alone
+-- does not retire an association. A NULL automatic-name marker protects a manual
+-- override for that incarnation; orphaned references never authorize automation.
+CREATE TABLE IF NOT EXISTS role_plugin_associations (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  role_provisioning_setting_id uuid,
+  project_id uuid,
+  plugin_id uuid,
+  is_current boolean NOT NULL DEFAULT false,
+  retired_at timestamptz,
+  last_automatic_name TEXT,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT role_plugin_associations_pkey PRIMARY KEY (id),
+  CONSTRAINT role_plugin_associations_role_provisioning_setting_id_fkey FOREIGN KEY (role_provisioning_setting_id) REFERENCES role_provisioning_settings (id) ON DELETE SET NULL,
+  CONSTRAINT role_plugin_associations_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE SET NULL,
+  CONSTRAINT role_plugin_associations_project_id_plugin_id_fkey FOREIGN KEY (project_id, plugin_id) REFERENCES plugins (project_id, id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS role_plugin_associations_plugin_id_key
+  ON role_plugin_associations (plugin_id)
+  WHERE plugin_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS role_plugin_associations_setting_id_project_id_key
+  ON role_plugin_associations (role_provisioning_setting_id, project_id)
+  WHERE retired_at IS NULL AND role_provisioning_setting_id IS NOT NULL AND project_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS role_plugin_associations_current_setting_id_key
+  ON role_plugin_associations (role_provisioning_setting_id)
+  WHERE is_current AND retired_at IS NULL AND role_provisioning_setting_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS role_plugin_associations_project_id_idx
+  ON role_plugin_associations (project_id)
+  WHERE project_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS skill_sync_receipts (
   project_id uuid NOT NULL,
   skill_id uuid NOT NULL,
