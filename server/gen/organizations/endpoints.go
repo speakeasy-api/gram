@@ -33,6 +33,7 @@ type Endpoints struct {
 	ListSetupTasks                     goa.Endpoint
 	AssignSetupWorkstream              goa.Endpoint
 	UpdateSetupTask                    goa.Endpoint
+	SubmitOnboardingSurvey             goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "organizations" service with endpoints.
@@ -57,6 +58,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListSetupTasks:                     NewListSetupTasksEndpoint(s, a.APIKeyAuth),
 		AssignSetupWorkstream:              NewAssignSetupWorkstreamEndpoint(s, a.APIKeyAuth),
 		UpdateSetupTask:                    NewUpdateSetupTaskEndpoint(s, a.APIKeyAuth),
+		SubmitOnboardingSurvey:             NewSubmitOnboardingSurveyEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -80,6 +82,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListSetupTasks = m(e.ListSetupTasks)
 	e.AssignSetupWorkstream = m(e.AssignSetupWorkstream)
 	e.UpdateSetupTask = m(e.UpdateSetupTask)
+	e.SubmitOnboardingSurvey = m(e.SubmitOnboardingSurvey)
 }
 
 // NewGetEndpoint returns an endpoint function that calls the method "get" of
@@ -471,5 +474,28 @@ func NewUpdateSetupTaskEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.UpdateSetupTask(ctx, p)
+	}
+}
+
+// NewSubmitOnboardingSurveyEndpoint returns an endpoint function that calls
+// the method "submitOnboardingSurvey" of service "organizations".
+func NewSubmitOnboardingSurveyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SubmitOnboardingSurveyPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SubmitOnboardingSurvey(ctx, p)
 	}
 }

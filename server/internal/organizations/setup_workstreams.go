@@ -14,10 +14,10 @@ type setupWorkstreamDefinition struct {
 	TaskKeys    []string
 }
 
-// setupWorkstreams is the canonical display order and membership for both
-// onboarding UIs and assignment. Membership includes hidden tasks.
+// setupWorkstreams is the canonical display order and membership for the
+// onboarding wizard and assignment. Membership includes hidden tasks.
 var setupWorkstreams = []setupWorkstreamDefinition{
-	{ID: "connect", Title: "Connect identity", Description: "Authenticate people and agents. Sync IDP roles.", TaskKeys: []string{"domain-verification", "identity-provider", "connect-idp", "directory-sync"}},
+	{ID: "connect", Title: "Connect identity", Description: "Authenticate people and agents. Sync IDP roles.", TaskKeys: []string{"domain-verification", "connect-idp", "directory-sync", "identity-provider"}},
 	{ID: "observe", Title: "Observe agents", Description: "Instrument agents, add integrations, and verify traffic.", TaskKeys: []string{"enable-logging", "anthropic-observability", "instrument-agents", "litellm", "additional-agent-config", "confirm-traffic"}},
 	{ID: "distribute", Title: "MCP Gateway", Description: "Publish and distribute approved MCP servers.", TaskKeys: []string{"create-marketplace", "distribute-servers", "platform-mcp"}},
 	{ID: "secure", Title: "Secure agent traffic", Description: "Apply the initial policy controls.", TaskKeys: []string{"anthropic-admin-controls", "configure-policies"}},

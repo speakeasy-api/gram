@@ -5,9 +5,45 @@ import {
   useMutation,
 } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { SetupWorkstream } from "@gram/client/models/components/setupworkstream.js";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
-import { SETUP_WORKSTREAMS } from "./components/board/workstream-fixtures";
+import type { SetupWorkstream } from "@gram/client/models/components/setupworkstream.js";
+
+// Representative API catalog for tests; production membership comes from the server.
+const SETUP_WORKSTREAMS: SetupWorkstream[] = [
+  {
+    id: "connect",
+    title: "Connect identity",
+    taskKeys: [
+      "domain-verification",
+      "connect-idp",
+      "directory-sync",
+      "identity-provider",
+    ],
+  },
+  {
+    id: "observe",
+    title: "Observe agents",
+    taskKeys: [
+      "enable-logging",
+      "anthropic-observability",
+      "instrument-agents",
+      "litellm",
+      "additional-agent-config",
+      "confirm-traffic",
+    ],
+  },
+  {
+    id: "distribute",
+    title: "MCP Gateway",
+    taskKeys: ["create-marketplace", "distribute-servers", "platform-mcp"],
+  },
+  {
+    id: "secure",
+    title: "Secure agent traffic",
+    taskKeys: ["anthropic-admin-controls", "configure-policies"],
+  },
+];
+
 import { useOnboarding, useOnboardingActions } from "./use-onboarding";
 
 const state = vi.hoisted(() => ({
@@ -21,7 +57,10 @@ const state = vi.hoisted(() => ({
   assign: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/assignSetupWorkstream.js", () => ({
-  useAssignSetupWorkstreamMutation: () => ({ mutateAsync: state.assign }),
+  useAssignSetupWorkstreamMutation: () => ({
+    mutateAsync: state.assign,
+    isPending: false,
+  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({

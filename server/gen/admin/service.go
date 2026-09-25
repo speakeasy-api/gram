@@ -396,6 +396,7 @@ type AdminOnboardingConfiguration struct {
 
 type AdminOnboardingPreset struct {
 	Key             string
+	Title           string
 	VisibleTaskKeys []string
 }
 
@@ -1420,7 +1421,8 @@ type SetOrganizationOnboardingPayload struct {
 	OrganizationID    string
 	// Complete explicit selection; an empty array selects no tasks.
 	VisibleTaskKeys []string
-	// Omit to preserve the saved preset. Null/reset is not supported.
+	// A key from presets. Omit to preserve the saved preset. Null/reset is not
+	// supported.
 	Preset *string
 }
 

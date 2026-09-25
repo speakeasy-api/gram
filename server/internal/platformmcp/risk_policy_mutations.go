@@ -396,7 +396,7 @@ func (s *riskPolicyMutationService) prepareCreate(ctx context.Context, principal
 	}
 	params := riskrepo.CreateRiskPolicyParams{
 		ID: uuid.Nil, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: input.Name,
-		PolicyType: input.PolicyType, Sources: []string{}, PresidioEntities: []string{}, AnalyzerConfig: nil,
+		PolicyType: input.PolicyType, Sources: []string{}, PresidioEntities: []string{}, AnalyzerConfig: nil, McpScope: nil,
 		PromptInjectionRules: []string{}, DisabledRules: []string{}, CustomRuleIds: []string{},
 		Enabled: input.Enabled, Action: action,
 		AudienceType: riskPolicyAudienceEveryone, ShadowMcpDisposition: pgtype.Text{String: "", Valid: false}, AutoName: false,
@@ -473,7 +473,7 @@ func (s *riskPolicyMutationService) prepareUpdate(ctx context.Context, principal
 		return policycore.UpdateMutation{}, nil, invalidRiskPolicyRequest()
 	}
 	params := riskrepo.UpdateRiskPolicyParams{
-		ID: current.ID, ProjectID: project.ID, Name: current.Name, Sources: slices.Clone(current.Sources), PresidioEntities: slices.Clone(current.PresidioEntities), AnalyzerConfig: slices.Clone(current.AnalyzerConfig),
+		ID: current.ID, ProjectID: project.ID, Name: current.Name, Sources: slices.Clone(current.Sources), PresidioEntities: slices.Clone(current.PresidioEntities), AnalyzerConfig: slices.Clone(current.AnalyzerConfig), McpScope: slices.Clone(current.McpScope),
 		PromptInjectionRules: slices.Clone(current.PromptInjectionRules), DisabledRules: slices.Clone(current.DisabledRules), CustomRuleIds: slices.Clone(current.CustomRuleIds),
 		Enabled: current.Enabled, Action: current.Action, AudienceType: current.AudienceType, AutoName: current.AutoName,
 		UserMessage: current.UserMessage, Prompt: current.Prompt, ModelConfig: slices.Clone(current.ModelConfig), Score: pgtype.Float8{Float64: current.Score, Valid: true},
@@ -799,7 +799,7 @@ func (s *riskPolicyMutationService) matchExistingCreate(ctx context.Context, tx 
 func riskPolicyCreateMatches(row riskrepo.RiskPolicy, audience []string, desired riskrepo.CreateRiskPolicyParams, catalog policycatalog.Catalog) bool {
 	return row.OrganizationID == desired.OrganizationID && row.Name == desired.Name && row.PolicyType == desired.PolicyType && row.Enabled == desired.Enabled && row.Action == desired.Action && row.AudienceType == desired.AudienceType && row.AutoName == desired.AutoName && row.Score == desired.Score.Float64 &&
 		reflect.DeepEqual(canonicalStrings(row.Sources), canonicalStrings(desired.Sources)) && reflect.DeepEqual(canonicalStrings(row.PresidioEntities), canonicalStrings(desired.PresidioEntities)) && reflect.DeepEqual(canonicalStrings(row.PromptInjectionRules), canonicalStrings(desired.PromptInjectionRules)) && reflect.DeepEqual(canonicalStrings(row.DisabledRules), canonicalStrings(desired.DisabledRules)) && len(row.CustomRuleIds) == 0 &&
-		canonicalJSONEqual(row.AnalyzerConfig, desired.AnalyzerConfig) && row.ShadowMcpDisposition == desired.ShadowMcpDisposition && row.UserMessage == desired.UserMessage && row.Prompt == desired.Prompt && len(row.ModelConfig) == 0 && reflect.DeepEqual(canonicalStrings(audience), []string{authz.AllUsersPrincipal().String()})
+		canonicalJSONEqual(row.AnalyzerConfig, desired.AnalyzerConfig) && canonicalJSONEqual(row.McpScope, desired.McpScope) && row.ShadowMcpDisposition == desired.ShadowMcpDisposition && row.UserMessage == desired.UserMessage && row.Prompt == desired.Prompt && len(row.ModelConfig) == 0 && reflect.DeepEqual(canonicalStrings(audience), []string{authz.AllUsersPrincipal().String()})
 }
 
 func canonicalJSONEqual(a, b []byte) bool {
@@ -867,9 +867,12 @@ func mapRiskPolicyMutationError(err error) error {
 	var stale *policycore.StalePolicyError
 	var blockingConflict *policycore.BlockingPolicyConflictError
 	var decisionConflict *policycore.DecisionConflictError
+	var validation *policycore.ValidationError
 	switch {
 	case errors.As(err, &mutation):
 		return mutation
+	case errors.As(err, &validation):
+		return &RiskMutationError{Code: "invalid_request", Message: validation.Message, Cause: ErrRiskMutationInvalid}
 	case errors.As(err, &stale), errors.As(err, &blockingConflict), errors.As(err, &decisionConflict):
 		return riskMutationConflict("The risk policy could not be changed because its current state conflicts with the request.")
 	case errors.Is(err, policycore.ErrLoadPolicy):

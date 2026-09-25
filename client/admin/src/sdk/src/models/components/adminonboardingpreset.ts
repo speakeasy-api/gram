@@ -5,23 +5,14 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export const Key = {
-  Gateway: "gateway",
-  Security: "security",
-} as const;
-export type Key = ClosedEnum<typeof Key>;
-
 export type AdminOnboardingPreset = {
-  key: Key;
+  key: string;
+  title: string;
   visibleTaskKeys: Array<string>;
 };
-
-/** @internal */
-export const Key$inboundSchema: z.ZodMiniEnum<typeof Key> = z.enum(Key);
 
 /** @internal */
 export const AdminOnboardingPreset$inboundSchema: z.ZodMiniType<
@@ -29,7 +20,8 @@ export const AdminOnboardingPreset$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
-    key: Key$inboundSchema,
+    key: z.string(),
+    title: z.string(),
     visible_task_keys: z.array(z.string()),
   }),
   z.transform((v) => {

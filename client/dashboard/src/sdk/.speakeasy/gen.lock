@@ -433,6 +433,7 @@ trackedFiles:
   src/funcs/organizationsRevokeInvite.ts: {}
   src/funcs/organizationsSendEnterpriseAdminOnboardingEmail.ts: {}
   src/funcs/organizationsSendInvite.ts: {}
+  src/funcs/organizationsSubmitOnboardingSurvey.ts: {}
   src/funcs/organizationsUpdateInviteRole.ts: {}
   src/funcs/organizationsUpdateSetupTask.ts: {}
   src/funcs/organizationsVerifyOnboardingHooksSetup.ts: {}
@@ -560,6 +561,7 @@ trackedFiles:
   src/funcs/riskPoliciesDelete.ts: {}
   src/funcs/riskPoliciesGet.ts: {}
   src/funcs/riskPoliciesList.ts: {}
+  src/funcs/riskPoliciesListForMcpServer.ts: {}
   src/funcs/riskPoliciesStatus.ts: {}
   src/funcs/riskPoliciesTrigger.ts: {}
   src/funcs/riskPoliciesUpdate.ts: {}
@@ -1492,6 +1494,8 @@ trackedFiles:
   src/models/components/riskexclusion.ts: {}
   src/models/components/riskexposureslice.ts: {}
   src/models/components/riskidrequestbody.ts: {}
+  src/models/components/riskmcpscope.ts: {}
+  src/models/components/riskmcpserverscope.ts: {}
   src/models/components/riskoverviewcategory.ts: {}
   src/models/components/riskoverviewresult.ts: {}
   src/models/components/riskoverviewtimeseriesfinding.ts: {}
@@ -1633,6 +1637,7 @@ trackedFiles:
   src/models/components/stripesubscription.ts: {}
   src/models/components/submitfeedbackrequestbody.ts: {}
   src/models/components/submitidentityproviderconnectionclientidrequestbody.ts: {}
+  src/models/components/submitonboardingsurveyrequestbody.ts: {}
   src/models/components/submitriskblockfeedbackrequestbody.ts: {}
   src/models/components/suggestcustomdetectionrulerequestbody.ts: {}
   src/models/components/suggestcustomdetectionruleresult.ts: {}
@@ -2259,6 +2264,7 @@ trackedFiles:
   src/models/operations/listriskevalreviews.ts: {}
   src/models/operations/listriskexclusions.ts: {}
   src/models/operations/listriskpolicies.ts: {}
+  src/models/operations/listriskpoliciesformcpserver.ts: {}
   src/models/operations/listriskpolicybypassrequests.ts: {}
   src/models/operations/listriskresults.ts: {}
   src/models/operations/listriskresultsbychat.ts: {}
@@ -2440,6 +2446,7 @@ trackedFiles:
   src/models/operations/startplatformmcponboardingsetup.ts: {}
   src/models/operations/submitfeedback.ts: {}
   src/models/operations/submitidentityproviderconnectionclientid.ts: {}
+  src/models/operations/submitonboardingsurvey.ts: {}
   src/models/operations/submitriskblockfeedback.ts: {}
   src/models/operations/suggestcustomdetectionrule.ts: {}
   src/models/operations/suggestexclusion.ts: {}
@@ -3290,6 +3297,8 @@ trackedFiles:
   src/react-query/riskListExclusions.ts: {}
   src/react-query/riskListPolicies.core.ts: {}
   src/react-query/riskListPolicies.ts: {}
+  src/react-query/riskListPoliciesForMcpServer.core.ts: {}
+  src/react-query/riskListPoliciesForMcpServer.ts: {}
   src/react-query/riskListPolicyBypassRequests.core.ts: {}
   src/react-query/riskListPolicyBypassRequests.ts: {}
   src/react-query/riskListResults.core.ts: {}
@@ -3426,6 +3435,7 @@ trackedFiles:
   src/react-query/startPlatformMCPOnboarding.ts: {}
   src/react-query/startPlatformMCPOnboardingSetup.ts: {}
   src/react-query/submitIdentityProviderConnectionClientId.ts: {}
+  src/react-query/submitOnboardingSurvey.ts: {}
   src/react-query/summarizeChat.ts: {}
   src/react-query/summarizeToolCall.ts: {}
   src/react-query/switchScopes.ts: {}
@@ -8898,6 +8908,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listRiskPoliciesForMcpServer:
+    speakeasy-default-list-risk-policies-for-mcp-server:
+      parameters:
+        query:
+          mcp_server_id: "189a0880-50cf-4131-8914-8cf7659bfebb"
+      responses:
+        "200":
+          application/json: {"policies": [{"action": "flag", "audience_principal_urns": [], "audience_type": "everyone", "auto_name": false, "created_at": "2026-09-09T21:20:58.943Z", "enabled": true, "id": "8fa91541-d013-49cc-a957-b7094975af96", "name": "<value>", "policy_type": "standard", "presidio_score_threshold": 0.75, "project_id": "52a02410-d5f6-4dd3-b9b9-e5461db19de7", "score": 5, "sources": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2026-07-05T09:37:26.690Z", "version": 380519}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listRiskPolicyBypassRequests:
     speakeasy-default-list-risk-policy-bypass-requests:
       responses:
@@ -10892,6 +10914,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  setSetupTaskSelection:
+    speakeasy-default-set-setup-task-selection:
+      requestBody:
+        application/json: {"visible_task_keys": ["<value 1>", "<value 2>", "<value 3>"]}
+      responses:
+        "200":
+          application/json: {"tasks": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   setSourceEnvironmentLink:
     speakeasy-default-set-source-environment-link:
       requestBody:
@@ -11027,6 +11060,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  submitOnboardingSurvey:
+    speakeasy-default-submit-onboarding-survey:
+      requestBody:
+        application/json: {"use_case": "<value>"}
+      responses:
+        "200":
+          application/json: {"tasks": [{"blocked_by": [], "completed_by_fact": true, "description": "and hence the", "hidden": false, "key": "<key>", "status": "todo", "title": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   submitRiskBlockFeedback:
     speakeasy-default-submit-risk-block-feedback:
       requestBody:

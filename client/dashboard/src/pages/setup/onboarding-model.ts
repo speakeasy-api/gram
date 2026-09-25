@@ -59,9 +59,9 @@ export interface OnboardingProgress {
 }
 
 export interface OnboardingModel {
-  /** Every authorized task, in canonical (workstream) order. */
+  /** Every authorized task, in server-selected order. */
   tasks: OnboardingTask[];
-  /** Tasks on the board and in the walk; hidden tasks excluded. */
+  /** Tasks in the walk; hidden tasks excluded. */
   visibleTasks: OnboardingTask[];
   workstreams: OnboardingWorkstream[];
   unsupportedTaskKeys: string[];
@@ -126,11 +126,7 @@ export function assignedTo(
   );
 }
 
-/**
- * The single projection of a listSetupTasks response that both the board and
- * the wizard render. Workstream membership from the API is the canonical
- * order; the task array's own order is not used for display.
- */
+/** Project server-selected order while retaining workstream membership metadata. */
 export function buildOnboardingModel(
   setupTasks: SetupTask[],
   setupWorkstreams: SetupWorkstream[],
@@ -151,12 +147,8 @@ export function buildOnboardingModel(
       tasks,
     };
   });
-  // The server partitions every task into a workstream; anything it misses
-  // still appears, after the workstreams, instead of silently disappearing.
-  const tasks = [
-    ...workstreams.flatMap((workstream) => workstream.tasks),
-    ...[...byId.values()].filter((task) => !placed.has(task.id)),
-  ];
+  // Survey selection determines the walk, not workstream grouping.
+  const tasks = [...byId.values()];
   return {
     tasks,
     visibleTasks: tasks.filter((task) => !task.hidden),

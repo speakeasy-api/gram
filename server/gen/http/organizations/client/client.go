@@ -84,6 +84,10 @@ type Client struct {
 	// updateSetupTask endpoint.
 	UpdateSetupTaskDoer goahttp.Doer
 
+	// SubmitOnboardingSurvey Doer is the HTTP client used to make requests to the
+	// submitOnboardingSurvey endpoint.
+	SubmitOnboardingSurveyDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -122,6 +126,7 @@ func NewClient(
 		ListSetupTasksDoer:                     doer,
 		AssignSetupWorkstreamDoer:              doer,
 		UpdateSetupTaskDoer:                    doer,
+		SubmitOnboardingSurveyDoer:             doer,
 		RestoreResponseBody:                    restoreBody,
 		scheme:                                 scheme,
 		host:                                   host,
@@ -534,6 +539,30 @@ func (c *Client) UpdateSetupTask() goa.Endpoint {
 		resp, err := c.UpdateSetupTaskDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("organizations", "updateSetupTask", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SubmitOnboardingSurvey returns an endpoint that makes HTTP requests to the
+// organizations service submitOnboardingSurvey server.
+func (c *Client) SubmitOnboardingSurvey() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSubmitOnboardingSurveyRequest(c.encoder)
+		decodeResponse = DecodeSubmitOnboardingSurveyResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSubmitOnboardingSurveyRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SubmitOnboardingSurveyDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("organizations", "submitOnboardingSurvey", err)
 		}
 		return decodeResponse(resp)
 	}

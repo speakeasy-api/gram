@@ -30,16 +30,23 @@ export interface Onboarding {
   canInspectHidden: boolean;
 }
 
-export function useOnboarding(): Onboarding {
+export function useOnboarding({
+  includeHidden,
+}: { includeHidden?: boolean } = {}): Onboarding {
   const session = useSession();
   const organizationId = session.organization.id;
   const client = useGramContext();
   const { hasScope } = useRBAC();
   const canInspectHidden = session.user.isAdmin;
   const query = useQuery(
-    buildOrganizationSetupTasksQuery(client, organizationId, canInspectHidden, {
-      retry: false,
-    }),
+    buildOrganizationSetupTasksQuery(
+      client,
+      organizationId,
+      includeHidden ?? canInspectHidden,
+      {
+        retry: false,
+      },
+    ),
   );
   return {
     model: buildOnboardingModel(
@@ -149,7 +156,7 @@ export function useOnboardingActions(
     );
 
   return {
-    isPending,
+    isPending: isPending || updateTask.isPending || assign.isPending,
     canSetStatus,
     setStatus: async (id, status) => {
       const task = model.task(id);

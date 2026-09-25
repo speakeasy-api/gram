@@ -104,7 +104,7 @@ function OnboardingEditor({
             Onboarding
           </h5>
           <Badge variant="outline">
-            {current.preset ?? "Legacy"}
+            {selectedPreset?.title ?? current.preset ?? "Legacy"}
             {customized ? " - customized" : ""}
           </Badge>
           {draft && <Badge variant="secondary">Unsaved changes</Badge>}
@@ -132,7 +132,7 @@ function OnboardingEditor({
             <SelectContent>
               {data.presets.map((preset) => (
                 <SelectItem key={preset.key} value={preset.key}>
-                  {preset.key === "gateway" ? "Gateway" : "Security"}
+                  {preset.title}
                 </SelectItem>
               ))}
             </SelectContent>

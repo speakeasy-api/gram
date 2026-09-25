@@ -3928,6 +3928,241 @@ func DecodeUpdateSetupTaskResponse(decoder func(*http.Response) goahttp.Decoder,
 	}
 }
 
+// BuildSubmitOnboardingSurveyRequest instantiates a HTTP request object with
+// method and path set to call the "organizations" service
+// "submitOnboardingSurvey" endpoint
+func (c *Client) BuildSubmitOnboardingSurveyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SubmitOnboardingSurveyOrganizationsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("organizations", "submitOnboardingSurvey", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSubmitOnboardingSurveyRequest returns an encoder for requests sent to
+// the organizations submitOnboardingSurvey server.
+func EncodeSubmitOnboardingSurveyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*organizations.SubmitOnboardingSurveyPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("organizations", "submitOnboardingSurvey", "*organizations.SubmitOnboardingSurveyPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSubmitOnboardingSurveyRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("organizations", "submitOnboardingSurvey", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSubmitOnboardingSurveyResponse returns a decoder for responses
+// returned by the organizations submitOnboardingSurvey endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSubmitOnboardingSurveyResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSubmitOnboardingSurveyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SubmitOnboardingSurveyResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
+			}
+			err = ValidateSubmitOnboardingSurveyResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
+			}
+			res := NewSubmitOnboardingSurveyListSetupTasksResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SubmitOnboardingSurveyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
+			}
+			err = ValidateSubmitOnboardingSurveyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
+			}
+			return nil, NewSubmitOnboardingSurveyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SubmitOnboardingSurveyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
+			}
+			err = ValidateSubmitOnboardingSurveyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
+			}
+			return nil, NewSubmitOnboardingSurveyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SubmitOnboardingSurveyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
+			}
+			err = ValidateSubmitOnboardingSurveyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
+			}
+			return nil, NewSubmitOnboardingSurveyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SubmitOnboardingSurveyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
+			}
+			err = ValidateSubmitOnboardingSurveyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
+			}
+			return nil, NewSubmitOnboardingSurveyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SubmitOnboardingSurveyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
+			}
+			err = ValidateSubmitOnboardingSurveyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
+			}
+			return nil, NewSubmitOnboardingSurveyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SubmitOnboardingSurveyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
+			}
+			err = ValidateSubmitOnboardingSurveyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
+			}
+			return nil, NewSubmitOnboardingSurveyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SubmitOnboardingSurveyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
+			}
+			err = ValidateSubmitOnboardingSurveyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
+			}
+			return nil, NewSubmitOnboardingSurveyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SubmitOnboardingSurveyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
+				}
+				err = ValidateSubmitOnboardingSurveyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
+				}
+				return nil, NewSubmitOnboardingSurveyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SubmitOnboardingSurveyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
+				}
+				err = ValidateSubmitOnboardingSurveyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
+				}
+				return nil, NewSubmitOnboardingSurveyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("organizations", "submitOnboardingSurvey", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SubmitOnboardingSurveyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("organizations", "submitOnboardingSurvey", err)
+			}
+			err = ValidateSubmitOnboardingSurveyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("organizations", "submitOnboardingSurvey", err)
+			}
+			return nil, NewSubmitOnboardingSurveyGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("organizations", "submitOnboardingSurvey", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalOrganizationInvitationResponseBodyToOrganizationsOrganizationInvitation
 // builds a value of type *organizations.OrganizationInvitation from a value of
 // type *OrganizationInvitationResponseBody.

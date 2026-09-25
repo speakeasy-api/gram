@@ -18,10 +18,12 @@ const fixture = {
   presets: [
     {
       key: "gateway",
+      title: "Gateway",
       visible_task_keys: ["create-marketplace", "distribute-servers"],
     },
     {
       key: "security",
+      title: "Security",
       visible_task_keys: ["create-marketplace", "enable-logging"],
     },
   ],
@@ -197,7 +199,7 @@ describe("Onboarding", () => {
       name: "Distribute servers",
     });
     expect(distribute.getAttribute("data-state")).toBe("unchecked");
-    expect(screen.getByText("gateway - customized")).toBeTruthy();
+    expect(screen.getByText("Gateway - customized")).toBeTruthy();
     fireEvent.click(distribute);
     expect(writes()).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Save onboarding" }));

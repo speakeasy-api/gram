@@ -36,6 +36,7 @@ type Server struct {
 	ListSetupTasks                     http.Handler
 	AssignSetupWorkstream              http.Handler
 	UpdateSetupTask                    http.Handler
+	SubmitOnboardingSurvey             http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -82,6 +83,7 @@ func New(
 			{"ListSetupTasks", "GET", "/rpc/organizations.listSetupTasks"},
 			{"AssignSetupWorkstream", "POST", "/rpc/organizations.assignSetupWorkstream"},
 			{"UpdateSetupTask", "POST", "/rpc/organizations.updateSetupTask"},
+			{"SubmitOnboardingSurvey", "POST", "/rpc/organizations.submitOnboardingSurvey"},
 		},
 		Get:                                NewGetHandler(e.Get, mux, decoder, encoder, errhandler, formatter),
 		SendInvite:                         NewSendInviteHandler(e.SendInvite, mux, decoder, encoder, errhandler, formatter),
@@ -100,6 +102,7 @@ func New(
 		ListSetupTasks:                     NewListSetupTasksHandler(e.ListSetupTasks, mux, decoder, encoder, errhandler, formatter),
 		AssignSetupWorkstream:              NewAssignSetupWorkstreamHandler(e.AssignSetupWorkstream, mux, decoder, encoder, errhandler, formatter),
 		UpdateSetupTask:                    NewUpdateSetupTaskHandler(e.UpdateSetupTask, mux, decoder, encoder, errhandler, formatter),
+		SubmitOnboardingSurvey:             NewSubmitOnboardingSurveyHandler(e.SubmitOnboardingSurvey, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -125,6 +128,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListSetupTasks = m(s.ListSetupTasks)
 	s.AssignSetupWorkstream = m(s.AssignSetupWorkstream)
 	s.UpdateSetupTask = m(s.UpdateSetupTask)
+	s.SubmitOnboardingSurvey = m(s.SubmitOnboardingSurvey)
 }
 
 // MethodNames returns the methods served.
@@ -149,6 +153,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListSetupTasksHandler(mux, h.ListSetupTasks)
 	MountAssignSetupWorkstreamHandler(mux, h.AssignSetupWorkstream)
 	MountUpdateSetupTaskHandler(mux, h.UpdateSetupTask)
+	MountSubmitOnboardingSurveyHandler(mux, h.SubmitOnboardingSurvey)
 }
 
 // Mount configures the mux to serve the organizations endpoints.
@@ -1038,6 +1043,60 @@ func NewUpdateSetupTaskHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateSetupTask")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSubmitOnboardingSurveyHandler configures the mux to serve the
+// "organizations" service "submitOnboardingSurvey" endpoint.
+func MountSubmitOnboardingSurveyHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/organizations.submitOnboardingSurvey", f)
+}
+
+// NewSubmitOnboardingSurveyHandler creates a HTTP handler which loads the HTTP
+// request and calls the "organizations" service "submitOnboardingSurvey"
+// endpoint.
+func NewSubmitOnboardingSurveyHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSubmitOnboardingSurveyRequest(mux, decoder)
+		encodeResponse = EncodeSubmitOnboardingSurveyResponse(encoder)
+		encodeError    = EncodeSubmitOnboardingSurveyError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "submitOnboardingSurvey")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizations")
 		payload, err := decodeRequest(r)
 		if err != nil {

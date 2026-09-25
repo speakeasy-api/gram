@@ -63,9 +63,9 @@ vi.mock("@/contexts/Telemetry", () => ({
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
-    setupTask: {
+    setup: {
       Link: ({ children }: { children: ReactNode }) => (
-        <a href="/example/setup/idp">{children}</a>
+        <a href="/example/setup?task=identity-provider">{children}</a>
       ),
     },
   }),

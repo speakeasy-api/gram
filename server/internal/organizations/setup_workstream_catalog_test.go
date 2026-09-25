@@ -34,6 +34,19 @@ func TestSetupWorkstreamMembershipPartitionsCatalog(t *testing.T) {
 	require.Nil(t, setupWorkstreamForID("unknown"))
 }
 
+func TestSetupWorkstreamOrderMatchesTaskCatalog(t *testing.T) {
+	t.Parallel()
+	var workstreamKeys []string
+	for _, workstream := range setupWorkstreams {
+		workstreamKeys = append(workstreamKeys, workstream.TaskKeys...)
+	}
+	var catalogKeys []string
+	for _, task := range setupTaskCatalog {
+		catalogKeys = append(catalogKeys, task.Key)
+	}
+	require.Equal(t, catalogKeys, workstreamKeys, "wizard and workstreams must use the same task order")
+}
+
 func TestSetupWorkstreamViewsFilterMembership(t *testing.T) {
 	t.Parallel()
 	views := setupWorkstreamViewsForTasks([]*gen.SetupTask{{Key: "directory-sync"}, {Key: "domain-verification"}})
@@ -43,7 +56,7 @@ func TestSetupWorkstreamViewsFilterMembership(t *testing.T) {
 		require.Empty(t, view.TaskKeys, "empty workstreams must not disclose hidden members")
 		require.NotNil(t, view.TaskKeys, "serialize empty membership as an array")
 	}
-	require.Equal(t, []string{"domain-verification", "identity-provider", "connect-idp", "directory-sync"}, setupWorkstreams[0].TaskKeys, "filtering must not mutate assignment membership")
+	require.Equal(t, []string{"domain-verification", "connect-idp", "directory-sync", "identity-provider"}, setupWorkstreams[0].TaskKeys, "filtering must not mutate assignment membership")
 }
 
 func TestSetupWorkstreamViewsDoNotAliasCatalog(t *testing.T) {
@@ -77,7 +90,7 @@ func TestSetupTaskCatalogReferencesResolve(t *testing.T) {
 			require.NotNil(t, setupTaskDefinitionForKey(prerequisite), "unknown prerequisite %q on %q", prerequisite, definition.Key)
 		}
 	}
-	for _, preset := range onboardingPresets() {
+	for _, preset := range adminOnboardingPresets() {
 		require.NotEmpty(t, preset.Key)
 		require.NotEmpty(t, preset.VisibleTaskKeys)
 		presetKeys := map[string]bool{}

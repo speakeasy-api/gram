@@ -13768,7 +13768,8 @@ func unmarshalAdminOnboardingTaskResponseBodyToAdminAdminOnboardingTask(v *Admin
 // *AdminOnboardingPresetResponseBody.
 func unmarshalAdminOnboardingPresetResponseBodyToAdminAdminOnboardingPreset(v *AdminOnboardingPresetResponseBody) *admin.AdminOnboardingPreset {
 	res := &admin.AdminOnboardingPreset{
-		Key: *v.Key,
+		Key:   *v.Key,
+		Title: *v.Title,
 	}
 	res.VisibleTaskKeys = make([]string, len(v.VisibleTaskKeys))
 	for i, val := range v.VisibleTaskKeys {

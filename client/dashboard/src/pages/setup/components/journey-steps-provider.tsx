@@ -79,7 +79,7 @@ export function JourneyStepsProvider({
 
   // Walking the rail rewrites ?step= so the address bar is always a link to
   // what is on screen. It replaces rather than pushes: Back belongs to the
-  // board the reader came from, not to each step they passed through.
+  // page the reader came from, not to each step they passed through.
   const setActiveIndex = useCallback(
     (index: number) => {
       setPickedIndex(index);

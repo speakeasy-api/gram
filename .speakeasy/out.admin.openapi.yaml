@@ -4966,9 +4966,6 @@ components:
         preset:
           type: string
           description: Absent for legacy organizations.
-          enum:
-            - gateway
-            - security
         presets:
           type: array
           items:
@@ -4992,15 +4989,15 @@ components:
       properties:
         key:
           type: string
-          enum:
-            - gateway
-            - security
+        title:
+          type: string
         visible_task_keys:
           type: array
           items:
             type: string
       required:
         - key
+        - title
         - visible_task_keys
     AdminOnboardingTask:
       type: object
@@ -6515,10 +6512,7 @@ components:
           type: string
         preset:
           type: string
-          description: Omit to preserve the saved preset. Null/reset is not supported.
-          enum:
-            - gateway
-            - security
+          description: A key from presets. Omit to preserve the saved preset. Null/reset is not supported.
         visible_task_keys:
           type: array
           items:

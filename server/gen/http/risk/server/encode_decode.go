@@ -475,6 +475,239 @@ func EncodeListRiskPoliciesError(encoder func(context.Context, http.ResponseWrit
 	}
 }
 
+// EncodeListRiskPoliciesForMcpServerResponse returns an encoder for responses
+// returned by the risk listRiskPoliciesForMcpServer endpoint.
+func EncodeListRiskPoliciesForMcpServerResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*risk.ListRiskPoliciesResult)
+		enc := encoder(ctx, w)
+		body := NewListRiskPoliciesForMcpServerResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeListRiskPoliciesForMcpServerRequest returns a decoder for requests
+// sent to the risk listRiskPoliciesForMcpServer endpoint.
+func DecodeListRiskPoliciesForMcpServerRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*risk.ListRiskPoliciesForMcpServerPayload, error) {
+	return func(r *http.Request) (*risk.ListRiskPoliciesForMcpServerPayload, error) {
+		var payload *risk.ListRiskPoliciesForMcpServerPayload
+		var (
+			mcpServerID      string
+			toolName         *string
+			apikeyToken      *string
+			sessionToken     *string
+			projectSlugInput *string
+			err              error
+		)
+		qp := r.URL.Query()
+		mcpServerID = qp.Get("mcp_server_id")
+		if mcpServerID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("mcp_server_id", mcpServerID, goa.FormatUUID))
+		toolNameRaw := qp.Get("tool_name")
+		if toolNameRaw != "" {
+			toolName = &toolNameRaw
+		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		projectSlugInputRaw := r.Header.Get("Gram-Project")
+		if projectSlugInputRaw != "" {
+			projectSlugInput = &projectSlugInputRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewListRiskPoliciesForMcpServerPayload(mcpServerID, toolName, apikeyToken, sessionToken, projectSlugInput)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
+			}
+		}
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeListRiskPoliciesForMcpServerError returns an encoder for errors
+// returned by the listRiskPoliciesForMcpServer risk endpoint.
+func EncodeListRiskPoliciesForMcpServerError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRiskPoliciesForMcpServerUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRiskPoliciesForMcpServerForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRiskPoliciesForMcpServerBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRiskPoliciesForMcpServerNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRiskPoliciesForMcpServerConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRiskPoliciesForMcpServerUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRiskPoliciesForMcpServerInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRiskPoliciesForMcpServerInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRiskPoliciesForMcpServerUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewListRiskPoliciesForMcpServerGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeListBuiltinExclusionsResponse returns an encoder for responses
 // returned by the risk listBuiltinExclusions endpoint.
 func EncodeListBuiltinExclusionsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -11762,6 +11995,54 @@ func unmarshalRiskDetectionScopeRequestBodyToTypesRiskDetectionScope(v *RiskDete
 	return res
 }
 
+// unmarshalRiskMCPScopeRequestBodyToTypesRiskMCPScope builds a value of type
+// *types.RiskMCPScope from a value of type *RiskMCPScopeRequestBody.
+func unmarshalRiskMCPScopeRequestBodyToTypesRiskMCPScope(v *RiskMCPScopeRequestBody) *types.RiskMCPScope {
+	if v == nil {
+		return nil
+	}
+	res := &types.RiskMCPScope{}
+	if v.AllServers != nil {
+		res.AllServers = *v.AllServers
+	}
+	if v.AllServers == nil {
+		res.AllServers = false
+	}
+	if v.ToolAnnotations != nil {
+		res.ToolAnnotations = make([]string, len(v.ToolAnnotations))
+		for i, val := range v.ToolAnnotations {
+			res.ToolAnnotations[i] = val
+		}
+	}
+	res.Servers = make([]*types.RiskMCPServerScope, len(v.Servers))
+	for i, val := range v.Servers {
+		if val == nil {
+			res.Servers[i] = nil
+			continue
+		}
+		res.Servers[i] = unmarshalRiskMCPServerScopeRequestBodyToTypesRiskMCPServerScope(val)
+	}
+
+	return res
+}
+
+// unmarshalRiskMCPServerScopeRequestBodyToTypesRiskMCPServerScope builds a
+// value of type *types.RiskMCPServerScope from a value of type
+// *RiskMCPServerScopeRequestBody.
+func unmarshalRiskMCPServerScopeRequestBodyToTypesRiskMCPServerScope(v *RiskMCPServerScopeRequestBody) *types.RiskMCPServerScope {
+	res := &types.RiskMCPServerScope{
+		McpServerID: *v.McpServerID,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	}
+
+	return res
+}
+
 // unmarshalRiskPolicyModelConfigRequestBodyToTypesRiskPolicyModelConfig builds
 // a value of type *types.RiskPolicyModelConfig from a value of type
 // *RiskPolicyModelConfigRequestBody.
@@ -11788,6 +12069,60 @@ func marshalTypesRiskDetectionScopeToRiskDetectionScopeResponseBody(v *types.Ris
 		Category:     v.Category,
 		ScopeInclude: v.ScopeInclude,
 		ScopeExempt:  v.ScopeExempt,
+	}
+
+	return res
+}
+
+// marshalTypesRiskMCPScopeToRiskMCPScopeResponseBody builds a value of type
+// *RiskMCPScopeResponseBody from a value of type *types.RiskMCPScope.
+func marshalTypesRiskMCPScopeToRiskMCPScopeResponseBody(v *types.RiskMCPScope) *RiskMCPScopeResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &RiskMCPScopeResponseBody{
+		AllServers: v.AllServers,
+	}
+	{
+		var zero bool
+		if res.AllServers == zero {
+			res.AllServers = false
+		}
+	}
+	if v.ToolAnnotations != nil {
+		res.ToolAnnotations = make([]string, len(v.ToolAnnotations))
+		for i, val := range v.ToolAnnotations {
+			res.ToolAnnotations[i] = val
+		}
+	}
+	if v.Servers != nil {
+		res.Servers = make([]*RiskMCPServerScopeResponseBody, len(v.Servers))
+		for i, val := range v.Servers {
+			if val == nil {
+				res.Servers[i] = nil
+				continue
+			}
+			res.Servers[i] = marshalTypesRiskMCPServerScopeToRiskMCPServerScopeResponseBody(val)
+		}
+	} else {
+		res.Servers = []*RiskMCPServerScopeResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTypesRiskMCPServerScopeToRiskMCPServerScopeResponseBody builds a
+// value of type *RiskMCPServerScopeResponseBody from a value of type
+// *types.RiskMCPServerScope.
+func marshalTypesRiskMCPServerScopeToRiskMCPServerScopeResponseBody(v *types.RiskMCPServerScope) *RiskMCPServerScopeResponseBody {
+	res := &RiskMCPServerScopeResponseBody{
+		McpServerID: v.McpServerID,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
 	}
 
 	return res
@@ -11886,6 +12221,9 @@ func marshalTypesRiskPolicyToRiskPolicyResponseBody(v *types.RiskPolicy) *RiskPo
 		}
 	} else {
 		res.AudiencePrincipalUrns = []string{}
+	}
+	if v.McpScope != nil {
+		res.McpScope = marshalTypesRiskMCPScopeToRiskMCPScopeResponseBody(v.McpScope)
 	}
 	if v.ModelConfig != nil {
 		res.ModelConfig = marshalTypesRiskPolicyModelConfigToRiskPolicyModelConfigResponseBody(v.ModelConfig)

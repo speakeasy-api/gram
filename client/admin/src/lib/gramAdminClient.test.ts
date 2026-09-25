@@ -169,6 +169,7 @@ describe("generated admin boundary", () => {
       presets: [
         {
           key: "gateway",
+          title: "Gateway",
           visible_task_keys: ["create-marketplace", "distribute-servers"],
         },
       ],
@@ -198,7 +199,11 @@ describe("generated admin boundary", () => {
         },
       ],
       presets: [
-        { visibleTaskKeys: ["create-marketplace", "distribute-servers"] },
+        {
+          key: "gateway",
+          title: "Gateway",
+          visibleTaskKeys: ["create-marketplace", "distribute-servers"],
+        },
       ],
     });
     const read = fetch.mock.calls[0]![0] as Request;

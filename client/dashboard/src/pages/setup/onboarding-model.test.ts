@@ -1,6 +1,43 @@
 import { describe, expect, it } from "vitest";
 import type { SetupTask } from "@gram/client/models/components/setuptask.js";
-import { SETUP_WORKSTREAMS } from "./components/board/workstream-fixtures";
+import type { SetupWorkstream } from "@gram/client/models/components/setupworkstream.js";
+
+// Representative API catalog for tests; production membership comes from the server.
+const SETUP_WORKSTREAMS: SetupWorkstream[] = [
+  {
+    id: "connect",
+    title: "Connect identity",
+    taskKeys: [
+      "domain-verification",
+      "connect-idp",
+      "directory-sync",
+      "identity-provider",
+    ],
+  },
+  {
+    id: "observe",
+    title: "Observe agents",
+    taskKeys: [
+      "enable-logging",
+      "anthropic-observability",
+      "instrument-agents",
+      "litellm",
+      "additional-agent-config",
+      "confirm-traffic",
+    ],
+  },
+  {
+    id: "distribute",
+    title: "MCP Gateway",
+    taskKeys: ["create-marketplace", "distribute-servers", "platform-mcp"],
+  },
+  {
+    id: "secure",
+    title: "Secure agent traffic",
+    taskKeys: ["anthropic-admin-controls", "configure-policies"],
+  },
+];
+
 import { assignedTo, buildOnboardingModel } from "./onboarding-model";
 import { ONBOARDING_TASK_IDS, ONBOARDING_TASKS } from "./onboarding-tasks";
 
@@ -19,12 +56,12 @@ function task(key: string, overrides: Partial<SetupTask> = {}): SetupTask {
 }
 
 describe("buildOnboardingModel", () => {
-  it("orders tasks by workstream membership, not the task array", () => {
+  it("preserves server-selected task order independently of workstreams", () => {
     // Catalog order on the server differs from workstream order.
     const tasks = [...ONBOARDING_TASK_IDS].reverse().map((key) => task(key));
     const model = buildOnboardingModel(tasks, SETUP_WORKSTREAMS);
     expect(model.tasks.map((item) => item.id)).toEqual(
-      SETUP_WORKSTREAMS.flatMap((workstream) => workstream.taskKeys),
+      tasks.map((task) => task.key),
     );
     expect(model.workstreams.map((workstream) => workstream.id)).toEqual([
       "connect",
@@ -34,14 +71,14 @@ describe("buildOnboardingModel", () => {
     ]);
   });
 
-  it("keeps a task no workstream claims, after the workstreams", () => {
+  it("keeps ungrouped tasks in their server-selected position", () => {
     const model = buildOnboardingModel(
       [task("platform-mcp"), task("domain-verification")],
       [{ id: "connect", title: "Connect", taskKeys: ["domain-verification"] }],
     );
     expect(model.tasks.map((item) => item.id)).toEqual([
-      "domain-verification",
       "platform-mcp",
+      "domain-verification",
     ]);
   });
 
@@ -62,8 +99,8 @@ describe("buildOnboardingModel", () => {
     expect(model.progress).toEqual({ done: 1, total: 2 });
     expect(model.workstreams[0]!.tasks.map((item) => item.id)).toEqual([
       "domain-verification",
-      "identity-provider",
       "connect-idp",
+      "identity-provider",
     ]);
   });
 
@@ -141,7 +178,7 @@ describe("buildOnboardingModel", () => {
     );
     for (const id of ONBOARDING_TASK_IDS) {
       expect(model.task(id)?.suggestedOwner).toBe(
-        ONBOARDING_TASKS[id].suggestedOwner,
+        ONBOARDING_TASKS[id]!.suggestedOwner,
       );
     }
   });

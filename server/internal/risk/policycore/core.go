@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	gentypes "github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
@@ -21,19 +22,31 @@ import (
 // established not-found mapping.
 var ErrLoadPolicy = errors.New("load risk policy")
 
+// ToolAnnotationsResolver resolves the effective hints for one called tool.
+type ToolAnnotationsResolver interface {
+	ToolAnnotations(ctx context.Context, mcpServerID, projectID uuid.UUID, toolName string) (*gentypes.ToolAnnotations, error)
+}
+
 // Core provides transport-neutral policy reads and projections. Authorization
 // remains the responsibility of the calling service.
 type Core struct {
-	db        repo.DBTX
-	queries   *repo.Queries
-	mutations *MutationDependencies
+	db              repo.DBTX
+	queries         *repo.Queries
+	mutations       *MutationDependencies
+	toolAnnotations ToolAnnotationsResolver
 }
 
 func New(db repo.DBTX, mutations ...MutationDependencies) *Core {
-	core := &Core{db: db, queries: repo.New(db), mutations: nil}
+	core := &Core{db: db, queries: repo.New(db), mutations: nil, toolAnnotations: nil}
 	if len(mutations) > 0 {
 		core.mutations = &mutations[0]
 	}
+	return core
+}
+
+func NewWithToolAnnotations(db repo.DBTX, resolver ToolAnnotationsResolver, mutations ...MutationDependencies) *Core {
+	core := New(db, mutations...)
+	core.toolAnnotations = resolver
 	return core
 }
 
@@ -65,6 +78,74 @@ func (c *Core) List(ctx context.Context, organizationID string, projectID uuid.U
 
 	policies := make([]Policy, 0, len(rows))
 	for _, row := range rows {
+		policies = append(policies, Project(row, audienceByPolicy[row.ID.String()], nil))
+	}
+	return policies, nil
+}
+
+// ListEnabledForMCPServer returns enabled MCP-scoped policies that apply to one
+// MCP server and, when provided, one tool. Policies without an MCP scope are
+// excluded. Gateway membership is resolved on every call.
+func (c *Core) ListEnabledForMCPServer(
+	ctx context.Context,
+	organizationID string,
+	projectID, serverID uuid.UUID,
+	toolName string,
+) ([]Policy, error) {
+	ownedIDs, err := c.queries.ListRiskPolicyMCPScopeServerIDs(ctx, repo.ListRiskPolicyMCPScopeServerIDsParams{
+		ProjectID:    projectID,
+		McpServerIds: []uuid.UUID{serverID},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("validate MCP server project: %w", err)
+	}
+	if len(ownedIDs) == 0 {
+		return []Policy{}, nil
+	}
+
+	gatewayIDs, err := c.queries.ListMetaMCPServerIDsContainingMCPServer(ctx, repo.ListMetaMCPServerIDsContainingMCPServerParams{
+		ProjectID:   projectID,
+		McpServerID: serverID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list MCP server gateways: %w", err)
+	}
+	rows, err := c.queries.ListEnabledRiskPoliciesByProject(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list enabled risk policies: %w", err)
+	}
+
+	var annotations *gentypes.ToolAnnotations
+	if toolName != "" && c.toolAnnotations != nil {
+		annotations, err = c.toolAnnotations.ToolAnnotations(ctx, serverID, projectID, toolName)
+		if err != nil {
+			return nil, fmt.Errorf("resolve MCP tool annotations: %w", err)
+		}
+	}
+
+	matchedRows := make([]repo.RiskPolicy, 0, len(rows))
+	policyIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		policy := Project(row, nil, nil)
+		if policy.MCPScope == nil {
+			continue
+		}
+		if !policy.MCPScope.Applies(serverID, toolName, annotations, gatewayIDs) {
+			continue
+		}
+		matchedRows = append(matchedRows, row)
+		policyIDs = append(policyIDs, row.ID.String())
+	}
+	if len(matchedRows) == 0 {
+		return []Policy{}, nil
+	}
+
+	audienceByPolicy, err := c.audienceURNsByPolicy(ctx, organizationID, policyIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load risk policy audiences: %w", err)
+	}
+	policies := make([]Policy, 0, len(matchedRows))
+	for _, row := range matchedRows {
 		policies = append(policies, Project(row, audienceByPolicy[row.ID.String()], nil))
 	}
 	return policies, nil

@@ -161,13 +161,10 @@ import {
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
 
-const OnboardingBoard = React.lazy(() =>
-  import("./pages/setup/components/board/onboarding-board").then((module) => ({
-    default: module.OnboardingBoard,
-  })),
-);
-const SetupTaskPage = React.lazy(() => import("./pages/setup/SetupTaskPage"));
 const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
+const SetupTaskRedirect = React.lazy(
+  () => import("./pages/setup/SetupTaskRedirect"),
+);
 
 type AppRouteBasic = {
   title: string;
@@ -1577,23 +1574,16 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Setup",
     url: "setup",
     icon: "settings",
-    component: OnboardingBoard,
-    outsideMainLayout: true,
-  },
-  // Static wizard route must precede the legacy task alias.
-  setupWizard: {
-    title: "Setup wizard",
-    url: "setup/wizard",
-    icon: "list-checks",
     component: SetupWizard,
     outsideMainLayout: true,
   },
-  // Legacy task URLs normalize through Workstreams into the setup wizard.
+  // Legacy per-card pages (setup/idp, setup/wizard, ...) open the wizard on
+  // that card.
   setupTask: {
     title: "Setup task",
     url: "setup/:taskSlug",
     icon: "list-checks",
-    component: SetupTaskPage,
+    component: SetupTaskRedirect,
     outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or

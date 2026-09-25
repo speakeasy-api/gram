@@ -516,9 +516,9 @@ BEGIN
   END LOOP;
 
   -- Customized Security selection: defer Anthropic admin controls and include
-  -- server distribution. Both views read this same explicit selection.
+  -- server distribution. The wizard reads this explicit selection.
   -- MCP Gateway has one owner across its visible and hidden tasks. Observe
-  -- retains mixed legacy assignments so the column shows that state honestly.
+  -- retains mixed legacy assignments so the workstream shows that state honestly.
   INSERT INTO organization_setup_tasks
     (organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at)
   VALUES

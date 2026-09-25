@@ -5,7 +5,6 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -21,24 +20,12 @@ import {
   SetupWorkstream$inboundSchema,
 } from "./setupworkstream.js";
 
-/**
- * Absent for legacy organizations.
- */
-export const Preset = {
-  Gateway: "gateway",
-  Security: "security",
-} as const;
-/**
- * Absent for legacy organizations.
- */
-export type Preset = ClosedEnum<typeof Preset>;
-
 export type AdminOnboardingConfiguration = {
   organizationId: string;
   /**
    * Absent for legacy organizations.
    */
-  preset?: Preset | undefined;
+  preset?: string | undefined;
   presets: Array<AdminOnboardingPreset>;
   tasks: Array<AdminOnboardingTask>;
   /**
@@ -48,18 +35,13 @@ export type AdminOnboardingConfiguration = {
 };
 
 /** @internal */
-export const Preset$inboundSchema: z.ZodMiniEnum<typeof Preset> = z.enum(
-  Preset,
-);
-
-/** @internal */
 export const AdminOnboardingConfiguration$inboundSchema: z.ZodMiniType<
   AdminOnboardingConfiguration,
   unknown
 > = z.pipe(
   z.object({
     organization_id: z.string(),
-    preset: z.optional(Preset$inboundSchema),
+    preset: z.optional(z.string()),
     presets: z.array(AdminOnboardingPreset$inboundSchema),
     tasks: z.array(AdminOnboardingTask$inboundSchema),
     workstreams: z.array(SetupWorkstream$inboundSchema),

@@ -36,14 +36,14 @@ vi.mock("@gram/client/react-query/generateWorkOSAdminPortalLink.js", () => ({
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
-    setupTask: {
+    setup: {
       Link: ({
-        params,
+        queryParams,
         children,
       }: {
-        params: string[];
+        queryParams: { task: string };
         children: ReactNode;
-      }) => <a href={`/acme/setup/${params[0]}`}>{children}</a>,
+      }) => <a href={`/acme/setup?task=${queryParams.task}`}>{children}</a>,
     },
   }),
 }));
@@ -226,7 +226,7 @@ describe("IdentityProviderStep", () => {
       screen
         .getByRole("link", { name: "Go to domain verification" })
         .getAttribute("href"),
-    ).toBe("/acme/setup/domain");
+    ).toBe("/acme/setup?task=domain");
 
     fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
     const connect = screen.getByRole<HTMLButtonElement>("button", {

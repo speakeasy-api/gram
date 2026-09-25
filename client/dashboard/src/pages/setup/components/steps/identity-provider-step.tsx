@@ -17,7 +17,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn, getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import { setupTaskSlug } from "../../task-slugs";
+import { setupTaskSlug } from "../../setup-cards";
 import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
 import { IDP_PROVIDERS } from "../../providers";
@@ -330,12 +330,12 @@ function SingleSignOnSection({
         {needsDomain && (
           <p className="text-muted-foreground text-sm">
             Verify a domain first.{" "}
-            <orgRoutes.setupTask.Link
-              params={[setupTaskSlug("domain-verification")]}
+            <orgRoutes.setup.Link
+              queryParams={{ task: setupTaskSlug("domain-verification") }}
               className="text-foreground underline underline-offset-2"
             >
               Go to domain verification
-            </orgRoutes.setupTask.Link>
+            </orgRoutes.setup.Link>
           </p>
         )}
 

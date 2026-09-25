@@ -43321,6 +43321,93 @@ paths:
             x-speakeasy-name-override: sendInvite
             x-speakeasy-react-hook:
                 name: SendInvite
+    /rpc/organizations.submitOnboardingSurvey:
+        post:
+            description: Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.
+            operationId: submitOnboardingSurvey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SubmitOnboardingSurveyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSetupTasksResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: submitOnboardingSurvey organizations
+            tags:
+                - organizations
+            x-speakeasy-name-override: submitOnboardingSurvey
+            x-speakeasy-react-hook:
+                name: SubmitOnboardingSurvey
     /rpc/organizations.updateInviteRole:
         put:
             description: Change the role assigned to a pending WorkOS invitation.
@@ -56942,6 +57029,121 @@ paths:
             x-speakeasy-name-override: listForAgent
             x-speakeasy-react-hook:
                 name: RiskListResultsForAgent
+    /rpc/risk.listRiskPoliciesForMcpServer:
+        get:
+            description: List enabled MCP-scoped risk policies that apply to an MCP server and optional tool. Policies without an MCP scope are excluded.
+            operationId: listRiskPoliciesForMcpServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The MCP server ID.
+                  in: query
+                  name: mcp_server_id
+                  required: true
+                  schema:
+                    description: The MCP server ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Optional tool name used to apply per-server tool selections.
+                  in: query
+                  name: tool_name
+                  schema:
+                    description: Optional tool name used to apply per-server tool selections.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListRiskPoliciesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listRiskPoliciesForMcpServer risk
+            tags:
+                - risk
+            x-speakeasy-group: risk.policies
+            x-speakeasy-name-override: listForMcpServer
+            x-speakeasy-react-hook:
+                name: RiskListPoliciesForMcpServer
     /rpc/risk.listSessionQuarantines:
         get:
             description: List active session quarantines for the current project.
@@ -76501,9 +76703,6 @@ components:
                 preset:
                     type: string
                     description: Absent for legacy organizations.
-                    enum:
-                        - gateway
-                        - security
                 presets:
                     type: array
                     items:
@@ -76527,15 +76726,15 @@ components:
             properties:
                 key:
                     type: string
-                    enum:
-                        - gateway
-                        - security
+                title:
+                    type: string
                 visible_task_keys:
                     type: array
                     items:
                         type: string
             required:
                 - key
+                - title
                 - visible_task_keys
         AdminOnboardingTask:
             type: object
@@ -81449,6 +81648,8 @@ components:
                 enabled:
                     type: boolean
                     description: Whether the policy is active.
+                mcp_scope:
+                    $ref: '#/components/schemas/RiskMCPScope'
                 model_config:
                     $ref: '#/components/schemas/RiskPolicyModelConfig'
                 name:
@@ -95997,6 +96198,45 @@ components:
                     format: uuid
             required:
                 - id
+        RiskMCPScope:
+            type: object
+            properties:
+                all_servers:
+                    type: boolean
+                    description: Apply to every MCP server, including servers added later.
+                    default: false
+                servers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/RiskMCPServerScope'
+                    description: Selected MCP servers and gateways, or custom per-server tool overrides when all_servers is true.
+                tool_annotations:
+                    type: array
+                    items:
+                        type: string
+                        enum:
+                            - destructiveHint
+                            - readOnlyHint
+                            - idempotentHint
+                            - openWorldHint
+                    description: Tool annotation hints matched by the policy-level rule. Empty matches all tools.
+            required:
+                - servers
+        RiskMCPServerScope:
+            type: object
+            properties:
+                mcp_server_id:
+                    type: string
+                    description: The selected MCP server or gateway ID.
+                    format: uuid
+                tools:
+                    type: array
+                    items:
+                        type: string
+                    description: Custom tool names for this server. Omit to follow the policy tool rule.
+                    minItems: 1
+            required:
+                - mcp_server_id
         RiskOverviewCategory:
             type: object
             properties:
@@ -96161,6 +96401,8 @@ components:
                     type: string
                     description: The risk policy ID.
                     format: uuid
+                mcp_scope:
+                    $ref: '#/components/schemas/RiskMCPScope'
                 model_config:
                     $ref: '#/components/schemas/RiskPolicyModelConfig'
                 name:
@@ -98487,10 +98729,7 @@ components:
                     type: string
                 preset:
                     type: string
-                    description: Omit to preserve the saved preset. Null/reset is not supported.
-                    enum:
-                        - gateway
-                        - security
+                    description: A key from presets. Omit to preserve the saved preset. Null/reset is not supported.
                 visible_task_keys:
                     type: array
                     items:
@@ -100907,6 +101146,14 @@ components:
             required:
                 - id
                 - client_id
+        SubmitOnboardingSurveyRequestBody:
+            type: object
+            properties:
+                use_case:
+                    type: string
+                    description: Use case the survey answers resolved to.
+            required:
+                - use_case
         SubmitRiskBlockFeedbackRequestBody:
             type: object
             properties:
@@ -105050,6 +105297,8 @@ components:
                     type: string
                     description: The policy ID.
                     format: uuid
+                mcp_scope:
+                    $ref: '#/components/schemas/RiskMCPScope'
                 model_config:
                     $ref: '#/components/schemas/RiskPolicyModelConfig'
                 name:
