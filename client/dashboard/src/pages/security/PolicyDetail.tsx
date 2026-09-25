@@ -1169,10 +1169,11 @@ function ScopeStep({
 }): JSX.Element {
   const mcpScopeFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
   const mcpScoped = mcpScope.mode === "mcp";
-  // Fail closed while the flag loads or is unavailable. A policy that already
-  // has a stored scope keeps its picker so the scope stays visible and editable.
+  // Fail closed while the flag loads or is unavailable. A stored scope or an
+  // in-progress MCP draft keeps the picker so the form never strands the user
+  // in MCP mode without the control to change it.
   const showMcpScopePicker =
-    mcpScopeFlag.status === "enabled" || hasStoredMcpScope;
+    mcpScopeFlag.status === "enabled" || hasStoredMcpScope || mcpScoped;
   return (
     <Card>
       <Stack gap={6}>
@@ -1182,6 +1183,11 @@ function ScopeStep({
             onChange={setMcpScope}
             action={action}
           />
+        ) : null}
+        {!showMcpScopePicker && selectedCategories.size === 0 ? (
+          <Text small muted>
+            Scope options appear here once you enable a detector.
+          </Text>
         ) : null}
         {mcpScoped && !mcpScope.allServers && mcpScope.servers.length === 0 ? (
           <Text small className="text-destructive">
