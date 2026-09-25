@@ -3,7 +3,6 @@ package jwks
 
 import (
 	"bytes"
-	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
+	"github.com/speakeasy-api/gram/internal/jwk"
 )
 
 // Path is the public verification-key endpoint on the tunnel gateway.
@@ -71,14 +71,11 @@ func PublicKey(key *rsa.PublicKey) (jose.JSONWebKey, error) {
 	if key == nil || key.N == nil || key.N.BitLen() < 2048 || key.E < 3 || key.E%2 == 0 {
 		return jose.JSONWebKey{}, errors.New("public keys must be RSA with at least 2048 bits and an odd exponent")
 	}
-	jwk := jose.JSONWebKey{Key: key, KeyID: "", Algorithm: string(jose.RS256), Use: "sig",
-		Certificates: nil, CertificatesURL: nil, CertificateThumbprintSHA1: nil, CertificateThumbprintSHA256: nil}
-	thumbprint, err := jwk.Thumbprint(crypto.SHA256)
+	public, err := jwk.NewPublicKey(key, jose.RS256)
 	if err != nil {
 		return jose.JSONWebKey{}, fmt.Errorf("compute public key ID: %w", err)
 	}
-	jwk.KeyID = base64.RawURLEncoding.EncodeToString(thumbprint)
-	return jwk, nil
+	return public, nil
 }
 
 // Contains reports whether the bundle publishes the given key ID.
