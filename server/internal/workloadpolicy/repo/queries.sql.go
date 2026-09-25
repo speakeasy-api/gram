@@ -88,8 +88,8 @@ func (q *Queries) CreateWorkloadAdmission(ctx context.Context, arg CreateWorkloa
 }
 
 const createWorkloadIssuer = `-- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO workload_issuers (organization_id, project_id, name, tags, issuer, jwks_uri, allow_wildcard_admission)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id, organization_id, project_id, name, tags, issuer, jwks_uri, allow_wildcard_admission, metadata, created_at, updated_at, deleted_at, deleted
 `
 
@@ -97,6 +97,7 @@ type CreateWorkloadIssuerParams struct {
 	OrganizationID         string
 	ProjectID              uuid.NullUUID
 	Name                   string
+	Tags                   []string
 	Issuer                 string
 	JwksUri                string
 	AllowWildcardAdmission bool
@@ -107,6 +108,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.Name,
+		arg.Tags,
 		arg.Issuer,
 		arg.JwksUri,
 		arg.AllowWildcardAdmission,

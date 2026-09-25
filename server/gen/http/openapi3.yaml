@@ -95500,6 +95500,13 @@ components:
                     type: boolean
                     description: Register the issuer for the selected project alone rather than the whole organization. Defaults to false.
                     default: false
+                tags:
+                    type: array
+                    items:
+                        type: string
+                        maxLength: 64
+                    description: Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+                    maxItems: 40
             description: Form for trusting an external workload issuer.
             required:
                 - name
@@ -108045,6 +108052,11 @@ components:
                 project_id:
                     type: string
                     description: The owning project id; empty for an organization-tier issuer.
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: Free-form labels for grouping and filtering trusted platforms. Empty rather than absent where none are set.
                 updated_at:
                     type: string
                     format: date-time
@@ -108057,6 +108069,7 @@ components:
                 - issuer
                 - jwks_uri
                 - allow_wildcard_admission
+                - tags
                 - created_at
                 - updated_at
     securitySchemes:

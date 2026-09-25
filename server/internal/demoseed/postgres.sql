@@ -1149,18 +1149,22 @@ BEGIN
   -- NOT permit one. The agent platform mints an opaque identity per resource
   -- that the caller cannot influence, which is the case the feature exists for.
   INSERT INTO workload_issuers
-    (id, organization_id, project_id, name, issuer, jwks_uri,
+    (id, organization_id, project_id, name, tags, issuer, jwks_uri,
      allow_wildcard_admission)
   VALUES
     -- Organization tier. Two of the admissions below are organization-tier and
     -- name this issuer, and an organization-tier admission may only bind an
     -- organization-tier issuer, so a project row here would be a policy shape
     -- the management API refuses to write.
+    --
+    -- Tags overlap deliberately: the Access Hub offers one filter chip per tag
+    -- in use, so a shared tag is what shows the filter narrowing to more than a
+    -- single platform.
     (demo.det_uuid('gram-demo-workload-issuer-1'), demo_org, NULL,
-     'Acme CI', 'https://ci-identity.example.com',
+     'Acme CI', ARRAY['ci', 'build'], 'https://ci-identity.example.com',
      'https://ci-identity.example.com/.well-known/jwks.json', FALSE),
     (demo.det_uuid('gram-demo-workload-issuer-2'), demo_org, NULL,
-     'Acme Agent Platform', 'https://agents.example.com',
+     'Acme Agent Platform', ARRAY['agents', 'build'], 'https://agents.example.com',
      'https://agents.example.com/.well-known/jwks.json', TRUE);
 
   INSERT INTO workload_identity_admissions

@@ -27,9 +27,19 @@ func BuildWorkloadIssuerView(row repo.WorkloadIssuer) *types.WorkloadIssuer {
 		Issuer:                 row.Issuer,
 		JwksURI:                row.JwksUri,
 		AllowWildcardAdmission: row.AllowWildcardAdmission,
-		CreatedAt:              row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              row.UpdatedAt.Time.Format(time.RFC3339),
+		// Empty rather than nil, so a client never has to distinguish "no tags"
+		// from "field absent".
+		Tags:      tagsOrEmpty(row.Tags),
+		CreatedAt: row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt: row.UpdatedAt.Time.Format(time.RFC3339),
 	}
+}
+
+func tagsOrEmpty(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
 }
 
 // BuildWorkloadIssuerListView renders the trusted issuers in list order.

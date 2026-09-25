@@ -31,6 +31,9 @@ type RegisterIssuerRequestBody struct {
 	// incident control rather than a setup step, which is why the dashboard does
 	// not ask for it at registration.
 	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
+	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
+	// not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Register the issuer for the selected project alone rather than the whole
 	// organization. Defaults to false.
 	ProjectScoped *bool `form:"project_scoped,omitempty" json:"project_scoped,omitempty" xml:"project_scoped,omitempty"`
@@ -1055,9 +1058,12 @@ type WorkloadIssuerResponseBody struct {
 	// Where the issuer publishes its signing keys.
 	JwksURI string `form:"jwks_uri" json:"jwks_uri" xml:"jwks_uri"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
-	AllowWildcardAdmission bool   `form:"allow_wildcard_admission" json:"allow_wildcard_admission" xml:"allow_wildcard_admission"`
-	CreatedAt              string `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt              string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	AllowWildcardAdmission bool `form:"allow_wildcard_admission" json:"allow_wildcard_admission" xml:"allow_wildcard_admission"`
+	// Free-form labels for grouping and filtering trusted platforms. Empty rather
+	// than absent where none are set.
+	Tags      []string `form:"tags" json:"tags" xml:"tags"`
+	CreatedAt string   `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt string   `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // WorkloadAdmissionResponseBody is used to define fields on response body
@@ -2003,6 +2009,12 @@ func NewRegisterIssuerPayload(body *RegisterIssuerRequestBody, sessionToken *str
 	if body.AllowWildcardAdmission == nil {
 		v.AllowWildcardAdmission = true
 	}
+	if body.Tags != nil {
+		v.Tags = make([]string, len(body.Tags))
+		for i, val := range body.Tags {
+			v.Tags[i] = val
+		}
+	}
 	if body.ProjectScoped == nil {
 		v.ProjectScoped = false
 	}
@@ -2092,6 +2104,14 @@ func ValidateRegisterIssuerRequestBody(body *RegisterIssuerRequestBody) (err err
 	}
 	if body.JwksURI != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_uri", *body.JwksURI, goa.FormatURI))
+	}
+	if len(body.Tags) > 40 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags", body.Tags, len(body.Tags), 40, false))
+	}
+	for _, e := range body.Tags {
+		if utf8.RuneCountInString(e) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags[*]", e, utf8.RuneCountInString(e), 64, false))
+		}
 	}
 	return
 }

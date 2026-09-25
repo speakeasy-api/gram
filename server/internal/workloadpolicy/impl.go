@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -226,6 +227,43 @@ func requireTrustDomain(raw string, field string) error {
 	return nil
 }
 
+const (
+	maxIssuerTags     = 40
+	maxIssuerTagRunes = 64
+)
+
+// normalizeIssuerTags trims, rejects blanks, and drops duplicates, keeping the
+// order the operator entered. The limits match the CHECK on the column, so a
+// list this accepts is one the insert can store.
+func normalizeIssuerTags(tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		return []string{}, nil
+	}
+
+	normalized := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, raw := range tags {
+		tag := strings.TrimSpace(raw)
+		if tag == "" {
+			return nil, oops.E(oops.CodeInvalid, nil, "tags must not be blank")
+		}
+		if utf8.RuneCountInString(tag) > maxIssuerTagRunes {
+			return nil, oops.E(oops.CodeInvalid, nil, "tags must be at most %d characters", maxIssuerTagRunes)
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		normalized = append(normalized, tag)
+	}
+
+	if len(normalized) > maxIssuerTags {
+		return nil, oops.E(oops.CodeInvalid, nil, "an issuer may have at most %d tags", maxIssuerTags)
+	}
+
+	return normalized, nil
+}
+
 func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssuerPayload) (*gen.WorkloadIdentityPolicy, error) {
 	t, err := s.resolve(ctx, authz.ScopeWorkloadWrite)
 	if err != nil {
@@ -260,6 +298,11 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 
 	allowWildcard := payload.AllowWildcardAdmission
 
+	tags, err := normalizeIssuerTags(payload.Tags)
+	if err != nil {
+		return nil, err
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error starting transaction").LogError(ctx, s.logger)
@@ -275,6 +318,7 @@ func (s *Service) RegisterIssuer(ctx context.Context, payload *gen.RegisterIssue
 		OrganizationID:         t.organizationID,
 		ProjectID:              projectID,
 		Name:                   name,
+		Tags:                   tags,
 		Issuer:                 strings.TrimSpace(payload.Issuer),
 		JwksUri:                strings.TrimSpace(payload.JwksURI),
 		AllowWildcardAdmission: allowWildcard,

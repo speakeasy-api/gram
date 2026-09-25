@@ -53,7 +53,7 @@ func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, wor
 	{
 		err = json.Unmarshal([]byte(workloadIdentitiesRegisterIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_wildcard_admission\": false,\n      \"issuer\": \"https://example.com/foo\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"allow_wildcard_admission\": false,\n      \"issuer\": \"https://example.com/foo\",\n      \"jwks_uri\": \"https://example.com/foo\",\n      \"name\": \"aa\",\n      \"project_scoped\": false,\n      \"tags\": [\n         \"aaa\",\n         \"aaa\",\n         \"aaa\"\n      ]\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
@@ -63,6 +63,14 @@ func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, wor
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.issuer", body.Issuer, goa.FormatURI))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.jwks_uri", body.JwksURI, goa.FormatURI))
+		if len(body.Tags) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags", body.Tags, len(body.Tags), 40, false))
+		}
+		for _, e := range body.Tags {
+			if utf8.RuneCountInString(e) > 64 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.tags[*]", e, utf8.RuneCountInString(e), 64, false))
+			}
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -96,6 +104,12 @@ func BuildRegisterIssuerPayload(workloadIdentitiesRegisterIssuerBody string, wor
 		var zero bool
 		if v.AllowWildcardAdmission == zero {
 			v.AllowWildcardAdmission = true
+		}
+	}
+	if body.Tags != nil {
+		v.Tags = make([]string, len(body.Tags))
+		for i, val := range body.Tags {
+			v.Tags[i] = val
 		}
 	}
 	{

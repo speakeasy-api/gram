@@ -118,6 +118,9 @@ type RegisterIssuerPayload struct {
 	// incident control rather than a setup step, which is why the dashboard does
 	// not ask for it at registration.
 	AllowWildcardAdmission bool
+	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
+	// not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+	Tags []string
 	// Register the issuer for the selected project alone rather than the whole
 	// organization. Defaults to false.
 	ProjectScoped bool
