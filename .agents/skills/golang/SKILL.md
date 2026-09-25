@@ -1,6 +1,6 @@
 ---
 name: golang
-description: Rules and best practices when writing and editing Go (Golang) code
+description: Use when writing, editing, or reviewing Go (Golang) code in this repo, including tests, Goa services, sqlc callers, Temporal activities, and CLI code under server/, cli/, or functions/.
 metadata:
   relevant_files:
     - "server/**/*.go"
@@ -8,48 +8,85 @@ metadata:
     - "cli/**/*.go"
 ---
 
-This codebases uses features from Go 1.25 and above.
+These are the conventions for Go code in this repo, which targets the Go version in the root [go.mod](../../../go.mod). Some existing code breaks these conventions; do not copy it.
 
-- Be pragmatic about introducing third-party dependencies beyond what is available in [go.mod](./server/go.mod) and lean on the standard library when appropriate.
-- Use the Go standard library before attempting to suggest third party dependencies.
-- Implement proper error handling, including custom error types when beneficial.
-- Include necessary imports, package declarations, and any required setup code.
-- Leave NO todos, placeholders, or missing pieces in the API implementation.
-- Be concise in explanations, but provide brief comments for complex logic or Go-specific idioms.
-- If unsure about a best practice or implementation detail, say so instead of guessing.
-- Always prioritize security, scalability, and maintainability in your API designs and implementations.
-- Avoid editing any source files that have a "DO NOT EDIT" comment at start of them.
-- Store dependencies on service structs via constructor-based dependency injection. Do NOT hide dependencies in session manager state.
-- Avoid shallow helpers that are just a one-line wrapper around another method, especially when they are only used once.
-- When using a slog logger, always use the context-aware methods: `DebugContext`, `InfoContext`, `WarnContext`, `ErrorContext`.
-- When logging errors make sure to always include them in the log payload using `attr.SlogError(err)`. Example: `logger.ErrorContext(ctx, "failed to write to database", attr.SlogError(err))`.
-- Any functions or methods that relate to making API calls or database queries or working with timers should take a `context.Context` value as their first argument.
-- IMPORTANT: never invoke `go` bare. Prefer a `mise` task when one exists; for server tests, use `mise run test:server`, which runs from `server/` and accepts the same extra arguments as `go test`, e.g. `mise run test:server ./internal/oops/`. When no mise task exists, prefix with `mise exec --`, e.g. `mise exec -- go test ./server/internal/oops/`. A bare `go` can resolve to a system install (Homebrew, `asdf`, a distro package) whose patch version differs from the toolchain pinned in `mise.toml`, while `GOROOT` still points at the mise install. The build then fails on every stdlib package with `compile: version "go1.26.4" does not match go tool version "go1.26.5"`. The same applies to the other pinned Go tools (`golangci-lint`, `gotestsum`, `sqlc`, `gomigrate`), and to `goa`, which is a `go.mod` tool directive and so inherits whichever toolchain invoked it.
-- Always run linters as part of finalizing your code changes. Use `mise lint:server` to run the linters on the server codebase.
-- The `exhaustruct` linter requires all struct fields to be explicitly set in struct literals. When adding new fields to a type, update ALL call sites — including places that construct the struct with zero values (e.g., `MyStruct{}` → `MyStruct{NewField: nil}`).
+**Scope.** The language conventions (comments, constants and types, functions, errors, logging style, testing style) apply to all Go in the repo. The package map, service wiring, and `testenv` guidance describe `server/`; its `internal` packages cannot be imported from `cli/` or `functions/`. In those trees, use the accessible local equivalent (Functions logging attributes live in `functions/internal/attr`) and search the target tree before introducing a helper or dependency. Do not export server internals or add a shared package just to follow this skill.
+
+- Prefer the standard library and the dependencies already in `go.mod` over adding a new one.
+- Do not edit files that start with a "DO NOT EDIT" comment; change their source and regenerate.
+- If you are unsure about a convention or implementation detail, say so instead of guessing.
+
+## Tooling
+
+Never invoke `go` bare. Use a `mise` task when one exists: for server tests, `mise run test:server` runs from `server/` and accepts the same arguments as `go test` (`mise run test:server ./internal/oops/`). Otherwise prefix the command with `mise exec --` (`mise exec -- go test ./server/internal/oops/`). A bare `go` may resolve to a system toolchain that differs from the mise pin, which fails every stdlib compile with a `version … does not match go tool version` error. The same applies to the other pinned tools (`golangci-lint`, `gotestsum`, `sqlc`, `gomigrate`) and to `goa`, which is a `go.mod` tool directive and inherits whichever toolchain invoked it.
+
+Run `mise lint:server` before finishing server changes and fix what it reports. `cli/` and `functions/` do not run the `glint` analyzers, so follow this skill there by hand. Suppress a finding only when the violation is intentional, with a specific reason. Put the directive as a trailing comment on the reported line (for a whole test, the `func` line), or, for a multi-line statement inside a function, either on its own line directly above it or trailing its first line; `glint` directives may not sit above the `package` clause or a top-level declaration. Ordinary linters are named directly; `glint` findings also name the analyzer at the start of the reason:
+
+```go
+func TestConfigFromEnv(t *testing.T) { //nolint:paralleltest // mutates process environment with t.Setenv
+opts := LaunchOptions{Postgres: true} //nolint:exhaustruct // negative fixture omits the other services on purpose
+//nolint:glint // notestingrawsql: pg_blocking_pids is a PostgreSQL synchronization primitive SQLc cannot generate
+err := conn.QueryRow(ctx, blockingPIDsSQL, pid).Scan(&blockers)
+```
+
+## Which skill
+
+When a change touches one of these areas, activate the matching skill as well:
+
+| Task                                                                                                                      | Skill                             |
+| ------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| ClickHouse schemas, migrations, queries, or inserts                                                                       | `clickhouse`                      |
+| Gating a feature behind a product feature or PostHog flag                                                                 | `feature-flag`                    |
+| New or changed lint rules (`glint` analyzers) or their fixtures                                                           | `glint`                           |
+| Recording or exposing audit events                                                                                        | `gram-audit-logging`              |
+| Features that surface data in the dashboard (demo and local seed data)                                                    | `gram-demo-seed`                  |
+| Gram Functions runner (`functions/`) or `server/internal/functions`                                                       | `gram-functions`                  |
+| Goa management endpoints under `/rpc/<service>.<method>`                                                                  | `gram-management-api`             |
+| Pub/Sub topics, publishers, or stream handlers                                                                            | `gram-pubsub`                     |
+| Scopes, grants, roles, or `authz.Engine.Require` checks                                                                   | `gram-rbac`                       |
+| New group-by or filter dimensions in `telemetry.query`                                                                    | `gram-telemetry-query-dimensions` |
+| Temporal workflows, activities, schedules, signals, or per-row, timer, and fan-out background work                        | `gram-temporal`                   |
+| Admin dashboard workflows, backend admin APIs, or staff permissions (`server/internal/admin`, `server/internal/adminmcp`) | `maintaining-admin-mcp`           |
+| Platform MCP tools, or backend changes that may need one                                                                  | `maintaining-platform-mcp`        |
+| Postgres schema, migrations, `queries.sql`, or sqlc                                                                       | `postgresql`                      |
+| Transactional email templates, sending, layout, or copy                                                                   | `transactional-email`             |
+
+## Packages
+
+### Reuse existing packages
+
+Before writing a helper, fake, or client, search the current package (including its `setup_test.go`) and the target tree for one that already does the job; grep for the concept (an RFC number, a vendor name). Extend what you find rather than adding a near-duplicate beside it, and when the owning package lacks a variant you need, add it there.
+
+Reusable packages in `server/internal`:
+
+| Need                                                            | Use                                                                                                                                                                                                 |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth and request context                                        | `contextvalues.GetAuthContext`, `contextvalues.GetRequestContext`                                                                                                                                   |
+| Caching                                                         | `cache.NewTypedObjectCache`, with `cache.NoopCache` where caching is off                                                                                                                            |
+| Conversions: pointers, defaults, pgtype, UUIDs, slugs, integers | `conv` (`ToPGText`, `PtrToPGText`, `FromPGText`, `PtrValOr`, `Default`, `SafeInt32`, ...)                                                                                                           |
+| Encrypting stored secrets                                       | `encryption`                                                                                                                                                                                        |
+| Invariant checks                                                | `inv.Check`, `inv.Require`                                                                                                                                                                          |
+| OAuth wire parameters and error codes                           | `oauthwire`, `oautherr` (`oautherr.ParseTokenError` for error bodies)                                                                                                                               |
+| Outbound HTTP and retries                                       | `guardian.Policy.Client(...)` or `PooledClient(...)`, with `guardian.WithRetryConfig` instead of hand-written retry loops. Inside a Temporal activity, add no HTTP retries; Temporal retries it.    |
+| Rate limits and bounded concurrency                             | `ratelimit.New` for budgets; `errgroup.SetLimit` to bound concurrent work instead of a channel semaphore                                                                                            |
+| Resource identifiers                                            | `urn` types, never hand-built URN strings                                                                                                                                                           |
+| Test doubles                                                    | See [Testing](#testing)                                                                                                                                                                             |
+| Test infrastructure and cross-package fixtures                  | `testenv`                                                                                                                                                                                           |
+| Transactional events and customer webhooks                      | `outbox.Publish`, `outbox.PublishWebhookEvent`, published in the transaction that records the state change behind the event; define new webhook events with `outbox.NewEventDef` in `outbox/events` |
+| User-facing errors in handlers                                  | `oops.E` with the `oops.Code*` constants                                                                                                                                                            |
+
+### Package boundaries
+
+Give a cohesive domain its own subpackage (e.g. `dpop`, `remotesessions/delegation`) instead of growing a large parent package. Domain types live in the domain package, not in the metrics, view, or handler package that happened to need them first.
 
 ## Comments
 
-- Write comments that describe current intent and behavior. Do NOT leave "intermediate" comments narrating the edit you just made (e.g. "previously this returned X, now it returns Y", "renamed from Foo"). That commentary, when appropriate, belongs in the commit message or pull request body, where it stays attached to the change instead of aging in the source. Markers that state current status are not narration and stay: `Deprecated: use X instead` on a symbol kept for compatibility (as its own trailing paragraph, which is the form `gopls` and pkg.go.dev surface to callers), build tags, `//go:` directives, and `TODO(TICKET-123)` notes. Write the rest of a deprecated symbol's doc in the present tense, describing what it still does today.
-- Do NOT write "see X" comments that point at a comment somewhere else (e.g. "see the note on `Foo` above", "see `handler.go` for details"). The target moves or gets rewritten and the pointer silently goes stale. The test is what the comment does with the name it mentions: stating the fact where the reader needs it is fine ("callers must hold `Registry.mu`"), sending the reader elsewhere to go find it is not ("see `Registry` for locking rules"). Referencing a symbol, package, ticket, or external spec that the comment is actually about is fine. Repeating a sentence or two to keep an explanation local is fine; when the full explanation is too long to restate, document it on the type or package that owns the invariant and give each use site the one-line consequence it needs.
-- Document struct fields one per field, at least on exported types. A comment placed above only the first field of a group documents just that field: `go doc <Type>.<Field>` and editor hovers show nothing for the rest. Grouped `const` and `var` blocks and interface methods follow the same attachment rule, and a comment above the `const (` line documents the block rather than any spec in it. Put a blank line between the previous field and the next field's comment: attachment survives without it, but the blank line keeps the boundary obvious. Never leave a blank line between a comment and the field it documents, which silently detaches it. The first field in a block needs no blank line before its comment, and `gofmt` flags none of these mistakes.
+Comments describe current intent and behavior.
 
-<bad-example>
-
-```go
-type Config struct {
-    // Timeouts applied to outbound requests. Previously these were a single
-    // Timeout field. See the note on Client above for retry interactions.
-    ReadTimeout  time.Duration
-    WriteTimeout time.Duration
-}
-```
-
-Three problems in four lines: the comment narrates a past refactor, it defers to a comment that can move or disappear, and `WriteTimeout` ends up with no documentation at all.
-
-</bad-example>
-
-<good-example>
+- Do not narrate the edit you just made ("previously this returned X, now it returns Y", "renamed from Foo"); that belongs in the commit message or PR body. Build tags, `//go:` directives, and `TODO(TICKET-123)` notes are not narration.
+- Mark a deprecated symbol with a trailing `Deprecated: use X instead` paragraph (the form `gopls` and pkg.go.dev surface), and keep the rest of its doc in the present tense.
+- Do not write "see X" comments that send the reader elsewhere ("see `Registry` for locking rules"); the target moves and the pointer goes stale. State the fact where the reader needs it ("callers must hold `Registry.mu`"). Referencing a symbol, ticket, or spec that the comment is about is fine. When the full explanation is too long to restate, document it on the type or package that owns the invariant and give each use site the one-line consequence.
+- Document each struct field with its own comment, at least on exported types. `gofmt` does not catch the mistakes here: a comment above only the first field of a group documents just that field, so `go doc` and editor hovers show nothing for the rest, and a blank line between a comment and its field silently detaches it. Put a blank line before each field's comment after the first. Grouped `const`/`var` blocks and interface methods follow the same rule, and a comment above `const (` documents the block, not its specs.
 
 ```go
 type Config struct {
@@ -62,318 +99,39 @@ type Config struct {
 }
 ```
 
-</good-example>
+## Constants and types
 
-## Updating the API
+- **Name and explain numeric values.** Limits, sizes, budgets, timeouts, retry counts, and thresholds are named constants, each with a comment saying what the value represents and why it was chosen. Write bitwise and multiplied sizes with the human-readable value alongside. Obvious literals (`0`, `1`, `2` for halving or pairs, base `10` in `strconv`) need no name.
 
-We use Goa to design our API and generate server code. All Goa code lives in `server/design`. The Goa DSL is documented in `https://pkg.go.dev/goa.design/goa/v3/dsl`.
+  ```go
+  const (
+      // maxManifestBytes bounds a plugin manifest upload. Real manifests are
+      // under 64 KiB; 1 MiB leaves headroom without letting one request
+      // hold a large buffer.
+      maxManifestBytes = 1 << 20 // 1 MiB
 
-To make an API change such as creating a new service or update an existing one:
+      // syncRetryTTL is how long a failed sync waits before retrying. The
+      // upstream API rate limits per hour, so retrying sooner cannot succeed.
+      syncRetryTTL = time.Hour
+  )
+  ```
 
-- Update the Goa design files in `server/design` to reflect the API change.
-- Run `mise run gen:goa-server`
-- This will regenerate the server code in `server/gen` with the new API changes. It's best to use `git` to discover the added/changed files.
+- **Fully initialize struct literals that `exhaustruct` covers.** Its excluded types and paths (test files among them) are listed in `server/.golangci.yaml`. When adding a field, update every covered literal, including zero values (`MyStruct{}` becomes `MyStruct{NewField: nil}`).
+- **Use `new(expr)` for a pointer to a value** (Go 1.26+, e.g. `new("secret")`) instead of a local `ptr` helper.
+- **Use string enums.** Declare `type fooOutcome string` with string constants so values go straight into logs and metric dimensions. If the zero value means "unknown", declare that constant explicitly rather than relying on `""`.
+- **Use struct types for context keys.** Declare a distinct unexported type per key (`type domainKey struct{}`) so keys from different packages cannot collide.
+- **Do not alias constants or variables.** If another package or an external test needs one, export it where it is declared (including instead of an `export_test.go` alias). Keep a separate name only when it deliberately decouples from its source: it selects a policy that must stay a one-line change (`const DefaultInEffect = Version20250326`), or it names a separate concept that shares the value today but may diverge. Say in its doc comment why the name must stay separate.
+- **Use protocol constants, not string literals.** If a string's meaning comes from an RFC or spec (OAuth parameters and error codes, HTTP statuses and methods), use the constant from its owning package (see [Reuse existing packages](#reuse-existing-packages), and `net/http` for HTTP), and add one there if it is missing.
+- **Type contractual JSON.** A JSON object whose shape is defined by a standard or an external contract gets a named struct type with a comment on each field, not a `map[string]any`.
 
-When implementing Goa services:
+## Functions
 
-- Ensure the service lives in a separate go package with an impl.go file such as `server/internal/<service>/impl.go`.
-- The general layout of the impl.go file should be as follows:
-
-```go
-package assets
-
-import (
-	"context"
-
-	"log/slog"
-
-	goahttp "goa.design/goa/v3/http"
-
-	gen "github.com/speakeasy-api/gram/server/gen/assets"
-	srv "github.com/speakeasy-api/gram/server/gen/http/assets/server"
-	"github.com/speakeasy-api/gram/server/internal/auth"
-)
-
-type Service struct {
-	tracer    trace.Tracer
-	logger    *slog.Logger
-	auth      *auth.Auth
-  // dependencies
-}
-
-func NewService(
-	logger *slog.Logger,
-	tracerProvider trace.TracerProvider,
-  auth *auth.Auth,
-  // dependencies
-) *Service {
-  return &Service{
-    // initialize dependencies
-  }
-}
-
-var _ gen.Service = (*Service)(nil)
-var _ gen.Auther = (*Service)(nil)
-
-func Attach(mux goahttp.Muxer, service *Service) {
-	endpoints := gen.NewEndpoints(service)
-	endpoints.Use(middleware.MapErrors())
-	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(
-		mux,
-		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
-	)
-}
-
-func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
-}
-
-func (s *Service) ListAssets(ctx context.Context, payload *gen.ListAssetsPayload) (*gen.ListAssetsResult, error) {
-  // implementation
-}
-```
-
-If you are creating a new Goa service, then make sure to attach it to the http server in `server/cmd/gram/start.go`.
-
-## Dependency injection
-
-- Always inject dependencies directly into service structs via the constructor.
-- Do NOT use a session manager to stash dependencies that the service needs later.
-- When a service needs database access, inject the DB connection and initialize query helpers (`repo.New`) when needed in functions.
-- Do NOT store `repo.Queries` directly on a service struct for a new service.
-
-<bad-example>
+- Take `context.Context` as the first argument of any function that does I/O, runs queries, or waits. To wait, use a `time.Timer` or `time.After` in a `select` on `ctx.Done()`, a Temporal timer, or `ratelimit`. In Temporal workflow code, use `workflow.Now(ctx)` for the current time.
+- Pass time-dependent logic a `now time.Time` argument, or give its struct a `now func() time.Time` field, instead of calling `time.Now()` inside, so tests control the clock.
+- Extract a function only when it adds reuse, names non-trivial logic, adapts a type to a required interface, or provides a seam that tests need. A function that only forwards to another call does none of these, in production code or tests (`func newFoo(t) *Foo { return NewFoo(deps) }`, `func seedX(...) { repo.New(db).InsertX(...) }`). When a signature changes, update the callers instead of adding a wrapper that keeps the old signature.
 
 ```go
-type Service struct {
-    queries *repo.Queries
-}
-
-func NewService(db *pgxpool.Pool) *Service {
-    return &Service{
-        queries: repo.New(db),
-    }
-}
-```
-
-This makes the service depend on a concrete query helper instance up front, which is not the pattern we want for new services.
-
-</bad-example>
-
-<good-example>
-
-```go
-type Service struct {
-    db *pgxpool.Pool
-}
-
-func NewService(db *pgxpool.Pool) *Service {
-    return &Service{db: db}
-}
-
-func (s *Service) Handler(ctx context.Context) error {
-    queries := repo.New(s.db)
-
-    if err := queries.DoThing(ctx); err != nil {
-        return fmt.Errorf("do thing: %w", err)
-    }
-
-    return nil
-}
-```
-
-This keeps the service dependency simple and avoids baking `repo.Queries` into the service shape.
-
-</good-example>
-
-## Auth context assumptions
-
-- In organization-scoped handlers, assume `ActiveOrganizationID` is present.
-- Session authentication can briefly produce an org-less context during login. The auth middleware handles that boundary by installing zero RBAC grants; do not spread empty-org checks into handlers.
-- Do NOT add defensive empty checks for `ActiveOrganizationID` outside that boundary unless there is another concrete code path proving otherwise.
-
-Avoid patterns that treat `ActiveOrganizationID` as optional when reading `authctx`. That adds defensive code around an invariant that should already hold.
-
-## Third-party clients
-
-- Constructors for third-party clients should always return a usable client implementation.
-- Avoid designs where internal code has to repeatedly check whether a client is `nil` before calling it.
-- Provide a stub implementation for local development and tests, but choose between the real and stub implementation in `deps.go` based on `c.String("environment")`.
-- Do NOT expose third-party request/response types from your wrapper to the rest of our codebase. Define our own types at the boundary.
-
-<bad-example>
-
-```go
-type Service struct {
-    client *vendor.Client
-}
-
-func NewService(cfg Config) *Service {
-    if cfg.APIKey == "" {
-        return nil
-    }
-
-    return &Service{client: vendor.New(cfg.APIKey)}
-}
-
-func (s *Service) Send(ctx context.Context, req *vendor.Request) error {
-    if s.client == nil {
-        return nil
-    }
-
-    return s.client.Send(ctx, req)
-}
-```
-
-This leaks vendor types into internal code and spreads `nil` handling into runtime call paths.
-
-</bad-example>
-
-<good-example>
-
-```go
-type Client interface {
-    Send(ctx context.Context, message Message) error
-}
-
-type Message struct {
-    To      string
-    Subject string
-    Body    string
-}
-
-type Service struct {
-    client Client
-}
-
-func NewService(client Client) *Service {
-    return &Service{client: client}
-}
-```
-
-Wire the real or stub implementation in `deps.go` so the service always receives a valid `Client`, and keep vendor-specific types inside the wrapper implementation.
-
-</good-example>
-
-## Transactional email (Loops)
-
-Sending transactional email goes through `server/internal/email`. The package wraps Loops and enforces a strongly typed `Template` interface.
-
-### Adding a new template
-
-Follow the `craft-transactional-emails` skill. The Go integration is:
-
-1. Add a stable `TemplateKey` constant to `server/internal/email/templates.go`. Provider IDs never belong in application source.
-2. Create `server/internal/email/template_<name>.go` with a struct implementing `Key()`, `Variables()`, and `AddToAudience()`.
-3. Append a fully initialized zero value to `RegisteredTemplates` so the application/manifest contract checks include it.
-4. Add the matching LMX and `manifest.json` entry under `server/internal/email/loops/`; merge CI creates the Loops email and gram-infra supplies its environment-specific ID at runtime.
-5. Test the key, complete snake_case variable map, and audience behavior.
-
-To send: call `s.emailSvc.Send(ctx, recipientEmail, tmpl)` where `tmpl` is your populated template struct.
-
-### Variable key naming
-
-`Variables()` must return **snake_case** keys. Loops substitutes these keys directly into template variables — camelCase keys silently render as blank fields in the delivered email.
-
-Every declared key must be present in the returned map even when the value is empty. A missing key causes partial template rendering.
-
-<bad-example>
-
-```go
-func (t MyTemplate) Variables() map[string]string {
-    return map[string]string{
-        "approvalUrl":    t.ApprovalURL,
-        "requesterEmail": t.RequesterEmail,
-    }
-}
-```
-
-camelCase keys silently render as blank fields in Loops — no error, no warning.
-
-</bad-example>
-
-<good-example>
-
-```go
-func (t MyTemplate) Variables() map[string]string {
-    return map[string]string{
-        "approval_url":    t.ApprovalURL,
-        "requester_email": t.RequesterEmail,
-    }
-}
-```
-
-</good-example>
-
-### `AddToAudience` semantics
-
-Controls whether Loops upserts the recipient as a contact in the audience when the email is sent.
-
-- Return `true` for user-facing emails that are part of the recipient's product journey (team invites, onboarding).
-- Return `false` for operational/admin emails where the recipient is incidental (admin alerts, system notifications).
-
-### Testing patterns
-
-**Base test setup — never pass `nil` for `*email.Service`:**
-
-```go
-loopsClient := loops.New(ctx, logger, nil, "") // nil guardian policy is safe when key is empty; returns noop client
-noopEmailSvc := email.NewService(logger, loopsClient)
-```
-
-**Asserting on sent emails — use a capture client:**
-
-`loops.Client` is our own interface (not a vendor type), so a hand-rolled capture client is appropriate here. The capture pattern lets tests assert on the exact payload sent — use it instead of `testify/mock` for Loops email assertions.
-
-```go
-type captureLoopsClient struct {
-    mu   sync.Mutex
-    sent []loops.SendTransactionalInput
-}
-
-func (c *captureLoopsClient) SendTransactional(_ context.Context, input loops.SendTransactionalInput) error {
-    c.mu.Lock()
-    defer c.mu.Unlock()
-    c.sent = append(c.sent, input)
-    return nil
-}
-
-func (c *captureLoopsClient) Sent() []loops.SendTransactionalInput {
-    c.mu.Lock()
-    defer c.mu.Unlock()
-    out := make([]loops.SendTransactionalInput, len(c.sent))
-    copy(out, c.sent)
-    return out
-}
-```
-
-To use it in a test, declare an instance and swap it into the service:
-
-```go
-captured := &captureLoopsClient{}
-svc.emailSvc = email.NewService(testenv.NewLogger(t), captured)
-```
-
-(This assigns an unexported field — works from within the same package, which is the convention for `access` package tests.)
-
-**Optional display fields — use `conv.Default`:**
-
-```go
-DisplayName: conv.Default(request.DisplayName, "(unknown resource)"),
-```
-
-Never send a template with a blank field that produces broken email copy. Apply a meaningful fallback at the Go layer, not in the Loops template.
-
-## Function shape
-
-- Avoid helper functions and methods that only forward to another method with no meaningful logic.
-- Avoid extracting single-use one-liners into separate methods just for indirection.
-- Prefer inlining trivial behavior at the call site unless the extracted function adds reuse, naming value, or non-trivial logic.
-
-<bad-example>
-
-```go
+// Bad: the wrapper adds no abstraction and has one caller.
 func (s *Service) listWidgets(ctx context.Context) error {
     return s.repo.ListWidgets(ctx)
 }
@@ -383,257 +141,85 @@ func (s *Service) List(ctx context.Context) error {
 }
 ```
 
-The wrapper adds no abstraction and is only used once.
+Call `s.repo.ListWidgets(ctx)` directly from `List`.
 
-</bad-example>
+## Errors
 
-<good-example>
+- In low-level functions, wrap with `fmt.Errorf` and a short context unique to the call site: `fmt.Errorf("save user: %w", err)`. Skip "failed to" and generic context such as "run database query".
+- In `server/` handlers and other high-level functions, use `oops` to pair the internal error with a user-facing message. Log client faults (4xx codes) with `LogWarn` or `LogInfo` and server faults (e.g. `oops.CodeUnexpected`) with `LogError`, so client mistakes do not mark the trace span as errored:
+
+  ```go
+  return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogWarn(ctx, s.logger)
+  ```
+
+- When callers need to branch on an error, export a sentinel (`var ErrNotFound = errors.New("...")`) or an error type, and have callers match it with `errors.Is` or `errors.As`.
+
+## Logging and observability
+
+- Build attributes with the tree's attribute helpers, not raw keys: `server/internal/attr/conventions.go` in `server/`, `functions/internal/attr` in `functions/`. Add a helper there when none fits. Always include the error: `logger.ErrorContext(ctx, "write to database", attr.SlogError(err))`.
+- Create child loggers with `logger.With(...)` to carry context into later calls (`logger.With(attr.SlogProjectID(projectID))`).
+- Log errors where they are handled and keep info-level logs rare.
+- In `server/`, run deferred cleanup through `o11y` rather than a bare `defer x.Close()` or `defer func() { _ = x.Close() }()`; the linter does not catch this:
+  - `defer o11y.LogDefer(ctx, logger, "close export file", func() error { return file.Close() })` when a failure matters (file I/O, critical resources). The message names the operation and resource.
+  - `defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })` when a failure is expected or harmless (rollback after commit, closing a response body).
+
+## Services
+
+### Goa services
+
+Goa designs live in `server/design` (DSL reference: `https://pkg.go.dev/goa.design/goa/v3/dsl`). After editing a design, run `mise run gen:goa-server` and use `git` to see what changed under `server/gen`.
+
+Each service lives in its own package with an `impl.go` (`server/internal/<service>/impl.go`). Copy an existing service's `impl.go` as the template; it contains:
+
+- the `Service` struct and a `NewService` constructor
+- a `var _ gen.Service = (*Service)(nil)` assertion, plus `var _ gen.Auther = (*Service)(nil)` when the service uses API key security
+- an `Attach(mux, service)` function that mounts the endpoints with `middleware.MapErrors()` and `middleware.TraceMethods(service.tracer)`
+- for API key security, an `APIKeyAuth` method delegating to `s.auth.Authorize`
+
+Attach new services in `server/cmd/gram/start.go`.
+
+### Dependency injection
+
+Inject dependencies through the service constructor and store them on the struct, not on the sessions manager or other shared state. For database access, inject the pool and build query helpers where they are used; do not add `repo.Queries` fields to a service struct (not lint-enforced).
 
 ```go
-func (s *Service) List(ctx context.Context) error {
-    return s.repo.ListWidgets(ctx)
+type Service struct {
+    db *pgxpool.Pool
+}
+
+func (s *Service) Handler(ctx context.Context) error {
+    if err := repo.New(s.db).DoThing(ctx); err != nil {
+        return fmt.Errorf("do thing: %w", err)
+    }
+    return nil
 }
 ```
 
-</good-example>
+### Auth context
 
-## Error handling
+In organization-scoped handlers, assume `ActiveOrganizationID` is present. The auth middleware handles the brief org-less login boundary by installing zero RBAC grants, so handlers do not need defensive empty-org checks unless a concrete code path proves otherwise.
 
-In low-level functions, use `fmt.Errorf` to wrap errors with distinct and useful context:
+### Third-party clients
 
-<bad-example>
-
-```go
-func SaveUser(repo Repository, u User) error {
-  err := repo.Save(u)
-  if err != nil {
-    return fmt.Errorf("failed to save user: %w", err)
-  }
-  return nil
-}
-```
-
-Do not need to use "failed to" language.
-
-</bad-example>
-
-<bad-example>
-
-```go
-func SaveUser(repo Repository, u User) error {
-  err := repo.Save(u)
-  if err != nil {
-    return fmt.Errorf("run database query: %w", err)
-  }
-  return nil
-}
-```
-
-Do not use generic language that doesn't add any context and doesn't improving searching for errors in the codebase.
-
-</bad-example>
-
-<good-example>
-
-```go
-func SaveUser(repo Repository, u User) error {
-  err := repo.Save(u)
-  if err != nil {
-    return fmt.Errorf("save user: %w", err)
-  }
-  return nil
-}
-```
-
-This is much better. The error message is concise and to the point and unique to the call site.
-
-</good-example>
-
-In higher-level functions of the `server/` codebase, which include HTTP service handlers, use the `server/internal/oops` package which allows us to wrap internal errors with user-facing error messages.
-
-<good-example>
-
-```go
-func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeploymentsPayload) (res *gen.ListDeploymentResult, err error) {
-  var cursor uuid.NullUUID
-	if form.Cursor != nil {
-		c, err := uuid.Parse(*form.Cursor)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
-		}
-
-		cursor = uuid.NullUUID{UUID: c, Valid: true}
-	}
-}
-```
-
-</good-example>
-
-## Logging
-
-- Use log/slog for logging.
-- ALWAYS use logging attributes defined in `server/internal/attr/conventions.go` when logging in the server codebase.
-- Where appropriate, create child loggers using `logger.With(attr.SlogXXX(...))` to capture contextual attributes for logging in later parts of code.
-- DO NOT spam the codebase with log statements. Focus on logging errors where appropriate and reduce the noise from excessive info-level logs.
-
-<bad-example>
-
-```go
-logger.InfoContext(ctx, "user created", "user_id", userID)
-```
-
-This is bad because it doesn't use the attributes from the convention package.
-
-</bad-example>
-
-<bad-example>
-
-```go
-import "github.com/speakeasy-api/gram/functions/internal/attr"
-
-func Example() {
-  logger.Error("failed to create user", attr.SlogError(err))
-}
-```
-
-This is bad because it uses `logger.Error` instead of `logger.ErrorContext`.
-
-</bad-example>
-
-<good-example>
-
-```go
-import "github.com/speakeasy-api/gram/functions/internal/attr"
-
-func Example(ctx context.Context) {
-  logger.ErrorContext(ctx, "failed to create user", attr.SlogError(err))
-}
-```
-
-This is great because:
-
-- It uses `logger.ErrorContext` which is the convention for logging in the server codebase.
-- It uses the `attr.SlogError` attribute from the attr package.
-
-</good-example>
-
-## Conversion utilities (`server/internal/conv`)
-
-Use the `conv` package for common type conversions instead of writing inline helpers. Key functions:
-
-- `conv.PtrEmpty(v)` — If v is not the zero value, return a pointer to v; otherwise, return nil.
-- `conv.PtrValOr(ptr, default)` — dereference a pointer with a fallback default.
-- `conv.Default(val, default)` — return `val` unless it is the zero value, then return `default`.
-- `conv.ToPGText`, `conv.ToPGTextEmpty`, `conv.PtrToPGText`, `conv.PtrToPGTextEmpty` — convert strings to `pgtype.Text`.
-- `conv.FromPGText`, `conv.FromPGBool` — convert `pgtype` values to Go pointer types.
-- `conv.PtrToPGBool` — convert a `*bool` to `pgtype.Bool`.
-- `conv.Ternary(cond, trueVal, falseVal)` — inline conditional expression.
-
-<important>
-
-Do NOT reimplement pointer helpers, ternary expressions, or pgtype conversions inline. Always reach for `conv` first.
-
-</important>
-
-## Observability (`server/internal/o11y`)
-
-Use the `o11y` package for deferred cleanup and error logging. Two key functions:
-
-### `o11y.LogDefer`
-
-```go
-func LogDefer(ctx context.Context, logger *slog.Logger, cb func() error) error
-```
-
-Use `LogDefer` when a cleanup operation's error should be **logged**. Wrap cleanup calls with `defer o11y.LogDefer(...)` so failures are always visible in logs.
-
-<good-example>
-
-```go
-defer o11y.LogDefer(ctx, logger, func() error { return file.Close() })
-```
-
-</good-example>
-
-### `o11y.NoLogDefer`
-
-```go
-func NoLogDefer(cb func() error)
-```
-
-Use `NoLogDefer` when a cleanup operation's error can be **silently discarded** — for example, rolling back a database transaction (which is a no-op if the transaction already committed) or closing an HTTP response body.
-
-<good-example>
-
-```go
-dbtx, err := s.repo.DB().Begin(ctx)
-if err != nil {
-    return nil, oops.E(oops.CodeUnexpected, err, "error accessing resource").LogError(ctx, logger)
-}
-defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-```
-
-</good-example>
-
-<good-example>
-
-```go
-defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
-```
-
-</good-example>
-
-<important>
-
-- ALWAYS use `o11y.LogDefer` or `o11y.NoLogDefer` for deferred cleanup instead of bare `defer resource.Close()` calls. Bare defers silently discard errors with no traceability.
-- Choose `LogDefer` when the error matters for debugging (file I/O, critical resource cleanup).
-- Choose `NoLogDefer` when the error is expected or inconsequential (transaction rollbacks, response body closes).
-
-</important>
+- Make constructors return a usable client (the stub when unconfigured), so callers never check for `nil`. Missing configuration for an optional integration selects the stub; it is not a constructor error.
+- When adding a vendor wrapper, add a stub alongside it for local development and tests, and choose real or stub in `server/cmd/gram/deps.go` based on `c.String("environment")`.
+- Keep vendor request and response types inside the wrapper. Define our own types at the boundary (`type Client interface { Send(ctx context.Context, message Message) error }`).
 
 ## Testing
 
-- When writing assertions, use `github.com/stretchr/testify/require` exclusively.
-- Avoid using `time.Sleep` to wait for eventual consistency or async state in tests. It is reported by the `forbidigo` rule `GG013` (enforced repo-wide, with a small grandfathered allowlist in `server/.golangci.yaml`). Poll instead: `require.EventuallyWithT` to wait until assertions pass or `require.Never` to assert a condition never becomes true. Inside an `EventuallyWithT` closure, make assertions with `assert.*` against the supplied `*assert.CollectT` — the one sanctioned use of `assert` over `require`.
-- Prefer `testing/synctest` (`synctest.Test` + `synctest.Wait`) for testing purely in-process timer/debounce logic. This is one of the few allowed `time.Sleep` use cases in tests since it is required for advancing the fake clock inside a synctest bubble.
-- In tests, use `t.Context()` instead of `context.Background()`, except inside `t.Cleanup(func())` callbacks.
-- IMPORTANT: avoid using `t.Run` to create subtests. Prefer writing separate test functions instead.
-- All test setup which includes spinning up databases, caches and background workers must go in `setup_test.go` files. Look for these across the codebase for inspiration and guidance.
-- NEVER write raw SQL in tests for any Postgres operation — `SELECT`, `INSERT`, `UPDATE`, `DELETE`, transactions (`Begin`/`BeginTx`), `CopyFrom`, and `SendBatch` are all covered. Use SQLc-generated methods. **Default to adding new fixture queries in the relevant domain package's own `queries.sql`** (e.g. a `toolsets`-shaped fixture goes in `server/internal/toolsets/queries.sql`, not in `testenv`). Reach for `server/internal/testenv/queries.sql` (and `testenv/testrepo`) only when a fixture query is genuinely reused across multiple packages. The `glint` `no-testing-raw-sql` rule enforces this against `*pgxpool.Pool`, `*pgx.Conn`, `pgx.Tx`, and `pgx.Querier` receivers in `*_test.go`. ClickHouse uses a different driver and is not flagged.
-- Use `github.com/stretchr/testify/mock` for mocking third-party libraries in tests instead of ad hoc fakes around vendor types.
-- Use `testenv.NewLogger(t)`, `testenv.NewTracerProvider(t)`, and `testenv.NewMeterProvider(t)` instead of constructing loggers or noop OTel providers inline. `testenv.NewLogger(t)` discards in normal runs and emits pretty logs under `go test -v`, which inline `slog.New(slog.DiscardHandler)` and `slog.New(slog.NewTextHandler(os.Stdout, nil))` do not. Exception: tests that assert on log output should use a capturing handler over a `bytes.Buffer`.
+The [Functions](#functions) and [Reuse existing packages](#reuse-existing-packages) rules apply to test code too. The `setup_test.go`, SQLc fixture, and `testenv` bullets describe `server/`.
 
-<bad-example>
-
-```go
-ctx := context.Background()
-```
-
-This loses the test lifecycle context that Go now provides directly on `*testing.T`.
-
-</bad-example>
-
-<good-example>
-
-```go
-ctx := t.Context()
-```
-
-</good-example>
-
-<good-example>
-
-```go
-type mockEmailClient struct {
-    mock.Mock
-}
-
-func (m *mockEmailClient) Send(ctx context.Context, message Message) error {
-    args := m.Called(ctx, message)
-    return args.Error(0)
-}
-```
-
-Use `testify/mock` when mocking integrations so expectations stay explicit and consistent across tests.
-
-</good-example>
+- Put setup that starts databases, caches, or workers in the package's `setup_test.go`: a `TestMain` calls `testenv.Launch(ctx, testenv.LaunchOptions{Postgres: true, ...})` into a package-level `infra`, and each test gets an isolated database from `infra.CloneTestDatabase(t, "testdb")`. Copy an existing `setup_test.go` (e.g. `server/internal/access`) and reuse its helpers.
+- Seed and inspect Postgres through SQLc, never raw SQL. Add a fixture query to the domain package's own `queries.sql` (a `toolsets` fixture goes in `server/internal/toolsets/queries.sql`). To seed rows owned by another domain, call that domain's generated repo (e.g. `orgrepo.CreateOrganizationMetadata`). Use `server/internal/testenv/queries.sql` and `testenv/testrepo` only for fixtures reused across packages. Genuine exceptions (PostgreSQL synchronization primitives such as `pg_blocking_pids`, or constraint tests that need writes SQLc cannot express) get a line-level `notestingrawsql` suppression.
+- Test doubles, in order of preference:
+  1. The vendor package's stub or fake when one exists; names vary (`workos.NewStubClient`, `okta.NewFake`, `openrouter.NewDevelopment`).
+  2. A suitable fake or capture already in the current package.
+  3. A small local fake or capture of an interface we own (for example a recording `loops.Client`). Consolidate one next to its interface only when another package actually needs it; do not relocate unrelated fixtures as part of a narrow change.
+  4. `github.com/stretchr/testify/mock` for vendor SDK clients without a stub, against a narrow interface declared where it is consumed when the vendor interface is large.
+- `httptest` servers are fine for protocol-level HTTP tests. `guardian.NewDefaultPolicy` blocks loopback, so build the client from `guardian.NewUnsafePolicy(tp, nil)` in those tests.
+- Use `testenv.NewLogger(t)`, `testenv.NewTracerProvider(t)`, and `testenv.NewMeterProvider(t)` instead of inline loggers or noop providers. `testenv.NewLogger(t)` discards in normal runs and pretty-prints under `go test -v`. Tests that assert on log output use a capturing handler over a `bytes.Buffer` instead.
+- Use `t.Context()` instead of `context.Background()`, except inside `t.Cleanup` callbacks.
+- Assert with `github.com/stretchr/testify/require`. The one exception is `assert.*` on the `*assert.CollectT` inside `require.EventuallyWithT`.
+- Never `time.Sleep` to wait for async state. When the test owns the goroutine, wait on a channel or `sync.WaitGroup` it signals. Otherwise poll with `require.EventuallyWithT`, or assert absence with `require.Never`. Use `testing/synctest` (`synctest.Test` and `synctest.Wait`) for in-process timer and debounce logic; `time.Sleep` inside the synctest bubble is allowed because it advances the fake clock.
+- Write a separate test function for each scenario that needs its own setup or assertions, so it can be read, run with `-run`, and fail on its own. Use a table-driven test only when cases differ just in inputs and expected outputs (a value or an error), running each case with `t.Run(tc.name, ...)` so a failure is named and can be rerun with `-run`.
+- Parallelize isolated tests and independent table cases: call `t.Parallel()` first in the test and in each `t.Run` closure (`paralleltest` and `tparallel` report missing calls). Keep a test and its ancestors sequential when it mutates process-global state (`t.Setenv` and `t.Chdir` panic under `t.Parallel()`) or intentionally shares a mutable fixture, and say why with `//nolint:paralleltest // <reason>`.
