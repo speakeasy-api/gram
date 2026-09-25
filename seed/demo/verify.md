@@ -178,7 +178,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     - Without a `?task=` selection, the wizard opens the first unfinished task.
       Select a task in the rail and confirm `?task=` changes; tasks with multiple
       steps show nested step navigation for the current task.
-    - Use **Previous** and **Skip task** to navigate without marking a task
+    - Use **Previous task** and **Skip task** to navigate without marking a task
       complete. The last task offers **Skip to dashboard**.
     - Seeded ownership and non-done statuses remain backend data: Priya owns
       Set up observability in other platforms (`in_progress`), and

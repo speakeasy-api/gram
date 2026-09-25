@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -39,6 +41,7 @@ func TestSetupCallbackUsesVisibleConfiguredTask(t *testing.T) {
 			require.True(t, ok)
 			require.NotNil(t, ac.SessionID)
 			ctx = contextvalues.SetSessionTokenInContext(ctx, *ac.SessionID)
+			ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ac.ActiveOrganizationID))
 			org, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 			require.NoError(t, err)
 			_, err = organizations.SaveOnboardingConfiguration(ctx, ti.conn, audit.NewLogger(), org.ID, tc.visible, nil, urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test"), nil)
@@ -81,6 +84,7 @@ func TestSetupCallbackDomainVerification(t *testing.T) {
 			require.True(t, ok)
 			require.NotNil(t, ac.SessionID)
 			ctx = contextvalues.SetSessionTokenInContext(ctx, *ac.SessionID)
+			ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ac.ActiveOrganizationID))
 			repo := orgrepo.New(ti.conn)
 			org, err := repo.GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 			require.NoError(t, err)
@@ -129,5 +133,50 @@ func TestSetupCallbackRejectsInvalidOrigin(t *testing.T) {
 		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/setup/callback?"+query, nil))
 		require.Equal(t, http.StatusBadRequest, rec.Code, query)
 		require.Empty(t, rec.Header().Get("Location"), query)
+	}
+}
+
+// Prepared grants exercise the session callback path while selecting the
+// caller's permissions independently of the default admin test fixture.
+func TestSetupCallbackRequiresActiveOrganizationAdmin(t *testing.T) {
+	t.Parallel()
+	for _, intent := range []string{"domain_verification", "sso", "dsync"} {
+		for _, origin := range []string{"", "&task=identity-provider"} {
+			for _, role := range []string{"member", "other organization admin"} {
+				t.Run(intent+origin+"/"+role, func(t *testing.T) {
+					ctx, ti := newTestOrganizationsService(t)
+					ac, ok := contextvalues.GetAuthContext(ctx)
+					require.True(t, ok)
+					require.NotNil(t, ac.SessionID)
+					ctx = contextvalues.SetSessionTokenInContext(ctx, *ac.SessionID)
+					grants := []authz.Grant{authz.NewGrant(authz.ScopeOrgRead, ac.ActiveOrganizationID)}
+					if role == "other organization admin" {
+						grants = append(grants, authz.NewGrant(authz.ScopeOrgAdmin, "org_other"))
+					}
+					ctx = authztest.WithExactGrants(t, ctx, grants...)
+					repo := orgrepo.New(ti.conn)
+					org, err := repo.GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
+					require.NoError(t, err)
+					config, err := organizations.SaveOnboardingConfiguration(ctx, ti.conn, audit.NewLogger(), org.ID, []string{"identity-provider"}, nil, urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test"), nil)
+					require.NoError(t, err)
+					// Make a regressed domain refresh observable without an unexpected mock call.
+					ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, org.WorkosID.String).Return(&workos.OrganizationDomainPolicy{Domains: []workos.OrganizationDomain{{Domain: "example.com", State: workos.OrganizationDomainStateVerified}}}, nil).Maybe()
+					mux := goahttp.NewMuxer()
+					organizations.Attach(mux, ti.service)
+					rec := httptest.NewRecorder()
+					mux.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/setup/callback?intent="+intent+origin, nil))
+					require.Equal(t, http.StatusForbidden, rec.Code)
+					require.Empty(t, rec.Header().Get("Location"))
+					require.Equal(t, "forbidden\n", rec.Body.String())
+					require.Empty(t, ti.orgs.Calls, "denied callbacks must not call WorkOS")
+					afterOrg, err := repo.GetOrganizationMetadata(ctx, org.ID)
+					require.NoError(t, err)
+					require.Equal(t, org.VerifiedDomains, afterOrg.VerifiedDomains)
+					afterConfig, err := organizations.LoadOnboardingConfiguration(ctx, ti.conn, org.ID)
+					require.NoError(t, err)
+					require.Equal(t, config, afterConfig)
+				})
+			}
+		}
 	}
 }

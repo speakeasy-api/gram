@@ -1171,6 +1171,12 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		span.SetStatus(codes.Error, "forbidden")
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "setup callback: read org", attr.SlogError(err))
