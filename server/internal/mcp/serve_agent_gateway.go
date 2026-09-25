@@ -91,6 +91,7 @@ func (s *Service) ServeAgentGateway(w http.ResponseWriter, r *http.Request) erro
 		Name:                "Agent gateway",
 		// NULL serves Gram's built-in gateway instructions.
 		Instructions:      pgtype.Text{String: "", Valid: false},
+		DiscoveryMode:     pgtype.Text{String: "", Valid: false},
 		Visibility:        visibility.Private,
 		NetworkAccessMode: pgtype.Text{String: "", Valid: false},
 		CreatedAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
