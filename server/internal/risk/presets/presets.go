@@ -90,7 +90,7 @@ var registry = []Preset{
 			"Treat local, test and staging targets as out of scope unless the request clearly says production.",
 		UserMessage:                  "This looks like a destructive change to a production system. Confirm the target is not production, or ask an administrator to run it.",
 		RequiresApprovedEmailDomains: false,
-		Keywords:                     []string{"destructive", "delete", "deleting", "drop table", "drop database", "truncate", "production", "prod ", "rm -rf", "force push", "force-push", "irreversible", "wipe", "terminate"},
+		Keywords:                     []string{"destructive", "delete", "deleting", "drop table", "drop database", "truncate", "production", "rm -rf", "force push", "force-push", "irreversible", "wipe", "terminate"},
 	},
 	{
 		ID:                           "unapproved_mcp_servers",
@@ -118,7 +118,7 @@ var registry = []Preset{
 		Prompt:                       "",
 		UserMessage:                  "",
 		RequiresApprovedEmailDomains: true,
-		Keywords:                     []string{"personal account", "non-corporate", "non corporate", "corporate account", "email domain", "gmail", "personal email", "byo", "company account", "work account"},
+		Keywords:                     []string{"personal account", "non-corporate", "non corporate", "corporate account", "email domain", "gmail", "gmail account", "personal email", "byo", "company account", "work account"},
 	},
 	{
 		ID:                           "prompt_injection",
@@ -223,6 +223,11 @@ const (
 	defaultBespokeScore = 5
 )
 
+// minPresetSignal is the keyword score a preset needs before it is chosen over
+// a bespoke draft: one phrase, or two single words. A lone generic word such
+// as "production" is not enough to commit to a preset.
+const minPresetSignal = 2.0
+
 // Suggest maps a plain-language description to the closest preset by keyword
 // overlap. It is the fallback the dashboard uses when the model is
 // unavailable and the whole path for the Platform MCP, whose caller is itself
@@ -233,16 +238,16 @@ func Suggest(description string) Suggestion {
 	for _, preset := range registry {
 		score := 0.0
 		for _, keyword := range preset.Keywords {
-			if !strings.Contains(normalized, strings.ToLower(keyword)) {
+			if !strings.Contains(normalized, " "+strings.ToLower(strings.TrimSpace(keyword))) {
 				continue
 			}
 			weight := 1.0
-			if strings.ContainsAny(keyword, " -") {
+			if strings.ContainsAny(strings.TrimSpace(keyword), " -") {
 				weight = 2
 			}
 			score += weight
 		}
-		if score == 0 {
+		if score < minPresetSignal {
 			continue
 		}
 		matches = append(matches, Match{Preset: preset.clone(), Confidence: score / (score + 2)})
@@ -301,9 +306,10 @@ func bespokeName(instruction string) string {
 		}
 		runes = runes[:cut]
 	}
-	name := strings.TrimRight(string(runes), " .,;:")
-	if name == "" {
+	name := []rune(strings.TrimRight(string(runes), " .,;:"))
+	if len(name) == 0 {
 		return "Custom guardrail"
 	}
-	return strings.ToUpper(name[:1]) + name[1:]
+	name[0] = unicode.ToUpper(name[0])
+	return string(name)
 }

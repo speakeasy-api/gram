@@ -76,6 +76,12 @@ func TestApplyRiskPolicyPresetRefusesUnknownOrConflictingInput(t *testing.T) {
 	_, err = applyRiskPolicyPreset(createRiskPolicyInput{ProjectSlug: "project", Preset: "secrets_and_credentials", PolicyType: "standard", IdempotencyKey: "key"})
 	require.ErrorIs(t, err, ErrRiskMutationInvalid)
 
+	_, err = applyRiskPolicyPreset(createRiskPolicyInput{ProjectSlug: "project", Preset: "secrets_and_credentials", Prompt: "ignored by a standard policy", IdempotencyKey: "key"})
+	require.ErrorIs(t, err, ErrRiskMutationInvalid, "a prompt override on a standard preset would be dropped silently")
+
+	_, err = applyRiskPolicyPreset(createRiskPolicyInput{ProjectSlug: "project", Preset: "destructive_production_actions", PresidioEntities: []string{"US_SSN"}, IdempotencyKey: "key"})
+	require.ErrorIs(t, err, ErrRiskMutationInvalid, "entity overrides do not apply to a prompt-based preset")
+
 	input, err := applyRiskPolicyPreset(createRiskPolicyInput{ProjectSlug: "project", PolicyType: "standard", Sources: []string{"gitleaks"}, IdempotencyKey: "key"})
 	require.NoError(t, err)
 	require.Equal(t, "standard", input.PolicyType)
@@ -114,27 +120,44 @@ func TestCreateRiskPolicySchemaAcceptsPresetBranch(t *testing.T) {
 		})
 	}
 
+	type property struct {
+		Description string `json:"description"`
+		Enum        []any  `json:"enum"`
+		Const       any    `json:"const"`
+		Items       struct {
+			Description string `json:"description"`
+		} `json:"items"`
+	}
 	var schema struct {
 		OneOf []struct {
-			Properties map[string]struct {
-				Description string `json:"description"`
-				Enum        []any  `json:"enum"`
-				Items       struct {
-					Description string `json:"description"`
-				} `json:"items"`
-			} `json:"properties"`
+			Properties map[string]property `json:"properties"`
 		} `json:"oneOf"`
 	}
 	require.NoError(t, json.Unmarshal(create.InputSchema, &schema))
 	require.Len(t, schema.OneOf, 3)
-	require.Contains(t, schema.OneOf[0].Properties["sources"].Description, "gitleaks: Secrets")
-	require.Contains(t, schema.OneOf[0].Properties["sources"].Items.Description, "gitleaks: Secrets")
-	require.Contains(t, schema.OneOf[0].Properties["presidio_entities"].Description, "US_SSN: US social security number")
-	require.Contains(t, schema.OneOf[0].Properties["action"].Description, "block: Deny")
-	require.Contains(t, schema.OneOf[0].Properties["policy_type"].Description, "Built-in detectors")
-	require.Contains(t, schema.OneOf[1].Properties["policy_type"].Description, "policy model")
-	require.Contains(t, schema.OneOf[2].Properties["preset"].Description, "secrets_and_credentials: Secrets and credentials")
-	require.Len(t, schema.OneOf[2].Properties["preset"].Enum, len(presets.IDs()))
+	var standard, prompt, preset map[string]property
+	for _, branch := range schema.OneOf {
+		switch {
+		case branch.Properties["preset"].Enum != nil:
+			preset = branch.Properties
+		case branch.Properties["policy_type"].Const == "standard":
+			standard = branch.Properties
+		case branch.Properties["policy_type"].Const == "prompt_based":
+			prompt = branch.Properties
+		}
+	}
+	require.NotNil(t, standard)
+	require.NotNil(t, prompt)
+	require.NotNil(t, preset)
+	require.Contains(t, standard["sources"].Description, "gitleaks: Secrets")
+	require.Contains(t, standard["sources"].Items.Description, "gitleaks: Secrets")
+	require.Contains(t, standard["presidio_entities"].Description, "US_SSN: US social security number")
+	require.Contains(t, standard["action"].Description, "block: Deny")
+	require.Contains(t, standard["policy_type"].Description, "Built-in detectors")
+	require.Contains(t, prompt["policy_type"].Description, "policy model")
+	require.Contains(t, preset["preset"].Description, "secrets_and_credentials: Secrets and credentials")
+	require.Len(t, preset["preset"].Enum, len(presets.IDs()))
+	require.NotContains(t, preset, "policy_type")
 }
 
 func TestRiskPresetToolsAnswerWithoutServices(t *testing.T) {
@@ -170,9 +193,16 @@ func TestRiskPresetToolsAnswerWithoutServices(t *testing.T) {
 	require.Equal(t, "destructive_production_actions", suggestion.Draft.Preset)
 	require.Equal(t, "prompt_based", suggestion.Draft.PolicyType)
 	require.Equal(t, "block", suggestion.Draft.Action)
+	require.True(t, suggestion.Draft.Enabled, "the draft carries the enabled default the create branches require")
+	require.True(t, suggestion.RequiresPromptPolicies)
 	require.NotEmpty(t, suggestion.Draft.Prompt)
 	require.Greater(t, suggestion.Confidence, 0.0)
 	require.Contains(t, suggestion.NextStep, "create_risk_policy")
+
+	_, err = suggest.Invoke(ctx, json.RawMessage(`{"description":"     "}`))
+	var refusal *ToolRefusalError
+	require.ErrorAs(t, err, &refusal, "a whitespace-only description is refused instead of drafting an empty prompt")
+	require.Contains(t, refusal.Payload, `"code":"invalid_request"`)
 
 	bespoke, err := suggest.Invoke(ctx, json.RawMessage(`{"description":"Agents must never promise refunds to customers"}`))
 	require.NoError(t, err)

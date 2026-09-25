@@ -405,7 +405,7 @@ function PolicyStartChooser(): JSX.Element {
     telemetry.isFeatureEnabled("gram-prompt-policies") ?? false;
   const [, setKind] = useQueryState("kind");
   const [description, setDescription] = useState("");
-  const { data, isLoading } = useRiskPresets();
+  const { data, isLoading, isError, refetch } = useRiskPresets();
   const presets = (data?.presets ?? []).filter(
     (preset) => promptPoliciesEnabled || preset.policyType !== "prompt_based",
   );
@@ -490,20 +490,35 @@ function PolicyStartChooser(): JSX.Element {
               Or start from a use case
             </Text>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {isLoading
-                ? Array.from({ length: 4 }, (_, index) => (
-                    <div
-                      key={index}
-                      className="bg-muted/30 h-32 animate-pulse border"
-                    />
-                  ))
-                : presets.map((preset) => (
-                    <PresetStartCard
-                      key={preset.id}
-                      preset={preset}
-                      onSelect={() => openDraft(draftFromPreset(preset))}
-                    />
-                  ))}
+              {isError ? (
+                <div className="flex flex-wrap items-center gap-3 border p-4 sm:col-span-2">
+                  <Text small muted>
+                    The presets could not be loaded.
+                  </Text>
+                  <Button
+                    type="button"
+                    variant="tertiary"
+                    onClick={() => void refetch()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              ) : isLoading ? (
+                Array.from({ length: 4 }, (_, index) => (
+                  <div
+                    key={index}
+                    className="bg-muted/30 h-32 animate-pulse border"
+                  />
+                ))
+              ) : (
+                presets.map((preset) => (
+                  <PresetStartCard
+                    key={preset.id}
+                    preset={preset}
+                    onSelect={() => openDraft(draftFromPreset(preset))}
+                  />
+                ))
+              )}
             </div>
           </Stack>
 

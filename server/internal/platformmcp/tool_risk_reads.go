@@ -177,7 +177,7 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 	if catalogAvailable && handlers != nil && handlers.Controls != nil {
 		if handlers.CreatePolicy != nil {
 			createPolicy = handlers.CreatePolicy
-			createPolicyDescription = "Create an allowlisted standard or prompt-based risk policy in an explicit project with idempotent replay safety."
+			createPolicyDescription = "Create a risk policy in an explicit project with idempotent replay safety: a standard policy from allowlisted detectors, a prompt-based policy from a judge instruction, or a policy expanded from a use-case preset (see list_risk_presets and suggest_risk_policy) with optional overrides. A preset policy is enabled unless enabled is false."
 		}
 		if handlers.UpdatePolicy != nil {
 			updatePolicy = handlers.UpdatePolicy
