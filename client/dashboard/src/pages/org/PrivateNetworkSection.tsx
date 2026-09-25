@@ -144,7 +144,11 @@ function ConfiguredPrivateNetwork({
   const health = useNetworkIngressCheckHealthMutation({
     onSuccess: async () => {
       await invalidateAllNetworkIngress(queryClient);
-      toast.success("Private network health check requested");
+      toast.success(
+        ingress.status === "error"
+          ? "Private network provisioning retried"
+          : "Private network health checked",
+      );
     },
     onError: (error) =>
       handleAPIError(error, "Failed to check private network health"),
@@ -227,6 +231,36 @@ function ConfiguredPrivateNetwork({
             Latest check: {statusLabel(ingress.lastError)}
           </Alert>
         )}
+        {ingress.status === "error" && (
+          <Alert variant="warning" dismissible={false}>
+            <div className="space-y-3">
+              <Text small>
+                Tailscale could not be connected. Check your OAuth client and
+                tailnet policy, then retry provisioning. If it still fails, our
+                team can help.
+              </Text>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!entitled || health.isPending}
+                  onClick={() =>
+                    health.mutate({
+                      security: { sessionHeaderGramSession: "" },
+                    })
+                  }
+                >
+                  {health.isPending ? "Retrying..." : "Retry provisioning"}
+                </Button>
+                <Button asChild variant="tertiary" size="sm">
+                  <a href="mailto:support@speakeasy.com?subject=Tailscale%20setup%20help">
+                    Contact support
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </Alert>
+        )}
         <div className="flex items-start justify-between gap-6 border-t pt-4">
           <div className="space-y-1">
             <Text variant="subheading">Require user identity</Text>
@@ -273,16 +307,18 @@ function ConfiguredPrivateNetwork({
           unavailable.
         </SettingsSection.FooterHint>
         <SettingsSection.FooterActions>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!entitled || health.isPending}
-            onClick={() =>
-              health.mutate({ security: { sessionHeaderGramSession: "" } })
-            }
-          >
-            {health.isPending ? "Checking..." : "Check health"}
-          </Button>
+          {ingress.status !== "error" && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!entitled || health.isPending}
+              onClick={() =>
+                health.mutate({ security: { sessionHeaderGramSession: "" } })
+              }
+            >
+              {health.isPending ? "Checking..." : "Check health"}
+            </Button>
+          )}
           <Button
             variant="secondary"
             size="sm"

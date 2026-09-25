@@ -72,6 +72,16 @@ vi.mock("@/components/require-scope", () => ({
   },
 }));
 
+vi.mock("@/routes", () => ({
+  useOrgRoutes: () => ({
+    domains: {
+      Link: ({ children }: { children: React.ReactNode }) => (
+        <a href="/org/network-access">{children}</a>
+      ),
+    },
+  }),
+}));
+
 vi.mock("@/hooks/useProductTier", () => ({
   useProductTier: () => testState.productTier,
 }));
@@ -327,6 +337,17 @@ describe("NetworkAccessSection", () => {
     expect(container.innerHTML).toBe("");
   });
 
+  it("links organization admins to network configuration", () => {
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "Configure organization network access" })
+        .getAttribute("href"),
+    ).toBe("/org/network-access");
+  });
+
   it("shows network access before staff enables Tailscale", () => {
     testState.entitled = false;
     render(
@@ -391,6 +412,11 @@ describe("NetworkAccessSection", () => {
     expect(
       screen.getByText(/Private network availability could not be checked/),
     ).toBeTruthy();
+    expect(
+      screen.queryByRole("link", {
+        name: "Configure organization network access",
+      }),
+    ).toBeNull();
 
     fireEvent.click(
       screen.getByRole("combobox", { name: "Network access mode" }),

@@ -22,6 +22,7 @@ import {
 } from "@/hooks/usePrivateMcpServerUrls";
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { useProductTier } from "@/hooks/useProductTier";
+import { useOrgRoutes } from "@/routes";
 import { customDomainMcpEndpointUrl } from "@/hooks/useToolsetUrl";
 
 import { BOOK_DEMO_URL } from "@/lib/constants";
@@ -108,6 +109,7 @@ function NetworkAccessSectionContent({
   canReadIngress: boolean;
 }): JSX.Element {
   const organization = useOrganization();
+  const orgRoutes = useOrgRoutes();
   const enterprise = useProductTier() === "enterprise";
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<UpdateMcpServerFormNetworkAccessMode>(
@@ -361,6 +363,13 @@ function NetworkAccessSectionContent({
               entitled and its private ingress is online.
             </FieldDescription>
           </Field>
+          {canReadIngress && (
+            <Button asChild variant="secondary" size="sm">
+              <orgRoutes.domains.Link>
+                Configure organization network access
+              </orgRoutes.domains.Link>
+            </Button>
+          )}
           {server.networkAccessMode !== McpServerNetworkAccessMode.PublicOnly &&
             privateEndpointUrls.length > 0 && (
               <Field>
