@@ -48,11 +48,14 @@ type DirectorySync struct {
 	provider   DirectoryProvider
 	audit      *audit.Logger
 	refresher  TokenRefresher
+	// A sync holds a pooled connection for its whole Slack fetch, including
+	// rate-limit waits, so this process runs at most a quarter of the pool at once.
+	slots chan struct{}
 }
 
 // NewDirectorySync takes an optional refresher; without one, expired tokens require reconnecting.
 func NewDirectorySync(db *pgxpool.Pool, enc *encryption.Client, provider DirectoryProvider, auditLogger *audit.Logger, refresher TokenRefresher) *DirectorySync {
-	return &DirectorySync{db: db, encryption: enc, provider: provider, audit: auditLogger, refresher: refresher}
+	return &DirectorySync{db: db, encryption: enc, provider: provider, audit: auditLogger, refresher: refresher, slots: make(chan struct{}, max(1, db.Config().MaxConns/4))}
 }
 
 // Refresh this long before expiry so a slow directory fetch cannot outlive the token.
@@ -127,6 +130,8 @@ func (s *DirectorySync) freshTokens(ctx context.Context, queries *repo.Queries, 
 
 var errSyncSuperseded = errors.New("slack directory sync superseded")
 
+const minSyncBudget = 15 * time.Minute
+
 // Run holds one database session lock across fetches, provider waits and publication.
 // Temporal retries use the same lock. Publication uses that very session, so an
 // attempt that loses its lock through a broken DB connection cannot publish.
@@ -134,6 +139,21 @@ func (s *DirectorySync) Run(ctx context.Context, input SyncInput, report func(Sy
 	if input.OrganizationID == constants.DemoOrganizationID {
 		return &SyncError{Code: "demo_read_only", Retryable: false, Reconnect: false, RetryAfter: 0}
 	}
+	select {
+	case s.slots <- struct{}{}:
+	default:
+		select {
+		case s.slots <- struct{}{}:
+		case <-ctx.Done():
+			return fmt.Errorf("wait for a Slack sync slot: %w", ctx.Err())
+		}
+		// Waiting spent the attempt's budget; retry with a fresh one rather than start a fetch that cannot finish.
+		if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < minSyncBudget {
+			<-s.slots
+			return &SyncError{Code: "sync_busy", Retryable: true, Reconnect: false, RetryAfter: 0}
+		}
+	}
+	defer func() { <-s.slots }()
 	conn, err := s.db.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire Slack sync connection: %w", err)

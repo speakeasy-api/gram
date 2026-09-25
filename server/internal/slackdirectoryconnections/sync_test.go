@@ -258,3 +258,50 @@ func TestSyncBatchesAndPreservesObservedMapping(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(501), list.Connections[0].MemberCount)
 }
+
+func TestSyncWaitsForASlotBeforeUsingAConnection(t *testing.T) {
+	t.Parallel()
+	ctx, f := newService(t)
+	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
+	fetched := 0
+	s := syncer(f, directoryFunc(func(context.Context, string, string, func(slackdirectoryconnections.SyncProgress)) ([]slackdirectoryconnections.DirectoryMember, error) {
+		fetched++
+		return nil, nil
+	}))
+	release := s.OccupySyncSlotsForTest()
+	waiting, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
+	err := s.Run(waiting, syncRequest(f, c), nil)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Zero(t, fetched)
+	release()
+	require.NoError(t, s.Run(ctx, syncRequest(f, c), nil))
+	require.Equal(t, 1, fetched)
+}
+
+func TestSyncRetriesAfterWaitingWithTooLittleBudget(t *testing.T) {
+	t.Parallel()
+	ctx, f := newService(t)
+	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
+	fetched := 0
+	s := syncer(f, directoryFunc(func(context.Context, string, string, func(slackdirectoryconnections.SyncProgress)) ([]slackdirectoryconnections.DirectoryMember, error) {
+		fetched++
+		return nil, nil
+	}))
+	short, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	// A sync that gets a slot at once runs even with a short budget.
+	require.NoError(t, s.Run(short, syncRequest(f, c), nil))
+	require.Equal(t, 1, fetched)
+	// One that had to wait for a slot retries instead of starting a fetch it cannot finish.
+	release := s.OccupySyncSlotsForTest()
+	time.AfterFunc(500*time.Millisecond, release)
+	err := s.Run(short, syncRequest(f, c), nil)
+	var syncErr *slackdirectoryconnections.SyncError
+	require.ErrorAs(t, err, &syncErr)
+	require.Equal(t, "sync_busy", syncErr.Code)
+	require.True(t, syncErr.Retryable)
+	require.Equal(t, 1, fetched)
+	require.NoError(t, s.Run(ctx, syncRequest(f, c), nil), "the refused attempt released its slot")
+	require.Equal(t, 2, fetched)
+}
