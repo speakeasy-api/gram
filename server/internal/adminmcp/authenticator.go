@@ -97,7 +97,7 @@ func (a *StaffAuthenticator) Authenticate(ctx context.Context, token string) (Pr
 	if !ok || staff == nil || staff.SessionID != browserSessionID || staff.OIDCSubject != subject.ID || staff.Email == "" {
 		return Principal{}, errors.New("staff identity does not match connection")
 	}
-	return Principal{Subject: claims.Subject, Email: staff.Email, ClientID: claims.ClientID, ConnectionID: session.ConnectionID, Scopes: session.Scopes}, nil
+	return Principal{Subject: claims.Subject, Email: staff.Email, ClientID: claims.ClientID, ConnectionID: session.ConnectionID, Scopes: session.Scopes, staff: staff}, nil
 }
 
 type postgresStaffAccessStore struct{ db *pgxpool.Pool }
