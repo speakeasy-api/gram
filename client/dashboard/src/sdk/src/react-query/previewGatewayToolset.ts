@@ -3,15 +3,13 @@
  */
 
 import {
-  MutationKey,
-  useMutation,
-  UseMutationResult,
+  InvalidateQueryFilters,
+  QueryClient,
+  useQuery,
+  UseQueryResult,
+  useSuspenseQuery,
+  UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { GramCore } from "../core.js";
-import { userSessionsPreviewGatewayToolset } from "../funcs/userSessionsPreviewGatewayToolset.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import { GramGatewayToolsetReview } from "../models/components/gramgatewaytoolsetreview.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -27,19 +25,26 @@ import {
   PreviewGatewayToolsetRequest,
   PreviewGatewayToolsetSecurity,
 } from "../models/operations/previewgatewaytoolset.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
-import { MutationHookOptions } from "./_types.js";
-
-export type PreviewGatewayToolsetMutationVariables = {
-  request: PreviewGatewayToolsetRequest;
-  security?: PreviewGatewayToolsetSecurity | undefined;
-  options?: RequestOptions;
+import {
+  QueryHookOptions,
+  SuspenseQueryHookOptions,
+  TupleToPrefixes,
+} from "./_types.js";
+import {
+  buildPreviewGatewayToolsetQuery,
+  prefetchPreviewGatewayToolset,
+  PreviewGatewayToolsetQueryData,
+  queryKeyPreviewGatewayToolset,
+} from "./previewGatewayToolset.core.js";
+export {
+  buildPreviewGatewayToolsetQuery,
+  prefetchPreviewGatewayToolset,
+  type PreviewGatewayToolsetQueryData,
+  queryKeyPreviewGatewayToolset,
 };
 
-export type PreviewGatewayToolsetMutationData = GramGatewayToolsetReview;
-
-export type PreviewGatewayToolsetMutationError =
+export type PreviewGatewayToolsetQueryError =
   | ServiceError
   | GramError
   | ResponseValidationError
@@ -56,62 +61,102 @@ export type PreviewGatewayToolsetMutationError =
  * @remarks
  * Read the complete currently permitted gateway inventory for an optional frozen connection. Does not execute tools. Unavailable members prevent approval.
  */
-export function usePreviewGatewayToolsetMutation(
-  options?: MutationHookOptions<
-    PreviewGatewayToolsetMutationData,
-    PreviewGatewayToolsetMutationError,
-    PreviewGatewayToolsetMutationVariables
+export function usePreviewGatewayToolset(
+  request: PreviewGatewayToolsetRequest,
+  security?: PreviewGatewayToolsetSecurity | undefined,
+  options?: QueryHookOptions<
+    PreviewGatewayToolsetQueryData,
+    PreviewGatewayToolsetQueryError
   >,
-): UseMutationResult<
-  PreviewGatewayToolsetMutationData,
-  PreviewGatewayToolsetMutationError,
-  PreviewGatewayToolsetMutationVariables
+): UseQueryResult<
+  PreviewGatewayToolsetQueryData,
+  PreviewGatewayToolsetQueryError
 > {
   const client = useGramContext();
-  return useMutation({
-    ...buildPreviewGatewayToolsetMutation(client, options),
+  return useQuery({
+    ...buildPreviewGatewayToolsetQuery(
+      client,
+      request,
+      security,
+      options,
+    ),
     ...options,
   });
 }
 
-export function mutationKeyPreviewGatewayToolset(): MutationKey {
-  return ["@gram/client", "userSessions", "previewGatewayToolset"];
-}
-
-export function buildPreviewGatewayToolsetMutation(
-  client$: GramCore,
-  hookOptions?: RequestOptions,
-): {
-  mutationKey: MutationKey;
-  mutationFn: (
-    variables: PreviewGatewayToolsetMutationVariables,
-  ) => Promise<PreviewGatewayToolsetMutationData>;
-} {
-  return {
-    mutationKey: mutationKeyPreviewGatewayToolset(),
-    mutationFn: function previewGatewayToolsetMutationFn({
+/**
+ * previewGatewayToolset userSessions
+ *
+ * @remarks
+ * Read the complete currently permitted gateway inventory for an optional frozen connection. Does not execute tools. Unavailable members prevent approval.
+ */
+export function usePreviewGatewayToolsetSuspense(
+  request: PreviewGatewayToolsetRequest,
+  security?: PreviewGatewayToolsetSecurity | undefined,
+  options?: SuspenseQueryHookOptions<
+    PreviewGatewayToolsetQueryData,
+    PreviewGatewayToolsetQueryError
+  >,
+): UseSuspenseQueryResult<
+  PreviewGatewayToolsetQueryData,
+  PreviewGatewayToolsetQueryError
+> {
+  const client = useGramContext();
+  return useSuspenseQuery({
+    ...buildPreviewGatewayToolsetQuery(
+      client,
       request,
       security,
       options,
-    }): Promise<PreviewGatewayToolsetMutationData> {
-      const mergedOptions = {
-        ...hookOptions,
-        ...options,
-        fetchOptions: {
-          ...hookOptions?.fetchOptions,
-          ...options?.fetchOptions,
-          signal: combineSignals(
-            hookOptions?.fetchOptions?.signal,
-            options?.fetchOptions?.signal,
-          ),
-        },
-      };
-      return unwrapAsync(userSessionsPreviewGatewayToolset(
-        client$,
-        request,
-        security,
-        mergedOptions,
-      ));
+    ),
+    ...options,
+  });
+}
+
+export function setPreviewGatewayToolsetData(
+  client: QueryClient,
+  queryKeyBase: [
+    parameters: {
+      metaMcpServerId: string;
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
     },
-  };
+  ],
+  data: PreviewGatewayToolsetQueryData,
+): PreviewGatewayToolsetQueryData | undefined {
+  const key = queryKeyPreviewGatewayToolset(...queryKeyBase);
+
+  return client.setQueryData<PreviewGatewayToolsetQueryData>(key, data);
+}
+
+export function invalidatePreviewGatewayToolset(
+  client: QueryClient,
+  queryKeyBase: TupleToPrefixes<
+    [parameters: {
+      metaMcpServerId: string;
+      gramSession?: string | undefined;
+      gramProject?: string | undefined;
+    }]
+  >,
+  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
+): Promise<void> {
+  return client.invalidateQueries({
+    ...filters,
+    queryKey: [
+      "@gram/client",
+      "userSessions",
+      "previewGatewayToolset",
+      ...queryKeyBase,
+    ],
+  });
+}
+
+export function invalidateAllPreviewGatewayToolset(
+  client: QueryClient,
+  filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
+): Promise<void> {
+  return client.invalidateQueries({
+    ...filters,
+    queryKey: ["@gram/client", "userSessions", "previewGatewayToolset"],
+  });
 }

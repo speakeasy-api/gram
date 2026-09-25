@@ -4400,7 +4400,7 @@ func ParseEndpoint(
 		userSessionsListFacetsProjectSlugInputFlag = userSessionsListFacetsFlags.String("project-slug-input", "", "")
 
 		userSessionsPreviewGatewayToolsetFlags                = flag.NewFlagSet("preview-gateway-toolset", flag.ExitOnError)
-		userSessionsPreviewGatewayToolsetBodyFlag             = userSessionsPreviewGatewayToolsetFlags.String("body", "REQUIRED", "")
+		userSessionsPreviewGatewayToolsetMetaMcpServerIDFlag  = userSessionsPreviewGatewayToolsetFlags.String("meta-mcp-server-id", "REQUIRED", "")
 		userSessionsPreviewGatewayToolsetSessionTokenFlag     = userSessionsPreviewGatewayToolsetFlags.String("session-token", "", "")
 		userSessionsPreviewGatewayToolsetProjectSlugInputFlag = userSessionsPreviewGatewayToolsetFlags.String("project-slug-input", "", "")
 
@@ -11019,7 +11019,7 @@ func ParseEndpoint(
 				data, err = usersessionsc.BuildListFacetsPayload(*userSessionsListFacetsSessionTokenFlag, *userSessionsListFacetsApikeyTokenFlag, *userSessionsListFacetsProjectSlugInputFlag)
 			case "preview-gateway-toolset":
 				endpoint = c.PreviewGatewayToolset()
-				data, err = usersessionsc.BuildPreviewGatewayToolsetPayload(*userSessionsPreviewGatewayToolsetBodyFlag, *userSessionsPreviewGatewayToolsetSessionTokenFlag, *userSessionsPreviewGatewayToolsetProjectSlugInputFlag)
+				data, err = usersessionsc.BuildPreviewGatewayToolsetPayload(*userSessionsPreviewGatewayToolsetMetaMcpServerIDFlag, *userSessionsPreviewGatewayToolsetSessionTokenFlag, *userSessionsPreviewGatewayToolsetProjectSlugInputFlag)
 			case "mint-frozen-gateway-session":
 				endpoint = c.MintFrozenGatewaySession()
 				data, err = usersessionsc.BuildMintFrozenGatewaySessionPayload(*userSessionsMintFrozenGatewaySessionBodyFlag, *userSessionsMintFrozenGatewaySessionSessionTokenFlag, *userSessionsMintFrozenGatewaySessionProjectSlugInputFlag)
@@ -29892,7 +29892,7 @@ func userSessionsListFacetsUsage() {
 func userSessionsPreviewGatewayToolsetUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] user-sessions preview-gateway-toolset", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -meta-mcp-server-id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
@@ -29902,13 +29902,13 @@ func userSessionsPreviewGatewayToolsetUsage() {
 	fmt.Fprintln(os.Stderr, `Read the complete currently permitted gateway inventory for an optional frozen connection. Does not execute tools. Unavailable members prevent approval.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -meta-mcp-server-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions preview-gateway-toolset --body '{\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions preview-gateway-toolset --meta-mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionsMintFrozenGatewaySessionUsage() {

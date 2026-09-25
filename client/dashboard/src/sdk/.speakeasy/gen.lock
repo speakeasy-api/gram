@@ -1424,7 +1424,6 @@ trackedFiles:
   src/models/components/pluginskilldistribution.ts: {}
   src/models/components/policybypassredemption.ts: {}
   src/models/components/prepareemarequestbody.ts: {}
-  src/models/components/previewgatewaytoolsetrequestbody.ts: {}
   src/models/components/previewspendrulerequestbody.ts: {}
   src/models/components/previewspendruleresult.ts: {}
   src/models/components/principalremotesessionbinding.ts: {}
@@ -3205,6 +3204,7 @@ trackedFiles:
   src/react-query/pluginsDownloadObservabilityPlugin.ts: {}
   src/react-query/pluginsDownloadPluginPackage.core.ts: {}
   src/react-query/pluginsDownloadPluginPackage.ts: {}
+  src/react-query/previewGatewayToolset.core.ts: {}
   src/react-query/previewGatewayToolset.ts: {}
   src/react-query/previewKillswitchOverlaps.ts: {}
   src/react-query/probeRemoteMcpURL.ts: {}
@@ -9791,6 +9791,9 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   previewGatewayToolset:
     speakeasy-default-preview-gateway-toolset:
+      parameters:
+        query:
+          meta_mcp_server_id: "43839d58-6d7b-49b6-9056-844911fa44fc"
       requestBody:
         application/json: {"meta_mcp_server_id": "43839d58-6d7b-49b6-9056-844911fa44fc"}
       responses:

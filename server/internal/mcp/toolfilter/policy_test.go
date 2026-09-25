@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 )
 
 func TestSessionPolicyLegacyUnrestricted(t *testing.T) {

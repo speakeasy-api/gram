@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { usePreviewGatewayToolsetMutation } from "@gram/client/react-query/previewGatewayToolset.js";
+import { useMutation } from "@tanstack/react-query";
+import { useSdkClient } from "@/contexts/Sdk";
 import type { GramGatewayToolsetReview } from "@gram/client/models/components/gramgatewaytoolsetreview.js";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -31,7 +32,10 @@ export function GatewayFrozenToolset({
   useEffect(() => {
     setReview(undefined);
   }, [approved]);
-  const preview = usePreviewGatewayToolsetMutation({
+  const client = useSdkClient();
+  const preview = useMutation({
+    mutationFn: () =>
+      client.userSessions.previewGatewayToolset({ metaMcpServerId: gatewayId }),
     throwOnError: false,
     onSuccess: (next) => {
       setReview(next);
@@ -80,13 +84,7 @@ export function GatewayFrozenToolset({
             disabled={!enabled || preview.isPending || pending}
             onClick={() => {
               setReview(undefined);
-              preview.mutate({
-                request: {
-                  previewGatewayToolsetRequestBody: {
-                    metaMcpServerId: gatewayId,
-                  },
-                },
-              });
+              preview.mutate();
             }}
           >
             <Button.Text>
@@ -181,14 +179,14 @@ export function GatewayFrozenToolset({
                         <div>
                           <Text className="text-xs">Previously approved</Text>
                           <pre className="overflow-auto text-xs">
-                            {JSON.stringify(old.definition, null, 2)}
+                            {old.definition}
                           </pre>
                         </div>
                       )}
                       <div>
                         <Text className="text-xs">Current</Text>
                         <pre className="overflow-auto text-xs">
-                          {JSON.stringify(tool.definition, null, 2)}
+                          {tool.definition}
                         </pre>
                       </div>
                     </div>

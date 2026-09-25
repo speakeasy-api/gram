@@ -232,3 +232,5 @@ The seeded gateway uses Progressive discovery. With the seeded gateway discovery
 ### Frozen toolsets
 
 Open **Frozen Toolset Demo → Inspect** with the rollout enabled. Its hosted members provide a complete review without external accounts. Review the definitions, select tools, and choose **Freeze tools and reconnect**. Both discovery modes show only that connection's approved definitions. **Review changes** compares the current definitions with the approved ones; **Use live tools and reconnect** starts a live connection.
+
+Browser verification: `[x]` (local, 2026-09-25). Direct shows 14 member tools; Progressive shows four wrappers. Freezing one tool narrows Direct to one, and returning to live restores 14. See check 24 in `verify.md`.

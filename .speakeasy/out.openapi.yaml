@@ -71182,10 +71182,19 @@ paths:
       x-speakeasy-react-hook:
         name: MintFrozenGatewaySession
   /rpc/userSessions.previewGatewayToolset:
-    post:
+    get:
       description: Read the complete currently permitted gateway inventory for an optional frozen connection. Does not execute tools. Unavailable members prevent approval.
       operationId: previewGatewayToolset
       parameters:
+        - allowEmptyValue: true
+          description: The gateway to review.
+          in: query
+          name: meta_mcp_server_id
+          required: true
+          schema:
+            description: The gateway to review.
+            format: uuid
+            type: string
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -71200,12 +71209,6 @@ paths:
           schema:
             description: project header
             type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PreviewGatewayToolsetRequestBody'
-        required: true
       responses:
         "200":
           content:
@@ -80258,7 +80261,8 @@ components:
       type: object
       properties:
         definition:
-          description: Full MCP tool definition.
+          type: string
+          description: Full MCP tool definition as formatted JSON text, preserving exact schema numbers for human review.
         fingerprint:
           type: string
           description: Fingerprint of the full definition and routing identity.
@@ -88969,15 +88973,6 @@ components:
         - user_session_issuer_id
         - remote_session_issuer_id
         - resource
-    PreviewGatewayToolsetRequestBody:
-      type: object
-      properties:
-        meta_mcp_server_id:
-          type: string
-          description: The gateway to review.
-          format: uuid
-      required:
-        - meta_mcp_server_id
     PreviewSpendRuleRequestBody:
       type: object
       properties:

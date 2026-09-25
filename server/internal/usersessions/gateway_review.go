@@ -1,10 +1,13 @@
 package usersessions
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/google/uuid"
+
 	gen "github.com/speakeasy-api/gram/server/gen/user_sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -52,11 +55,11 @@ func (s *Service) PreviewGatewayToolset(ctx context.Context, payload *gen.Previe
 	}
 	tools := make([]*gen.GatewayReviewedTool, 0, len(inventory.Tools))
 	for _, tool := range inventory.Tools {
-		var definition any
-		if err := json.Unmarshal(tool.Definition, &definition); err != nil {
+		var definition bytes.Buffer
+		if err := json.Indent(&definition, tool.Definition, "", "  "); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "invalid reviewed definition")
 		}
-		tools = append(tools, &gen.GatewayReviewedTool{Name: tool.Name, Fingerprint: tool.Fingerprint, Definition: definition})
+		tools = append(tools, &gen.GatewayReviewedTool{Name: tool.Name, Fingerprint: tool.Fingerprint, Definition: definition.String()})
 	}
 	return &gen.GatewayToolsetReview{Fingerprint: fingerprint, Tools: tools}, nil
 }

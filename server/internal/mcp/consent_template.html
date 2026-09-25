@@ -675,7 +675,7 @@
             <button
               type="submit"
               name="action"
-              value="approve"
+              value="{{if and .GatewayReview .GatewayReview.Frozen}}approve_frozen{{else}}approve{{end}}"
               id="consent-approve-button"
               data-self-label="Give access"
               data-agent-label="Authorize agent"

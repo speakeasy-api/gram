@@ -14,13 +14,6 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// PreviewGatewayToolsetRequestBody is the type of the "userSessions" service
-// "previewGatewayToolset" endpoint HTTP request body.
-type PreviewGatewayToolsetRequestBody struct {
-	// The gateway to review.
-	MetaMcpServerID string `form:"meta_mcp_server_id" json:"meta_mcp_server_id" xml:"meta_mcp_server_id"`
-}
-
 // MintFrozenGatewaySessionRequestBody is the type of the "userSessions"
 // service "mintFrozenGatewaySession" endpoint HTTP request body.
 type MintFrozenGatewaySessionRequestBody struct {
@@ -1390,8 +1383,9 @@ type GatewayReviewedToolResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// Fingerprint of the full definition and routing identity.
 	Fingerprint *string `form:"fingerprint,omitempty" json:"fingerprint,omitempty" xml:"fingerprint,omitempty"`
-	// Full MCP tool definition.
-	Definition any `form:"definition,omitempty" json:"definition,omitempty" xml:"definition,omitempty"`
+	// Full MCP tool definition as formatted JSON text, preserving exact schema
+	// numbers for human review.
+	Definition *string `form:"definition,omitempty" json:"definition,omitempty" xml:"definition,omitempty"`
 }
 
 // FrozenGatewayReviewRequestBody is used to define fields on request body
@@ -1401,16 +1395,6 @@ type FrozenGatewayReviewRequestBody struct {
 	Fingerprint string `form:"fingerprint" json:"fingerprint" xml:"fingerprint"`
 	// Qualified tool names approved for this connection. Empty means no tools.
 	Tools []string `form:"tools" json:"tools" xml:"tools"`
-}
-
-// NewPreviewGatewayToolsetRequestBody builds the HTTP request body from the
-// payload of the "previewGatewayToolset" endpoint of the "userSessions"
-// service.
-func NewPreviewGatewayToolsetRequestBody(p *usersessions.PreviewGatewayToolsetPayload) *PreviewGatewayToolsetRequestBody {
-	body := &PreviewGatewayToolsetRequestBody{
-		MetaMcpServerID: p.MetaMcpServerID,
-	}
-	return body
 }
 
 // NewMintFrozenGatewaySessionRequestBody builds the HTTP request body from the

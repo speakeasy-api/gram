@@ -34,8 +34,9 @@ type GatewayReviewedToolView struct {
 	Name *string
 	// Fingerprint of the full definition and routing identity.
 	Fingerprint *string
-	// Full MCP tool definition.
-	Definition any
+	// Full MCP tool definition as formatted JSON text, preserving exact schema
+	// numbers for human review.
+	Definition *string
 }
 
 var (

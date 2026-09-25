@@ -5,11 +5,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 
 	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -40,6 +43,9 @@ func NewFrozenTool(name string, memberID uuid.UUID, routing string, definition j
 	decoder.UseNumber()
 	if err := decoder.Decode(&decoded); err != nil {
 		return FrozenTool{}, fmt.Errorf("decode tool definition: %w", err)
+	}
+	if err := decoder.Decode(new(json.RawMessage)); !errors.Is(err, io.EOF) {
+		return FrozenTool{}, fmt.Errorf("tool definition carries trailing data")
 	}
 	if decoded == nil || name == "" || memberID == uuid.Nil || routing == "" {
 		return FrozenTool{}, fmt.Errorf("incomplete frozen tool")
@@ -91,6 +97,9 @@ func (f *FrozenToolset) Fingerprint() (string, error) {
 
 // Select rejects a stale review before applying the user's exact selection.
 func (f *FrozenToolset) Select(fingerprint string, names []string) (*FrozenToolset, error) {
+	if len(names) > 10000 {
+		return nil, fmt.Errorf("too many reviewed tools")
+	}
 	current, err := f.Fingerprint()
 	if err != nil {
 		return nil, err

@@ -91,7 +91,8 @@ var _ = Service("userSessions", func() {
 		})
 		Result(GatewayToolsetReview)
 		HTTP(func() {
-			POST("/rpc/userSessions.previewGatewayToolset")
+			GET("/rpc/userSessions.previewGatewayToolset")
+			Param("meta_mcp_server_id")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
@@ -360,7 +361,7 @@ var FrozenGatewayReview = Type("FrozenGatewayReview", func() {
 var GatewayReviewedTool = Type("GatewayReviewedTool", func() {
 	Attribute("name", String, "Qualified tool name.")
 	Attribute("fingerprint", String, "Fingerprint of the full definition and routing identity.")
-	Attribute("definition", Any, "Full MCP tool definition.")
+	Attribute("definition", String, "Full MCP tool definition as formatted JSON text, preserving exact schema numbers for human review.")
 	Required("name", "fingerprint", "definition")
 })
 var GatewayToolsetReview = ResultType("application/vnd.gram.gateway-toolset-review", func() {

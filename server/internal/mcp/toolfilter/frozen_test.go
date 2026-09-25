@@ -2,9 +2,10 @@ package toolfilter
 
 import (
 	"encoding/json"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestFrozenDefinitionsCanonicalAndComplete(t *testing.T) {
@@ -70,4 +71,15 @@ func TestFrozenPolicyVersionsAndFingerprints(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ParseSessionPolicy(oldVersion)
 	require.ErrorContains(t, err, "version 2")
+}
+
+func TestFrozenDefinitionRejectsMalformedAndTrailingJSON(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{`null`, `[]`, `{} {}`, `{} trailing`} {
+		_, err := NewFrozenTool("member--read", uuid.New(), "route", json.RawMessage(raw))
+		require.Error(t, err, raw)
+	}
+	inventory := &FrozenToolset{Tools: []FrozenTool{}}
+	_, err := inventory.Select("unused", make([]string, 10001))
+	require.ErrorContains(t, err, "too many reviewed tools")
 }

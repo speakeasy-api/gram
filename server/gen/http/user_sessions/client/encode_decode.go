@@ -522,7 +522,7 @@ func DecodeListFacetsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 // "previewGatewayToolset" endpoint
 func (c *Client) BuildPreviewGatewayToolsetRequest(ctx context.Context, v any) (*http.Request, error) {
 	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PreviewGatewayToolsetUserSessionsPath()}
-	req, err := http.NewRequest("POST", u.String(), nil)
+	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("userSessions", "previewGatewayToolset", u.String(), err)
 	}
@@ -549,10 +549,9 @@ func EncodePreviewGatewayToolsetRequest(encoder func(*http.Request) goahttp.Enco
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		body := NewPreviewGatewayToolsetRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("userSessions", "previewGatewayToolset", err)
-		}
+		values := req.URL.Query()
+		values.Add("meta_mcp_server_id", p.MetaMcpServerID)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

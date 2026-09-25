@@ -78,8 +78,9 @@ type GatewayReviewedTool struct {
 	Name string
 	// Fingerprint of the full definition and routing identity.
 	Fingerprint string
-	// Full MCP tool definition.
-	Definition any
+	// Full MCP tool definition as formatted JSON text, preserving exact schema
+	// numbers for human review.
+	Definition string
 }
 
 // GatewayToolsetReview is the result type of the userSessions service
@@ -340,7 +341,7 @@ func transformUsersessionsviewsGatewayReviewedToolViewToGatewayReviewedTool(v *u
 	res := &GatewayReviewedTool{
 		Name:        *v.Name,
 		Fingerprint: *v.Fingerprint,
-		Definition:  v.Definition,
+		Definition:  *v.Definition,
 	}
 
 	return res
@@ -353,7 +354,7 @@ func transformGatewayReviewedToolToUsersessionsviewsGatewayReviewedToolView(v *G
 	res := &usersessionsviews.GatewayReviewedToolView{
 		Name:        &v.Name,
 		Fingerprint: &v.Fingerprint,
-		Definition:  v.Definition,
+		Definition:  &v.Definition,
 	}
 
 	return res

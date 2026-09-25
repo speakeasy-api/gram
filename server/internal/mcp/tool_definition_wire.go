@@ -13,6 +13,9 @@ func (t *toolListEntry) UnmarshalJSON(raw []byte) error {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		return fmt.Errorf("decode tool: %w", err)
 	}
+	if decoded.Name == "" {
+		return fmt.Errorf("tool definition requires a name")
+	}
 	*t = toolListEntry(decoded)
 	t.rawDefinition = append(json.RawMessage(nil), raw...)
 	return nil
@@ -29,6 +32,9 @@ func (t toolListEntry) MarshalJSON() ([]byte, error) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(t.rawDefinition, &fields); err != nil {
 		return nil, fmt.Errorf("decode full tool: %w", err)
+	}
+	if fields == nil {
+		return nil, fmt.Errorf("tool definition must be an object")
 	}
 	name, err := json.Marshal(t.Name)
 	if err != nil {

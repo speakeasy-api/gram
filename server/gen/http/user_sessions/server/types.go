@@ -13,13 +13,6 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// PreviewGatewayToolsetRequestBody is the type of the "userSessions" service
-// "previewGatewayToolset" endpoint HTTP request body.
-type PreviewGatewayToolsetRequestBody struct {
-	// The gateway to review.
-	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
-}
-
 // MintFrozenGatewaySessionRequestBody is the type of the "userSessions"
 // service "mintFrozenGatewaySession" endpoint HTTP request body.
 type MintFrozenGatewaySessionRequestBody struct {
@@ -1389,8 +1382,9 @@ type GatewayReviewedToolResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// Fingerprint of the full definition and routing identity.
 	Fingerprint string `form:"fingerprint" json:"fingerprint" xml:"fingerprint"`
-	// Full MCP tool definition.
-	Definition any `form:"definition" json:"definition" xml:"definition"`
+	// Full MCP tool definition as formatted JSON text, preserving exact schema
+	// numbers for human review.
+	Definition string `form:"definition" json:"definition" xml:"definition"`
 }
 
 // FrozenGatewayReviewRequestBody is used to define fields on request body
@@ -2413,10 +2407,9 @@ func NewListFacetsPayload(sessionToken *string, apikeyToken *string, projectSlug
 
 // NewPreviewGatewayToolsetPayload builds a userSessions service
 // previewGatewayToolset endpoint payload.
-func NewPreviewGatewayToolsetPayload(body *PreviewGatewayToolsetRequestBody, sessionToken *string, projectSlugInput *string) *usersessions.PreviewGatewayToolsetPayload {
-	v := &usersessions.PreviewGatewayToolsetPayload{
-		MetaMcpServerID: *body.MetaMcpServerID,
-	}
+func NewPreviewGatewayToolsetPayload(metaMcpServerID string, sessionToken *string, projectSlugInput *string) *usersessions.PreviewGatewayToolsetPayload {
+	v := &usersessions.PreviewGatewayToolsetPayload{}
+	v.MetaMcpServerID = metaMcpServerID
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -2462,18 +2455,6 @@ func NewRevokeUserSessionPayload(id string, sessionToken *string, apikeyToken *s
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
-}
-
-// ValidatePreviewGatewayToolsetRequestBody runs the validations defined on
-// PreviewGatewayToolsetRequestBody
-func ValidatePreviewGatewayToolsetRequestBody(body *PreviewGatewayToolsetRequestBody) (err error) {
-	if body.MetaMcpServerID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("meta_mcp_server_id", "body"))
-	}
-	if body.MetaMcpServerID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
-	}
-	return
 }
 
 // ValidateMintFrozenGatewaySessionRequestBody runs the validations defined on

@@ -58,6 +58,17 @@
   if (form) {
     var button = form.querySelector('button[type="submit"]');
     var submitted = false;
+    var frozenInput = document.querySelector('input[name="gateway_freeze"]');
+    function syncFrozenAction() {
+      if (!button || button.getAttribute("data-agent-selected") === "true")
+        return;
+      button.value =
+        frozenInput && frozenInput.checked && !frozenInput.disabled
+          ? "approve_frozen"
+          : "approve";
+    }
+    if (frozenInput) frozenInput.addEventListener("change", syncFrozenAction);
+    syncFrozenAction();
     var agentInputs = document.querySelectorAll("input[data-agent-select]");
     var agentPolicy = document.querySelector("[data-agent-policy]");
     var agentPolicyName = document.querySelector("[data-agent-policy-name]");
@@ -396,6 +407,7 @@
             authorizingAgent ? "true" : "false",
           );
           button.value = authorizingAgent ? "approve_agent" : "approve";
+          syncFrozenAction();
           button.disabled = authorizingAgent
             ? true
             : button.getAttribute("data-consent-self-ready") !== "true";

@@ -1032,9 +1032,13 @@ The staff-managed `gateway_discovery_modes` product feature enables new gateway 
 
 Platform MCP's `get_mcp_connection_settings` includes a gateway's discovery mode. During preview, mode changes use the dashboard or management API. The existing Platform MCP address and network mutations remain limited to those settings; an agent-facing mode mutation is deferred until it has its own confirmation and concurrency contract.
 
+## Gateway frozen toolsets
+
 Gateway frozen-toolset preview and issuance require `mcp:connect` on the gateway in the selected project. A frozen connection continues to apply current member and tool permissions.
 
 | Gateway operation                    | Required permission                                 | Resource                     |
 | ------------------------------------ | --------------------------------------------------- | ---------------------------- |
 | `userSessions.previewGatewayToolset` | `mcp:connect` and each member’s current permissions | Gateway and admitted members |
 | `userSessions.mintFrozenGateway`     | `mcp:connect` and a fresh, complete tool review     | Gateway and admitted members |
+
+Frozen review and session minting are intentionally human approval flows in consent and Inspect. Platform MCP cannot approve its own tools or mint a human connection; these endpoints are not exposed as agent tools.

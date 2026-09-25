@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	orgusersgen "github.com/speakeasy-api/gram/server/gen/organization_user_session_issuers"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_session_issuers"
@@ -22,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
-	"github.com/stretchr/testify/require"
 )
 
 func TestIssuerLifecycle_RotationAdoptsEMABoundReplacement(t *testing.T) {

@@ -6,11 +6,12 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	"github.com/stretchr/testify/require"
 )
 
 func TestConsentGatewayModeChoices(t *testing.T) {
@@ -58,4 +59,13 @@ func TestFrozenGrantNamespaceSeparatesModeOnlyReaders(t *testing.T) {
 	require.Equal(t, "frozenGatewayUserSessionGrant:"+uuid.Nil.String()+":"+code, userSessionGrantCacheKey(uuid.Nil, code, false))
 	require.NotEqual(t, "userSessionGrant:"+uuid.Nil.String()+":"+code, userSessionGrantCacheKey(uuid.Nil, code, false))
 	require.NotEqual(t, "gatewayUserSessionGrant:"+uuid.Nil.String()+":"+code, userSessionGrantCacheKey(uuid.Nil, code, false))
+}
+
+func TestGatewayConsentUsesQualifiedFrozenPicker(t *testing.T) {
+	t.Parallel()
+	service := &Service{}
+	endpoint := &ResolvedMcpEndpoint{MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, McpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	eligible, err := service.consentToolPickerEligible(t.Context(), endpoint)
+	require.NoError(t, err)
+	require.False(t, eligible, "member-local name selections cannot describe gateway tools")
 }

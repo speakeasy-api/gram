@@ -1,11 +1,13 @@
 import {
-  act,
   cleanup,
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 import {
   GatewayFrozenToolset,
   type FrozenGatewayConnection,
@@ -13,42 +15,44 @@ import {
 import type { GramGatewayToolsetReview } from "@gram/client/models/components/gramgatewaytoolsetreview.js";
 
 const state = vi.hoisted(() => ({
-  onSuccess: undefined as
-    | undefined
-    | ((review: GramGatewayToolsetReview) => void),
   enabled: true,
-  mutate: vi.fn(),
+  preview: vi.fn<() => Promise<GramGatewayToolsetReview>>(),
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => ({ status: state.enabled ? "enabled" : "disabled" }),
 }));
-vi.mock("@gram/client/react-query/previewGatewayToolset.js", () => ({
-  usePreviewGatewayToolsetMutation: ({
-    onSuccess,
-  }: {
-    onSuccess: (review: GramGatewayToolsetReview) => void;
-  }) => {
-    state.onSuccess = onSuccess;
-    return { mutate: state.mutate, isPending: false, isError: false };
-  },
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    userSessions: { previewGatewayToolset: state.preview },
+  }),
 }));
+function renderReview(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { mutations: { retry: false } },
+  });
+  return render(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 afterEach(cleanup);
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   state.enabled = true;
 });
 const tool = (name: string, fingerprint: string) => ({
   name,
   fingerprint,
-  definition: { name, inputSchema: { type: "object" } },
+  definition: `{ "name": "${name}", "inputSchema": { "type": "object", "maximum": 9007199254740993 } }`,
 });
-it("leaves changed and new tools unchecked while preserving unchanged approvals", () => {
+it("leaves changed and new tools unchecked while preserving unchanged approvals", async () => {
   const onApply = vi.fn<(value: FrozenGatewayConnection | undefined) => void>();
   const old = {
     fingerprint: "old",
     tools: [tool("same", "v1"), tool("changed", "v1"), tool("removed", "v1")],
   };
-  render(
+  renderReview(
     <GatewayFrozenToolset
       gatewayId="gateway"
       pending={false}
@@ -56,12 +60,14 @@ it("leaves changed and new tools unchecked while preserving unchanged approvals"
       onApply={onApply}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Review changes" }));
   const next = {
     fingerprint: "new",
     tools: [tool("same", "v1"), tool("changed", "v2"), tool("new", "v1")],
   };
-  act(() => state.onSuccess?.(next));
+  state.preview.mockResolvedValueOnce(next);
+  fireEvent.click(screen.getByRole("button", { name: "Review changes" }));
+  await screen.findByRole("checkbox", { name: "same" });
+  expect(state.preview).toHaveBeenCalledWith({ metaMcpServerId: "gateway" });
   expect(
     screen.getByRole("checkbox", { name: "same" }).getAttribute("aria-checked"),
   ).toBe("true");
@@ -74,6 +80,7 @@ it("leaves changed and new tools unchecked while preserving unchanged approvals"
     screen.getByRole("checkbox", { name: "new" }).getAttribute("aria-checked"),
   ).toBe("false");
   expect(screen.getByText("No longer available: removed")).toBeTruthy();
+  expect(screen.getAllByText(/9007199254740993/).length).toBeGreaterThan(0);
   fireEvent.click(
     screen.getByRole("button", { name: "Freeze 1 tool and reconnect" }),
   );
@@ -84,13 +91,13 @@ it("leaves changed and new tools unchecked while preserving unchanged approvals"
   );
   expect(onApply).toHaveBeenLastCalledWith({ review: next, names: [] });
 });
-it("clears an old review before a new preview and keeps an issued freeze visible with the flag off", () => {
+it("clears an old review before a new preview and keeps an issued freeze visible with the flag off", async () => {
   const approved = {
     review: { fingerprint: "old", tools: [tool("same", "v1")] },
     names: ["same"],
   };
   const onApply = vi.fn<(value: FrozenGatewayConnection | undefined) => void>();
-  const { rerender } = render(
+  const { rerender } = renderReview(
     <GatewayFrozenToolset
       gatewayId="gateway"
       pending={false}
@@ -98,11 +105,17 @@ it("clears an old review before a new preview and keeps an issued freeze visible
       onApply={onApply}
     />,
   );
-  act(() => state.onSuccess?.(approved.review));
+  state.preview.mockResolvedValueOnce(approved.review);
+  fireEvent.click(screen.getByRole("button", { name: "Review changes" }));
+  await screen.findByRole("button", { name: "Freeze 1 tool and reconnect" });
   expect(
     screen.getByRole("button", { name: "Freeze 1 tool and reconnect" }),
   ).toBeTruthy();
+  state.preview.mockRejectedValueOnce(new Error("Inventory unavailable"));
   fireEvent.click(screen.getByRole("button", { name: "Review changes" }));
+  await waitFor(() =>
+    expect(screen.getByRole("alert").textContent).toBe("Inventory unavailable"),
+  );
   expect(
     screen.queryByRole("button", { name: "Freeze 1 tool and reconnect" }),
   ).toBeNull();

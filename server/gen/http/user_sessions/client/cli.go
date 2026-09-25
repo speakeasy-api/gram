@@ -143,15 +143,12 @@ func BuildListFacetsPayload(userSessionsListFacetsSessionToken string, userSessi
 
 // BuildPreviewGatewayToolsetPayload builds the payload for the userSessions
 // previewGatewayToolset endpoint from CLI flags.
-func BuildPreviewGatewayToolsetPayload(userSessionsPreviewGatewayToolsetBody string, userSessionsPreviewGatewayToolsetSessionToken string, userSessionsPreviewGatewayToolsetProjectSlugInput string) (*usersessions.PreviewGatewayToolsetPayload, error) {
+func BuildPreviewGatewayToolsetPayload(userSessionsPreviewGatewayToolsetMetaMcpServerID string, userSessionsPreviewGatewayToolsetSessionToken string, userSessionsPreviewGatewayToolsetProjectSlugInput string) (*usersessions.PreviewGatewayToolsetPayload, error) {
 	var err error
-	var body PreviewGatewayToolsetRequestBody
+	var metaMcpServerID string
 	{
-		err = json.Unmarshal([]byte(userSessionsPreviewGatewayToolsetBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", body.MetaMcpServerID, goa.FormatUUID))
+		metaMcpServerID = userSessionsPreviewGatewayToolsetMetaMcpServerID
+		err = goa.MergeErrors(err, goa.ValidateFormat("meta_mcp_server_id", metaMcpServerID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
@@ -168,9 +165,8 @@ func BuildPreviewGatewayToolsetPayload(userSessionsPreviewGatewayToolsetBody str
 			projectSlugInput = &userSessionsPreviewGatewayToolsetProjectSlugInput
 		}
 	}
-	v := &usersessions.PreviewGatewayToolsetPayload{
-		MetaMcpServerID: body.MetaMcpServerID,
-	}
+	v := &usersessions.PreviewGatewayToolsetPayload{}
+	v.MetaMcpServerID = metaMcpServerID
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
