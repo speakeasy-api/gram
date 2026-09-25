@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Run the opt-in worktree Stripe sandbox webhook listener"
 //MISE hide=true

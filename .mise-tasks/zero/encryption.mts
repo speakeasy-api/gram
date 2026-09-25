@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Setup Gram encryption keys for local development."
 //MISE hide=true

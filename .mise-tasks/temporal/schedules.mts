@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Pause or resume this worktree's recurring Temporal schedules"
 //MISE dir="{{ config_root }}"

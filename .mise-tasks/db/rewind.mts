@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Undo a series of database migrations "
 //MISE dir="{{ config_root }}/server"

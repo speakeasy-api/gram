@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+#!/usr/bin/env node
 
 //MISE description="Hold this worktree's site port while the stack is paused and wake it on the first browser hit"
 //MISE dir="{{ config_root }}"

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Set up VS Code / Cursor editor settings"
 
