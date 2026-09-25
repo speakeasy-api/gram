@@ -56,13 +56,13 @@ export function failOpenMissingFlags(telemetry: Telemetry): Telemetry {
 // would also match dev.ai.speakeasy.com and preview hosts.
 const PROD_HOSTS = new Set(["app.getgram.ai", "ai.speakeasy.com"]);
 
-function isProdHost(serverURL: string): boolean {
+export function isProdHost(serverURL: string): boolean {
   return PROD_HOSTS.has(new URL(serverURL).hostname);
 }
 
 // Gram's own hosts: getgram.ai, ai.speakeasy.com and their subdomains. Matched
 // on label boundaries so lookalikes such as mygetgram.ai do not qualify.
-function isGramHost(serverURL: string): boolean {
+export function isGramHost(serverURL: string): boolean {
   const host = new URL(serverURL).hostname;
   return ["getgram.ai", "ai.speakeasy.com"].some(
     (domain) => host === domain || host.endsWith(`.${domain}`),

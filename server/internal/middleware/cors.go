@@ -55,6 +55,8 @@ func CORSMiddleware(env string, serverURL string, platformOrigins []string, chat
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 				w.Header().Set("Access-Control-Allow-Methods", "GET")
 				w.Header().Del("Access-Control-Allow-Credentials")
+				// "*" does not depend on Origin; keep these cacheable as one entry.
+				w.Header().Del("Vary")
 			}
 
 			// Special CORS handling for chat sessions-enabled routes
@@ -76,13 +78,17 @@ func CORSMiddleware(env string, serverURL string, platformOrigins []string, chat
 }
 
 // allowedPlatformOrigin returns the request Origin when it is one of the
-// platform origins, marking the response as varying by Origin, and serverURL
-// otherwise.
+// platform origins and serverURL otherwise. With platform origins configured
+// the answer depends on Origin, so every response says so, fallbacks included:
+// a cache must not hand the server-URL answer to a platform-origin request.
 func allowedPlatformOrigin(w http.ResponseWriter, r *http.Request, serverURL string, platformOrigins []string) string {
+	if len(platformOrigins) == 0 {
+		return serverURL
+	}
+	w.Header().Add("Vary", "Origin")
 	origin := r.Header.Get("Origin")
 	if origin == "" || origin == serverURL || !slices.Contains(platformOrigins, origin) {
 		return serverURL
 	}
-	w.Header().Add("Vary", "Origin")
 	return origin
 }
