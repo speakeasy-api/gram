@@ -25,10 +25,11 @@ const (
 	directoryRoleMappingSourceGroup     = "group"
 	directoryRoleMappingSourceAttribute = "attribute"
 
-	// maxDirectoryAttributeOptionsPerKey caps the attribute keys offered as
-	// mapping sources. A key with more distinct values than this holds
-	// per-person data (emails, employee ids), so it is left out of the list.
-	// SetDirectoryRoleMapping still accepts any existing key and value.
+	// maxDirectoryAttributeOptionsPerKey keeps the option list usable: a key
+	// with more distinct values than this (emails, employee ids) is no use as
+	// a mapping source, so it is left out. It is not a privacy boundary; the
+	// admin-only scope on ListDirectoryRoleMappings is. SetDirectoryRoleMapping
+	// still accepts any existing key and value.
 	maxDirectoryAttributeOptionsPerKey = 100
 )
 
@@ -39,7 +40,8 @@ func (s *Service) ListDirectoryRoleMappings(ctx context.Context, _ *gen.ListDire
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	// Admin only: attribute values can carry personal directory data.
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(

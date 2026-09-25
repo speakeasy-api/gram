@@ -151,7 +151,7 @@ var _ = Service("access", func() {
 	Method("listDirectoryRoleMappings", func() {
 		Description("List the organization's directory groups and attribute values, and the roles mapped to them.")
 		Security(security.ByKey, func() {
-			Scope("consumer")
+			Scope("producer")
 		})
 		Security(security.Session)
 

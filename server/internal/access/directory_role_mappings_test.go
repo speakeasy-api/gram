@@ -103,6 +103,17 @@ func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	require.Equal(t, code, oopsErr.Code)
 }
 
+func TestService_ListDirectoryRoleMappings_ForbiddenWithOrgReadOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx := testAccessAuthContext(t, ctx)
+	ctx = withRBACGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgRead, Selector: authz.NewSelector(authz.ScopeOrgRead, authCtx.ActiveOrganizationID)})
+
+	_, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
 func TestService_SetDirectoryRoleMapping_GroupCreatesAndReplaces(t *testing.T) {
 	t.Parallel()
 

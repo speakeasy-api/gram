@@ -307,7 +307,7 @@ func NewListDirectoryRoleMappingsEndpoint(s Service, authAPIKeyFn security.AuthA
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
 			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
-			RequiredScopes: []string{"consumer"},
+			RequiredScopes: []string{"producer"},
 		}
 		var key string
 		if p.ApikeyToken != nil {
