@@ -196,6 +196,26 @@ describe("AuthProvider organization telemetry group", () => {
     expect(registeredOrgGroups()).toEqual([["organization", ORG.slug, {}]]);
   });
 
+  it.each(["/setup", "/test-org/setup?task=enable-logging"])(
+    "keeps pending setup session behind the loading gate at %s",
+    (destination) => {
+      mocks.sessionData.mockReturnValue({
+        session: null,
+        error: null,
+        status: "pending",
+      });
+
+      renderGate(destination);
+
+      expect(screen.getByRole("heading", { name: "Loading…" })).toBeTruthy();
+      expect(screen.queryByTestId("app")).toBeNull();
+      expect(screen.queryByTestId("session")).toBeNull();
+      expect(screen.queryByTestId("book-demo")).toBeNull();
+      expect(screen.queryByTestId("switch-org")).toBeNull();
+      expect(screen.getByTestId("location").textContent).toBe(destination);
+    },
+  );
+
   it("registers nothing while the session is still loading", () => {
     mocks.sessionData.mockReturnValue({
       session: null,

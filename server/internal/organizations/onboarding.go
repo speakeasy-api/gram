@@ -15,11 +15,51 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func onboardingPresets() []*gen.AdminOnboardingPreset {
-	return []*gen.AdminOnboardingPreset{
-		{Key: "gateway", VisibleTaskKeys: []string{"create-marketplace", "distribute-servers"}},
-		{Key: "security", VisibleTaskKeys: []string{"identity-provider", "create-marketplace", "enable-logging", "anthropic-observability", "instrument-agents", "additional-agent-config", "confirm-traffic", "anthropic-admin-controls", "configure-policies"}},
+// onboardingPreset is a named task selection. The onboarding survey resolves
+// to one, and staff can apply one from the admin dashboard.
+type onboardingPreset struct {
+	Key   string
+	Title string
+	// TaskKeys are setupTaskCatalog keys; the wizard walks them in catalog order.
+	TaskKeys []string
+}
+
+// onboardingPresets is the only list of presets. Adding an entry here is all a
+// new preset needs: the admin editor, the Admin API, and submitOnboardingSurvey
+// all read from it.
+var onboardingPresets = []onboardingPreset{
+	{Key: "gateway", Title: "Gateway", TaskKeys: []string{"create-marketplace", "distribute-servers"}},
+	{Key: "security", Title: "Security", TaskKeys: []string{"identity-provider", "create-marketplace", "enable-logging", "anthropic-observability", "instrument-agents", "additional-agent-config", "confirm-traffic", "anthropic-admin-controls", "configure-policies"}},
+}
+
+func onboardingPresetByKey(key string) *onboardingPreset {
+	for i := range onboardingPresets {
+		if onboardingPresets[i].Key == key {
+			return &onboardingPresets[i]
+		}
 	}
+	return nil
+}
+
+// defaultPlaybookForUseCase returns the preset an onboarding survey use case
+// starts from.
+// ponytail: use cases are 1:1 with preset keys until use cases get their own
+// catalog; then this becomes that catalog's default-playbook lookup.
+func defaultPlaybookForUseCase(useCase string) *onboardingPreset {
+	return onboardingPresetByKey(useCase)
+}
+
+// IsOnboardingPreset reports whether key names a preset.
+func IsOnboardingPreset(key string) bool {
+	return onboardingPresetByKey(key) != nil
+}
+
+func adminOnboardingPresets() []*gen.AdminOnboardingPreset {
+	presets := make([]*gen.AdminOnboardingPreset, 0, len(onboardingPresets))
+	for _, preset := range onboardingPresets {
+		presets = append(presets, &gen.AdminOnboardingPreset{Key: preset.Key, Title: preset.Title, VisibleTaskKeys: slices.Clone(preset.TaskKeys)})
+	}
+	return presets
 }
 
 // LoadOnboardingConfiguration reads effective selection in one database snapshot.
@@ -46,7 +86,7 @@ func LoadOnboardingConfiguration(ctx context.Context, db repo.DBTX, organization
 		}
 		tasks = append(tasks, &gen.AdminOnboardingTask{Key: task.Key, Title: task.Title, Description: task.Description, Hidden: value})
 	}
-	return &gen.AdminOnboardingConfiguration{OrganizationID: organizationID, Preset: conv.FromPGText[string](rows[0].OnboardingPreset), Tasks: tasks, Presets: onboardingPresets()}, nil
+	return &gen.AdminOnboardingConfiguration{OrganizationID: organizationID, Preset: conv.FromPGText[string](rows[0].OnboardingPreset), Tasks: tasks, Presets: adminOnboardingPresets()}, nil
 }
 
 // SaveOnboardingConfiguration changes selection only. Its caller authenticates
@@ -55,7 +95,7 @@ func SaveOnboardingConfiguration(ctx context.Context, db *pgxpool.Pool, logger *
 	if visibleTaskKeys == nil {
 		return nil, oops.E(oops.CodeBadRequest, nil, "visible_task_keys must be an explicit array")
 	}
-	if preset != nil && *preset != "gateway" && *preset != "security" {
+	if preset != nil && !IsOnboardingPreset(*preset) {
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid onboarding preset")
 	}
 	for _, key := range visibleTaskKeys {

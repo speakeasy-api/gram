@@ -15,6 +15,7 @@ import { organizationsRemoveUser } from "../funcs/organizationsRemoveUser.js";
 import { organizationsRevokeInvite } from "../funcs/organizationsRevokeInvite.js";
 import { organizationsSendEnterpriseAdminOnboardingEmail } from "../funcs/organizationsSendEnterpriseAdminOnboardingEmail.js";
 import { organizationsSendInvite } from "../funcs/organizationsSendInvite.js";
+import { organizationsSubmitOnboardingSurvey } from "../funcs/organizationsSubmitOnboardingSurvey.js";
 import { organizationsUpdateInviteRole } from "../funcs/organizationsUpdateInviteRole.js";
 import { organizationsUpdateSetupTask } from "../funcs/organizationsUpdateSetupTask.js";
 import { organizationsVerifyOnboardingHooksSetup } from "../funcs/organizationsVerifyOnboardingHooksSetup.js";
@@ -82,6 +83,10 @@ import {
   SendInviteRequest,
   SendInviteSecurity,
 } from "../models/operations/sendinvite.js";
+import {
+  SubmitOnboardingSurveyRequest,
+  SubmitOnboardingSurveySecurity,
+} from "../models/operations/submitonboardingsurvey.js";
 import {
   UpdateInviteRoleRequest,
   UpdateInviteRoleSecurity,
@@ -337,6 +342,25 @@ export class Organizations extends ClientSDK {
     options?: RequestOptions,
   ): Promise<OrganizationInvitation> {
     return unwrapAsync(organizationsSendInvite(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * submitOnboardingSurvey organizations
+   *
+   * @remarks
+   * Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.
+   */
+  async submitOnboardingSurvey(
+    request: SubmitOnboardingSurveyRequest,
+    security?: SubmitOnboardingSurveySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListSetupTasksResult> {
+    return unwrapAsync(organizationsSubmitOnboardingSurvey(
       this,
       request,
       security,

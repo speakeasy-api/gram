@@ -43792,6 +43792,93 @@ paths:
             x-speakeasy-name-override: sendInvite
             x-speakeasy-react-hook:
                 name: SendInvite
+    /rpc/organizations.submitOnboardingSurvey:
+        post:
+            description: Record the onboarding survey result. The server picks the use case's default playbook, which decides the setup tasks the wizard walks; progress and assignments are kept.
+            operationId: submitOnboardingSurvey
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SubmitOnboardingSurveyRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSetupTasksResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: submitOnboardingSurvey organizations
+            tags:
+                - organizations
+            x-speakeasy-name-override: submitOnboardingSurvey
+            x-speakeasy-react-hook:
+                name: SubmitOnboardingSurvey
     /rpc/organizations.updateInviteRole:
         put:
             description: Change the role assigned to a pending WorkOS invitation.
@@ -77715,9 +77802,6 @@ components:
                 preset:
                     type: string
                     description: Absent for legacy organizations.
-                    enum:
-                        - gateway
-                        - security
                 presets:
                     type: array
                     items:
@@ -77735,15 +77819,15 @@ components:
             properties:
                 key:
                     type: string
-                    enum:
-                        - gateway
-                        - security
+                title:
+                    type: string
                 visible_task_keys:
                     type: array
                     items:
                         type: string
             required:
                 - key
+                - title
                 - visible_task_keys
         AdminOnboardingTask:
             type: object
@@ -100158,10 +100242,7 @@ components:
                     type: string
                 preset:
                     type: string
-                    description: Omit to preserve the saved preset. Null/reset is not supported.
-                    enum:
-                        - gateway
-                        - security
+                    description: A key from presets. Omit to preserve the saved preset. Null/reset is not supported.
                 visible_task_keys:
                     type: array
                     items:
@@ -102555,6 +102636,14 @@ components:
             required:
                 - id
                 - client_id
+        SubmitOnboardingSurveyRequestBody:
+            type: object
+            properties:
+                use_case:
+                    type: string
+                    description: Use case the survey answers resolved to.
+            required:
+                - use_case
         SubmitRiskBlockFeedbackRequestBody:
             type: object
             properties:

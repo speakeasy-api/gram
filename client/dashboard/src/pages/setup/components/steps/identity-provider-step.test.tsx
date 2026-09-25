@@ -6,7 +6,9 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
+import { JourneyStepsProvider } from "../journey-steps-provider";
+import { useJourneyView } from "../journey-steps";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityProviderStep } from "./identity-provider-step";
 import { toast } from "sonner";
@@ -54,19 +56,6 @@ vi.mock("@gram/client/react-query/generateWorkOSAdminPortalLink.js", () => ({
     },
   }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    setupTask: {
-      Link: ({
-        params,
-        children,
-      }: {
-        params: string[];
-        children: ReactNode;
-      }) => <a href={`/acme/setup/${params[0]}`}>{children}</a>,
-    },
-  }),
-}));
 vi.mock("@/components/ui/hooks/useConfig", () => ({
   useConfig: () => ({ theme: "light" }),
 }));
@@ -91,6 +80,60 @@ beforeEach(() => {
 });
 
 describe("IdentityProviderStep", () => {
+  it("keeps domain, SSO, and directory sync as nested wizard steps", () => {
+    onboardingStatus.current.data.domainVerified = false;
+    function Rail() {
+      const { steps, setActiveIndex } = useJourneyView();
+      return (
+        <nav aria-label="Identity steps">
+          {steps.map((step) => (
+            <button key={step.slug} onClick={() => setActiveIndex(step.index)}>
+              {step.title}
+            </button>
+          ))}
+        </nav>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={["/org/setup?task=idp"]}>
+        <JourneyStepsProvider>
+          <Rail />
+          <IdentityProviderStep onComplete={() => {}} />
+        </JourneyStepsProvider>
+      </MemoryRouter>,
+    );
+    const rail = screen.getByRole("navigation", { name: "Identity steps" });
+    expect(
+      within(rail)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Verify domain", "Single sign-on", "Directory sync"]);
+    expect(screen.getByRole("heading", { name: "Verify domain" })).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Single sign-on" }),
+    ).toBeNull();
+    fireEvent.click(
+      within(rail).getByRole("button", { name: "Single sign-on" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Single sign-on" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Connect" }).hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.click(
+      within(rail).getByRole("button", { name: "Directory sync" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Directory sync" }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Connect directory" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
   it("does not reopen the portal when directory sync is connected", () => {
     onboardingStatus.current.data.dsyncConfigured = true;
     const complete = vi.fn<() => void>();

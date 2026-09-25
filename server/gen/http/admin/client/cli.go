@@ -1140,15 +1140,10 @@ func BuildSetOrganizationOnboardingPayload(adminSetOrganizationOnboardingBody st
 	{
 		err = json.Unmarshal([]byte(adminSetOrganizationOnboardingBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"preset\": \"security\",\n      \"visible_task_keys\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"preset\": \"abc123\",\n      \"visible_task_keys\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.VisibleTaskKeys == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("visible_task_keys", "body"))
-		}
-		if body.Preset != nil {
-			if !(*body.Preset == "gateway" || *body.Preset == "security") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.preset", *body.Preset, []any{"gateway", "security"}))
-			}
 		}
 		if err != nil {
 			return nil, err
