@@ -5,6 +5,7 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import {
   KillswitchCapabilityKey,
@@ -24,9 +25,32 @@ export type KillswitchesListSecurity = {
   sessionHeaderGramSession: string;
 };
 
+/**
+ * Defaults to user; agent_id selects agent when omitted
+ */
+export const PrincipalKind = {
+  User: "user",
+  Agent: "agent",
+} as const;
+/**
+ * Defaults to user; agent_id selects agent when omitted
+ */
+export type PrincipalKind = ClosedEnum<typeof PrincipalKind>;
+
 export type KillswitchesListRequest = {
   capabilityKey?: KillswitchCapabilityKey | undefined;
+  /**
+   * Target user. Supply exactly one of user_id or agent_id.
+   */
   userId?: string | undefined;
+  /**
+   * Target registered agent, independent of its owner. Applies across all credential sessions in the organization.
+   */
+  agentId?: string | undefined;
+  /**
+   * Defaults to user; agent_id selects agent when omitted
+   */
+  principalKind?: PrincipalKind | undefined;
   status?: KillswitchListStatus | undefined;
   limit?: number | undefined;
   cursor?: string | undefined;
@@ -69,9 +93,15 @@ export function killswitchesListSecurityToJSON(
 }
 
 /** @internal */
+export const PrincipalKind$outboundSchema: z.ZodMiniEnum<typeof PrincipalKind> =
+  z.enum(PrincipalKind);
+
+/** @internal */
 export type KillswitchesListRequest$Outbound = {
   capability_key?: string | undefined;
   user_id?: string | undefined;
+  agent_id?: string | undefined;
+  principal_kind?: string | undefined;
   status?: string | undefined;
   limit?: number | undefined;
   cursor?: string | undefined;
@@ -86,6 +116,8 @@ export const KillswitchesListRequest$outboundSchema: z.ZodMiniType<
   z.object({
     capabilityKey: z.optional(KillswitchCapabilityKey$outboundSchema),
     userId: z.optional(z.string()),
+    agentId: z.optional(z.string()),
+    principalKind: z.optional(PrincipalKind$outboundSchema),
     status: z.optional(KillswitchListStatus$outboundSchema),
     limit: z.optional(z.int()),
     cursor: z.optional(z.string()),
@@ -95,6 +127,8 @@ export const KillswitchesListRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       capabilityKey: "capability_key",
       userId: "user_id",
+      agentId: "agent_id",
+      principalKind: "principal_kind",
       gramSession: "Gram-Session",
     });
   }),

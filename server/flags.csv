@@ -8,6 +8,7 @@ distinct_id,flag,enabled,variant
 72640a3e-93dd-5dbc-89b2-6b95bead0fac,risk-finding-analytics,true
 72640a3e-93dd-5dbc-89b2-6b95bead0fac,gram-risk-llm-analyzer,true,shadow
 org_gram_demo_workspace,gram-risk-watchdog,true
+org_gram_demo_workspace,agent-management,true
 org_gram_demo_workspace,risk-overview-from-clickhouse,true
 org_gram_demo_workspace,risk-list-from-clickhouse,true
 org_gram_demo_workspace,risk-finding-analytics,true

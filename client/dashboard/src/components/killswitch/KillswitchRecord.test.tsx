@@ -36,6 +36,9 @@ const mocks = vi.hoisted(() => ({
   liftProps: undefined as Record<string, unknown> | undefined,
   renderRealLift: false,
   subjectUserId: undefined as string | undefined,
+  subjectAgent: undefined as
+    | { id: string; name: string; canEdit: boolean }
+    | undefined,
   selectKillswitch: vi.fn(),
   close: vi.fn(),
 }));
@@ -75,7 +78,7 @@ vi.mock("@/routes", () => ({
 }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
-  useQueryClient: () => ({}),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: (...args: unknown[]) => {
@@ -169,6 +172,7 @@ afterEach(cleanup);
 
 beforeEach(() => {
   mocks.subjectUserId = undefined;
+  mocks.subjectAgent = undefined;
   mocks.selectKillswitch.mockReset();
   mocks.close.mockReset();
   mocks.detailError = undefined;
@@ -209,6 +213,7 @@ function activeDetail(overrides: Partial<Detail> = {}): Detail {
     id: "ks-1",
     userId: "user-1",
     capabilityKey: "mcp_tool_calls",
+    principalKind: "user",
     capabilityLabel: "MCP tool calls",
     version: 1,
     status: "active",
@@ -247,7 +252,12 @@ function RecordAtRoute() {
   return (
     <KillswitchRecord
       killswitchId={killswitchId}
-      subjectUserId={mocks.subjectUserId ?? mocks.detail?.userId ?? "user-1"}
+      subjectUserId={
+        mocks.subjectAgent
+          ? undefined
+          : (mocks.subjectUserId ?? mocks.detail?.userId ?? "user-1")
+      }
+      subjectAgent={mocks.subjectAgent}
       onSelectKillswitch={(id) => {
         mocks.selectKillswitch(id);
       }}
@@ -303,6 +313,7 @@ describe("KillswitchRecord", () => {
       id: "ks-1",
       userId: "deleted-user",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 2,
       status: "active",
@@ -360,6 +371,7 @@ describe("KillswitchRecord", () => {
       id: "ks-1",
       userId: "user-1",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 1,
       status: "active",
@@ -422,7 +434,10 @@ describe("KillswitchRecord", () => {
     expect(mocks.capabilityRequest).toEqual({ gramSession: "session" });
     expect(mocks.serverRequest).toEqual({ gramSession: "session" });
     expect(mocks.detailOptions).toEqual({ throwOnError: false });
-    expect(mocks.membersOptions).toEqual({ throwOnError: false });
+    expect(mocks.membersOptions).toEqual({
+      throwOnError: false,
+      enabled: true,
+    });
     expect(mocks.serverOptions).toEqual({ throwOnError: false });
     expect(mocks.capabilityOptions).toEqual({
       enabled: false,
@@ -1070,5 +1085,91 @@ describe("KillswitchRecord", () => {
     renderDetail();
     expect(screen.getByText("Killswitch unavailable")).not.toBeNull();
     expect(screen.getByText("read failed")).not.toBeNull();
+  });
+});
+
+describe("agent record authorization and attribution", () => {
+  it("closes an open editor when the agent becomes unavailable and rejects its retained submit callback", async () => {
+    mocks.detail = activeDetail({
+      principalKind: "agent",
+      agentId: "agent-1",
+      userId: undefined,
+    });
+    mocks.subjectAgent = {
+      id: "agent-1",
+      name: "Synthetic agent",
+      canEdit: true,
+    };
+    const view = renderDetail();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Edit killswitch" }),
+    );
+    expect(await screen.findByText("Edit dialog open")).toBeTruthy();
+    const submit = mocks.editorProps!.onSubmit as (
+      draft: Record<string, unknown>,
+      operationId: string,
+      version: number,
+    ) => Promise<unknown>;
+    mocks.subjectAgent = { ...mocks.subjectAgent, canEdit: false };
+    view.rerender(detailRoute());
+    expect(screen.queryByText("Edit dialog open")).toBeNull();
+    await expect(submit({}, "stale-edit", 1)).rejects.toThrow(
+      "can no longer be edited",
+    );
+    expect(mocks.edit).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Release restriction" }),
+    ).toBeTruthy();
+  });
+  it("renders agent recovery controls without a members query", async () => {
+    mocks.detail = activeDetail({
+      principalKind: "agent",
+      agentId: "agent-1",
+      userId: undefined,
+    });
+    mocks.subjectAgent = {
+      id: "agent-1",
+      name: "Synthetic agent",
+      canEdit: false,
+    };
+    renderDetail();
+    expect(await screen.findByText("Registered agent")).toBeTruthy();
+    expect(screen.getAllByText("Synthetic agent").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("button", { name: "Release restriction" }),
+    ).toBeTruthy();
+    expect(mocks.membersOptions).toMatchObject({ enabled: false });
+    expect(
+      screen.queryByRole("button", { name: "Edit killswitch" }),
+    ).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Release restriction" }),
+    );
+    await waitFor(() => expect(mocks.preview).toHaveBeenCalled());
+    expect(
+      mocks.preview.mock.lastCall?.[0].request.killswitchPreviewOverlapsRequest,
+    ).toMatchObject({ agentId: "agent-1" });
+    expect(
+      mocks.preview.mock.lastCall?.[0].request.killswitchPreviewOverlapsRequest
+        .userId,
+    ).toBeUndefined();
+  });
+  it.each([
+    { principalKind: "agent" as const, agentId: "another", userId: undefined },
+    { principalKind: "user" as const, userId: "agent-1", agentId: undefined },
+  ])("refuses a mismatched target %j", async (target) => {
+    mocks.detail = activeDetail(target);
+    mocks.subjectAgent = {
+      id: "agent-1",
+      name: "Synthetic agent",
+      canEdit: false,
+    };
+    renderDetail();
+    expect(
+      await screen.findByText("Killswitch belongs to someone else"),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Release restriction" }),
+    ).toBeNull();
   });
 });

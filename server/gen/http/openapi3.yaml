@@ -31228,6 +31228,92 @@ paths:
             x-speakeasy-name-override: validate
             x-speakeasy-react-hook:
                 name: ValidateAPIKey
+    /rpc/killswitches.batchAgentBadges:
+        post:
+            operationId: batchKillswitchAgentBadges
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/KillswitchBatchAgentBadgesRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/KillswitchBatchAgentBadgesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - session_header_Gram-Session: []
+            summary: batchAgentBadges killswitches
+            tags:
+                - killswitches
+            x-speakeasy-name-override: batchAgentBadges
+            x-speakeasy-react-hook:
+                name: BatchKillswitchAgentBadges
     /rpc/killswitches.batchUserBadges:
         post:
             operationId: batchKillswitchUserBadges
@@ -31689,9 +31775,28 @@ paths:
                         - mcp_tool_calls
                     type: string
                 - allowEmptyValue: true
+                  description: Target user. Supply exactly one of user_id or agent_id.
                   in: query
                   name: user_id
                   schema:
+                    description: Target user. Supply exactly one of user_id or agent_id.
+                    type: string
+                - allowEmptyValue: true
+                  description: Target registered agent, independent of its owner. Applies across all credential sessions in the organization.
+                  in: query
+                  name: agent_id
+                  schema:
+                    description: Target registered agent, independent of its owner. Applies across all credential sessions in the organization.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Defaults to user; agent_id selects agent when omitted
+                  in: query
+                  name: principal_kind
+                  schema:
+                    enum:
+                        - user
+                        - agent
                     type: string
                 - allowEmptyValue: true
                   in: query
@@ -88779,6 +88884,44 @@ components:
                 - scopes
                 - created_at
                 - updated_at
+        KillswitchAgentBadge:
+            type: object
+            properties:
+                affected:
+                    type: boolean
+                affected_now:
+                    type: boolean
+                agent_id:
+                    type: string
+                    format: uuid
+                scheduled:
+                    type: boolean
+            required:
+                - agent_id
+                - affected
+                - affected_now
+                - scheduled
+        KillswitchBatchAgentBadgesRequest:
+            type: object
+            properties:
+                agent_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    minItems: 1
+                    maxItems: 100
+            required:
+                - agent_ids
+        KillswitchBatchAgentBadgesResult:
+            type: object
+            properties:
+                badges:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/KillswitchAgentBadge'
+            required:
+                - badges
         KillswitchBatchUserBadgesRequest:
             type: object
             properties:
@@ -88834,6 +88977,10 @@ components:
         KillswitchCreateRequest:
             type: object
             properties:
+                agent_id:
+                    type: string
+                    description: Target registered agent, independent of its owner. Applies across all credential sessions in the organization.
+                    format: uuid
                 capability_key:
                     type: string
                     enum:
@@ -88853,6 +89000,7 @@ components:
                     $ref: '#/components/schemas/KillswitchScope'
                 user_id:
                     type: string
+                    description: Target user. Supply exactly one of user_id or agent_id.
             required:
                 - operation_id
                 - scope
@@ -88860,10 +89008,13 @@ components:
                 - external_note
                 - internal_note
                 - capability_key
-                - user_id
         KillswitchDetail:
             type: object
             properties:
+                agent_id:
+                    type: string
+                    description: Present only for registered-agent restrictions
+                    format: uuid
                 capability_key:
                     type: string
                     enum:
@@ -88884,6 +89035,11 @@ components:
                     format: uuid
                 internal_note:
                     type: string
+                principal_kind:
+                    type: string
+                    enum:
+                        - user
+                        - agent
                 schedule:
                     $ref: '#/components/schemas/KillswitchSchedule'
                 scope:
@@ -88897,6 +89053,7 @@ components:
                         - lifted
                 user_id:
                     type: string
+                    description: Present only for user restrictions
                 version:
                     type: integer
                     format: int64
@@ -88908,7 +89065,7 @@ components:
                 - id
                 - capability_key
                 - capability_label
-                - user_id
+                - principal_kind
                 - version
                 - status
                 - scope
@@ -89116,6 +89273,10 @@ components:
         KillswitchPreviewOverlapsRequest:
             type: object
             properties:
+                agent_id:
+                    type: string
+                    description: Target registered agent, independent of its owner. Applies across all credential sessions in the organization.
+                    format: uuid
                 capability_key:
                     type: string
                     enum:
@@ -89129,9 +89290,9 @@ components:
                     $ref: '#/components/schemas/KillswitchScope'
                 user_id:
                     type: string
+                    description: Target user. Supply exactly one of user_id or agent_id.
             required:
                 - capability_key
-                - user_id
                 - scope
                 - schedule
         KillswitchPreviewOverlapsResult:
@@ -89188,6 +89349,10 @@ components:
         KillswitchSummary:
             type: object
             properties:
+                agent_id:
+                    type: string
+                    description: Present only for registered-agent restrictions
+                    format: uuid
                 capability_key:
                     type: string
                     enum:
@@ -89197,6 +89362,11 @@ components:
                 id:
                     type: string
                     format: uuid
+                principal_kind:
+                    type: string
+                    enum:
+                        - user
+                        - agent
                 schedule:
                     $ref: '#/components/schemas/KillswitchSchedule'
                 scope:
@@ -89210,6 +89380,7 @@ components:
                         - lifted
                 user_id:
                     type: string
+                    description: Present only for user restrictions
                 version:
                     type: integer
                     format: int64
@@ -89217,7 +89388,7 @@ components:
                 - id
                 - capability_key
                 - capability_label
-                - user_id
+                - principal_kind
                 - version
                 - status
                 - scope
@@ -91718,6 +91889,10 @@ components:
                 id:
                     type: string
                     format: uuid
+                last_credential_used_at:
+                    type: string
+                    description: Latest recorded credential-session or API-key authentication for this agent at Gram in this organization. Recording is best-effort and updates are coalesced. Includes credentials since revoked or expired. Populated by agents.list for callers who can manage the agent's credentials, and in the read-only synthetic demo organization; absent otherwise or when no authentication was recorded. Not run, process, or tool-call activity.
+                    format: date-time
                 lifecycle:
                     type: string
                     enum:
@@ -108784,7 +108959,7 @@ components:
             in: header
 tags:
     - name: killswitches
-      description: Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.
+      description: Manage MCP tool-call killswitches for users and registered agents in the active organization. Requires an ordinary live organization-administrator session.
     - name: access
       description: Manage roles, team member access control, and authorization challenge events.
     - name: agent

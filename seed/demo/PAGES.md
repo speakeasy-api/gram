@@ -12,7 +12,7 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Page                                                           | Backing data                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Status |
 | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | Agent sessions list                                            | PG `chats` + org `rbac` feature (without it ShouldEnforce=false hides everything)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `[x]`  |
-| Agent management setup                                         | No seeded entity: management requires active organization membership, which shared demo visitors deliberately do not have; the page renders the disabled-state explanation instead                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `[~]`  |
+| Agent management setup                                         | Ten synthetic identities are browsable through Fleet; management still requires active membership, so the Agents setup page keeps its demo-disabled explanation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `[~]`  |
 | Chat detail sheet (transcript + per-turn cost + tool payloads) | PG `chat_messages` (`message_id`=prompt id, `tool_call_id`=call_demo_i_k) + CH api_request/tool_result rows; demo-org impersonation lift in chat.load                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `[~]`  |
 | Risk events / findings                                         | PG `risk_results` (~125, 13 rule types across 6 policies) mirrored 1:1 into CH `risk_findings`; 8 enabled `risk_policies`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `[x]`  |
 | Watchdog (risk signals)                                        | CH `risk_findings` only — needs `chat_source`/`team`/`user_email` for its App/Team/top-user groupings, and a policy-score spread for its severities                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `[~]`  |
@@ -33,10 +33,10 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 | Team page                                                      | PG `organization_user_relationships` + `users.workos_id` + role assignments (global_roles admin/member, skipped if absent)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `[~]`  |
 | Identities (roster + per-person pages)                         | PG memberships + `user_accounts` (3 personal, across two providers) + `mdm_devices` ×7 under one `device_integration_configs` row + `device_agent_syncs`; CH telemetry keyed by email (agent-metrics view) and by `user.id` (raw logs), plus `ai_scan_receipts` ×35 and `ai_detections` ×52 across six directory users and all three categories (harness, assistant, local_model) for per-person Shadow AI — one account-less address and one agent id so both kinds render; request rows carry `gen_ai.response.id` or the Chat requests tile reads 0; `gram.account_type` splits one person's chats and tool calls across team and personal so the Usage tab's account filter has both sides | `[~]`  |
 | Device coverage widgets (org Device agent page)                | PG `mdm_devices` ×7 spanning the coverage buckets — agent active, agent stale, no agent, unresolved email — plus `device_agent_syncs` for the four with a reporting agent                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `[~]`  |
-| Org home (activity, facepiles, challenges)                     | PG `audit_logs` (22 rows: 12 general, 1 quarantine, 9 Killswitch lifecycle) + CH `authz_challenges` (13 rows incl. api_key bucket)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `[~]`  |
-| Audit logs                                                     | PG `audit_logs`: 9 canonical Killswitch actions (activate ×6, change, deactivate, expire), plus the existing general/quarantine history                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `[~]`  |
-| Killswitches (identity Access tab)                             | PG `killswitch_prescriptions` ×6 current aggregates: Active ×3, Scheduled ×1, Lifted ×1, Expired ×1; selected/all scopes and one overlapping principal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `[~]`  |
-| Killswitch record and version history (identity Access tab)    | PG `killswitch_prescription_versions` ×8 + complete resource snapshots; changed A/B/C → A, lifted successor, expiry marker, notes, and matching Audit events                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `[~]`  |
+| Org home (activity, facepiles, challenges)                     | PG `audit_logs` (27 rows: 12 general, 1 trial change, 1 quarantine, 13 Killswitch lifecycle) + CH `authz_challenges` (13 rows incl. api_key bucket)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `[~]`  |
+| Audit logs                                                     | PG `audit_logs`: 13 canonical Killswitch actions (activate ×10, change, deactivate, expire), plus the existing general/trial-change/quarantine history                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `[~]`  |
+| Killswitches (identity Access tab and Fleet)                   | PG `killswitch_prescriptions` ×10 current aggregates: Active ×7, Scheduled ×1, Lifted ×1, Expired ×1; six user restrictions and four agent restrictions, with selected/all scopes and two overlapping principals                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `[~]`  |
+| Killswitch record and version history (user and agent targets) | PG `killswitch_prescription_versions` ×12 + complete resource snapshots; changed A/B/C → A, lifted successor, expiry marker, notes, and matching Audit events                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `[~]`  |
 | Access challenges                                              | CH `authz_challenges` (member user_ids pass the suppression filter)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `[~]`  |
 | Budgets / spend controls                                       | PG `spend_rules` ×2 + `spend_rule_events` ×4, calibrated to CH usage (breach+warning per rule); usage MV already fed by existing rows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `[~]`  |
 | Toolsets / MCP / Sources / Deployments / Playground            | PG deployment stack: asset + completed deployment + 8 `http_tool_definitions` (urns match telemetry, doc slug `acme`) + 4 toolsets (+versions)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `[~]`  |
@@ -55,9 +55,7 @@ Status: `[x]` seeded + verified · `[~]` seeded, not yet verified · `[ ]` not s
 Onboarding selection: the seed persists 13 explicit task rows, 10 visible, with a customized Security preset. Distribute servers is included and Anthropic admin controls is deferred. In Admin organization Features, verify "security - customized", apply a preset to a draft, then discard it; saved task status and assignment must remain unchanged.
 
 The ordinary MCP connection inventory totals 11 sessions: five on Acme Partner
-Gateway and six across Linear, Slack, and Acme Agent Gateway. The project-scoped
-managed-agent session below is checked separately, not counted as a twelfth MCP
-connection.
+Gateway and six across Linear, Slack, and Acme Agent Gateway. The eight managed-agent credential sessions below are checked separately from those human connections.
 
 ### Gateway instructions
 
@@ -69,14 +67,14 @@ behavior is covered by editor tests; browser verification remains pending.
 
 ### Managed agents
 
-The Identities roster also reads these four existing registered-agent fixtures
+The Identities roster also reads these ten registered-agent fixtures
 in an ordinary local session. Agent names open the shared identity overview at
 `/:orgSlug/projects/:projectSlug/identities/agent%3A<AGENT_ID>/overview`, with an
 "Edit Agent Identity" link to the agent-management screen. Owners without
 `org:read` go directly to Agent Identity management instead. Identity is the first
 project navigation group; organization membership appears under Team → Members. The roster toggle
 selects All, Humans, or Agents; unmatched telemetry identifiers without an email are Unknown, not Agent.
-The shared demo skips the restricted inventory read and keeps its people roster.
+Fleet permits a narrow read-only synthetic inventory projection in the shared demo; selected-agent and credential APIs still require membership.
 
 Registered-agent profiles read the stored agent policy on Access and Overview;
 saving permissions in Agent Identity invalidates both views. Verify restricted
@@ -86,27 +84,19 @@ agent sessions API, with its credential authorization gate. Accounts & devices
 shows agent API keys. Usage, cost, and risk aggregation currently lack a registered
 agent identifier and must show unavailable, never human-owner activity or zeros.
 
-Verify in the local rewritten seed with an ordinary human session: shared demo
-impersonation remains intentionally restricted by agent management authorization.
+Verify management in the local rewritten seed with an ordinary human session.
 `agent-management` enables inventory; `agent-identity-credentials` enables API key
-management. PG `agents` ×4 includes Release assistant, Support triage, Retired
-documentation bot, and the active Release notes assistant, covering active,
-suspended, and revoked identities with three existing fictional owners (display names and
-avatar initials fallback). One inert agent-subject `user_sessions` row shows the
-credential relationship and approving human; its refresh hash is invalid and its
-delegation is empty. Release notes assistant adds an attachment-backed session
-and a scoped connect policy. On MCP sessions, readable agents resolve to their name and
-link to `agent-management?id=<AGENT_ID>` with a dotted underline and a muted bot
-icon in the avatar slot (users retain solid underlines and initials/photos). If agent reads
-are denied (including shared demo impersonation), keep the session visible with
-its raw subject URN and no profile link. API keys deliberately remain empty in the shared demo: the
-seed deletes visitor-created keys and asserts none survive. Local-only usable
-keys belong in `RunLocalFixtures`. Reseeding also clears agent-principal policy
-grants only in the target organization, without removing human grants, then
-recreates two `mcp:connect` grants for the active release agents, narrowed to
-the demo project and Linear MCP server. The wizard intersects these with
-owner/caller permissions; seeded policy does not prove fresh UI creation. Follow
-check 17 in `verify.md`. Browser verification: `[~]` (not yet verified).
+management. PG `agents` ×10 spans four departments and both project and
+organization scope. Eight expired credential sessions and three expired inert
+agent keys provide historical authentication evidence; two sessions and one key
+are soft-deleted. No fixture can authenticate or refresh. The two active release
+agents retain their exact Linear grants and inert upstream attachments. The
+organization API Keys list excludes agent-subject keys; agent key tabs show their
+expired status. Shared SQL clears visitor-created keys before inserting these
+three inert examples. Local-only usable keys remain in `RunLocalFixtures`.
+Reseeding clears only the target organization's agent grants and restores the two
+scoped policies; human grants are preserved. Follow check 17 in `verify.md` for
+management, and the Fleet contract below for read-only demo browsing.
 
 ### Audit session target resolution
 
@@ -155,7 +145,7 @@ present in a developer's org and deliberately absent from the shared demo org.
 
 | Page                     | Why                                                          |
 | ------------------------ | ------------------------------------------------------------ |
-| Plugins / Assistants     | Auto-provision on first visit; empty state is intentional    |
+| Plugins                  | Auto-provision on first visit; empty state is intentional    |
 | Integrations / Triggers  | Acceptable empty states                                      |
 | Settings                 | Render fine without seed data                                |
 | ChatGPT/Work usage split | Later phase (`chatgpt:usage:metrics` rows)                   |
@@ -222,3 +212,68 @@ confirmed zero bindings/sessions and no client secret. No dedicated preparation
 dashboard, provider acceptance, or usable human access is demonstrated.
 
 [Browser evidence and supplementary checks](https://github.com/speakeasy-api/gram/pull/6438#issuecomment-5798502630).
+
+### Fleet and agent MCP restrictions — `[~]`
+
+Fleet is in Observability, gated as a whole by the dashboard PostHog flag
+`gram-fleet`. Disabled, loading, missing and error states mount no Fleet data
+queries. `agent-management` independently gates the registered inventory and
+`assistants` gates assistant inventory. Local dashboard flags are enabled;
+`server/flags.csv` enables agent management for the local demo organization.
+Production PostHog must define `gram-fleet` and enable the relevant flags for the
+demo organization group. This PR does not change remote PostHog configuration.
+
+Fleet shows observed activity in the last 24 hours. Core fixtures are 2–20 minutes
+old at reseed, so they survive nearly the full daily interval; there are no future
+timestamps or scheduler changes. Reseed before local verification. Registration
+edits do not count. Credential stamps are organization-wide, best-effort and
+coalesced (roughly five minutes for sessions and one for keys), with no freshness
+guarantee. Normal viewers need credential-management permission to receive them;
+ordinary demo visitors receive only synthetic registration data and aggregate
+timestamps with read-only permissions. No demo credential, policy or mutation
+endpoint is opened.
+
+| Registered identity         | Owner / department             | Scope        | Evidence / lifecycle                                                   |
+| --------------------------- | ------------------------------ | ------------ | ---------------------------------------------------------------------- |
+| Release assistant           | Amara / Support Engineering    | Organization | Session 2m ago; active, selected + all-server restrictions             |
+| Support triage              | Jonas / Support Engineering    | Organization | Session 12m ago; suspended 6m ago; all-server restriction              |
+| Retired documentation bot   | Priya / Platform Engineering   | Project      | Session 15m ago; revoked 8m ago; credential revoked with it            |
+| Release notes assistant     | Amara / Support Engineering    | Organization | API key only, 3m ago; active                                           |
+| Billing reconciliation      | Hana / Billing Operations      | Project      | Session 5m ago beats key 25m ago; active                               |
+| Deploy verifier             | Mateo / Platform Engineering   | Project      | Session 10m ago; credential revoked 4m ago; registration active        |
+| Incident evidence collector | Priya / Platform Engineering   | Organization | Session 7m ago; active                                                 |
+| Engineering digest          | Lucas / Engineering Leadership | Project      | Session 20m ago; active                                                |
+| Legacy invoice exporter     | Hana / Billing Operations      | Organization | Last use 4d ago, suspended 3d ago; omitted but restriction recoverable |
+| Nightly report agent        | Lucas / Engineering Leadership | Organization | Never used; omitted                                                    |
+
+Three assistants have five explicit `assistant_threads`: four recent conversations
+and one 48-hour historical conversation. Support handoff assistant (creator Jonas),
+Deployment review assistant (creator Priya), and Billing review assistant (creator
+Hana, paused after the latest capture) tell support, engineering and billing
+stories with four-message transcripts. Capture users differ from creators.
+Assistants appear through explicit assistantId evidence on session pages loaded
+during the visit; search retains that evidence. The initial 50 captures include
+all three assistants, asserted by postflight.
+
+Eight dedicated captures include the five linked conversations plus an unverified
+external contractor, an external id equal to a directory id (still unverified),
+and an unattributed capture. A synthetic email-address finding in Deployment review has
+one matching PG/CH finding; it is not an enforcement receipt. Existing bulk
+history remains unchanged. Captures never bind to registered agents through
+names, owners, creators, or external ids. Directory roles remain Owner, Creator,
+and Captured user.
+
+Restrictions are local-admin verification only; shared demo visitors cannot
+read or mutate them. Release assistant's selected/all restrictions overlap;
+Support triage and the old Legacy invoice exporter retain independent restrictions.
+Release removes one restriction, not suspension or other restrictions, and never
+restarts a process. Covered effect is MCP tools/call only. Agent recovery remains
+available through `/killswitch/:id` and the `/killswitch` index when Fleet is off
+or project:read is absent. That fallback also links to people’s restrictions.
+
+Verified in the local shared demo: all three sources, department grouping,
+explicit attribution, the flagged transcript, read-only inspector panels, and
+phone focus restoration. The local administrator view also exposes all four
+agent restrictions, including recovery for the older identity. Deployed-preview
+markers are recorded separately; no remote authenticated automation or remote
+seed execution is claimed.

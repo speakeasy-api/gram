@@ -29,6 +29,7 @@ const routes = {
     "Remote Identity Providers",
     "remote-identity-providers",
   ),
+  fleet: route("Fleet", "fleet"),
   agents: route("Agent Identity", "agent-management"),
   agentSessions: route("Agent Sessions", "agent-sessions"),
   assistants: route("Assistants", "assistants"),
@@ -87,6 +88,7 @@ beforeEach(() => {
   testState.orgMemoryEnabled = false;
   testState.featureFlags = {
     [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
+    [FEATURE_FLAGS.fleet]: { status: "enabled" },
     [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
     [FEATURE_FLAGS.assistants]: unavailableFeatureFlag("loading"),
     [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag("loading"),
@@ -152,6 +154,12 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes.indexOf(routes.shadowAI)).toBeLessThan(
       navRoutes.indexOf(routes.costs),
     );
+    const insightsIndex = navRoutes.indexOf(routes.insights);
+    expect(navRoutes.slice(insightsIndex, insightsIndex + 3)).toEqual([
+      routes.insights,
+      routes.fleet,
+      routes.agentSessions,
+    ]);
   });
 
   it("uses Shadow AI as the nav destination, with Shadow MCP folded into it", () => {
@@ -201,6 +209,7 @@ describe("useProjectNavRoutes", () => {
     (status) => {
       testState.featureFlags = {
         [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
+        [FEATURE_FLAGS.fleet]: { status: "enabled" },
         [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
         [FEATURE_FLAGS.assistants]: unavailableFeatureFlag(status),
         [FEATURE_FLAGS.deploymentsPage]: unavailableFeatureFlag(status),
@@ -238,6 +247,7 @@ describe("useProjectNavRoutes", () => {
   it("uses resolved values for feature-gated navigation", () => {
     testState.featureFlags = {
       [FEATURE_FLAGS.agentManagement]: { status: "enabled" },
+      [FEATURE_FLAGS.fleet]: { status: "enabled" },
       [FEATURE_FLAGS.userSessionsDashboard]: { status: "enabled" },
       [FEATURE_FLAGS.assistants]: { status: "enabled" },
       [FEATURE_FLAGS.deploymentsPage]: { status: "disabled" },
@@ -258,3 +268,14 @@ describe("useProjectNavRoutes", () => {
     expect(navRoutes).toContain(routes.riskEvents);
   });
 });
+
+it.each(["disabled", "missing", "error", "loading"] as const)(
+  "hides Fleet from navigation when its rollout is %s",
+  (status) => {
+    testState.featureFlags[FEATURE_FLAGS.fleet] = { status };
+    const { result } = renderHook(() => useProjectNavRoutes());
+    expect(result.current.map((entry) => entry.route)).not.toContain(
+      routes.fleet,
+    );
+  },
+);

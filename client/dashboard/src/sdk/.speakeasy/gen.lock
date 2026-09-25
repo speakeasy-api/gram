@@ -309,6 +309,7 @@ trackedFiles:
   src/funcs/keysRevokeById.ts: {}
   src/funcs/keysRotate.ts: {}
   src/funcs/keysValidate.ts: {}
+  src/funcs/killswitchesBatchAgentBadges.ts: {}
   src/funcs/killswitchesBatchUserBadges.ts: {}
   src/funcs/killswitchesCreate.ts: {}
   src/funcs/killswitchesEdit.ts: {}
@@ -1147,6 +1148,9 @@ trackedFiles:
   src/models/components/jsonwebkeysetdeletepreflight.ts: {}
   src/models/components/judgerequestbody.ts: {}
   src/models/components/key.ts: {}
+  src/models/components/killswitchagentbadge.ts: {}
+  src/models/components/killswitchbatchagentbadgesrequest.ts: {}
+  src/models/components/killswitchbatchagentbadgesresult.ts: {}
   src/models/components/killswitchbatchuserbadgesrequest.ts: {}
   src/models/components/killswitchbatchuserbadgesresult.ts: {}
   src/models/components/killswitchcapability.ts: {}
@@ -1883,6 +1887,7 @@ trackedFiles:
   src/models/operations/attachusersessionissuer.ts: {}
   src/models/operations/authcallback.ts: {}
   src/models/operations/authlogin.ts: {}
+  src/models/operations/batchkillswitchagentbadges.ts: {}
   src/models/operations/cancelstripesubscription.ts: {}
   src/models/operations/captureevent.ts: {}
   src/models/operations/checkdomainhealth.ts: {}
@@ -2657,6 +2662,7 @@ trackedFiles:
   src/react-query/auditLogFacets.ts: {}
   src/react-query/auditLogs.core.ts: {}
   src/react-query/auditLogs.ts: {}
+  src/react-query/batchKillswitchAgentBadges.ts: {}
   src/react-query/batchKillswitchUserBadges.ts: {}
   src/react-query/builtinExclusions.core.ts: {}
   src/react-query/builtinExclusions.ts: {}
@@ -4035,6 +4041,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  batchKillswitchAgentBadges:
+    speakeasy-default-batch-killswitch-agent-badges:
+      requestBody:
+        application/json: {"agent_ids": ["6956f28e-f1ba-4c9f-9e25-02da4ff1b487", "564cc37a-58b6-4f50-a8d9-6a4d0a30d106"]}
+      responses:
+        "200":
+          application/json: {"badges": [{"affected": true, "affected_now": true, "agent_id": "c8b8d38d-fd1b-4895-828c-c5e3deb3fda6", "scheduled": true}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   blockShadowMCPInventoryServer:
     speakeasy-default-block-shadow-MCP-inventory-server:
       requestBody:
@@ -7772,7 +7789,7 @@ examples:
   killswitchesCreate:
     speakeasy-default-killswitches-create:
       requestBody:
-        application/json: {"external_note": "<value>", "internal_note": "<value>", "operation_id": "c2bef8ac-c98a-4b89-8a32-cd62272034a3", "schedule": {"start": "now", "end": "bounded", "ends_at": "2024-06-16T19:43:19.564Z"}, "scope": {"type": "all_servers"}, "user_id": "<id>", "capability_key": "mcp_tool_calls"}
+        application/json: {"external_note": "<value>", "internal_note": "<value>", "operation_id": "c2bef8ac-c98a-4b89-8a32-cd62272034a3", "schedule": {"start": "now", "end": "bounded", "ends_at": "2024-06-16T19:43:19.564Z"}, "scope": {"type": "all_servers"}, "capability_key": "mcp_tool_calls"}
       responses:
         "200":
           application/json: {"id": "2b497ff0-1441-454e-b4e8-5d3eb1b5584a", "replayed": false, "version": 597942}
@@ -7802,7 +7819,7 @@ examples:
           id: "3aa7d685-0777-47f3-91a3-7e54b72bb4d4"
       responses:
         "200":
-          application/json: {"capability_label": "<value>", "external_note": "<value>", "history": [{"changed_at": "2026-11-13T17:48:28.615Z", "external_note": "<value>", "internal_note": "<value>", "schedule": {"start": "scheduled", "starts_at": "2024-07-14T20:01:43.318Z", "end": "bounded", "ends_at": "2024-12-09T21:55:27.033Z"}, "scope": {"type": "all_servers"}, "sequence": 611499, "version": 588073, "action": "edited", "status": "lifted"}], "history_truncated": true, "id": "96cba4a4-4e8e-481f-9de0-55e7582031cf", "internal_note": "<value>", "schedule": {"start": "scheduled", "starts_at": "2026-08-16T09:15:15.373Z", "end": "until_lifted"}, "scope": {"type": "selected_servers", "server_ids": ["e101a803-c388-4b8e-86e8-b208cc2fe968", "b76dda33-4e69-476a-a1a0-8d6b66db304f", "e6814a5d-f85f-4e5d-b290-0e27fe059054"]}, "user_id": "<id>", "version": 28275, "capability_key": "mcp_tool_calls", "status": "active"}
+          application/json: {"capability_label": "<value>", "external_note": "<value>", "history": [{"changed_at": "2026-11-13T17:48:28.615Z", "external_note": "<value>", "internal_note": "<value>", "schedule": {"start": "scheduled", "starts_at": "2024-07-14T20:01:43.318Z", "end": "bounded", "ends_at": "2024-12-09T21:55:27.033Z"}, "scope": {"type": "all_servers"}, "sequence": 611499, "version": 588073, "action": "edited", "status": "lifted"}], "history_truncated": true, "id": "96cba4a4-4e8e-481f-9de0-55e7582031cf", "internal_note": "<value>", "principal_kind": "user", "schedule": {"start": "scheduled", "starts_at": "2026-08-16T09:15:15.373Z", "end": "until_lifted"}, "scope": {"type": "selected_servers", "server_ids": ["e101a803-c388-4b8e-86e8-b208cc2fe968", "b76dda33-4e69-476a-a1a0-8d6b66db304f", "e6814a5d-f85f-4e5d-b290-0e27fe059054"]}, "version": 28275, "capability_key": "mcp_tool_calls", "status": "active"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -7850,7 +7867,7 @@ examples:
   killswitchesPreviewOverlaps:
     speakeasy-default-killswitches-preview-overlaps:
       requestBody:
-        application/json: {"schedule": {"start": "now", "end": "bounded", "ends_at": "2026-09-27T02:17:57.903Z"}, "scope": {"type": "selected_servers", "server_ids": ["6db68204-4ca9-42cc-8f49-93e367971ed1", "bbb07b6c-a818-483a-a076-b5712d1ff133"]}, "user_id": "<id>", "capability_key": "mcp_tool_calls"}
+        application/json: {"schedule": {"start": "now", "end": "bounded", "ends_at": "2026-09-27T02:17:57.903Z"}, "scope": {"type": "selected_servers", "server_ids": ["6db68204-4ca9-42cc-8f49-93e367971ed1", "bbb07b6c-a818-483a-a076-b5712d1ff133"]}, "capability_key": "mcp_tool_calls"}
       responses:
         "200":
           application/json: {"overlaps": [], "truncated": false}

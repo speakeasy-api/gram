@@ -10,7 +10,73 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+const batchManagedAgentCredentialLastUsed = `-- name: BatchManagedAgentCredentialLastUsed :many
+WITH session_use AS (
+  SELECT s.subject_urn::text AS subject, MAX(s.last_used_at)::timestamptz AS last_used_at
+  FROM user_sessions AS s
+  JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+  LEFT JOIN projects AS p ON p.id = iss.project_id
+  LEFT JOIN projects AS session_project ON session_project.id = s.project_id
+  WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id, session_project.organization_id) = $1::text
+    AND (s.organization_id IS NULL OR s.organization_id = $1::text)
+    AND (iss.organization_id IS NULL OR iss.organization_id = $1::text)
+    AND (p.organization_id IS NULL OR p.organization_id = $1::text)
+    AND (session_project.organization_id IS NULL OR session_project.organization_id = $1::text)
+    AND s.subject_urn = ANY($2::text[])
+    AND s.last_used_at IS NOT NULL
+  GROUP BY s.subject_urn
+), key_use AS (
+  SELECT k.subject_urn::text AS subject, MAX(k.last_accessed_at)::timestamptz AS last_used_at
+  FROM api_keys AS k
+  LEFT JOIN projects AS p ON p.id = k.project_id
+  WHERE k.organization_id = $1::text
+    AND (p.organization_id IS NULL OR p.organization_id = $1::text)
+    AND k.subject_urn = ANY($3::text[])
+    AND k.last_accessed_at IS NOT NULL
+  GROUP BY k.subject_urn
+)
+SELECT 'session'::text AS source, subject, last_used_at FROM session_use
+UNION ALL
+SELECT 'key'::text AS source, subject, last_used_at FROM key_use
+`
+
+type BatchManagedAgentCredentialLastUsedParams struct {
+	OrganizationID  string
+	SessionSubjects []string
+	KeySubjects     []string
+}
+
+type BatchManagedAgentCredentialLastUsedRow struct {
+	Source     string
+	Subject    string
+	LastUsedAt pgtype.Timestamptz
+}
+
+// This aggregate retains historical authentication evidence after credential
+// revocation or expiry. Inputs contain only subjects whose credentials the
+// caller may manage. Session and API-key subjects use distinct URN formats.
+func (q *Queries) BatchManagedAgentCredentialLastUsed(ctx context.Context, arg BatchManagedAgentCredentialLastUsedParams) ([]BatchManagedAgentCredentialLastUsedRow, error) {
+	rows, err := q.db.Query(ctx, batchManagedAgentCredentialLastUsed, arg.OrganizationID, arg.SessionSubjects, arg.KeySubjects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BatchManagedAgentCredentialLastUsedRow
+	for rows.Next() {
+		var i BatchManagedAgentCredentialLastUsedRow
+		if err := rows.Scan(&i.Source, &i.Subject, &i.LastUsedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const createAgent = `-- name: CreateAgent :one
 INSERT INTO agents (
@@ -933,6 +999,81 @@ func (q *Queries) RevokeManagedAgentSession(ctx context.Context, arg RevokeManag
 		&i.AlreadyRevoked,
 	)
 	return i, err
+}
+
+const seedAgentCredentialKeyActivityFixture = `-- name: SeedAgentCredentialKeyActivityFixture :exec
+INSERT INTO api_keys
+  (id, organization_id, project_id, created_by_user_id, name, key_prefix,
+   key_hash, subject_urn, last_accessed_at, deleted_at, expires_at)
+VALUES ($1, $2, $3, $4, $5,
+        'fixture', $6, $7, $8,
+        $9, $10)
+`
+
+type SeedAgentCredentialKeyActivityFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	OwnerUserID    string
+	Name           string
+	KeyHash        string
+	Subject        pgtype.Text
+	LastUsedAt     pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	ExpiresAt      pgtype.Timestamptz
+}
+
+// Synthetic key history; no usable credential is minted by this fixture.
+func (q *Queries) SeedAgentCredentialKeyActivityFixture(ctx context.Context, arg SeedAgentCredentialKeyActivityFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedAgentCredentialKeyActivityFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.OwnerUserID,
+		arg.Name,
+		arg.KeyHash,
+		arg.Subject,
+		arg.LastUsedAt,
+		arg.DeletedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const seedAgentCredentialSessionActivityFixture = `-- name: SeedAgentCredentialSessionActivityFixture :exec
+INSERT INTO user_sessions
+  (id, organization_id, project_id, user_session_issuer_id, subject_urn,
+   jti, expires_at, refresh_expires_at, last_used_at, deleted_at)
+VALUES ($1, $2, $3, $4,
+        $5, $6, $7, $7, $8, $9)
+`
+
+type SeedAgentCredentialSessionActivityFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID pgtype.Text
+	ProjectID      uuid.NullUUID
+	IssuerID       uuid.UUID
+	Subject        urn.SessionSubject
+	Jti            string
+	ExpiresAt      pgtype.Timestamptz
+	LastUsedAt     pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+}
+
+// Synthetic credential history, including legacy tenancy and revoked rows.
+func (q *Queries) SeedAgentCredentialSessionActivityFixture(ctx context.Context, arg SeedAgentCredentialSessionActivityFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedAgentCredentialSessionActivityFixture,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.IssuerID,
+		arg.Subject,
+		arg.Jti,
+		arg.ExpiresAt,
+		arg.LastUsedAt,
+		arg.DeletedAt,
+	)
+	return err
 }
 
 const suspendAgent = `-- name: SuspendAgent :one
