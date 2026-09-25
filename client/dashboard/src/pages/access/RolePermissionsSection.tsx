@@ -80,37 +80,43 @@ export function RolePermissionsSection({
   const activeGroups = tab === "mcp" ? mcpGroups : otherGroups;
   const activeSelected = tab === "mcp" ? mcpSelected : otherSelected;
 
+  const addButton = (
+    <PopoverTrigger asChild>
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={disabled}
+        // The header bar is tinted, so the button keeps its own surface
+        // rather than dissolving into it.
+        className="bg-background"
+      >
+        <Button.LeftIcon>
+          <Plus className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>Add permissions</Button.Text>
+      </Button>
+    </PopoverTrigger>
+  );
+
   return (
     <div className="border-border border">
       {/* gap-0: the tab strip and the list share one bordered box, so the
             Tabs default gap left the first row sitting lower than the rest. */}
-      <Tabs value={tab} onValueChange={setTab} className="gap-0">
-        <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border-b px-4">
-          <PageTabsList>
-            <PageTabsTrigger value="mcp">
-              MCP access ({mcpSelected.length})
-            </PageTabsTrigger>
-            <PageTabsTrigger value="organization">
-              Platform access ({otherSelected.length})
-            </PageTabsTrigger>
-          </PageTabsList>
+      {/* One picker, opened from the empty state while the tab has no
+            permissions and from the header once it has some. */}
+      <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+        <Tabs value={tab} onValueChange={setTab} className="gap-0">
+          <div className="border-border bg-muted/30 flex items-center justify-between gap-3 border-b px-4">
+            <PageTabsList>
+              <PageTabsTrigger value="mcp">
+                MCP access ({mcpSelected.length})
+              </PageTabsTrigger>
+              <PageTabsTrigger value="organization">
+                Platform access ({otherSelected.length})
+              </PageTabsTrigger>
+            </PageTabsList>
 
-          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={disabled}
-                // The bar behind it is tinted, so the button keeps its own
-                // surface rather than dissolving into the header.
-                className="bg-background"
-              >
-                <Button.LeftIcon>
-                  <Plus className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add permissions</Button.Text>
-              </Button>
-            </PopoverTrigger>
+            {activeSelected.length > 0 && addButton}
             <PopoverContent
               align="end"
               className="w-[min(24rem,calc(100vw-2rem))] p-0"
@@ -153,80 +159,81 @@ export function RolePermissionsSection({
                 </CommandList>
               </Command>
             </PopoverContent>
-          </Popover>
-        </div>
+          </div>
 
-        {/* One height whether empty, one row, or several: the box is
+          {/* One height whether empty, one row, or several: the box is
               directly under a popover trigger, so a box that grew or shrank as
               permissions came and went would shift the page under the cursor. */}
-        <TabsContent value={tab} forceMount className="min-h-[13.5rem]">
-          {activeSelected.length === 0 ? (
-            <div className="flex min-h-[13.5rem] flex-col items-center justify-center px-4 text-center">
-              <Text variant="body" className="font-medium">
-                {tab === "mcp"
-                  ? "No MCP permissions"
-                  : "No platform permissions"}
-              </Text>
-              <Text muted small className="mt-1">
-                {tab === "mcp"
-                  ? `Add a permission to let ${subjectLabel} reach MCP servers and their tools.`
-                  : `Add a permission to let ${subjectLabel} work with projects, environments and skills.`}
-              </Text>
-            </div>
-          ) : (
-            <div className="divide-border divide-y">
-              {activeSelected.map((scope) => {
-                const rule = renderScopeRule(scope);
-                return (
-                  <div
-                    key={scope.slug}
-                    className="flex items-start gap-3 px-4 py-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Text
-                          variant="body"
-                          className="font-mono text-sm font-medium"
-                        >
-                          {scope.slug}
+          <TabsContent value={tab} forceMount className="min-h-[13.5rem]">
+            {activeSelected.length === 0 ? (
+              <div className="flex min-h-[13.5rem] flex-col items-center justify-center px-4 text-center">
+                <Text variant="body" className="font-medium">
+                  {tab === "mcp"
+                    ? "No MCP permissions"
+                    : "No platform permissions"}
+                </Text>
+                <Text muted small className="mt-1">
+                  {tab === "mcp"
+                    ? `Add a permission to let ${subjectLabel} reach MCP servers and their tools.`
+                    : `Add a permission to let ${subjectLabel} work with projects, environments and skills.`}
+                </Text>
+                <div className="mt-4">{addButton}</div>
+              </div>
+            ) : (
+              <div className="divide-border divide-y">
+                {activeSelected.map((scope) => {
+                  const rule = renderScopeRule(scope);
+                  return (
+                    <div
+                      key={scope.slug}
+                      className="flex items-start gap-3 px-4 py-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Text
+                            variant="body"
+                            className="font-mono text-sm font-medium"
+                          >
+                            {scope.slug}
+                          </Text>
+                          {markAgentIneligible &&
+                            scope.agentEligible === false && (
+                              <Badge variant="neutral" size="sm">
+                                Not available to agents
+                              </Badge>
+                            )}
+                        </div>
+                        <Text muted small>
+                          {scope.description}
                         </Text>
-                        {markAgentIneligible &&
-                          scope.agentEligible === false && (
-                            <Badge variant="neutral" size="sm">
-                              Not available to agents
-                            </Badge>
-                          )}
-                      </div>
-                      <Text muted small>
-                        {scope.description}
-                      </Text>
-                      {/* Only permissions that can be narrowed carry a control;
+                        {/* Only permissions that can be narrowed carry a control;
                           an empty container left the row taller than its
                           neighbours. */}
-                      {rule && (
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          {rule}
-                        </div>
-                      )}
+                        {rule && (
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                            {rule}
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        disabled={disabled}
+                        onClick={() => onToggleScope(scope.slug as Scope)}
+                        aria-label={`Remove ${scope.slug}`}
+                      >
+                        <Button.LeftIcon>
+                          <X className="h-4 w-4" />
+                        </Button.LeftIcon>
+                      </Button>
                     </div>
-                    <Button
-                      variant="tertiary"
-                      size="sm"
-                      disabled={disabled}
-                      onClick={() => onToggleScope(scope.slug as Scope)}
-                      aria-label={`Remove ${scope.slug}`}
-                    >
-                      <Button.LeftIcon>
-                        <X className="h-4 w-4" />
-                      </Button.LeftIcon>
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </Popover>
     </div>
   );
 }

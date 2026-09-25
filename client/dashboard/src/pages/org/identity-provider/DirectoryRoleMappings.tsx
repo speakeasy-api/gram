@@ -266,7 +266,11 @@ export function DirectoryRoleMappings({
           )}
         >
           <CollapsibleTrigger asChild>
-            <Button variant="tertiary" size="sm" className="group">
+            <Button
+              variant="tertiary"
+              size="sm"
+              className="group text-muted-foreground hover:text-foreground"
+            >
               <Button.LeftIcon>
                 <ChevronRight className="size-4 transition-transform group-data-[state=open]:rotate-90" />
               </Button.LeftIcon>
@@ -664,9 +668,9 @@ function RemoveMappingButton({
 function SyncGroupsButton(): JSX.Element {
   const queryClient = useQueryClient();
   const sync = useSyncDirectoryGroupsMutation({
-    onSuccess: async (result) => {
+    onSuccess: async () => {
       await invalidateAllDirectoryRoleMappings(queryClient);
-      toast.success(`Synced ${result.groupCount} directory groups`);
+      toast.success("Updated directory group list");
     },
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to sync directory groups"));
