@@ -101,6 +101,29 @@ func TestDirectoryProviderRejectsIncompleteEnvelopeAndCursorLoop(t *testing.T) {
 	require.Equal(t, int32(3), requests.Load())
 }
 
+func TestDirectoryProviderAcceptsTerminalCursor(t *testing.T) {
+	t.Parallel()
+	for name, metadata := range map[string]string{
+		"empty":            `,"response_metadata":{"next_cursor":""}`,
+		"null":             `,"response_metadata":{"next_cursor":null}`,
+		"missing cursor":   `,"response_metadata":{}`,
+		"missing metadata": ``,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprintf(w, `{"ok":true,"members":[{"id":"UEXAMPLE01","team_id":"TEXAMPLE01"}]%s}`, metadata)
+			}))
+			defer server.Close()
+			provider := slackdirectoryconnections.NewDirectoryProvider(slackapi.NewClient(server.URL, server.Client()))
+			members, err := provider.Fetch(t.Context(), "synthetic-token", "TEXAMPLE01", nil)
+			require.NoError(t, err)
+			require.Len(t, members, 1)
+		})
+	}
+}
+
 func TestDirectoryProviderRateLimitHonorsRetryAfter(t *testing.T) {
 	t.Parallel()
 	var requests atomic.Int32

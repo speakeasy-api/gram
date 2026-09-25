@@ -158,7 +158,11 @@ func (p *directoryProvider) Fetch(ctx context.Context, token, team string, repor
 			return nil, &SyncError{Code: "directory_too_large", Retryable: false, Reconnect: false, RetryAfter: 0}
 		}
 		report(SyncProgress{Phase: "fetching", Pages: pageNumber, Members: len(members), ExcludedExternal: len(excluded), Bots: bots})
-		cursor = *page.Metadata.NextCursor
+		cursor = ""
+		if page.Metadata != nil && page.Metadata.NextCursor != nil {
+			cursor = *page.Metadata.NextCursor
+		}
+		// Slack ends pagination with an empty, null or missing next_cursor.
 		if cursor == "" {
 			return members, nil
 		}
@@ -233,7 +237,7 @@ func (p *directoryProvider) request(ctx context.Context, token, team, cursor str
 			return nil, 0, &SyncError{Code: "provider_unavailable", Retryable: true, Reconnect: false, RetryAfter: 0}
 		}
 	}
-	if page.Members == nil || page.Metadata == nil || page.Metadata.NextCursor == nil {
+	if page.Members == nil {
 		return nil, 0, &SyncError{Code: "invalid_directory", Retryable: true, Reconnect: false, RetryAfter: 0}
 	}
 	return &page, 0, nil
