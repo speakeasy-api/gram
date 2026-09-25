@@ -48,7 +48,7 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 			return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
 		}
 		if catalog.incomplete {
-			return nil, oops.E(oops.CodeUnavailable, nil, "gateway tool inventory contains invalid definitions; try again")
+			return nil, oops.E(oops.CodeUnavailable, nil, "gateway tool inventory contains invalid definitions; try again").LogWarn(ctx, logger)
 		}
 		for _, entry := range catalog.entries {
 			qualified := *entry

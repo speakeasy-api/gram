@@ -44,7 +44,7 @@ func testConfigurationReads() *recordingConfigurationReader {
 func TestOrganizationConfigurationReadsExactTargetAndSafeProjection(t *testing.T) {
 	t.Parallel()
 	reads := testConfigurationReads()
-	reads.features = &gen.ProductFeatures{SsoEnabled: true, PlatformMcpEnabled: true, DeviceAgent: true}
+	reads.features = &gen.ProductFeatures{SsoEnabled: true, PlatformMcpEnabled: true, DeviceAgent: true, GatewayDiscoveryModesEnabled: true}
 	reads.settings = &gen.AdminChatAnalysisSettings{OrganizationID: "org-a", WorkUnitsEnabled: true, WorkUnitsDailyCap: 42, BusinessMemoryDailyCap: 5, IsDefault: false}
 
 	status, body, data := callStaffReadTool(t, reads, "get_organization_features", `{"organization_id":"org-a"}`)
@@ -56,6 +56,7 @@ func TestOrganizationConfigurationReadsExactTargetAndSafeProjection(t *testing.T
 	require.Equal(t, "org-a", features.OrganizationID)
 	require.True(t, features.SSOEnabled)
 	require.True(t, features.PlatformMCPEnabled)
+	require.True(t, features.GatewayDiscoveryModesEnabled)
 	require.NotContains(t, body, `"device_agent"`)
 	require.NotContains(t, body, "admin_session_token")
 

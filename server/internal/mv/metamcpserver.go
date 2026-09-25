@@ -13,18 +13,19 @@ import (
 // response type.
 func BuildMetaMcpServerView(server repo.MetaMcpServer) *types.MetaMcpServer {
 	return &types.MetaMcpServer{
-		ID:                  server.ID.String(),
-		OrganizationID:      server.OrganizationID,
-		ProjectID:           server.ProjectID.String(),
-		Name:                server.Name,
-		UserSessionIssuerID: conv.FromNullableUUID(server.UserSessionIssuerID),
-		Visibility:          types.MetaMcpServerVisibility(server.Visibility),
-		NetworkAccessMode:   types.NetworkAccessMode(networkaccess.EffectiveForView(server.NetworkAccessMode)),
-		Instructions:        conv.FromPGText[string](server.Instructions),
-		DiscoveryMode:       string(metamcp.ResolveDiscoveryMode(server.DiscoveryMode.String)),
-		CreatedAt:           conv.FromPGTimestamptz(server.CreatedAt),
-		UpdatedAt:           conv.FromPGTimestamptz(server.UpdatedAt),
-		MemberCount:         nil,
+		ID:                    server.ID.String(),
+		OrganizationID:        server.OrganizationID,
+		ProjectID:             server.ProjectID.String(),
+		Name:                  server.Name,
+		UserSessionIssuerID:   conv.FromNullableUUID(server.UserSessionIssuerID),
+		Visibility:            types.MetaMcpServerVisibility(server.Visibility),
+		NetworkAccessMode:     types.NetworkAccessMode(networkaccess.EffectiveForView(server.NetworkAccessMode)),
+		Instructions:          conv.FromPGText[string](server.Instructions),
+		DiscoveryModesEnabled: nil,
+		DiscoveryMode:         string(metamcp.ResolveDiscoveryMode(server.DiscoveryMode.String)),
+		CreatedAt:             conv.FromPGTimestamptz(server.CreatedAt),
+		UpdatedAt:             conv.FromPGTimestamptz(server.UpdatedAt),
+		MemberCount:           nil,
 	}
 }
 

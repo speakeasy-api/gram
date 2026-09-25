@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
+import { TooltipProvider } from "@/components/ui/Tooltip";
 import { GatewayInspectTab } from "./GatewayInspectTab";
 
 vi.mock("@/lib/utils", async (importOriginal) => ({
@@ -13,9 +14,6 @@ const state = vi.hoisted(() => ({ mint: vi.fn() }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-test" }),
   useSession: () => ({ user: { id: "user-test" } }),
-}));
-vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({ data: { gatewayDiscoveryModesEnabled: false } }),
 }));
 vi.mock("@/hooks/useUserSessionToken", () => ({
   useUserSessionToken: (input: { target: { discoveryMode?: string } }) => {
@@ -63,6 +61,7 @@ vi.mock("@/components/page-layout", () => {
   );
   return {
     Page: {
+      Toolbar: Object.assign(Block, { Leading: Block, Actions: Block }),
       Section: Object.assign(Block, {
         Title: Block,
         Description: Block,
@@ -113,4 +112,51 @@ it("lets a saved mode fall back to the gateway default when its product feature 
   expect(
     screen.queryByText("Gateway discovery settings are not available"),
   ).toBeNull();
+});
+it("applies enabled discovery choices to the URL and the minted connection", async () => {
+  state.mint.mockClear();
+  const gateway = {
+    id: "gateway-test",
+    userSessionIssuerId: "issuer-test",
+    discoveryMode: "progressive",
+    discoveryModesEnabled: true,
+  } as MetaMcpServer;
+  render(
+    <TooltipProvider>
+      <MemoryRouter initialEntries={["/inspect?keep=value"]}>
+        <GatewayInspectTab
+          metaMcpServer={gateway}
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+        <Location />
+      </MemoryRouter>
+    </TooltipProvider>,
+  );
+  fireEvent.click(
+    screen.getByRole("combobox", { name: "Inspect discovery mode" }),
+  );
+  fireEvent.click(await screen.findByRole("option", { name: "Direct" }));
+  fireEvent.click(screen.getByRole("button", { name: "Apply and reconnect" }));
+  expect(state.mint).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      target: expect.objectContaining({ discoveryMode: "direct" }),
+    }),
+  );
+  expect(screen.getByLabelText("location").textContent).toBe(
+    "?keep=value&discovery_mode=direct",
+  );
+  fireEvent.click(
+    screen.getByRole("combobox", { name: "Inspect discovery mode" }),
+  );
+  fireEvent.click(
+    await screen.findByRole("option", { name: "Use gateway default" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Apply and reconnect" }));
+  expect(state.mint).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      target: expect.objectContaining({ discoveryMode: undefined }),
+    }),
+  );
+  expect(screen.getByLabelText("location").textContent).toBe("?keep=value");
 });

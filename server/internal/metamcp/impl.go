@@ -229,7 +229,7 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return mv.BuildMetaMcpServerView(created), nil
+	return s.withGatewayCapabilities(ctx, mv.BuildMetaMcpServerView(created)), nil
 }
 
 func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpServerPayload) (*types.MetaMcpServer, error) {
@@ -259,7 +259,7 @@ func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpS
 		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, s.logger)
 	}
 
-	return mv.BuildMetaMcpServerView(row), nil
+	return s.withGatewayCapabilities(ctx, mv.BuildMetaMcpServerView(row)), nil
 }
 
 func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaMcpServersPayload) (*gen.ListMetaMcpServersResult, error) {
@@ -280,7 +280,14 @@ func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaM
 		return nil, oops.E(oops.CodeUnexpected, err, "list meta mcp servers").LogError(ctx, s.logger)
 	}
 
-	return &gen.ListMetaMcpServersResult{MetaMcpServers: mv.BuildMetaMcpServerListView(rows)}, nil
+	views := mv.BuildMetaMcpServerListView(rows)
+	if len(views) > 0 {
+		s.withGatewayCapabilities(ctx, views[0])
+		for _, view := range views[1:] {
+			view.DiscoveryModesEnabled = views[0].DiscoveryModesEnabled
+		}
+	}
+	return &gen.ListMetaMcpServersResult{MetaMcpServers: views}, nil
 }
 
 func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMetaMcpServerPayload) (*types.MetaMcpServer, error) {
@@ -490,7 +497,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, false)
 
-	return afterView, nil
+	return s.withGatewayCapabilities(ctx, afterView), nil
 }
 
 // UpdateMetaMCPServerNetworkAccessModeInTransaction changes only an existing

@@ -19,14 +19,6 @@ const state = vi.hoisted(() => ({
   invalidate: vi.fn().mockResolvedValue(undefined),
   success: undefined as undefined | (() => Promise<void>),
 }));
-vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({
-    data: { gatewayDiscoveryModesEnabled: state.enabled },
-  }),
-}));
-vi.mock("@/contexts/Auth", () => ({
-  useOrganization: () => ({ id: "org-test" }),
-}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => state.canWrite }),
 }));
@@ -69,7 +61,9 @@ const gateway = {
 const show = () =>
   render(
     <TooltipProvider>
-      <GatewayDiscoverySection metaMcpServer={gateway} />
+      <GatewayDiscoverySection
+        metaMcpServer={{ ...gateway, discoveryModesEnabled: state.enabled }}
+      />
     </TooltipProvider>,
   );
 afterEach(cleanup);
@@ -124,9 +118,22 @@ describe("Gateway discovery settings", () => {
       }),
     );
   });
-  it("disables controls during a save", () => {
+  it("disables controls during a save", async () => {
+    const { rerender } = show();
+    fireEvent.click(screen.getByRole("combobox"));
+    fireEvent.click(await screen.findByRole("option", { name: "Direct" }));
+    expect(
+      (screen.getByRole("button", { name: /save/i }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
     state.pending = true;
-    show();
+    rerender(
+      <TooltipProvider>
+        <GatewayDiscoverySection
+          metaMcpServer={{ ...gateway, discoveryModesEnabled: true }}
+        />
+      </TooltipProvider>,
+    );
     expect((screen.getByRole("combobox") as HTMLButtonElement).disabled).toBe(
       true,
     );

@@ -91744,6 +91744,9 @@ components:
                     enum:
                         - progressive
                         - direct
+                discovery_modes_enabled:
+                    type: boolean
+                    description: Whether the organization allows new discovery choices. Read through the gateway without requiring organization feature-management access.
                 id:
                     type: string
                     description: The ID of the meta MCP server

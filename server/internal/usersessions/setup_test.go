@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -113,7 +114,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		tokenRevoker = revoker
 	}
 
-	productFeatures := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	productFeatures := productfeaturestest.NewClient(t, logger, tracerProvider, conn)
 	svc := usersessions.NewService(
 		logger,
 		tracerProvider,
