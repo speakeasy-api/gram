@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -16,13 +17,14 @@ func TestConsentGatewayModeChoices(t *testing.T) {
 	flags := &feature.InMemory{}
 	service := &Service{features: flags}
 	endpoint := &ResolvedMcpEndpoint{MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, OrganizationID: "org_test", ProjectID: uuid.New()}
-	policy, err := service.consentGatewayPolicy(t.Context(), endpoint, AuthnChallengeState{}, "", "", nil)
+	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: "org_test", OrganizationSlug: "test-org"})
+	policy, err := service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "", nil)
 	require.NoError(t, err)
 	require.Nil(t, policy)
-	_, err = service.consentGatewayPolicy(t.Context(), endpoint, AuthnChallengeState{}, "", "direct", nil)
+	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "direct", nil)
 	require.Error(t, err)
 	flags.SetFlag(feature.FlagGatewayDiscoveryModes, endpoint.OrganizationID, true)
-	policy, err = service.consentGatewayPolicy(t.Context(), endpoint, AuthnChallengeState{}, "", "direct", nil)
+	policy, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "direct", nil)
 	require.NoError(t, err)
 	require.Nil(t, policy.Selection)
 	require.Equal(t, metamcp.DiscoveryModeDirect, *policy.Gateway.DiscoveryMode)
@@ -30,11 +32,11 @@ func TestConsentGatewayModeChoices(t *testing.T) {
 	require.NoError(t, err)
 	_, err = toolfilter.ParseSessionSelection(raw)
 	require.Error(t, err, "old servers must reject gateway policies")
-	_, err = service.consentGatewayPolicy(t.Context(), endpoint, AuthnChallengeState{FirstParty: true}, "", "direct", nil)
+	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{FirstParty: true}, "", "direct", nil)
 	require.Error(t, err)
-	_, err = service.consentGatewayPolicy(t.Context(), endpoint, AuthnChallengeState{}, uuid.NewString(), "direct", nil)
+	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, uuid.NewString(), "direct", nil)
 	require.Error(t, err)
-	_, err = service.consentGatewayPolicy(t.Context(), endpoint, AuthnChallengeState{}, "", "unsupported", nil)
+	_, err = service.consentGatewayPolicy(ctx, endpoint, AuthnChallengeState{}, "", "unsupported", nil)
 	require.Error(t, err)
 }
 
