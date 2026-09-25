@@ -7,7 +7,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { Label } from "@/components/ui/Label";
-import { ModelSelect } from "@/components/model-select";
 import { Slider } from "@/components/ui/Slider";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
@@ -58,8 +57,6 @@ interface ToolsetSectionProps {
   onToolToggle?: (toolId: string) => void;
   temperature?: number;
   onTemperatureChange?: (temp: number) => void;
-  model?: string;
-  onModelChange?: (model: string) => void;
   maxTokens?: number;
   onMaxTokensChange?: (tokens: number) => void;
   toolsetSelector?: React.ReactNode;
@@ -253,8 +250,6 @@ export function PlaygroundConfigPanel({
   onToolToggle: _onToolToggle,
   temperature,
   onTemperatureChange,
-  model,
-  onModelChange,
   maxTokens,
   onMaxTokensChange,
   toolsetSelector,
@@ -393,20 +388,6 @@ export function PlaygroundConfigPanel({
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent className="space-y-4 px-4 pt-2 pb-3">
-            {/* Model */}
-            {model !== undefined && onModelChange && (
-              <div className="space-y-2">
-                <Label htmlFor="model" className="text-xs font-medium">
-                  Model
-                </Label>
-                <ModelSelect
-                  value={model}
-                  onValueChange={onModelChange}
-                  triggerClassName="w-full"
-                />
-              </div>
-            )}
-
             {/* Temperature */}
             {temperature !== undefined && onTemperatureChange && (
               <div className="space-y-2">

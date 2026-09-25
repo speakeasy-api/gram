@@ -1,5 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { TabbedPage } from "@/components/page-templates";
+import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
 import { RequireScope } from "@/components/require-scope";
 import { AssistantActivitySparkline } from "@/components/assistants/activity-sparkline";
 import { AssistantOwner } from "@/components/assistants/assistant-owner";
@@ -94,10 +95,7 @@ export default function AssistantsIndex(): JSX.Element {
     const query = search.toLowerCase();
     return assistants.filter((assistant) => {
       if (!query) return true;
-      return (
-        assistant.name.toLowerCase().includes(query) ||
-        assistant.model.toLowerCase().includes(query)
-      );
+      return assistant.name.toLowerCase().includes(query);
     });
   }, [assistants, search]);
 
@@ -314,8 +312,15 @@ function AssistantCard({ assistant }: { assistant: Assistant }) {
           <div className="mb-3 flex flex-col gap-2">
             <div className="flex items-center gap-1.5">
               <Cpu className="text-muted-foreground/70 size-3.5 shrink-0" />
-              <Text muted small className="truncate" title={assistant.model}>
-                {assistant.model}
+              {/* Every assistant runs the pinned model; the stored record can
+                  hold a stale pre-pin value, so don't render it. */}
+              <Text
+                muted
+                small
+                className="truncate"
+                title={DEFAULT_ASSISTANT_MODEL}
+              >
+                {DEFAULT_ASSISTANT_MODEL}
               </Text>
             </div>
             <AssistantToolsets assistant={assistant} />
