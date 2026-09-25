@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 // Bump this when enforcement input extraction or checkpoint semantics change.
@@ -39,17 +38,19 @@ type checkpointSession interface {
 }
 
 type postgresCheckpoint struct {
-	userID     string
-	db         *pgxpool.Pool
-	expected   []byte
-	config     Config
-	externalID string
-	revision   string
+	userID   string
+	db       *pgxpool.Pool
+	expected []byte
+	config   Config
+	chatID   uuid.UUID
+	revision string
 }
 
 // Begin creates request-local checkpoint state; it acquires no connection or lock.
-func (s *postgresStore) Begin(_ context.Context, config Config, frame Frame, userID string) (checkpointSession, error) {
-	return &postgresCheckpoint{userID: userID, db: s.db, expected: nil, config: config, externalID: "anthropic-inference:" + conversationID(config, frame).String(), revision: ""}, nil
+// The marker lives on the conversation the delivery was bound to, which is the
+// owning lane's chat when this transcript is archived elsewhere.
+func (s *postgresStore) Begin(_ context.Context, config Config, binding conversation, userID string) (checkpointSession, error) {
+	return &postgresCheckpoint{userID: userID, db: s.db, expected: nil, config: config, chatID: binding.chatID, revision: ""}, nil
 }
 
 func (s *postgresCheckpoint) Load(ctx context.Context) ([][]byte, error) {
@@ -60,7 +61,7 @@ func (s *postgresCheckpoint) Load(ctx context.Context) ([][]byte, error) {
 	}
 	s.revision = revision
 	data, err := q.GetInferenceAcceptedCheckpoint(ctx, chatrepo.GetInferenceAcceptedCheckpointParams{
-		ProjectID: s.config.ProjectID, ExternalChatID: conv.ToPGText(s.externalID),
+		ProjectID: s.config.ProjectID, ChatID: s.chatID,
 	})
 	s.expected = data
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -110,7 +111,7 @@ func (s *postgresCheckpoint) Accept(ctx context.Context, hashes [][]byte) error 
 	// Empty frames have no conversation row and no content to accept.
 	if len(hashes) != 0 {
 		count, err := q.SetInferenceAcceptedCheckpoint(ctx, chatrepo.SetInferenceAcceptedCheckpointParams{
-			ProjectID: s.config.ProjectID, ExternalChatID: conv.ToPGText(s.externalID), Checkpoint: data, ExpectedCheckpoint: s.expected,
+			ProjectID: s.config.ProjectID, ChatID: s.chatID, Checkpoint: data, ExpectedCheckpoint: s.expected,
 		})
 		if err != nil {
 			return fmt.Errorf("persist accepted checkpoint: %w", err)

@@ -705,6 +705,66 @@ func (q *Queries) DeleteChatResolutionsAfterMessage(ctx context.Context, arg Del
 	return err
 }
 
+const findInferenceTranscriptOwner = `-- name: FindInferenceTranscriptOwner :one
+WITH candidates AS (
+  SELECT c.id AS chat_id, c.user_id, c.external_user_id, 0 AS priority FROM chats c
+  WHERE c.id = $1 AND c.project_id = $2
+  UNION ALL
+  SELECT c.id AS chat_id, c.user_id, c.external_user_id, 1 AS priority FROM chats c
+  WHERE c.id = $3 AND c.project_id = $2
+  UNION ALL
+  SELECT c.id AS chat_id, c.user_id, c.external_user_id, 2 AS priority FROM chats c
+  WHERE c.organization_id = $4 AND c.external_chat_id = $5
+    AND c.project_id = $2
+)
+SELECT candidates.chat_id, candidates.user_id, candidates.external_user_id FROM candidates
+ORDER BY candidates.priority
+LIMIT 1
+`
+
+type FindInferenceTranscriptOwnerParams struct {
+	InferenceChatID uuid.UUID
+	ProjectID       uuid.UUID
+	SessionChatID   uuid.UUID
+	OrganizationID  string
+	ExternalChatID  pgtype.Text
+}
+
+type FindInferenceTranscriptOwnerRow struct {
+	ChatID         uuid.UUID
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+}
+
+// Resolves the chat an Anthropic inference delivery belongs to, which is not
+// always its own conversation: an organization can run inference hooks
+// alongside the lanes that already record the same session — agent hooks for
+// a locally run harness, a compliance import for a provider-hosted chat — and
+// those lanes archive the turns the frame carries.
+//
+// The inference conversation wins when it exists, so a lane that appears
+// mid-conversation never splits an archived transcript in two; otherwise the
+// hook-captured session (keyed by the chat id derived from the harness
+// session id) or the imported conversation (keyed by the provider's chat id)
+// owns it. Soft-deleted chats still count: a session the user deleted must
+// not come back through another lane. Every branch is an index lookup.
+//
+// The owner's attribution comes back with it: session identifiers can be
+// client asserted, so the caller checks that a candidate is the delivery's
+// own conversation before letting it stand in for one.
+func (q *Queries) FindInferenceTranscriptOwner(ctx context.Context, arg FindInferenceTranscriptOwnerParams) (FindInferenceTranscriptOwnerRow, error) {
+	row := q.db.QueryRow(ctx, findInferenceTranscriptOwner,
+		arg.InferenceChatID,
+		arg.ProjectID,
+		arg.SessionChatID,
+		arg.OrganizationID,
+		arg.ExternalChatID,
+	)
+	var i FindInferenceTranscriptOwnerRow
+	err := row.Scan(&i.ChatID, &i.UserID, &i.ExternalUserID)
+	return i, err
+}
+
 const getActiveUserCountByMessages = `-- name: GetActiveUserCountByMessages :one
 SELECT
   COUNT(DISTINCT COALESCE(NULLIF(c.external_user_id, ''), c.user_id))::bigint as active_user_count
@@ -1132,16 +1192,19 @@ func (q *Queries) GetChatTitlesByIDs(ctx context.Context, arg GetChatTitlesByIDs
 
 const getInferenceAcceptedCheckpoint = `-- name: GetInferenceAcceptedCheckpoint :one
 SELECT inference_accepted_checkpoint FROM chats
-WHERE project_id = $1 AND external_chat_id = $2
+WHERE project_id = $1 AND id = $2
 `
 
 type GetInferenceAcceptedCheckpointParams struct {
-	ProjectID      uuid.UUID
-	ExternalChatID pgtype.Text
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
 }
 
+// The checkpoint is keyed by chat id rather than external_chat_id because a
+// delivery whose transcript another lane owns carries its marker on that
+// lane's conversation, which has no inference external id.
 func (q *Queries) GetInferenceAcceptedCheckpoint(ctx context.Context, arg GetInferenceAcceptedCheckpointParams) ([]byte, error) {
-	row := q.db.QueryRow(ctx, getInferenceAcceptedCheckpoint, arg.ProjectID, arg.ExternalChatID)
+	row := q.db.QueryRow(ctx, getInferenceAcceptedCheckpoint, arg.ProjectID, arg.ChatID)
 	var inference_accepted_checkpoint []byte
 	err := row.Scan(&inference_accepted_checkpoint)
 	return inference_accepted_checkpoint, err
@@ -3626,14 +3689,14 @@ func (q *Queries) SetChatPinned(ctx context.Context, arg SetChatPinnedParams) er
 
 const setInferenceAcceptedCheckpoint = `-- name: SetInferenceAcceptedCheckpoint :execrows
 UPDATE chats SET inference_accepted_checkpoint = $1
-WHERE project_id = $2 AND external_chat_id = $3
+WHERE project_id = $2 AND id = $3
   AND inference_accepted_checkpoint IS NOT DISTINCT FROM $4::bytea
 `
 
 type SetInferenceAcceptedCheckpointParams struct {
 	Checkpoint         []byte
 	ProjectID          uuid.UUID
-	ExternalChatID     pgtype.Text
+	ChatID             uuid.UUID
 	ExpectedCheckpoint []byte
 }
 
@@ -3641,7 +3704,7 @@ func (q *Queries) SetInferenceAcceptedCheckpoint(ctx context.Context, arg SetInf
 	result, err := q.db.Exec(ctx, setInferenceAcceptedCheckpoint,
 		arg.Checkpoint,
 		arg.ProjectID,
-		arg.ExternalChatID,
+		arg.ChatID,
 		arg.ExpectedCheckpoint,
 	)
 	if err != nil {

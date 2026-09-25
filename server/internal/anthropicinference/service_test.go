@@ -33,12 +33,12 @@ func (s *memoryStore) ResolveActor(_ context.Context, _ Config, _ Frame) (string
 	return s.userID, nil
 }
 
-func (s *memoryStore) Save(_ context.Context, _ Config, frame Frame, _ string) (int, error) {
+func (s *memoryStore) Save(_ context.Context, _ Config, frame Frame, _ string) (conversation, int, error) {
 	s.saved = append(s.saved, frame)
-	return 0, s.err
+	return conversation{chatID: uuid.Nil, adopted: false}, 0, s.err
 }
 
-func (s *memoryStore) Begin(context.Context, Config, Frame, string) (checkpointSession, error) {
+func (s *memoryStore) Begin(context.Context, Config, conversation, string) (checkpointSession, error) {
 	return &memoryCheckpoint{store: s}, nil
 }
 
@@ -214,9 +214,9 @@ type deltaStore struct {
 	newStart int
 }
 
-func (s *deltaStore) Save(ctx context.Context, config Config, frame Frame, userID string) (int, error) {
-	_, err := s.memoryStore.Save(ctx, config, frame, userID)
-	return s.newStart, err
+func (s *deltaStore) Save(ctx context.Context, config Config, frame Frame, userID string) (conversation, int, error) {
+	binding, _, err := s.memoryStore.Save(ctx, config, frame, userID)
+	return binding, s.newStart, err
 }
 
 func TestServiceScansOnlyNewMessagesAndTheCurrentTurn(t *testing.T) {

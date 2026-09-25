@@ -204,7 +204,7 @@ type failingAcceptanceStore struct {
 	accept func(context.Context) error
 }
 
-func (s *failingAcceptanceStore) Begin(context.Context, Config, Frame, string) (checkpointSession, error) {
+func (s *failingAcceptanceStore) Begin(context.Context, Config, conversation, string) (checkpointSession, error) {
 	return &failingAcceptanceSession{memoryCheckpoint: &memoryCheckpoint{store: s.memoryStore}, accept: s.accept}, nil
 }
 
