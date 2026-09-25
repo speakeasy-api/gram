@@ -4,11 +4,8 @@ import {
   AnthropicAdminControlsStep,
   ConfigurePoliciesStep,
   ConfirmTrafficStep,
-  ConnectIdpStep,
   CreateMarketplaceStep,
-  DirectorySyncStep,
   DistributeServersStep,
-  DomainVerificationStep,
   InstrumentAgentsStep,
   LiteLLMSetupStep,
   PlatformMCPSetupStep,
@@ -105,8 +102,6 @@ export function TaskStepContent({
           <EnableLoggingSection index={1} />
         </StepContainer>
       );
-    case "domain-verification":
-      return <DomainVerificationStep onComplete={onComplete} />;
     case "identity-provider":
       return <IdentityProviderStep onComplete={onComplete} />;
     case "anthropic-observability":
@@ -115,16 +110,6 @@ export function TaskStepContent({
       return <LiteLLMSetupStep onComplete={onComplete} />;
     case "anthropic-admin-controls":
       return <AnthropicAdminControlsStep onComplete={onComplete} />;
-    case "connect-idp":
-      return <ConnectIdpStep onSkip={onClose} onComplete={onComplete} />;
-    case "directory-sync":
-      return (
-        <DirectorySyncStep
-          onComplete={onComplete}
-          onSkip={onClose}
-          onBack={onClose}
-        />
-      );
     case "create-marketplace":
       return <CreateMarketplaceStep onComplete={onComplete} onBack={onClose} />;
     case "instrument-agents":

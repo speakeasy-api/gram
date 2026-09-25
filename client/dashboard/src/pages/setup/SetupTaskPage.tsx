@@ -96,20 +96,18 @@ function StepsRail({
   return (
     <div>
       <BoardLink className="mb-6" />
-      <div className="bg-card border-border border p-5">
-        <p className="text-eyebrow mb-4">
-          {railSteps.filter((step) => step.status === "done").length} of{" "}
-          {railSteps.length} complete
-        </p>
-        <OnboardingStepper
-          steps={railSteps}
-          currentStep={currentStep === -1 ? 0 : currentStep}
-          onStepClick={(position) => {
-            const step = steps[position];
-            if (step) setActiveIndex(step.index);
-          }}
-        />
-      </div>
+      <p className="text-eyebrow mb-4">
+        {railSteps.filter((step) => step.status === "done").length} of{" "}
+        {railSteps.length} complete
+      </p>
+      <OnboardingStepper
+        steps={railSteps}
+        currentStep={currentStep === -1 ? 0 : currentStep}
+        onStepClick={(position) => {
+          const step = steps[position];
+          if (step) setActiveIndex(step.index);
+        }}
+      />
     </div>
   );
 }

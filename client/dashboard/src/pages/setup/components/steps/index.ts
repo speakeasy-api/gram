@@ -1,6 +1,3 @@
-export { DomainVerificationStep } from "./domain-verification-step";
-export { ConnectIdpStep } from "./connect-idp-step";
-export { DirectorySyncStep } from "./directory-sync-step";
 export { CreateMarketplaceStep } from "./create-marketplace-step";
 export { ConfirmTrafficStep } from "./confirm-traffic-step";
 export { IdentityProviderStep } from "./identity-provider-step";

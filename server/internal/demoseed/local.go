@@ -133,6 +133,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"adopt developer", localAdoptDeveloperSQL, []any{spec.OrgID, dev.ID, workosID}},
 		{"grant session visibility", localSessionVisibilitySQL, []any{spec.OrgID, dev.ID}},
 		{"enable platform mcp", localPlatformMCPFeatureSQL, []any{spec.OrgID}},
+		{"enable sso and directory sync", localIdentityFeaturesSQL, []any{spec.OrgID}},
 		{"api key", localAPIKeySQL, []any{spec.OrgID, spec.ProjectID(), dev.ID, localAPIKeyID(), LocalAPIKeyName, apiKeyHash, apiKey[:len(auth.APIKeyPrefix(env))+5]}},
 		{"default environment", localEnvironmentSQL, []any{spec.OrgID, spec.ProjectID(), localEnvironmentID()}},
 		{"mcp registry", localMCPRegistrySQL, nil},
@@ -253,6 +254,8 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		productfeatures.FeatureSessionCapture,
 		productfeatures.FeatureSkills,
 		productfeatures.FeaturePlatformMCP,
+		productfeatures.FeatureSSO,
+		productfeatures.FeatureSCIM,
 	} {
 		keys = append(keys, productfeatures.FeatureCacheKey(orgID, feature))
 	}
@@ -339,6 +342,14 @@ ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), s
 const localPlatformMCPFeatureSQL = `
 INSERT INTO organization_features (organization_id, feature_name)
 VALUES ($1, 'platform_mcp')
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+`
+
+// SSO and directory sync (scim) are paid entitlements that gate the WorkOS
+// admin portal; enabled locally so the identity setup flow works end to end.
+const localIdentityFeaturesSQL = `
+INSERT INTO organization_features (organization_id, feature_name)
+VALUES ($1, 'sso'), ($1, 'scim')
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 `
 

@@ -20,9 +20,9 @@ vi.mock("./setup-task-content", () => ({
 }));
 
 const task: SetupTask = {
-  key: "connect-idp",
-  title: "Connect identity provider",
-  description: "Connect SSO",
+  key: "identity-provider",
+  title: "Set up identity provider",
+  description: "Connect SSO and directory sync",
   status: "todo",
   completedByFact: false,
   blockedBy: [],

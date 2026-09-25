@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { StepSupportProvider } from "../step-container";
 import { AnthropicInferenceHooksStep } from "../steps/anthropic-inference-hooks-step";
-import { DomainVerificationStep } from "../steps";
+import { IdentityProviderStep } from "../steps";
 import { TaskStep, TaskStepContent, type TaskStepProps } from "./task-step";
 import { ONBOARDING_TASKS, ONBOARDING_WORKSTREAMS } from "./tasks";
 import { SETUP_TASK_SLUGS } from "../../task-slugs";
@@ -65,7 +65,6 @@ vi.mock("../steps", () =>
       "CreateMarketplaceStep",
       "DirectorySyncStep",
       "DistributeServersStep",
-      "DomainVerificationStep",
       "LiteLLMSetupStep",
       "IdentityProviderStep",
       "InstrumentAgentsStep",
@@ -147,19 +146,26 @@ describe("workstream task coverage", () => {
     expect(step.type).toBe(AnthropicInferenceHooksStep);
     expect(step.props.onComplete).toBe(onComplete);
   });
-  it("routes domain verification to its step in Connect identity", () => {
+  it("routes the identity provider task, which now covers domain verification", () => {
     const onComplete = vi.fn<TaskStepProps["onComplete"]>();
     const step = TaskStepContent({
-      taskId: "domain-verification",
+      taskId: "identity-provider",
       onComplete,
       onClose: vi.fn<() => void>(),
     });
-    expect(step.type).toBe(DomainVerificationStep);
+    expect(step.type).toBe(IdentityProviderStep);
     expect(step.props.onComplete).toBe(onComplete);
     expect(
       ONBOARDING_WORKSTREAMS.find((stream) => stream.id === "connect")?.taskIds,
-    ).toContain("domain-verification");
-    expect(SETUP_TASK_SLUGS["domain-verification"]).toBe("domain");
+    ).toEqual(["identity-provider"]);
+    for (const retired of [
+      "domain-verification",
+      "connect-idp",
+      "directory-sync",
+    ]) {
+      expect(ONBOARDING_TASKS.map((task) => task.id)).not.toContain(retired);
+      expect(SETUP_TASK_SLUGS).not.toHaveProperty(retired);
+    }
   });
   it("includes every main task and every server-supported key", () => {
     const ids = ONBOARDING_TASKS.map((task) => task.id);

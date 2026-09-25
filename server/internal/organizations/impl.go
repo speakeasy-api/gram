@@ -1138,8 +1138,7 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	originTask := r.URL.Query().Get("task")
 	validOrigin := originTask == "" ||
-		(intent == "sso" && (originTask == "connect-idp" || originTask == "identity-provider")) ||
-		(intent == "dsync" && (originTask == "directory-sync" || originTask == "identity-provider"))
+		((intent == "domain_verification" || intent == "sso" || intent == "dsync") && originTask == "identity-provider")
 	if !validOrigin {
 		span.SetStatus(codes.Error, "invalid originating task")
 		http.Error(w, "invalid originating task", http.StatusBadRequest)
@@ -1187,16 +1186,13 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	var nextStepSlug string
 	switch intent {
 	case "domain_verification":
-		// Single sign-on unlocks once a domain is verified. WorkOS may still
-		// be checking DNS, so stay on this step until it reports verified.
-		nextStepSlug = "domain-verification"
+		// Domain verification lives on the identity provider card. Refresh the
+		// stored domains so the card shows the result; WorkOS may still be
+		// checking DNS, in which case the card stays unverified.
+		nextStepSlug = "identity-provider"
 		if workosOrgID != "" {
-			verified, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains)
-			if err != nil {
+			if _, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains); err != nil {
 				s.logger.ErrorContext(ctx, "setup callback: check domain verification", attr.SlogError(err))
-			}
-			if len(verified) > 0 {
-				nextStepSlug = "identity-provider"
 			}
 		}
 	case "sso":

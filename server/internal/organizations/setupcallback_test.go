@@ -17,6 +17,7 @@ import (
 func TestSetupCallbackPreservesValidatedOriginAndLegacyNavigation(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestOrganizationsService(t)
+	ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, mock.Anything).Return(&workos.OrganizationDomainPolicy{Domains: nil}, nil).Maybe()
 	ac, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, ac.SessionID)
@@ -30,14 +31,13 @@ func TestSetupCallbackPreservesValidatedOriginAndLegacyNavigation(t *testing.T) 
 		location string
 		active   bool
 	}{
-		{"intent=sso&task=connect-idp", "?task=connect-idp", true},
-		{"intent=sso&task=connect-idp", "?task=connect-idp", false},
-		{"intent=dsync&task=directory-sync", "?task=directory-sync", false},
 		{"intent=sso&task=identity-provider", "?task=identity-provider", true},
 		{"intent=dsync&task=identity-provider", "?task=identity-provider", false},
+		{"intent=domain_verification&task=identity-provider", "?task=identity-provider", false},
 		{"intent=sso", "?step=identity-provider", true},
 		{"intent=sso", "", false},
 		{"intent=dsync", "?step=anthropic-observability", false},
+		{"intent=domain_verification", "?step=identity-provider", false},
 	} {
 		state := "inactive"
 		if tc.active {
@@ -59,9 +59,9 @@ func TestSetupCallbackRejectsInvalidOrigin(t *testing.T) {
 	mux := goahttp.NewMuxer()
 	organizations.Attach(mux, ti.service)
 	for _, query := range []string{
-		"intent=sso&task=directory-sync", "intent=dsync&task=connect-idp",
+		"intent=sso&task=connect-idp", "intent=dsync&task=directory-sync",
 		"intent=dsync&task=anthropic-observability", "intent=sso&task=unknown",
-		"intent=sso&task=https://example.test", "intent=unknown&task=connect-idp",
+		"intent=sso&task=https://example.test", "intent=unknown&task=identity-provider",
 	} {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/setup/callback?"+query, nil))

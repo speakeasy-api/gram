@@ -18,7 +18,7 @@ import (
 func onboardingPresets() []*gen.AdminOnboardingPreset {
 	return []*gen.AdminOnboardingPreset{
 		{Key: "gateway", VisibleTaskKeys: []string{"create-marketplace", "distribute-servers"}},
-		{Key: "security", VisibleTaskKeys: []string{"domain-verification", "connect-idp", "directory-sync", "create-marketplace", "enable-logging", "anthropic-observability", "instrument-agents", "additional-agent-config", "confirm-traffic", "anthropic-admin-controls", "configure-policies"}},
+		{Key: "security", VisibleTaskKeys: []string{"identity-provider", "create-marketplace", "enable-logging", "anthropic-observability", "instrument-agents", "additional-agent-config", "confirm-traffic", "anthropic-admin-controls", "configure-policies"}},
 	}
 }
 
