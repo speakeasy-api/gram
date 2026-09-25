@@ -11,7 +11,7 @@ import type { SetDirectoryRoleMappingForm } from "@gram/client/models/components
  * URL means a crafted link cannot trigger a mapping (it has no entry to point
  * at), and directory attribute values never reach history, logs or referrers.
  */
-export const DIRECTORY_MAPPING_FLOW = "directory-mapping";
+const DIRECTORY_MAPPING_FLOW = "directory-mapping";
 
 const FLOW_PARAM = "mapping";
 const STORAGE_PREFIX = "gram.directoryRoleMappingFlow.";
