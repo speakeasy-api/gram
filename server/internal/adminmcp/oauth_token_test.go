@@ -227,6 +227,15 @@ func TestStaffOAuthPublicClientCannotPresentCredentials(t *testing.T) {
 	response = httptest.NewRecorder()
 	tokens.TokenHandler().ServeHTTP(response, publicStaffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "client_id": {staffClient, "client_other"}}))
 	require.Equal(t, http.StatusUnauthorized, response.Code)
+
+	// Any other Authorization header is an ambiguous presentation, not absent.
+	for _, header := range []string{"Bearer some-token", "Basic not-base64", "Basic"} {
+		request := publicStaffTokenRequest("authorization_code", url.Values{"code": {"one-time-code"}, "redirect_uri": {"http://localhost:5555/callback"}, "code_verifier": {strings.Repeat("x", 43)}})
+		request.Header.Set("Authorization", header)
+		response = httptest.NewRecorder()
+		tokens.TokenHandler().ServeHTTP(response, request)
+		require.Equal(t, http.StatusUnauthorized, response.Code, header)
+	}
 	require.Zero(t, store.validate)
 }
 

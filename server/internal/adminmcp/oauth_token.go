@@ -104,11 +104,13 @@ type staffPresentedClient struct {
 }
 
 // staffClientCredentials accepts exactly one presentation: HTTP Basic for
-// confidential clients, or a single form client_id with no secret for public
-// clients. A form client_secret or a Basic header mixed with a form client_id
-// is refused.
+// confidential clients, or a single form client_id with no secret and no
+// Authorization header for public clients. A form client_secret, a Basic
+// header mixed with a form client_id, or any other Authorization header is
+// refused.
 func staffClientCredentials(r *http.Request) (staffPresentedClient, bool) {
-	if r.PostForm.Has("client_secret") {
+	authorization := r.Header.Values("Authorization")
+	if r.PostForm.Has("client_secret") || len(authorization) > 1 {
 		return staffPresentedClient{ID: "", Secret: "", Public: false}, false
 	}
 	if id, secret, basic := r.BasicAuth(); basic {
@@ -118,7 +120,7 @@ func staffClientCredentials(r *http.Request) (staffPresentedClient, bool) {
 		return staffPresentedClient{ID: id, Secret: secret, Public: false}, true
 	}
 	ids := r.PostForm["client_id"]
-	if len(ids) != 1 || ids[0] == "" {
+	if len(authorization) != 0 || len(ids) != 1 || ids[0] == "" {
 		return staffPresentedClient{ID: "", Secret: "", Public: false}, false
 	}
 	return staffPresentedClient{ID: ids[0], Secret: "", Public: true}, true
