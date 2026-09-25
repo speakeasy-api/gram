@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
@@ -178,9 +179,15 @@ func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Requ
 	}
 	_, sessionID, err := s.staffSession(r)
 	if err != nil {
-		if !errors.Is(err, errMissingStaffCookie) {
+		var authErr *oops.ShareableError
+		if !errors.Is(err, errMissingStaffCookie) && (!errors.As(err, &authErr) || authErr.Code != oops.CodeUnauthorized) {
 			staffOAuthError(w, http.StatusUnauthorized, "access_denied", "staff login is required")
 			return
+		}
+		// A logged-out session can leave a path-scoped browser cookie behind.
+		// Clear it before returning to normal staff login, without touching /admin.
+		if !errors.Is(err, errMissingStaffCookie) {
+			http.SetCookie(w, &http.Cookie{Name: constants.AdminSessionCookie, Path: Path, MaxAge: -1, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:exhaustruct // Only the scoped cookie is expired.
 		}
 		// The relative return target is server-owned and contains only the opaque
 		// challenge ID, never an untrusted redirect URI or client-supplied URL.

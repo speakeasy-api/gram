@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -127,6 +128,51 @@ func TestStaffOAuthAuthorizationRequiresStaffConsent(t *testing.T) {
 	s.ConnectHandler().ServeHTTP(response, request)
 	require.Equal(t, http.StatusUnauthorized, response.Code)
 	require.Equal(t, 1, store.calls)
+}
+
+func TestStaffOAuthAuthorizationReauthenticatesRevokedBrowserSession(t *testing.T) {
+	t.Parallel()
+	s, store, verifier, pkce := staffAuthorizationFixture(t)
+	response := httptest.NewRecorder()
+	s.AuthorizeHandler().ServeHTTP(response, staffAuthorizeRequest(pkce))
+	require.Equal(t, http.StatusFound, response.Code)
+	connectURL := response.Header().Get("Location")
+	proof := staffBrowserProof(t, response)
+	verifier.err = oops.C(oops.CodeUnauthorized)
+
+	request := httptest.NewRequest(http.MethodGet, connectURL, nil)
+	request.AddCookie(proof)
+	request.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: "logged-out-session"})
+	response = httptest.NewRecorder()
+	s.ConnectHandler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusFound, response.Code)
+	require.Contains(t, response.Header().Get("Location"), "/admin/auth.login?return_to=")
+	require.Equal(t, "logged-out-session", verifier.key)
+	require.Zero(t, store.calls)
+	cookies := response.Result().Cookies()
+	require.Len(t, cookies, 1)
+	require.Equal(t, constants.AdminSessionCookie, cookies[0].Name)
+	require.Equal(t, Path, cookies[0].Path)
+	require.Negative(t, cookies[0].MaxAge)
+	require.True(t, cookies[0].Secure)
+	require.True(t, cookies[0].HttpOnly)
+
+	// A new login can resume the same unconsumed challenge.
+	verifier.err = nil
+	request = httptest.NewRequest(http.MethodGet, connectURL, nil)
+	request.AddCookie(proof)
+	request.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: "browser-session"})
+	response = httptest.NewRecorder()
+	s.ConnectHandler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Zero(t, store.calls)
+
+	verifier.err = oops.C(oops.CodeUnexpected)
+	response = httptest.NewRecorder()
+	s.ConnectHandler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Empty(t, response.Header().Get("Location"), "verification outages must not restart login")
+	require.Zero(t, store.calls)
 }
 
 func TestStaffOAuthAuthorizationRejectsCopiedBrowserState(t *testing.T) {
