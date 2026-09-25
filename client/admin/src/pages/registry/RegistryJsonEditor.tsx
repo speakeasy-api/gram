@@ -219,9 +219,6 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
                 }}
               />
             </div>
-            <a href="#registry-feedback" className="shrink-0 text-sm underline">
-              Validation feedback
-            </a>
           </>
         )}
       </div>
