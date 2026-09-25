@@ -45,8 +45,8 @@ WHERE organization_id = @organization_id
 ORDER BY (project_id IS NULL) DESC, name;
 
 -- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission)
-VALUES (@organization_id, @project_id, @name, @issuer, @jwks_uri, @allow_wildcard_admission)
+INSERT INTO workload_issuers (organization_id, project_id, name, tags, issuer, jwks_uri, allow_wildcard_admission)
+VALUES (@organization_id, @project_id, @name, @tags, @issuer, @jwks_uri, @allow_wildcard_admission)
 RETURNING *;
 
 -- name: SoftDeleteWorkloadIssuer :one

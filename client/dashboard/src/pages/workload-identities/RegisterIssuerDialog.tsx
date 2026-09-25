@@ -3,6 +3,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Stack } from "@/components/ui/Stack";
+import { TagInput } from "@/components/ui/TagInput";
 import { Text } from "@/components/ui/Text";
 import { useEffect, useState } from "react";
 
@@ -10,6 +11,7 @@ export interface RegisterIssuerValues {
   name: string;
   issuer: string;
   jwksUri: string;
+  tags: string[];
 }
 
 interface RegisterIssuerDialogProps {
@@ -23,7 +25,23 @@ const EMPTY: RegisterIssuerValues = {
   name: "",
   issuer: "",
   jwksUri: "",
+  tags: [],
 };
+
+// The column caps the list at 40 and each entry at 64 characters; the server
+// refuses anything past that. Checked here so the reason lands beside the field.
+const MAX_TAGS = 40;
+const MAX_TAG_LENGTH = 64;
+
+function tagsProblem(tags: string[]): string | null {
+  if (tags.length > MAX_TAGS) {
+    return `At most ${MAX_TAGS} tags.`;
+  }
+  if (tags.some((tag) => tag.length > MAX_TAG_LENGTH)) {
+    return `Each tag is at most ${MAX_TAG_LENGTH} characters.`;
+  }
+  return null;
+}
 
 // Mirrors what the server refuses on the write path, so the reason appears next
 // to the field instead of arriving as a toast after submit. Deliberately not a
@@ -82,13 +100,15 @@ export function RegisterIssuerDialog({
 
   const issuerProblem = httpsUrlProblem(values.issuer, true);
   const jwksProblem = httpsUrlProblem(values.jwksUri, false);
+  const tagProblem = tagsProblem(values.tags);
 
   const canSubmit =
     values.name.trim().length > 0 &&
     values.issuer.trim().length > 0 &&
     values.jwksUri.trim().length > 0 &&
     issuerProblem === null &&
-    jwksProblem === null;
+    jwksProblem === null &&
+    tagProblem === null;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -171,6 +191,32 @@ export function RegisterIssuerDialog({
               <Text muted small>
                 Where the issuer publishes its signing keys. This is the only
                 field Gram reads when verifying an assertion.
+              </Text>
+            )}
+          </Stack>
+
+          <Stack gap={2}>
+            <Label htmlFor="workload-issuer-tags">Tags</Label>
+            <TagInput
+              id="workload-issuer-tags"
+              value={values.tags}
+              placeholder="production, ci"
+              error={tagProblem !== null}
+              onChange={(tags) => setValues({ ...values, tags })}
+            />
+            {tagProblem !== null ? (
+              <Text
+                id="workload-issuer-tags-error"
+                role="alert"
+                small
+                destructive
+              >
+                {tagProblem}
+              </Text>
+            ) : (
+              <Text muted small>
+                Optional labels for grouping platforms here. Not used for
+                matching.
               </Text>
             )}
           </Stack>

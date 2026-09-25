@@ -23,6 +23,9 @@ type WorkloadIssuer struct {
 	JwksURI string
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	AllowWildcardAdmission bool
-	CreatedAt              string
-	UpdatedAt              string
+	// Free-form labels for grouping and filtering trusted platforms. Empty rather
+	// than absent where none are set.
+	Tags      []string
+	CreatedAt string
+	UpdatedAt string
 }

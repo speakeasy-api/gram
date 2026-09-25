@@ -29,6 +29,10 @@ export type RegisterWorkloadIssuerForm = {
    * Register the issuer for the selected project alone rather than the whole organization. Defaults to false.
    */
   projectScoped?: boolean | undefined;
+  /**
+   * Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+   */
+  tags?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -38,6 +42,7 @@ export type RegisterWorkloadIssuerForm$Outbound = {
   jwks_uri: string;
   name: string;
   project_scoped: boolean;
+  tags?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -51,6 +56,7 @@ export const RegisterWorkloadIssuerForm$outboundSchema: z.ZodMiniType<
     jwksUri: z.string(),
     name: z.string(),
     projectScoped: z._default(z.boolean(), false),
+    tags: z.optional(z.array(z.string())),
   }),
   z.transform((v) => {
     return remap$(v, {

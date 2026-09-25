@@ -15,6 +15,7 @@ function issuer(overrides: Partial<WorkloadIssuer> = {}): WorkloadIssuer {
     issuer: "https://identity.example.com",
     jwksUri: "https://identity.example.com/jwks",
     allowWildcardAdmission: false,
+    tags: [],
     createdAt: new Date("2026-09-23T00:00:00Z"),
     updatedAt: new Date("2026-09-23T00:00:00Z"),
     ...overrides,

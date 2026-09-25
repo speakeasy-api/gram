@@ -30,6 +30,9 @@ type RegisterIssuerRequestBody struct {
 	// incident control rather than a setup step, which is why the dashboard does
 	// not ask for it at registration.
 	AllowWildcardAdmission bool `form:"allow_wildcard_admission" json:"allow_wildcard_admission" xml:"allow_wildcard_admission"`
+	// Free-form labels for grouping and filtering trusted platforms. Flat strings,
+	// not key/value pairs. Trimmed and de-duplicated on write. At most 40.
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Register the issuer for the selected project alone rather than the whole
 	// organization. Defaults to false.
 	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
@@ -1054,9 +1057,12 @@ type WorkloadIssuerResponseBody struct {
 	// Where the issuer publishes its signing keys.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
-	AllowWildcardAdmission *bool   `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
-	CreatedAt              *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	UpdatedAt              *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
+	// Free-form labels for grouping and filtering trusted platforms. Empty rather
+	// than absent where none are set.
+	Tags      []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	CreatedAt *string  `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	UpdatedAt *string  `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
 // WorkloadAdmissionResponseBody is used to define fields on response body
@@ -1107,6 +1113,12 @@ func NewRegisterIssuerRequestBody(p *workloadidentities.RegisterIssuerPayload) *
 		var zero bool
 		if body.AllowWildcardAdmission == zero {
 			body.AllowWildcardAdmission = true
+		}
+	}
+	if p.Tags != nil {
+		body.Tags = make([]string, len(p.Tags))
+		for i, val := range p.Tags {
+			body.Tags[i] = val
 		}
 	}
 	{
@@ -3366,6 +3378,9 @@ func ValidateWorkloadIssuerResponseBody(body *WorkloadIssuerResponseBody) (err e
 	}
 	if body.AllowWildcardAdmission == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("allow_wildcard_admission", "body"))
+	}
+	if body.Tags == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

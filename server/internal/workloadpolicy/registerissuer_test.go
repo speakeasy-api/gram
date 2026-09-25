@@ -25,6 +25,7 @@ func registerAnthropic(t *testing.T, ctx context.Context, ti *testInstance, allo
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
 		AllowWildcardAdmission: allowWildcard,
+		Tags:                   nil,
 		ProjectScoped:          false,
 	})
 	require.NoError(t, err)
@@ -72,6 +73,7 @@ func TestRegisterIssuer_DefaultsToRefusingWildcards(t *testing.T) {
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
 		AllowWildcardAdmission: false,
+		Tags:                   nil,
 		ProjectScoped:          false,
 	})
 	require.NoError(t, err)
@@ -137,6 +139,7 @@ func TestRegisterIssuer_RefusesADuplicateNameAtTheSameTier(t *testing.T) {
 		Issuer:                 "https://identity.example.com",
 		JwksURI:                "https://identity.example.com/jwks",
 		AllowWildcardAdmission: false,
+		Tags:                   nil,
 		ProjectScoped:          false,
 	})
 	requireOopsCode(t, err, oops.CodeConflict)
@@ -158,6 +161,7 @@ func TestRegisterIssuer_RequiresWorkloadWrite(t *testing.T) {
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
 		AllowWildcardAdmission: false,
+		Tags:                   nil,
 		ProjectScoped:          false,
 	})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -178,6 +182,77 @@ func TestRegisterIssuer_RefusesABlankName(t *testing.T) {
 		Issuer:                 anthropicIssuer,
 		JwksURI:                anthropicJWKS,
 		AllowWildcardAdmission: false,
+		Tags:                   nil,
+		ProjectScoped:          false,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestRegisterIssuer_StoresTagsTrimmedAndDeduplicated(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	policy, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		ProjectSlugInput:       nil,
+		Name:                   "Claude Tag",
+		Issuer:                 anthropicIssuer,
+		JwksURI:                anthropicJWKS,
+		AllowWildcardAdmission: true,
+		Tags:                   []string{"  production  ", "ci", "production"},
+		ProjectScoped:          false,
+	})
+	require.NoError(t, err)
+
+	// Trimmed, de-duplicated, and in the order they were entered: a tag list is
+	// something an operator reads back, so it should not be reordered under them.
+	require.Equal(t, []string{"production", "ci"}, policy.Issuers[0].Tags)
+}
+
+func TestRegisterIssuer_RendersNoTagsAsAnEmptyList(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	policy := registerAnthropic(t, ctx, ti, true)
+
+	// Empty rather than null, so a client never has to distinguish "no tags"
+	// from "field absent".
+	require.NotNil(t, policy.Issuers[0].Tags)
+	require.Empty(t, policy.Issuers[0].Tags)
+}
+
+func TestRegisterIssuer_RefusesABlankTag(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	_, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		ProjectSlugInput:       nil,
+		Name:                   "Claude Tag",
+		Issuer:                 anthropicIssuer,
+		JwksURI:                anthropicJWKS,
+		AllowWildcardAdmission: true,
+		Tags:                   []string{"production", "   "},
+		ProjectScoped:          false,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
+func TestRegisterIssuer_RefusesAnOverlongTag(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	_, err := ti.service.RegisterIssuer(ctx, &gen.RegisterIssuerPayload{
+		SessionToken:           nil,
+		ApikeyToken:            nil,
+		ProjectSlugInput:       nil,
+		Name:                   "Claude Tag",
+		Issuer:                 anthropicIssuer,
+		JwksURI:                anthropicJWKS,
+		AllowWildcardAdmission: true,
+		Tags:                   []string{strings.Repeat("a", 65)},
 		ProjectScoped:          false,
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)

@@ -41,6 +41,10 @@ export type WorkloadIssuer = {
    * The owning project id; empty for an organization-tier issuer.
    */
   projectId: string;
+  /**
+   * Free-form labels for grouping and filtering trusted platforms. Empty rather than absent where none are set.
+   */
+  tags: Array<string>;
   updatedAt: Date;
 };
 
@@ -61,6 +65,7 @@ export const WorkloadIssuer$inboundSchema: z.ZodMiniType<
     name: z.string(),
     organization_id: z.string(),
     project_id: z.string(),
+    tags: z.array(z.string()),
     updated_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

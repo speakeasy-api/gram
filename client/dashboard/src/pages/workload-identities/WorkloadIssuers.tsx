@@ -1,4 +1,5 @@
 import { InlineEmptyState } from "@/components/inline-empty-state";
+import { cn } from "@/lib/utils";
 import { ResourceListPage } from "@/components/page-templates";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
@@ -15,7 +16,7 @@ import {
 import { useRegisterWorkloadIssuerMutation } from "@gram/client/react-query/registerWorkloadIssuer.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, Outlet } from "react-router";
 import { useRoutes } from "@/routes";
 import { toast } from "sonner";
@@ -59,8 +60,29 @@ function WorkloadIssuersCatalogue(): JSX.Element {
   // fallback for a platform the catalogue does not carry yet — which today is
   // all of them.
   const [view, setView] = useState<IssuerView>("catalog");
+  const [activeTag, setActiveTag] = useState<string | null>(null);
   const { data, isPending } = useWorkloadIdentities({});
   const issuers = data?.issuers ?? [];
+
+  // Only tags actually in use are offered, so the filter row cannot point at an
+  // empty result.
+  const allTags = useMemo(() => {
+    const seen = new Set<string>();
+    for (const issuer of issuers) {
+      for (const tag of issuer.tags) {
+        seen.add(tag);
+      }
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [issuers]);
+
+  const visibleIssuers = useMemo(
+    () =>
+      activeTag === null
+        ? issuers
+        : issuers.filter((issuer) => issuer.tags.includes(activeTag)),
+    [issuers, activeTag],
+  );
 
   const registerIssuer = useRegisterWorkloadIssuerMutation({
     onSuccess: async () => {
@@ -84,6 +106,7 @@ function WorkloadIssuersCatalogue(): JSX.Element {
           name: values.name.trim(),
           issuer: values.issuer.trim(),
           jwksUri: values.jwksUri.trim(),
+          tags: values.tags,
         },
       },
     });
@@ -139,11 +162,41 @@ function WorkloadIssuersCatalogue(): JSX.Element {
               />
             </Cards>
           ) : (
-            <Cards isLoading={isPending} cardSize={2}>
-              {issuers.map((issuer) => (
-                <IssuerCard key={issuer.id} issuer={issuer} />
-              ))}
-            </Cards>
+            <>
+              {allTags.length > 0 && (
+                <Stack
+                  direction="horizontal"
+                  gap={2}
+                  align="center"
+                  className="mb-4 flex-wrap"
+                >
+                  <TagFilterChip
+                    label="All"
+                    active={activeTag === null}
+                    onClick={() => setActiveTag(null)}
+                  />
+                  {allTags.map((tag) => (
+                    <TagFilterChip
+                      key={tag}
+                      label={tag}
+                      active={activeTag === tag}
+                      // Clicking the active tag clears it, so the filter can be
+                      // undone where it was set.
+                      onClick={() =>
+                        setActiveTag((current) =>
+                          current === tag ? null : tag,
+                        )
+                      }
+                    />
+                  ))}
+                </Stack>
+              )}
+              <Cards isLoading={isPending} cardSize={2}>
+                {visibleIssuers.map((issuer) => (
+                  <IssuerCard key={issuer.id} issuer={issuer} />
+                ))}
+              </Cards>
+            </>
           )
         ) : (
           // Empty on purpose. A preset carries what an operator cannot be
@@ -197,6 +250,11 @@ function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
             <Badge variant="neutral" background>
               {organizationTier ? "Organization" : "This project"}
             </Badge>
+            {issuer.tags.map((tag) => (
+              <Badge key={tag} variant="information">
+                {tag}
+              </Badge>
+            ))}
           </div>
           <Text muted small className="mt-3 block break-all">
             Keys: {issuer.jwksUri}
@@ -204,5 +262,31 @@ function IssuerCard({ issuer }: { issuer: WorkloadIssuer }): JSX.Element {
         </Card.Content>
       </Card>
     </Link>
+  );
+}
+
+function TagFilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-3 py-1 text-xs transition-colors",
+        active
+          ? "border-foreground bg-foreground text-background"
+          : "border-border text-muted-foreground hover:border-foreground/30",
+      )}
+    >
+      {label}
+    </button>
   );
 }

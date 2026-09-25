@@ -177,6 +177,9 @@ var RegisterWorkloadIssuerForm = Type("RegisterWorkloadIssuerForm", func() {
 	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to true. Re-checked on every lookup rather than at write time, so clearing it makes wildcard rules already written inert immediately — an incident control rather than a setup step, which is why the dashboard does not ask for it at registration.", func() {
 		Default(true)
 	})
+	Attribute("tags", ArrayOf(String, func() { MaxLength(64) }), "Free-form labels for grouping and filtering trusted platforms. Flat strings, not key/value pairs. Trimmed and de-duplicated on write. At most 40.", func() {
+		MaxLength(40)
+	})
 	Attribute("project_scoped", Boolean, "Register the issuer for the selected project alone rather than the whole organization. Defaults to false.", func() {
 		Default(false)
 	})
@@ -222,6 +225,7 @@ var WorkloadIssuer = Type("WorkloadIssuer", func() {
 	Attribute("issuer", String, "The issuer identifier the assertion's iss claim must carry.")
 	Attribute("jwks_uri", String, "Where the issuer publishes its signing keys.")
 	Attribute("allow_wildcard_admission", Boolean, "Whether subjects under this issuer may be admitted by a wildcard rule.")
+	Attribute("tags", ArrayOf(String), "Free-form labels for grouping and filtering trusted platforms. Empty rather than absent where none are set.")
 	Attribute("created_at", String, func() {
 		Format(FormatDateTime)
 	})
@@ -229,7 +233,7 @@ var WorkloadIssuer = Type("WorkloadIssuer", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "organization_id", "project_id", "name", "issuer", "jwks_uri", "allow_wildcard_admission", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "name", "issuer", "jwks_uri", "allow_wildcard_admission", "tags", "created_at", "updated_at")
 })
 
 var WorkloadAdmission = Type("WorkloadAdmission", func() {
