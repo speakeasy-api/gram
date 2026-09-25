@@ -85,7 +85,7 @@ func TestStaffAuthenticatorRequiresLiveMatchingStaff(t *testing.T) {
 	auth, store, verifier, token := staffAuthFixture(t)
 	principal, err := auth.Authenticate(t.Context(), token)
 	require.NoError(t, err)
-	require.Equal(t, Principal{Subject: "user:" + staffSubject, Email: "staff@example.test", ClientID: staffClient, ConnectionID: "connection-1", Scopes: []string{"admin:read"}}, principal)
+	require.Equal(t, Principal{Subject: "user:" + staffSubject, Email: "staff@example.test", ClientID: staffClient, ConnectionID: "connection-1", Scopes: []string{"admin:read"}, staff: verifier.result}, principal)
 	require.Equal(t, "linked-browser-session", verifier.key)
 	require.Equal(t, 1, verifier.calls)
 	require.Equal(t, 1, store.calls)
