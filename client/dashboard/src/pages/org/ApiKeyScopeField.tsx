@@ -57,6 +57,10 @@ const GENERAL_SCOPE_OPTIONS: ApiKeyScopeOption[] = [
       "Upload OpenAPI documents and trigger deployments",
       "Create and edit projects, toolsets, and MCP servers",
       "Read chat transcripts, telemetry, and risk findings",
+      // Named as a capability rather than as "what a Chat key can do": the chat
+      // scope is no longer offered above, so naming it would point at an option
+      // the reader cannot see. Producer still implies it, so it belongs here.
+      "Create chat sessions and run agent workflows",
       "Everything a Consumer key can do",
     ],
     excludes: "Sending AI traffic in, enrolling device agents",

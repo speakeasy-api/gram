@@ -373,6 +373,11 @@ describe("API key scope options", () => {
     expect(
       screen.getByText("Sending AI traffic in, enrolling device agents"),
     ).toBeTruthy();
+    // producer implies chat in auth.effectiveScopes, so the card must not
+    // understate itself now that the chat scope is no longer offered.
+    expect(
+      screen.getByText("Create chat sessions and run agent workflows"),
+    ).toBeTruthy();
     expect(
       screen.getByRole("radio", { checked: true }).getAttribute("value"),
     ).toBe("consumer");
