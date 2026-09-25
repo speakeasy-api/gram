@@ -97095,7 +97095,6 @@ components:
                     items:
                         type: string
                     description: Custom tool names for this server. Omit to follow the policy tool rule.
-                    minItems: 1
             required:
                 - mcp_server_id
         RiskOverviewCategory:

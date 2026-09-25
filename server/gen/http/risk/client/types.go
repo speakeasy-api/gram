@@ -34774,9 +34774,6 @@ func ValidateRiskMCPScopeRequestBody(body *RiskMCPScopeRequestBody) (err error) 
 // RiskMCPServerScopeRequestBody
 func ValidateRiskMCPServerScopeRequestBody(body *RiskMCPServerScopeRequestBody) (err error) {
 	err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
-	if len(body.Tools) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools", body.Tools, len(body.Tools), 1, true))
-	}
 	return
 }
 
@@ -34818,9 +34815,6 @@ func ValidateRiskMCPServerScopeResponseBody(body *RiskMCPServerScopeResponseBody
 	}
 	if body.McpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
-	}
-	if len(body.Tools) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools", body.Tools, len(body.Tools), 1, true))
 	}
 	return
 }
