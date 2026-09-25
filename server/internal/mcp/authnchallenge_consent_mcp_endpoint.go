@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -361,7 +362,14 @@ func (s *Service) serveConsentProxiedMCP(
 			return oops.E(oops.CodeUnauthorized, nil, "consent subject has no authenticated context").LogWarn(ctx, logger)
 		}
 	}
-	ctx = s.stampConsentDiscovery(ctx, challengeState)
+	// Discovery identity belongs to the user who authenticated this challenge.
+	ctx = mcpidentity.WithoutIdentity(ctx)
+	if subject.Kind == urn.SessionSubjectKindUser &&
+		challengeState.AuthorizerImpersonated != nil && !*challengeState.AuthorizerImpersonated &&
+		challengeState.AuthorizerUserID != "" && subject.ID == challengeState.AuthorizerUserID &&
+		challengeState.Federation == nil && !challengeState.CreatedAt.IsZero() && !challengeState.CreatedAt.After(time.Now().Add(time.Minute)) {
+		ctx = s.identityValidator.StampConsentDiscovery(ctx, subject.ID, challengeState.CreatedAt.Add(challengeState.TTL()))
+	}
 	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, endpoint.ProjectID, serverRow)
 	if err != nil {
 		return fmt.Errorf("authorize consent transport access: %w", err)
