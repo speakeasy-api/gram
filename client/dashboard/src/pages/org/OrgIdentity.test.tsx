@@ -382,6 +382,24 @@ describe("domain verification portal", () => {
     ).toBe("domain_verification");
   });
 
+  it("opens the WorkOS portal to set up SSO", () => {
+    mocks.features.mockImplementation(() => ({ data: { ssoEnabled: true } }));
+    mocks.onboarding = {
+      domainVerified: true,
+      ssoConfigured: false,
+      verifiedDomains: ["example.com"],
+    };
+    show();
+    fireEvent.click(
+      section("Single Sign-On").getByRole("button", { name: "Configure" }),
+    );
+    expect(mocks.portal.mutate).toHaveBeenCalledOnce();
+    expect(
+      mocks.portal.mutate.mock.calls[0]?.[0].request
+        .generateWorkOSAdminPortalLinkRequestBody.intent,
+    ).toBe("sso");
+  });
+
   it("opens the WorkOS portal to set up Directory Sync", () => {
     mocks.features.mockImplementation(() => ({ data: { scimEnabled: true } }));
     mocks.onboarding = {

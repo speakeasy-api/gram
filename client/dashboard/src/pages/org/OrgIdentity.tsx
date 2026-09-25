@@ -12,7 +12,6 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
 import { useGenerateWorkOSAdminPortalLinkMutation } from "@gram/client/react-query/generateWorkOSAdminPortalLink.js";
 import { useOnboardingStatus } from "@gram/client/react-query/onboardingStatus";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
@@ -97,27 +96,6 @@ function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
   );
 }
 
-/**
- * Routes an admin into Gram's guided setup wizard at the relevant step instead
- * of bouncing them straight to the WorkOS admin portal. Used when SSO / Directory
- * Sync has not been configured yet so first-run setup happens in-product.
- */
-function SetupStepButton() {
-  const orgRoutes = useOrgRoutes();
-
-  // First-run setup is the one thing to do on an unconfigured card, so it is
-  // the primary action there.
-  return (
-    <RequireScope scope="org:admin" level="component">
-      <orgRoutes.setup.Link queryParams={{ task: "identity-provider" }}>
-        <Button variant="primary" size="sm">
-          Configure
-        </Button>
-      </orgRoutes.setup.Link>
-    </RequireScope>
-  );
-}
-
 /** Launches the WorkOS admin portal for the given intent. */
 function WorkOSPortalButton({
   intent,
@@ -186,9 +164,9 @@ function WorkOSPortalButton({
 }
 
 /**
- * Picks the SSO configure control: upsell when the feature is not entitled, the
- * WorkOS portal launcher once a connection exists, otherwise the in-product
- * setup wizard for first-run configuration.
+ * Picks the SSO configure control: upsell when the feature is not entitled,
+ * otherwise the WorkOS portal launcher, as the primary action until a
+ * connection exists.
  */
 function SSOConfigureControl({
   featureEnabled,
@@ -206,7 +184,13 @@ function SSOConfigureControl({
       />
     );
   }
-  return <SetupStepButton />;
+  return (
+    <WorkOSPortalButton
+      intent="sso"
+      errorFallback="Failed to start SSO setup"
+      variant="primary"
+    />
+  );
 }
 
 /**
