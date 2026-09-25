@@ -21,10 +21,13 @@ var SupportCoverageCell = Type("SupportCoverageCell", func() {
 	})
 	Attribute("value", Int64, "Primary measure: sessions, tokens, blocks, attributed sessions or distinct shadow servers depending on the capability. Zero unless observed.")
 	Attribute("detail", String, "Short qualifier rendered under the value. Empty when there is nothing to qualify.")
-	Attribute("last_seen", String, "RFC3339 timestamp of the most recent supporting evidence. Empty unless observed.", func() {
+	// Absent rather than empty when there is no evidence: the declared
+	// date-time format leaves no room for a sentinel, and one empty string
+	// would fail validation for the whole response.
+	Attribute("last_seen", String, "RFC3339 timestamp of the most recent supporting evidence. Absent unless observed.", func() {
 		Format(FormatDateTime)
 	})
-	Required("capability", "surface", "status", "value", "detail", "last_seen")
+	Required("capability", "surface", "status", "value", "detail")
 })
 
 // SupportCoverageUnmapped reports activity that folded onto no surface, so it

@@ -68,9 +68,9 @@ export type SupportCoverageCell = {
    */
   detail: string;
   /**
-   * RFC3339 timestamp of the most recent supporting evidence. Empty unless observed.
+   * RFC3339 timestamp of the most recent supporting evidence. Absent unless observed.
    */
-  lastSeen: Date;
+  lastSeen?: Date | undefined;
   /**
    * Whether evidence was found, absent, or not answerable yet.
    */
@@ -107,9 +107,8 @@ export const SupportCoverageCell$inboundSchema: z.ZodMiniType<
   z.object({
     capability: Capability$inboundSchema,
     detail: z.string(),
-    last_seen: z.pipe(
-      z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
+    last_seen: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     status: SupportCoverageCellStatus$inboundSchema,
     surface: Surface$inboundSchema,

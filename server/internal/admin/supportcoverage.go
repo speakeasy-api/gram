@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
@@ -22,6 +23,12 @@ func (s *Service) GetSupportCoverage(ctx context.Context, payload *gen.GetSuppor
 
 	result, err := s.supportCoverage.SupportCoverageForOrganization(ctx, payload.OrganizationID, payload.WindowDays)
 	if err != nil {
+		// The reader classifies its own failures — a blank organization id is
+		// invalid input, not a server fault — so a shareable error passes
+		// through with its code rather than being flattened to a 500.
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+			return nil, shareable
+		}
 		return nil, oops.E(oops.CodeUnexpected, err, "read support coverage").LogError(ctx, s.logger)
 	}
 
@@ -46,14 +53,17 @@ func (s *Service) GetSupportCoverage(ctx context.Context, payload *gen.GetSuppor
 		Cells:      cells,
 		Unmapped:   unmapped,
 		WindowDays: result.WindowDays,
-		From:       stampSupportCoverage(result.From),
-		To:         stampSupportCoverage(result.To),
+		From:       result.From.UTC().Format(time.RFC3339),
+		To:         result.To.UTC().Format(time.RFC3339),
 	}, nil
 }
 
-func stampSupportCoverage(at time.Time) string {
+// Returns nil rather than an empty string: last_seen declares a date-time
+// format, so a sentinel would fail validation for the whole response.
+func stampSupportCoverage(at time.Time) *string {
 	if at.IsZero() {
-		return ""
+		return nil
 	}
-	return at.UTC().Format(time.RFC3339)
+	stamped := at.UTC().Format(time.RFC3339)
+	return &stamped
 }

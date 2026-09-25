@@ -13101,7 +13101,7 @@ type SupportCoverageCellResponseBody struct {
 	// Short qualifier rendered under the value. Empty when there is nothing to
 	// qualify.
 	Detail *string `form:"detail,omitempty" json:"detail,omitempty" xml:"detail,omitempty"`
-	// RFC3339 timestamp of the most recent supporting evidence. Empty unless
+	// RFC3339 timestamp of the most recent supporting evidence. Absent unless
 	// observed.
 	LastSeen *string `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
 }
@@ -40427,9 +40427,6 @@ func ValidateSupportCoverageCellResponseBody(body *SupportCoverageCellResponseBo
 	}
 	if body.Detail == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("detail", "body"))
-	}
-	if body.LastSeen == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("last_seen", "body"))
 	}
 	if body.Capability != nil {
 		if !(*body.Capability == "session" || *body.Capability == "blocking" || *body.Capability == "identity" || *body.Capability == "cost" || *body.Capability == "shadow") {

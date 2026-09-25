@@ -15,7 +15,7 @@ const cellSchema = z.object({
   status: z.enum(["observed", "none", "pending"]),
   value: z.number(),
   detail: z.string(),
-  last_seen: z.string(),
+  last_seen: z.string().optional(),
 });
 
 const coverageSchema = z.object({

@@ -1500,9 +1500,9 @@ type SupportCoverageCell struct {
 	// Short qualifier rendered under the value. Empty when there is nothing to
 	// qualify.
 	Detail string
-	// RFC3339 timestamp of the most recent supporting evidence. Empty unless
+	// RFC3339 timestamp of the most recent supporting evidence. Absent unless
 	// observed.
-	LastSeen string
+	LastSeen *string
 }
 
 // SupportCoverageResult is the result type of the admin service

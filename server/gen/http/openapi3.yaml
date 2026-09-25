@@ -102259,7 +102259,7 @@ components:
                     description: Short qualifier rendered under the value. Empty when there is nothing to qualify.
                 last_seen:
                     type: string
-                    description: RFC3339 timestamp of the most recent supporting evidence. Empty unless observed.
+                    description: RFC3339 timestamp of the most recent supporting evidence. Absent unless observed.
                     format: date-time
                 status:
                     type: string
@@ -102289,7 +102289,6 @@ components:
                 - status
                 - value
                 - detail
-                - last_seen
         SupportCoverageResult:
             type: object
             properties:

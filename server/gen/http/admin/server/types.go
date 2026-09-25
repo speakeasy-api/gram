@@ -13089,9 +13089,9 @@ type SupportCoverageCellResponseBody struct {
 	// Short qualifier rendered under the value. Empty when there is nothing to
 	// qualify.
 	Detail string `form:"detail" json:"detail" xml:"detail"`
-	// RFC3339 timestamp of the most recent supporting evidence. Empty unless
+	// RFC3339 timestamp of the most recent supporting evidence. Absent unless
 	// observed.
-	LastSeen string `form:"last_seen" json:"last_seen" xml:"last_seen"`
+	LastSeen *string `form:"last_seen,omitempty" json:"last_seen,omitempty" xml:"last_seen,omitempty"`
 }
 
 // SupportCoverageUnmappedResponseBody is used to define fields on response

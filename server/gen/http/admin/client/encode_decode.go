@@ -14536,7 +14536,7 @@ func unmarshalSupportCoverageCellResponseBodyToAdminSupportCoverageCell(v *Suppo
 		Status:     *v.Status,
 		Value:      *v.Value,
 		Detail:     *v.Detail,
-		LastSeen:   *v.LastSeen,
+		LastSeen:   v.LastSeen,
 	}
 
 	return res

@@ -110,7 +110,9 @@ export function Coverage({ org }: { org: AdminOrganization }): JSX.Element {
           <p className="text-muted-foreground text-sm">
             The support matrix could not be loaded.
           </p>
-        ) : methods.length === 0 && !catalog.isPending ? (
+        ) : catalog.isPending ? (
+          <p className="text-muted-foreground text-sm">Loading integrations…</p>
+        ) : methods.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             No integration in the support matrix claims any of these
             capabilities yet.{" "}
