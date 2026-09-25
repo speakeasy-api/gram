@@ -8,13 +8,20 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
 import { Combobox, type DropdownItem } from "@/components/ui/Combobox";
 import { SearchBar } from "@/components/ui/SearchBar";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
+import type { ListDirectoryRoleMappingsResult } from "@gram/client/models/components/listdirectoryrolemappingsresult.js";
 import type { Role } from "@gram/client/models/components/role.js";
 import type { SetDirectoryRoleMappingForm } from "@gram/client/models/components/setdirectoryrolemappingform.js";
 import { useDeleteDirectoryRoleMappingMutation } from "@gram/client/react-query/deleteDirectoryRoleMapping.js";
@@ -29,9 +36,6 @@ import {
 import { useSetDirectoryRoleMappingMutation } from "@gram/client/react-query/setDirectoryRoleMapping.js";
 import { useSyncDirectoryGroupsMutation } from "@gram/client/react-query/syncDirectoryGroups.js";
 
-type SourceKind = "group" | "attribute";
-type MappingFilter = "all" | "mapped" | "unmapped";
-
 const UNMAPPED = "__unmapped";
 const CREATE_ROLE = "__create_role";
 
@@ -40,14 +44,9 @@ type SourceRow = {
   key: string;
   label: string;
   detail: string;
-  memberCount: number;
   form: Omit<SetDirectoryRoleMappingForm, "roleUrn">;
   mapping: DirectoryRoleMapping | undefined;
 };
-
-function attributeKey(key: string, value: string): string {
-  return `${key}\u0000${value}`;
-}
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -57,63 +56,66 @@ function memberLabel(count: number): string {
   return `${count} ${count === 1 ? "user" : "users"}`;
 }
 
+function groupRows(data: ListDirectoryRoleMappingsResult): SourceRow[] {
+  const byGroup = new Map(
+    data.mappings
+      .filter((m) => m.sourceKind === "group")
+      .map((m) => [m.directoryGroupId, m]),
+  );
+  return data.groups.map((group) => ({
+    key: group.id,
+    label: group.name,
+    detail: memberLabel(group.memberCount),
+    form: { sourceKind: "group", directoryGroupId: group.id },
+    mapping: byGroup.get(group.id),
+  }));
+}
+
+/** Attribute mappings that exist, including ones whose value no user has now. */
+function attributeMappingRows(
+  data: ListDirectoryRoleMappingsResult,
+): SourceRow[] {
+  return data.mappings
+    .filter((m) => m.sourceKind === "attribute")
+    .map((mapping): SourceRow => {
+      const key = mapping.attributeKey ?? "";
+      const value = mapping.attributeValue ?? "";
+      const option = data.attributes.find(
+        (a) => a.key === key && a.value === value,
+      );
+      return {
+        key: mapping.id,
+        label: `${key} = ${value}`,
+        detail: memberLabel(option?.memberCount ?? 0),
+        form: {
+          sourceKind: "attribute",
+          attributeKey: key,
+          attributeValue: value,
+        },
+        mapping,
+      };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
 /**
- * Maps directory groups and attribute values to Gram roles. Every group and
- * attribute value is a row with its own role picker; picking a role saves it.
- * Members who match get that role on top of the roles assigned to them
- * directly. Render it only for org admins: the listing exposes directory
- * attribute values and the server rejects anyone else.
+ * Maps directory groups to Gram roles, with attribute values as a secondary
+ * option for directories whose groups don't fit. Every group is a row with its
+ * own role picker; picking a role saves it. Members who match get that role on
+ * top of the roles assigned to them directly. Render it only for org admins:
+ * the listing exposes directory attribute values and the server rejects anyone
+ * else.
  */
 export function DirectoryRoleMappings(): JSX.Element {
   const { data, isPending } = useDirectoryRoleMappings();
   const { data: rolesData } = useRoles();
-  const [kind, setKind] = useState<SourceKind>("group");
-  const [filter, setFilter] = useState<MappingFilter>("all");
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
 
   const roles = useMemo(() => rolesData?.roles ?? [], [rolesData?.roles]);
+  const rows = useMemo(() => (data ? groupRows(data) : []), [data]);
 
-  const rows = useMemo<SourceRow[]>(() => {
-    if (!data) return [];
-    if (kind === "group") {
-      const byGroup = new Map(
-        data.mappings
-          .filter((m) => m.sourceKind === "group")
-          .map((m) => [m.directoryGroupId, m]),
-      );
-      return data.groups.map((group) => ({
-        key: group.id,
-        label: group.name,
-        detail: memberLabel(group.memberCount),
-        memberCount: group.memberCount,
-        form: { sourceKind: "group", directoryGroupId: group.id },
-        mapping: byGroup.get(group.id),
-      }));
-    }
-    const byAttribute = new Map(
-      data.mappings
-        .filter((m) => m.sourceKind === "attribute")
-        .map((m) => [
-          attributeKey(m.attributeKey ?? "", m.attributeValue ?? ""),
-          m,
-        ]),
-    );
-    return data.attributes.map((attribute) => ({
-      key: attributeKey(attribute.key, attribute.value),
-      label: attribute.value,
-      detail: `${attribute.key} · ${memberLabel(attribute.memberCount)}`,
-      memberCount: attribute.memberCount,
-      form: {
-        sourceKind: "attribute",
-        attributeKey: attribute.key,
-        attributeValue: attribute.value,
-      },
-      mapping: byAttribute.get(attributeKey(attribute.key, attribute.value)),
-    }));
-  }, [data, kind]);
-
-  // Unmapped rows sort first. Each row's place is fixed by whether it was
+  // Unmapped groups sort first. Each row's place is fixed by whether it was
   // mapped when it first loaded, so picking a role does not move the row
   // under the cursor; the order refreshes the next time the panel mounts.
   const [mappedAtLoad, setMappedAtLoad] = useState<Record<string, boolean>>({});
@@ -132,25 +134,22 @@ export function DirectoryRoleMappings(): JSX.Element {
     const wasMapped = (row: SourceRow) =>
       mappedAtLoad[row.key] ?? row.mapping !== undefined;
     return rows
-      .filter((row) => {
-        if (filter === "mapped" && !row.mapping) return false;
-        if (filter === "unmapped" && row.mapping) return false;
-        if (needle === "") return true;
-        return `${row.label} ${row.detail}`.toLowerCase().includes(needle);
-      })
+      .filter(
+        (row) => needle === "" || row.label.toLowerCase().includes(needle),
+      )
       .sort(
         (a, b) =>
           Number(wasMapped(a)) - Number(wasMapped(b)) ||
           a.label.localeCompare(b.label),
       );
-  }, [rows, filter, deferredSearch, mappedAtLoad]);
+  }, [rows, deferredSearch, mappedAtLoad]);
 
   const mappedCount = rows.filter((row) => row.mapping).length;
 
   const columns: Column<SourceRow>[] = [
     {
       key: "source",
-      header: kind === "group" ? "Directory group" : "Attribute value",
+      header: "Directory group",
       render: (row) => (
         <div className="min-w-0">
           <Text className="truncate font-medium">{row.label}</Text>
@@ -174,54 +173,28 @@ export function DirectoryRoleMappings(): JSX.Element {
         <div>
           <div className="text-eyebrow">Role mappings</div>
           <Text muted small>
-            {mappedCount} of {rows.length}{" "}
-            {kind === "group" ? "groups" : "attribute values"} give their
-            members a role.
+            {mappedCount} of {rows.length} groups give their members a role.
           </Text>
         </div>
-        {kind === "group" && <SyncGroupsButton />}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <SegmentedControl<SourceKind>
-          value={kind}
-          onChange={setKind}
-          options={[
-            { value: "group", label: "Groups" },
-            { value: "attribute", label: "Attributes" },
-          ]}
-        />
-        <SearchBar
-          value={search}
-          onChange={setSearch}
-          placeholder={
-            kind === "group" ? "Search groups" : "Search attributes and values"
-          }
-          className="w-64"
-        />
-        <SegmentedControl<MappingFilter>
-          value={filter}
-          onChange={setFilter}
-          options={[
-            { value: "all", label: "All" },
-            { value: "mapped", label: "Mapped" },
-            { value: "unmapped", label: "Not mapped" },
-          ]}
-        />
+        <div className="flex items-center gap-2">
+          {rows.length > 0 && (
+            <SearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder="Search groups"
+              className="w-56"
+            />
+          )}
+          <SyncGroupsButton />
+        </div>
       </div>
 
       {isPending && <SkeletonTable />}
       {!isPending && rows.length === 0 && (
         <InlineEmptyState
           icon="users"
-          heading={
-            kind === "group" ? "No directory groups yet" : "No attributes yet"
-          }
-          description={
-            kind === "group"
-              ? "Sync groups to pull them from your directory."
-              : "Attributes appear once your directory syncs users with attributes."
-          }
+          heading="No directory groups yet"
+          description="Sync groups to pull them from your directory."
         />
       )}
       {!isPending && rows.length > 0 && (
@@ -230,9 +203,133 @@ export function DirectoryRoleMappings(): JSX.Element {
           data={visibleRows}
           rowKey={(row) => row.key}
           className="max-h-[480px] overflow-y-auto"
-          noResultsMessage={<Text muted>Nothing matches</Text>}
+          noResultsMessage={<Text muted>No groups match</Text>}
         />
       )}
+
+      {data && <AttributeMappings data={data} roles={roles} />}
+    </div>
+  );
+}
+
+/**
+ * The escape hatch for directories whose groups don't match how access should
+ * be split: give a role to everyone with an attribute value, such as a
+ * department. Collapsed behind a link until the org has an attribute mapping.
+ */
+function AttributeMappings({
+  data,
+  roles,
+}: {
+  data: ListDirectoryRoleMappingsResult;
+  roles: Role[];
+}): JSX.Element {
+  const rows = attributeMappingRows(data);
+  const [open, setOpen] = useState(false);
+  const [attributeKey, setAttributeKey] = useState("");
+  const [attributeValue, setAttributeValue] = useState("");
+
+  const keys = useMemo(
+    () => [...new Set(data.attributes.map((a) => a.key))].sort(),
+    [data.attributes],
+  );
+  const values = data.attributes.filter((a) => a.key === attributeKey);
+
+  if (!open && rows.length === 0) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4"
+      >
+        Map by directory attribute instead
+      </button>
+    );
+  }
+
+  const draft: SourceRow = {
+    key: "draft",
+    label: "",
+    detail: "",
+    form: { sourceKind: "attribute", attributeKey, attributeValue },
+    mapping: undefined,
+  };
+
+  return (
+    <div className="border-border space-y-2 border-t pt-3">
+      <div>
+        <div className="text-eyebrow">Attribute mappings</div>
+        <Text muted small>
+          For roles your groups don&apos;t line up with: give a role to everyone
+          with an attribute value, such as a department.
+        </Text>
+      </div>
+
+      {rows.map((row) => (
+        <div key={row.key} className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <Text className="truncate">{row.label}</Text>
+            <Text muted small>
+              {row.detail}
+            </Text>
+          </div>
+          <div className="w-[280px] shrink-0">
+            <RolePicker row={row} roles={roles} />
+          </div>
+        </div>
+      ))}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={attributeKey}
+          onValueChange={(key) => {
+            setAttributeKey(key);
+            setAttributeValue("");
+          }}
+        >
+          <SelectTrigger className="w-48" aria-label="Attribute">
+            <SelectValue placeholder="Attribute" />
+          </SelectTrigger>
+          <SelectContent>
+            {keys.map((key) => (
+              <SelectItem key={key} value={key}>
+                {key}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={attributeValue}
+          onValueChange={setAttributeValue}
+          disabled={attributeKey === ""}
+        >
+          <SelectTrigger className="w-56" aria-label="Value">
+            <SelectValue placeholder="Value" />
+          </SelectTrigger>
+          <SelectContent>
+            {values.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.value} ({option.memberCount})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="w-[280px]">
+          <RolePicker
+            row={draft}
+            roles={roles}
+            disabledMessage={
+              attributeValue === ""
+                ? "Pick an attribute and value first"
+                : undefined
+            }
+            onSaved={() => {
+              setAttributeKey("");
+              setAttributeValue("");
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -244,9 +341,13 @@ export function DirectoryRoleMappings(): JSX.Element {
 function RolePicker({
   row,
   roles,
+  disabledMessage,
+  onSaved,
 }: {
   row: SourceRow;
   roles: Role[];
+  disabledMessage?: string;
+  onSaved?: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -259,7 +360,10 @@ function RolePicker({
     ]);
   // Returning the refresh keeps the mutation pending until the row reloads.
   const save = useSetDirectoryRoleMappingMutation({
-    onSuccess: () => refresh(),
+    onSuccess: async () => {
+      await refresh();
+      onSaved?.();
+    },
     onError: (error) => {
       toast.error(errorMessage(error, "Failed to save role mapping"));
     },
@@ -312,6 +416,7 @@ function RolePicker({
   let label = "Not mapped";
   if (saving) label = "Saving…";
   else if (row.mapping) label = current?.name ?? "Deleted role";
+  else if (row.key === "draft") label = "Pick a role";
 
   return (
     <Combobox
@@ -323,7 +428,7 @@ function RolePicker({
       variant="tertiary"
       className="h-auto w-full justify-start py-1 text-left"
       contentClassName="w-[min(24rem,90vw)]"
-      disabledMessage={saving ? "Saving mapping" : undefined}
+      disabledMessage={saving ? "Saving mapping" : disabledMessage}
     >
       <span
         className={cn(
