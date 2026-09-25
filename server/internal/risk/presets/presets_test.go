@@ -123,6 +123,29 @@ func TestSuggestMapsDescriptionsToPresets(t *testing.T) {
 	}
 }
 
+func TestSuggestIgnoresASingleGenericKeyword(t *testing.T) {
+	t.Parallel()
+
+	for _, description := range []string{
+		"show me production usage for last week",
+		"remind engineers to rotate their token every quarter",
+		"agents may only answer questions about the shadow pricing tier",
+	} {
+		suggestion := presets.Suggest(description)
+		require.Nil(t, suggestion.Preset, description)
+		require.Equal(t, presets.PolicyTypePromptBased, suggestion.Draft.PolicyType)
+		require.Equal(t, description, suggestion.Draft.Prompt)
+	}
+}
+
+func TestBespokeNameKeepsNonASCIIStart(t *testing.T) {
+	t.Parallel()
+
+	suggestion := presets.Suggest("ärgere niemals den Kunden mit Rückerstattungsversprechen")
+	require.Nil(t, suggestion.Preset)
+	require.True(t, strings.HasPrefix(suggestion.Draft.Name, "Ärgere"), suggestion.Draft.Name)
+}
+
 func TestSuggestFallsBackToBespokePromptPolicy(t *testing.T) {
 	t.Parallel()
 

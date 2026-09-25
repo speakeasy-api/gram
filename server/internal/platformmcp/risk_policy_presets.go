@@ -8,9 +8,10 @@ import (
 )
 
 // applyRiskPolicyPreset expands a preset reference into the same create input
-// an explicit request carries, keeping any field the caller set. Validation of
-// the expanded request stays with prepareCreate, so a preset can never bypass a
-// check an explicit request would face.
+// an explicit request carries, keeping any field the caller set. Overrides
+// that the preset's policy type would silently drop are refused instead.
+// Validation of the expanded request stays with prepareCreate, so a preset
+// can never bypass a check an explicit request would face.
 func applyRiskPolicyPreset(input createRiskPolicyInput) (createRiskPolicyInput, error) {
 	id := strings.TrimSpace(input.Preset)
 	if id == "" {
@@ -40,6 +41,9 @@ func applyRiskPolicyPreset(input createRiskPolicyInput) (createRiskPolicyInput, 
 	}
 	switch draft.PolicyType {
 	case presets.PolicyTypeStandard:
+		if strings.TrimSpace(input.Prompt) != "" {
+			return input, invalidRiskPolicyRequest()
+		}
 		if len(input.Sources) == 0 {
 			input.Sources = slices.Clone(draft.Sources)
 		}
@@ -47,6 +51,9 @@ func applyRiskPolicyPreset(input createRiskPolicyInput) (createRiskPolicyInput, 
 			input.PresidioEntities = slices.Clone(draft.PresidioEntities)
 		}
 	case presets.PolicyTypePromptBased:
+		if len(input.PresidioEntities) > 0 || len(input.ApprovedEmailDomains) > 0 {
+			return input, invalidRiskPolicyRequest()
+		}
 		if strings.TrimSpace(input.Prompt) == "" {
 			input.Prompt = draft.Prompt
 		}
