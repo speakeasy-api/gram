@@ -160,6 +160,46 @@ beforeEach(() => {
 });
 
 describe("SetupWizard", () => {
+  it.each(["Complete", "Get support"])(
+    "guards %s when prerequisites are unmet and explains what to finish",
+    async (action) => {
+      mocks.setupQuery.mockReturnValue(
+        loaded(
+          tasks.map((t) =>
+            t.key === "anthropic-observability"
+              ? { ...t, blockedBy: ["identity-provider"] }
+              : { ...t, status: "todo" },
+          ),
+        ),
+      );
+      mocks.searchParams = new URLSearchParams("task=anthropic-observability");
+      render(<SetupWizard />);
+
+      fireEvent.click(screen.getByRole("button", { name: action }));
+
+      await waitFor(() =>
+        expect(mocks.toastError).toHaveBeenCalledWith(
+          "Complete these prerequisites first: Set up identity provider.",
+        ),
+      );
+      expect(
+        screen.getByText(
+          "Complete these prerequisites first: Set up identity provider.",
+        ),
+      ).toBeTruthy();
+      expect(mocks.update).not.toHaveBeenCalled();
+      expect(mocks.invalidate).not.toHaveBeenCalled();
+      expect(mocks.toastSuccess).not.toHaveBeenCalled();
+      expect(mocks.showPylonChat).not.toHaveBeenCalled();
+      expect(mocks.setSearchParams).not.toHaveBeenCalled();
+      expect(mocks.navigate).not.toHaveBeenCalled();
+
+      // Prerequisites restrict status changes, not navigation through setup.
+      fireEvent.click(screen.getByRole("button", { name: "Skip task" }));
+      expect(lastParams().get("task")).toBe("other-platforms");
+    },
+  );
+
   it("lists every card in the rail and opens on the first one still open", () => {
     render(<SetupWizard />);
 

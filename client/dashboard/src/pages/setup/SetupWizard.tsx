@@ -216,6 +216,11 @@ function SetupWizardInner(): JSX.Element {
   const requested = tasks.find((task) => task.key === requestedKey);
   const firstOpen = tasks.find((task) => task.status !== "done");
   const current = requested ?? firstOpen ?? tasks[tasks.length - 1];
+  const prerequisiteMessage = current?.blockedBy.length
+    ? `Complete these prerequisites first: ${current.blockedBy
+        .map((key) => tasks.find((task) => task.key === key)?.title ?? key)
+        .join(", ")}.`
+    : undefined;
   const currentIndex = current
     ? tasks.findIndex((task) => task.key === current.key)
     : -1;
@@ -266,6 +271,10 @@ function SetupWizardInner(): JSX.Element {
 
   const guarded = async (action: () => Promise<void>) => {
     if (updateTask.isPending || actionInFlight.current) return;
+    if (prerequisiteMessage) {
+      toast.error(prerequisiteMessage);
+      return;
+    }
     actionInFlight.current = true;
     setActionSettling(true);
     try {
@@ -354,6 +363,14 @@ function SetupWizardInner(): JSX.Element {
             advance();
           }}
         />
+        {prerequisiteMessage && (
+          <Alert variant="info" className="mb-6">
+            <div>
+              <AlertTitle>Prerequisites incomplete</AlertTitle>
+              <AlertDescription>{prerequisiteMessage}</AlertDescription>
+            </div>
+          </Alert>
+        )}
         <SetupTaskContent
           taskKey={current.key}
           onComplete={() => void complete()}

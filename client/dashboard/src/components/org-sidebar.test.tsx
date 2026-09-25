@@ -3,11 +3,14 @@ import { cleanup, render, screen } from "@testing-library/react";
 
 import { OrgSidebar } from "./org-sidebar";
 import type { ReactNode } from "react";
+import type { ProductTier } from "@/hooks/useProductTier";
 
 const mocks = vi.hoisted(() => ({
   features: vi.fn(() => ({})),
   active: "agents",
   isPlatformAdmin: false,
+  productTier: "enterprise" as ProductTier,
+  adminOrganizationId: null as string | null,
 }));
 vi.mock("@/routes", () => ({
   useOrgRoutes: () =>
@@ -17,7 +20,10 @@ vi.mock("@/routes", () => ({
         get: (_, key: string) => ({
           title: key === "identity" ? "IDP and SSO" : key,
           active: key === mocks.active,
-          href: () => (key === "identity" ? "/example/identity" : `/${key}`),
+          href: () =>
+            key === "identity" || key === "setup"
+              ? `/example/${key}`
+              : `/${key}`,
         }),
       },
     ),
@@ -26,10 +32,39 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org_example" }),
   useIsPlatformAdmin: () => mocks.isPlatformAdmin,
 }));
-vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ isLoading: false, hasScope: () => false }),
+vi.mock("@/hooks/useRBAC", async (importOriginal) => {
+  const { hasScopeInGrants } =
+    await importOriginal<typeof import("@/hooks/useRBAC")>();
+  return {
+    useRBAC: () => ({
+      isLoading: false,
+      hasScope: (
+        scope: Parameters<typeof hasScopeInGrants>[1],
+        resourceId?: string,
+      ) =>
+        hasScopeInGrants(
+          mocks.adminOrganizationId
+            ? [
+                {
+                  scope: "org:admin",
+                  selectors: [
+                    {
+                      resourceKind: "org",
+                      resourceId: mocks.adminOrganizationId,
+                    },
+                  ],
+                },
+              ]
+            : [],
+          scope,
+          resourceId,
+        ),
+    }),
+  };
+});
+vi.mock("@/hooks/useProductTier", () => ({
+  useProductTier: () => mocks.productTier,
 }));
-vi.mock("@/hooks/useCanSetUpOrg", () => ({ useCanSetUpOrg: () => false }));
 
 vi.mock("@/contexts/Telemetry", () => ({
   useTelemetry: () => ({ isFeatureEnabled: () => false }),
@@ -38,7 +73,9 @@ vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: mocks.features,
 }));
 vi.mock("react-router", () => ({
-  Link: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  Link: ({ children, to }: { children: ReactNode; to: string }) => (
+    <a href={to}>{children}</a>
+  ),
 }));
 vi.mock("@/components/nav-menu", () => ({
   NavButton: () => null,
@@ -93,7 +130,6 @@ vi.mock("@/components/scope-gated-nav-group", () => ({
     </>
   ),
 }));
-vi.mock("./sidebar-footer-action", () => ({ SidebarFooterAction: () => null }));
 vi.mock("./sidebar-user-menu", () => ({ SidebarUserMenu: () => null }));
 vi.mock("./trial-status-card", () => ({ TrialStatusCard: () => null }));
 
@@ -101,6 +137,8 @@ afterEach(() => {
   cleanup();
   mocks.active = "agents";
   mocks.isPlatformAdmin = false;
+  mocks.productTier = "enterprise";
+  mocks.adminOrganizationId = null;
 });
 
 it("lists one IDP and SSO entry under Team and no vendor entry", () => {
@@ -162,3 +200,30 @@ it("does not request organization features for baseline project users", () => {
     expect.objectContaining({ enabled: false }),
   );
 });
+
+it.each([
+  ["enterprise", "org_example", true],
+  ["payg", "org_example", true],
+  ["base", "org_example", false],
+  ["base_PAID", "org_example", false],
+  ["__deprecated__pro", "org_example", false],
+  ["enterprise", null, false],
+  ["payg", null, false],
+  ["enterprise", "org_other", false],
+  ["payg", "org_other", false],
+] as const)(
+  "shows setup footer for tier=%s adminOrganization=%s: %s",
+  (tier, adminOrganizationId, visible) => {
+    mocks.productTier = tier;
+    mocks.adminOrganizationId = adminOrganizationId;
+    render(<OrgSidebar />);
+    const link = screen.queryByRole("link", {
+      name: "Finish organization setup",
+    });
+    if (visible) {
+      expect(link?.getAttribute("href")).toBe("/example/setup");
+    } else {
+      expect(link).toBeNull();
+    }
+  },
+);

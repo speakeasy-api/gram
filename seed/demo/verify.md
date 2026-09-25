@@ -164,14 +164,26 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Gateway (not Shadow MCP) and link back to the gateway, and each member
     dispatch carries a "via Acme Agent Gateway" marker. Back on the MCP
     listing, the gateway card shows no "never used" marker.
-17. **Organization setup board** — with the `gram-setup-board` flag enabled,
-    open `/acme-demo/setup/board`. Confirm all four columns render, Priya owns
-    Set up observability in other platforms, `security-owner@demo.getgram.ai` owns Configure
-    integrations in Awaiting Support, and Set up identity provider and Set up
-    Anthropic observability sit in To Do. Distribute MCP servers, Configure
-    policies, and Set up Platform MCP are hidden by default, so the board shows
-    four tasks. As a platform admin, enable **Show hidden tasks** and confirm
-    all three appear with a Hidden badge.
+17. **Organization setup wizard** — open `/acme-demo/setup` (no setup feature
+    flag required). Confirm the task rail shows 11 tasks: the 10 visible seeded
+    selections plus **Verify your domain**, supplied by the catalog default.
+    **Distribute MCP servers** and **Configure policies** are included;
+    **Set up identity provider**, **Set up Anthropic admin controls**,
+    **Set up Platform MCP**, and the default-hidden **Set up LiteLLM** are absent.
+    The wizard has no hidden-task toggle or assignment/status columns.
+    - Confirm **Configure policies** is marked complete. Other completion marks
+      also reflect organization facts (for example, configured SSO or a
+      published marketplace), not only the saved task statuses.
+    - Without a `?task=` selection, the wizard opens the first unfinished task.
+      Select a task in the rail and confirm `?task=` changes; tasks with multiple
+      steps show nested step navigation for the current task.
+    - Use **Previous** and **Skip task** to navigate without marking a task
+      complete. The last task offers **Skip to dashboard**.
+    - Seeded ownership and non-done statuses remain backend data: Priya owns
+      Set up observability in other platforms (`in_progress`), and
+      `security-owner@demo.getgram.ai` owns Configure integrations
+      (`awaiting_support`). Do not expect assignee labels or those statuses
+      in the rail; it marks completed tasks and highlights the current task.
 
 18. **Managed agents (local rewritten seed only)** — run `mise run seed` and
     use an ordinary human session in the local organization, with permission to
