@@ -56,6 +56,90 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-conversation-v1-message
+    name: gram-conversation-v1-message
+    spec:
+      definition: |
+        edition = "2024";
+        message Message {
+          enum Role {
+            ROLE_UNSPECIFIED = 0;
+            ROLE_SYSTEM = 1;
+            ROLE_DEVELOPER = 2;
+            ROLE_USER = 3;
+            ROLE_ASSISTANT = 4;
+            ROLE_TOOL = 5;
+          }
+          message Provenance {
+            string source = 1;
+            string external_message_id = 2;
+            string user_id = 3;
+            string external_user_id = 4;
+            string assistant_id = 5;
+            string provider = 6;
+            string model = 7;
+            bool replayed = 8;
+            string adapter = 9;
+            string hook_source = 10;
+            string hostname = 11;
+            string user_agent = 12;
+            string user_email = 13;
+            Account account = 14;
+          }
+          message Account {
+            string user_account_id = 1;
+            string account_type = 2;
+            string billing_mode = 3;
+          }
+          message ConversationContext {
+            string external_conversation_id = 1;
+            string working_directory = 2;
+          }
+          message Body {
+            repeated Part parts = 1;
+            oneof original_content {
+              ContentReference source_content = 2;
+              bytes source_content_json = 3;
+            }
+          }
+          message Part {
+            oneof value {
+              string text = 1;
+              ToolCall tool_call = 2;
+              ContentReference content_reference = 3;
+            }
+          }
+          message ToolCall {
+            string id = 1;
+            string name = 2;
+            string arguments_json = 3;
+          }
+          message ContentReference {
+            string uri = 1;
+            string media_type = 2;
+            uint64 size_bytes = 3;
+            bytes sha256 = 4;
+          }
+          string id = 1;
+          string organization_id = 2;
+          string project_id = 3;
+          string conversation_id = 4;
+          Role role = 5;
+          string created_at = 6;
+          string produced_at = 7;
+          Provenance provenance = 8;
+          string tool_call_id = 9;
+          string finish_reason = 10;
+          oneof content {
+            Body body = 11;
+            ContentReference body_reference = 12;
+          }
+          string correlation_id = 13;
+          ConversationContext conversation_context = 14;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading
     name: gram-metering-v1-meter-reading
     spec:
@@ -1890,6 +1974,16 @@ pubsub:
     name: gram-authz-v1-challenge-ch-writer-dlq
     spec:
       messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-conversation-v1-message
+    name: gram-conversation-v1-message
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-conversation-v1-message
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-metering-v1-meter-reading
