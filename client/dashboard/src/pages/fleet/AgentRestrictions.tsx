@@ -1,9 +1,12 @@
 import { useFleetParamUpdate } from "./useFleetParamUpdate";
 import { agentRestrictionLabel } from "./fleet-model";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router";
 import { KillswitchRecord } from "@/components/killswitch/KillswitchRecord";
-import { scopeLabel } from "@/components/killswitch/killswitch-view-model";
+import {
+  nextScheduleBoundaryDelay,
+  scopeLabel,
+} from "@/components/killswitch/killswitch-view-model";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonTable } from "@/components/ui/Skeleton";
@@ -47,7 +50,17 @@ export function AgentRestrictions({
     { gramSession: session.session },
     { throwOnError: false },
   );
-  const items = list.data?.pages.flatMap((page) => page.result.items) ?? [];
+  const items = useMemo(
+    () => list.data?.pages.flatMap((page) => page.result.items) ?? [],
+    [list.data],
+  );
+  const refetchList = list.refetch;
+  useEffect(() => {
+    const delay = nextScheduleBoundaryDelay(items.map((item) => item.schedule));
+    if (delay == null) return;
+    const timer = window.setTimeout(() => void refetchList(), delay);
+    return () => window.clearTimeout(timer);
+  }, [items, refetchList]);
   const names = useMemo(
     () =>
       new Map(
@@ -157,12 +170,8 @@ export function AgentRestrictions({
       {list.data && (
         <div className="flex items-center justify-between">
           <span className="text-muted-foreground text-xs">
-            {items.length}{" "}
-            {list.hasNextPage
-              ? "loaded restrictions"
-              : items.length === 1
-                ? "restriction"
-                : "restrictions"}
+            {items.length} {list.hasNextPage && "loaded "}
+            {items.length === 1 ? "restriction" : "restrictions"}
           </span>
           {list.hasNextPage && (
             <Button

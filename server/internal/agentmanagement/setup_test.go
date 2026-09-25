@@ -172,6 +172,7 @@ func newActivityTracedTestDB(t *testing.T) (*pgxpool.Pool, *atomic.Int64) {
 	t.Helper()
 	base := newTestDB(t)
 	config := base.Config()
+	base.Close()
 	tracer := new(activityQueryCounter)
 	config.ConnConfig.Tracer = tracer
 	conn, err := pgxpool.NewWithConfig(t.Context(), config)

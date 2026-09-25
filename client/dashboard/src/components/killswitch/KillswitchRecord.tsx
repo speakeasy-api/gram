@@ -128,6 +128,7 @@ export function KillswitchRecord({
   const security = { sessionHeaderGramSession: session.session };
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
+  const canEdit = !subjectAgent || subjectAgent.canEdit;
   const [liftOpen, setLiftOpen] = useState(false);
   const [liftReview, setLiftReview] = useState<KillswitchDetailModel>();
   const [authorityBlocked, setAuthorityBlocked] = useState(false);
@@ -170,7 +171,8 @@ export function KillswitchRecord({
     detail?: KillswitchDetailModel;
     routeId: string;
     blocked: boolean;
-  }>({ routeId: killswitchId, blocked: true });
+    canEdit: boolean;
+  }>({ routeId: killswitchId, blocked: true, canEdit: false });
   const refetchDetail = detailQuery.refetch;
 
   const detail = detailQuery.data;
@@ -187,8 +189,13 @@ export function KillswitchRecord({
       detail,
       routeId: killswitchId,
       blocked: changeBlocked,
+      canEdit,
     };
-  }, [changeBlocked, detail, killswitchId, renderedRoute]);
+  }, [canEdit, changeBlocked, detail, killswitchId, renderedRoute]);
+
+  useEffect(() => {
+    if (!canEdit) setEditOpen(false);
+  }, [canEdit]);
 
   const currentOverlapPreview =
     detail?.id === killswitchId &&
@@ -382,6 +389,8 @@ export function KillswitchRecord({
     operationId: string,
     expectedVersion?: number,
   ) => {
+    if (!changeableRef.current.canEdit)
+      throw new Error("This agent restriction can no longer be edited.");
     const current = requireChangeable();
     if (expectedVersion == null)
       throw new Error("The current version is unavailable.");
@@ -668,7 +677,7 @@ export function KillswitchRecord({
           </div>
           {canChange && (
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-              {(!subjectAgent || subjectAgent.canEdit) && (
+              {canEdit && (
                 <Button variant="secondary" onClick={() => setEditOpen(true)}>
                   Edit killswitch
                 </Button>
@@ -803,7 +812,7 @@ export function KillswitchRecord({
 
       <History detail={detail} serverNames={serverNames} />
 
-      {editOpen && (
+      {editOpen && canEdit && (
         <Suspense
           fallback={
             <p role="status" className="text-muted-foreground text-sm">

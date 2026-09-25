@@ -143,7 +143,10 @@ export function FleetCollection({
                       selected={selected}
                       onSelect={onSelect}
                     />
-                    <FleetStatus row={row} blocked={blocked.has(row.id)} />
+                    <div className="fleet-row-signals">
+                      <FleetStatus row={row} blocked={blocked.has(row.id)} />
+                      <LastActivity row={row} />
+                    </div>
                     <ChevronRight size={14} aria-hidden />
                   </div>
                 ))}

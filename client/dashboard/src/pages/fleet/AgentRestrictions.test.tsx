@@ -1,5 +1,12 @@
 import { agentRestrictionLabel } from "./fleet-model";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
+import type { KillswitchSchedule } from "@gram/client/models/components/killswitchschedule.js";
 import { BrowserRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentRestrictions, AgentRestrictionRecord } from "./AgentRestrictions";
@@ -9,6 +16,10 @@ const mocks = vi.hoisted(() => ({
   agentId: "agent-12345678",
   list: vi.fn(),
   refetch: vi.fn(),
+  schedule: { start: "now", end: "until_lifted" } as KillswitchSchedule,
+  isLoading: false,
+  hasNextPage: false,
+  fetchNextPage: vi.fn(),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ session: "session" }),
@@ -18,6 +29,10 @@ vi.mock("@gram/client/react-query/killswitches.js", () => ({
     mocks.list(...args);
     return {
       error: mocks.error,
+      isLoading: mocks.isLoading,
+      hasNextPage: mocks.hasNextPage,
+      isFetchingNextPage: false,
+      fetchNextPage: mocks.fetchNextPage,
       data: mocks.error
         ? undefined
         : {
@@ -29,6 +44,7 @@ vi.mock("@gram/client/react-query/killswitches.js", () => ({
                       id: "restriction-1",
                       agentId: mocks.agentId,
                       status: "active",
+                      schedule: mocks.schedule,
                       scope: { type: "all_servers" },
                     },
                   ],
@@ -76,14 +92,44 @@ function list() {
     </BrowserRouter>,
   );
 }
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 beforeEach(() => {
   window.history.replaceState(null, "", "/");
   mocks.error = undefined;
+  mocks.schedule = { start: "now", end: "until_lifted" };
+  mocks.isLoading = false;
+  mocks.hasNextPage = false;
   vi.clearAllMocks();
 });
 
 describe("Agent restriction recovery", () => {
+  it("refreshes status at a loaded restriction's schedule boundary", async () => {
+    vi.useFakeTimers();
+    const now = new Date("2026-09-01T12:00:00Z");
+    vi.setSystemTime(now);
+    mocks.schedule = {
+      start: "scheduled",
+      startsAt: new Date(now.getTime() + 1_000),
+      end: "until_lifted",
+    };
+    list();
+    await act(() => vi.advanceTimersByTime(999));
+    expect(mocks.refetch).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTime(101));
+    expect(mocks.refetch).toHaveBeenCalledOnce();
+  });
+  it("loads the next page without treating the loaded count as the total", () => {
+    mocks.hasNextPage = true;
+    list();
+    expect(screen.getByText("1 loaded restriction")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more restrictions" }),
+    );
+    expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
+  });
   it("keeps failures distinct from an empty list", () => {
     mocks.error = new Error("unavailable");
     list();

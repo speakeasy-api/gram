@@ -804,46 +804,50 @@ describe("KillswitchEditorSheet", () => {
     expect(onSubmit).toHaveBeenCalledTimes(2);
     expect(onSubmit.mock.calls[0]![1]).toBe(onSubmit.mock.calls[1]![1]);
   });
-});
 
-it("retains the exact agent and capability when adding another restriction", async () => {
-  const view = renderEditor({
-    agentTarget: { id: "agent-1", name: "Synthetic agent" },
-    members: [],
+  it("retains the exact agent and capability when adding another restriction", async () => {
+    const view = renderEditor({
+      agentTarget: { id: "agent-1", name: "Synthetic agent" },
+      members: [],
+    });
+    await userEvent.click(screen.getByLabelText(/All MCP servers/));
+    await userEvent.type(
+      screen.getByLabelText("Public message returned to the caller"),
+      "Synthetic review",
+    );
+    await userEvent.type(
+      screen.getByLabelText("Internal note"),
+      "Synthetic test",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Review impact" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Turn off MCP tool calls" }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "Add another killswitch for Synthetic agent",
+      }),
+    );
+    expect(
+      (screen.getByLabelText("MCP tool calls") as HTMLInputElement).checked,
+    ).toBe(true);
+    await userEvent.click(screen.getByLabelText(/All MCP servers/));
+    await userEvent.type(
+      screen.getByLabelText("Public message returned to the caller"),
+      "Second review",
+    );
+    await userEvent.type(screen.getByLabelText("Internal note"), "Second test");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Review impact" }),
+    );
+    expect(view.onPreview).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        agentId: "agent-1",
+        userId: "",
+        capabilityKey: "mcp_tool_calls",
+      }),
+    );
   });
-  await userEvent.click(screen.getByLabelText(/All MCP servers/));
-  await userEvent.type(
-    screen.getByLabelText("Public message returned to the caller"),
-    "Synthetic review",
-  );
-  await userEvent.type(
-    screen.getByLabelText("Internal note"),
-    "Synthetic test",
-  );
-  await userEvent.click(screen.getByRole("button", { name: "Review impact" }));
-  await userEvent.click(
-    screen.getByRole("button", { name: "Turn off MCP tool calls" }),
-  );
-  await userEvent.click(
-    await screen.findByRole("button", {
-      name: "Add another killswitch for Synthetic agent",
-    }),
-  );
-  expect(
-    (screen.getByLabelText("MCP tool calls") as HTMLInputElement).checked,
-  ).toBe(true);
-  await userEvent.click(screen.getByLabelText(/All MCP servers/));
-  await userEvent.type(
-    screen.getByLabelText("Public message returned to the caller"),
-    "Second review",
-  );
-  await userEvent.type(screen.getByLabelText("Internal note"), "Second test");
-  await userEvent.click(screen.getByRole("button", { name: "Review impact" }));
-  expect(view.onPreview).toHaveBeenLastCalledWith(
-    expect.objectContaining({
-      agentId: "agent-1",
-      userId: "",
-      capabilityKey: "mcp_tool_calls",
-    }),
-  );
 });

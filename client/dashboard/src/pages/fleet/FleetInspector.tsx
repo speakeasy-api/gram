@@ -100,7 +100,11 @@ function InspectorContents({
   const access = useKillswitchAccess();
   const heading = useRef<HTMLHeadingElement>(null);
   const chatActions = useChatDetailSheet();
-  const tab = params.get("detail") ?? "activity";
+  const requestedTab = params.get("detail");
+  const tab =
+    requestedTab === "identity" || requestedTab === "controls"
+      ? requestedTab
+      : "activity";
   useEffect(() => {
     heading.current?.focus({ preventScroll: true });
   }, [row.id]);

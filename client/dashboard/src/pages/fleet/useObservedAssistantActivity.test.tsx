@@ -36,7 +36,15 @@ it("retains only the latest explicit assistant timestamp across search/page chan
   expect([...result.current]).toEqual([
     ["assistant", session.lastMessageTimestamp],
   ]);
-  rerender({ sessions: [], clock: now + FLEET_WINDOW_MS + 1 });
+  const newer = new Date(now + 60_000);
+  rerender({
+    sessions: [{ ...session, lastMessageTimestamp: newer }],
+    clock: now + 60_000,
+  });
+  expect(result.current.get("assistant")).toEqual(newer);
+  rerender({ sessions: [], clock: newer.getTime() + FLEET_WINDOW_MS });
+  expect(result.current.get("assistant")).toEqual(newer);
+  rerender({ sessions: [], clock: newer.getTime() + FLEET_WINDOW_MS + 1 });
   expect(result.current.size).toBe(0);
 });
 

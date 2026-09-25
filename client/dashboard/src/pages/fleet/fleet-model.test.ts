@@ -54,6 +54,44 @@ const input = {
 };
 
 describe("Fleet attribution", () => {
+  it("groups explicit people by directory department and retains loaded assistant evidence", () => {
+    const rows = buildFleetRows({
+      ...input,
+      sessions: [],
+      members: [
+        {
+          id: "owner",
+          name: "Synthetic owner",
+          email: "owner@example.test",
+          department: "Engineering",
+          joinedAt: now,
+          principalUrn: "urn:gram:principal:user:owner",
+          roleIds: [],
+        },
+      ],
+      observedAssistantActivity: new Map([[assistant.id, now]]),
+    });
+    expect(rows[0]).toMatchObject({
+      personName: "Synthetic owner",
+      department: "Engineering",
+    });
+    expect(rows[1]).toMatchObject({
+      personName: "Directory profile unavailable",
+      department: "Unassigned department",
+      lastActivity: now,
+    });
+    const engineering = fleetDirectory(rows).find(
+      (department) => department.name === "Engineering",
+    );
+    expect(engineering?.identities).toMatchObject([
+      {
+        id: "user:owner",
+        name: "Synthetic owner",
+        roles: ["Owner"],
+        rows: [{ id: "agent:same-id" }],
+      },
+    ]);
+  });
   it("keeps namespaces and person roles distinct despite identical names and ids", () => {
     const rows = buildFleetRows(input);
     expect(rows.map((row) => row.id)).toEqual([

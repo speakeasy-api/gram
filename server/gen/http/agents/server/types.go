@@ -155,11 +155,11 @@ type CreateResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	// Most recent successful authentication of this agent's credential sessions or
-	// API keys at Gram in this organization, at 1–5 minute resolution. Includes
-	// credentials since revoked or expired. Populated by agents.list only for
-	// callers who can manage the agent's credentials; absent when unknown or
-	// unauthorized. Not run, process, or tool-call activity.
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list only for callers who can manage the agent's credentials; absent
+	// when unknown or unauthorized. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -183,11 +183,11 @@ type GetResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	// Most recent successful authentication of this agent's credential sessions or
-	// API keys at Gram in this organization, at 1–5 minute resolution. Includes
-	// credentials since revoked or expired. Populated by agents.list only for
-	// callers who can manage the agent's credentials; absent when unknown or
-	// unauthorized. Not run, process, or tool-call activity.
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list only for callers who can manage the agent's credentials; absent
+	// when unknown or unauthorized. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -211,11 +211,11 @@ type RenameResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	// Most recent successful authentication of this agent's credential sessions or
-	// API keys at Gram in this organization, at 1–5 minute resolution. Includes
-	// credentials since revoked or expired. Populated by agents.list only for
-	// callers who can manage the agent's credentials; absent when unknown or
-	// unauthorized. Not run, process, or tool-call activity.
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list only for callers who can manage the agent's credentials; absent
+	// when unknown or unauthorized. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -269,11 +269,11 @@ type TransferResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	// Most recent successful authentication of this agent's credential sessions or
-	// API keys at Gram in this organization, at 1–5 minute resolution. Includes
-	// credentials since revoked or expired. Populated by agents.list only for
-	// callers who can manage the agent's credentials; absent when unknown or
-	// unauthorized. Not run, process, or tool-call activity.
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list only for callers who can manage the agent's credentials; absent
+	// when unknown or unauthorized. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -297,11 +297,11 @@ type ReassignResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	// Most recent successful authentication of this agent's credential sessions or
-	// API keys at Gram in this organization, at 1–5 minute resolution. Includes
-	// credentials since revoked or expired. Populated by agents.list only for
-	// callers who can manage the agent's credentials; absent when unknown or
-	// unauthorized. Not run, process, or tool-call activity.
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list only for callers who can manage the agent's credentials; absent
+	// when unknown or unauthorized. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -325,11 +325,11 @@ type SuspendResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	// Most recent successful authentication of this agent's credential sessions or
-	// API keys at Gram in this organization, at 1–5 minute resolution. Includes
-	// credentials since revoked or expired. Populated by agents.list only for
-	// callers who can manage the agent's credentials; absent when unknown or
-	// unauthorized. Not run, process, or tool-call activity.
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list only for callers who can manage the agent's credentials; absent
+	// when unknown or unauthorized. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -353,11 +353,11 @@ type ResumeResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	// Most recent successful authentication of this agent's credential sessions or
-	// API keys at Gram in this organization, at 1–5 minute resolution. Includes
-	// credentials since revoked or expired. Populated by agents.list only for
-	// callers who can manage the agent's credentials; absent when unknown or
-	// unauthorized. Not run, process, or tool-call activity.
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list only for callers who can manage the agent's credentials; absent
+	// when unknown or unauthorized. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -381,11 +381,11 @@ type RevokeResponseBody struct {
 	ProjectID   *string                       `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                        `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponseBody `form:"permissions" json:"permissions" xml:"permissions"`
-	// Most recent successful authentication of this agent's credential sessions or
-	// API keys at Gram in this organization, at 1–5 minute resolution. Includes
-	// credentials since revoked or expired. Populated by agents.list only for
-	// callers who can manage the agent's credentials; absent when unknown or
-	// unauthorized. Not run, process, or tool-call activity.
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list only for callers who can manage the agent's credentials; absent
+	// when unknown or unauthorized. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -3505,11 +3505,11 @@ type ManagedAgentResponse struct {
 	ProjectID   *string                   `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	Lifecycle   string                    `form:"lifecycle" json:"lifecycle" xml:"lifecycle"`
 	Permissions *AgentPermissionsResponse `form:"permissions" json:"permissions" xml:"permissions"`
-	// Most recent successful authentication of this agent's credential sessions or
-	// API keys at Gram in this organization, at 1–5 minute resolution. Includes
-	// credentials since revoked or expired. Populated by agents.list only for
-	// callers who can manage the agent's credentials; absent when unknown or
-	// unauthorized. Not run, process, or tool-call activity.
+	// Latest recorded credential-session or API-key authentication for this agent
+	// at Gram in this organization. Recording is best-effort and updates are
+	// coalesced. Includes credentials since revoked or expired. Populated by
+	// agents.list only for callers who can manage the agent's credentials; absent
+	// when unknown or unauthorized. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`

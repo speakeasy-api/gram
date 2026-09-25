@@ -1089,6 +1089,38 @@ describe("KillswitchRecord", () => {
 });
 
 describe("agent record authorization and attribution", () => {
+  it("closes an open editor when the agent becomes unavailable and rejects its retained submit callback", async () => {
+    mocks.detail = activeDetail({
+      principalKind: "agent",
+      agentId: "agent-1",
+      userId: undefined,
+    });
+    mocks.subjectAgent = {
+      id: "agent-1",
+      name: "Synthetic agent",
+      canEdit: true,
+    };
+    const view = renderDetail();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Edit killswitch" }),
+    );
+    expect(await screen.findByText("Edit dialog open")).toBeTruthy();
+    const submit = mocks.editorProps!.onSubmit as (
+      draft: Record<string, unknown>,
+      operationId: string,
+      version: number,
+    ) => Promise<unknown>;
+    mocks.subjectAgent = { ...mocks.subjectAgent, canEdit: false };
+    view.rerender(detailRoute());
+    expect(screen.queryByText("Edit dialog open")).toBeNull();
+    await expect(submit({}, "stale-edit", 1)).rejects.toThrow(
+      "can no longer be edited",
+    );
+    expect(mocks.edit).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Release restriction" }),
+    ).toBeTruthy();
+  });
   it("renders agent recovery controls without a members query", async () => {
     mocks.detail = activeDetail({
       principalKind: "agent",
