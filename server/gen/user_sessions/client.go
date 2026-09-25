@@ -15,19 +15,23 @@ import (
 
 // Client is the "userSessions" service client.
 type Client struct {
-	ListUserSessionsEndpoint  goa.Endpoint
-	ListFacetsEndpoint        goa.Endpoint
-	MintUserSessionEndpoint   goa.Endpoint
-	RevokeUserSessionEndpoint goa.Endpoint
+	ListUserSessionsEndpoint         goa.Endpoint
+	ListFacetsEndpoint               goa.Endpoint
+	PreviewGatewayToolsetEndpoint    goa.Endpoint
+	MintFrozenGatewaySessionEndpoint goa.Endpoint
+	MintUserSessionEndpoint          goa.Endpoint
+	RevokeUserSessionEndpoint        goa.Endpoint
 }
 
 // NewClient initializes a "userSessions" service client given the endpoints.
-func NewClient(listUserSessions, listFacets, mintUserSession, revokeUserSession goa.Endpoint) *Client {
+func NewClient(listUserSessions, listFacets, previewGatewayToolset, mintFrozenGatewaySession, mintUserSession, revokeUserSession goa.Endpoint) *Client {
 	return &Client{
-		ListUserSessionsEndpoint:  listUserSessions,
-		ListFacetsEndpoint:        listFacets,
-		MintUserSessionEndpoint:   mintUserSession,
-		RevokeUserSessionEndpoint: revokeUserSession,
+		ListUserSessionsEndpoint:         listUserSessions,
+		ListFacetsEndpoint:               listFacets,
+		PreviewGatewayToolsetEndpoint:    previewGatewayToolset,
+		MintFrozenGatewaySessionEndpoint: mintFrozenGatewaySession,
+		MintUserSessionEndpoint:          mintUserSession,
+		RevokeUserSessionEndpoint:        revokeUserSession,
 	}
 }
 
@@ -74,6 +78,52 @@ func (c *Client) ListFacets(ctx context.Context, p *ListFacetsPayload) (res *Lis
 		return
 	}
 	return ires.(*ListUserSessionFacetsResult), nil
+}
+
+// PreviewGatewayToolset calls the "previewGatewayToolset" endpoint of the
+// "userSessions" service.
+// PreviewGatewayToolset may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) PreviewGatewayToolset(ctx context.Context, p *PreviewGatewayToolsetPayload) (res *GatewayToolsetReview, err error) {
+	var ires any
+	ires, err = c.PreviewGatewayToolsetEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GatewayToolsetReview), nil
+}
+
+// MintFrozenGatewaySession calls the "mintFrozenGatewaySession" endpoint of
+// the "userSessions" service.
+// MintFrozenGatewaySession may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) MintFrozenGatewaySession(ctx context.Context, p *MintFrozenGatewaySessionPayload) (res *MintFrozenGatewaySessionResult, err error) {
+	var ires any
+	ires, err = c.MintFrozenGatewaySessionEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*MintFrozenGatewaySessionResult), nil
 }
 
 // MintUserSession calls the "mintUserSession" endpoint of the "userSessions"

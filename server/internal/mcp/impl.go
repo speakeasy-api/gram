@@ -654,6 +654,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/idp_callback", oops.ErrHandle(service.logger, service.HandleIDPCallback).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/connect", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
+	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/connect/frozen-v2", oops.ErrHandle(service.logger, service.HandleConsent).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/connect/remote-session", oops.ErrHandle(service.logger, service.HandleConsentAction).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute+"/connect/mcp", oops.ErrHandle(service.logger, service.HandleConsentMCP).ServeHTTP)
 	o11y.AttachHandler(mux, "DELETE", PublicServerRoute+"/connect/mcp", oops.ErrHandle(service.logger, service.HandleConsentMCP).ServeHTTP)

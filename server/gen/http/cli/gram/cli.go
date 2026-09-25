@@ -197,7 +197,7 @@ func UsageCommands() []string {
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
 		"user-session-issuers (create-user-session-issuer|update-user-session-issuer|list-user-session-issuers|get-user-session-issuer|delete-user-session-issuer)",
 		"organization-user-session-issuers (create-issuer|list-issuers|get-issuer|update-issuer|get-issuer-delete-preflight|delete-issuer|move-issuer|get-issuer-migrate-preflight|migrate-issuer|create-cimd-client|list-cimd-clients|get-cimd-client|delete-cimd-client)",
-		"user-sessions (list-user-sessions|list-facets|mint-user-session|revoke-user-session)",
+		"user-sessions (list-user-sessions|list-facets|preview-gateway-toolset|mint-frozen-gateway-session|mint-user-session|revoke-user-session)",
 		"workload-identities (list|register-issuer|withdraw-issuer|admit-subject|withdraw-subject)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
 	}
@@ -4399,6 +4399,16 @@ func ParseEndpoint(
 		userSessionsListFacetsApikeyTokenFlag      = userSessionsListFacetsFlags.String("apikey-token", "", "")
 		userSessionsListFacetsProjectSlugInputFlag = userSessionsListFacetsFlags.String("project-slug-input", "", "")
 
+		userSessionsPreviewGatewayToolsetFlags                = flag.NewFlagSet("preview-gateway-toolset", flag.ExitOnError)
+		userSessionsPreviewGatewayToolsetBodyFlag             = userSessionsPreviewGatewayToolsetFlags.String("body", "REQUIRED", "")
+		userSessionsPreviewGatewayToolsetSessionTokenFlag     = userSessionsPreviewGatewayToolsetFlags.String("session-token", "", "")
+		userSessionsPreviewGatewayToolsetProjectSlugInputFlag = userSessionsPreviewGatewayToolsetFlags.String("project-slug-input", "", "")
+
+		userSessionsMintFrozenGatewaySessionFlags                = flag.NewFlagSet("mint-frozen-gateway-session", flag.ExitOnError)
+		userSessionsMintFrozenGatewaySessionBodyFlag             = userSessionsMintFrozenGatewaySessionFlags.String("body", "REQUIRED", "")
+		userSessionsMintFrozenGatewaySessionSessionTokenFlag     = userSessionsMintFrozenGatewaySessionFlags.String("session-token", "", "")
+		userSessionsMintFrozenGatewaySessionProjectSlugInputFlag = userSessionsMintFrozenGatewaySessionFlags.String("project-slug-input", "", "")
+
 		userSessionsMintUserSessionFlags                = flag.NewFlagSet("mint-user-session", flag.ExitOnError)
 		userSessionsMintUserSessionBodyFlag             = userSessionsMintUserSessionFlags.String("body", "REQUIRED", "")
 		userSessionsMintUserSessionSessionTokenFlag     = userSessionsMintUserSessionFlags.String("session-token", "", "")
@@ -5406,6 +5416,8 @@ func ParseEndpoint(
 	userSessionsFlags.Usage = userSessionsUsage
 	userSessionsListUserSessionsFlags.Usage = userSessionsListUserSessionsUsage
 	userSessionsListFacetsFlags.Usage = userSessionsListFacetsUsage
+	userSessionsPreviewGatewayToolsetFlags.Usage = userSessionsPreviewGatewayToolsetUsage
+	userSessionsMintFrozenGatewaySessionFlags.Usage = userSessionsMintFrozenGatewaySessionUsage
 	userSessionsMintUserSessionFlags.Usage = userSessionsMintUserSessionUsage
 	userSessionsRevokeUserSessionFlags.Usage = userSessionsRevokeUserSessionUsage
 
@@ -8266,6 +8278,12 @@ func ParseEndpoint(
 			case "list-facets":
 				epf = userSessionsListFacetsFlags
 
+			case "preview-gateway-toolset":
+				epf = userSessionsPreviewGatewayToolsetFlags
+
+			case "mint-frozen-gateway-session":
+				epf = userSessionsMintFrozenGatewaySessionFlags
+
 			case "mint-user-session":
 				epf = userSessionsMintUserSessionFlags
 
@@ -10999,6 +11017,12 @@ func ParseEndpoint(
 			case "list-facets":
 				endpoint = c.ListFacets()
 				data, err = usersessionsc.BuildListFacetsPayload(*userSessionsListFacetsSessionTokenFlag, *userSessionsListFacetsApikeyTokenFlag, *userSessionsListFacetsProjectSlugInputFlag)
+			case "preview-gateway-toolset":
+				endpoint = c.PreviewGatewayToolset()
+				data, err = usersessionsc.BuildPreviewGatewayToolsetPayload(*userSessionsPreviewGatewayToolsetBodyFlag, *userSessionsPreviewGatewayToolsetSessionTokenFlag, *userSessionsPreviewGatewayToolsetProjectSlugInputFlag)
+			case "mint-frozen-gateway-session":
+				endpoint = c.MintFrozenGatewaySession()
+				data, err = usersessionsc.BuildMintFrozenGatewaySessionPayload(*userSessionsMintFrozenGatewaySessionBodyFlag, *userSessionsMintFrozenGatewaySessionSessionTokenFlag, *userSessionsMintFrozenGatewaySessionProjectSlugInputFlag)
 			case "mint-user-session":
 				endpoint = c.MintUserSession()
 				data, err = usersessionsc.BuildMintUserSessionPayload(*userSessionsMintUserSessionBodyFlag, *userSessionsMintUserSessionSessionTokenFlag, *userSessionsMintUserSessionProjectSlugInputFlag)
@@ -29801,6 +29825,8 @@ func userSessionsUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    list-user-sessions: List issued user_sessions in the caller's project. refresh_token_hash is never returned.`)
 	fmt.Fprintln(os.Stderr, `    list-facets: List available user session facet values (clients, users, servers) in the caller's project.`)
+	fmt.Fprintln(os.Stderr, `    preview-gateway-toolset: Read the complete currently permitted gateway inventory for an optional frozen connection. Does not execute tools. Unavailable members prevent approval.`)
+	fmt.Fprintln(os.Stderr, `    mint-frozen-gateway-session: Mint a gateway connection from a freshly validated tool-definition review. This separate route prevents older servers from ignoring frozen options.`)
 	fmt.Fprintln(os.Stderr, `    mint-user-session: Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: an MCP server, a meta MCP server, or a legacy toolset without an mcp_servers wrapper. Exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.`)
 	fmt.Fprintln(os.Stderr, `    revoke-user-session: Push the session's jti into the revocation cache and soft-delete the row.`)
 	fmt.Fprintln(os.Stderr)
@@ -29861,6 +29887,50 @@ func userSessionsListFacetsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions list-facets --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionsPreviewGatewayToolsetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-sessions preview-gateway-toolset", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Read the complete currently permitted gateway inventory for an optional frozen connection. Does not execute tools. Unavailable members prevent approval.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions preview-gateway-toolset --body '{\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func userSessionsMintFrozenGatewaySessionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] user-sessions mint-frozen-gateway-session", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Mint a gateway connection from a freshly validated tool-definition review. This separate route prevents older servers from ignoring frozen options.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "user-sessions mint-frozen-gateway-session --body '{\n      \"discovery_mode\": \"progressive\",\n      \"frozen_toolset\": {\n         \"fingerprint\": \"abc123\",\n         \"tools\": [\n            \"abc123\"\n         ]\n      },\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func userSessionsMintUserSessionUsage() {

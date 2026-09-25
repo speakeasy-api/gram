@@ -382,7 +382,8 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 		}
 		subject := sess.SubjectUrn
 		// A synthetic first-party state: the probe reads only the subject, the id it keys its session on, and the endpoint.
-		state := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
+		state := AuthnChallengeState{
+			GatewayReviewFingerprint: "", FederatedBinding: nil, DelegationRetryUsed: false,
 			Browser:                  nil,
 			Federation:               nil,
 			ID:                       "keepalive:" + sess.ID.String(),

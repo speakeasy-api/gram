@@ -1,3 +1,5 @@
+import { useMintFrozenGatewaySessionMutation } from "@gram/client/react-query/mintFrozenGatewaySession.js";
+import type { FrozenGatewayReview } from "@gram/client/models/components/frozengatewayreview.js";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useMintUserSessionMutation } from "@gram/client/react-query/mintUserSession.js";
 import type { MintUserSessionRequestBody } from "@gram/client/models/components/mintusersessionrequestbody.js";
@@ -20,6 +22,7 @@ export type UserSessionTokenTarget =
       id: string | undefined;
       discoveryMode?: "direct" | "progressive";
       connectionVersion?: string;
+      frozenToolset?: FrozenGatewayReview;
     };
 
 export interface UseUserSessionTokenResult {
@@ -78,6 +81,9 @@ export function useUserSessionToken({
   const session = useSession();
   const project = useProject();
   const mintMutation = useMintUserSessionMutation({ throwOnError: false });
+  const frozenMintMutation = useMintFrozenGatewaySessionMutation({
+    throwOnError: false,
+  });
 
   const { kind, id } = target;
   const isIssuerGated = !!userSessionIssuerId;
@@ -93,9 +99,27 @@ export function useUserSessionToken({
       session.user.id,
       target.kind === "metaMcpServer" ? target.discoveryMode : undefined,
       target.kind === "metaMcpServer" ? target.connectionVersion : undefined,
+      target.kind === "metaMcpServer" ? target.frozenToolset : undefined,
     ],
     queryFn: async () => {
       if (!id) return null;
+      if (target.kind === "metaMcpServer" && target.frozenToolset) {
+        return frozenMintMutation.mutateAsync({
+          request: {
+            gramProject: project.id,
+            mintFrozenGatewaySessionRequestBody: {
+              metaMcpServerId: id,
+              discoveryMode: target.discoveryMode,
+              frozenToolset: target.frozenToolset,
+            },
+          },
+          security: {
+            sessionHeaderGramSession: session.session,
+            projectSlugHeaderGramProject: project.slug,
+          },
+        });
+      }
+
       const result = await mintMutation.mutateAsync({
         request: {
           gramProject: project.id,

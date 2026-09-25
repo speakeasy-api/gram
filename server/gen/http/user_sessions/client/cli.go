@@ -141,6 +141,95 @@ func BuildListFacetsPayload(userSessionsListFacetsSessionToken string, userSessi
 	return v, nil
 }
 
+// BuildPreviewGatewayToolsetPayload builds the payload for the userSessions
+// previewGatewayToolset endpoint from CLI flags.
+func BuildPreviewGatewayToolsetPayload(userSessionsPreviewGatewayToolsetBody string, userSessionsPreviewGatewayToolsetSessionToken string, userSessionsPreviewGatewayToolsetProjectSlugInput string) (*usersessions.PreviewGatewayToolsetPayload, error) {
+	var err error
+	var body PreviewGatewayToolsetRequestBody
+	{
+		err = json.Unmarshal([]byte(userSessionsPreviewGatewayToolsetBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", body.MetaMcpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if userSessionsPreviewGatewayToolsetSessionToken != "" {
+			sessionToken = &userSessionsPreviewGatewayToolsetSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionsPreviewGatewayToolsetProjectSlugInput != "" {
+			projectSlugInput = &userSessionsPreviewGatewayToolsetProjectSlugInput
+		}
+	}
+	v := &usersessions.PreviewGatewayToolsetPayload{
+		MetaMcpServerID: body.MetaMcpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildMintFrozenGatewaySessionPayload builds the payload for the userSessions
+// mintFrozenGatewaySession endpoint from CLI flags.
+func BuildMintFrozenGatewaySessionPayload(userSessionsMintFrozenGatewaySessionBody string, userSessionsMintFrozenGatewaySessionSessionToken string, userSessionsMintFrozenGatewaySessionProjectSlugInput string) (*usersessions.MintFrozenGatewaySessionPayload, error) {
+	var err error
+	var body MintFrozenGatewaySessionRequestBody
+	{
+		err = json.Unmarshal([]byte(userSessionsMintFrozenGatewaySessionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"discovery_mode\": \"progressive\",\n      \"frozen_toolset\": {\n         \"fingerprint\": \"abc123\",\n         \"tools\": [\n            \"abc123\"\n         ]\n      },\n      \"meta_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		if body.FrozenToolset == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("frozen_toolset", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", body.MetaMcpServerID, goa.FormatUUID))
+		if body.DiscoveryMode != nil {
+			if !(*body.DiscoveryMode == "direct" || *body.DiscoveryMode == "progressive") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"direct", "progressive"}))
+			}
+		}
+		if body.FrozenToolset != nil {
+			if err2 := ValidateFrozenGatewayReviewRequestBody(body.FrozenToolset); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if userSessionsMintFrozenGatewaySessionSessionToken != "" {
+			sessionToken = &userSessionsMintFrozenGatewaySessionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if userSessionsMintFrozenGatewaySessionProjectSlugInput != "" {
+			projectSlugInput = &userSessionsMintFrozenGatewaySessionProjectSlugInput
+		}
+	}
+	v := &usersessions.MintFrozenGatewaySessionPayload{
+		MetaMcpServerID: body.MetaMcpServerID,
+		DiscoveryMode:   body.DiscoveryMode,
+	}
+	if body.FrozenToolset != nil {
+		v.FrozenToolset = marshalFrozenGatewayReviewRequestBodyToUsersessionsFrozenGatewayReview(body.FrozenToolset)
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildMintUserSessionPayload builds the payload for the userSessions
 // mintUserSession endpoint from CLI flags.
 func BuildMintUserSessionPayload(userSessionsMintUserSessionBody string, userSessionsMintUserSessionSessionToken string, userSessionsMintUserSessionProjectSlugInput string) (*usersessions.MintUserSessionPayload, error) {

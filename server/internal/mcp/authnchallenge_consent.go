@@ -93,6 +93,7 @@ var remoteSetHashEmpty = func() string {
 type consentTemplateData struct {
 	// ShowDiscoveryMode exposes optional gateway connection settings.
 	ShowDiscoveryMode  bool
+	GatewayReview      *gatewayConsentReview
 	ClientName         string
 	MCPSlug            string
 	MCPRouteBase       string
@@ -648,7 +649,12 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		)
 	}
 
+	gatewayReview, err := s.gatewayConsentReview(ctx, endpoint, &challengeState, clientRowID)
+	if err != nil {
+		return err
+	}
 	data := consentTemplateData{
+		GatewayReview:           gatewayReview,
 		ClientName:              clientName,
 		MCPSlug:                 endpoint.Slug,
 		MCPRouteBase:            endpoint.RouteBase,
@@ -869,6 +875,10 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if err != nil {
 		return err
 	}
+	toolPolicy, err = s.consentFrozenGatewayPolicy(ctx, endpoint, challengeState, selectedAgentID, r.PostForm, toolPolicy)
+	if err != nil {
+		return err
+	}
 
 	// Resolve the user_session_clients row id for the consent FK.
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
@@ -954,6 +964,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	if agentAuthorization != nil {
 		code = agentAuthorizationCodePrefix + code
+	} else if toolPolicy != nil && toolPolicy.Gateway != nil && toolPolicy.Gateway.Frozen != nil {
+		code = frozenAuthorizationCodePrefix + code
 	} else if toolPolicy != nil {
 		code = gatewayAuthorizationCodePrefix + code
 	}

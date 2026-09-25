@@ -13,6 +13,10 @@ import (
 // gatewayDiscoveryOptionsEnabled gates new settings only. Runtime policy
 // parsing and enforcement do not depend on this product feature.
 func (s *Service) gatewayDiscoveryOptionsEnabled(ctx context.Context, endpoint *ResolvedMcpEndpoint) bool {
+	return s.gatewayConnectionOptionsEnabled(ctx, endpoint, feature.FlagGatewayDiscoveryModes)
+}
+
+func (s *Service) gatewayConnectionOptionsEnabled(ctx context.Context, endpoint *ResolvedMcpEndpoint, flag feature.Flag) bool {
 	if !endpoint.MetaMcpServerID.Valid {
 		return false
 	}
@@ -30,7 +34,7 @@ func (s *Service) consentGatewayPolicy(ctx context.Context, endpoint *ResolvedMc
 	policy := &toolfilter.SessionPolicy{
 		Resource:  endpointToolSelectionResource(endpoint),
 		Selection: selection,
-		Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: &mode},
+		Gateway:   &toolfilter.GatewayOptions{Frozen: nil, DiscoveryMode: &mode},
 	}
 	if _, err := json.Marshal(policy); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid gateway connection options")

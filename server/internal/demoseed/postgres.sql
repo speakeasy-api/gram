@@ -1284,6 +1284,8 @@ BEGIN
   INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
                                 user_session_issuer_id, discovery_mode) VALUES
     (demo.det_uuid('gram-demo-metamcp-1'), demo_org, proj_a, 'Acme Agent Gateway',
+     demo.det_uuid('gram-demo-issuer-gateway'), 'progressive'),
+    (demo.det_uuid('gram-demo-metamcp-freeze'), demo_org, proj_a, 'Frozen Toolset Demo',
      demo.det_uuid('gram-demo-issuer-gateway'), 'progressive');
 
   -- sort_order is the order agents see members in list_servers.
@@ -1296,7 +1298,12 @@ BEGIN
     (demo.det_uuid('gram-demo-metamember-linear'), proj_a,
      demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-linear'), 2),
     (demo.det_uuid('gram-demo-metamember-slack'), proj_a,
-     demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-slack'), 3);
+     demo.det_uuid('gram-demo-metamcp-1'), demo.det_uuid('gram-demo-mcpserver-slack'), 3),
+    -- Hosted members let visitors review a complete inventory without linking an external account.
+    (demo.det_uuid('gram-demo-metamember-freeze-support'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-freeze'), demo.det_uuid('gram-demo-mcpserver-support'), 0),
+    (demo.det_uuid('gram-demo-metamember-freeze-ops'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-freeze'), demo.det_uuid('gram-demo-mcpserver-ops'), 1);
 
   -- GitHub was a member until three days ago. Its dispatches are still in
   -- ClickHouse (gwgone rows), so the Activity section can show that a removed
@@ -1315,7 +1322,9 @@ BEGIN
     (demo.det_uuid('gram-demo-endpoint-linear'), proj_a, NULL,
      demo.det_uuid('gram-demo-mcpserver-linear'), 'acme-demo-linear'),
     (demo.det_uuid('gram-demo-endpoint-slack'), proj_a, NULL,
-     demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack');
+     demo.det_uuid('gram-demo-mcpserver-slack'), 'acme-demo-slack'),
+    (demo.det_uuid('gram-demo-endpoint-freeze'), proj_a,
+     demo.det_uuid('gram-demo-metamcp-freeze'), NULL, 'acme-demo-frozen-gateway');
 
   -- Live connections spread across the MCP servers, not pooled on one issuer.
   -- The identity page's connections tab groups by MCP server, and every
@@ -2862,8 +2871,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO stray
   FROM meta_mcp_server_members m
   WHERE m.project_id = proj_a AND m.deleted IS FALSE;
-  IF stray <> 4 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 4 gateway members, found %', stray;
+  IF stray <> 6 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 6 gateway members, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray
@@ -2877,8 +2886,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   FROM mcp_endpoints e
   WHERE e.project_id = proj_a AND e.deleted IS FALSE
     AND e.meta_mcp_server_id IS NOT NULL;
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 gateway endpoint, found %', stray;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 gateway endpoints, found %', stray;
   END IF;
 
   -- A member whose server lost its backend can never be dispatched to, so it

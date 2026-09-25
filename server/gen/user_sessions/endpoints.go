@@ -16,10 +16,12 @@ import (
 
 // Endpoints wraps the "userSessions" service endpoints.
 type Endpoints struct {
-	ListUserSessions  goa.Endpoint
-	ListFacets        goa.Endpoint
-	MintUserSession   goa.Endpoint
-	RevokeUserSession goa.Endpoint
+	ListUserSessions         goa.Endpoint
+	ListFacets               goa.Endpoint
+	PreviewGatewayToolset    goa.Endpoint
+	MintFrozenGatewaySession goa.Endpoint
+	MintUserSession          goa.Endpoint
+	RevokeUserSession        goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "userSessions" service with endpoints.
@@ -27,10 +29,12 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListUserSessions:  NewListUserSessionsEndpoint(s, a.APIKeyAuth),
-		ListFacets:        NewListFacetsEndpoint(s, a.APIKeyAuth),
-		MintUserSession:   NewMintUserSessionEndpoint(s, a.APIKeyAuth),
-		RevokeUserSession: NewRevokeUserSessionEndpoint(s, a.APIKeyAuth),
+		ListUserSessions:         NewListUserSessionsEndpoint(s, a.APIKeyAuth),
+		ListFacets:               NewListFacetsEndpoint(s, a.APIKeyAuth),
+		PreviewGatewayToolset:    NewPreviewGatewayToolsetEndpoint(s, a.APIKeyAuth),
+		MintFrozenGatewaySession: NewMintFrozenGatewaySessionEndpoint(s, a.APIKeyAuth),
+		MintUserSession:          NewMintUserSessionEndpoint(s, a.APIKeyAuth),
+		RevokeUserSession:        NewRevokeUserSessionEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -38,6 +42,8 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListUserSessions = m(e.ListUserSessions)
 	e.ListFacets = m(e.ListFacets)
+	e.PreviewGatewayToolset = m(e.PreviewGatewayToolset)
+	e.MintFrozenGatewaySession = m(e.MintFrozenGatewaySession)
 	e.MintUserSession = m(e.MintUserSession)
 	e.RevokeUserSession = m(e.RevokeUserSession)
 }
@@ -157,6 +163,81 @@ func NewListFacetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return s.ListFacets(ctx, p)
+	}
+}
+
+// NewPreviewGatewayToolsetEndpoint returns an endpoint function that calls the
+// method "previewGatewayToolset" of service "userSessions".
+func NewPreviewGatewayToolsetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*PreviewGatewayToolsetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		res, err := s.PreviewGatewayToolset(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		vres := NewViewedGatewayToolsetReview(res, "default")
+		return vres, nil
+	}
+}
+
+// NewMintFrozenGatewaySessionEndpoint returns an endpoint function that calls
+// the method "mintFrozenGatewaySession" of service "userSessions".
+func NewMintFrozenGatewaySessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*MintFrozenGatewaySessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.MintFrozenGatewaySession(ctx, p)
 	}
 }
 

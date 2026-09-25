@@ -79,7 +79,7 @@ func buildDynamicSessionTools(
 
 	return []*toolListEntry{
 		{
-			Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
+			routingIdentity: "", rawDefinition: nil, Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
 			Name:        searchToolsToolName,
 			Description: findDescription,
 			InputSchema: buildDynamicSearchToolsSchema(availableTags),
@@ -131,7 +131,7 @@ func buildDescribeToolsTool(tools []*types.Tool) (*toolListEntry, error) {
 	}`, strings.Join(toolNames[:exampleCount], ", "))
 
 	return &toolListEntry{
-		Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
+		routingIdentity: "", rawDefinition: nil, Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
 		Name:        describeToolsToolName,
 		Description: description,
 		InputSchema: json.RawMessage(schemaJSON),
@@ -261,7 +261,7 @@ func buildToolSearchResultEntries(tools []*types.Tool, searchResults []*rag.Tool
 		meta["tags"] = searchResult.Tags
 
 		results = append(results, &toolListEntry{
-			Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
+			routingIdentity: "", rawDefinition: nil, Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
 			Name:        toolEntry.Name,
 			Description: toolEntry.Description,
 			Meta:        meta,

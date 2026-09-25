@@ -95,7 +95,7 @@ func TestGatewayModeOnlySessionIsBoundAndUnrestricted(t *testing.T) {
 	otherSlug := "gateway-" + uuid.NewString()
 	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, otherSlug, issuerID)
 	mode := metamcp.DiscoveryModeDirect
-	policy, err := json.Marshal(&toolfilter.SessionPolicy{Resource: "meta_mcp_server:" + gateway.ID.String(), Gateway: &toolfilter.GatewayOptions{DiscoveryMode: &mode}})
+	policy, err := json.Marshal(&toolfilter.SessionPolicy{Resource: "meta_mcp_server:" + gateway.ID.String(), Gateway: &toolfilter.GatewayOptions{Frozen: nil, DiscoveryMode: &mode}})
 	require.NoError(t, err)
 	subject := urn.NewUserSubject("gateway-mode-test-" + uuid.NewString())
 	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{Subject: subject, Audience: urn.NewUserSessionIssuer(issuerID).String(), Issuer: ti.serverURL.String() + "/mcp/" + slug, Lifetime: time.Hour})

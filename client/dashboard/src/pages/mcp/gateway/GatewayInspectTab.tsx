@@ -1,3 +1,5 @@
+import { GatewayFrozenToolset, type FrozenGatewayConnection } from "./GatewayFrozenToolset";
+import { useSession } from "@/contexts/Auth";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/Badge";
@@ -18,7 +20,7 @@ import { mcpConnectionUrl } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -43,7 +45,19 @@ function argumentNames(inputSchema: unknown): string {
   return names.length > 0 ? names.join(", ") : "(no arguments)";
 }
 
-export function GatewayInspectTab({
+export function GatewayInspectTab(
+  props: Parameters<typeof GatewayInspectConnection>[0],
+): JSX.Element {
+  const session = useSession();
+  return (
+    <GatewayInspectConnection
+      key={`${props.metaMcpServer.id}:${session.user.id}`}
+      {...props}
+    />
+  );
+}
+
+function GatewayInspectConnection({
   metaMcpServer,
   endpoints,
   isLoadingEndpoints,
@@ -63,6 +77,9 @@ export function GatewayInspectTab({
       ? requestedMode
       : "default",
   );
+  const [frozen, setFrozen] = useState<FrozenGatewayConnection>();
+  const [approvedFrozen, setApprovedFrozen] =
+    useState<FrozenGatewayConnection>();
   const [connection, setConnection] = useState(() => ({
     mode: modeDraft,
     version: crypto.randomUUID(),
@@ -103,9 +120,15 @@ export function GatewayInspectTab({
       id: metaMcpServer.id,
       discoveryMode,
       connectionVersion: connection.version,
+      frozenToolset: frozen
+        ? { fingerprint: frozen.review.fingerprint, tools: frozen.names }
+        : undefined,
     },
     userSessionIssuerId: metaMcpServer.userSessionIssuerId,
   });
+  useEffect(() => {
+    if (accessToken && !mintError) setApprovedFrozen(frozen);
+  }, [accessToken, mintError, frozen]);
   const headers = accessToken
     ? { Authorization: `Bearer ${accessToken}` }
     : undefined;
@@ -146,6 +169,17 @@ export function GatewayInspectTab({
         </Button>
       </Page.Section.CTA>
       <Page.Section.Body>
+        {metaMcpServer.userSessionIssuerId && (
+          <GatewayFrozenToolset
+            gatewayId={metaMcpServer.id}
+            approved={approvedFrozen}
+            pending={isMintingToken}
+            onApply={(value) => {
+              setFrozen(value);
+              applyMode(modeDraft);
+            }}
+          />
+        )}
         {metaMcpServer.discoveryModesEnabled &&
           metaMcpServer.userSessionIssuerId && (
             <Page.Toolbar>

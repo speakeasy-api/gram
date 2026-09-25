@@ -1031,3 +1031,10 @@ planning. Please note that this might be slightly outdated, and this guide shoul
 The staff-managed `gateway_discovery_modes` product feature enables new gateway defaults and per-connection discovery choices. Gateway defaults require project `mcp:write`; Inspect overrides require gateway `mcp:connect`. Disabling the product feature preserves stored defaults and session choices.
 
 Platform MCP's `get_mcp_connection_settings` includes a gateway's discovery mode. During preview, mode changes use the dashboard or management API. The existing Platform MCP address and network mutations remain limited to those settings; an agent-facing mode mutation is deferred until it has its own confirmation and concurrency contract.
+
+Gateway frozen-toolset preview and issuance require `mcp:connect` on the gateway in the selected project. A frozen connection continues to apply current member and tool permissions.
+
+| Gateway operation                    | Required permission                                 | Resource                     |
+| ------------------------------------ | --------------------------------------------------- | ---------------------------- |
+| `userSessions.previewGatewayToolset` | `mcp:connect` and each member’s current permissions | Gateway and admitted members |
+| `userSessions.mintFrozenGateway`     | `mcp:connect` and a fresh, complete tool review     | Gateway and admitted members |

@@ -80,6 +80,54 @@ var _ = Service("userSessions", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UserSessionFacets"}`)
 	})
 
+	Method("previewGatewayToolset", func() {
+		Description("Read the complete currently permitted gateway inventory for an optional frozen connection. Does not execute tools. Unavailable members prevent approval.")
+		Security(security.Session, security.ProjectSlug)
+		Payload(func() {
+			Attribute("meta_mcp_server_id", String, "The gateway to review.", func() { Format(FormatUUID) })
+			Required("meta_mcp_server_id")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(GatewayToolsetReview)
+		HTTP(func() {
+			POST("/rpc/userSessions.previewGatewayToolset")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "previewGatewayToolset")
+		Meta("openapi:extension:x-speakeasy-name-override", "previewGatewayToolset")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"PreviewGatewayToolset"}`)
+	})
+
+	Method("mintFrozenGatewaySession", func() {
+		Description("Mint a gateway connection from a freshly validated tool-definition review. This separate route prevents older servers from ignoring frozen options.")
+		Security(security.Session, security.ProjectSlug)
+		Payload(func() {
+			Attribute("meta_mcp_server_id", String, "Gateway to connect.", func() { Format(FormatUUID) })
+			Attribute("discovery_mode", String, "Optional explicit discovery mode.", func() { Enum("direct", "progressive") })
+			Attribute("frozen_toolset", FrozenGatewayReview, "The reviewed inventory and exact approved tools.")
+			Required("meta_mcp_server_id", "frozen_toolset")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+		Result(func() {
+			Attribute("access_token", String, "Gateway bearer token.")
+			Attribute("expires_in", Int, "Lifetime in seconds.")
+			Attribute("frozen_tool_count", Int, "Number of approved tools in this frozen connection.")
+			Required("access_token", "expires_in", "frozen_tool_count")
+		})
+		HTTP(func() {
+			POST("/rpc/userSessions.mintFrozenGateway")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "mintFrozenGatewaySession")
+		Meta("openapi:extension:x-speakeasy-name-override", "mintFrozenGateway")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"MintFrozenGatewaySession"}`)
+	})
 	Method("mintUserSession", func() {
 		Description("Mint a user_session on behalf of the authenticated dashboard user, bound to an issuer-gated audience: an MCP server, a meta MCP server, or a legacy toolset without an mcp_servers wrapper. Exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id must be provided. The minted JWT matches the shape /token would emit after a successful OAuth dance, so the runtime MCP gateway validates it through the same path as a real MCP client's bearer.")
 
@@ -302,4 +350,22 @@ var ListUserSessionFacetsResult = Type("ListUserSessionFacetsResult", func() {
 	Attribute("users", ArrayOf(UserSessionFacetOption), "Subject (user) facets.")
 	Attribute("servers", ArrayOf(UserSessionFacetOption), "Issuer/server facets.")
 	Required("clients", "users", "servers")
+})
+
+var FrozenGatewayReview = Type("FrozenGatewayReview", func() {
+	Attribute("fingerprint", String, "Fingerprint returned by the complete inventory review.")
+	Attribute("tools", ArrayOf(String), "Qualified tool names approved for this connection. Empty means no tools.")
+	Required("fingerprint", "tools")
+})
+var GatewayReviewedTool = Type("GatewayReviewedTool", func() {
+	Attribute("name", String, "Qualified tool name.")
+	Attribute("fingerprint", String, "Fingerprint of the full definition and routing identity.")
+	Attribute("definition", Any, "Full MCP tool definition.")
+	Required("name", "fingerprint", "definition")
+})
+var GatewayToolsetReview = ResultType("application/vnd.gram.gateway-toolset-review", func() {
+	TypeName("GatewayToolsetReview")
+	Attribute("fingerprint", String, "Fingerprint of the complete permitted inventory.")
+	Attribute("tools", ArrayOf(GatewayReviewedTool), "Tools available for review.")
+	Required("fingerprint", "tools")
 })
