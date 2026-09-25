@@ -66,6 +66,8 @@ export const AUDIT_ACTIONS = [
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
   "device_integration:upsert",
+  "directory_role_mapping:delete",
+  "directory_role_mapping:set",
   "environment:create",
   "environment:delete",
   "environment:update",
@@ -472,6 +474,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated device integration schedule";
     case "device_integration:retry_schedule":
       return "retried device integration sync";
+
+    case "directory_role_mapping:set":
+      return "set directory role mapping";
+    case "directory_role_mapping:delete":
+      return "removed directory role mapping";
 
     case "environment:create":
       return "created environment";
