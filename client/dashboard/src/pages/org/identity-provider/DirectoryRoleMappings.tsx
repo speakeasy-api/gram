@@ -1,12 +1,22 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  Check,
   ChevronRight,
-  CircleCheck,
   Loader2,
   Plus,
   RefreshCw,
+  TriangleAlert,
 } from "lucide-react";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  cloneElement,
+  type ReactElement,
+  type ReactNode,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
@@ -29,6 +39,7 @@ import {
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
@@ -53,7 +64,6 @@ import {
   pendingMappingFromParams,
 } from "./directoryMappingFlow";
 
-const UNMAPPED = "__unmapped";
 const CREATE_ROLE = "__create_role";
 
 /** One directory group or attribute value that can be mapped to a role. */
@@ -123,7 +133,12 @@ function attributeMappingRows(
  * the listing exposes directory attribute values and the server rejects anyone
  * else.
  */
-export function DirectoryRoleMappings(): JSX.Element {
+export function DirectoryRoleMappings({
+  footerAction,
+}: {
+  /** Shown at the right of the footer bar, such as the connection button. */
+  footerAction?: ReactNode;
+}): JSX.Element {
   const { data, isPending } = useDirectoryRoleMappings();
   const { data: rolesData } = useRoles();
   const [search, setSearch] = useState("");
@@ -191,33 +206,14 @@ export function DirectoryRoleMappings(): JSX.Element {
   }, [rows, deferredSearch, mappedAtLoad]);
 
   const mappedCount = rows.filter((row) => row.mapping).length;
-
-  const columns: Column<SourceRow>[] = [
-    {
-      key: "source",
-      header: "Directory group",
-      render: (row) => (
-        <div className="min-w-0">
-          <Text className="truncate font-medium">{row.label}</Text>
-          <Text muted small className="truncate">
-            {row.detail}
-          </Text>
-        </div>
-      ),
-    },
-    {
-      key: "role",
-      header: "Role",
-      width: "280px",
-      render: (row) => <RolePicker row={row} roles={roles} />,
-    },
-  ];
+  const attributeCount =
+    data?.mappings.filter((m) => m.sourceKind === "attribute").length ?? 0;
 
   return (
-    <div className="border-border space-y-3 border-t p-4">
+    <div className="mt-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-eyebrow">Role mappings</div>
+          <div className="text-eyebrow">Configure role mappings</div>
           <Text muted small>
             {mappedCount} of {rows.length} groups give their members a role.
           </Text>
@@ -235,33 +231,129 @@ export function DirectoryRoleMappings(): JSX.Element {
         </div>
       </div>
 
-      {isPending && <SkeletonTable />}
-      {!isPending && rows.length === 0 && (
-        <InlineEmptyState
-          icon="users"
-          heading="No directory groups yet"
-          description="Sync groups to pull them from your directory."
-        />
-      )}
-      {!isPending && rows.length > 0 && (
-        <Table
-          columns={columns}
-          data={visibleRows}
-          rowKey={(row) => row.key}
-          className="max-h-[480px] overflow-y-auto"
-          noResultsMessage={<Text muted>No groups match</Text>}
-        />
-      )}
-
-      {data && <AttributeMappings data={data} roles={roles} />}
+      <Collapsible>
+        {isPending && <SkeletonTable />}
+        {!isPending && rows.length === 0 && (
+          <InlineEmptyState
+            icon="users"
+            heading="No directory groups yet"
+            description="Sync groups to pull them from your directory."
+          />
+        )}
+        {!isPending && rows.length > 0 && (
+          <MappingTable
+            rows={visibleRows}
+            roles={roles}
+            sourceHeader="Directory group"
+            noResults="No groups match"
+            scrollable
+          />
+        )}
+        {/* One footer bar under the table: the attribute fallback on the left,
+          the directory connection on the right. */}
+        <div
+          className={cn(
+            "border-border flex flex-wrap items-center justify-between gap-3 border px-2 py-2",
+            rows.length > 0 && "border-t-0",
+          )}
+        >
+          <CollapsibleTrigger asChild>
+            <Button variant="tertiary" size="sm" className="group">
+              <Button.LeftIcon>
+                <ChevronRight className="size-4 transition-transform group-data-[state=open]:rotate-90" />
+              </Button.LeftIcon>
+              Map by attribute
+              {attributeCount > 0 && ` (${attributeCount})`}
+            </Button>
+          </CollapsibleTrigger>
+          {footerAction}
+        </div>
+        <CollapsibleContent className="border-border space-y-2 border border-t-0 p-4">
+          {data && <AttributeMappings data={data} roles={roles} />}
+        </CollapsibleContent>
+      </Collapsible>
     </div>
+  );
+}
+
+/**
+ * One table of groups or attribute values, each with its role picker and a
+ * mark saying whether it gives a role. Groups and attributes share it so the
+ * two sections look and behave the same.
+ */
+function MappingTable({
+  rows,
+  roles,
+  sourceHeader,
+  noResults,
+  scrollable = false,
+}: {
+  rows: SourceRow[];
+  roles: Role[];
+  sourceHeader: string;
+  noResults: string;
+  scrollable?: boolean;
+}): JSX.Element {
+  const columns: Column<SourceRow>[] = [
+    {
+      key: "source",
+      header: sourceHeader,
+      render: (row) => (
+        <div className="min-w-0">
+          <Text className="truncate font-medium">{row.label}</Text>
+          <Text muted small className="truncate">
+            {row.detail}
+          </Text>
+        </div>
+      ),
+    },
+    {
+      key: "role",
+      header: "Role",
+      width: "280px",
+      render: (row) => <RolePicker row={row} roles={roles} />,
+    },
+    {
+      key: "status",
+      header: "",
+      width: "48px",
+      render: (row) => <MappedMark mapped={row.mapping !== undefined} />,
+    },
+  ];
+
+  return (
+    <Table
+      columns={columns}
+      data={rows}
+      rowKey={(row) => row.key}
+      // Mapped rows get a light fill so the unmapped ones, still waiting for a
+      // role, stand out; unmapped rows keep a lighter hover so hovering one
+      // never makes it look mapped.
+      renderRow={(row, rowElement) =>
+        cloneElement(rowElement as ReactElement<{ className?: string }>, {
+          className: cn(
+            (rowElement.props as { className?: string }).className,
+            row.mapping ? "bg-muted/25 hover:bg-muted/40" : "hover:bg-muted/10",
+          ),
+        })
+      }
+      // A scrollable table keeps its header pinned. Its scrollbar is hidden so
+      // it never sits beside an open role picker's scrollbar; the cut-off last
+      // row shows there is more.
+      className={cn(
+        scrollable &&
+          "[&_thead]:bg-card max-h-[480px] overflow-y-auto [scrollbar-width:none] [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&::-webkit-scrollbar]:hidden",
+      )}
+      noResultsMessage={<Text muted>{noResults}</Text>}
+    />
   );
 }
 
 /**
  * The escape hatch for directories whose groups don't match how access should
  * be split: give a role to everyone with an attribute value, such as a
- * department. Starts collapsed so groups stay the primary path.
+ * department. It opens from the footer bar under the groups table and starts
+ * collapsed, so groups stay the primary path.
  */
 function AttributeMappings({
   data,
@@ -289,33 +381,30 @@ function AttributeMappings({
   };
 
   return (
-    <Collapsible className="border-border border-t pt-3">
-      <CollapsibleTrigger className="group text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm">
-        <ChevronRight className="size-4 transition-transform group-data-[state=open]:rotate-90" />
-        Attribute mappings
-        {rows.length > 0 && <span>({rows.length})</span>}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="space-y-2 pt-2">
-        <Text muted small>
-          For roles your groups don&apos;t line up with: give a role to everyone
-          with an attribute value, such as a department.
-        </Text>
+    <>
+      <Text muted small>
+        For roles your groups don&apos;t line up with: give a role to everyone
+        with an attribute value, such as a department.
+      </Text>
 
-        {rows.map((row) => (
-          <div key={row.key} className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <Text className="truncate">{row.label}</Text>
-              <Text muted small>
-                {row.detail}
-              </Text>
-            </div>
-            <div className="w-[280px] shrink-0">
-              <RolePicker row={row} roles={roles} />
-            </div>
-          </div>
-        ))}
+      <div>
+        {rows.length > 0 && (
+          <MappingTable
+            rows={rows}
+            roles={roles}
+            sourceHeader="Attribute value"
+            noResults="No attribute mappings"
+          />
+        )}
 
-        <div className="flex flex-wrap items-center gap-2">
+        {/* The add row sits under the table and lines up with its columns:
+          attribute and value take the source column, then the role. */}
+        <div
+          className={cn(
+            "border-border flex items-center gap-3 border px-4 py-3",
+            rows.length > 0 && "border-t-0",
+          )}
+        >
           <Select
             value={attributeKey}
             onValueChange={(key) => {
@@ -323,7 +412,7 @@ function AttributeMappings({
               setAttributeValue("");
             }}
           >
-            <SelectTrigger className="w-48" aria-label="Attribute">
+            <SelectTrigger className="min-w-0 flex-1" aria-label="Attribute">
               <SelectValue placeholder="Attribute" />
             </SelectTrigger>
             <SelectContent>
@@ -339,7 +428,7 @@ function AttributeMappings({
             onValueChange={setAttributeValue}
             disabled={attributeKey === ""}
           >
-            <SelectTrigger className="w-56" aria-label="Value">
+            <SelectTrigger className="min-w-0 flex-1" aria-label="Value">
               <SelectValue placeholder="Value" />
             </SelectTrigger>
             <SelectContent>
@@ -350,7 +439,7 @@ function AttributeMappings({
               ))}
             </SelectContent>
           </Select>
-          <div className="w-[280px]">
+          <div className="w-[280px] shrink-0">
             <RolePicker
               row={draft}
               roles={roles}
@@ -365,15 +454,17 @@ function AttributeMappings({
               }}
             />
           </div>
+          {/* Keeps the role picker in line with the table's mark column. */}
+          <div className="w-12 shrink-0" />
         </div>
-      </CollapsibleContent>
-    </Collapsible>
+      </div>
+    </>
   );
 }
 
 /**
  * Picks the role for one group or attribute value. Picking a role saves it
- * straight away; "Not mapped" removes the mapping.
+ * straight away; picking the mapped role again removes the mapping.
  */
 function RolePicker({
   row,
@@ -418,13 +509,6 @@ function RolePicker({
     label: role.name,
     description: role.description || undefined,
   }));
-  if (row.mapping) {
-    items.unshift({
-      value: UNMAPPED,
-      label: "Not mapped",
-      description: "Remove this mapping",
-    });
-  }
   items.unshift({
     value: CREATE_ROLE,
     label: "Create role…",
@@ -438,9 +522,9 @@ function RolePicker({
       void navigate(`${orgRoutes.createRole.href()}?${params.toString()}`);
       return;
     }
-    if (value === (row.mapping?.roleUrn ?? UNMAPPED)) return;
-    if (value === UNMAPPED) {
-      if (row.mapping) remove.mutate({ request: { id: row.mapping.id } });
+    // Picking the role that is already mapped clears it, like unticking it.
+    if (row.mapping && value === row.mapping.roleUrn) {
+      remove.mutate({ request: { id: row.mapping.id } });
       return;
     }
     save.mutate({
@@ -473,16 +557,39 @@ function RolePicker({
       disabledMessage={saving ? "Saving mapping" : disabledMessage}
     >
       <span className="flex items-center gap-2">
-        {row.mapping && !saving && (
-          <CircleCheck
-            className="text-default-success size-4 shrink-0"
-            aria-label="Mapped"
-          />
-        )}
         {!row.mapping && !saving && <Plus className="size-4 shrink-0" />}
         {label}
       </span>
     </Combobox>
+  );
+}
+
+/** The check that marks a group or attribute value as mapped. */
+/**
+ * Marks a group or attribute value: a check once it gives a role, a warning
+ * while it gives its members nothing.
+ */
+function MappedMark({ mapped }: { mapped: boolean }): JSX.Element {
+  return (
+    <div className="flex justify-center">
+      {mapped ? (
+        <Check
+          className="text-default-success size-4 shrink-0"
+          strokeWidth={2.5}
+          aria-label="Mapped"
+        />
+      ) : (
+        <SimpleTooltip tooltip="No role mapped yet. Its members get nothing from it until you assign a role.">
+          <span
+            role="img"
+            aria-label="No role mapped yet. Assign a role to give its members access."
+            className="inline-flex"
+          >
+            <TriangleAlert className="text-warning size-4 shrink-0" />
+          </span>
+        </SimpleTooltip>
+      )}
+    </div>
   );
 }
 
@@ -502,6 +609,8 @@ function SyncGroupsButton(): JSX.Element {
     <Button
       variant="secondary"
       size="sm"
+      // Matches the search box beside it.
+      className="h-10"
       disabled={sync.isPending}
       onClick={() => sync.mutate({ request: {} })}
     >

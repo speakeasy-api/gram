@@ -34,7 +34,12 @@ vi.mock("nuqs", async (importOriginal) => ({
     .useRouterQueryState,
 }));
 vi.mock("./identity-provider/DirectoryRoleMappings", () => ({
-  DirectoryRoleMappings: () => <div>Role mappings panel</div>,
+  DirectoryRoleMappings: ({ footerAction }: { footerAction?: ReactNode }) => (
+    <div>
+      Role mappings panel
+      {footerAction}
+    </div>
+  ),
 }));
 vi.mock("./identity-provider/EnterpriseManagedAuth", () => ({
   EnterpriseManagedAuth: () => {

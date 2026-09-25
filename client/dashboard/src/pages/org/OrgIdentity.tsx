@@ -19,7 +19,7 @@ import { useProductFeatures } from "@gram/client/react-query/productFeatures.js"
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { FolderSync, Globe, Loader2, Lock } from "lucide-react";
+import { ExternalLink, FolderSync, Globe, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 
 import { DirectoryRoleMappings } from "./identity-provider/DirectoryRoleMappings";
@@ -49,6 +49,10 @@ type IdentityCardProps = {
   blocked?: boolean;
   configureButton?: React.ReactNode;
   children?: React.ReactNode;
+  /** Content below the card, outside its border, such as a table. */
+  below?: React.ReactNode;
+  /** Leaves out the provider card, for sections whose content replaces it. */
+  hideCard?: boolean;
 };
 
 /**
@@ -101,10 +105,12 @@ function ConfigureButton({ sectionId }: { sectionId: IdentitySectionId }) {
 function SetupStepButton() {
   const orgRoutes = useOrgRoutes();
 
+  // First-run setup is the one thing to do on an unconfigured card, so it is
+  // the primary action there.
   return (
     <RequireScope scope="org:admin" level="component">
       <orgRoutes.setup.Link queryParams={{ task: "identity-provider" }}>
-        <Button variant="secondary" size="sm">
+        <Button variant="primary" size="sm">
           Configure
         </Button>
       </orgRoutes.setup.Link>
@@ -117,10 +123,13 @@ function WorkOSPortalButton({
   intent,
   errorFallback,
   label = "Configure",
+  external = false,
 }: {
   intent: "sso" | "dsync" | "domain_verification";
   errorFallback: string;
   label?: string;
+  /** Adds an external-link icon, for spots where leaving Gram is not obvious. */
+  external?: boolean;
 }) {
   const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
     onError: (error) => {
@@ -163,6 +172,11 @@ function WorkOSPortalButton({
           </Button.LeftIcon>
         )}
         {label}
+        {external && (
+          <Button.RightIcon>
+            <ExternalLink className="h-4 w-4" />
+          </Button.RightIcon>
+        )}
       </Button>
     </RequireScope>
   );
@@ -193,8 +207,9 @@ function SSOConfigureControl({
 }
 
 /**
- * Picks the Directory Sync configure control, mirroring {@link SSOConfigureControl}:
- * upsell, WorkOS portal launcher, or the in-product setup wizard.
+ * Picks the Directory Sync card control: upsell or the in-product setup
+ * wizard. A connected directory has none on the card; its connection is
+ * managed from the secondary button under the role mappings.
  */
 function DirectorySyncConfigureControl({
   featureEnabled,
@@ -203,16 +218,8 @@ function DirectorySyncConfigureControl({
   featureEnabled: boolean;
   active: boolean;
 }) {
+  if (active) return null;
   if (!featureEnabled) return <ConfigureButton sectionId="directory_sync" />;
-  if (active) {
-    return (
-      <WorkOSPortalButton
-        intent="dsync"
-        errorFallback="Failed to start Directory Sync setup"
-        label="Manage connection"
-      />
-    );
-  }
   return <SetupStepButton />;
 }
 
@@ -230,6 +237,8 @@ function IdentitySection({
   blocked = false,
   configureButton,
   children,
+  below,
+  hideCard = false,
 }: IdentityCardProps) {
   let control = configureButton ?? <ConfigureButton sectionId={sectionId} />;
   // A blocked card replaces every control, including the upsell, so nothing
@@ -258,34 +267,37 @@ function IdentitySection({
             </Text>
           </Alert>
         )}
-        <div
-          aria-disabled={blocked || undefined}
-          className={cn(
-            "border-border overflow-hidden border",
-            blocked && "opacity-70",
-          )}
-        >
-          <div className="flex items-center gap-4 p-4">
-            <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
-              {providerIcon}
+        {!hideCard && (
+          <div
+            aria-disabled={blocked || undefined}
+            className={cn(
+              "border-border overflow-hidden border",
+              blocked && "opacity-70",
+            )}
+          >
+            <div className="flex items-center gap-4 p-4">
+              <div className="bg-muted flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
+                {providerIcon}
+              </div>
+              <div className="min-w-0 flex-1">
+                <Text variant="body" className="font-medium">
+                  {providerTitle}
+                </Text>
+                <Text muted small>
+                  {providerSubtitle}
+                </Text>
+                {active && (
+                  <Badge variant="success" className="mt-1.5">
+                    <Badge.Text>{activeLabel}</Badge.Text>
+                  </Badge>
+                )}
+              </div>
+              {control}
             </div>
-            <div className="min-w-0 flex-1">
-              <Text variant="body" className="font-medium">
-                {providerTitle}
-              </Text>
-              <Text muted small>
-                {providerSubtitle}
-              </Text>
-              {active && (
-                <Badge variant="success" className="mt-1.5">
-                  <Badge.Text>{activeLabel}</Badge.Text>
-                </Badge>
-              )}
-            </div>
-            {control}
+            {children}
           </div>
-          {children}
-        </div>
+        )}
+        {below}
         <a
           href={learnMoreHref}
           target="_blank"
@@ -464,13 +476,26 @@ function SingleSignOnTab(): JSX.Element {
             active={scimActive}
           />
         }
-      >
-        {scimActive && (
-          <RequireScope scope="org:admin" level="component">
-            <DirectoryRoleMappings />
-          </RequireScope>
-        )}
-      </IdentitySection>
+        // Once a directory is connected the role mappings are the section;
+        // the connection is managed from the button below them.
+        hideCard={scimActive}
+        below={
+          scimActive && (
+            <RequireScope scope="org:admin" level="component">
+              <DirectoryRoleMappings
+                footerAction={
+                  <WorkOSPortalButton
+                    intent="dsync"
+                    errorFallback="Failed to open the directory connection"
+                    label="Manage connection"
+                    external
+                  />
+                }
+              />
+            </RequireScope>
+          )
+        }
+      />
     </div>
   );
 }
