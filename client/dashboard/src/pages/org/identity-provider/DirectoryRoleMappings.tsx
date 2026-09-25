@@ -1,11 +1,22 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { CircleCheck, Loader2, Plus, RefreshCw } from "lucide-react";
+import {
+  ChevronRight,
+  CircleCheck,
+  Loader2,
+  Plus,
+  RefreshCw,
+} from "lucide-react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/Collapsible";
 import { Combobox, type DropdownItem } from "@/components/ui/Combobox";
 import { SearchBar } from "@/components/ui/SearchBar";
 import {
@@ -215,7 +226,7 @@ export function DirectoryRoleMappings(): JSX.Element {
 /**
  * The escape hatch for directories whose groups don't match how access should
  * be split: give a role to everyone with an attribute value, such as a
- * department. Collapsed behind a link until the org has an attribute mapping.
+ * department. Starts collapsed so groups stay the primary path.
  */
 function AttributeMappings({
   data,
@@ -225,7 +236,6 @@ function AttributeMappings({
   roles: Role[];
 }): JSX.Element {
   const rows = attributeMappingRows(data);
-  const [open, setOpen] = useState(false);
   const [attributeKey, setAttributeKey] = useState("");
   const [attributeValue, setAttributeValue] = useState("");
 
@@ -234,18 +244,6 @@ function AttributeMappings({
     [data.attributes],
   );
   const values = data.attributes.filter((a) => a.key === attributeKey);
-
-  if (!open && rows.length === 0) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="text-muted-foreground hover:text-foreground text-sm underline underline-offset-4"
-      >
-        Map by directory attribute instead
-      </button>
-    );
-  }
 
   const draft: SourceRow = {
     key: "draft",
@@ -256,81 +254,85 @@ function AttributeMappings({
   };
 
   return (
-    <div className="border-border space-y-2 border-t pt-3">
-      <div>
-        <div className="text-eyebrow">Attribute mappings</div>
+    <Collapsible className="border-border border-t pt-3">
+      <CollapsibleTrigger className="group text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm">
+        <ChevronRight className="size-4 transition-transform group-data-[state=open]:rotate-90" />
+        Attribute mappings
+        {rows.length > 0 && <span>({rows.length})</span>}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-2 pt-2">
         <Text muted small>
           For roles your groups don&apos;t line up with: give a role to everyone
           with an attribute value, such as a department.
         </Text>
-      </div>
 
-      {rows.map((row) => (
-        <div key={row.key} className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <Text className="truncate">{row.label}</Text>
-            <Text muted small>
-              {row.detail}
-            </Text>
+        {rows.map((row) => (
+          <div key={row.key} className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <Text className="truncate">{row.label}</Text>
+              <Text muted small>
+                {row.detail}
+              </Text>
+            </div>
+            <div className="w-[280px] shrink-0">
+              <RolePicker row={row} roles={roles} />
+            </div>
           </div>
-          <div className="w-[280px] shrink-0">
-            <RolePicker row={row} roles={roles} />
-          </div>
-        </div>
-      ))}
+        ))}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Select
-          value={attributeKey}
-          onValueChange={(key) => {
-            setAttributeKey(key);
-            setAttributeValue("");
-          }}
-        >
-          <SelectTrigger className="w-48" aria-label="Attribute">
-            <SelectValue placeholder="Attribute" />
-          </SelectTrigger>
-          <SelectContent>
-            {keys.map((key) => (
-              <SelectItem key={key} value={key}>
-                {key}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={attributeValue}
-          onValueChange={setAttributeValue}
-          disabled={attributeKey === ""}
-        >
-          <SelectTrigger className="w-56" aria-label="Value">
-            <SelectValue placeholder="Value" />
-          </SelectTrigger>
-          <SelectContent>
-            {values.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.value} ({option.memberCount})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="w-[280px]">
-          <RolePicker
-            row={draft}
-            roles={roles}
-            disabledMessage={
-              attributeValue === ""
-                ? "Pick an attribute and value first"
-                : undefined
-            }
-            onSaved={() => {
-              setAttributeKey("");
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={attributeKey}
+            onValueChange={(key) => {
+              setAttributeKey(key);
               setAttributeValue("");
             }}
-          />
+          >
+            <SelectTrigger className="w-48" aria-label="Attribute">
+              <SelectValue placeholder="Attribute" />
+            </SelectTrigger>
+            <SelectContent>
+              {keys.map((key) => (
+                <SelectItem key={key} value={key}>
+                  {key}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={attributeValue}
+            onValueChange={setAttributeValue}
+            disabled={attributeKey === ""}
+          >
+            <SelectTrigger className="w-56" aria-label="Value">
+              <SelectValue placeholder="Value" />
+            </SelectTrigger>
+            <SelectContent>
+              {values.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.value} ({option.memberCount})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="w-[280px]">
+            <RolePicker
+              row={draft}
+              roles={roles}
+              disabledMessage={
+                attributeValue === ""
+                  ? "Pick an attribute and value first"
+                  : undefined
+              }
+              onSaved={() => {
+                setAttributeKey("");
+                setAttributeValue("");
+              }}
+            />
+          </div>
         </div>
-      </div>
-    </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
