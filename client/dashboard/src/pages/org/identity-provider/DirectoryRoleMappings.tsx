@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, RefreshCw } from "lucide-react";
-import { useDeferredValue, useMemo, useState } from "react";
+import { CircleCheck, Loader2, Plus, RefreshCw } from "lucide-react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
@@ -12,6 +12,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { type Column, Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
+import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import type { DirectoryRoleMapping } from "@gram/client/models/components/directoryrolemapping.js";
 import type { Role } from "@gram/client/models/components/role.js";
@@ -112,15 +113,37 @@ export function DirectoryRoleMappings(): JSX.Element {
     }));
   }, [data, kind]);
 
+  // Unmapped rows sort first. Each row's place is fixed by whether it was
+  // mapped when it first loaded, so picking a role does not move the row
+  // under the cursor; the order refreshes the next time the panel mounts.
+  const [mappedAtLoad, setMappedAtLoad] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    setMappedAtLoad((previous) => {
+      const missing = rows.filter((row) => !(row.key in previous));
+      if (missing.length === 0) return previous;
+      const next = { ...previous };
+      for (const row of missing) next[row.key] = row.mapping !== undefined;
+      return next;
+    });
+  }, [rows]);
+
   const visibleRows = useMemo(() => {
     const needle = deferredSearch.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (filter === "mapped" && !row.mapping) return false;
-      if (filter === "unmapped" && row.mapping) return false;
-      if (needle === "") return true;
-      return `${row.label} ${row.detail}`.toLowerCase().includes(needle);
-    });
-  }, [rows, filter, deferredSearch]);
+    const wasMapped = (row: SourceRow) =>
+      mappedAtLoad[row.key] ?? row.mapping !== undefined;
+    return rows
+      .filter((row) => {
+        if (filter === "mapped" && !row.mapping) return false;
+        if (filter === "unmapped" && row.mapping) return false;
+        if (needle === "") return true;
+        return `${row.label} ${row.detail}`.toLowerCase().includes(needle);
+      })
+      .sort(
+        (a, b) =>
+          Number(wasMapped(a)) - Number(wasMapped(b)) ||
+          a.label.localeCompare(b.label),
+      );
+  }, [rows, filter, deferredSearch, mappedAtLoad]);
 
   const mappedCount = rows.filter((row) => row.mapping).length;
 
@@ -302,7 +325,18 @@ function RolePicker({
       contentClassName="w-[min(24rem,90vw)]"
       disabledMessage={saving ? "Saving mapping" : undefined}
     >
-      <span className={row.mapping ? "" : "text-muted-foreground font-normal"}>
+      <span
+        className={cn(
+          "flex items-center gap-2",
+          !row.mapping && "text-muted-foreground font-normal",
+        )}
+      >
+        {row.mapping && !saving && (
+          <CircleCheck
+            className="text-default-success size-4 shrink-0"
+            aria-label="Mapped"
+          />
+        )}
         {label}
       </span>
     </Combobox>
