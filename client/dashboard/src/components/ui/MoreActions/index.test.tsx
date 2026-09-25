@@ -16,9 +16,17 @@ describe("MoreActions", () => {
     render(
       <MoreActions
         actions={[
-          { label: "Inspect", onClick: vi.fn() },
-          { label: "Edit", onClick: vi.fn(), separatorBefore: false },
-          { label: "Delete", onClick: vi.fn(), separatorBefore: true },
+          { label: "Inspect", onClick: vi.fn<() => void>() },
+          {
+            label: "Edit",
+            onClick: vi.fn<() => void>(),
+            separatorBefore: false,
+          },
+          {
+            label: "Delete",
+            onClick: vi.fn<() => void>(),
+            separatorBefore: true,
+          },
         ]}
       />,
     );

@@ -36,6 +36,7 @@ func TestSetupCallbackUsesVisibleConfiguredTask(t *testing.T) {
 		{"intent=dsync", []string{}, ""},
 	} {
 		t.Run(tc.query+"/"+tc.task, func(t *testing.T) {
+			t.Parallel()
 			ctx, ti := newTestOrganizationsService(t)
 			ac, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
@@ -79,6 +80,7 @@ func TestSetupCallbackDomainVerification(t *testing.T) {
 		{name: "lookup failure", visible: []string{"identity-provider"}, lookupErr: errors.New("workos unavailable"), task: "identity-provider"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			ctx, ti := newTestOrganizationsService(t)
 			ac, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
@@ -144,6 +146,7 @@ func TestSetupCallbackRequiresActiveOrganizationAdmin(t *testing.T) {
 		for _, origin := range []string{"", "&task=identity-provider"} {
 			for _, role := range []string{"member", "other organization admin"} {
 				t.Run(intent+origin+"/"+role, func(t *testing.T) {
+					t.Parallel()
 					ctx, ti := newTestOrganizationsService(t)
 					ac, ok := contextvalues.GetAuthContext(ctx)
 					require.True(t, ok)
