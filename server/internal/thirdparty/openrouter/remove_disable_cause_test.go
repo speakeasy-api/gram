@@ -148,7 +148,7 @@ func TestAddDisableCauseReconcilesUpstreamAfterRolledBackFinalRemoval(t *testing
 	conn, err := provisioner.db.Acquire(ctx)
 	require.NoError(t, err)
 	defer conn.Release()
-	tx, err := conn.Begin(ctx) //nolint:glint // this transaction only uses SQLc methods and must roll back a local mirror after the upstream call
+	tx, err := conn.Begin(ctx) //nolint:glint // notestingrawsql: this transaction only uses SQLc methods and must roll back a local mirror after the upstream call
 	require.NoError(t, err)
 	lockParams := repo.AcquireOpenRouterKeyBillingLockParams{OrganizationID: orgID, KeyType: string(KeyTypeChat)}
 	require.NoError(t, repo.New(tx).AcquireOpenRouterKeyBillingLock(ctx, lockParams))

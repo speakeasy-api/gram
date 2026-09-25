@@ -31583,6 +31583,101 @@ paths:
             x-speakeasy-name-override: previewOverlaps
             x-speakeasy-react-hook:
                 name: PreviewKillswitchOverlaps
+    /rpc/launcher.judge:
+        post:
+            description: Judge which of the supplied command palette candidates the typed query refers to, what kind of action it asks for, and whether the intent is settled enough to act on Enter. Returns probability distributions rather than text. When no intent service is configured the response carries disabled=true and the palette falls back to fuzzy ordering.
+            operationId: launcherJudge
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/JudgeRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/LauncherJudgment'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: judge launcher
+            tags:
+                - launcher
+            x-speakeasy-name-override: judge
+            x-speakeasy-react-hook:
+                name: LauncherJudge
     /rpc/litellm.createInstance:
         post:
             description: Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.
@@ -52724,6 +52819,110 @@ paths:
             tags:
                 - remoteSessions
             x-speakeasy-name-override: attachBinding
+    /rpc/remoteSessions.commitServerIdentityConfiguration:
+        post:
+            description: Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
+            operationId: commitServerIdentityConfiguration
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CommitServerIdentityConfigurationForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CommitServerIdentityConfigurationResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: commitServerIdentityConfiguration remoteSessions
+            tags:
+                - remoteSessions
+            x-speakeasy-name-override: commitServerIdentityConfiguration
+            x-speakeasy-react-hook:
+                name: CommitServerIdentityConfiguration
     /rpc/remoteSessions.detachBinding:
         post:
             description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
@@ -76708,10 +76907,14 @@ components:
             properties:
                 display_name:
                     type: string
-                    description: Display name for the server. Defaults to the backing toolset or mcp_server name when omitted.
+                    description: Display name for the server. Defaults to the backing server name when omitted.
                 mcp_server_id:
                     type: string
-                    description: Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of toolset_id or mcp_server_id.
+                    description: Gram MCP server ID. Provide exactly one backend ID.
+                    format: uuid
+                meta_mcp_server_id:
+                    type: string
+                    description: MCP gateway ID. Provide exactly one backend ID.
                     format: uuid
                 plugin_id:
                     type: string
@@ -76728,7 +76931,7 @@ components:
                     format: int32
                 toolset_id:
                     type: string
-                    description: Gram toolset ID for a toolset-backed MCP server. Provide exactly one of toolset_id or mcp_server_id.
+                    description: Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.
                     format: uuid
             required:
                 - plugin_id
@@ -80503,6 +80706,84 @@ components:
                     type: string
                     description: Reason for the decision, shown to the user
             description: Result for Codex hook events
+        CommitServerIdentityConfigurationForm:
+            type: object
+            properties:
+                client_configuration:
+                    $ref: '#/components/schemas/ServerIdentityClientConfiguration'
+                client_mode:
+                    type: string
+                    description: How to provide the OAuth client.
+                    enum:
+                        - auto
+                        - existing
+                        - manual
+                create_provider:
+                    $ref: '#/components/schemas/CreateRemoteSessionIssuerForm'
+                existing_client_id:
+                    type: string
+                    description: An existing visible remote-session client to link. Required only for existing mode.
+                    format: uuid
+                mcp_server_id:
+                    type: string
+                    description: The target MCP server. It must be backed directly by a Remote MCP source.
+                    format: uuid
+                provider_id:
+                    type: string
+                    description: An existing Remote Identity Provider visible to the target project.
+                    format: uuid
+            description: 'A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.'
+            required:
+                - mcp_server_id
+                - client_mode
+        CommitServerIdentityConfigurationResult:
+            type: object
+            properties:
+                client:
+                    $ref: '#/components/schemas/RemoteSessionClient'
+                client_path:
+                    type: string
+                    description: Organization-relative dashboard path to the client detail surface.
+                client_tier:
+                    type: string
+                    description: The client ownership tier.
+                    enum:
+                        - project-specific
+                        - organization-level
+                failure:
+                    $ref: '#/components/schemas/ServerIdentityRegistrationFailure'
+                manual_setup_required:
+                    type: boolean
+                    description: True only when auto mode found neither usable CIMD nor DCR support. This is not a registration failure and no local state was changed.
+                provider:
+                    $ref: '#/components/schemas/RemoteSessionIssuer'
+                provider_path:
+                    type: string
+                    description: Organization-relative dashboard path to the Remote Identity Provider detail surface.
+                provider_tier:
+                    type: string
+                    description: The provider ownership tier.
+                    enum:
+                        - project-specific
+                        - organization-level
+                        - platform-level
+                registration_method:
+                    type: string
+                    description: How the client was obtained. Present on success and registration failure.
+                    enum:
+                        - cimd
+                        - dcr
+                        - manual
+                        - existing
+                status:
+                    type: string
+                    description: Successful commit status. Present only after local commit.
+                    enum:
+                        - registered
+                        - linked
+            description: The outcome of committing a Remote MCP server user-identity plan. registered and linked are successful local commits. A registration failure is returned in failure. manual_setup_required is a preparation signal, not a registration outcome, and means auto mode found neither usable CIMD nor DCR support; no local state changed.
+            required:
+                - manual_setup_required
         ConfirmOktaResourceConnectionsRequestBody:
             type: object
             properties:
@@ -87878,6 +88159,24 @@ components:
             required:
                 - client_count
                 - client_ids
+        JudgeRequestBody:
+            type: object
+            properties:
+                candidates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/LauncherCandidate'
+                    description: Fuzzy-prefiltered candidates to rank.
+                    maxItems: 32
+                context:
+                    $ref: '#/components/schemas/LauncherContext'
+                query:
+                    type: string
+                    description: Text typed into the command palette so far.
+                    maxLength: 200
+            required:
+                - query
+                - candidates
         Key:
             type: object
             properties:
@@ -88414,6 +88713,74 @@ components:
             required:
                 - client_name
                 - activity_count
+        LauncherCandidate:
+            type: object
+            properties:
+                detail:
+                    type: string
+                    description: Short state description, such as 'MCP server · disabled'.
+                    maxLength: 160
+                id:
+                    type: string
+                    description: Caller-chosen stable identifier echoed back in the judgment.
+                    maxLength: 200
+                kind:
+                    type: string
+                    description: The candidate kind, such as page, mcp_server, plugin or marketplace.
+                    maxLength: 64
+                title:
+                    type: string
+                    description: Display title of the candidate.
+                    maxLength: 120
+                verbs:
+                    type: array
+                    items:
+                        type: string
+                        maxLength: 32
+                    description: Verbs the caller may run on this candidate, such as open, enable, disable or publish.
+                    maxItems: 8
+            description: One item the palette could open or act on.
+            required:
+                - id
+                - kind
+                - title
+        LauncherContext:
+            type: object
+            properties:
+                route:
+                    type: string
+                    description: The current dashboard route path.
+                    maxLength: 512
+            description: The dashboard location the palette was opened from.
+        LauncherJudgment:
+            type: object
+            properties:
+                action:
+                    type: object
+                    description: Probability that the query asks for each of open, enable, disable, publish or unclear.
+                    additionalProperties:
+                        type: number
+                        format: double
+                disabled:
+                    type: boolean
+                    description: True when no intent service is configured; the other fields are then absent. When false, target, action, ready and latency_ms are always present.
+                latency_ms:
+                    type: integer
+                    description: Round trip time to the intent service in milliseconds.
+                    format: int64
+                ready:
+                    type: number
+                    description: Probability that the query is unambiguous enough to act on the best candidate on Enter.
+                    format: double
+                target:
+                    type: object
+                    description: Probability that each candidate id, or 'none', is the item the user means.
+                    additionalProperties:
+                        type: number
+                        format: double
+            description: Probability distributions over the supplied candidates and verbs.
+            required:
+                - disabled
         ListAIDetectionUsersResult:
             type: object
             properties:
@@ -93660,7 +94027,11 @@ components:
                     format: uuid
                 mcp_server_id:
                     type: string
-                    description: Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one of toolset_id / mcp_server_id is set).
+                    description: Gram MCP server ID. Exactly one backend ID is set.
+                    format: uuid
+                meta_mcp_server_id:
+                    type: string
+                    description: MCP gateway ID. Exactly one backend ID is set.
                     format: uuid
                 policy:
                     type: string
@@ -93674,7 +94045,7 @@ components:
                     format: int32
                 toolset_id:
                     type: string
-                    description: Gram toolset ID. Set when this server is toolset-backed (exactly one of toolset_id / mcp_server_id is set).
+                    description: Gram toolset ID. Exactly one backend ID is set.
                     format: uuid
             required:
                 - id
@@ -98772,6 +99143,68 @@ components:
                 - content_type
                 - content_length
                 - last_modified
+        ServerIdentityClientConfiguration:
+            type: object
+            properties:
+                audience:
+                    type: string
+                    description: Optional upstream OAuth audience.
+                    pattern: ^[!-~]+$
+                    maxLength: 512
+                client_id:
+                    type: string
+                    description: The out-of-band OAuth client identifier. Manual mode only.
+                client_secret:
+                    type: string
+                    description: The out-of-band OAuth client secret. Manual mode only; encrypted before persistence.
+                scope:
+                    type: array
+                    items:
+                        type: string
+                        pattern: ^[!#-[\]-~]+$
+                        maxLength: 128
+                    description: Each value must be an RFC 6749 scope token.
+                token_endpoint_auth_method:
+                    type: string
+                    description: How the client authenticates at the provider token endpoint, or the preferred method for DCR.
+                    enum:
+                        - client_secret_basic
+                        - client_secret_post
+                        - none
+            description: Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.
+        ServerIdentityRegistrationFailure:
+            type: object
+            properties:
+                http_status:
+                    type: integer
+                    description: Optional upstream HTTP status.
+                    format: int64
+                outcome:
+                    type: string
+                    enum:
+                        - unreachable
+                        - refused
+                provider_message:
+                    type: string
+                    description: Optional sanitized and truncated provider-controlled message.
+                reason:
+                    type: string
+                    enum:
+                        - dns_error
+                        - tls_error
+                        - timeout
+                        - network_error
+                        - rate_limited
+                        - upstream_unavailable
+                        - authorization_rejected
+                        - invalid_success_response
+                retryable:
+                    type: boolean
+            description: A completed automatic registration failure using the bounded OAuth registration taxonomy.
+            required:
+                - outcome
+                - reason
+                - retryable
         ServerNameOverride:
             type: object
             properties:
@@ -107729,6 +108162,8 @@ tags:
       description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
     - name: keys
       description: Managing system api keys.
+    - name: launcher
+      description: Rank command palette candidates by the intent behind the text the user typed.
     - name: litellm
       description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
     - name: mcpApproval
@@ -107786,7 +108221,7 @@ tags:
     - name: organizationRemoteSessions
       description: Organization-administrator visibility into remote_sessions Gram is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.
     - name: remoteSessions
-      description: Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.
+      description: Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned. Also hosts composite dashboard operations that configure a single MCP server's identity in one atomic call.
     - name: resources
       description: Dashboard API for interacting with resources.
     - name: risk

@@ -25,11 +25,11 @@ type LogRiskResultUnmaskEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskResultID uuid.UUID //nolint:glint // matches risk_policy precedent; URN migration tracked in AGE-1954
+	RiskResultID uuid.UUID //nolint:glint // auditeventurnnaming: matches risk_policy precedent; URN migration tracked in AGE-1954
 	// ChatID is recorded so reviewers can see which chat the unmasked secret
 	// came from without a second lookup. It is auxiliary context, not the
 	// audit subject (which is RiskResultID).
-	ChatID uuid.UUID //nolint:glint // auxiliary context, not the audit subject
+	ChatID uuid.UUID //nolint:glint // auditeventurnnaming: auxiliary context, not the audit subject
 }
 
 // LogRiskResultUnmask records that a risk result's plaintext match was
@@ -71,7 +71,7 @@ type LogRiskResultDismissEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskResultID uuid.UUID //nolint:glint // matches LogRiskResultUnmaskEvent precedent
+	RiskResultID uuid.UUID //nolint:glint // auditeventurnnaming: matches LogRiskResultUnmaskEvent precedent
 }
 
 // LogRiskResultDismiss records that a risk result was manually marked as a
@@ -113,7 +113,7 @@ type LogRiskResultRestoreEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	RiskResultID uuid.UUID //nolint:glint // matches LogRiskResultUnmaskEvent precedent
+	RiskResultID uuid.UUID //nolint:glint // auditeventurnnaming: matches LogRiskResultUnmaskEvent precedent
 }
 
 // LogRiskResultRestore records that a manual false-positive dismissal was

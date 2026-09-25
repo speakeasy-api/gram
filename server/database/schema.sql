@@ -5345,6 +5345,25 @@ CREATE INDEX IF NOT EXISTS agent_executions_project_id_started_at_idx
 ON agent_executions (project_id, started_at)
 WHERE deleted IS FALSE;
 
+CREATE TABLE IF NOT EXISTS mcp_registry_entries (
+  id uuid PRIMARY KEY DEFAULT generate_uuidv7(),
+  data jsonb NOT NULL,
+  published boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mcp_registry_entries_name_check CHECK (
+    COALESCE(
+      jsonb_typeof(data #> '{server,name}') = 'string'
+      AND (data #>> '{server,name}') <> '',
+      false
+    )
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS mcp_registry_entries_name_key
+  ON mcp_registry_entries ((data #>> '{server,name}'));
+
 -- Public/external MCP registries (e.g. PulseMCP) — seeded into the DB.
 -- These are distinct from org-level collection registries in organization_mcp_collection_registries.
 CREATE TABLE IF NOT EXISTS mcp_registries (

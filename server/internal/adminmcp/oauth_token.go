@@ -58,15 +58,14 @@ func (s *StaffOAuthTokens) TokenHandler() http.Handler {
 			staffOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse token request")
 			return
 		}
-		clientID, secret := staffClientCredentials(r)
-		client, err := s.authenticateClient(r.Context(), clientID, secret)
-		if err != nil {
-			staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
+		presented, ok := staffClientCredentials(r)
+		if !ok {
+			staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication method is invalid")
 			return
 		}
-		_, _, basicAuth := r.BasicAuth()
-		if !basicAuth || r.PostForm.Has("client_id") || r.PostForm.Has("client_secret") {
-			staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication method is invalid")
+		client, err := s.authenticateClient(r.Context(), presented)
+		if err != nil {
+			staffOAuthError(w, http.StatusUnauthorized, "invalid_client", "client authentication failed")
 			return
 		}
 		switch r.PostForm.Get("grant_type") {
@@ -98,20 +97,50 @@ func (s *StaffOAuthTokens) TokenHandler() http.Handler {
 	})
 }
 
-func staffClientCredentials(r *http.Request) (string, string) {
-	id, secret, _ := r.BasicAuth()
-	return id, secret
+type staffPresentedClient struct {
+	ID     string
+	Secret string
+	Public bool
 }
 
-func (s *StaffOAuthTokens) authenticateClient(ctx context.Context, clientID, secret string) (staffOAuthClient, error) {
-	if clientID == "" {
-		return staffOAuthClient{}, errStaffGrant
+// staffClientCredentials accepts exactly one presentation: HTTP Basic for
+// confidential clients, or a single form client_id with no secret and no
+// Authorization header for public clients. A form client_secret, a Basic
+// header mixed with a form client_id, or any other Authorization header is
+// refused.
+func staffClientCredentials(r *http.Request) (staffPresentedClient, bool) {
+	authorization := r.Header.Values("Authorization")
+	if r.PostForm.Has("client_secret") || len(authorization) > 1 {
+		return staffPresentedClient{ID: "", Secret: "", Public: false}, false
 	}
-	client, err := s.clients.GetClient(ctx, clientID)
+	if id, secret, basic := r.BasicAuth(); basic {
+		if r.PostForm.Has("client_id") || id == "" {
+			return staffPresentedClient{ID: "", Secret: "", Public: false}, false
+		}
+		return staffPresentedClient{ID: id, Secret: secret, Public: false}, true
+	}
+	ids := r.PostForm["client_id"]
+	if len(authorization) != 0 || len(ids) != 1 || ids[0] == "" {
+		return staffPresentedClient{ID: "", Secret: "", Public: false}, false
+	}
+	return staffPresentedClient{ID: ids[0], Secret: "", Public: true}, true
+}
+
+// authenticateClient enforces the method implied by the stored client: a
+// client registered with a secret must present it via Basic, and a public
+// client must present no credentials at all.
+func (s *StaffOAuthTokens) authenticateClient(ctx context.Context, presented staffPresentedClient) (staffOAuthClient, error) {
+	client, err := s.clients.GetClient(ctx, presented.ID)
 	if err != nil || (client.SecretExpiresAt != nil && !time.Now().Before(*client.SecretExpiresAt)) {
 		return staffOAuthClient{}, errStaffGrant
 	}
-	if client.SecretHash == "" || bcrypt.CompareHashAndPassword([]byte(client.SecretHash), []byte(secret)) != nil {
+	if presented.Public {
+		if client.SecretHash != "" {
+			return staffOAuthClient{}, errStaffGrant
+		}
+		return client, nil
+	}
+	if client.SecretHash == "" || bcrypt.CompareHashAndPassword([]byte(client.SecretHash), []byte(presented.Secret)) != nil {
 		return staffOAuthClient{}, errStaffGrant
 	}
 	return client, nil
