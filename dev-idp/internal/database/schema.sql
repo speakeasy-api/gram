@@ -170,6 +170,58 @@ CREATE TABLE IF NOT EXISTS organization_roles (
 CREATE UNIQUE INDEX IF NOT EXISTS organization_roles_organization_id_slug_key
   ON organization_roles (organization_id, slug);
 
+-- Directory Sync emulation. One mock directory per org
+-- ("directory_mock_<workos org id>"); groups and users hang off the org.
+-- Fixture rows are seeded lazily the first time an org's directory is read.
+CREATE TABLE IF NOT EXISTS directory_groups (
+  id TEXT NOT NULL PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS directory_groups_organization_id_idx
+  ON directory_groups (organization_id);
+
+CREATE TABLE IF NOT EXISTS directory_users (
+  id TEXT NOT NULL PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  first_name TEXT NOT NULL DEFAULT '',
+  last_name TEXT NOT NULL DEFAULT '',
+  job_title TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT 'active',
+  -- JSON object; served as the WorkOS `custom_attributes` field.
+  custom_attributes TEXT NOT NULL DEFAULT '{}',
+
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (organization_id) REFERENCES organizations (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS directory_users_organization_id_idx
+  ON directory_users (organization_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS directory_users_organization_id_email_key
+  ON directory_users (organization_id, email);
+
+CREATE TABLE IF NOT EXISTS directory_group_members (
+  group_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+
+  PRIMARY KEY (group_id, user_id),
+  FOREIGN KEY (group_id) REFERENCES directory_groups (id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES directory_users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS directory_group_members_user_id_idx
+  ON directory_group_members (user_id);
+
 -- =============================================================================
 -- Enterprise-Managed Authorization (EMA) tables. Two independent policy surfaces:
 --

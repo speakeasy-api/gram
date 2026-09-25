@@ -1,5 +1,7 @@
 package mockworkos
 
+import "encoding/json"
+
 // WorkOS-shaped wire types served by the mock-workos mode's
 // /user_management/*, /organizations/*, and /authorization/* endpoints.
 // Field names + JSON tags mirror workos-go/v6 SDK types so Gram-side's
@@ -42,6 +44,54 @@ type workosOrganization struct {
 	CreatedAt                        string                     `json:"created_at"`
 	UpdatedAt                        string                     `json:"updated_at"`
 	ExternalID                       string                     `json:"external_id"`
+}
+
+type workosDirectoryGroup struct {
+	Object         string         `json:"object"`
+	ID             string         `json:"id"`
+	IdpID          string         `json:"idp_id"`
+	DirectoryID    string         `json:"directory_id"`
+	OrganizationID string         `json:"organization_id"`
+	Name           string         `json:"name"`
+	RawAttributes  map[string]any `json:"raw_attributes"`
+	CreatedAt      string         `json:"created_at"`
+	UpdatedAt      string         `json:"updated_at"`
+}
+
+type workosDirectoryGroupList struct {
+	Data         []workosDirectoryGroup `json:"data"`
+	ListMetadata listMetadata           `json:"list_metadata"`
+}
+
+type workosDirectoryUserEmail struct {
+	Primary bool   `json:"primary"`
+	Type    string `json:"type"`
+	Value   string `json:"value"`
+}
+
+type workosDirectoryUser struct {
+	Object           string                     `json:"object"`
+	ID               string                     `json:"id"`
+	IdpID            string                     `json:"idp_id"`
+	DirectoryID      string                     `json:"directory_id"`
+	OrganizationID   string                     `json:"organization_id"`
+	Email            string                     `json:"email"`
+	Username         string                     `json:"username"`
+	Emails           []workosDirectoryUserEmail `json:"emails"`
+	Groups           []workosDirectoryGroup     `json:"groups"`
+	FirstName        string                     `json:"first_name"`
+	LastName         string                     `json:"last_name"`
+	JobTitle         string                     `json:"job_title"`
+	State            string                     `json:"state"`
+	RawAttributes    map[string]any             `json:"raw_attributes"`
+	CustomAttributes json.RawMessage            `json:"custom_attributes"`
+	CreatedAt        string                     `json:"created_at"`
+	UpdatedAt        string                     `json:"updated_at"`
+}
+
+type workosDirectoryUserList struct {
+	Data         []workosDirectoryUser `json:"data"`
+	ListMetadata listMetadata          `json:"list_metadata"`
 }
 
 type workosOrganizationDomain struct {
