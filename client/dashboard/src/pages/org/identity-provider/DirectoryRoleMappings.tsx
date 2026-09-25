@@ -529,11 +529,18 @@ function RolePicker({
   });
   const saving = save.isPending || remove.isPending;
 
+  const current = roles.find(
+    (role) => role.principalUrn === row.mapping?.roleUrn,
+  );
   const items: DropdownItem[] = roles.map((role) => ({
     value: role.principalUrn,
     label: role.name,
     description: role.description || undefined,
   }));
+  // A mapping to a deleted role keeps an item, so picking it clears the row.
+  if (row.mapping && !current) {
+    items.push({ value: row.mapping.roleUrn, label: "Deleted role" });
+  }
   items.unshift({
     value: CREATE_ROLE,
     label: "Create role…",
@@ -567,9 +574,6 @@ function RolePicker({
     });
   };
 
-  const current = roles.find(
-    (role) => role.principalUrn === row.mapping?.roleUrn,
-  );
   let label = "Assign role";
   if (saving) label = "Saving…";
   else if (row.mapping) label = current?.name ?? "Deleted role";

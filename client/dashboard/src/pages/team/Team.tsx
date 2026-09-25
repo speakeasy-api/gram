@@ -74,7 +74,7 @@ import { getIdentityTint, useIsDarkTheme } from "@/components/gradient-colors";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { ChangeRoleDialog } from "@/pages/access/ChangeRoleDialog";
 import { killswitchCreateHref } from "@/components/killswitch/killswitch-routing";
-import { useKillswitchUserBadges } from "@/components/killswitch/KillswitchUserStatus";
+import { useKillswitchAccess } from "@/hooks/useKillswitchAccess";
 import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
 
 /**
@@ -317,13 +317,11 @@ function TeamInner() {
     safePage * MEMBERS_PAGE_SIZE,
     (safePage + 1) * MEMBERS_PAGE_SIZE,
   );
-  // Killswitches are managed on the person's own access tab, so every entry
-  // point here — the mark on the row, both menu items — goes to the same page.
+  // Killswitches are managed on the person's own access tab, so both menu
+  // items go to the same page.
   const identityAccessHref = useIdentityHrefBuilder("access");
   const memberAccessHref = (userId: string) => identityAccessHref({ userId });
-  const killswitchBadges = useKillswitchUserBadges(
-    visibleMembers.map((member) => member.userId),
-  );
+  const killswitchAccess = useKillswitchAccess();
   const invites = invitesData?.invitations ?? [];
   const roles = rolesData?.roles ?? [];
   const accessMembers = accessMembersData?.members ?? [];
@@ -547,7 +545,7 @@ function TeamInner() {
     adminRoleId,
     challengesHref: orgRoutes.access.challenges.href(),
     identityAccessHref: memberAccessHref,
-    canUseKillswitch: killswitchBadges.canAccess,
+    canUseKillswitch: killswitchAccess.canAccess,
     navigate,
     roleIdsByUserId,
     scimManaged: Boolean(organization.scimEnabled),
@@ -948,7 +946,6 @@ function TeamInner() {
 
   return (
     <>
-      {killswitchBadges.loader}
       <ResourceListPage
         title="Team Members"
         description={`Manage who has access to ${organization.name}`}
