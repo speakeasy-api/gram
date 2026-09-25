@@ -77,6 +77,7 @@ type platformMCPConfig struct {
 	Catalog                 *externalmcp.CatalogService
 	GuardianPolicy          *guardian.Policy
 	RemoteChallengeManager  *remotesessions.ChallengeManager
+	IdentityCommitter       *remotesessions.IdentityCommitter
 	AuditLogger             *audit.Logger
 	AccessRoles             access.RoleProvider
 	PluginPublisher         *plugins.Service
@@ -335,7 +336,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithOperationBudgets(budgets).
 		WithReadiness(readiness).
 		WithDashboardURL(config.DashboardURL).
-		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.Logger, config.MeterProvider, config.DB, config.Encryption, config.GuardianPolicy, config.AuditLogger, config.ServerURL)).
+		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.Logger, config.MeterProvider, config.DB, config.IdentityCommitter, config.GuardianPolicy, config.ServerURL)).
 		WithClientAdmission(platformmcp.NewClientAdmissionService(config.DB, config.AuditLogger)).
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
@@ -783,7 +784,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithOperationBudgets(budgets).
 		WithReadiness(readiness).
 		WithDashboardURL(config.DashboardURL).
-		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.Logger, config.MeterProvider, config.DB, config.Encryption, config.GuardianPolicy, config.AuditLogger, config.ServerURL)).
+		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.Logger, config.MeterProvider, config.DB, config.IdentityCommitter, config.GuardianPolicy, config.ServerURL)).
 		WithClientAdmission(platformmcp.NewClientAdmissionService(config.DB, config.AuditLogger)).
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
