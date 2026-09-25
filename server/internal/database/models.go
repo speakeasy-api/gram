@@ -858,6 +858,20 @@ type DirectoryGroup struct {
 	WorkosLastEventID      pgtype.Text
 }
 
+type DirectoryRoleMapping struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	SourceKind       string
+	DirectoryGroupID uuid.NullUUID
+	AttributeKey     pgtype.Text
+	AttributeValue   pgtype.Text
+	RoleUrn          string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+}
+
 type DirectoryUser struct {
 	ID                    uuid.UUID
 	OrganizationID        string
