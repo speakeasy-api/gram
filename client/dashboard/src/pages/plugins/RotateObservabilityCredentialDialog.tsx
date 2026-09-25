@@ -77,6 +77,10 @@ export function RotateObservabilityCredentialDialog({
   const reset = () => {
     setFate("grace");
     setResult(null);
+    // The mutation cache holds the same plaintext key the dialog just revealed,
+    // so dropping local state alone would leave it recoverable after the
+    // one-time reveal is dismissed.
+    rotateMutation.reset();
   };
 
   const close = () => {

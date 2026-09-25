@@ -2282,17 +2282,10 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
 	}
-	// Decide which components to (re)generate. A human publish refreshes customer
-	// MCP packages so installed copies pick up a new manifest version. A
-	// Platform-only transition deliberately carries those customer packages
-	// unchanged. Hooks change independently based on their version and
-	// output-affecting config.
-	// A credential rotation is hooks-only: it must never treat MCP as changed,
-	// so the consumer packages customers installed -- and the consumer key baked
-	// into them -- are carried untouched.
-	mcpChanged := !input.RotateHooksKey && (firstPublish ||
-		!input.SkipIfUnchanged ||
-		!maps.Equal(mcpFingerprints, publishedMCPFingerprints))
+	// rotateHooks is decided below, once the rollout gate has resolved the hooks
+	// version this org may receive; a rotation the gate holds back must not
+	// change what this publish does at all.
+	rotateHooks := false
 
 	// Snapshot the hook-output-affecting config (resolved marketplace name,
 	// browser login, server URL, etc.). A rename or browser-login toggle
@@ -2346,8 +2339,33 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		targetHooksConfigHash = ""
 		hooksConfigDeferred = false
 	}
+	// A credential rotation regenerates the hooks subtree, which always lands on
+	// the CURRENT generator version — so it has to clear the same gate as any
+	// other hooks change. The gate is re-read here rather than trusted from the
+	// caller: between the caller's check and this point a flag flip could
+	// otherwise push an uncleared version onto the org. A held-back rotation
+	// leaves the published credential in place and is reported as deferred.
+	if input.RotateHooksKey && observabilityEnabled {
+		if targetHooksVersion == hooksGeneratorVersion {
+			rotateHooks = true
+		} else {
+			hooksConfigDeferred = true
+		}
+	}
+
+	// Decide which components to (re)generate. A human publish refreshes customer
+	// MCP packages so installed copies pick up a new manifest version. A
+	// Platform-only transition deliberately carries those customer packages
+	// unchanged. Hooks change independently based on their version and
+	// output-affecting config. A credential rotation is hooks-only: it never
+	// treats MCP as changed, so the consumer packages customers installed -- and
+	// the consumer key baked into them -- are carried untouched.
+	mcpChanged := !rotateHooks && (firstPublish ||
+		!input.SkipIfUnchanged ||
+		!maps.Equal(mcpFingerprints, publishedMCPFingerprints))
+
 	hooksChanged := firstPublish ||
-		input.RotateHooksKey ||
+		rotateHooks ||
 		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion ||
 		publishedHooksConfigHash != targetHooksConfigHash
 
@@ -2394,7 +2412,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	files := make(map[string][]byte)
 	var candidates []pluginAPIKeyCandidate
 	var hooksCandidate *pluginAPIKeyCandidate
-	if input.RotateHooksKey && input.HooksKeyCandidate != nil {
+	if rotateHooks && input.HooksKeyCandidate != nil {
 		hooksCandidate = input.HooksKeyCandidate
 		candidates = append(candidates, *input.HooksKeyCandidate)
 	}
@@ -2407,6 +2425,14 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
 		}
 		carriedMCP = carry(files, paths)
+	}
+	if rotateHooks && !carriedMCP {
+		// Regenerating MCP here would mint a replacement consumer key and rewrite
+		// the packages customers already installed — the opposite of what a
+		// hooks-only rotation promises. Refuse instead, and let the caller
+		// republish the marketplace first.
+		return nil, oops.E(oops.CodeFailedPrecondition, nil,
+			"cannot rotate the observability credential while the published MCP packages are out of date or unreadable: publish the marketplace first").LogWarn(ctx, s.logger)
 	}
 	if !carriedMCP {
 		mcpCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeConsumer, "mcp")

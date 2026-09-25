@@ -72,13 +72,26 @@ WHERE id = @id
   AND expires_at > created_at
   AND expires_at <= created_at + INTERVAL '365 days';
 
+-- name: CurrentDatabaseTime :one
+-- The database clock, used as the cutoff a credential rotation retires keys
+-- against so the comparison shares a clock with api_keys.created_at.
+SELECT clock_timestamp()::timestamptz;
+
 -- Plugin distribution mints hooks keys as plugins-hooks-<timestamp>-<token>
 -- (publish) or plugins-hooks-download-<timestamp>-<token> (ZIP download). The
--- name pattern below mirrors the shape auth.IsOrgWidePluginHooksAPIKey parses,
--- so a key that merely starts with the reserved plugins- prefix is not swept up
--- by a rotation. Both statements are set-based and exclude the replacement key
--- by hash, so two concurrent rotations can still race for "newest key" but
--- neither can leave a pre-rotation credential behind.
+-- two retirement statements below select that set the same way:
+--
+--   * the name matches the generated shape auth.IsOrgWidePluginHooksAPIKey
+--     parses, and its six-character token marker agrees with the stored
+--     key_prefix, so provenance is proven from the minting material rather than
+--     from a name a user could once have typed;
+--   * the key was created before the rotation began, which retires every
+--     pre-rotation credential while leaving any replacement minted by an
+--     overlapping rotation alone -- two concurrent rotations can race for
+--     "newest key", but neither can revoke the other's replacement and neither
+--     can leave a pre-rotation credential valid;
+--   * the replacement of THIS rotation is excluded by hash as well, so the key
+--     just handed to the caller cannot be swept up by its own statement.
 
 -- name: RevokePluginHooksAPIKeysByProject :many
 UPDATE api_keys
@@ -87,23 +100,29 @@ WHERE organization_id = @organization_id
   AND project_id = @project_id
   AND deleted IS FALSE
   AND key_hash <> @replacement_key_hash
+  AND created_at < @retire_keys_created_before
   AND scopes @> ARRAY['hooks']::text[]
   AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+  AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
 RETURNING id, organization_id, project_id, name, key_prefix, scopes;
 
 -- name: ExpirePluginHooksAPIKeysByProject :many
--- Already-expired keys are left alone: handing a dead credential a fresh grace
--- window would resurrect it.
+-- LEAST keeps the earliest deadline: an already-expired key is excluded
+-- outright, and a key already inside a grace window keeps that window rather
+-- than having it extended, so repeated rotations cannot keep one credential
+-- alive indefinitely.
 UPDATE api_keys
-SET expires_at = @expires_at
+SET expires_at = LEAST(COALESCE(expires_at, @expires_at), @expires_at)
   , updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND project_id = @project_id
   AND deleted IS FALSE
   AND key_hash <> @replacement_key_hash
+  AND created_at < @retire_keys_created_before
   AND (expires_at IS NULL OR expires_at > clock_timestamp())
   AND scopes @> ARRAY['hooks']::text[]
   AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+  AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
 RETURNING id, organization_id, project_id, name, key_prefix, scopes;
 
 -- name: ListAPIKeysByOrganization :many
