@@ -357,15 +357,6 @@ const acceptGitHubInviteStep = {
   ),
 };
 
-function PersonalAccountNote() {
-  return (
-    <p className="text-muted-foreground mt-3 flex items-start gap-1.5 text-xs leading-relaxed">
-      <Info className="mt-0.5 size-3.5 shrink-0" />
-      <span>{PERSONAL_ACCOUNT_GOVERNANCE_NOTE}</span>
-    </p>
-  );
-}
-
 /**
  * Claude Cowork (org-managed) install. Cowork admins point their org at the
  * underlying private GitHub repo on Claude.ai's Organization Settings page;
@@ -478,7 +469,10 @@ function ClaudeCoworkInstallContent({
             },
           ]}
         />
-        <PersonalAccountNote />
+        <p className="text-muted-foreground mt-3 flex items-start gap-1.5 text-xs leading-relaxed">
+          <Info className="mt-0.5 size-3.5 shrink-0" />
+          <span>{PERSONAL_ACCOUNT_GOVERNANCE_NOTE}</span>
+        </p>
 
         <RelatedLinks
           links={[
@@ -623,7 +617,6 @@ function CursorInstallContent({
             },
           ]}
         />
-        <PersonalAccountNote />
 
         <RelatedLinks
           links={[
