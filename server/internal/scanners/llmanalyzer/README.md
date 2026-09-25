@@ -25,6 +25,11 @@ re-labels the finding per policy source, so a single `destructive_tool_call`
 verdict yields `destructive_tool.llm` for a `destructive_tool` policy and
 `cli_destructive.llm` for a `cli_destructive` policy.
 
+On the batch lane the legacy engine behind `prompt_injection` is itself a
+streams consumer — see `../promptinjection/README.md` — so its findings are
+already ClickHouse-only in every mode, and the `llm` mode replaces a dispatch
+rather than an inline scan.
+
 Findings carry `Source = "llm_analyzer"`, `Description` = model reasoning
 (capped at 500 runes), an empty `Match`, no offsets (`surface = none`),
 `Confidence = 1` and one category tag. `custom`, `shadow_mcp`,
@@ -246,7 +251,7 @@ Temporal AnalyzeBatch (worker) ─► scanStandardPolicy
    ▼
 publishLLMScanRequests: one LLMAnalysis per message ─► topic gram-risk-v1-llm-analysis
    │  llm:    execution_path=llm_analyzer_stream, sources = covered subset; no inline scan, no legacy publishes
-   │  shadow: execution_path=llm_shadow_stream, shadow=true; inline scan and legacy publishes unchanged
+   │  shadow: execution_path=llm_shadow_stream, shadow=true; legacy engines and publishes unchanged
    ▼
 streams: llmanalyzer.Handler (sub gram-risk-v1-llm-analyzer, ack 60 s, 7 d retention, no DLQ)
    │  Analyzer.Analyze(scan_mode=async)

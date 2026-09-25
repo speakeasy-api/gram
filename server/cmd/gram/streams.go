@@ -80,6 +80,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/webhooks/svixrelay"
 )
 
+// promptInjectionReceiveSettings paces the prompt-injection consumer against
+// the judge budget it spends. Batch analysis has no inline scan any more, so
+// every finding for that source depends on this subscription draining — and a
+// call the shared judge limiter denies is not retried, it fails open into a
+// message nothing judged. The client default of 1000 outstanding messages per
+// replica is roughly twenty times what the limiter sustains
+// (openrouter.judgeRatePerMinute = 250/min against a 10s
+// piopenrouter.JudgeTimeout is ~42 calls in flight fleet-wide), so it would
+// convert a backlog into denials instead of queueing it. 64 lets one replica
+// saturate the budget with headroom for BYOK organizations, which bucket on
+// their own key, and leaves the rest on the subscription, which retains
+// requests for 7 days. Raise it with the limiter, not on its own.
+var promptInjectionReceiveSettings = pubsub.ReceiveSettings{
+	MaxOutstandingMessages:     64,
+	MaxOutstandingBytes:        64 * constants.MiB,
+	MaxExtension:               pubsub.DefaultReceiveSettings.MaxExtension,
+	MaxDurationPerAckExtension: pubsub.DefaultReceiveSettings.MaxDurationPerAckExtension,
+	MinDurationPerAckExtension: pubsub.DefaultReceiveSettings.MinDurationPerAckExtension,
+	EnablePerStreamFlowControl: pubsub.DefaultReceiveSettings.EnablePerStreamFlowControl,
+	NumGoroutines:              pubsub.DefaultReceiveSettings.NumGoroutines,
+	ShutdownOptions:            pubsub.DefaultReceiveSettings.ShutdownOptions,
+}
+
 func newStreamsCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 
@@ -459,9 +482,10 @@ func newStreamsCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create gitleaks enforcement handler: %w", err)
 			}
+			// No shadow gate: this consumer is the only prompt-injection engine
+			// for batch analysis, so every request runs the real judge.
 			promptInjectionScanner := promptinjection.NewScanner(logger, piopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Classify)
-			promptInjectionStubScanner := promptinjection.NewScanner(logger, promptinjection.NoopClassifier)
-			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, promptInjectionStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
+			promptInjectionHandler := promptinjection.NewHandler(logger, meterProvider, promptInjectionScanner, findingsPub, riskRecorder)
 			promptPolicyScanner := promptpolicy.NewScanner(logger, ppopenrouter.New(logger, tracerProvider, meterProvider, completionsClient, judgeRateLimiter).Evaluate)
 			promptPolicyStubScanner := promptpolicy.NewScanner(logger, promptpolicy.NoopEvaluator)
 			promptPolicyHandler := promptpolicy.NewHandler(logger, meterProvider, promptPolicyScanner, promptPolicyStubScanner, findingsPub, scanners.NewAsyncShadowGate(logger, featureFlags, replicaDB), riskRecorder)
@@ -650,7 +674,7 @@ func newStreamsCommand() *cli.Command {
 				mustReceive(rg, &riskv1.GitleaksAnalysis{}, &riskv1.GitleaksAnalyzer{}, gitleaksHandler)
 				mustReceive(rg, &riskv1.GitleaksEnforcement{}, &riskv1.GitleaksEnforcer{}, gitleaksEnforceHandler)
 				mustReceive(rg, &riskv1.LLMEnforcement{}, &riskv1.LLMEnforcer{}, llmanalyzer.NewEnforceHandler(logger, tracerProvider, meterProvider, llmAnalyzer, replyWriter, llmanalyzer.WithRiskRecorder(riskRecorder)))
-				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler)
+				mustReceive(rg, &riskv1.PromptInjectionAnalysis{}, &riskv1.PromptInjectionAnalyzer{}, promptInjectionHandler, gcp.WithPubSubReceiveSettings(&promptInjectionReceiveSettings))
 				mustReceive(rg, &riskv1.PromptPolicyAnalysis{}, &riskv1.PromptPolicyAnalyzer{}, promptPolicyHandler)
 				mustReceive(rg, &riskv1.LLMAnalysis{}, &riskv1.LLMAnalyzer{}, llmAnalyzerHandler)
 				mustReceive(rg, &riskv1.CustomRulesAnalysis{}, &riskv1.CustomRulesAnalyzer{}, customRulesHandler)

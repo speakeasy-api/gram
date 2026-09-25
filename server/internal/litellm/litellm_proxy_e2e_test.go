@@ -798,7 +798,7 @@ func (h *proxyHarness) materializeFinding(messageID uuid.UUID) {
 	shadowMCPClient := shadowmcp.NewClient(testenv.NewLogger(h.t), h.conn, cache.NoopCache, nil)
 	analyze, err := riskanalysis.NewAnalyzeBatch(
 		testenv.NewLogger(h.t), testenv.NewTracerProvider(h.t), testenv.NewMeterProvider(h.t), h.conn,
-		nil, &riskanalysis.StubPIIScanner{}, nil, shadowMCPClient, noMCPProvenance{}, nil, flags,
+		nil, &riskanalysis.StubPIIScanner{}, shadowMCPClient, noMCPProvenance{}, nil, flags,
 		gcp.NewNoopPublisher[*riskv1.PresidioAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.GitleaksAnalysis](),
 		gcp.NewNoopPublisher[*riskv1.PromptInjectionAnalysis](),

@@ -931,7 +931,6 @@ func TestRealHooksPureTextResponseProducesAssistantPolicyFinding(t *testing.T) {
 		ti.conn,
 		nil,
 		&riskanalysis.StubPIIScanner{},
-		nil,
 		shadowMCPClient,
 		noMCPProvenance{},
 		nil,
