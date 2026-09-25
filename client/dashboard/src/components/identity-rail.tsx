@@ -7,6 +7,8 @@ export type IdentityRailItem = {
   title: string;
   href: string;
   active: boolean;
+  /** A sub-page of the item above it, drawn indented beneath it. */
+  nested?: boolean;
 };
 
 /**
@@ -38,6 +40,7 @@ export function IdentityRail({
             // only grows them when selected moves the whole rail by a pixel
             // each time you change section.
             "shrink-0 border-b-2 px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
+            item.nested && "lg:pl-6",
             "lg:border-t lg:border-r lg:border-b lg:border-l-2",
             item.active
               ? // The open section lifts off the recessed ground as a card:

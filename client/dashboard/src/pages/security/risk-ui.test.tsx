@@ -1,5 +1,5 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CategoryLabel,
@@ -83,11 +83,14 @@ describe("EventMatchDialog", () => {
     expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
   });
 
-  it("falls back to the redacted match without chat:read and no rationale", () => {
+  it("names the missing permission without chat:read and no rationale", async () => {
     hasScope.mockReturnValue(false);
     renderCell(undefined);
 
-    expect(screen.getByText("<redacted len=42 sha=deadbeef>")).toBeTruthy();
+    expect(screen.getByText("chat:read")).toBeTruthy();
+    // The fingerprint moves to the tooltip, off the page until hovered.
+    expect(screen.queryByText("<redacted len=42 sha=deadbeef>")).toBeNull();
+    await expectFingerprintInTooltip();
     expect(screen.queryByText("Hidden")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
@@ -108,6 +111,16 @@ describe("EventMatchDialog", () => {
   });
 });
 
+// Focus opens the tooltip without pointer events.
+async function expectFingerprintInTooltip() {
+  const trigger = screen.getByText("chat:read").closest("[tabindex]");
+  expect(trigger).toBeTruthy();
+  fireEvent.focus(trigger!);
+  expect(
+    (await screen.findAllByText("<redacted len=42 sha=deadbeef>")).length,
+  ).toBeGreaterThan(0);
+}
+
 function renderMasked(matchRedacted = "<redacted len=42 sha=deadbeef>") {
   render(
     <TooltipProvider>
@@ -120,11 +133,13 @@ function renderMasked(matchRedacted = "<redacted len=42 sha=deadbeef>") {
 }
 
 describe("MaskedMatch", () => {
-  it("shows the redacted match without chat:read, and offers no reveal", () => {
+  it("names the missing permission without chat:read, and offers no reveal", async () => {
     hasScope.mockReturnValue(false);
     renderMasked();
 
-    expect(screen.getByText("<redacted len=42 sha=deadbeef>")).toBeTruthy();
+    expect(screen.getByText("chat:read")).toBeTruthy();
+    expect(screen.queryByText("<redacted len=42 sha=deadbeef>")).toBeNull();
+    await expectFingerprintInTooltip();
     expect(screen.queryByText("Hidden")).toBeNull();
     expect(screen.queryByText("Click to reveal")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();

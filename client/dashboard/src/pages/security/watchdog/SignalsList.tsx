@@ -7,7 +7,7 @@ import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { Sparkline } from "@/pages/costs/Sparkline";
 import type { RiskSignal } from "@gram/client/models/components/risksignal.js";
-import { RULE_CATEGORY_META, type RuleCategory } from "../policy-data";
+import { ruleCategoryLabel } from "../policy-data";
 import { CategoryLabel } from "../risk-ui";
 import { getRuleTitleFallback, scoreToRating } from "../risk-utils";
 import {
@@ -61,7 +61,7 @@ function groupLabel(group: SignalGroup, mode: SignalGroupMode): string {
     case "severity":
       return SEVERITY_GROUP_LABEL[group.key as SignalSeverity] ?? group.key;
     case "category":
-      return RULE_CATEGORY_META[group.key as RuleCategory]?.label ?? group.key;
+      return ruleCategoryLabel(group.key);
     case "team":
     case "app":
     case "principal":

@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { CodeBlock } from "@/components/code";
@@ -188,11 +189,14 @@ export function RevealAllToggle({
 export function MaskedMatch({
   resultId,
   matchRedacted,
+  chatId,
   tone = "default",
   wrap = false,
 }: {
   resultId: string | undefined;
   matchRedacted: string | undefined;
+  /** The finding's chat; when set, reveal needs chat:read on it. */
+  chatId?: string;
   /**
    * "contrast" renders for a dark code-block backdrop (the Watchdog drawer's
    * evidence card): the masked state becomes a red redaction chip and the
@@ -208,7 +212,7 @@ export function MaskedMatch({
 }): JSX.Element {
   const contrast = tone === "contrast";
   const { hasScope } = useRBAC();
-  const canReveal = hasScope(REVEAL_SCOPE);
+  const canReveal = hasScope(REVEAL_SCOPE, chatId);
   const ctx = useRevealAll();
   const generation = ctx?.generation;
   const revealAll = ctx?.revealAll ?? false;
@@ -232,9 +236,8 @@ export function MaskedMatch({
 
   if (!resultId || !matchRedacted) return <span>-</span>;
 
-  // Without chat:read the plaintext can never be revealed — keep the
-  // fingerprint on screen so a reviewer can still correlate and inspect the
-  // finding before suppressing it. Reveal-all must not flip this open.
+  // Without chat:read the plaintext can never be revealed, so say which
+  // permission is missing. Reveal-all must not flip this open.
   if (!canReveal) {
     return (
       <LockedRedactedMatch
@@ -272,6 +275,11 @@ export function MaskedMatch({
     );
   }
 
+  const hide = (e: MouseEvent) => {
+    e.stopPropagation();
+    setRevealed(false);
+  };
+
   return (
     <span
       className={cn(
@@ -280,33 +288,38 @@ export function MaskedMatch({
       )}
     >
       <SimpleTooltip tooltip={value}>
+        {/* Clicking the value hides it, unless the click ended a text selection. */}
         <span
           className={cn(
-            "min-w-0 font-mono text-xs",
+            "min-w-0 cursor-pointer font-mono text-xs",
             wrap
               ? "break-all whitespace-pre-wrap"
               : "overflow-x-auto whitespace-nowrap",
             contrast && "text-background",
           )}
+          onClick={(e) => {
+            if (window.getSelection()?.toString()) e.stopPropagation();
+            else hide(e);
+          }}
         >
           {value}
         </span>
       </SimpleTooltip>
-      <button
-        type="button"
-        className={cn(
-          "shrink-0",
-          contrast
-            ? "text-background/60 hover:text-background"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-        onClick={(e) => {
-          e.stopPropagation();
-          setRevealed(false);
-        }}
-      >
-        <Eye className="h-3 w-3" />
-      </button>
+      <SimpleTooltip tooltip="Hide">
+        <button
+          type="button"
+          aria-label="Hide match"
+          className={cn(
+            "shrink-0",
+            contrast
+              ? "text-background/60 hover:text-background"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={hide}
+        >
+          <Eye className="h-3 w-3" />
+        </button>
+      </SimpleTooltip>
     </span>
   );
 }
@@ -319,9 +332,8 @@ function prettyJSON(s: string): string {
   }
 }
 
-// Static fingerprint for callers who lack chat:read. The lock explains why
-// the plaintext stays withheld; the fingerprint itself is the reviewable
-// token the list endpoints already ship as match_redacted.
+// Without chat:read: the permission needed, with the fingerprint in the tooltip
+// so reviewers can still compare findings.
 function LockedRedactedMatch({
   matchRedacted,
   contrast = false,
@@ -332,8 +344,17 @@ function LockedRedactedMatch({
   wrap?: boolean;
 }): JSX.Element {
   return (
-    <SimpleTooltip tooltip={REVEAL_DENIED_REASON}>
+    <SimpleTooltip
+      tooltip={
+        <span className="flex flex-col gap-1">
+          <span>{REVEAL_DENIED_REASON}</span>
+          <span className="font-mono opacity-70">{matchRedacted}</span>
+        </span>
+      }
+    >
+      {/* Focusable so keyboard users can reach the fingerprint too. */}
       <span
+        tabIndex={0}
         className={cn(
           "inline-flex max-w-full min-w-0 gap-1 text-xs",
           wrap ? "items-start" : "items-center",
@@ -345,15 +366,8 @@ function LockedRedactedMatch({
           aria-label={REVEAL_DENIED_REASON}
           className="h-3 w-3 shrink-0"
         />
-        <span
-          className={cn(
-            "min-w-0 font-mono",
-            wrap
-              ? "break-all whitespace-pre-wrap"
-              : "overflow-x-auto whitespace-nowrap",
-          )}
-        >
-          {matchRedacted}
+        <span className="min-w-0 truncate">
+          Requires <span className="font-mono">{REVEAL_SCOPE}</span>
         </span>
       </span>
     </SimpleTooltip>
