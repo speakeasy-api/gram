@@ -194,20 +194,20 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
       }}
     >
       <SheetContent
-        className="w-full overflow-y-auto sm:max-w-3xl"
+        className="w-full gap-0 overflow-hidden sm:max-w-3xl"
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           opener.current?.focus();
         }}
       >
-        <SheetHeader>
+        <SheetHeader className="shrink-0 pb-3 pr-10">
           <SheetTitle>
             {base || id ? "Edit registry entry" : "New registry entry"}
           </SheetTitle>
           <SheetDescription>{STAGE_A_NOTICE}</SheetDescription>
         </SheetHeader>
-        <div className="space-y-4 px-4 pb-6">
-          <p className="text-muted-foreground text-sm">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4">
+          <p className="text-muted-foreground shrink-0 text-sm">
             Stage A: existing server names and ordered endpoint structure are
             immutable. Do not add, remove, reorder, or change remote transports
             or URLs. Metadata edits remain available. Create publishes; Save
@@ -217,7 +217,7 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
             <div
               id="registry-request-error"
               role="alert"
-              className="whitespace-pre-wrap"
+              className="max-h-28 shrink-0 overflow-y-auto whitespace-pre-wrap text-sm"
             >
               {serverIssues.length > 0 ? (
                 <ul>
@@ -251,7 +251,6 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
             )
           ) : (
             <>
-              <p className="block text-sm font-medium">Record JSON</p>
               <Suspense fallback={<p role="status">Loading JSON editor…</p>}>
                 <RegistryJsonEditor
                   value={text}
@@ -281,7 +280,10 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
                   }
                 />
               </Suspense>
-              <div id="registry-feedback" className="text-sm">
+              <div
+                id="registry-feedback"
+                className="max-h-28 shrink-0 overflow-y-auto text-sm"
+              >
                 <p>
                   Syntax and schema feedback appear while editing. Suggestions
                   are optional; values are never applied automatically. Size is
@@ -305,6 +307,8 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
               </div>
             </>
           )}
+        </div>
+        <div className="shrink-0 space-y-2 border-t p-4">
           <div className="flex flex-wrap gap-2">
             <Button
               disabled={
@@ -337,7 +341,7 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
             )}
           </div>
           {dirty && base && (
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground shrink-0 text-sm">
               Save or cancel edits before changing visibility.
             </p>
           )}

@@ -148,7 +148,19 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
     const { value, onChange, onBlur, disabled, invalid, describedBy } =
       this.props;
     return (
-      <div>
+      <div className="flex min-h-64 flex-1 flex-col gap-2">
+        <div className="flex shrink-0 items-center justify-between gap-3">
+          <p className="text-sm font-medium">Record JSON</p>
+          {!this.large && (
+            <Button
+              variant="outline"
+              disabled={disabled || !this.state.mounted}
+              onClick={this.formatDocument}
+            >
+              Format JSON
+            </Button>
+          )}
+        </div>
         {this.large ? (
           <>
             <p className="text-muted-foreground text-sm">
@@ -159,7 +171,7 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
               aria-label="Record JSON"
               aria-describedby={describedBy}
               aria-invalid={invalid}
-              className="border-input min-h-96 w-full border p-3 font-mono text-sm"
+              className="border-input min-h-48 w-full flex-1 resize-none rounded-md border p-3 font-mono text-sm"
               value={value}
               disabled={disabled}
               onChange={(event) => onChange(event.target.value)}
@@ -168,16 +180,12 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
           </>
         ) : (
           <>
-            <Button
-              variant="outline"
-              disabled={disabled || !this.state.mounted}
-              onClick={this.formatDocument}
+            <div
+              className="border-input min-h-48 flex-1 overflow-hidden rounded-md border py-2"
+              onBlur={onBlur}
             >
-              Format JSON
-            </Button>
-            <div onBlur={onBlur}>
               <MonacoEditor
-                height="384px"
+                height="100%"
                 language="json"
                 theme={this.state.dark ? "vs-dark" : "vs"}
                 path={this.modelPath}
@@ -211,7 +219,7 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
                 }}
               />
             </div>
-            <a href="#registry-feedback" className="text-sm underline">
+            <a href="#registry-feedback" className="shrink-0 text-sm underline">
               Validation feedback
             </a>
           </>
