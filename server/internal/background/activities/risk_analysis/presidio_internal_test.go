@@ -711,6 +711,46 @@ func TestPresidioClientTruncatesOversizedMessages(t *testing.T) {
 	assert.Greater(t, receivedSize, presidioMaxMessageBytes-4, "expected truncation near the cap, not further back")
 }
 
+// TestPrepareScanTextMatchesRequestBody pins the exported preparation helper
+// to what the client actually posts. Offline volume analysis (cmd/tools/
+// scanvolume) counts stokens over PrepareScanText's output and would silently
+// measure the wrong surface if the two ever diverged.
+func TestPrepareScanTextMatchesRequestBody(t *testing.T) {
+	t.Parallel()
+
+	inputs := map[string]string{
+		"plain text":  "contact me at alice@example.com",
+		"json object": `{"stdout":"line one\nline two\n","stderr":""}`,
+		"oversized":   `{"originalFile":"` + strings.Repeat("package main\\n", 8000) + `"}`,
+	}
+
+	for name, input := range inputs {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var sent string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var req presidioRequest
+				assert.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+				if assert.Len(t, req.Text, 1) {
+					sent = req.Text[0]
+				}
+				w.Header().Set("Content-Type", "application/json")
+				assert.NoError(t, json.NewEncoder(w).Encode([][]presidioResult{{}}))
+			}))
+			t.Cleanup(srv.Close)
+
+			client := newTestPresidioClient(t, srv.URL)
+			_, err := client.AnalyzeBatch(t.Context(), []string{input}, nil, 0, nil)
+			require.NoError(t, err)
+
+			prepared, truncated := PrepareScanText(input)
+			assert.Equal(t, prepared, sent)
+			assert.Equal(t, len(NormalizeScanText(input)) > PresidioMaxMessageBytes, truncated)
+		})
+	}
+}
+
 func TestTruncateAtRuneBoundaryHandlesMultibyte(t *testing.T) {
 	t.Parallel()
 
