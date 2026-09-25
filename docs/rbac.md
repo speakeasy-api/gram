@@ -1025,3 +1025,9 @@ Keep scopes coarse and customer-meaningful. Use selectors and dimensions for res
 
 Please refer to the original [RFC](https://www.notion.so/speakeasyapi/RFC-Gram-RBAC-Scope-Permission-Design-319726c497cc8177b7e9dea65a91ff10) which contains the original decision making process during RBAC
 planning. Please note that this might be slightly outdated, and this guide should be the actual source of truth.
+
+### Gateway discovery configuration
+
+The staff-managed `gateway_discovery_modes` product feature enables new gateway defaults and per-connection discovery choices. Gateway defaults require project `mcp:write`; Inspect overrides require gateway `mcp:connect`. Disabling the product feature preserves stored defaults and session choices.
+
+Platform MCP's `get_mcp_connection_settings` includes a gateway's discovery mode. During preview, mode changes use the dashboard or management API. The existing Platform MCP address and network mutations remain limited to those settings; an agent-facing mode mutation is deferred until it has its own confirmation and concurrency contract.

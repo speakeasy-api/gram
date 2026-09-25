@@ -249,6 +249,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		ConsentToolFilteringEnabled:             snapshot.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               snapshot.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled,
+		GatewayDiscoveryModesEnabled:            snapshot.GatewayDiscoveryModesEnabled,
 		DeviceAgent:                             snapshot.DeviceAgent,
 	}, nil
 }

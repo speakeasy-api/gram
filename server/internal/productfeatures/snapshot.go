@@ -27,6 +27,7 @@ type ProductFeaturesSnapshot struct {
 	ConsentToolFilteringEnabled             bool
 	SessionPortabilityEnabled               bool
 	NetworkIngressEnabled                   bool
+	GatewayDiscoveryModesEnabled            bool
 	DeviceAgent                             bool
 }
 
@@ -105,6 +106,7 @@ func (c *Client) snapshot(ctx context.Context, organizationID string, strict boo
 		ConsentToolFilteringEnabled:             isEnabled(FeatureConsentToolFiltering),
 		SessionPortabilityEnabled:               isEnabled(FeatureSessionPortability),
 		NetworkIngressEnabled:                   isEnabled(FeatureNetworkIngress),
+		GatewayDiscoveryModesEnabled:            isEnabled(FeatureGatewayDiscoveryModes),
 		DeviceAgent:                             deviceAgent,
 	}
 	if readErr != nil {

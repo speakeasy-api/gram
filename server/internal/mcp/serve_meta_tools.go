@@ -303,8 +303,9 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 
 // memberCatalog is one hosted member's described tool inventory.
 type memberCatalog struct {
-	entries []*toolListEntry
-	byName  map[string]*toolListEntry
+	entries    []*toolListEntry
+	byName     map[string]*toolListEntry
+	incomplete bool
 }
 
 // describeMemberToolset loads the member's catalog via the same model view
@@ -342,17 +343,22 @@ func (s *Service) describeMemberToolset(
 		described.Tools = toolfilter.FilterToolsBySelection(described.Tools, gate.toolSelection)
 	}
 
-	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}}
+	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
 		// External-MCP passthrough tools are excluded from the meta MCP
 		// catalog (toolToListEntry returns nil); they belong to the
 		// proxied-member runtime.
+		if tool != nil && conv.IsProxyTool(tool) {
+			continue
+		}
 		entry := toolToListEntry(tool)
-		if entry == nil {
+		if entry == nil || entry.Name == "" {
+			catalog.incomplete = true
 			continue
 		}
 		if _, exists := catalog.byName[entry.Name]; exists {
+			catalog.incomplete = true
 			duplicates[entry.Name] = true
 			continue
 		}

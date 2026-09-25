@@ -225,4 +225,6 @@ dashboard, provider acceptance, or usable human access is demonstrated.
 
 ### Gateway discovery
 
-The seeded gateway uses Progressive discovery. With the discovery rollout enabled, Settings shows this default and Inspect can reconnect in Direct mode to show qualified member tools. Choosing a mode in Inspect leaves the gateway default unchanged.
+Browser verification: [~] — follow check 25 in `seed/demo/verify.md`.
+
+The seeded gateway uses Progressive discovery. With the seeded gateway discovery product feature enabled, Settings shows this default and Inspect can reconnect in Direct mode to show qualified member tools. Choosing a mode in Inspect leaves the gateway default unchanged.

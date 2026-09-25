@@ -445,6 +445,9 @@ type GetOrganizationFeaturesResponseBody struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled *bool `form:"network_ingress_enabled,omitempty" json:"network_ingress_enabled,omitempty" xml:"network_ingress_enabled,omitempty"`
+	// Whether gateway defaults and per-connection discovery choices can be
+	// configured
+	GatewayDiscoveryModesEnabled *bool `form:"gateway_discovery_modes_enabled,omitempty" json:"gateway_discovery_modes_enabled,omitempty" xml:"gateway_discovery_modes_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -503,6 +506,9 @@ type SetOrganizationFeatureResponseBody struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled *bool `form:"network_ingress_enabled,omitempty" json:"network_ingress_enabled,omitempty" xml:"network_ingress_enabled,omitempty"`
+	// Whether gateway defaults and per-connection discovery choices can be
+	// configured
+	GatewayDiscoveryModesEnabled *bool `form:"gateway_discovery_modes_enabled,omitempty" json:"gateway_discovery_modes_enabled,omitempty" xml:"gateway_discovery_modes_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -13948,6 +13954,7 @@ func NewGetOrganizationFeaturesProductFeaturesOK(body *GetOrganizationFeaturesRe
 		ConsentToolFilteringEnabled:             body.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               body.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   body.NetworkIngressEnabled,
+		GatewayDiscoveryModesEnabled:            body.GatewayDiscoveryModesEnabled,
 		DeviceAgent:                             body.DeviceAgent,
 	}
 
@@ -14127,6 +14134,7 @@ func NewSetOrganizationFeatureProductFeaturesOK(body *SetOrganizationFeatureResp
 		ConsentToolFilteringEnabled:             body.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               body.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   body.NetworkIngressEnabled,
+		GatewayDiscoveryModesEnabled:            body.GatewayDiscoveryModesEnabled,
 		DeviceAgent:                             body.DeviceAgent,
 	}
 

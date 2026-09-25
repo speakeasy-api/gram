@@ -27,9 +27,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -62,7 +62,7 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	features            *feature.InMemory
+	productFeatures     *productfeatures.Client
 	service             *usersessions.Service
 	conn                *pgxpool.Pool
 	sessionManager      *sessions.Manager
@@ -113,7 +113,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		tokenRevoker = revoker
 	}
 
-	flags := new(feature.InMemory)
+	productFeatures := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
 	svc := usersessions.NewService(
 		logger,
 		tracerProvider,
@@ -129,11 +129,11 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		usersessions.NewSigner("test-jwt-secret"),
 		"http://0.0.0.0",
 		ratelimit.NewRedisStore(redisClient),
-		flags,
+		productFeatures,
 	)
 
 	return ctx, &testInstance{
-		features:            flags,
+		productFeatures:     productFeatures,
 		service:             svc,
 		conn:                conn,
 		sessionManager:      sessionManager,

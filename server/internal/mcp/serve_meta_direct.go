@@ -45,10 +45,10 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 			if errors.As(err, &denied) && (denied.Code == oops.CodeNotFound || denied.Code == oops.CodeForbidden) {
 				continue
 			}
-			if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-				return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete: %s", memberErr.message).LogWarn(ctx, logger)
-			}
 			return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
+		}
+		if catalog.incomplete {
+			return nil, oops.E(oops.CodeUnavailable, nil, "gateway tool inventory contains invalid definitions; try again")
 		}
 		for _, entry := range catalog.entries {
 			qualified := *entry

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -45,6 +46,7 @@ func TestGatewayDiscoveryDefaultChangesLive(t *testing.T) {
 	request := makeMetaRPCBody(t, "tools/list", map[string]any{})
 	w, err := servePublicHTTP(t, t.Context(), ti, slug, request, "", nil)
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), `"name":"execute_tool"`)
 	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
 	w, err = servePublicHTTP(t, t.Context(), ti, slug, request, "", nil)
@@ -57,6 +59,7 @@ func TestGatewayDiscoveryDefaultChangesLive(t *testing.T) {
 	setGatewayMode(t, ctx, ti, gateway.ID, "progressive")
 	w, err = servePublicHTTP(t, t.Context(), ti, slug, request, "", nil)
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), `"name":"execute_tool"`)
 }
 
@@ -72,6 +75,7 @@ func TestGatewayDirectRoutesRemoteTool(t *testing.T) {
 	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
 	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), memberSlug+"--ping")
 	result := callMetaTool(t, t.Context(), ti, slug, memberSlug+"--ping", map[string]any{})
 	require.NotContains(t, result, "error")
@@ -100,6 +104,7 @@ func TestGatewayModeOnlySessionIsBoundAndUnrestricted(t *testing.T) {
 	require.NoError(t, err)
 	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), token, nil)
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), member.slug+"--alpha")
 	require.Contains(t, w.Body.String(), member.slug+"--beta")
 	require.NotContains(t, w.Body.String(), `"name":"execute_tool"`)
@@ -121,6 +126,7 @@ func TestGatewayDirectPaginationRejectsChangedInventory(t *testing.T) {
 	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
 	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
 	var page struct {
 		Result struct {
 			Tools      []json.RawMessage `json:"tools"`
@@ -133,6 +139,7 @@ func TestGatewayDirectPaginationRejectsChangedInventory(t *testing.T) {
 	require.NotEmpty(t, cursor)
 	w, err = servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{"cursor": cursor}), "", nil)
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
 	page.Result.NextCursor = ""
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
 	require.Len(t, page.Result.Tools, 1)
@@ -140,5 +147,58 @@ func TestGatewayDirectPaginationRejectsChangedInventory(t *testing.T) {
 	seedHostedMetaMember(t, ctx, ti, gateway.ID, "Added tools", 2, mcpservers.VisibilityPublic, "new_tool")
 	w, err = servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{"cursor": cursor}), "", nil)
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
 	require.Contains(t, w.Body.String(), "gateway inventory changed")
+}
+
+func TestDirectRejectsMalformedCatalogWhileProgressiveRemainsUsable(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			ID     json.RawMessage `json:"id"`
+			Method string          `json:"method"`
+		}
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Errorf("decode upstream request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if len(request.ID) == 0 {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		var result any
+		switch request.Method {
+		case "initialize":
+			result = map[string]any{"protocolVersion": "2025-03-26", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]string{"name": "catalog-test", "version": "1"}}
+		case "tools/list":
+			result = map[string]any{"tools": []any{map[string]any{"name": "valid", "inputSchema": map[string]any{"type": "object"}}, map[string]any{"description": "missing name", "inputSchema": map[string]any{"type": "object"}}}}
+		default:
+			result = map[string]any{}
+		}
+		if err := json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": request.ID, "result": result}); err != nil {
+			t.Errorf("encode upstream response: %v", err)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+	memberSlug := "catalog-member"
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Catalog member", memberSlug, 1, upstream.URL)
+	result := callMetaTool(t, t.Context(), ti, slug, "describe_tools", map[string]any{"tools": []string{memberSlug + "--valid"}})
+	require.NotContains(t, result, "error")
+	require.Contains(t, string(result["result"]), memberSlug+"--valid")
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "invalid definitions")
+	require.NotContains(t, w.Body.String(), memberSlug+"--valid")
 }

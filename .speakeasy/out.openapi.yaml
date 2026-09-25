@@ -88830,6 +88830,9 @@ components:
         device_agent:
           type: boolean
           description: Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
+        gateway_discovery_modes_enabled:
+          type: boolean
+          description: Whether gateway defaults and per-connection discovery choices can be configured
         hooks_browser_login_enabled:
           type: boolean
           description: Whether generated hook plugins may mint per-user keys via the interactive browser login
@@ -88892,6 +88895,7 @@ components:
         - consent_tool_filtering_enabled
         - session_portability_enabled
         - network_ingress_enabled
+        - gateway_discovery_modes_enabled
         - device_agent
     Project:
       type: object
@@ -93892,6 +93896,7 @@ components:
             - consent_tool_filtering
             - session_portability
             - network_ingress
+            - gateway_discovery_modes
           maxLength: 60
         organization_id:
           type: string

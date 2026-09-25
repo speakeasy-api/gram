@@ -3,34 +3,20 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 // gatewayDiscoveryOptionsEnabled gates new settings only. Runtime policy
-// parsing and enforcement do not depend on this rollout flag.
+// parsing and enforcement do not depend on this product feature.
 func (s *Service) gatewayDiscoveryOptionsEnabled(ctx context.Context, endpoint *ResolvedMcpEndpoint) bool {
 	if !endpoint.MetaMcpServerID.Valid {
 		return false
 	}
-	orgSlug := ""
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID == endpoint.OrganizationID {
-		orgSlug = authCtx.OrganizationSlug
-	}
-	if orgSlug == "" {
-		org, err := orgrepo.New(s.db).GetOrganizationMetadata(ctx, endpoint.OrganizationID)
-		if err != nil {
-			return false
-		}
-		orgSlug = org.Slug
-	}
-	enabled, err := s.features.IsFlagEnabled(ctx, feature.FlagGatewayDiscoveryModes, endpoint.OrganizationID, feature.OrgProjectGroups(orgSlug, ""))
-	return err == nil && enabled
+	return s.platformFeatureChecker != nil && s.platformFeatureChecker(ctx, endpoint.OrganizationID, string(productfeatures.FeatureGatewayDiscoveryModes))
 }
 
 func (s *Service) consentGatewayPolicy(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, selectedAgentID, modeValue string, selection *toolfilter.SessionSelection) (*toolfilter.SessionPolicy, error) {
