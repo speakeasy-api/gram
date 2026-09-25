@@ -90148,6 +90148,9 @@ components:
           type: string
           description: The organization JSON Web Key Set attached to this client, managed through attachKeySet and detachKeySet. Null when no key set is attached.
           format: uuid
+        legacy_callback_url:
+          type: boolean
+          description: Whether the client was registered upstream with the legacy callback URL. The authorize leg then sends that URL and a JSON state instead of the current callback. Cleared when the client is rotated.
         organization_id:
           type: string
           description: The owning organization id. Empty for legacy rows not yet backfilled and global clients.
@@ -90198,6 +90201,7 @@ components:
         - remote_session_issuer_id
         - user_session_issuer_ids
         - client_id
+        - legacy_callback_url
         - created_at
         - updated_at
         - grant_types

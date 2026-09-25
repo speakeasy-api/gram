@@ -54,7 +54,11 @@ type RemoteSessionClient struct {
 	Scope []string
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string
-	CreatedAt string
-	UpdatedAt string
+	Audience *string
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool
+	CreatedAt         string
+	UpdatedAt         string
 }

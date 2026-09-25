@@ -1442,9 +1442,13 @@ type RemoteSessionClientResponseBody struct {
 	Scope []string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
-	Audience  *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
-	CreatedAt string  `form:"created_at" json:"created_at" xml:"created_at"`
-	UpdatedAt string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the client was registered upstream with the legacy callback URL. The
+	// authorize leg then sends that URL and a JSON state instead of the current
+	// callback. Cleared when the client is rotated.
+	LegacyCallbackURL bool   `form:"legacy_callback_url" json:"legacy_callback_url" xml:"legacy_callback_url"`
+	CreatedAt         string `form:"created_at" json:"created_at" xml:"created_at"`
+	UpdatedAt         string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // ServerIdentityRegistrationFailureResponseBody is used to define fields on
