@@ -1645,6 +1645,9 @@ jobs:
       (needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true')
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
+      # Google tag id the dashboard reports ad conversions to. Unset leaves
+      # the tag out of the bundle (see client/dashboard/src/lib/google-ads.ts).
+      GRAM_GOOGLE_TAG_ID: "${{ vars.GRAM_GOOGLE_TAG_ID }}"
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
