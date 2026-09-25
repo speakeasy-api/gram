@@ -914,6 +914,8 @@ CREATE TABLE IF NOT EXISTS organization_role_provisioning_settings (
   enabled boolean DEFAULT false,
   project_id uuid,
   version bigint DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT organization_role_provisioning_settings_pkey PRIMARY KEY (organization_id),
   CONSTRAINT organization_role_provisioning_settings_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
