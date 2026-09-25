@@ -344,15 +344,15 @@ function ClaudeCodeInstallContent({
  * First step of every personal-account (manual) setup: the marketplace repo is
  * private, so the user must be a collaborator before a personal Claude or
  * Cursor account can read it. GitHub mails the invite to the email on the
- * user's GitHub account, which is often a personal address, not a work one.
+ * user's GitHub account.
  */
 const acceptGitHubInviteStep = {
   title: "Accept the GitHub invite",
   description: (
     <>
       Ask an admin to add your GitHub username as a collaborator on this
-      marketplace. GitHub emails an invite to the address on your GitHub account
-      — often a personal email, not your work one. Accept it before continuing.
+      marketplace. GitHub emails an invite to the address on your GitHub
+      account. Accept it before continuing.
     </>
   ),
 };
@@ -503,10 +503,13 @@ function CursorInstallContent({
   // each Cursor plugin lives at cursor-plugins/<slug>-cursor.
   const cursorPluginDir = `${pluginSlug ?? "<plugin-slug>"}-cursor`;
   // Re-runnable as-is, since local plugins must be re-copied after each publish.
+  // Chained so a failed clone or missing plugin never deletes the installed copy.
   const localInstallCommand = [
-    `tmp=$(mktemp -d) && git clone --depth 1 ${repoUrl}.git "$tmp"`,
-    `mkdir -p ~/.cursor/plugins/local`,
-    `rm -rf ~/.cursor/plugins/local/${cursorPluginDir}`,
+    `tmp=$(mktemp -d) &&`,
+    `git clone --depth 1 ${repoUrl}.git "$tmp" &&`,
+    `test -d "$tmp/cursor-plugins/${cursorPluginDir}" &&`,
+    `mkdir -p ~/.cursor/plugins/local &&`,
+    `rm -rf ~/.cursor/plugins/local/${cursorPluginDir} &&`,
     `cp -R "$tmp/cursor-plugins/${cursorPluginDir}" ~/.cursor/plugins/local/`,
   ].join("\n");
 
