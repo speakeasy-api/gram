@@ -1,4 +1,4 @@
-package typesafe
+package typesafedecisions
 
 import (
 	"context"

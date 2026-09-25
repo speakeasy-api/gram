@@ -10,7 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/typesafe"
+	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )

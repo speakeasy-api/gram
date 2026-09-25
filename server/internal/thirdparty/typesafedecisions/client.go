@@ -1,5 +1,5 @@
-// Package typesafe provides bounded, typed judgments from Jev.
-package typesafe
+// Package typesafedecisions provides bounded, typed judgments from Jev.
+package typesafedecisions
 
 import (
 	"bytes"

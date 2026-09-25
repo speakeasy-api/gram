@@ -14,7 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/typesafe"
+	typesafe "github.com/speakeasy-api/gram/server/internal/thirdparty/typesafedecisions"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
