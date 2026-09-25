@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  act,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { Component } from "react";
 
@@ -34,6 +40,8 @@ vi.mock("@monaco-editor/react", () => ({
   default: class MockMonaco extends Component<{
     onMount: (editor: unknown) => void;
     options: unknown;
+    theme?: string;
+    path?: string;
   }> {
     componentDidMount() {
       mock.options = this.props.options;
@@ -60,7 +68,13 @@ vi.mock("@monaco-editor/react", () => ({
       });
     }
     render() {
-      return <div data-testid="monaco" />;
+      return (
+        <div
+          data-testid="monaco"
+          data-theme={this.props.theme}
+          data-path={this.props.path}
+        />
+      );
     }
   },
 }));
@@ -78,6 +92,7 @@ const props = {
 afterEach(() => {
   cleanup();
   mock.dom = null;
+  vi.unstubAllGlobals();
   vi.clearAllMocks();
   mock.value = '{"n":9007199254740993}';
 });
@@ -177,5 +192,27 @@ it.each(["textarea", "div"])(
     rerender(<RegistryJsonEditor {...props} />);
     expect(input.getAttribute("aria-invalid")).toBe("false");
     expect(input.getAttribute("aria-describedby")).toBe("registry-feedback");
+  },
+);
+
+it.each([false, true])(
+  "follows live system theme without replacing the model (dark=%s)",
+  (dark) => {
+    const media = new EventTarget();
+    Object.assign(media, { matches: dark });
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue(media));
+    render(<RegistryJsonEditor {...props} />);
+    const editor = screen.getByTestId("monaco");
+    const path = editor.getAttribute("data-path");
+    expect(editor.getAttribute("data-theme")).toBe(dark ? "vs-dark" : "vs");
+    act(() => {
+      Object.assign(media, { matches: !dark });
+      media.dispatchEvent(new Event("change"));
+    });
+    expect(screen.getByTestId("monaco")).toBe(editor);
+    expect(editor.getAttribute("data-path")).toBe(path);
+    expect(editor.getAttribute("data-theme")).toBe(dark ? "vs" : "vs-dark");
+    expect(mock.dispose).not.toHaveBeenCalled();
+    expect(mock.edits).not.toHaveBeenCalled();
   },
 );

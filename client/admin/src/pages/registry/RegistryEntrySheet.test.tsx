@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, cleanup } from "@testing-library/react";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { renderWithApp } from "@/test/harness";
+import { formatRegistryJson } from "@/lib/registryJsonEditor";
 import { registryEntryQuery } from "@/lib/gramAdminClient";
 
 vi.mock("./RegistryJsonEditor", () => ({
@@ -91,12 +92,24 @@ it("saves only explicitly, preserving raw large integers and the opaque token on
   await mount();
   await screen.findByLabelText("Record JSON");
   expect(mutations.save).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("Record JSON"), {
+    target: { value: raw },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(mutations.save).toHaveBeenCalledTimes(1));
   expect(mutations.save.mock.calls[0]![0]).toEqual({
     request: { id, dataJson: raw, updatedAt: token },
   });
   expect(mutations.visibility).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true),
+  );
+  expect(
+    (screen.getByLabelText("Record JSON") as HTMLTextAreaElement).value,
+  ).toBe(formatRegistryJson(raw));
 });
 
 it("keeps dirty text and base token on refetch and disables visibility", async () => {
@@ -178,7 +191,10 @@ it.each([401, 422, 503])(
 it("disables duplicate submission and close while pending", async () => {
   mutations.save.mockReturnValue(new Promise(() => {}));
   await mount();
-  fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+  fireEvent.change(await screen.findByLabelText("Record JSON"), {
+    target: { value: raw },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(mutations.save).toHaveBeenCalledTimes(1));
   expect(
@@ -223,7 +239,10 @@ it("uses the successful response token for subsequent visibility changes", async
   mutations.save.mockResolvedValue(latest);
   mutations.visibility.mockResolvedValue({ ...latest, published: true });
   await mount();
-  fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+  fireEvent.change(await screen.findByLabelText("Record JSON"), {
+    target: { value: raw },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() =>
     expect(client.getQueryData(registryEntryQuery(id).queryKey)).toEqual(
       latest,
@@ -260,6 +279,15 @@ it("creates from unchanged raw text then saves rather than creating again", asyn
   });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await screen.findByRole("button", { name: "Unpublish" });
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true),
+  );
+  fireEvent.change(screen.getByLabelText("Record JSON"), {
+    target: { value: raw },
+  });
   expect(mutations.create.mock.calls[0]![0]).toEqual({
     request: { dataJson: raw },
   });
@@ -308,9 +336,16 @@ it("reloads only after confirmation and uses the freshly fetched token", async (
   await waitFor(() =>
     expect(
       (screen.getByLabelText("Record JSON") as HTMLTextAreaElement).value,
-    ).toBe(raw + "\n"),
+    ).toBe(formatRegistryJson(raw + "\n")),
   );
   expect(mutations.save).toHaveBeenCalledTimes(1);
+  expect(
+    (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+  fireEvent.change(screen.getByLabelText("Record JSON"), {
+    target: { value: raw },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(mutations.save).toHaveBeenCalledTimes(2));
   expect(mutations.save.mock.calls[1]![0].request.updatedAt).toBe(latestToken);
@@ -362,7 +397,10 @@ it("saves synthetic extension JSON verbatim with syntax validation", async () =>
   expect(
     ((await screen.findByLabelText("Record JSON")) as HTMLTextAreaElement)
       .value,
-  ).toBe(approved);
+  ).toBe(formatRegistryJson(approved));
+  fireEvent.change(screen.getByLabelText("Record JSON"), {
+    target: { value: approved },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(mutations.save).toHaveBeenCalled());
   expect(mutations.save.mock.calls[0]![0].request.dataJson).toBe(approved);
@@ -414,7 +452,7 @@ it("retries an initial detail failure without showing perpetual loading", async 
   expect(
     ((await screen.findByLabelText("Record JSON")) as HTMLTextAreaElement)
       .value,
-  ).toBe(raw);
+  ).toBe(formatRegistryJson(raw));
   expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   expect(mutations.save).not.toHaveBeenCalled();
 });
@@ -442,6 +480,7 @@ it("maps server issues after Save and clears stale markers on edit", async () =>
   );
   await mount();
   const editor = await screen.findByLabelText("Record JSON");
+  fireEvent.change(editor, { target: { value: raw } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await screen.findByRole("alert");
   expect(JSON.parse(editor.getAttribute("data-server-issues")!)).toHaveLength(
@@ -489,3 +528,34 @@ it("shows the latest request failure after retrying a validation failure", async
   expect((editor as HTMLTextAreaElement).value).toBe(raw + " ");
   expect(mutations.save.mock.calls[1]![0].request.updatedAt).toBe(token);
 });
+
+it.each([
+  raw,
+  '{"unknown":{"integer":9007199254740993,"exponent":1e999}}',
+  '{"padding":"' + "x".repeat(8 * 1024 * 1024 - 100) + '"}',
+])(
+  "pretty prints stored syntax-valid JSON without dirtying the baseline %#",
+  async (dataJson) => {
+    client.setQueryData(registryEntryQuery(id).queryKey, {
+      ...entry,
+      dataJson,
+    });
+    const confirm = vi.fn();
+    vi.stubGlobal("confirm", confirm);
+    await mount();
+    const editor = await screen.findByLabelText("Record JSON");
+    expect(
+      (editor as HTMLTextAreaElement).value === formatRegistryJson(dataJson),
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Republish" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(confirm).not.toHaveBeenCalled();
+  },
+);

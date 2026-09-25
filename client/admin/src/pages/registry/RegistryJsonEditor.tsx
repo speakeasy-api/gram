@@ -52,7 +52,20 @@ export type RegistryJsonEditorProps = {
 const RICH_EDITOR_LIMIT = 1024 * 1024;
 
 export default class RegistryJsonEditor extends Component<RegistryJsonEditorProps> {
-  state = { mounted: false };
+  // Admin CSS follows the system preference; it has no theme override.
+  private readonly colorScheme = window.matchMedia(
+    "(prefers-color-scheme: dark)",
+  );
+  state = { mounted: false, dark: this.colorScheme.matches };
+
+  componentDidMount(): void {
+    this.colorScheme.addEventListener("change", this.updateTheme);
+  }
+
+  private updateTheme = (): void => {
+    this.setState({ dark: this.colorScheme.matches });
+  };
+
   // Fix presentation at mount: replacing the editor during an edit loses undo.
   private readonly large = this.props.value.length > RICH_EDITOR_LIMIT;
   private readonly modelPath = `gram-registry://draft/${crypto.randomUUID()}.json`;
@@ -60,6 +73,7 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
   private subscriptions: monaco.IDisposable[] = [];
 
   componentWillUnmount(): void {
+    this.colorScheme.removeEventListener("change", this.updateTheme);
     this.disposeSubscriptions();
   }
 
@@ -165,6 +179,7 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
               <MonacoEditor
                 height="384px"
                 language="json"
+                theme={this.state.dark ? "vs-dark" : "vs"}
                 path={this.modelPath}
                 value={value}
                 onChange={(next) => onChange(next ?? "")}

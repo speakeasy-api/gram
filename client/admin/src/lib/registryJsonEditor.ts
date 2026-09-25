@@ -1,10 +1,4 @@
-import {
-  applyEdits,
-  format,
-  parseTree,
-  type Node,
-  type ParseError,
-} from "jsonc-parser";
+import { format, parseTree, type Node, type ParseError } from "jsonc-parser";
 import type { ValidationIssue } from "./registryValidation";
 
 // Formatting edits only whitespace; parsed numbers/strings never become output.
@@ -14,10 +8,20 @@ export function formatRegistryJson(text: string): string | null {
   } catch {
     return null;
   }
-  return applyEdits(
-    text,
-    format(text, undefined, { tabSize: 2, insertSpaces: true, eol: "\n" }),
-  );
+  // applyEdits copies the entire document per edit, which is quadratic for
+  // large stored records. Join the formatter's ordered whitespace edits once.
+  const parts: string[] = [];
+  let offset = 0;
+  for (const edit of format(text, undefined, {
+    tabSize: 2,
+    insertSpaces: true,
+    eol: "\n",
+  })) {
+    parts.push(text.slice(offset, edit.offset), edit.content);
+    offset = edit.offset + edit.length;
+  }
+  parts.push(text.slice(offset));
+  return parts.join("");
 }
 
 // registry.go joins sanitized validation messages with "; ". Preserve generic
