@@ -8,10 +8,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -19,6 +22,10 @@ import (
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/risk"
+	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	templatesrepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -43,6 +50,24 @@ func scanAttributes(recorder *tracetest.SpanRecorder, surface string) []map[attr
 		}
 	}
 	return events
+}
+
+type hostedPolicyLookup struct {
+	policy         policycore.Policy
+	scopedServerID uuid.UUID
+}
+
+func (l hostedPolicyLookup) ListEnabledForMCPServer(_ context.Context, _ string, _, serverID uuid.UUID, _ string) ([]policycore.Policy, error) {
+	if serverID != l.scopedServerID {
+		return []policycore.Policy{}, nil
+	}
+	return []policycore.Policy{l.policy}, nil
+}
+
+type hostedPolicyDetector struct{}
+
+func (hostedPolicyDetector) ScanMCPPolicy(context.Context, policycore.Policy, risk.MCPScanRequest) ([]scanners.Finding, error) {
+	return []scanners.Finding{{RuleID: "hosted.block", Description: "Blocked hosted input", Tags: []string{}, Source: "gitleaks", Confidence: 1}}, nil
 }
 
 func TestRiskScan_ProxiedMetaMember(t *testing.T) {
@@ -199,6 +224,70 @@ func TestRiskScan_HostedHTTPPreservesPayloadAndErrorResult(t *testing.T) {
 	require.Equal(t, "scan_http", events[0][attr.ToolNameKey])
 	require.Equal(t, mcpriskscan.MethodToolsCall, events[0]["gram.mcp.risk.scan.method"])
 	require.Equal(t, mcpriskscan.PhaseRequest, events[0]["gram.mcp.risk.scan.phase"])
+}
+
+func TestRiskScan_HostedScopedBlockPolicyOnlyStopsMatchingServer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	slug := "scan-block-" + uuid.NewString()[:8]
+	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, slug)
+	scopedServer := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.Nil)
+	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "scan_block")
+	evaluator := mcpriskscan.NewPolicyEvaluator(
+		ti.logger,
+		ti.tracerProvider,
+		testenv.NewMeterProvider(t),
+		hostedPolicyLookup{
+			policy: policycore.Policy{
+				ID:             uuid.New(),
+				ProjectID:      *authCtx.ProjectID,
+				OrganizationID: authCtx.ActiveOrganizationID,
+				Name:           "Hosted policy",
+				Action:         "block",
+			},
+			scopedServerID: scopedServer.ID,
+		},
+		hostedPolicyDetector{},
+		gcp.NewNoopPublisher[*riskv1.Finding](),
+		mcpriskscan.DefaultPolicyConfig,
+	)
+	ti.service.SetRiskScanEvaluator(evaluator)
+	var upstreamCalls atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		upstreamCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	t.Cleanup(upstream.Close)
+	body := makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": "scan_block", "arguments": map[string]any{"body": map[string]any{"message": "blocked"}},
+	})
+
+	response, err := servePublicHTTP(t, t.Context(), ti, slug, body, "", map[string]string{"Mcp-Test-Server-Url": upstream.URL})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code)
+	rpc := decodeRPCResponse(t, response)
+	var rejected struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(rpc["error"], &rejected))
+	require.Equal(t, int(oops.MCPCodeForbidden), rejected.Code)
+	require.Contains(t, rejected.Message, "Hosted policy")
+	require.Zero(t, upstreamCalls.Load())
+
+	otherSlug := "scan-pass-" + uuid.NewString()[:8]
+	otherToolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, otherSlug)
+	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, otherToolset.ID, otherSlug, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.Nil)
+	addHTTPTools(t, ctx, ti, otherToolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "scan_block")
+	response, err = servePublicHTTP(t, t.Context(), ti, otherSlug, body, "", map[string]string{"Mcp-Test-Server-Url": upstream.URL})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code)
+	rpc = decodeRPCResponse(t, response)
+	require.Empty(t, rpc["error"])
+	require.Equal(t, int32(1), upstreamCalls.Load())
 }
 
 func TestRiskScan_PromptAsToolPreservesRendering(t *testing.T) {
