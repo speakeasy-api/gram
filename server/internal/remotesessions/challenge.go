@@ -1329,14 +1329,17 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	redirectBaseURL := m.serverURL.String()
 	if state.Authority.IsPrivate() {
 		redirectBaseURL = state.Authority.BaseURL
-	} else if state.Authority.Surface == requestorigin.SurfaceCustomDomain {
-		// Return to the custom domain the challenge was minted on. Resolve the
-		// domain by the mint host, as the custom-domain middleware does, rather
-		// than by the endpoint's domain id: an endpoint reachable on more than
-		// one of the organization's domains pins the id of only one of them.
-		if err := m.checkLiveCustomDomain(ctx, state.Authority); err != nil {
-			logger.WarnContext(ctx, "remote login returning to platform host: mint custom domain is not live", attr.SlogError(err))
-		} else {
+	} else if state.Authority.Surface == requestorigin.SurfacePlatform && state.Authority.BaseURL != "" {
+		// A platform authority's origin is the server URL or an extra platform
+		// host (GRAM_PLATFORM_HOSTS), stamped by request middleware at mint.
+		// Consent revalidates it on arrival, so return to the host the flow
+		// started on rather than the configured server URL.
+		redirectBaseURL = state.Authority.BaseURL
+	} else if state.Authority.Surface == requestorigin.SurfaceCustomDomain && state.Authority.CustomDomainID.Valid {
+		domain, derr := customdomainsrepo.New(m.db).GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
+			ID: state.Authority.CustomDomainID.UUID, OrganizationID: state.Authority.OrganizationID,
+		})
+		if derr == nil && domain.Verified && domain.Activated && !domain.Deleted && "https://"+strings.ToLower(domain.Domain) == state.Authority.BaseURL {
 			redirectBaseURL = state.Authority.BaseURL
 		}
 	}
@@ -1380,28 +1383,6 @@ func (m *ChallengeManager) recordCIMDAuthorizationFailure(ctx context.Context, s
 	}
 
 	m.registrationTelemetry.RecordFailure(ctx, registration.MethodCIMD, failure)
-}
-
-// checkLiveCustomDomain checks that the custom domain a challenge was minted
-// on still admits the minting organization, so the consent redirect only
-// returns to a host that would accept the continuation.
-func (m *ChallengeManager) checkLiveCustomDomain(ctx context.Context, authority networkingress.Authority) error {
-	baseURL, err := url.Parse(authority.BaseURL)
-	if err != nil || baseURL.Scheme != "https" || baseURL.Path != "" {
-		return fmt.Errorf("mint origin %q is not a custom-domain origin", authority.BaseURL)
-	}
-	host, err := requestorigin.CanonicalHost(baseURL.Host)
-	if err != nil || "https://"+host != authority.BaseURL {
-		return fmt.Errorf("mint origin %q is not canonical", authority.BaseURL)
-	}
-	domain, err := customdomainsrepo.New(m.db).GetCustomDomainByDomain(ctx, host)
-	if err != nil {
-		return fmt.Errorf("load mint custom domain: %w", err)
-	}
-	if !domain.Verified || !domain.Activated || domain.OrganizationID != authority.OrganizationID {
-		return fmt.Errorf("mint custom domain no longer admits the organization")
-	}
-	return nil
 }
 
 // denied rejects the callback; the public message echoes only IETF-registered error codes.
