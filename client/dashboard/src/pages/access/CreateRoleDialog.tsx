@@ -183,8 +183,14 @@ export function CreateRoleDialog({
   );
   const agentManagementEnabled =
     useFeatureFlag(FEATURE_FLAGS.agentManagement).status === "enabled";
+  // throwOnError is off because the agents service answers 404 (and 403 for
+  // callers without agent:read) when the rollout is off for the organization,
+  // and the global query policy only suppresses 401 and 403. The agent picker
+  // is optional here, so on any error it shows no agents instead of taking the
+  // role editor down.
   const { data: agentsData } = useAgents(undefined, undefined, {
     enabled: agentManagementEnabled,
+    throwOnError: false,
   });
   // Suspended and revoked agents keep the roles they hold but cannot be given
   // new ones, so only active agents are offered. An agent already on the role
