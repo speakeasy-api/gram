@@ -391,6 +391,33 @@ WHERE du.organization_id = @organization_id
 GROUP BY attribute.key, attribute.value
 ORDER BY attribute.key, attribute.value;
 
+-- name: ListMappableDirectoryAttributeValues :many
+-- Attribute values an admin can map to a role. Keys with more than
+-- @max_values_per_key distinct values are left out: those hold per-person
+-- data (emails, employee ids) that is no use as a mapping source.
+SELECT attribute_key, attribute_value, member_count
+FROM (
+  SELECT
+    attribute.key::text AS attribute_key,
+    attribute.value::text AS attribute_value,
+    COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint AS member_count,
+    COUNT(*) OVER (PARTITION BY attribute.key) AS values_per_key
+  FROM directory_users AS du
+  CROSS JOIN LATERAL jsonb_each_text(
+    CASE jsonb_typeof(du.attributes)
+      WHEN 'object' THEN du.attributes
+      ELSE '{}'::jsonb
+    END
+  ) AS attribute(key, value)
+  WHERE du.organization_id = @organization_id
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+    AND attribute.value IS NOT NULL
+  GROUP BY attribute.key, attribute.value
+) AS attribute_values
+WHERE values_per_key <= sqlc.arg(max_values_per_key)::bigint
+ORDER BY attribute_key, attribute_value;
+
 -- name: ClearOrganizationDirectoryUserLinksFixture :exec
 -- Test fixture: exercise email fallback without a direct Gram user link.
 UPDATE directory_users SET user_id = NULL WHERE organization_id = @organization_id;

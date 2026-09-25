@@ -1612,7 +1612,7 @@ profiles AS (
     WHERE d.organization_id = $1
       AND d.deleted IS FALSE
       AND d.workos_deleted IS FALSE
-      AND (d.user_id = members.id OR LOWER(d.email) = LOWER(members.email))
+      AND (d.user_id = members.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(members.email)))
     ORDER BY (d.user_id = members.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
     LIMIT 1
   ) AS p
@@ -1643,6 +1643,7 @@ JOIN profiles
   )
 WHERE drm.organization_id = $1
   AND drm.deleted IS FALSE
+  AND ($2::text[] IS NULL OR drm.role_urn = ANY($2::text[]))
   AND NOT EXISTS (
     SELECT 1
     FROM organization_role_assignments AS ora
@@ -1654,6 +1655,11 @@ WHERE drm.organization_id = $1
 GROUP BY drm.role_urn
 `
 
+type ListDirectoryMappedRoleMemberCountsParams struct {
+	OrganizationID string
+	RoleUrns       []string
+}
+
 type ListDirectoryMappedRoleMemberCountsRow struct {
 	RoleUrn     string
 	MemberCount int64
@@ -1663,8 +1669,9 @@ type ListDirectoryMappedRoleMemberCountsRow struct {
 // mapping. Members with a live direct assignment of the same role are left
 // out, so callers add this to the direct member count. Each member's
 // directory profile is chosen the same way as in ListUserRolePrincipals.
-func (q *Queries) ListDirectoryMappedRoleMemberCounts(ctx context.Context, organizationID string) ([]ListDirectoryMappedRoleMemberCountsRow, error) {
-	rows, err := q.db.Query(ctx, listDirectoryMappedRoleMemberCounts, organizationID)
+// A NULL role_urns counts every role; otherwise only the listed ones.
+func (q *Queries) ListDirectoryMappedRoleMemberCounts(ctx context.Context, arg ListDirectoryMappedRoleMemberCountsParams) ([]ListDirectoryMappedRoleMemberCountsRow, error) {
+	rows, err := q.db.Query(ctx, listDirectoryMappedRoleMemberCounts, arg.OrganizationID, arg.RoleUrns)
 	if err != nil {
 		return nil, err
 	}
@@ -2410,7 +2417,7 @@ profile AS (
   WHERE d.organization_id = $1
     AND d.deleted IS FALSE
     AND d.workos_deleted IS FALSE
-    AND (d.user_id = member.id OR LOWER(d.email) = LOWER(member.email))
+    AND (d.user_id = member.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(member.email)))
   ORDER BY (d.user_id = member.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
   LIMIT 1
 ),
@@ -2478,7 +2485,8 @@ type ListUserRolePrincipalsParams struct {
 // through directory role mappings. A mapping applies when its group contains
 // the member's directory profile, or its attribute value matches it. The
 // profile is the directory user linked to the member, falling back to an
-// email match. Mappings that point at a deleted role are skipped. Callers
+// unlinked directory user with the same email. A profile linked to another
+// user never matches. Mappings that point at a deleted role are skipped. Callers
 // dedupe roles that come from both sources.
 func (q *Queries) ListUserRolePrincipals(ctx context.Context, arg ListUserRolePrincipalsParams) ([]string, error) {
 	rows, err := q.db.Query(ctx, listUserRolePrincipals, arg.OrganizationID, arg.UserID)
@@ -2529,6 +2537,19 @@ SELECT pg_advisory_xact_lock(hashtextextended(
 // and this keeps concurrent batches bounded and deterministic.
 func (q *Queries) LockChallengeResolutions(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, lockChallengeResolutions, organizationID)
+	return err
+}
+
+const lockDirectoryRoleMappingSource = `-- name: LockDirectoryRoleMappingSource :exec
+SELECT pg_advisory_xact_lock(hashtextextended('access.directory_role_mapping:' || $1::text, 0))
+`
+
+// Serializes mapping writes for one group or attribute value, so the prior
+// role read before an upsert is still current when the upsert lands. Row
+// locks cannot do this for a first-time mapping, which has no row yet. Held
+// until the transaction ends.
+func (q *Queries) LockDirectoryRoleMappingSource(ctx context.Context, sourceKey string) error {
+	_, err := q.db.Exec(ctx, lockDirectoryRoleMappingSource, sourceKey)
 	return err
 }
 

@@ -85,7 +85,7 @@ func (r *RoleManager) ListRoles(ctx context.Context, gramOrgID string) (*gen.Lis
 	if err != nil {
 		return nil, err
 	}
-	mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, r.db, gramOrgID)
+	mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, r.db, gramOrgID, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -481,7 +481,7 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 			trace.SpanFromContext(ctx).SetAttributes(attr.AccessRoleDBWriteFailed(true))
 			return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "upsert local role record").LogError(ctx, r.logger)
 		}
-		mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, tx, gramOrgID)
+		mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, tx, gramOrgID, []string{updatedRow.RoleUrn})
 		if err != nil {
 			return RoleUpdateResult{}, RoleReconciliation{}, err
 		}
@@ -1250,7 +1250,7 @@ func (r *RoleManager) getLocalRoleByIDTx(ctx context.Context, dbtx repo.DBTX, gr
 	if err != nil {
 		return localRole{}, err
 	}
-	mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, dbtx, gramOrgID)
+	mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, dbtx, gramOrgID, []string{row.RoleUrn})
 	if err != nil {
 		return localRole{}, err
 	}
@@ -1285,7 +1285,7 @@ func (r *RoleManager) getLocalRoleBySlugTx(ctx context.Context, dbtx repo.DBTX, 
 	if err != nil {
 		return localRole{}, err
 	}
-	mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, dbtx, gramOrgID)
+	mappedMembers, err := r.directoryMappedMemberCountsTx(ctx, dbtx, gramOrgID, []string{row.RoleUrn})
 	if err != nil {
 		return localRole{}, err
 	}
@@ -1334,9 +1334,13 @@ func (r *RoleManager) agentIDsByRoleTx(ctx context.Context, dbtx repo.DBTX, gram
 
 // directoryMappedMemberCountsTx returns, per role principal URN, the members
 // who hold the role only through a directory role mapping. Adding it to the
-// direct assignment count gives everyone who holds the role.
-func (r *RoleManager) directoryMappedMemberCountsTx(ctx context.Context, dbtx repo.DBTX, gramOrgID string) (map[string]int, error) {
-	rows, err := repo.New(dbtx).ListDirectoryMappedRoleMemberCounts(ctx, gramOrgID)
+// direct assignment count gives everyone who holds the role. A nil roleURNs
+// counts every role; otherwise only the listed ones.
+func (r *RoleManager) directoryMappedMemberCountsTx(ctx context.Context, dbtx repo.DBTX, gramOrgID string, roleURNs []string) (map[string]int, error) {
+	rows, err := repo.New(dbtx).ListDirectoryMappedRoleMemberCounts(ctx, repo.ListDirectoryMappedRoleMemberCountsParams{
+		OrganizationID: gramOrgID,
+		RoleUrns:       roleURNs,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "count directory mapped role members").LogError(ctx, r.logger)
 	}

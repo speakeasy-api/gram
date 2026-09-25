@@ -2,6 +2,7 @@ package access
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -23,6 +25,13 @@ import (
 )
 
 func seedMappingDirectoryGroup(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, name string) uuid.UUID {
+	t.Helper()
+
+	groupID, _ := seedMappingDirectoryGroupWithWorkOSID(t, ctx, conn, orgID, name)
+	return groupID
+}
+
+func seedMappingDirectoryGroupWithWorkOSID(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, name string) (uuid.UUID, string) {
 	t.Helper()
 
 	now := time.Now().UTC()
@@ -38,15 +47,39 @@ func seedMappingDirectoryGroup(t *testing.T, ctx context.Context, conn *pgxpool.
 	})
 	require.NoError(t, err)
 
-	return groupID
+	return groupID, workosGroupID
 }
 
-func seedMappingDirectoryUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, userID, email, attributes string) {
+func deleteMappingDirectoryGroup(t *testing.T, ctx context.Context, conn *pgxpool.Pool, workosGroupID string) {
+	t.Helper()
+
+	_, err := directoryrepo.New(conn).DeleteDirectoryGroupByWorkOSID(ctx, directoryrepo.DeleteDirectoryGroupByWorkOSIDParams{
+		WorkosDeletedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
+		WorkosLastEventID:      conv.ToPGText("event_delete_" + workosGroupID),
+		WorkosDirectoryGroupID: workosGroupID,
+	})
+	require.NoError(t, err)
+}
+
+func addMappingGroupMember(t *testing.T, ctx context.Context, conn *pgxpool.Pool, directoryUserID uuid.UUID, workosUserID string, groupID uuid.UUID, workosGroupID string) {
+	t.Helper()
+
+	_, err := directoryrepo.New(conn).OpenDirectoryUserGroupMembership(ctx, directoryrepo.OpenDirectoryUserGroupMembershipParams{
+		DirectoryUserID:        directoryUserID,
+		DirectoryGroupID:       groupID,
+		WorkosDirectoryUserID:  workosUserID,
+		WorkosDirectoryGroupID: workosGroupID,
+		WorkosCreatedAt:        conv.ToPGTimestamptz(time.Now().UTC()),
+	})
+	require.NoError(t, err)
+}
+
+func seedMappingDirectoryUser(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID, userID, email, attributes string) (uuid.UUID, string) {
 	t.Helper()
 
 	now := time.Now().UTC()
 	workosUserID := "du_" + uuid.NewString()
-	_, err := directoryrepo.New(conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
+	directoryUserID, err := directoryrepo.New(conn).UpsertDirectoryUser(ctx, directoryrepo.UpsertDirectoryUserParams{
 		OrganizationID:        orgID,
 		UserID:                conv.ToPGTextEmpty(userID),
 		WorkosDirectoryUserID: workosUserID,
@@ -58,6 +91,8 @@ func seedMappingDirectoryUser(t *testing.T, ctx context.Context, conn *pgxpool.P
 		WorkosLastEventID:     conv.ToPGText("event_" + workosUserID),
 	})
 	require.NoError(t, err)
+
+	return directoryUserID, workosUserID
 }
 
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
@@ -317,4 +352,188 @@ func TestService_DirectoryRoleMapping_GrantsRoleToMatchingMember(t *testing.T) {
 	role, err = ti.service.GetRole(ctx, &gen.GetRolePayload{ID: builderID})
 	require.NoError(t, err)
 	require.Equal(t, 1, role.MemberCount)
+}
+
+func TestService_SyncDirectoryGroups_KeepsDeletedAndNewerGroups(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+	dirQueries := directoryrepo.New(ti.conn)
+
+	_, deletedWorkOSID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Retired")
+	deleteMappingDirectoryGroup(t, ctx, ti.conn, deletedWorkOSID)
+	_, newerWorkOSID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
+	newerBefore, err := dirQueries.GetDirectoryGroupSyncStateByWorkOSID(ctx, newerWorkOSID)
+	require.NoError(t, err)
+
+	stale := time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339)
+	later := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	ti.roles.On("ListDirectories", mock.Anything, mockidp.MockOrgID).Return([]thirdpartyworkos.Directory{
+		{ID: "directory_linked", OrganizationID: mockidp.MockOrgID, Type: "okta scim v2.0", Name: "Okta", State: "linked", CreatedAt: "", UpdatedAt: ""},
+	}, nil).Once()
+	ti.roles.On("ListDirectoryGroups", mock.Anything, "directory_linked").Return([]thirdpartyworkos.DirectoryGroup{
+		// Newer than the delete event: only the deleted guard keeps it deleted.
+		{ID: deletedWorkOSID, DirectoryID: "directory_linked", OrganizationID: mockidp.MockOrgID, Name: "Retired", RawAttributes: nil, CreatedAt: stale, UpdatedAt: later},
+		// Older than the stored row: only the timestamp guard keeps it as is.
+		{ID: newerWorkOSID, DirectoryID: "directory_linked", OrganizationID: mockidp.MockOrgID, Name: "Renamed", RawAttributes: nil, CreatedAt: stale, UpdatedAt: stale},
+	}, nil).Once()
+
+	_, err = ti.service.SyncDirectoryGroups(ctx, &gen.SyncDirectoryGroupsPayload{})
+	require.NoError(t, err)
+
+	deleted, err := dirQueries.GetDirectoryGroupByWorkOSID(ctx, deletedWorkOSID)
+	require.NoError(t, err)
+	require.True(t, deleted.Deleted, "a listing must not restore a group an event deleted")
+
+	newer, err := dirQueries.GetDirectoryGroupByWorkOSID(ctx, newerWorkOSID)
+	require.NoError(t, err)
+	require.Equal(t, "Engineering", newer.Name, "an older listing must not overwrite a newer row")
+	newerAfter, err := dirQueries.GetDirectoryGroupSyncStateByWorkOSID(ctx, newerWorkOSID)
+	require.NoError(t, err)
+	require.Equal(t, newerBefore.WorkosUpdatedAt, newerAfter.WorkosUpdatedAt)
+}
+
+func TestService_DirectoryRoleMapping_GroupMappingFollowsGroupLifecycle(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder")
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_eng_user", "eng@test.com", "Eng User", "user_eng", "membership_eng")
+	directoryUserID, workosUserID := seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_eng_user", "eng@test.com", `{}`)
+	groupID, workosGroupID := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
+	addMappingGroupMember(t, ctx, ti.conn, directoryUserID, workosUserID, groupID, workosGroupID)
+
+	group := groupID.String()
+	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+		SourceKind:       directoryRoleMappingSourceGroup,
+		DirectoryGroupID: &group,
+		RoleUrn:          builder.String(),
+	})
+	require.NoError(t, err)
+
+	principals, err := authz.ResolveUserPrincipals(ctx, ti.conn, orgID, "local_eng_user")
+	require.NoError(t, err)
+	require.Contains(t, principals, builder)
+
+	deleteMappingDirectoryGroup(t, ctx, ti.conn, workosGroupID)
+	principals, err = authz.ResolveUserPrincipals(ctx, ti.conn, orgID, "local_eng_user")
+	require.NoError(t, err)
+	require.NotContains(t, principals, builder, "a deleted group grants nothing")
+}
+
+func TestService_DirectoryRoleMapping_SkipsDeletedRole(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder")
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_sales_user", "sales@test.com", "Sales User", "user_sales", "membership_sales")
+	seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_sales_user", "sales@test.com", `{"department_name":"Sales"}`)
+
+	key := "department_name"
+	value := "Sales"
+	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+		SourceKind:     directoryRoleMappingSourceAttribute,
+		AttributeKey:   &key,
+		AttributeValue: &value,
+		RoleUrn:        builder.String(),
+	})
+	require.NoError(t, err)
+
+	principals, err := authz.ResolveUserPrincipals(ctx, ti.conn, orgID, "local_sales_user")
+	require.NoError(t, err)
+	require.Contains(t, principals, builder)
+
+	_, err = repo.New(ti.conn).MarkOrganizationRoleDeletedLocally(ctx, repo.MarkOrganizationRoleDeletedLocallyParams{
+		OrganizationID: orgID,
+		WorkosSlug:     "builder",
+	})
+	require.NoError(t, err)
+
+	principals, err = authz.ResolveUserPrincipals(ctx, ti.conn, orgID, "local_sales_user")
+	require.NoError(t, err)
+	require.NotContains(t, principals, builder, "a mapping to a deleted role grants nothing")
+}
+
+func TestService_DirectoryRoleMapping_EmailFallbackIgnoresProfileLinkedToAnotherUser(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	builderID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder")
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_user_a", "a@test.com", "User A", "user_a", "membership_a")
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_user_b", "b@test.com", "User B", "user_b", "membership_b")
+	// User A's directory profile carries user B's email address.
+	seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_user_a", "b@test.com", `{"department_name":"Sales"}`)
+
+	key := "department_name"
+	value := "Sales"
+	_, err := ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+		SourceKind:     directoryRoleMappingSourceAttribute,
+		AttributeKey:   &key,
+		AttributeValue: &value,
+		RoleUrn:        builder.String(),
+	})
+	require.NoError(t, err)
+
+	principals, err := authz.ResolveUserPrincipals(ctx, ti.conn, orgID, "local_user_a")
+	require.NoError(t, err)
+	require.Contains(t, principals, builder)
+
+	principals, err = authz.ResolveUserPrincipals(ctx, ti.conn, orgID, "local_user_b")
+	require.NoError(t, err)
+	require.NotContains(t, principals, builder, "a profile linked to another user must not match by email")
+
+	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: builderID})
+	require.NoError(t, err)
+	require.Equal(t, 1, role.MemberCount)
+}
+
+func TestService_ListDirectoryRoleMappings_LeavesOutHighCardinalityAttributeKeys(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	for i := range maxDirectoryAttributeOptionsPerKey + 1 {
+		email := fmt.Sprintf("person%d@test.com", i)
+		seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "", email, fmt.Sprintf(`{"department_name":"Sales","employee_id":"E%d"}`, i))
+	}
+
+	listed, err := ti.service.ListDirectoryRoleMappings(ctx, &gen.ListDirectoryRoleMappingsPayload{})
+	require.NoError(t, err)
+	require.Len(t, listed.Attributes, 1)
+	require.Equal(t, "department_name", listed.Attributes[0].Key)
+	require.Equal(t, "Sales", listed.Attributes[0].Value)
+
+	// The cap only trims the options: an existing value can still be mapped.
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder").String()
+	key := "employee_id"
+	value := "E7"
+	_, err = ti.service.SetDirectoryRoleMapping(ctx, &gen.SetDirectoryRoleMappingPayload{
+		SourceKind:     directoryRoleMappingSourceAttribute,
+		AttributeKey:   &key,
+		AttributeValue: &value,
+		RoleUrn:        builder,
+	})
+	require.NoError(t, err)
 }

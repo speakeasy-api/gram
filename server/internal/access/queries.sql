@@ -1225,13 +1225,21 @@ ORDER BY LOWER(name), id;
 -- global_roles and has no per-organization row to lock.
 SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || sqlc.arg(role_urn)::text, 0));
 
+-- name: LockDirectoryRoleMappingSource :exec
+-- Serializes mapping writes for one group or attribute value, so the prior
+-- role read before an upsert is still current when the upsert lands. Row
+-- locks cannot do this for a first-time mapping, which has no row yet. Held
+-- until the transaction ends.
+SELECT pg_advisory_xact_lock(hashtextextended('access.directory_role_mapping:' || sqlc.arg(source_key)::text, 0));
+
 -- name: ListUserRolePrincipals :many
 -- Every role principal a member holds, in one read: direct role assignments
 -- first (the same rows as ListMemberRolePrincipalsByUser), then roles granted
 -- through directory role mappings. A mapping applies when its group contains
 -- the member's directory profile, or its attribute value matches it. The
 -- profile is the directory user linked to the member, falling back to an
--- email match. Mappings that point at a deleted role are skipped. Callers
+-- unlinked directory user with the same email. A profile linked to another
+-- user never matches. Mappings that point at a deleted role are skipped. Callers
 -- dedupe roles that come from both sources.
 WITH direct AS (
   SELECT
@@ -1264,7 +1272,7 @@ profile AS (
   WHERE d.organization_id = @organization_id
     AND d.deleted IS FALSE
     AND d.workos_deleted IS FALSE
-    AND (d.user_id = member.id OR LOWER(d.email) = LOWER(member.email))
+    AND (d.user_id = member.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(member.email)))
   ORDER BY (d.user_id = member.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
   LIMIT 1
 ),
@@ -1326,6 +1334,7 @@ ORDER BY source_rank, sort_key;
 -- mapping. Members with a live direct assignment of the same role are left
 -- out, so callers add this to the direct member count. Each member's
 -- directory profile is chosen the same way as in ListUserRolePrincipals.
+-- A NULL role_urns counts every role; otherwise only the listed ones.
 WITH members AS (
   SELECT u.id, u.email
   FROM users AS u
@@ -1344,7 +1353,7 @@ profiles AS (
     WHERE d.organization_id = @organization_id
       AND d.deleted IS FALSE
       AND d.workos_deleted IS FALSE
-      AND (d.user_id = members.id OR LOWER(d.email) = LOWER(members.email))
+      AND (d.user_id = members.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(members.email)))
     ORDER BY (d.user_id = members.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
     LIMIT 1
   ) AS p
@@ -1375,6 +1384,7 @@ JOIN profiles
   )
 WHERE drm.organization_id = @organization_id
   AND drm.deleted IS FALSE
+  AND (sqlc.narg(role_urns)::text[] IS NULL OR drm.role_urn = ANY(sqlc.narg(role_urns)::text[]))
   AND NOT EXISTS (
     SELECT 1
     FROM organization_role_assignments AS ora

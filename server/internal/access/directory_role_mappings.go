@@ -24,6 +24,12 @@ import (
 const (
 	directoryRoleMappingSourceGroup     = "group"
 	directoryRoleMappingSourceAttribute = "attribute"
+
+	// maxDirectoryAttributeOptionsPerKey caps the attribute keys offered as
+	// mapping sources. A key with more distinct values than this holds
+	// per-person data (emails, employee ids), so it is left out of the list.
+	// SetDirectoryRoleMapping still accepts any existing key and value.
+	maxDirectoryAttributeOptionsPerKey = 100
 )
 
 // ListDirectoryRoleMappings returns the organization's live mappings together
@@ -56,7 +62,10 @@ func (s *Service) ListDirectoryRoleMappings(ctx context.Context, _ *gen.ListDire
 		})
 	}
 
-	attributeRows, err := dirQueries.ListActiveDirectoryAttributeValues(ctx, ac.ActiveOrganizationID)
+	attributeRows, err := dirQueries.ListMappableDirectoryAttributeValues(ctx, directoryrepo.ListMappableDirectoryAttributeValuesParams{
+		OrganizationID:  ac.ActiveOrganizationID,
+		MaxValuesPerKey: maxDirectoryAttributeOptionsPerKey,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list directory attribute values").LogError(ctx, s.logger)
 	}
@@ -203,7 +212,8 @@ func (s *Service) SetDirectoryRoleMapping(ctx context.Context, payload *gen.SetD
 		return nil, oops.E(oops.CodeNotFound, ErrRoleNotFound, "role not found").LogError(ctx, s.logger)
 	}
 
-	var sourceLabel string
+	// lockKey serializes writes for this group or attribute value.
+	var sourceLabel, lockKey string
 	var groupName *string
 	if groupID.Valid {
 		name, err := queries.GetActiveDirectoryGroupName(ctx, repo.GetActiveDirectoryGroupNameParams{
@@ -218,6 +228,7 @@ func (s *Service) SetDirectoryRoleMapping(ctx context.Context, payload *gen.SetD
 		}
 		sourceLabel = name
 		groupName = &name
+		lockKey = ac.ActiveOrganizationID + ":group:" + groupID.UUID.String()
 	} else {
 		exists, err := directoryrepo.New(dbtx).DirectoryAttributeValueExists(ctx, directoryrepo.DirectoryAttributeValueExistsParams{
 			OrganizationID: ac.ActiveOrganizationID,
@@ -231,6 +242,11 @@ func (s *Service) SetDirectoryRoleMapping(ctx context.Context, payload *gen.SetD
 			return nil, oops.E(oops.CodeNotFound, nil, "no directory user has this attribute value").LogError(ctx, s.logger)
 		}
 		sourceLabel = *payload.AttributeKey + "=" + *payload.AttributeValue
+		lockKey = ac.ActiveOrganizationID + ":attr:" + sourceLabel
+	}
+
+	if err := queries.LockDirectoryRoleMappingSource(ctx, lockKey); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock directory role mapping source").LogError(ctx, s.logger)
 	}
 
 	var previousRoleURN *string
