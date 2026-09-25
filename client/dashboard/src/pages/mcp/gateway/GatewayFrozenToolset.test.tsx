@@ -6,7 +6,10 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { GatewayFrozenToolset } from "./GatewayFrozenToolset";
+import {
+  GatewayFrozenToolset,
+  type FrozenGatewayConnection,
+} from "./GatewayFrozenToolset";
 import type { GramGatewayToolsetReview } from "@gram/client/models/components/gramgatewaytoolsetreview.js";
 
 const state = vi.hoisted(() => ({
@@ -40,7 +43,7 @@ const tool = (name: string, fingerprint: string) => ({
   definition: { name, inputSchema: { type: "object" } },
 });
 it("leaves changed and new tools unchecked while preserving unchanged approvals", () => {
-  const onApply = vi.fn();
+  const onApply = vi.fn<(value: FrozenGatewayConnection | undefined) => void>();
   const old = {
     fingerprint: "old",
     tools: [tool("same", "v1"), tool("changed", "v1"), tool("removed", "v1")],
@@ -86,7 +89,7 @@ it("clears an old review before a new preview and keeps an issued freeze visible
     review: { fingerprint: "old", tools: [tool("same", "v1")] },
     names: ["same"],
   };
-  const onApply = vi.fn();
+  const onApply = vi.fn<(value: FrozenGatewayConnection | undefined) => void>();
   const { rerender } = render(
     <GatewayFrozenToolset
       gatewayId="gateway"
