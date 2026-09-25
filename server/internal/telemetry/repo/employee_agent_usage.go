@@ -76,7 +76,7 @@ func (q *Queries) SearchEmployeeAgentUsage(ctx context.Context, arg SearchEmploy
 		Where("time_bucket <= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd).
 		// Email-keyed rows only; the empty-email bucket is handled by
 		// ListEmaillessIdentities so it isn't shown as one synthetic user.
-		Where("user_email != ''"). //nolint:glint // fold-neutral emptiness check - the fold never maps empty to non-empty or back
+		Where("user_email != ''"). //nolint:glint // norawuseremailfilter: fold-neutral emptiness check - the fold never maps empty to non-empty or back
 		GroupBy(emailKey).
 		// Order by the group expression, not the alias: the user_email alias
 		// shadows the base column and ClickHouse resolves ORDER BY identifiers
@@ -157,7 +157,7 @@ func (q *Queries) ListEmaillessIdentities(ctx context.Context, arg ListEmailless
 	sb = sb.GroupBy("user_id").
 		// Keep only user_ids that never co-occur with an email in the window;
 		// those that do are folded into an email key by SearchEmployeeAgentUsage.
-		Having("max(user_email != '') = 0"). //nolint:glint // fold-neutral emptiness check partitioning email-less identities
+		Having("max(user_email != '') = 0"). //nolint:glint // norawuseremailfilter: fold-neutral emptiness check partitioning email-less identities
 		OrderBy("last_seen_unix_nano DESC", "user_id DESC").
 		Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
 

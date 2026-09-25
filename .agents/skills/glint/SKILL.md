@@ -9,6 +9,7 @@ metadata:
 `glint` is Gram's package of custom `go/analysis` analyzers, and `gcl` is the golangci-lint custom-build configuration that loads `glint` as a plugin. Together they automate enforcement of project coding conventions and bug-prevention rules so the same feedback isn't re-litigated in PR review.
 
 - Plugin entry point: [glint/plugin.go](../../../glint/plugin.go) — registers the plugin via `register.Plugin("glint", New)`, defines the `settings`/`ruleSettings` structs, and lists every analyzer in `BuildAnalyzers`.
+- Second plugin: [glint/nolint_plugin.go](../../../glint/nolint_plugin.go) registers `glintnolint`, which polices `//nolint:glint` directives. It is a separate linter name because a `//nolint:glint` directive would otherwise suppress the diagnostic that reports it. It is enabled in `server/.golangci.yaml` next to `glint`, and derives the valid analyzer names from `BuildAnalyzers`, so new analyzers need no extra wiring there.
 - gcl wiring: [server/.custom-gcl.yml](../../../server/.custom-gcl.yml) — declares `github.com/speakeasy-api/gram/glint` as the imported plugin module for the custom golangci-lint binary. Its `version` must match the golangci-lint pinned in [mise.toml](../../../mise.toml); `mise run lint:server` refuses to run otherwise.
 - `glint` is its own Go module ([glint/go.mod](../../../glint/go.mod)), separate from the root module, so that the custom build only depends on `golang.org/x/tools` and `plugin-module-register` at the versions golangci-lint itself uses, and so that server dependency bumps never rebuild `gcl`. Keep it that way: never import a root-module package from `glint`. The one shared type, the `annotations.Service` marker embedded by services, lives in the root module at [server/internal/annotations](../../../server/internal/annotations) and analyzers match it by import path.
 - Tests run with `mise run test:glint` (CI runs them in the `glint-test` job).
@@ -146,7 +147,7 @@ type noRepoFieldsInServiceSettings struct {
 }
 ```
 
-The default opt-out for end users is the standard `//nolint:glint` directive (or `//nolint:glint:<rule-key>` for a specific rule). golangci-lint applies this without any analyzer-side wiring. If a particular violation is genuinely intentional in repo code, add `//nolint:glint:<rule-key>` with a brief comment explaining why.
+The opt-out for end users is the standard `//nolint:glint` directive, which golangci-lint applies without any analyzer-side wiring. golangci-lint only knows the linter name, so the directive silences every glint analyzer on that line. `glintnolint` therefore requires it to sit on the offending line (not above `package` or a top-level declaration) with an explanation that starts with the suppressed analyzer name: `//nolint:glint // notestingrawsql: <why this violation is intentional>`.
 
 The only setting-shape exception today is **narrow message customization**: two analyzers (`no-anonymous-defer`, `enforce-o11y-conventions`) expose a `Message string` that gets appended to the default diagnostic when set. From [glint/no_anonymous_defer.go](../../../glint/no_anonymous_defer.go):
 
@@ -272,7 +273,7 @@ func TestNoSqlErrNoRows(t *testing.T) {
 
 ## Naming conventions
 
-There are three parallel namings to keep aligned for each analyzer: the **rule key** (user-facing, in YAML/JSON settings and `//nolint` directives), the **Go identifiers** (constant, settings struct, constructor), and the **file name**.
+There are three parallel namings to keep aligned for each analyzer: the **rule key** (user-facing, in YAML/JSON settings; `//nolint:glint` explanations use the analyzer name, which is the rule key without dashes), the **Go identifiers** (constant, settings struct, constructor), and the **file name**.
 
 ### Rule key (kebab-case, user-facing)
 

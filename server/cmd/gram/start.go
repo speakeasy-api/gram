@@ -82,6 +82,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/killswitchapi"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	"github.com/speakeasy-api/gram/server/internal/launcher"
 	"github.com/speakeasy-api/gram/server/internal/litellm"
 	"github.com/speakeasy-api/gram/server/internal/litellm/callcache"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
@@ -106,6 +107,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	oauthregistration "github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
@@ -161,6 +163,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/typesafe"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/tokenexchange"
 	"github.com/speakeasy-api/gram/server/internal/tools"
@@ -318,6 +321,7 @@ const probeDrainTimeout = 20 * time.Second
 
 func mcpRuntimeFlags() []cli.Flag {
 	flags := []cli.Flag{
+		pluginPublicationEmitFlag(),
 		&cli.StringFlag{
 			Name:    "authentication-host-url",
 			Usage:   "Base URL of the alternate authentication host. It serves the per-server MCP OAuth authorization server, kept apart from MCP traffic. Issuers opt in to announcing it. Empty disables it.",
@@ -808,6 +812,7 @@ func newStartCommand() *cli.Command {
 			openRouterKeyRefresher := &background.OpenRouterKeyRefresher{TemporalEnv: temporalEnv}
 			var openRouter interface {
 				openrouter.Provisioner
+				openrouter.ExistingKeyLookup
 				openrouter.SpendClient
 			}
 			if c.String("environment") == "local" {
@@ -1544,14 +1549,19 @@ func newStartCommand() *cli.Command {
 			// through the interface and defeat the services' own nil guards.
 			var pluginsPublishSignaler plugins.PluginPublishSignaler
 			var skillsPublishSignaler skills.PluginPublishSignaler
-			if pluginsGitHub != nil {
+			if pluginsGitHub != nil && temporalEnv != nil {
 				publishSignaler := &background.TemporalPluginPublisher{TemporalEnv: temporalEnv}
 				pluginsPublishSignaler, skillsPublishSignaler = publishSignaler, publishSignaler
 			}
 			distributionAdmission := admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger))
+			if pluginPublisher != nil {
+				pluginPublisher.WithDistributionAdmission(distributionAdmission)
+			}
+			publicationEmit := c.Bool(pluginPublicationEmitFlagName)
 			pluginsSvc := plugins.NewService(logger, tracerProvider, db, sessionManager, cache.NewRedisCacheAdapter(redisClient), authzEngine, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags, pluginsPublishSignaler).
-				WithDistributionAdmission(distributionAdmission)
+				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit)
 			plugins.Attach(mux, pluginsSvc)
+			launcher.Attach(mux, launcher.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, openRouter, typesafe.NewClient(guardianPolicy.PooledClient(), logger, typesafe.WithTracerProvider(tracerProvider))))
 			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
 			skillefficacy.Attach(mux, skillefficacy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger, telemetryrepo.New(chDB)))
 			// The manual trigger bypasses the write-throttled signaler on purpose:
@@ -1609,16 +1619,22 @@ func newStartCommand() *cli.Command {
 			if temporalEnv != nil {
 				networkIngressClient.Client = temporalEnv.Client()
 			}
-			networkIngressService := networkingress.NewService(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), networkIngressClient)
+			var ingressPublicationRequester networkingress.PublicationRequester
+			if publicationEmit {
+				ingressPublicationRequester = plugins.PublicationRequests{Enabled: true}
+			}
+			networkIngressService := networkingress.NewServiceWithPublication(logger, tracerProvider, db, sessionManager, authzEngine, encryptionClient, auditLogger, networkIngressAdmission, networkingress.NewOutboxRequester(networkIngressQueue), ingressPublicationRequester, networkIngressClient)
 			networkingress.Attach(mux, networkIngressService, networkIngressEnabled)
 			mcpServersService := mcpservers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, toolDispositionCache, pluginsGitHub != nil, assetsService, upstreamRevoker, networkIngressAdmission).
-				WithDistributionAdmission(distributionAdmission)
+				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit)
 			mcpservers.Attach(mux, mcpServersService)
 			mcpendpoints.Attach(mux, mcpendpoints.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil).
-				WithDistributionAdmission(distributionAdmission))
-			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, networkIngressAdmission))
+				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit))
+			metamcp.Attach(mux, metamcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, networkIngressAdmission).
+				WithDistributionAdmission(distributionAdmission).WithPluginPublisher(pluginsPublishSignaler).WithPublicationRequests(publicationEmit))
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner)), productFeatures)
+			identityCommitter := remotesessions.NewIdentityCommitter(logger, db, encryptionClient, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner)), productFeatures)
 			usersessions.Attach(mux, usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), ratelimit.NewRedisStore(redisClient), clientAssertionSigner))
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))
 			remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
@@ -1728,9 +1744,13 @@ func newStartCommand() *cli.Command {
 				Catalog:                 mcpCatalog,
 				GuardianPolicy:          guardianPolicy,
 				RemoteChallengeManager:  remoteChallengeManager,
+				IdentityCommitter:       identityCommitter,
 				AuditLogger:             auditLogger,
 				AccessRoles:             roleClient,
 				PluginPublisher:         pluginPublisher,
+				PluginPublishSignaler:   pluginsPublishSignaler,
+				NetworkAccessAdmission:  networkIngressAdmission,
+				PublicationRequests:     plugins.PublicationRequests{Enabled: publicationEmit},
 				TemporalEnv:             temporalEnv,
 				Skills:                  skillsService,
 				RiskPolicyApprovals:     mcpApprovalService,
@@ -1775,7 +1795,7 @@ func newStartCommand() *cli.Command {
 				},
 				c.String("custom-domain-cname"),
 				customDomainARecords,
-			))
+			).WithPublicationRequests(plugins.PublicationRequests{Enabled: publicationEmit}))
 			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier, meterReadConn))
 			tm.Attach(mux, telemSvc)
 			analytics.Attach(mux, analyticsSvc)
@@ -1981,7 +2001,7 @@ func newStartCommand() *cli.Command {
 						DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
 						LLMAnalyzerEnabled:           llmAnalyzerConfigFromCLI(c).Enabled(),
 					})
-					executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, networkIngressConfig)
+					executor, err := newNetworkIngressExecutor(logger, meterProvider, db, encryptionClient, k8sClient, networkIngressConfig, ingressPublicationRequester)
 					if err != nil {
 						logger.ErrorContext(ctx, "configure network ingress worker", attr.SlogError(err))
 						return

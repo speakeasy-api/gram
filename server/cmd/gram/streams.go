@@ -32,6 +32,7 @@ import (
 	networkingressv1 "github.com/speakeasy-api/gram/infra/gen/gram/networkingress/v1"
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
 	pingv2 "github.com/speakeasy-api/gram/infra/gen/gram/ping/v2"
+	pluginsv1 "github.com/speakeasy-api/gram/infra/gen/gram/plugins/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	telemetryv1 "github.com/speakeasy-api/gram/infra/gen/gram/telemetry/v1"
 	webhooksv1 "github.com/speakeasy-api/gram/infra/gen/gram/webhooks/v1"
@@ -57,6 +58,7 @@ import (
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	otelchrepo "github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/ping"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -251,6 +253,7 @@ func newStreamsCommand() *cli.Command {
 
 	flags = append(flags, stripeFlags()...)
 	flags = append(flags, networkIngressQueueFlags()...)
+	flags = append(flags, pluginPublicationConsumeFlag())
 	flags = append(flags, gcpFlags()...)
 	flags = append(flags, svixFlags()...)
 	flags = append(flags, posthogFlags()...)
@@ -632,6 +635,13 @@ func newStreamsCommand() *cli.Command {
 			// Start subscription receivers in this block
 			{
 				mustReceive(rg, &pingv2.Message{}, &pingv2.Processor{}, ping.NewHandler(logger, slog.LevelDebug))
+				if c.Bool(pluginPublicationConsumeFlagName) {
+					publicationHandler := plugins.NewPublicationHandler(logger, db, (&background.TemporalPluginPublisher{TemporalEnv: temporalEnv}).SignalPluginPublish)
+					organizationPublicationHandler := plugins.NewOrganizationPublicationHandler(logger, db)
+					settings := gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second}
+					mustReceiveBatchWithResult(rg, &pluginsv1.PublicationRequested{}, &pluginsv1.PublicationScheduler{}, publicationHandler, settings)
+					mustReceiveBatchWithResult(rg, &pluginsv1.OrganizationPublicationRequested{}, &pluginsv1.OrganizationPublicationScheduler{}, organizationPublicationHandler, settings)
+				}
 				if queue := c.String(networkIngressQueueFlag); queue != "" {
 					client := &background.NetworkIngressClient{Client: temporalEnv.Client(), Queue: queue}
 					mustReceiveBatchWithResult(rg, &networkingressv1.ReconcileRequested{}, &networkingressv1.Reconciler{}, networkingress.NewReconcileHandler(logger, queue, client.SignalNetworkIngress), gcp.BatchReceiveSettings{MaxMessages: 100, MaxBytes: constants.MiB, MaxLatency: time.Second})
