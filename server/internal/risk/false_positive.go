@@ -54,14 +54,14 @@ func parseResultIDs(raw []string) ([]uuid.UUID, error) {
 	return ids, nil
 }
 
-func lockFalsePositiveTransitions(ctx context.Context, queries *repo.Queries, ids []uuid.UUID) error {
+func lockFalsePositiveTransitions(ctx context.Context, queries *repo.Queries, projectID uuid.UUID, ids []uuid.UUID) error {
 	lockIDs := make([]string, len(ids))
 	for i, id := range ids {
 		lockIDs[i] = id.String()
 	}
 	sort.Strings(lockIDs)
 	for _, id := range lockIDs {
-		if err := queries.LockRiskResultFalsePositiveTransition(ctx, id); err != nil {
+		if err := queries.LockRiskResultFalsePositiveTransition(ctx, repo.LockRiskResultFalsePositiveTransitionParams{ProjectID: projectID.String(), ID: id}); err != nil {
 			return fmt.Errorf("lock false positive transition for result %s: %w", id, err)
 		}
 	}
@@ -92,7 +92,7 @@ func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
-	if err := lockFalsePositiveTransitions(ctx, queries, ids); err != nil {
+	if err := lockFalsePositiveTransitions(ctx, queries, *authCtx.ProjectID, ids); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock risk result false positive transitions").LogError(ctx, s.logger)
 	}
 
@@ -163,7 +163,7 @@ func (s *Service) UnmarkRiskResultsFalsePositive(ctx context.Context, payload *g
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
-	if err := lockFalsePositiveTransitions(ctx, queries, ids); err != nil {
+	if err := lockFalsePositiveTransitions(ctx, queries, *authCtx.ProjectID, ids); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock risk result false positive transitions").LogError(ctx, s.logger)
 	}
 

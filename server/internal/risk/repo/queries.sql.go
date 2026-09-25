@@ -5004,11 +5004,17 @@ func (q *Queries) LockRiskPolicyMutations(ctx context.Context, projectID string)
 }
 
 const lockRiskResultFalsePositiveTransition = `-- name: LockRiskResultFalsePositiveTransition :exec
-SELECT pg_advisory_xact_lock(hashtext($1::text))
+SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))
 `
 
-func (q *Queries) LockRiskResultFalsePositiveTransition(ctx context.Context, id string) error {
-	_, err := q.db.Exec(ctx, lockRiskResultFalsePositiveTransition, id)
+type LockRiskResultFalsePositiveTransitionParams struct {
+	ProjectID string
+	ID        string
+}
+
+// Two-key form keeps this lock apart from single-key project locks.
+func (q *Queries) LockRiskResultFalsePositiveTransition(ctx context.Context, arg LockRiskResultFalsePositiveTransitionParams) error {
+	_, err := q.db.Exec(ctx, lockRiskResultFalsePositiveTransition, arg.ProjectID, arg.ID)
 	return err
 }
 

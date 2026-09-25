@@ -1766,7 +1766,8 @@ WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[]);
 
 -- name: LockRiskResultFalsePositiveTransition :exec
-SELECT pg_advisory_xact_lock(hashtext(@id::text));
+-- Two-key form keeps this lock apart from single-key project locks.
+SELECT pg_advisory_xact_lock(hashtext(@project_id::text), hashtext(@id::text));
 
 -- name: MarkRiskResultsFalsePositive :many
 -- Returns the full rows the UPDATE actually changed for audit logging.
