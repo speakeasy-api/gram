@@ -130,6 +130,9 @@ export function OverviewTab({
 
       <InfoSection title="Identity Provider Details">
         <InfoField label="Scopes">{list(issuer.scopesSupported)}</InfoField>
+        <InfoField label="Scope Override">
+          {list(issuer.scopeOverride ?? undefined)}
+        </InfoField>
         <InfoField label="Grant Types">
           {list(issuer.grantTypesSupported)}
         </InfoField>
