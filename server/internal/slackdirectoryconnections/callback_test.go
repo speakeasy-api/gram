@@ -21,6 +21,7 @@ func TestCallbackBrowserRedirects(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, out.Code)
 	require.Equal(t, "https://dashboard.example/login", out.Header().Get("Location"))
 	require.Equal(t, "no-store", out.Header().Get("Cache-Control"))
+	require.Equal(t, "no-referrer", out.Header().Get("Referrer-Policy"))
 
 	authenticated := contextvalues.SetSessionTokenInContext(ctx, *f.auth.SessionID)
 	req = httptest.NewRequest(http.MethodGet, slackdirectoryconnections.CallbackPath+"?state=invalid&code=unused", nil).WithContext(authenticated)
@@ -29,4 +30,5 @@ func TestCallbackBrowserRedirects(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, out.Code)
 	require.Contains(t, out.Header().Get("Location"), "slack_result=invalid_state")
 	require.Equal(t, "no-store", out.Header().Get("Cache-Control"))
+	require.Equal(t, "no-referrer", out.Header().Get("Referrer-Policy"))
 }

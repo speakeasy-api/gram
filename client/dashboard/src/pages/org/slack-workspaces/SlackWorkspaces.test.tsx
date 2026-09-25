@@ -53,8 +53,14 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ slug: mocks.organizationSlug }),
 }));
 vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: ReactNode }) =>
-    mocks.admin ? children : <div>Unauthorized</div>,
+  RequireScope: ({
+    scope,
+    children,
+  }: {
+    scope: string;
+    children: ReactNode;
+  }) =>
+    mocks.admin && scope === "org:admin" ? children : <div>Unauthorized</div>,
 }));
 vi.mock("@gram/client/react-query/slackDirectoryConnections.js", () => ({
   invalidateAllSlackDirectoryConnections: (...args: unknown[]) =>
