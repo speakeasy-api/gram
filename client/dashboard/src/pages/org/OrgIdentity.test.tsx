@@ -33,6 +33,9 @@ vi.mock("nuqs", async (importOriginal) => ({
   useQueryState: (await import("./identity-provider/nuqsRouterMock"))
     .useRouterQueryState,
 }));
+vi.mock("./identity-provider/DirectoryRoleMappings", () => ({
+  DirectoryRoleMappings: () => <div>Role mappings panel</div>,
+}));
 vi.mock("./identity-provider/EnterpriseManagedAuth", () => ({
   EnterpriseManagedAuth: () => {
     mocks.ema();
@@ -317,7 +320,12 @@ describe("directory sync domain gate", () => {
     show();
     const dsync = directorySyncSection();
     expect(dsync.queryByText("Verify a domain first.")).toBeNull();
-    expect(configureButton().disabled).toBe(false);
+    expect(
+      dsync.getByRole<HTMLButtonElement>("button", {
+        name: "Manage connection",
+      }).disabled,
+    ).toBe(false);
+    expect(dsync.getByText("Role mappings panel")).toBeTruthy();
   });
 });
 

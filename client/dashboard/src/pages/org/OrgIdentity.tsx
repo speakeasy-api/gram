@@ -209,6 +209,7 @@ function DirectorySyncConfigureControl({
       <WorkOSPortalButton
         intent="dsync"
         errorFallback="Failed to start Directory Sync setup"
+        label="Manage connection"
       />
     );
   }
