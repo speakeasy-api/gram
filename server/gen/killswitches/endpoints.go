@@ -25,6 +25,7 @@ type Endpoints struct {
 	Lift             goa.Endpoint
 	PreviewOverlaps  goa.Endpoint
 	BatchUserBadges  goa.Endpoint
+	BatchAgentBadges goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "killswitches" service with endpoints.
@@ -41,6 +42,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Lift:             NewLiftEndpoint(s, a.APIKeyAuth),
 		PreviewOverlaps:  NewPreviewOverlapsEndpoint(s, a.APIKeyAuth),
 		BatchUserBadges:  NewBatchUserBadgesEndpoint(s, a.APIKeyAuth),
+		BatchAgentBadges: NewBatchAgentBadgesEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -55,6 +57,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Lift = m(e.Lift)
 	e.PreviewOverlaps = m(e.PreviewOverlaps)
 	e.BatchUserBadges = m(e.BatchUserBadges)
+	e.BatchAgentBadges = m(e.BatchAgentBadges)
 }
 
 // NewListCapabilitiesEndpoint returns an endpoint function that calls the
@@ -261,5 +264,28 @@ func NewBatchUserBadgesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.BatchUserBadges(ctx, p)
+	}
+}
+
+// NewBatchAgentBadgesEndpoint returns an endpoint function that calls the
+// method "batchAgentBadges" of service "killswitches".
+func NewBatchAgentBadgesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*BatchAgentBadgesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.BatchAgentBadges(ctx, p)
 	}
 }

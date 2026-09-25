@@ -1419,7 +1419,7 @@ BEGIN
   FROM unnest(ARRAY[1, 4]) AS n;
 
   ------------------------------------------------------------------
-  -- Killswitches. Six stable aggregates exercise every customer status and
+  -- Killswitches. Eight stable aggregates exercise every customer status and
   -- the principal-first overlap/history stories. Direct SQL mirrors lifecycle
   -- transactions: immutable complete snapshots, superseded predecessors,
   -- completed replay receipts, and current_version pointing at the newest
@@ -1576,6 +1576,41 @@ BEGIN
        'prescription_id', demo.det_uuid('gram-demo-killswitch-expired')::text,
        'prescription_version', 1, 'state', 'active'),
      now() + interval '26 days', now() - interval '4 days', now() - interval '4 days');
+
+  -- Two independent agent restrictions overlap without targeting the owner.
+  -- Captured hook sessions deliberately carry no registered-agent binding.
+  INSERT INTO killswitch_prescriptions
+    (id, organization_id, definition_key, principal_kind, principal_key,
+     resource_kind, current_version, created_at, updated_at)
+  SELECT demo.det_uuid('gram-demo-killswitch-agent-' || scope_name), demo_org,
+    'mcp_tool_execution', 'agent', demo.det_uuid('gram-demo-managed-agent-1')::text,
+    'mcp_server', 1, now() - interval '2 hours', now() - interval '2 hours'
+  FROM unnest(ARRAY['selected', 'all']) AS scope_name;
+
+  INSERT INTO killswitch_prescription_versions
+    (organization_id, prescription_id, version, state, resource_scope,
+     activated_at, internal_note, external_note, created_at)
+  SELECT demo_org, demo.det_uuid('gram-demo-killswitch-agent-' || scope_name),
+    1, 'active', scope_name, now() - interval '2 hours',
+    'Synthetic release-assistant containment exercise. Release each restriction independently.',
+    'Covered MCP tools/call are blocked for this registered agent.', now() - interval '2 hours'
+  FROM unnest(ARRAY['selected', 'all']) AS scope_name;
+
+  INSERT INTO killswitch_prescription_version_resources
+    (organization_id, prescription_id, version, resource_key)
+  VALUES (demo_org, demo.det_uuid('gram-demo-killswitch-agent-selected'), 1,
+    demo.det_uuid('gram-demo-mcpserver-linear')::text);
+
+  INSERT INTO killswitch_operations
+    (organization_id, operation_id, actor_user_id, operation, request_hash,
+     status, response, expires_at, created_at, updated_at)
+  SELECT demo_org, demo.det_uuid('gram-demo-killswitch-operation-agent-' || scope_name),
+    demo_user_ids[6], 'activate', 'sha256:' || repeat('a', 64), 'completed',
+    jsonb_build_object('response_version', 'killswitch-operation-response-v1',
+      'prescription_id', demo.det_uuid('gram-demo-killswitch-agent-' || scope_name)::text,
+      'prescription_version', 1, 'state', 'active'),
+    now() + interval '29 days 22 hours', now() - interval '2 hours', now() - interval '2 hours'
+  FROM unnest(ARRAY['selected', 'all']) AS scope_name;
 
   ------------------------------------------------------------------
   -- Prompts (the Prompts page otherwise falls back to onboarding).
@@ -2270,6 +2305,18 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
           ),
           now() - interval '35 minutes');
 
+  INSERT INTO audit_logs
+    (id, organization_id, actor_id, actor_type, actor_display_name,
+     action, subject_id, subject_type, after_snapshot, metadata, created_at)
+  SELECT demo.det_uuid('gram-demo-audit-killswitch-agent-' || scope_name), demo_org,
+    demo_user_ids[6], 'user', demo_user_names[6], 'killswitch:activate',
+    demo.det_uuid('gram-demo-killswitch-agent-' || scope_name)::text,
+    'killswitch_prescription', jsonb_build_object('version', 1, 'state', 'active'),
+    jsonb_build_object('operation', 'activate', 'operation_id',
+      demo.det_uuid('gram-demo-killswitch-operation-agent-' || scope_name)),
+    now() - interval '2 hours'
+  FROM unnest(ARRAY['selected', 'all']) AS scope_name;
+
   -- Killswitch lifecycle history mirrors the transaction hook: mutation rows
   -- carry a bounded after snapshot plus their replay operation, while expiry
   -- carries the version and database-time deadline. Internal notes stay out of
@@ -2427,31 +2474,31 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO tool_count
   FROM http_tool_definitions WHERE project_id = proj_a AND deleted IS FALSE;
 
-  -- Killswitch aggregate counts are exact: six headers, two successor
-  -- versions, eight complete selected snapshots, one expiry marker, and one
+  -- Killswitch aggregate counts are exact: eight headers, two successor
+  -- versions, nine complete selected snapshots, one expiry marker, and one
   -- completed operation/audit event for every lifecycle mutation.
   SELECT count(*) INTO stray FROM killswitch_prescriptions
   WHERE organization_id = demo_org;
-  IF stray <> 6 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 6 killswitch prescriptions, found %', stray;
+  IF stray <> 8 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 8 killswitch prescriptions, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM killswitch_prescription_versions
   WHERE organization_id = demo_org;
-  IF stray <> 8 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 8 killswitch versions, found %', stray;
+  IF stray <> 10 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 10 killswitch versions, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM killswitch_prescription_version_resources
   WHERE organization_id = demo_org;
-  IF stray <> 8 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 8 killswitch resource snapshots, found %', stray;
+  IF stray <> 9 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 9 killswitch resource snapshots, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM killswitch_operations
   WHERE organization_id = demo_org;
-  IF stray <> 8 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 8 killswitch operations, found %', stray;
+  IF stray <> 10 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 10 killswitch operations, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM killswitch_expiry_events
@@ -2493,12 +2540,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- Immediate versions have no explicit start; the only non-NULL start is the
   -- future scheduled window. Every version has a historical activation time.
   SELECT CASE WHEN
-      count(*) FILTER (WHERE starts_at IS NULL) = 7
+      count(*) FILTER (WHERE starts_at IS NULL) = 9
       AND count(*) FILTER (WHERE starts_at > clock_timestamp()) = 1
       AND count(*) FILTER (WHERE starts_at IS NOT NULL) = 1
       AND count(*) FILTER (
         WHERE activated_at IS NOT NULL AND activated_at < clock_timestamp()
-      ) = 8
+      ) = 10
     THEN 0 ELSE 1 END INTO stray
   FROM killswitch_prescription_versions
   WHERE organization_id = demo_org;
@@ -2529,14 +2576,17 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   FROM killswitch_prescriptions p
   WHERE p.organization_id = demo_org
     AND (p.definition_key <> 'mcp_tool_execution'
-      OR p.principal_kind <> 'user'
+      OR p.principal_kind NOT IN ('user', 'agent')
       OR p.resource_kind <> 'mcp_server'
-      OR NOT EXISTS (
+      OR (p.principal_kind = 'user' AND NOT EXISTS (
         SELECT 1 FROM organization_user_relationships member
         WHERE member.organization_id = p.organization_id
           AND member.user_id = p.principal_key
           AND member.deleted_at IS NULL
-      ));
+      )) OR (p.principal_kind = 'agent' AND NOT EXISTS (
+        SELECT 1 FROM agents agent WHERE agent.organization_id = p.organization_id
+          AND agent.id::text = p.principal_key AND agent.deleted IS FALSE
+      )));
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % killswitch prescriptions have an invalid principal or contract', stray;
   END IF;
@@ -2552,11 +2602,11 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: % killswitch resources are not live canonical MCP servers', stray;
   END IF;
 
-  -- Database-time status projection: three active, one scheduled, one lifted,
+  -- Database-time status projection: five active, one scheduled, one lifted,
   -- and one expired current aggregate. The two Amara rows overlap because one
   -- selected-server interval intersects one dynamic all-server interval.
   SELECT CASE WHEN
-      count(*) FILTER (WHERE customer_status = 'active') = 3
+      count(*) FILTER (WHERE customer_status = 'active') = 5
       AND count(*) FILTER (WHERE customer_status = 'scheduled') = 1
       AND count(*) FILTER (WHERE customer_status = 'lifted') = 1
       AND count(*) FILTER (WHERE customer_status = 'expired') = 1
@@ -2632,8 +2682,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE organization_id = demo_org
     AND subject_type = 'killswitch_prescription'
     AND action IN ('killswitch:activate', 'killswitch:change', 'killswitch:deactivate');
-  IF stray <> 8 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 8 killswitch lifecycle audits, found %', stray;
+  IF stray <> 10 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 10 killswitch lifecycle audits, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray

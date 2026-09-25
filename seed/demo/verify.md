@@ -428,3 +428,15 @@ and exact remote-session attachment checks, or
 and commit the SQL change once green.
 Screenshots of failures go to `.playwright-cli/` (ignored) — reference them in
 the PR, don't commit them.
+
+## Fleet and agent restriction recovery
+
+Open Fleet in list and Directory modes at desktop and phone widths. Select a
+registered identity with no observed run, then a captured session. Check person
+roles, risk counts, transcript/Security links, URL selection, and Back focus.
+In a local writable admin session, release the selected-server restriction on the
+release assistant: the all-server overlap must remain and MCP blocked must stay.
+Create a selected-server restriction, reviewing the exact agent, named servers,
+organization scope and tools/call effect. Verify Release after revoke/delete via
+the organization restrictions list or exact audit record link. With inventory
+unavailable, labels fall back safely and Release remains available.

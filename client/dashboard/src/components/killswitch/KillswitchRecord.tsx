@@ -30,6 +30,8 @@ import {
   useState,
 } from "react";
 import {
+  affectedServerNames,
+  draftTarget,
   conflictName,
   draftToSchedule,
   draftToScope,
@@ -110,12 +112,14 @@ function RecordShell({
 export function KillswitchRecord({
   killswitchId,
   subjectUserId,
+  subjectAgent,
   onSelectKillswitch,
   onClose,
 }: {
   killswitchId: string;
   /** The person whose page this is, so a record for anyone else is refused. */
-  subjectUserId: string;
+  subjectUserId?: string;
+  subjectAgent?: { id: string; name: string; canEdit: boolean };
   /** Opens another of this person's killswitches, e.g. one that overlaps. */
   onSelectKillswitch: (id: string) => void;
   onClose: () => void;
@@ -136,6 +140,7 @@ export function KillswitchRecord({
   );
   const membersQuery = useMembers({ gramSession: session.session }, security, {
     throwOnError: false,
+    enabled: !subjectAgent,
   });
   const capabilitiesQuery = useKillswitchCapabilities(
     security,
@@ -207,9 +212,9 @@ export function KillswitchRecord({
     () => new Map(servers.map((server) => [server.id, server.name])),
     [servers],
   );
-  const memberName = members.find(
-    (member) => member.id === detail?.userId,
-  )?.name;
+  const memberName =
+    subjectAgent?.name ??
+    members.find((member) => member.id === detail?.userId)?.name;
   const catalogError = membersQuery.error ?? serversQuery.error;
   const catalogUnavailable = Boolean(
     (membersQuery.error && !membersQuery.data) ||
@@ -265,6 +270,7 @@ export function KillswitchRecord({
           killswitchPreviewOverlapsRequest: {
             id: current.id,
             userId: current.userId,
+            agentId: current.agentId,
             capabilityKey: current.capabilityKey,
             scope: current.scope,
             schedule: current.schedule,
@@ -307,7 +313,7 @@ export function KillswitchRecord({
     // A record belonging to someone else is refused rather than rendered, so
     // it is refused before it is queried too: asking for its overlaps would
     // read another person's restrictions on the strength of a pasted link.
-    if (detail.userId !== subjectUserId) return;
+    if (!matchesSubject(detail, subjectUserId, subjectAgent?.id)) return;
     const key = overlapPreviewKey(detail);
     if (liftOpen && liftReview && key !== overlapPreviewKey(liftReview)) return;
     if (previewedKey.current === key) return;
@@ -325,6 +331,7 @@ export function KillswitchRecord({
     liftReview?.id,
     liftReview?.version,
     subjectUserId,
+    subjectAgent?.id,
   ]);
 
   useEffect(() => {
@@ -335,6 +342,7 @@ export function KillswitchRecord({
       void Promise.all([
         refetchDetail(),
         invalidateAllKillswitches(queryClient),
+        queryClient.invalidateQueries({ queryKey: ["fleet-agent-badges"] }),
       ]);
     }, delay);
     return () => window.clearTimeout(timer);
@@ -347,7 +355,7 @@ export function KillswitchRecord({
       request: {
         killswitchPreviewOverlapsRequest: {
           id: current.id,
-          userId: draft.userId,
+          ...draftTarget(draft),
           capabilityKey: "mcp_tool_calls",
           scope: draftToScope(draft),
           schedule: draftToSchedule(draft),
@@ -359,6 +367,7 @@ export function KillswitchRecord({
   const invalidate = (id: string) =>
     Promise.all([
       invalidateAllKillswitches(queryClient),
+      queryClient.invalidateQueries({ queryKey: ["fleet-agent-badges"] }),
       invalidateKillswitch(queryClient, [{ id }]),
     ]);
 
@@ -523,7 +532,7 @@ export function KillswitchRecord({
   // A record names one person. Opening it on someone else's page — a pasted
   // link, an edited address — would file this restriction under a person it
   // was never placed on, so it is refused rather than rendered.
-  if (detail.userId !== subjectUserId) {
+  if (!matchesSubject(detail, subjectUserId, subjectAgent?.id)) {
     return (
       <RecordShell onClose={onClose}>
         <Alert variant="error">
@@ -649,9 +658,11 @@ export function KillswitchRecord({
           </div>
           {canChange && (
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-              <Button variant="secondary" onClick={() => setEditOpen(true)}>
-                Edit killswitch
-              </Button>
+              {(!subjectAgent || subjectAgent.canEdit) && (
+                <Button variant="secondary" onClick={() => setEditOpen(true)}>
+                  Edit killswitch
+                </Button>
+              )}
               {!authorityBlocked && (
                 <Button
                   variant="destructive-primary"
@@ -662,7 +673,7 @@ export function KillswitchRecord({
                     void loadOverlaps(current).catch(() => undefined);
                   }}
                 >
-                  Lift killswitch
+                  {subjectAgent ? "Release restriction" : "Lift killswitch"}
                 </Button>
               )}
             </div>
@@ -672,7 +683,7 @@ export function KillswitchRecord({
 
       <section className="grid gap-4 border p-5 sm:grid-cols-2">
         <DetailValue
-          label="Member"
+          label={subjectAgent ? "Registered agent" : "Member"}
           value={
             <IdentityLink
               identifier={detail.userId ? { userId: detail.userId } : null}
@@ -721,7 +732,7 @@ export function KillswitchRecord({
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Current overlaps</h2>
         <p className="text-muted-foreground text-sm">
-          Includes only Killswitches for this member and capability whose server
+          Includes only Killswitches for this target and capability whose server
           scope and schedule intersect.
         </p>
         {overlapPreviewStatus === "loading" ? (
@@ -790,6 +801,7 @@ export function KillswitchRecord({
             open
             onOpenChange={setEditOpen}
             mode="edit"
+            agentTarget={subjectAgent}
             members={members}
             servers={servers}
             capabilities={capabilitiesQuery.data?.capabilities ?? []}
@@ -826,6 +838,12 @@ export function KillswitchRecord({
             overlaps={liftOverlapPreview?.overlaps ?? EMPTY}
             overlapsTruncated={liftOverlapPreview?.truncated ?? false}
             serverNames={serverNames}
+            targetDescription={
+              subjectAgent
+                ? `${subjectAgent.name} (${subjectAgent.id})`
+                : undefined
+            }
+            affectedServers={affectedServerNames(liftReview.scope, serverNames)}
             previewStatus={liftOverlapPreview?.status ?? "loading"}
             previewError={liftOverlapPreview?.error}
             onRetryPreview={() => loadOverlaps(liftReview)}
@@ -991,4 +1009,18 @@ function formatDiff(ids: string[], names: ReadonlyMap<string, string>): string {
   return ids.length === 0
     ? "None"
     : ids.map((id) => names.get(id) ?? "Deleted MCP server").join(", ");
+}
+
+function matchesSubject(
+  detail: KillswitchDetailModel,
+  userId?: string,
+  agentId?: string,
+): boolean {
+  if (agentId)
+    return detail.principalKind === "agent" && detail.agentId === agentId;
+  return (
+    detail.principalKind === "user" &&
+    Boolean(userId) &&
+    detail.userId === userId
+  );
 }

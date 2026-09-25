@@ -49,7 +49,7 @@ func BuildListMCPServersPayload(killswitchesListMCPServersSessionToken string) (
 
 // BuildListPayload builds the payload for the killswitches list endpoint from
 // CLI flags.
-func BuildListPayload(killswitchesListCapabilityKey string, killswitchesListUserID string, killswitchesListStatus string, killswitchesListLimit string, killswitchesListCursor string, killswitchesListSessionToken string) (*killswitches.ListPayload, error) {
+func BuildListPayload(killswitchesListCapabilityKey string, killswitchesListUserID string, killswitchesListAgentID string, killswitchesListPrincipalKind string, killswitchesListStatus string, killswitchesListLimit string, killswitchesListCursor string, killswitchesListSessionToken string) (*killswitches.ListPayload, error) {
 	var err error
 	var capabilityKey *string
 	{
@@ -67,6 +67,28 @@ func BuildListPayload(killswitchesListCapabilityKey string, killswitchesListUser
 	{
 		if killswitchesListUserID != "" {
 			userID = &killswitchesListUserID
+		}
+	}
+	var agentID *string
+	{
+		if killswitchesListAgentID != "" {
+			agentID = &killswitchesListAgentID
+			err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", *agentID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var principalKind *string
+	{
+		if killswitchesListPrincipalKind != "" {
+			principalKind = &killswitchesListPrincipalKind
+			if !(*principalKind == "user" || *principalKind == "agent") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("principal_kind", *principalKind, []any{"user", "agent"}))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var status *string
@@ -120,6 +142,11 @@ func BuildListPayload(killswitchesListCapabilityKey string, killswitchesListUser
 		v.CapabilityKey = &tmpcapabilityKey
 	}
 	v.UserID = userID
+	v.AgentID = agentID
+	if principalKind != nil {
+		tmpprincipalKind := killswitches.KillswitchPrincipalKind(*principalKind)
+		v.PrincipalKind = &tmpprincipalKind
+	}
 	if status != nil {
 		tmpstatus := killswitches.KillswitchStatus(*status)
 		v.Status = &tmpstatus
@@ -164,7 +191,7 @@ func BuildCreatePayload(killswitchesCreateBody string, killswitchesCreateSession
 	{
 		err = json.Unmarshal([]byte(killswitchesCreateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"capability_key\": \"mcp_tool_calls\",\n      \"external_note\": \"aaa\",\n      \"internal_note\": \"aaa\",\n      \"operation_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"schedule\": {\n         \"end\": \"bounded\",\n         \"ends_at\": \"1970-01-01T00:00:01Z\",\n         \"start\": \"scheduled\",\n         \"starts_at\": \"1970-01-01T00:00:01Z\"\n      },\n      \"scope\": {\n         \"server_ids\": [\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\"\n         ],\n         \"type\": \"selected_servers\"\n      },\n      \"user_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"capability_key\": \"mcp_tool_calls\",\n      \"external_note\": \"aaa\",\n      \"internal_note\": \"aaa\",\n      \"operation_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"schedule\": {\n         \"end\": \"bounded\",\n         \"ends_at\": \"1970-01-01T00:00:01Z\",\n         \"start\": \"scheduled\",\n         \"starts_at\": \"1970-01-01T00:00:01Z\"\n      },\n      \"scope\": {\n         \"server_ids\": [\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\"\n         ],\n         \"type\": \"selected_servers\"\n      },\n      \"user_id\": \"abc123\"\n   }'")
 		}
 		if body.Scope == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
@@ -175,6 +202,9 @@ func BuildCreatePayload(killswitchesCreateBody string, killswitchesCreateSession
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.operation_id", body.OperationID, goa.FormatUUID))
 		if !(body.CapabilityKey == "mcp_tool_calls") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.capability_key", body.CapabilityKey, []any{"mcp_tool_calls"}))
+		}
+		if body.AgentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 		}
 		if body.Scope != nil {
 			if err2 := ValidateKillswitchScopeRequestBodyRequestBody(body.Scope); err2 != nil {
@@ -206,6 +236,7 @@ func BuildCreatePayload(killswitchesCreateBody string, killswitchesCreateSession
 		OperationID:   body.OperationID,
 		CapabilityKey: killswitches.KillswitchCapabilityKey(body.CapabilityKey),
 		UserID:        body.UserID,
+		AgentID:       body.AgentID,
 		ExternalNote:  body.ExternalNote,
 		InternalNote:  body.InternalNote,
 	}
@@ -322,7 +353,7 @@ func BuildPreviewOverlapsPayload(killswitchesPreviewOverlapsBody string, killswi
 	{
 		err = json.Unmarshal([]byte(killswitchesPreviewOverlapsBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"capability_key\": \"mcp_tool_calls\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"schedule\": {\n         \"end\": \"bounded\",\n         \"ends_at\": \"1970-01-01T00:00:01Z\",\n         \"start\": \"scheduled\",\n         \"starts_at\": \"1970-01-01T00:00:01Z\"\n      },\n      \"scope\": {\n         \"server_ids\": [\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\"\n         ],\n         \"type\": \"selected_servers\"\n      },\n      \"user_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"capability_key\": \"mcp_tool_calls\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"schedule\": {\n         \"end\": \"bounded\",\n         \"ends_at\": \"1970-01-01T00:00:01Z\",\n         \"start\": \"scheduled\",\n         \"starts_at\": \"1970-01-01T00:00:01Z\"\n      },\n      \"scope\": {\n         \"server_ids\": [\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\",\n            \"550e8400-e29b-41d4-a716-446655440000\"\n         ],\n         \"type\": \"selected_servers\"\n      },\n      \"user_id\": \"abc123\"\n   }'")
 		}
 		if body.Scope == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
@@ -335,6 +366,9 @@ func BuildPreviewOverlapsPayload(killswitchesPreviewOverlapsBody string, killswi
 		}
 		if !(body.CapabilityKey == "mcp_tool_calls") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.capability_key", body.CapabilityKey, []any{"mcp_tool_calls"}))
+		}
+		if body.AgentID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
 		}
 		if body.Scope != nil {
 			if err2 := ValidateKillswitchScopeRequestBodyRequestBody(body.Scope); err2 != nil {
@@ -360,6 +394,7 @@ func BuildPreviewOverlapsPayload(killswitchesPreviewOverlapsBody string, killswi
 		ID:            body.ID,
 		CapabilityKey: killswitches.KillswitchCapabilityKey(body.CapabilityKey),
 		UserID:        body.UserID,
+		AgentID:       body.AgentID,
 	}
 	if body.Scope != nil {
 		v.Scope = marshalKillswitchScopeRequestBodyRequestBodyToKillswitchesKillswitchScope(body.Scope)
@@ -409,6 +444,52 @@ func BuildBatchUserBadgesPayload(killswitchesBatchUserBadgesBody string, killswi
 		}
 	} else {
 		v.UserIds = []string{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildBatchAgentBadgesPayload builds the payload for the killswitches
+// batchAgentBadges endpoint from CLI flags.
+func BuildBatchAgentBadgesPayload(killswitchesBatchAgentBadgesBody string, killswitchesBatchAgentBadgesSessionToken string) (*killswitches.BatchAgentBadgesPayload, error) {
+	var err error
+	var body BatchAgentBadgesRequestBody
+	{
+		err = json.Unmarshal([]byte(killswitchesBatchAgentBadgesBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\",\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ]\n   }'")
+		}
+		if body.AgentIds == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("agent_ids", "body"))
+		}
+		if len(body.AgentIds) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_ids", body.AgentIds, len(body.AgentIds), 1, true))
+		}
+		if len(body.AgentIds) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.agent_ids", body.AgentIds, len(body.AgentIds), 100, false))
+		}
+		for _, e := range body.AgentIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_ids[*]", e, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if killswitchesBatchAgentBadgesSessionToken != "" {
+			sessionToken = &killswitchesBatchAgentBadgesSessionToken
+		}
+	}
+	v := &killswitches.BatchAgentBadgesPayload{}
+	if body.AgentIds != nil {
+		v.AgentIds = make([]string, len(body.AgentIds))
+		for i, val := range body.AgentIds {
+			v.AgentIds[i] = val
+		}
+	} else {
+		v.AgentIds = []string{}
 	}
 	v.SessionToken = sessionToken
 

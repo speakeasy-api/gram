@@ -64,7 +64,7 @@ func TestCustomerKillswitchLifecycleAndReadModels(t *testing.T) {
 	seedOrganizationMember(t, db, orgID, subjectUserID, "Affected User")
 	endsAt := time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339Nano)
 	payload := &gen.CreatePayload{
-		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: subjectUserID,
+		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: &subjectUserID,
 		Scope:        &gen.KillswitchScope{Type: "selected_servers", ServerIds: []string{servers[1].String(), servers[0].String(), servers[1].String()}},
 		Schedule:     &gen.KillswitchSchedule{Start: "now", End: "bounded", EndsAt: &endsAt},
 		ExternalNote: "  Customer message  ", InternalNote: "\n operator context \t",
@@ -111,7 +111,7 @@ func TestCustomerKillswitchLifecycleAndReadModels(t *testing.T) {
 	require.False(t, badgeFor(t, badges, "unknown-user").Affected)
 
 	overlaps, err := service.PreviewOverlaps(ctx, &gen.PreviewOverlapsPayload{
-		CapabilityKey: CapabilityMCPToolCalls, UserID: subjectUserID,
+		CapabilityKey: CapabilityMCPToolCalls, UserID: &subjectUserID,
 		Scope:    &gen.KillswitchScope{Type: "selected_servers", ServerIds: []string{servers[0].String()}},
 		Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"},
 	})
@@ -146,7 +146,7 @@ func TestCustomerKillswitchOverlapResultsReportTruncation(t *testing.T) {
 	created := make([]*gen.KillswitchMutationReceipt, 102)
 	for i := range created {
 		result, err := service.Create(ctx, &gen.CreatePayload{
-			OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+			OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: &userID,
 			Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"},
 			ExternalNote: fmt.Sprintf("message %d", i), InternalNote: fmt.Sprintf("context %d", i),
 		})
@@ -155,7 +155,7 @@ func TestCustomerKillswitchOverlapResultsReportTruncation(t *testing.T) {
 	}
 
 	preview, err := service.PreviewOverlaps(ctx, &gen.PreviewOverlapsPayload{
-		CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		CapabilityKey: CapabilityMCPToolCalls, UserID: &userID,
 		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"},
 	})
 	require.NoError(t, err)
@@ -176,7 +176,7 @@ func TestCustomerKillswitchScheduleOverlapPaginationAndStaleEdit(t *testing.T) {
 	boundaryText := boundary.Format(time.RFC3339Nano)
 
 	first, err := service.Create(ctx, &gen.CreatePayload{
-		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: &userID,
 		Scope:    &gen.KillswitchScope{Type: "selected_servers", ServerIds: []string{servers[0].String()}},
 		Schedule: &gen.KillswitchSchedule{Start: "now", End: "bounded", EndsAt: &boundaryText}, ExternalNote: "message", InternalNote: "context",
 	})
@@ -184,7 +184,7 @@ func TestCustomerKillswitchScheduleOverlapPaginationAndStaleEdit(t *testing.T) {
 
 	adjacentStart := boundaryText
 	preview, err := service.PreviewOverlaps(ctx, &gen.PreviewOverlapsPayload{
-		CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		CapabilityKey: CapabilityMCPToolCalls, UserID: &userID,
 		Scope:    &gen.KillswitchScope{Type: "selected_servers", ServerIds: []string{servers[0].String()}},
 		Schedule: &gen.KillswitchSchedule{Start: "scheduled", StartsAt: &adjacentStart, End: "until_lifted"},
 	})
@@ -192,7 +192,7 @@ func TestCustomerKillswitchScheduleOverlapPaginationAndStaleEdit(t *testing.T) {
 	require.Empty(t, preview.Overlaps, "adjacent half-open intervals must not overlap")
 
 	second, err := service.Create(ctx, &gen.CreatePayload{
-		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: &userID,
 		Scope:    &gen.KillswitchScope{Type: "all_servers"},
 		Schedule: &gen.KillswitchSchedule{Start: "scheduled", StartsAt: &adjacentStart, End: "until_lifted"}, ExternalNote: "message two", InternalNote: "context two",
 	})
@@ -238,7 +238,7 @@ func TestCustomerKillswitchEditNowPreservesRequestedStartMode(t *testing.T) {
 	startsAt := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Millisecond).Format(time.RFC3339Nano)
 
 	created, err := service.Create(ctx, &gen.CreatePayload{
-		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: &userID,
 		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "scheduled", StartsAt: &startsAt, End: "until_lifted"},
 		ExternalNote: "message", InternalNote: "context",
 	})
@@ -279,14 +279,14 @@ func TestCustomerCreateAndEditRequireScheduledStartAfterDatabaseTime(t *testing.
 	notFuture := databaseNow.Time.UTC().Format(time.RFC3339Nano)
 	schedule := &gen.KillswitchSchedule{Start: "scheduled", StartsAt: &notFuture, End: "until_lifted"}
 	_, err = service.Create(ctx, &gen.CreatePayload{
-		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: &userID,
 		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: schedule,
 		ExternalNote: "message", InternalNote: "context",
 	})
 	requireOops(t, err, oops.CodeBadRequest)
 
 	created, err := service.Create(ctx, &gen.CreatePayload{
-		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: &userID,
 		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"},
 		ExternalNote: "message", InternalNote: "context",
 	})
@@ -382,7 +382,7 @@ func TestCustomerAuthorizationAndOpaqueForeignReferences(t *testing.T) {
 
 	create := func(serverID string) error {
 		_, createErr := service.Create(ctx, &gen.CreatePayload{
-			OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+			OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: &userID,
 			Scope:    &gen.KillswitchScope{Type: "selected_servers", ServerIds: []string{serverID}},
 			Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"}, ExternalNote: "message", InternalNote: "context",
 		})
@@ -400,7 +400,7 @@ func TestCustomerListUsesKeysetPagination(t *testing.T) {
 	receipts := make([]*gen.KillswitchMutationReceipt, 3)
 	for i := range receipts {
 		created, err := service.Create(ctx, &gen.CreatePayload{
-			OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+			OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: &userID,
 			Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"},
 			ExternalNote: fmt.Sprintf("message %d", i), InternalNote: fmt.Sprintf("context %d", i),
 		})
@@ -436,7 +436,7 @@ func TestCustomerHistoryUsesEventTimeStatus(t *testing.T) {
 	transitionAt := databaseNow.Time.Add(2 * time.Second).UTC()
 	startText := transitionAt.Format(time.RFC3339Nano)
 	created, err := service.Create(ctx, &gen.CreatePayload{
-		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		OperationID: uuid.NewString(), CapabilityKey: CapabilityMCPToolCalls, UserID: &userID,
 		Scope: &gen.KillswitchScope{Type: "all_servers"}, Schedule: &gen.KillswitchSchedule{Start: "scheduled", StartsAt: &startText, End: "until_lifted"},
 		ExternalNote: "scheduled event", InternalNote: "scheduled event",
 	})
@@ -474,7 +474,7 @@ func TestPreviewSelectedServersCanonicalizesMaximumDuplicateBatch(t *testing.T) 
 		serverIDs[i] = servers[i%len(servers)].String()
 	}
 	result, err := service.PreviewOverlaps(ctx, &gen.PreviewOverlapsPayload{
-		CapabilityKey: CapabilityMCPToolCalls, UserID: userID,
+		CapabilityKey: CapabilityMCPToolCalls, UserID: &userID,
 		Scope:    &gen.KillswitchScope{Type: "selected_servers", ServerIds: serverIDs},
 		Schedule: &gen.KillswitchSchedule{Start: "now", End: "until_lifted"},
 	})

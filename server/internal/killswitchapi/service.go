@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
@@ -21,6 +22,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/killswitches/server"
 	gen "github.com/speakeasy-api/gram/server/gen/killswitches"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	gramauth "github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -40,7 +42,7 @@ const (
 	CapabilityMCPToolCalls = "mcp_tool_calls"
 	capabilityLabel        = "MCP tool calls"
 	maxHistoryEvents       = int32(100)
-	maxBatchUsers          = 100
+	maxBatchPrincipals     = 100
 	maxRequestBodyBytes    = 2 << 20
 )
 
@@ -50,7 +52,7 @@ type Service struct {
 	auth       *gramauth.Auth
 	db         *pgxpool.Pool
 	authorized *killswitches.AuthorizedService
-	user       killswitches.PrincipalAdapter
+	principals map[killswitches.PrincipalKind]killswitches.PrincipalAdapter
 	server     killswitches.ResourceAdapter
 }
 
@@ -66,9 +68,13 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	if err != nil {
 		return nil, fmt.Errorf("build killswitch lifecycle service: %w", err)
 	}
-	user, ok := registry.PrincipalAdapter(mcptoolexecution.PrincipalKindUser)
-	if !ok {
-		return nil, errors.New("MCP tool-call killswitch registry has no user adapter")
+	principals := make(map[killswitches.PrincipalKind]killswitches.PrincipalAdapter, 2)
+	for _, kind := range []killswitches.PrincipalKind{mcptoolexecution.PrincipalKindUser, mcptoolexecution.PrincipalKindAgent} {
+		adapter, ok := registry.PrincipalAdapter(kind)
+		if !ok {
+			return nil, fmt.Errorf("MCP tool-call killswitch registry has no %s adapter", kind)
+		}
+		principals[kind] = adapter
 	}
 	server, ok := registry.ResourceAdapter(mcptoolexecution.ResourceKindMCPServer)
 	if !ok {
@@ -85,7 +91,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/killswitchapi"), logger: logger,
 		auth: gramauth.New(logger, db, sessionManager, authzEngine), db: db, authorized: authorized,
-		user: user, server: server,
+		principals: principals, server: server,
 	}, nil
 }
 
@@ -168,11 +174,28 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Kill
 		return nil, badRequest(errors.New("limit must be between 1 and 100"))
 	}
 
+	kind := mcptoolexecution.PrincipalKindUser
+	if payload.AgentID != nil {
+		kind = mcptoolexecution.PrincipalKindAgent
+	}
+	if payload.PrincipalKind != nil {
+		kind = killswitches.PrincipalKind(*payload.PrincipalKind)
+	}
+	if _, ok := s.principals[kind]; !ok {
+		return nil, badRequest(errors.New("principal kind is not available"))
+	}
 	var principalKey *killswitches.PrincipalKey
-	if payload.UserID != nil {
-		canonical, err := s.canonicalUser(organizationID, *payload.UserID)
-		if err != nil {
-			return nil, err
+	if payload.UserID != nil || payload.AgentID != nil {
+		targetKind, input, targetErr := target(payload.UserID, payload.AgentID)
+		if targetErr != nil {
+			return nil, targetErr
+		}
+		if targetKind != kind {
+			return nil, badRequest(errors.New("principal kind does not match target"))
+		}
+		canonical, canonicalErr := s.canonicalPrincipal(organizationID, kind, input)
+		if canonicalErr != nil {
+			return nil, canonicalErr
 		}
 		key := killswitches.PrincipalKey(canonical)
 		principalKey = &key
@@ -182,7 +205,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Kill
 		value := killswitches.CustomerStatus(*payload.Status)
 		status = &value
 	}
-	filter := listFilter(principalKey, status)
+	filter := string(kind) + "|" + listFilter(principalKey, status)
 
 	var cursor *killswitches.CustomerListCursor
 	if payload.Cursor != nil {
@@ -202,7 +225,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Kill
 	}
 
 	result, err := s.authorized.ListCustomerPrescriptions(ctx, killswitches.AuthorizedListCustomerPrescriptionsRequest{
-		Definition: mcptoolexecution.DefinitionKeyMCPToolExecution, PrincipalKind: mcptoolexecution.PrincipalKindUser,
+		Definition: mcptoolexecution.DefinitionKeyMCPToolExecution, PrincipalKind: kind,
 		ResourceKind: mcptoolexecution.ResourceKindMCPServer, PrincipalKey: principalKey, Status: status,
 		Limit: limit, Cursor: cursor,
 	})
@@ -211,7 +234,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Kill
 	}
 	items := make([]*gen.KillswitchSummary, len(result.Items))
 	for i, item := range result.Items {
-		items[i] = summary(string(item.ID), string(item.PrincipalKey), item.Version, string(item.Status), string(item.StartMode), string(item.ResourceScope), stringsFrom(item.SelectedResourceKeys), item.StartsAt, item.ExpiresAt)
+		items[i] = summary(string(item.ID), kind, string(item.PrincipalKey), item.Version, string(item.Status), string(item.StartMode), string(item.ResourceScope), stringsFrom(item.SelectedResourceKeys), item.StartsAt, item.ExpiresAt)
 	}
 	var next *string
 	if result.NextCursor != nil {
@@ -238,7 +261,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.Killsw
 	if prescription.StartMode == killswitches.StartModeAt {
 		start = "scheduled"
 	}
-	base := summary(string(prescription.ID), string(prescription.PrincipalKey), prescription.Version, status, start, string(prescription.ResourceScope), stringsFrom(prescription.SelectedResourceKeys), prescription.StartsAt, prescription.ExpiresAt)
+	base := summary(string(prescription.ID), prescription.PrincipalKind, string(prescription.PrincipalKey), prescription.Version, status, start, string(prescription.ResourceScope), stringsFrom(prescription.SelectedResourceKeys), prescription.StartsAt, prescription.ExpiresAt)
 	id, _ := uuid.Parse(payload.ID)
 	rows, err := killswitchrepo.New(s.db).ListCustomerKillswitchHistory(ctx, killswitchrepo.ListCustomerKillswitchHistoryParams{PrescriptionID: id, OrganizationID: string(organizationID), ResultLimit: maxHistoryEvents + 1})
 	if err != nil {
@@ -256,7 +279,7 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.Killsw
 		}
 	}
 	return &gen.KillswitchDetail{
-		ID: base.ID, CapabilityKey: base.CapabilityKey, CapabilityLabel: base.CapabilityLabel, UserID: base.UserID, Version: base.Version, Status: base.Status, Scope: base.Scope, Schedule: base.Schedule,
+		ID: base.ID, CapabilityKey: base.CapabilityKey, CapabilityLabel: base.CapabilityLabel, UserID: base.UserID, AgentID: base.AgentID, PrincipalKind: base.PrincipalKind, Version: base.Version, Status: base.Status, Scope: base.Scope, Schedule: base.Schedule,
 		ExternalNote: prescription.ExternalNote, InternalNote: prescription.InternalNote, History: history, HistoryTruncated: truncated,
 	}, nil
 }
@@ -264,6 +287,10 @@ func (s *Service) Get(ctx context.Context, payload *gen.GetPayload) (*gen.Killsw
 func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.KillswitchMutationReceipt, error) {
 	if payload.CapabilityKey != CapabilityMCPToolCalls {
 		return nil, badRequest(errors.New("capability is not available"))
+	}
+	kind, input, err := target(payload.UserID, payload.AgentID)
+	if err != nil {
+		return nil, err
 	}
 	desired, err := desired(payload.Scope, payload.Schedule, payload.InternalNote, payload.ExternalNote)
 	if err != nil {
@@ -274,8 +301,8 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 		return nil, err
 	}
 	result, err := s.authorized.ActivatePrescription(ctx, killswitches.AuthorizedActivatePrescriptionRequest{
-		OperationID: operationID, Definition: mcptoolexecution.DefinitionKeyMCPToolExecution, PrincipalKind: mcptoolexecution.PrincipalKindUser,
-		PrincipalInput: payload.UserID, ResourceKind: mcptoolexecution.ResourceKindMCPServer, Desired: desired,
+		OperationID: operationID, Definition: mcptoolexecution.DefinitionKeyMCPToolExecution, PrincipalKind: kind,
+		PrincipalInput: input, ResourceKind: mcptoolexecution.ResourceKindMCPServer, Desired: desired,
 	})
 	if err != nil {
 		return nil, mapError(err)
@@ -320,7 +347,7 @@ func (s *Service) Lift(ctx context.Context, payload *gen.LiftPayload) (*gen.Kill
 	if err != nil {
 		return nil, err
 	}
-	overlaps, truncated, err := s.overlaps(ctx, organizationID, string(current.PrincipalKey), current.ResourceScope, stringsFrom(current.SelectedResourceKeys), current.StartsAt, current.ExpiresAt, current.ID)
+	overlaps, truncated, err := s.overlaps(ctx, organizationID, current.PrincipalKind, string(current.PrincipalKey), current.ResourceScope, stringsFrom(current.SelectedResourceKeys), current.StartsAt, current.ExpiresAt, current.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -335,16 +362,18 @@ func (s *Service) PreviewOverlaps(ctx context.Context, payload *gen.PreviewOverl
 	if payload.CapabilityKey != CapabilityMCPToolCalls {
 		return nil, badRequest(errors.New("capability is not available"))
 	}
-	userID, err := s.canonicalUser(organizationID, payload.UserID)
+	kind, input, err := target(payload.UserID, payload.AgentID)
 	if err != nil {
 		return nil, err
 	}
-	valid, err := s.user.ValidateCurrentOrganization(ctx, organizationID, killswitches.PrincipalKey(userID))
+	principalID, err := s.canonicalPrincipal(organizationID, kind, input)
 	if err != nil {
-		return nil, mapError(err)
+		return nil, err
 	}
-	if !valid {
-		return nil, badRequest(errors.New("user is not available"))
+	if payload.ID == nil {
+		if err := s.validateTarget(ctx, organizationID, kind, principalID); err != nil {
+			return nil, err
+		}
 	}
 	scope, selected, err := s.previewScope(ctx, organizationID, payload.Scope)
 	if err != nil {
@@ -360,12 +389,12 @@ func (s *Service) PreviewOverlaps(ctx context.Context, payload *gen.PreviewOverl
 		if getErr != nil {
 			return nil, getErr
 		}
-		if string(current.PrincipalKey) != userID {
+		if current.PrincipalKind != kind || string(current.PrincipalKey) != principalID {
 			return nil, badRequest(errors.New("killswitch identity cannot be changed"))
 		}
 		exclude = current.ID
 	}
-	overlaps, truncated, err := s.overlaps(ctx, organizationID, userID, scope, selected, startsAt, endsAt, exclude)
+	overlaps, truncated, err := s.overlaps(ctx, organizationID, kind, principalID, scope, selected, startsAt, endsAt, exclude)
 	if err != nil {
 		return nil, err
 	}
@@ -377,12 +406,12 @@ func (s *Service) BatchUserBadges(ctx context.Context, payload *gen.BatchUserBad
 	if err != nil {
 		return nil, err
 	}
-	if len(payload.UserIds) < 1 || len(payload.UserIds) > maxBatchUsers {
+	if len(payload.UserIds) < 1 || len(payload.UserIds) > maxBatchPrincipals {
 		return nil, badRequest(errors.New("user_ids must contain between 1 and 100 items"))
 	}
 	users := make([]string, 0, len(payload.UserIds))
 	for _, input := range payload.UserIds {
-		key, canonicalErr := s.canonicalUser(organizationID, input)
+		key, canonicalErr := s.canonicalPrincipal(organizationID, mcptoolexecution.PrincipalKindUser, input)
 		if canonicalErr != nil {
 			return nil, canonicalErr
 		}
@@ -420,22 +449,91 @@ func (s *Service) getCurated(ctx context.Context, id string) (killswitches.Curre
 	if err != nil {
 		return killswitches.CurrentPrescription{}, "", mapError(err)
 	}
-	if prescription.Definition != mcptoolexecution.DefinitionKeyMCPToolExecution || prescription.PrincipalKind != mcptoolexecution.PrincipalKindUser || prescription.ResourceKind != mcptoolexecution.ResourceKindMCPServer {
+	if prescription.Definition != mcptoolexecution.DefinitionKeyMCPToolExecution || (prescription.PrincipalKind != mcptoolexecution.PrincipalKindUser && prescription.PrincipalKind != mcptoolexecution.PrincipalKindAgent) || prescription.ResourceKind != mcptoolexecution.ResourceKindMCPServer {
 		return killswitches.CurrentPrescription{}, "", oops.C(oops.CodeNotFound)
 	}
 	return prescription, prescription.OrganizationID, nil
 }
 
-func (s *Service) canonicalUser(organizationID killswitches.OrganizationID, input string) (string, error) {
-	result, err := s.user.Canonicalize(organizationID, input)
+func (s *Service) canonicalPrincipal(organizationID killswitches.OrganizationID, kind killswitches.PrincipalKind, input string) (string, error) {
+	result, err := s.principals[kind].Canonicalize(organizationID, input)
 	if err != nil {
 		return "", mapError(err)
 	}
 	key, supported, err := result.Key()
 	if err != nil || !supported {
-		return "", badRequest(errors.New("user is not available"))
+		return "", badRequest(errors.New("target is not available"))
 	}
 	return string(key), nil
+}
+
+// target never promotes an owner or user-attributed session to an agent principal.
+func target(userID, agentID *string) (killswitches.PrincipalKind, string, error) {
+	if (userID == nil) == (agentID == nil) {
+		return "", "", badRequest(errors.New("supply exactly one of user_id or agent_id"))
+	}
+	if agentID != nil {
+		return mcptoolexecution.PrincipalKindAgent, *agentID, nil
+	}
+	return mcptoolexecution.PrincipalKindUser, *userID, nil
+}
+
+func (s *Service) validateTarget(ctx context.Context, organizationID killswitches.OrganizationID, kind killswitches.PrincipalKind, key string) error {
+	if kind == mcptoolexecution.PrincipalKindAgent {
+		id, err := uuid.Parse(key)
+		if err != nil {
+			return badRequest(errors.New("target is not available"))
+		}
+		agent, err := agentsrepo.New(s.db).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: string(organizationID), ID: id})
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && !mcptoolexecution.AgentAvailableForRestriction(agent)) {
+			return badRequest(errors.New("target is not available"))
+		}
+		if err != nil {
+			return mapError(fmt.Errorf("validate killswitch agent: %w", err))
+		}
+		return nil
+	}
+	valid, err := s.principals[kind].ValidateCurrentOrganization(ctx, organizationID, killswitches.PrincipalKey(key))
+	if err != nil {
+		return mapError(err)
+	}
+	if !valid {
+		return badRequest(errors.New("target is not available"))
+	}
+	return nil
+}
+
+func (s *Service) BatchAgentBadges(ctx context.Context, payload *gen.BatchAgentBadgesPayload) (*gen.KillswitchBatchAgentBadgesResult, error) {
+	organizationID, err := s.organization(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(payload.AgentIds) < 1 || len(payload.AgentIds) > maxBatchPrincipals {
+		return nil, badRequest(errors.New("agent_ids must contain between 1 and 100 items"))
+	}
+	ids := make([]string, 0, len(payload.AgentIds))
+	for _, input := range payload.AgentIds {
+		key, err := s.canonicalPrincipal(organizationID, mcptoolexecution.PrincipalKindAgent, input)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, key)
+	}
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	// This shared query keys on PrincipalKind; its legacy user column aliases hold agent IDs here.
+	rows, err := killswitchrepo.New(s.db).BatchCustomerKillswitchUserBadges(ctx, killswitchrepo.BatchCustomerKillswitchUserBadgesParams{
+		OrganizationID: string(organizationID), DefinitionKey: string(mcptoolexecution.DefinitionKeyMCPToolExecution),
+		PrincipalKind: string(mcptoolexecution.PrincipalKindAgent), ResourceKind: string(mcptoolexecution.ResourceKindMCPServer), UserIds: ids,
+	})
+	if err != nil {
+		return nil, mapError(fmt.Errorf("read killswitch agent badges: %w", err))
+	}
+	badges := make([]*gen.KillswitchAgentBadge, len(rows))
+	for i, row := range rows {
+		badges[i] = &gen.KillswitchAgentBadge{AgentID: row.UserID, Affected: row.AffectedNow || row.Scheduled, AffectedNow: row.AffectedNow, Scheduled: row.Scheduled}
+	}
+	return &gen.KillswitchBatchAgentBadgesResult{Badges: badges}, nil
 }
 
 func desired(scope *gen.KillswitchScope, schedule *gen.KillswitchSchedule, internalNote, externalNote string) (killswitches.DesiredVersionInput, error) {
@@ -571,7 +669,7 @@ func (s *Service) previewSchedule(ctx context.Context, schedule *gen.KillswitchS
 	return start, endsAt, nil
 }
 
-func (s *Service) overlaps(ctx context.Context, organizationID killswitches.OrganizationID, userID string, scope killswitches.ResourceScope, selected []string, startsAt time.Time, endsAt *time.Time, exclude killswitches.PrescriptionID) ([]*gen.KillswitchOverlap, bool, error) {
+func (s *Service) overlaps(ctx context.Context, organizationID killswitches.OrganizationID, kind killswitches.PrincipalKind, principalID string, scope killswitches.ResourceScope, selected []string, startsAt time.Time, endsAt *time.Time, exclude killswitches.PrescriptionID) ([]*gen.KillswitchOverlap, bool, error) {
 	excludeID := uuid.NullUUID{}
 	if exclude != "" {
 		id, err := uuid.Parse(string(exclude))
@@ -581,7 +679,7 @@ func (s *Service) overlaps(ctx context.Context, organizationID killswitches.Orga
 		excludeID = uuid.NullUUID{UUID: id, Valid: true}
 	}
 	rows, err := killswitchrepo.New(s.db).ListCustomerKillswitchOverlaps(ctx, killswitchrepo.ListCustomerKillswitchOverlapsParams{
-		OrganizationID: string(organizationID), DefinitionKey: string(mcptoolexecution.DefinitionKeyMCPToolExecution), PrincipalKind: string(mcptoolexecution.PrincipalKindUser), PrincipalKey: userID, ResourceKind: string(mcptoolexecution.ResourceKindMCPServer),
+		OrganizationID: string(organizationID), DefinitionKey: string(mcptoolexecution.DefinitionKeyMCPToolExecution), PrincipalKind: string(kind), PrincipalKey: principalID, ResourceKind: string(mcptoolexecution.ResourceKindMCPServer),
 		ExcludeID: excludeID, DraftStartsAt: conv.ToPGTimestamptz(startsAt), DraftEndsAt: conv.PtrToPGTimestamptz(endsAt), DraftScope: string(scope), DraftSelectedResourceKeys: selected,
 	})
 	if err != nil {
@@ -598,8 +696,14 @@ func (s *Service) overlaps(ctx context.Context, organizationID killswitches.Orga
 	return result, truncated, nil
 }
 
-func summary(id, userID string, version int64, status, start, scope string, selected []string, startsAt time.Time, endsAt *time.Time) *gen.KillswitchSummary {
-	return &gen.KillswitchSummary{ID: id, CapabilityKey: CapabilityMCPToolCalls, CapabilityLabel: capabilityLabel, UserID: userID, Version: version, Status: gen.KillswitchStatus(status), Scope: outputScope(scope, selected), Schedule: outputSchedule(startsAt, endsAt, start)}
+func summary(id string, kind killswitches.PrincipalKind, principalID string, version int64, status, start, scope string, selected []string, startsAt time.Time, endsAt *time.Time) *gen.KillswitchSummary {
+	var userID, agentID *string
+	if kind == mcptoolexecution.PrincipalKindAgent {
+		agentID = &principalID
+	} else {
+		userID = &principalID
+	}
+	return &gen.KillswitchSummary{ID: id, CapabilityKey: CapabilityMCPToolCalls, CapabilityLabel: capabilityLabel, PrincipalKind: gen.KillswitchPrincipalKind(kind), UserID: userID, AgentID: agentID, Version: version, Status: gen.KillswitchStatus(status), Scope: outputScope(scope, selected), Schedule: outputSchedule(startsAt, endsAt, start)}
 }
 
 func outputScope(scope string, selected []string) *gen.KillswitchScope {

@@ -221,3 +221,25 @@ confirmed zero bindings/sessions and no client secret. No dedicated preparation
 dashboard, provider acceptance, or usable human access is demonstrated.
 
 [Browser evidence and supplementary checks](https://github.com/speakeasy-api/gram/pull/6438#issuecomment-5798502630).
+
+### Fleet and agent MCP restrictions — `[x]`
+
+Fleet combines registered identities (including those without observed runs),
+configured assistants when available, and paged captured sessions. Directory
+branches use owner, creator, and captured-user roles separately. Captured sessions
+have no registered-agent binding, even when a name or person matches. The existing
+assistant empty state is intentional.
+
+The release assistant has two active agent restrictions: one selected-server and
+one all-server restriction. Releasing either leaves the other active. Local
+organization administrators can exercise Kill/Release; the public demo remains
+read-only. Scope is covered MCP tools/call across the agent's current and future
+credential sessions, independent of registration suspension and execution state.
+
+Verify phone rows, source selection, Directory branches, inspector Back focus,
+transcript/Security links, selected-server confirmation, overlap-preserving Release,
+and organization-wide restrictions. The exact `/killswitch/:id` record and the
+no-project-read `/killswitch` recovery list need no agent inventory or rollout.
+A query failure must offer Retry rather than claim no restrictions.
+
+Locally verified at desktop and phone sizes: source groups and directory, selected inspector, resize then Back focus, selected/all-server Release with overlaps, and immediate MCP badge refresh. Backend coverage includes tenant/owner/sibling isolation, suspended-create/resume, and Release after revoke/delete. Final PR preview verification is recorded with the PR demo.

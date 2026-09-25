@@ -35,6 +35,7 @@ import DataExports from "./pages/data-exports/DataExports";
 import { LegacyDataRedirect } from "./pages/data-exports/LegacyDataRedirect";
 import DeviceAgent, { DeviceAgentRoot } from "./pages/device-agent/DeviceAgent";
 import AgentsPage from "./pages/agents/Agents";
+import Fleet from "./pages/fleet/Fleet";
 import MdmIntegrationDetail from "./pages/org/device-integrations/MdmIntegrationDetail";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
@@ -697,6 +698,7 @@ const ROUTE_STRUCTURE = {
     },
   },
 
+  fleet: { title: "Fleet", url: "fleet", icon: "bot", component: Fleet },
   agents: {
     title: "Agent Identity",
     url: "agent-management",

@@ -75,7 +75,7 @@ vi.mock("@/routes", () => ({
 }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
-  useQueryClient: () => ({}),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: (...args: unknown[]) => {
@@ -209,6 +209,7 @@ function activeDetail(overrides: Partial<Detail> = {}): Detail {
     id: "ks-1",
     userId: "user-1",
     capabilityKey: "mcp_tool_calls",
+    principalKind: "user",
     capabilityLabel: "MCP tool calls",
     version: 1,
     status: "active",
@@ -303,6 +304,7 @@ describe("KillswitchRecord", () => {
       id: "ks-1",
       userId: "deleted-user",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 2,
       status: "active",
@@ -360,6 +362,7 @@ describe("KillswitchRecord", () => {
       id: "ks-1",
       userId: "user-1",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 1,
       status: "active",
@@ -422,7 +425,10 @@ describe("KillswitchRecord", () => {
     expect(mocks.capabilityRequest).toEqual({ gramSession: "session" });
     expect(mocks.serverRequest).toEqual({ gramSession: "session" });
     expect(mocks.detailOptions).toEqual({ throwOnError: false });
-    expect(mocks.membersOptions).toEqual({ throwOnError: false });
+    expect(mocks.membersOptions).toEqual({
+      throwOnError: false,
+      enabled: true,
+    });
     expect(mocks.serverOptions).toEqual({ throwOnError: false });
     expect(mocks.capabilityOptions).toEqual({
       enabled: false,

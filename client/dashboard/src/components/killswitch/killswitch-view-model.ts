@@ -27,6 +27,7 @@ function trimNoteEdges(value: string): string {
 }
 
 export type EditorDraft = {
+  agentId?: string;
   userId: string;
   capabilityKey: "" | "mcp_tool_calls";
   scopeType: "" | "all_servers" | "selected_servers";
@@ -50,7 +51,9 @@ export function validateDraft(
   now = new Date(),
 ): DraftErrors {
   const errors: DraftErrors = {};
-  if (!draft.userId) errors.userId = "Choose one team member.";
+  if (!draft.userId && !draft.agentId) errors.userId = "Choose one target.";
+  if (draft.userId && draft.agentId)
+    errors.userId = "Choose exactly one target.";
   if (!draft.capabilityKey) errors.capabilityKey = "Choose one capability.";
   if (!draft.scopeType) errors.scopeType = "Choose an MCP server scope.";
   if (draft.scopeType === "selected_servers" && draft.serverIds.length === 0) {
@@ -207,4 +210,28 @@ export function conflictName(
 
 export function newOperationId(): string {
   return crypto.randomUUID();
+}
+
+/** Keep actor namespaces explicit; ownership never supplies an agent target. */
+export function draftTarget(draft: Pick<EditorDraft, "userId" | "agentId">): {
+  userId?: string;
+  agentId?: string;
+} {
+  if (Boolean(draft.userId) === Boolean(draft.agentId))
+    throw new Error("Choose exactly one target.");
+  return draft.agentId ? { agentId: draft.agentId } : { userId: draft.userId };
+}
+
+export function affectedServerNames(
+  scope: KillswitchScope,
+  servers: ReadonlyMap<string, string>,
+): string {
+  if (scope.type === "all_servers")
+    return "All MCP servers in the organization, including ones added later";
+  const ids = scope.serverIds;
+  return (
+    ids
+      .map((id) => servers.get(id) ?? "Deleted or unavailable MCP server")
+      .join(", ") || "No current eligible servers"
+  );
 }

@@ -29,6 +29,7 @@ const routes = {
     "Remote Identity Providers",
     "remote-identity-providers",
   ),
+  fleet: route("Fleet", "fleet"),
   agents: route("Agent Identity", "agent-management"),
   agentSessions: route("Agent Sessions", "agent-sessions"),
   assistants: route("Assistants", "assistants"),
@@ -140,8 +141,9 @@ describe("useProjectNavRoutes", () => {
   it("lists Identity before MCP Gateway, Security and Policy, and Observability", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
     const navRoutes = result.current.map((entry) => entry.route);
-    expect(navRoutes.slice(2, 6)).toEqual([
+    expect(navRoutes.slice(2, 7)).toEqual([
       routes.identities,
+      routes.fleet,
       routes.agents,
       routes.mcpSessions,
       routes.remoteIdentityProviders,

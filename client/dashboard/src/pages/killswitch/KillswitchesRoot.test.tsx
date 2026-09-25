@@ -1,14 +1,18 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  KillswitchesRoot,
   KillswitchIndexRedirect,
   KillswitchRecordRedirect,
 } from "./KillswitchesRoot";
 
 const mocks = vi.hoisted(() => ({
-  detail: undefined as { userId: string } | undefined,
+  detail: undefined as
+    | { principalKind: string; userId?: string; agentId?: string }
+    | undefined,
+  canAccess: true,
   isLoading: false,
   canOpenIdentity: true,
   canOpenDirectory: true,
@@ -39,13 +43,16 @@ vi.mock("@/hooks/useRBAC", () => {
 });
 vi.mock("@/hooks/useKillswitchAccess", () => ({
   useKillswitchAccess: () => ({
-    canAccess: true,
+    canAccess: mocks.canAccess,
     isLoading: false,
     reason: "allowed",
   }),
 }));
 vi.mock("@/routes", () => ({
-  useRoutes: () => ({ identities: { href: () => "/acme/p/identities" } }),
+  useRoutes: () => ({
+    identities: { href: () => "/acme/p/identities" },
+    fleet: { href: () => "/acme/p/fleet" },
+  }),
 }));
 // Mirrors the real builder, which applies withIdentityWindow to every href —
 // so the record forward is exercised against an href that already carries a
@@ -74,6 +81,39 @@ vi.mock("@gram/client/react-query/killswitch.js", () => ({
   }),
 }));
 
+vi.mock("@/hooks/useReadableAgents", () => ({
+  useReadableAgents: () => {
+    throw new Error("Recovery must not query inventory");
+  },
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: "disabled" }),
+}));
+vi.mock("@gram/client/react-query/killswitches.js", () => ({
+  useKillswitchesInfinite: () => ({
+    data: { pages: [{ result: { items: [] } }] },
+    isLoading: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/killswitchMCPServers.js", () => ({
+  useKillswitchMCPServers: () => ({ data: { servers: [] } }),
+}));
+vi.mock("@/components/killswitch/KillswitchRecord", () => ({
+  KillswitchRecord: ({
+    subjectAgent,
+    onClose,
+  }: {
+    subjectAgent: { name: string };
+    onClose: () => void;
+  }) => (
+    <section aria-label="Restriction">
+      <h1>{subjectAgent.name}</h1>
+      <button>Release restriction</button>
+      <button onClick={onClose}>Close</button>
+    </section>
+  ),
+}));
+
 function renderAt(element: JSX.Element, at = "/acme/killswitch/ks-1") {
   return render(
     <MemoryRouter initialEntries={[at]}>
@@ -92,7 +132,8 @@ function Landed(): JSX.Element {
 
 afterEach(cleanup);
 beforeEach(() => {
-  mocks.detail = { userId: "user-1" };
+  mocks.detail = { principalKind: "user", userId: "user-1" };
+  mocks.canAccess = true;
   mocks.isLoading = false;
   mocks.canOpenIdentity = true;
   mocks.canOpenDirectory = true;
@@ -147,10 +188,66 @@ describe("retired killswitch addresses", () => {
     );
   });
 
-  it("says where killswitches went rather than forwarding a reader who cannot open the directory", () => {
+  it("offers agent recovery without project read", () => {
     mocks.canOpenDirectory = false;
     renderAt(<KillswitchIndexRedirect />);
     expect(screen.queryByTestId("landed")).toBeNull();
-    expect(screen.queryByText("Killswitches moved")).not.toBeNull();
+    expect(
+      screen.getByRole("region", { name: "Agent restrictions" }),
+    ).toBeTruthy();
+  });
+});
+
+describe("agent restriction recovery routes", () => {
+  beforeEach(() => {
+    mocks.detail = { principalKind: "agent", agentId: "agent-12345678" };
+  });
+  it("opens the exact agent restriction without inventory or the agent rollout", () => {
+    renderAt(<KillswitchRecordRedirect />);
+    expect(
+      screen.getByRole("button", { name: "Release restriction" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Agent · agent-12" }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Deleted/)).toBeNull();
+    expect(screen.queryByTestId("landed")).toBeNull();
+  });
+  it("returns to Fleet restrictions with project read", () => {
+    renderAt(<KillswitchRecordRedirect />);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.getByTestId("landed").textContent).toBe(
+      "/acme/p/fleet?tab=restrictions",
+    );
+  });
+  it("returns to the killswitch index without project read", () => {
+    mocks.canOpenDirectory = false;
+    renderAt(<KillswitchRecordRedirect />);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.getByTestId("landed").textContent).toBe("/acme/killswitch");
+  });
+  it.each([
+    { principalKind: "agent" },
+    { principalKind: "unknown", agentId: "agent-1" },
+  ])("refuses malformed target %j", (detail) => {
+    mocks.detail = detail;
+    renderAt(<KillswitchRecordRedirect />);
+    expect(
+      screen.getByText(
+        /not an agent restriction|Unsupported restriction target/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Release restriction" }),
+    ).toBeNull();
+    expect(screen.queryByTestId("landed")).toBeNull();
+  });
+  it("retains the killswitch authorization gate", () => {
+    mocks.canAccess = false;
+    renderAt(<KillswitchesRoot />);
+    expect(screen.getByText("Killswitch is not available")).toBeTruthy();
+    expect(
+      screen.queryByRole("region", { name: "Agent restrictions" }),
+    ).toBeNull();
   });
 });

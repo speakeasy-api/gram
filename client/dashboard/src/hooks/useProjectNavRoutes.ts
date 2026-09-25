@@ -67,6 +67,7 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
       { route: routes.home, scope: read },
       { route: routes.chat, scope: read },
       { route: routes.identities, scope: observe },
+      { route: routes.fleet, scope: read },
       ...(agentManagementFlag.status === "enabled"
         ? [{ route: routes.agents, scope: [] }]
         : []),

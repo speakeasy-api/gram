@@ -1,3 +1,8 @@
+import {
+  AgentRestrictions,
+  AgentRestrictionRecord,
+} from "@/pages/fleet/AgentRestrictions";
+import { useNavigate } from "react-router";
 import { killswitchRecordHref } from "@/components/killswitch/killswitch-routing";
 import { useSession } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
@@ -56,8 +61,7 @@ export function KillswitchesRoot(): JSX.Element {
  * project comes from the same slug org-scoped pages already send on their
  * requests — this route carries none in its path. The roster is a project:read
  * surface while Killswitch is gated on org:admin, and a custom role can grant
- * one without the other: those readers are told where killswitches went rather
- * than forwarded onto a screen that refuses them.
+ * one without the other. Agent restrictions remain recoverable at this route.
  */
 function useIdentitiesHref(): string | null {
   const projectSlug = useProjectSlugForRequests();
@@ -79,13 +83,17 @@ function KillswitchesMovedNotice(): JSX.Element {
 }
 
 /**
- * Where the killswitch roster used to be. There is no longer a list of
- * restrictions to land on, so the reader is sent to the people they are placed
- * on.
+ * Preserve the person-directory entry point, with an agent recovery list for
+ * administrators who cannot open project-scoped Fleet.
  */
 export function KillswitchIndexRedirect(): JSX.Element {
   const identitiesHref = useIdentitiesHref();
-  if (!identitiesHref) return <KillswitchesMovedNotice />;
+  if (!identitiesHref)
+    return (
+      <div className="p-4 sm:p-8">
+        <AgentRestrictions agents={[]} inventoryAvailable={false} />
+      </div>
+    );
   return <Navigate to={identitiesHref} replace />;
 }
 
@@ -99,6 +107,10 @@ export function KillswitchIndexRedirect(): JSX.Element {
  */
 export function KillswitchRecordRedirect(): JSX.Element {
   const { killswitchId = "" } = useParams();
+  const navigate = useNavigate();
+  const { hasScope } = useRBAC();
+  const projectSlug = useProjectSlugForRequests();
+  const fleetHref = useRoutes({ projectSlug }).fleet.href();
   const session = useSession();
   const identityAccessHref = useIdentityHrefBuilder("access");
   const identitiesHref = useIdentitiesHref();
@@ -116,7 +128,36 @@ export function KillswitchRecordRedirect(): JSX.Element {
     );
   }
 
-  const userId = detailQuery.data?.userId;
+  if (detailQuery.data?.principalKind === "agent") {
+    return (
+      <div className="p-4 sm:p-8">
+        <AgentRestrictionRecord
+          id={killswitchId}
+          agents={[]}
+          inventoryAvailable={false}
+          onSelect={(id) => {
+            void navigate(`../${id}`);
+          }}
+          onClose={() => {
+            void navigate(
+              hasScope("project:read") ? `${fleetHref}?tab=restrictions` : "..",
+              { relative: "path" },
+            );
+          }}
+        />
+      </div>
+    );
+  }
+  if (detailQuery.data && detailQuery.data.principalKind !== "user")
+    return (
+      <KillswitchNotice title="Unsupported restriction target">
+        This restriction cannot be managed here.
+      </KillswitchNotice>
+    );
+  const userId =
+    detailQuery.data?.principalKind === "user"
+      ? detailQuery.data.userId
+      : undefined;
   const accessHref = userId ? identityAccessHref({ userId }) : null;
   if (accessHref) {
     return (

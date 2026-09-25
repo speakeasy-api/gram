@@ -12,6 +12,8 @@ import {
 } from "@/components/killswitch/killswitch-view-model";
 
 type Props = {
+  targetDescription?: string;
+  affectedServers?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   overlaps: KillswitchOverlap[];
@@ -25,6 +27,8 @@ type Props = {
 
 export function LiftKillswitchDialog({
   open,
+  targetDescription,
+  affectedServers,
   onOpenChange,
   overlaps,
   overlapsTruncated,
@@ -76,12 +80,22 @@ export function LiftKillswitchDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Lift killswitch</Dialog.Title>
+          <Dialog.Title>
+            {targetDescription ? "Release MCP restriction" : "Lift killswitch"}
+          </Dialog.Title>
           <Dialog.Description>
             Lifting ends this independently managed restriction. It does not
-            lift overlapping Killswitches.
+            lift overlapping Killswitches. Other restrictions and permissions
+            still apply; nothing is restarted.
           </Dialog.Description>
         </Dialog.Header>
+        {targetDescription && (
+          <p className="text-sm">
+            Target: <strong>{targetDescription}</strong>. All its credential
+            sessions across the organization. Covered MCP tools/call on:{" "}
+            {affectedServers}.
+          </p>
+        )}
         {previewStatus === "loading" ? (
           <p role="status" className="text-muted-foreground text-sm">
             Refreshing overlaps…
@@ -146,7 +160,11 @@ export function LiftKillswitchDialog({
             disabled={isPending || previewStatus !== "ready"}
             onClick={() => void lift()}
           >
-            {isPending ? "Lifting…" : "Lift killswitch"}
+            {isPending
+              ? "Lifting…"
+              : targetDescription
+                ? "Release restriction"
+                : "Lift killswitch"}
           </Button>
         </Dialog.Footer>
       </Dialog.Content>

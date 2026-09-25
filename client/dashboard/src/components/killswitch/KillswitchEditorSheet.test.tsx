@@ -100,7 +100,7 @@ describe("KillswitchEditorSheet", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Turn off MCP tool calls" }),
     );
-    expect(await screen.findByText("Choose one team member.")).not.toBeNull();
+    expect(await screen.findByText("Choose one target.")).not.toBeNull();
     expect(screen.getByText("Choose one capability.")).not.toBeNull();
     expect(screen.getByText("Choose an MCP server scope.")).not.toBeNull();
     expect(screen.getAllByText("This note is required.")).toHaveLength(2);
@@ -211,6 +211,7 @@ describe("KillswitchEditorSheet", () => {
       id: "ks-1",
       userId: "user-1",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 1,
       status: "active",
@@ -239,7 +240,9 @@ describe("KillswitchEditorSheet", () => {
       ),
     ).not.toBeNull();
     expect(
-      screen.getByText("Removed servers regain access immediately."),
+      screen.getByText(
+        "This restriction no longer covers removed servers. Other access controls still apply.",
+      ),
     ).not.toBeNull();
     expect(screen.getByText("Unchanged: Server A")).not.toBeNull();
     expect(screen.getByText("Removed: Server B, Server C")).not.toBeNull();
@@ -252,6 +255,7 @@ describe("KillswitchEditorSheet", () => {
         id: "ks-all",
         userId: "user-1",
         capabilityKey: "mcp_tool_calls",
+        principalKind: "user",
         capabilityLabel: "MCP tool calls",
         version: 1,
         status: "scheduled",
@@ -295,6 +299,7 @@ describe("KillswitchEditorSheet", () => {
         id: "ks-all-current",
         userId: "user-1",
         capabilityKey: "mcp_tool_calls",
+        principalKind: "user",
         capabilityLabel: "MCP tool calls",
         version: 1,
         status: "active",
@@ -331,6 +336,7 @@ describe("KillswitchEditorSheet", () => {
       id: "ks-1",
       userId: "user-1",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 1,
       status: "active",
@@ -440,6 +446,7 @@ describe("KillswitchEditorSheet", () => {
         id: "ks-deleted-server",
         userId: "user-1",
         capabilityKey: "mcp_tool_calls",
+        principalKind: "user",
         capabilityLabel: "MCP tool calls",
         version: 1,
         status: "active",
@@ -467,6 +474,7 @@ describe("KillswitchEditorSheet", () => {
         id: "ks-picker-names",
         userId: "user-1",
         capabilityKey: "mcp_tool_calls",
+        principalKind: "user",
         capabilityLabel: "MCP tool calls",
         version: 1,
         status: "active",
@@ -496,6 +504,7 @@ describe("KillswitchEditorSheet", () => {
       id: "ks-picker",
       userId: "user-1",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 1,
       status: "active",
@@ -524,6 +533,7 @@ describe("KillswitchEditorSheet", () => {
         id: "ks-active",
         userId: "user-1",
         capabilityKey: "mcp_tool_calls",
+        principalKind: "user",
         capabilityLabel: "MCP tool calls",
         version: 2,
         status: "active",
@@ -559,6 +569,7 @@ describe("KillswitchEditorSheet", () => {
         id: "ks-conflict",
         userId: "user-1",
         capabilityKey: "mcp_tool_calls",
+        principalKind: "user",
         capabilityLabel: "MCP tool calls",
         version: 1,
         status: "active",
@@ -639,6 +650,7 @@ describe("KillswitchEditorSheet", () => {
       id: "ks-1",
       userId: "user-1",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 1,
       status: "active",
@@ -695,6 +707,7 @@ describe("KillswitchEditorSheet", () => {
       id: "ks-1",
       userId: "user-1",
       capabilityKey: "mcp_tool_calls",
+      principalKind: "user",
       capabilityLabel: "MCP tool calls",
       version: 1,
       status: "active",
