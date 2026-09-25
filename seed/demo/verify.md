@@ -137,7 +137,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     `/<org>/killswitch` forwards to **Identities**; and
     `/<org>/killswitch/<killswitchId>?range=…` forwards onto its subject's
     Access tab with that record open and the range still applied.
-14. **Audit logs** — Killswitch history contributes eleven rows: eight
+14. **Audit logs** — Killswitch history contributes thirteen rows: ten
     **activated**, one **changed**, one **lifted/deactivated**, and one
     **expired**. Mutation rows name the same fictional operator and prescription
     version as their Killswitch history entries; the expiry row is attributed to
@@ -188,12 +188,12 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       readable owner names and initials fallback rather than raw IDs or broken
       avatars. Local seeded fixtures must be visible to the authorized human.
     - Open Release assistant's sessions. Its one display-only session is
-      expired; suspended/revoked agents have no seeded sessions. This fixture has no signing token, an invalid refresh
+      expired. Suspended Support triage also has expired history; the revoked documentation identity retains a soft-deleted session. These fixtures have no signing token, an invalid refresh
       hash, and empty delegation: it must not authenticate or refresh. The
       `agent-identity-credentials` flag gates live MCP authorization, not
       the inventory check; no live connection is promised by these fixtures.
-    - API keys are empty after the shared SQL runs. With the credentials flag
-      enabled, only the active agent permits key creation; suspended/revoked
+    - Shared SQL inserts three expired inert agent keys (Release notes assistant, Billing reconciliation and a revoked Deploy verifier key). The organization API Keys list excludes agent keys; agent key tabs must label live fixture rows expired. With the credentials flag
+      enabled, only active agents permit key creation; suspended/revoked
       agents must not offer usable credentials. With the flag disabled, confirm
       the unavailable-rollout state, not a misleading empty-key success state.
       Never add usable keys to shared SQL.
@@ -218,11 +218,10 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       and only then complete consent. Missing connections must block approval.
       Verify policy is unchanged. Use a locally executable provider for live
       exchange; the inert shared seed cannot prove third-party authentication.
-    - Seed rationale: four identities cover active, suspended and revoked
+    - Seed rationale: ten identities cover active, suspended and revoked
       states; the two active release agents have exact project/server-scoped
-      Linear grants and share one inert human-owned upstream session. API keys
-      remain empty and the agent credential session is expired. Confirm the
-      release agents' policy views show their scoped grant; the other two
+      Linear grants and share one inert human-owned upstream session. All eight agent credential sessions and all three agent keys are expired and inert. Confirm the
+      release agents' policy views show their scoped grant; the other
       identities retain an explicit empty direct-policy state.
     - **Fresh creation is required acceptance evidence.** As an ordinary human
       in the local organization, create a new agent owned by that human using
@@ -295,7 +294,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       a test key into shared SQL or `RunLocalFixtures`. Do not mutate the shared
       demo remotely for these checks. Missing live-usage prerequisites mean
       the check is blocked, not passed.
-    - Rerun `mise run seed`: the same four identities/lifecycles return, agent
+    - Rerun `mise run seed`: the same ten identities/lifecycles return, agent
       policy grants are reset, and no visitor-created API keys survive the
       shared SQL. Local-only developer keys may be restored by
       `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
@@ -386,7 +385,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       Reattach the same exact session twice: only one active binding per
       agent/issuer/client slot. A replacement session must not silently take
       over a binding to the original session.
-    - Rerun `mise run seed` twice. Expect four agents, one inert upstream
+    - Rerun `mise run seed` twice. Expect ten agents, one inert upstream
       session, two bindings and two exact project/server-scoped grants, with no
       usable upstream credentials. This
       fixture proves display and identity relationships, not live execution.
@@ -435,26 +434,43 @@ Connector` appears under **Inactive** with no connections. Its row menu's
 
 25. **Fleet and agent restriction recovery**
 
-Open Fleet in list and Directory modes at desktop and phone widths. Select a
-registered identity with recent credential authentication, then a captured
-session. Both list and Directory must show only observed activity in the last
-24 hours; profile edits and missing timestamps do not qualify. Assistants use
-only explicit assistantId links on session pages loaded during this visit,
-retaining recent timestamps across search and page changes. Check person
-roles, risk counts, transcript/Security links, URL selection, and Back focus.
-Leave an inspector open through a refresh: loaded data stays visible while the
-next window fetches. A row aging out keeps the URL and does not take focus from
-search. Verify that hidden tabs pause the rolling clock and refresh on return.
-Agent restrictions remain discoverable regardless of the target’s activity age.
-These browsing checks may run in the demo organization. The following restriction
-mutation checks are local only: use an ordinary human organization-admin session
-after `mise run seed`, without impersonation.
-Release the selected-server restriction on the
-release assistant: the all-server overlap must remain and MCP blocked must stay.
-Create a selected-server restriction, reviewing the exact agent, named servers,
-organization scope and tools/call effect. Verify Release after revoke/delete via
-the organization restrictions list or exact audit record link. With inventory
-unavailable, labels fall back safely and Release remains available.
+Run `mise run seed` twice locally: it populates both the writable local org and
+actual demo org. Open plain `/explore-demo`, wait for the organization switch, then navigate
+to `/acme-demo/projects/default/fleet` for the real non-member demo audience. `gram-fleet` must be enabled for Fleet;
+`agent-management` and `assistants` independently enable those inventories.
+Production flags are an external configuration dependency, not set by seeding.
+
+- Fresh seed: expect eight registered agents, three assistants and recent captures
+  from the matrix in `PAGES.md`. Both List and Directory omit Legacy invoice
+  exporter (4d old) and Nightly report agent (no use), while management still
+  lists all ten identities. Confirm four departments and project/org scope.
+- Inspect support, deployment and billing transcripts. Each has four meaningful
+  turns. Creator and captured user are distinct; the deployment review has one
+  synthetic email-address finding visible through Security. External contractor and
+  same-string directory-id captures remain unverified; the unknown capture has
+  no owner. No capture infers a registered-agent binding.
+- In demo, agent inspectors show registration and timestamps, hide management
+  links, make no credential/policy requests, and explain read-only restrictions.
+  The primary Manage CTA is absent. A normal read-only member retains the
+  management viewing link but policy requests require agent write permission.
+- Search an assistant by name after loading its capture; it stays visible even
+  when chat search returns no rows. Visit-scoped evidence persists over paging
+  and resets on project/org/user change. Old assistant history stays excluded.
+- Check desktop/phone List, Directory, selection, transcript links and Back focus.
+  Leave selection open through a refresh: rows and search focus stay stable.
+  Aging-out preserves the URL. Hidden tabs pause the rolling window.
+- With Fleet disabled/loading/missing/error, nav and route load no Fleet queries.
+  Exact agent restriction records remain reachable. Closing returns to the
+  agent recovery list at `/killswitch` if Fleet is hidden; people’s restrictions
+  remain linked through Identities. Legacy user record redirects are unchanged.
+
+Restriction mutations remain LOCAL ONLY, in the writable local org under an
+ordinary org-admin session. Release one Release assistant restriction and retain
+the overlap. Inspect Support triage's independent all-server restriction. Recover
+Legacy invoice exporter's restriction despite its age, and test revoke/delete
+recovery through the exact record. Confirmation names agent and servers, applies
+organization-wide to covered tools/call only, and Release never restarts anything.
+Do not run remote seed or remote mutations for this verification.
 
 ## On failure
 

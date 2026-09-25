@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     | { principalKind: string; userId?: string; agentId?: string }
     | undefined,
   canAccess: true,
+  fleetStatus: "enabled",
   isLoading: false,
   canOpenIdentity: true,
   canOpenDirectory: true,
@@ -41,6 +42,9 @@ vi.mock("@/hooks/useRBAC", () => {
     }),
   };
 });
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({ status: mocks.fleetStatus }),
+}));
 vi.mock("@/hooks/useKillswitchAccess", () => ({
   useKillswitchAccess: () => ({
     canAccess: mocks.canAccess,
@@ -86,9 +90,7 @@ vi.mock("@/hooks/useReadableAgents", () => ({
     throw new Error("Recovery must not query inventory");
   },
 }));
-vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: "disabled" }),
-}));
+
 vi.mock("@gram/client/react-query/killswitches.js", () => ({
   useKillswitchesInfinite: () => ({
     data: { pages: [{ result: { items: [] } }] },
@@ -133,6 +135,7 @@ function Landed(): JSX.Element {
 
 afterEach(cleanup);
 beforeEach(() => {
+  mocks.fleetStatus = "enabled";
   mocks.detail = { principalKind: "user", userId: "user-1" };
   mocks.canAccess = true;
   mocks.isLoading = false;
@@ -201,6 +204,7 @@ describe("retired killswitch addresses", () => {
 
 describe("agent restriction recovery routes", () => {
   beforeEach(() => {
+    mocks.fleetStatus = "enabled";
     mocks.detail = { principalKind: "agent", agentId: "agent-12345678" };
   });
   it("opens the exact agent restriction without inventory or the agent rollout", () => {
@@ -251,4 +255,25 @@ describe("agent restriction recovery routes", () => {
       screen.queryByRole("region", { name: "Agent restrictions" }),
     ).toBeNull();
   });
+});
+
+it.each(["disabled", "missing", "error"])(
+  "keeps agent recovery reachable with Fleet %s",
+  (status) => {
+    mocks.fleetStatus = status;
+    mocks.detail = { principalKind: "agent", agentId: "agent-12345678" };
+    renderAt(<KillswitchRecordRedirect />);
+    expect(
+      screen.getByRole("button", { name: "Release restriction" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.getByTestId("landed").textContent).toBe("/acme/killswitch");
+    expect(screen.getByTestId("landed").textContent).not.toContain("/fleet");
+  },
+);
+it("offers the agent recovery list to project readers when Fleet is off", () => {
+  mocks.fleetStatus = "disabled";
+  renderAt(<KillswitchIndexRedirect />);
+  expect(screen.getByText("Agent restrictions")).toBeTruthy();
+  expect(screen.queryByTestId("landed")).toBeNull();
 });

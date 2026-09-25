@@ -15,6 +15,7 @@ import type { FleetRow } from "./fleet-model";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 
 const mocks = vi.hoisted(() => ({
+  fleetStatus: "enabled",
   query: vi.fn(),
   listArgs: vi.fn(),
   badges: vi.fn(),
@@ -38,7 +39,9 @@ vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
-  useFeatureFlag: () => ({ status: "enabled" }),
+  useFeatureFlag: (flag: string) => ({
+    status: flag === "gram-fleet" ? mocks.fleetStatus : "enabled",
+  }),
 }));
 vi.mock("@/hooks/useKillswitchAccess", () => ({
   useKillswitchAccess: () => ({ canAccess: true }),
@@ -162,6 +165,7 @@ async function settle() {
   });
 }
 beforeEach(() => {
+  mocks.fleetStatus = "enabled";
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
@@ -408,3 +412,17 @@ it("finishes a search clear when source is clicked before debounce and data rere
   expect(screen.getByLabelText("URL").textContent).not.toContain("q=");
   expect((search as HTMLInputElement).value).toBe("");
 });
+
+it.each(["disabled", "missing", "error", "loading"])(
+  "does not load Fleet data when the rollout is %s",
+  async (status) => {
+    mocks.fleetStatus = status;
+    mount();
+    expect(mocks.listArgs).not.toHaveBeenCalled();
+    expect(mocks.query).not.toHaveBeenCalled();
+    expect(mocks.badges).not.toHaveBeenCalled();
+    expect(screen.queryByRole("searchbox")).toBeNull();
+    if (status !== "loading")
+      expect(screen.getByText("Fleet is not available")).toBeTruthy();
+  },
+);

@@ -14,7 +14,7 @@ import (
 // reads. Runtime eligibility is not a management filter: suspended and revoked
 // agents must remain visible so humans can inspect and manage them.
 func (s *Service) List(ctx context.Context, _ *gen.ListPayload) ([]*gen.ManagedAgent, error) {
-	human, err := s.authorizer.RequireHuman(ctx, s.db)
+	human, demoReadOnly, err := s.authorizer.RequireListReader(ctx, s.db)
 	if err != nil {
 		return nil, s.serviceError(ctx, err, "list managed agents")
 	}
@@ -30,9 +30,12 @@ func (s *Service) List(ctx context.Context, _ *gen.ListPayload) ([]*gen.ManagedA
 	keySubjects := make([]string, 0, len(rows))
 	subjectAgents := map[string]map[string]string{"session": {}, "key": {}}
 	for _, agent := range rows {
-		permissions, err := s.authorizer.Permissions(ctx, human, agent)
-		if err != nil {
-			return nil, s.serviceError(ctx, err, "evaluate agent permissions")
+		permissions := AgentPermissions{Read: true, Write: false, Authorize: false, Transfer: false}
+		if !demoReadOnly {
+			permissions, err = s.authorizer.Permissions(ctx, human, agent)
+			if err != nil {
+				return nil, s.serviceError(ctx, err, "evaluate agent permissions")
+			}
 		}
 		if !permissions.Read {
 			continue
@@ -41,7 +44,9 @@ func (s *Service) List(ctx context.Context, _ *gen.ListPayload) ([]*gen.ManagedA
 		permissionsByID[agent.ID.String()] = permissions
 		// Credential timestamps follow ListSessions' OwnedAgentAuthorize gate,
 		// independently of permission to see the registered identity.
-		if permissions.Authorize {
+		// DemoScopeGrants allows browsing synthetic data. Expose its aggregate
+		// timestamp only, while projecting no credential-management capability.
+		if permissions.Authorize || demoReadOnly {
 			sessionSubject := urn.NewAgentSubject(agent.ID).String()
 			keySubject := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()
 			sessionSubjects = append(sessionSubjects, sessionSubject)

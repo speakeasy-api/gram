@@ -1,8 +1,10 @@
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import {
   AgentRestrictions,
   AgentRestrictionRecord,
 } from "@/pages/fleet/AgentRestrictions";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { killswitchRecordHref } from "@/components/killswitch/killswitch-routing";
 import { useSession } from "@/contexts/Auth";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
@@ -88,9 +90,20 @@ function KillswitchesMovedNotice(): JSX.Element {
  */
 export function KillswitchIndexRedirect(): JSX.Element {
   const identitiesHref = useIdentitiesHref();
-  if (!identitiesHref)
+  const fleetFlag = useFeatureFlag(FEATURE_FLAGS.fleet);
+  if (fleetFlag.status === "loading")
+    return <div className="p-8 text-sm">Loading restriction navigation…</div>;
+  if (!identitiesHref || fleetFlag.status !== "enabled")
     return (
       <div className="p-4 sm:p-8">
+        {identitiesHref && (
+          <Link
+            className="text-sm underline underline-offset-4"
+            to={identitiesHref}
+          >
+            Manage people’s restrictions in Identities
+          </Link>
+        )}
         <AgentRestrictions agents={[]} inventoryAvailable={false} />
       </div>
     );
@@ -111,6 +124,7 @@ export function KillswitchRecordRedirect(): JSX.Element {
   const { hasScope } = useRBAC();
   const projectSlug = useProjectSlugForRequests();
   const fleetHref = useRoutes({ projectSlug }).fleet.href();
+  const fleetFlag = useFeatureFlag(FEATURE_FLAGS.fleet);
   const session = useSession();
   const identityAccessHref = useIdentityHrefBuilder("access");
   const identitiesHref = useIdentitiesHref();
@@ -140,7 +154,9 @@ export function KillswitchRecordRedirect(): JSX.Element {
           }}
           onClose={() => {
             void navigate(
-              hasScope("project:read") ? `${fleetHref}?tab=restrictions` : "..",
+              hasScope("project:read") && fleetFlag.status === "enabled"
+                ? `${fleetHref}?tab=restrictions`
+                : "..",
               { relative: "path" },
             );
           }}

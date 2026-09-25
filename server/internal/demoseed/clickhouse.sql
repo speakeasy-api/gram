@@ -1483,6 +1483,30 @@ FROM (
 )
 WHERE k >= 0;
 
+-- Match the explicit recent Fleet transcript finding in Postgres. Keep only
+-- masked content here; this is exposure evidence, not an enforcement receipt.
+INSERT INTO risk_findings
+  (id, created_at, organization_id, project_id, chat_message_id, chat_id,
+   assistant_id, user_id, external_user_id, user_email, team, chat_source,
+   risk_policy_id, risk_policy_version, rule_id, description, source, confidence,
+   category, tags, start_pos, end_pos, match_len, match_redacted, surface, field,
+   message_created_at)
+WITH
+  (seed -> lower(hex(MD5(seed)))) AS hash_seed,
+  (h -> concat(substring(h, 1, 8), '-', substring(h, 9, 4), '-5', substring(h, 14, 3),
+    '-8', substring(h, 18, 3), '-', substring(h, 21, 12))) AS format_uuid,
+  'billing-review@example.com' AS sample,
+  length('Draft a rollout review for ') AS match_start
+SELECT toUUID(format_uuid(hash_seed('gram-demo-fleet-risk'))), now64(9) - INTERVAL 6 MINUTE,
+  'org_gram_demo_workspace', 'dec0de00-0000-4000-a000-000000000001',
+  format_uuid(hash_seed('gram-demo-fleet-message-2-1')), format_uuid(hash_seed('gram-demo-fleet-chat-2')),
+  format_uuid(hash_seed('gram-demo-fleet-assistant-2')), 'user_demo_mateo',
+  'mateo@demo.getgram.ai', 'mateo@demo.getgram.ai', 'Reliability', 'dashboard',
+  'dec0de00-0000-4000-a000-00000000f007', 1, 'pii.email_address',
+  'Synthetic contact address in a deployment review prompt', 'presidio', 0.88,
+  'pii', ['pii'], match_start, match_start + length(sample), length(sample),
+  '***@example.com', 'user', 'content', now64(9) - INTERVAL 9 MINUTE;
+
 -- Skill efficacy mappings: one skill_session_versions row per Postgres
 -- skill_observation (same det-uuid ids, same skill-per-chat formula
 -- 1 + (((i-1)/2) % 3)). surface='dev' — the insights query joins scores to
@@ -2439,3 +2463,9 @@ SELECT throwIf(
   (SELECT countIf(cost_usd > 0) FROM agent_events
    WHERE organization_id = 'org_gram_demo_workspace' AND surface = 'codex') != 0,
   'demo seed postflight: Codex states no cost, so no Codex demo row may carry one');
+
+-- Dedicated Fleet exposure example must survive reseeds exactly once.
+SELECT throwIf((SELECT count() FROM risk_findings
+  WHERE organization_id = 'org_gram_demo_workspace'
+    AND description = 'Synthetic contact address in a deployment review prompt') != 1,
+  'demo seed postflight: expected one Fleet transcript finding');

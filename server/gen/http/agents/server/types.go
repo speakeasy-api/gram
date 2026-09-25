@@ -158,8 +158,9 @@ type CreateResponseBody struct {
 	// Latest recorded credential-session or API-key authentication for this agent
 	// at Gram in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
-	// agents.list only for callers who can manage the agent's credentials; absent
-	// when unknown or unauthorized. Not run, process, or tool-call activity.
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -186,8 +187,9 @@ type GetResponseBody struct {
 	// Latest recorded credential-session or API-key authentication for this agent
 	// at Gram in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
-	// agents.list only for callers who can manage the agent's credentials; absent
-	// when unknown or unauthorized. Not run, process, or tool-call activity.
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -214,8 +216,9 @@ type RenameResponseBody struct {
 	// Latest recorded credential-session or API-key authentication for this agent
 	// at Gram in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
-	// agents.list only for callers who can manage the agent's credentials; absent
-	// when unknown or unauthorized. Not run, process, or tool-call activity.
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -272,8 +275,9 @@ type TransferResponseBody struct {
 	// Latest recorded credential-session or API-key authentication for this agent
 	// at Gram in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
-	// agents.list only for callers who can manage the agent's credentials; absent
-	// when unknown or unauthorized. Not run, process, or tool-call activity.
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -300,8 +304,9 @@ type ReassignResponseBody struct {
 	// Latest recorded credential-session or API-key authentication for this agent
 	// at Gram in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
-	// agents.list only for callers who can manage the agent's credentials; absent
-	// when unknown or unauthorized. Not run, process, or tool-call activity.
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -328,8 +333,9 @@ type SuspendResponseBody struct {
 	// Latest recorded credential-session or API-key authentication for this agent
 	// at Gram in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
-	// agents.list only for callers who can manage the agent's credentials; absent
-	// when unknown or unauthorized. Not run, process, or tool-call activity.
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -356,8 +362,9 @@ type ResumeResponseBody struct {
 	// Latest recorded credential-session or API-key authentication for this agent
 	// at Gram in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
-	// agents.list only for callers who can manage the agent's credentials; absent
-	// when unknown or unauthorized. Not run, process, or tool-call activity.
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -384,8 +391,9 @@ type RevokeResponseBody struct {
 	// Latest recorded credential-session or API-key authentication for this agent
 	// at Gram in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
-	// agents.list only for callers who can manage the agent's credentials; absent
-	// when unknown or unauthorized. Not run, process, or tool-call activity.
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`
@@ -3508,8 +3516,9 @@ type ManagedAgentResponse struct {
 	// Latest recorded credential-session or API-key authentication for this agent
 	// at Gram in this organization. Recording is best-effort and updates are
 	// coalesced. Includes credentials since revoked or expired. Populated by
-	// agents.list only for callers who can manage the agent's credentials; absent
-	// when unknown or unauthorized. Not run, process, or tool-call activity.
+	// agents.list for callers who can manage the agent's credentials, and in the
+	// read-only synthetic demo organization; absent otherwise or when no
+	// authentication was recorded. Not run, process, or tool-call activity.
 	LastCredentialUsedAt *string `form:"last_credential_used_at,omitempty" json:"last_credential_used_at,omitempty" xml:"last_credential_used_at,omitempty"`
 	CreatedAt            string  `form:"created_at" json:"created_at" xml:"created_at"`
 	UpdatedAt            string  `form:"updated_at" json:"updated_at" xml:"updated_at"`

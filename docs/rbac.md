@@ -1024,3 +1024,5 @@ Keep scopes coarse and customer-meaningful. Use selectors and dimensions for res
 
 Please refer to the original [RFC](https://www.notion.so/speakeasyapi/RFC-Gram-RBAC-Scope-Permission-Design-319726c497cc8177b7e9dea65a91ff10) which contains the original decision making process during RBAC
 planning. Please note that this might be slightly outdated, and this guide should be the actual source of truth.
+
+Fleet’s `gram-fleet` flag controls dashboard rollout only; project:read still gates the collection. In the synthetic demo organization only, ordinary validated human sessions may list registered agents and aggregate credential timestamps without membership, with read-only capabilities. Selected-agent reads, credentials and mutations retain membership checks. Fleet policy details require agent:write; credential sessions require agent:authorize. Agent Kill/Release remains an ordinary organization-admin operation, refused in demo. Exact Kill Switches records and the agent-restriction index remain available to authorized administrators when Fleet is hidden.

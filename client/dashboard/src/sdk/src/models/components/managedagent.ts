@@ -28,7 +28,7 @@ export type ManagedAgent = {
   createdAt: Date;
   id: string;
   /**
-   * Latest recorded credential-session or API-key authentication for this agent at Gram in this organization. Recording is best-effort and updates are coalesced. Includes credentials since revoked or expired. Populated by agents.list only for callers who can manage the agent's credentials; absent when unknown or unauthorized. Not run, process, or tool-call activity.
+   * Latest recorded credential-session or API-key authentication for this agent at Gram in this organization. Recording is best-effort and updates are coalesced. Includes credentials since revoked or expired. Populated by agents.list for callers who can manage the agent's credentials, and in the read-only synthetic demo organization; absent otherwise or when no authentication was recorded. Not run, process, or tool-call activity.
    */
   lastCredentialUsedAt?: Date | undefined;
   lifecycle: Lifecycle;

@@ -198,6 +198,7 @@ DECLARE
   rule_weekly  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000e002';
 
   bulk_chats CONSTANT int := 180;
+  fleet_capture record;
 
   titles CONSTANT text[] := ARRAY[
     'Incident triage: payment 401s', 'Refund request for order 4823',
@@ -555,21 +556,33 @@ BEGIN
             'demo_mem_' || demo_user_ids[i], now() - (interval '40 days' * i));
   END LOOP;
 
-  -- Managed identities are distinct from OAuth client registrations below.
-  -- Existing fictional owners exercise name/initials rendering without adding
-  -- external avatar dependencies. The two active release agents receive only
-  -- project/server-scoped direct grants alongside their inert attachments below.
+  -- Registered identities have explicit owners, independent of captured chats.
+  -- Eight have recent credential history; two are old/never-used controls.
   INSERT INTO agents
-    (id, organization_id, owner_user_id, name, suspended_at, revoked_at)
-  VALUES
-    (demo.det_uuid('gram-demo-managed-agent-1'), demo_org, demo_user_ids[1],
-     'Release assistant', NULL, NULL),
-    (demo.det_uuid('gram-demo-managed-agent-2'), demo_org, demo_user_ids[2],
-     'Support triage', now() - interval '2 days', NULL),
-    (demo.det_uuid('gram-demo-managed-agent-3'), demo_org, demo_user_ids[3],
-     'Retired documentation bot', NULL, now() - interval '5 days'),
-    (demo.det_uuid('gram-demo-managed-agent-4'), demo_org, demo_user_ids[1],
-     'Release notes assistant', NULL, NULL);
+    (id, organization_id, project_id, owner_user_id, name, suspended_at,
+     revoked_at, created_at, updated_at)
+  SELECT demo.det_uuid('gram-demo-managed-agent-' || n), demo_org,
+    CASE WHEN n IN (3,5,6,8) THEN proj_a END, demo_user_ids[owner_n], name,
+    CASE WHEN n = 2 THEN now() - interval '6 minutes'
+         WHEN n = 9 THEN now() - interval '3 days' END,
+    CASE WHEN n = 3 THEN now() - interval '8 minutes' END,
+    now() - interval '30 days',
+    CASE WHEN n = 2 THEN now() - interval '6 minutes'
+         WHEN n = 3 THEN now() - interval '8 minutes'
+         WHEN n = 9 THEN now() - interval '3 days'
+         ELSE now() - interval '20 days' END
+  FROM (VALUES
+    (1, 1, 'Release assistant'),
+    (2, 2, 'Support triage'),
+    (3, 3, 'Retired documentation bot'),
+    (4, 1, 'Release notes assistant'),
+    (5, 5, 'Billing reconciliation'),
+    (6, 4, 'Deploy verifier'),
+    (7, 3, 'Incident evidence collector'),
+    (8, 6, 'Engineering digest'),
+    (9, 5, 'Legacy invoice exporter'),
+    (10, 6, 'Nightly report agent')
+  ) AS fixture(n, owner_n, name);
 
   -- Role assignments (Roles column on the team page). Global roles are synced
   -- from WorkOS in real envs; tolerate their absence locally.
@@ -1111,26 +1124,44 @@ BEGIN
      now() - interval '30 hours', now() - interval '6 days');
 
   ------------------------------------------------------------------
-  -- A display-only managed-agent credential: no signing token, an invalid
-  -- refresh hash, and an empty delegation prevent usable programmatic access.
-  -- Recent authentication remains Fleet activity after access-token expiry.
-  -- The other managed identities have no credential-use evidence and remain
-  -- outside Fleet’s 24-hour collection; restriction recovery has no age limit.
-  -- The issuer/project cascade above cleans this row on every reseed.
+  -- Credential evidence is historical, never a runnable workload. Access AND
+  -- refresh expiry are past, hashes have no valid preimage, delegation is empty.
+  -- Agent 4 is API-key-only; 9 is old; 10 has never authenticated. Revoked
+  -- agent 3 and the revoked credential of agent 6 retain their last-use stamps.
   INSERT INTO user_sessions
-    (id, project_id, organization_id, user_session_issuer_id,
-     user_session_client_id, subject_urn, authorizer_user_id, delegated_grants,
-     delegated_grants_version, jti, refresh_token_hash, refresh_expires_at,
-     expires_at, last_used_at, created_at)
-  VALUES
-    (demo.det_uuid('gram-demo-managed-agent-session-1'), proj_a, demo_org,
-     us_issuer, usc_public,
-     'agent:' || demo.det_uuid('gram-demo-managed-agent-1')::text,
-     demo_user_ids[1], '[]'::jsonb, 1,
-     demo.det_uuid('gram-demo-managed-agent-jti-1')::text,
-     'DEMO-NOT-A-VALID-HASH-' || demo.det_uuid('gram-demo-managed-agent-refresh-1')::text,
-     now() + interval '7 days', now() - interval '10 minutes',
-     now() - interval '20 minutes', now() - interval '3 days');
+    (id, project_id, organization_id, user_session_issuer_id, user_session_client_id,
+     subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version,
+     jti, refresh_token_hash, refresh_expires_at, expires_at, last_used_at,
+     created_at, updated_at, deleted_at)
+  SELECT demo.det_uuid('gram-demo-managed-agent-session-' || n), proj_a, demo_org,
+    us_issuer, usc_public, 'agent:' || a.id::text, a.owner_user_id, '[]'::jsonb, 1,
+    demo.det_uuid('gram-demo-managed-agent-jti-' || n)::text,
+    'DEMO-NOT-A-VALID-HASH-' || demo.det_uuid('gram-demo-managed-agent-refresh-' || n)::text,
+    now() - interval '1 minute', now() - interval '1 minute',
+    now() - age, now() - interval '10 days', now() - interval '1 minute',
+    CASE WHEN n = 3 THEN a.revoked_at WHEN n = 6 THEN now() - interval '4 minutes' END
+  FROM (VALUES (1, interval '2 minutes'), (2, interval '12 minutes'),
+    (3, interval '15 minutes'), (5, interval '5 minutes'),
+    (6, interval '10 minutes'), (7, interval '7 minutes'),
+    (8, interval '20 minutes'), (9, interval '4 days')) AS fixture(n, age)
+  JOIN agents a ON a.organization_id = demo_org
+    AND a.id = demo.det_uuid('gram-demo-managed-agent-' || n);
+
+  INSERT INTO api_keys
+    (id, organization_id, project_id, created_by_user_id, name, key_prefix,
+     key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version,
+     expires_at, last_accessed_at, created_at, updated_at, deleted_at)
+  SELECT demo.det_uuid('gram-demo-agent-api-key-' || n), demo_org, a.project_id,
+    a.owner_user_id, a.name || ' — expired demo credential', 'DEMO-INERT',
+    'DEMO-NOT-A-VALID-HASH-' || demo.det_uuid('gram-demo-agent-api-key-hash-' || n)::text,
+    '{}'::text[], 'agent:' || a.id::text, '[]'::jsonb, 1,
+    now() - interval '1 minute', now() - age,
+    now() - interval '10 days', now() - interval '1 minute',
+    CASE WHEN n = 6 THEN now() - interval '4 minutes' END
+  FROM (VALUES (4, interval '3 minutes'), (5, interval '25 minutes'),
+    (6, interval '30 minutes')) AS fixture(n, age)
+  JOIN agents a ON a.organization_id = demo_org
+    AND a.id = demo.det_uuid('gram-demo-managed-agent-' || n);
 
   ------------------------------------------------------------------
   -- Workload sessions: machines that authenticate with a platform-issued
@@ -1455,7 +1486,7 @@ BEGIN
   FROM unnest(ARRAY[1, 4]) AS n;
 
   ------------------------------------------------------------------
-  -- Killswitches. Eight stable aggregates exercise every customer status and
+  -- Killswitches. Ten stable aggregates exercise every customer status and
   -- the principal-first overlap/history stories. Direct SQL mirrors lifecycle
   -- transactions: immutable complete snapshots, superseded predecessors,
   -- completed replay receipts, and current_version pointing at the newest
@@ -1614,39 +1645,45 @@ BEGIN
      now() + interval '26 days', now() - interval '4 days', now() - interval '4 days');
 
   -- Two independent agent restrictions overlap without targeting the owner.
+  -- Suspended and old identities also retain restrictions for recovery.
   -- Captured hook sessions deliberately carry no registered-agent binding.
   INSERT INTO killswitch_prescriptions
     (id, organization_id, definition_key, principal_kind, principal_key,
      resource_kind, current_version, created_at, updated_at)
-  SELECT demo.det_uuid('gram-demo-killswitch-agent-' || scope_name), demo_org,
-    'mcp_tool_execution', 'agent', demo.det_uuid('gram-demo-managed-agent-1')::text,
+  SELECT demo.det_uuid('gram-demo-killswitch-agent-' || fixture_key), demo_org,
+    'mcp_tool_execution', 'agent', demo.det_uuid('gram-demo-managed-agent-' || agent_n)::text,
     'mcp_server', 1, now() - interval '2 hours', now() - interval '2 hours'
-  FROM unnest(ARRAY['selected', 'all']) AS scope_name;
+  FROM (VALUES ('selected', 'selected', 1), ('all', 'all', 1),
+    ('suspended', 'all', 2), ('historical', 'selected', 9)) AS fixture(fixture_key, scope_name, agent_n);
 
   INSERT INTO killswitch_prescription_versions
     (organization_id, prescription_id, version, state, resource_scope,
      activated_at, internal_note, external_note, created_at)
-  SELECT demo_org, demo.det_uuid('gram-demo-killswitch-agent-' || scope_name),
+  SELECT demo_org, demo.det_uuid('gram-demo-killswitch-agent-' || fixture_key),
     1, 'active', scope_name, now() - interval '2 hours',
-    'Synthetic release-assistant containment exercise. Release each restriction independently.',
+    'Synthetic containment exercise. Release each restriction independently.',
     'Covered MCP tools/call are blocked for this registered agent.', now() - interval '2 hours'
-  FROM unnest(ARRAY['selected', 'all']) AS scope_name;
+  FROM (VALUES ('selected', 'selected', 1), ('all', 'all', 1),
+    ('suspended', 'all', 2), ('historical', 'selected', 9)) AS fixture(fixture_key, scope_name, agent_n);
 
   INSERT INTO killswitch_prescription_version_resources
     (organization_id, prescription_id, version, resource_key)
   VALUES (demo_org, demo.det_uuid('gram-demo-killswitch-agent-selected'), 1,
-    demo.det_uuid('gram-demo-mcpserver-linear')::text);
+    demo.det_uuid('gram-demo-mcpserver-linear')::text),
+    (demo_org, demo.det_uuid('gram-demo-killswitch-agent-historical'), 1,
+     demo.det_uuid('gram-demo-mcpserver-support')::text);
 
   INSERT INTO killswitch_operations
     (organization_id, operation_id, actor_user_id, operation, request_hash,
      status, response, expires_at, created_at, updated_at)
-  SELECT demo_org, demo.det_uuid('gram-demo-killswitch-operation-agent-' || scope_name),
+  SELECT demo_org, demo.det_uuid('gram-demo-killswitch-operation-agent-' || fixture_key),
     demo_user_ids[6], 'activate', 'sha256:' || repeat('a', 64), 'completed',
     jsonb_build_object('response_version', 'killswitch-operation-response-v1',
-      'prescription_id', demo.det_uuid('gram-demo-killswitch-agent-' || scope_name)::text,
+      'prescription_id', demo.det_uuid('gram-demo-killswitch-agent-' || fixture_key)::text,
       'prescription_version', 1, 'state', 'active'),
     now() + interval '29 days 22 hours', now() - interval '2 hours', now() - interval '2 hours'
-  FROM unnest(ARRAY['selected', 'all']) AS scope_name;
+  FROM (VALUES ('selected', 'selected', 1), ('all', 'all', 1),
+    ('suspended', 'all', 2), ('historical', 'selected', 9)) AS fixture(fixture_key, scope_name, agent_n);
 
   ------------------------------------------------------------------
   -- Prompts (the Prompts page otherwise falls back to onboarding).
@@ -2307,6 +2344,102 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     (demo.det_uuid('gram-demo-claude-tag-ack'), chat_id, proj_a, 'assistant', 'Replied in the thread.',
      NULL, 'claude-tag', 'claude-sonnet-4-6', now() - interval '9 minutes', now());
 
+  -- Fleet assistants are configured identities with archived conversations,
+  -- not live runtimes. No triggers, deliveries, runs or runtime rows are seeded.
+  -- Project deletion cascades through assistants, threads, chats and messages.
+  INSERT INTO assistants
+    (id, project_id, organization_id, created_by_user_id, name, model,
+     instructions, status, created_at, updated_at)
+  SELECT demo.det_uuid('gram-demo-fleet-assistant-' || n), proj_a, demo_org,
+    demo_user_ids[creator], name, 'anthropic/claude-sonnet-4.6', instructions,
+    status, now() - interval '14 days',
+    CASE WHEN status = 'paused' THEN now() - interval '2 minutes' ELSE now() - interval '1 day' END
+  FROM (VALUES
+    (1, 2, 'Support handoff assistant', 'Summarize support cases, separate evidence from hypotheses, and propose the next human follow-up.', 'active'),
+    (2, 3, 'Deployment review assistant', 'Review rollout evidence and rollback readiness. Explain uncertainty and never execute deployment changes.', 'active'),
+    (3, 5, 'Billing review assistant', 'Reconcile synthetic invoice entries and draft a review checklist. Never initiate a payment or refund.', 'paused')
+  ) AS fixture(n, creator, name, instructions, status);
+
+  -- Explicit assistant_threads establish assistantId. Capture users deliberately
+  -- differ from creators. External ids never resolve to a directory/agent owner.
+  FOR fleet_capture IN SELECT * FROM (VALUES
+    (1, 1, 1, NULL::text, 'Support handoff: duplicate charge', 4, 'dashboard',
+      'Order DEMO-4823 shows two authorization holds. Draft a support handoff without promising a refund.',
+      'The two holds share a checkout attempt, but only one capture is recorded. Ask billing to verify settlement before offering a refund.',
+      'Add the next owner and a customer-safe reply.',
+      'Billing will check settlement. Suggested reply: we are reviewing the duplicate hold and will confirm the result before taking action.'),
+    (2, 2, 4, NULL::text, 'Deployment review: checkout retry logs', 6, 'dashboard',
+      'Draft a rollout review for billing-review@example.com using the synthetic retry log.',
+      'Keep the contact address out of the shared review. The retry change needs a staging check and a rollback owner.',
+      'Record the review outcome without deploying.',
+      'Review only: rollout is pending the staging retry check and contact redaction. No deployment action was taken.'),
+    (3, 3, 6, NULL::text, 'Billing review: invoice reconciliation', 8, 'dashboard',
+      'Compare synthetic invoice DEMO-1042 with the ledger and draft a review note.',
+      'The subtotal matches. A credit memo remains unapplied, so the balance needs human review before collection.',
+      'Who should follow up?',
+      'Billing Operations should confirm the credit memo. This is a review note, not a payment instruction.'),
+    (4, 1, 2, NULL::text, 'Support handoff: webhook retry', 10, 'dashboard',
+      'Summarize the webhook retry report for the next support shift.',
+      'Delivery resumed after the retry window. Two earlier events still need reconciliation against the receiver log.',
+      'Keep the unresolved checks visible.',
+      'Handoff: compare the two event ids, confirm receipt with the receiver, then close the case. Recovery is observed; completeness is not yet confirmed.'),
+    (5, NULL::int, NULL::int, 'gram-demo-external-contractor', 'External capture: cache investigation', 12, 'cursor',
+      'Compare the synthetic cache hit rates before and after the rollout.',
+      'The sample improves from 82 to 91 percent. The observation window is small; keep monitoring before changing capacity.',
+      'List one follow-up.', 'Compare the next full-hour sample with the same-hour baseline and check whether the traffic mix changed.'),
+    (6, NULL::int, NULL::int, demo_user_ids[3], 'External capture: migration checklist', 14, 'codex',
+      'Draft a read-only checklist for the test schema migration.',
+      'Verify the backup, inspect the migration plan, and identify the rollback owner before any write.',
+      'Did you run it?', 'No commands were run; this is a review checklist.'),
+    (7, NULL::int, NULL::int, NULL::text, 'Unattributed capture: incident notes', 16, 'claude-code',
+      'Summarize the synthetic incident notes without attributing them to a person.',
+      'The notes describe elevated queue latency followed by recovery. The capture has no user attribution.',
+      'What remains unknown?', 'The initiating identity and runtime state are not present in this captured transcript.'),
+    (8, 3, 5, NULL::text, 'Billing review: previous weekly close', 2880, 'dashboard',
+      'Archive the prior synthetic weekly close review.',
+      'The previous batch reconciled after one credit adjustment. This older conversation is retained for history.',
+      'Any new activity?', 'None is represented by this historical transcript.')
+  ) AS fixture(n, assistant_n, capture_user_n, external_id, title, minutes_ago, source, prompt, reply, followup, conclusion)
+  LOOP
+    chat_id := demo.det_uuid('gram-demo-fleet-chat-' || fleet_capture.n);
+    chat_ts := now() - make_interval(mins => fleet_capture.minutes_ago);
+    INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
+    VALUES (chat_id, proj_a, demo_org, demo_user_ids[fleet_capture.capture_user_n],
+      coalesce(fleet_capture.external_id, demo_user_emails[fleet_capture.capture_user_n]),
+      fleet_capture.title, chat_ts - interval '3 minutes', chat_ts);
+    INSERT INTO chat_messages
+      (id, chat_id, project_id, role, content, source, model, created_at, risk_analyzed_at)
+    SELECT demo.det_uuid('gram-demo-fleet-message-' || fleet_capture.n || '-' || msg_n),
+      chat_id, proj_a, CASE WHEN msg_n IN (1,3) THEN 'user' ELSE 'assistant' END,
+      content, fleet_capture.source, 'claude-sonnet-4-6',
+      chat_ts - make_interval(mins => 4 - msg_n), now()
+    FROM (VALUES (1, fleet_capture.prompt), (2, fleet_capture.reply),
+      (3, fleet_capture.followup), (4, fleet_capture.conclusion)) AS message(msg_n, content);
+    IF fleet_capture.assistant_n IS NOT NULL THEN
+      INSERT INTO assistant_threads
+        (id, assistant_id, project_id, correlation_id, chat_id, source_kind,
+         last_event_at, created_at, updated_at)
+      VALUES (demo.det_uuid('gram-demo-fleet-thread-' || fleet_capture.n),
+        demo.det_uuid('gram-demo-fleet-assistant-' || fleet_capture.assistant_n), proj_a,
+        'gram-demo-fleet-correlation-' || fleet_capture.n, chat_id, 'dashboard',
+        chat_ts, chat_ts - interval '3 minutes', chat_ts);
+    END IF;
+  END LOOP;
+
+  -- One synthetic contact-data finding, mirrored in clickhouse.sql. The reserved
+  -- example address matches the email detector without containing a credential.
+  f_match := 'billing-review@example.com';
+  f_content := 'Draft a rollout review for ' || f_match || ' using the synthetic retry log.';
+  INSERT INTO risk_results
+    (id, project_id, organization_id, risk_policy_id, risk_policy_version,
+     chat_message_id, source, found, rule_id, description, match,
+     start_pos, end_pos, confidence, tags, created_at)
+  VALUES (demo.det_uuid('gram-demo-fleet-risk'), proj_a, demo_org, policy_cd, 1,
+    demo.det_uuid('gram-demo-fleet-message-2-1'), 'presidio', true,
+    'pii.email_address', 'Synthetic contact address in a deployment review prompt', f_match,
+    strpos(f_content, f_match) - 1, strpos(f_content, f_match) - 1 + length(f_match),
+    0.88, '{pii}', now() - interval '6 minutes');
+
   -- Historical shortened trial: audit history shows both dates, not an extension.
   INSERT INTO audit_logs
     (id, organization_id, actor_id, actor_type, actor_display_name,
@@ -2344,14 +2477,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   INSERT INTO audit_logs
     (id, organization_id, actor_id, actor_type, actor_display_name,
      action, subject_id, subject_type, after_snapshot, metadata, created_at)
-  SELECT demo.det_uuid('gram-demo-audit-killswitch-agent-' || scope_name), demo_org,
+  SELECT demo.det_uuid('gram-demo-audit-killswitch-agent-' || fixture_key), demo_org,
     demo_user_ids[6], 'user', demo_user_names[6], 'killswitch:activate',
-    demo.det_uuid('gram-demo-killswitch-agent-' || scope_name)::text,
+    demo.det_uuid('gram-demo-killswitch-agent-' || fixture_key)::text,
     'killswitch_prescription', jsonb_build_object('version', 1, 'state', 'active'),
     jsonb_build_object('operation', 'activate', 'operation_id',
-      demo.det_uuid('gram-demo-killswitch-operation-agent-' || scope_name)),
+      demo.det_uuid('gram-demo-killswitch-operation-agent-' || fixture_key)),
     now() - interval '2 hours'
-  FROM unnest(ARRAY['selected', 'all']) AS scope_name;
+  FROM (VALUES ('selected'), ('all'), ('suspended'), ('historical')) AS fixture(fixture_key);
 
   -- Killswitch lifecycle history mirrors the transaction hook: mutation rows
   -- carry a bounded after snapshot plus their replay operation, while expiry
@@ -2510,31 +2643,31 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO tool_count
   FROM http_tool_definitions WHERE project_id = proj_a AND deleted IS FALSE;
 
-  -- Killswitch aggregate counts are exact: eight headers, two successor
-  -- versions, nine complete selected snapshots, one expiry marker, and one
+  -- Killswitch aggregate counts are exact: ten headers, two successor
+  -- versions, ten complete selected snapshots, one expiry marker, and one
   -- completed operation/audit event for every lifecycle mutation.
   SELECT count(*) INTO stray FROM killswitch_prescriptions
   WHERE organization_id = demo_org;
-  IF stray <> 8 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 8 killswitch prescriptions, found %', stray;
+  IF stray <> 10 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 10 killswitch prescriptions, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM killswitch_prescription_versions
   WHERE organization_id = demo_org;
-  IF stray <> 10 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 10 killswitch versions, found %', stray;
+  IF stray <> 12 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 12 killswitch versions, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM killswitch_prescription_version_resources
   WHERE organization_id = demo_org;
-  IF stray <> 9 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 9 killswitch resource snapshots, found %', stray;
+  IF stray <> 10 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 10 killswitch resource snapshots, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM killswitch_operations
   WHERE organization_id = demo_org;
-  IF stray <> 10 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 10 killswitch operations, found %', stray;
+  IF stray <> 12 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 12 killswitch operations, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM killswitch_expiry_events
@@ -2576,12 +2709,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- Immediate versions have no explicit start; the only non-NULL start is the
   -- future scheduled window. Every version has a historical activation time.
   SELECT CASE WHEN
-      count(*) FILTER (WHERE starts_at IS NULL) = 9
+      count(*) FILTER (WHERE starts_at IS NULL) = 11
       AND count(*) FILTER (WHERE starts_at > clock_timestamp()) = 1
       AND count(*) FILTER (WHERE starts_at IS NOT NULL) = 1
       AND count(*) FILTER (
         WHERE activated_at IS NOT NULL AND activated_at < clock_timestamp()
-      ) = 10
+      ) = 12
     THEN 0 ELSE 1 END INTO stray
   FROM killswitch_prescription_versions
   WHERE organization_id = demo_org;
@@ -2638,11 +2771,11 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: % killswitch resources are not live canonical MCP servers', stray;
   END IF;
 
-  -- Database-time status projection: five active, one scheduled, one lifted,
+  -- Database-time status projection: seven active, one scheduled, one lifted,
   -- and one expired current aggregate. The two Amara rows overlap because one
   -- selected-server interval intersects one dynamic all-server interval.
   SELECT CASE WHEN
-      count(*) FILTER (WHERE customer_status = 'active') = 5
+      count(*) FILTER (WHERE customer_status = 'active') = 7
       AND count(*) FILTER (WHERE customer_status = 'scheduled') = 1
       AND count(*) FILTER (WHERE customer_status = 'lifted') = 1
       AND count(*) FILTER (WHERE customer_status = 'expired') = 1
@@ -2718,8 +2851,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE organization_id = demo_org
     AND subject_type = 'killswitch_prescription'
     AND action IN ('killswitch:activate', 'killswitch:change', 'killswitch:deactivate');
-  IF stray <> 10 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 10 killswitch lifecycle audits, found %', stray;
+  IF stray <> 12 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 12 killswitch lifecycle audits, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray
@@ -2868,7 +3001,9 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
 
   SELECT count(*) INTO stray
   FROM chats WHERE organization_id = demo_org
-    AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL);
+    AND (user_id IS NULL OR user_id = '' OR external_user_id IS NULL)
+    AND id NOT IN (demo.det_uuid('gram-demo-fleet-chat-5'),
+      demo.det_uuid('gram-demo-fleet-chat-6'), demo.det_uuid('gram-demo-fleet-chat-7'));
   IF stray > 0 THEN
     RAISE EXCEPTION 'demo seed postflight: % chats have no owner (sessions would render as anonymous)', stray;
   END IF;
@@ -3001,11 +3136,18 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: expected 3 personal accounts, found %', stray;
   END IF;
 
-  -- The seed never creates API keys: any row left here was minted by a demo
-  -- visitor and would grant programmatic access that survives the reseed.
+  -- Only three inert agent keys survive the shared SQL. Local fixtures restore
+  -- the separate developer key afterwards; it never belongs to the demo org.
   SELECT count(*) INTO stray FROM api_keys WHERE organization_id = demo_org;
-  IF stray > 0 THEN
-    RAISE EXCEPTION 'demo seed postflight: % api keys survived the reseed', stray;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 inert agent keys, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray FROM api_keys WHERE organization_id = demo_org
+    AND (expires_at IS NULL OR expires_at >= now()
+      OR key_hash NOT LIKE 'DEMO-NOT-A-VALID-HASH-%' OR cardinality(scopes) <> 0
+      OR delegated_grants IS DISTINCT FROM '[]'::jsonb OR subject_urn NOT LIKE 'agent:%');
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: agent key fixtures must be unusable';
   END IF;
 
   SELECT count(*) INTO stray FROM principal_grants
@@ -3065,14 +3207,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   END IF;
 
   SELECT count(*) INTO stray FROM agents WHERE organization_id = demo_org;
-  IF stray <> 4 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 4 managed agents, found %', stray;
+  IF stray <> 10 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 10 managed agents, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_sessions
   WHERE organization_id = demo_org AND subject_urn LIKE 'agent:%';
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 managed agent session, found %', stray;
+  IF stray <> 8 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 8 managed agent sessions, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_sessions
@@ -3081,6 +3223,129 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     AND last_used_at >= now() - interval '24 hours' AND expires_at < now();
   IF stray <> 1 THEN
     RAISE EXCEPTION 'demo seed postflight: expected recent expired agent credential history, found %', stray;
+  END IF;
+
+  -- Fleet coverage is a contract, not names that happen to populate a table.
+  WITH evidence AS (
+    SELECT subject_urn, last_used_at AS used_at FROM user_sessions WHERE organization_id = demo_org
+    UNION ALL
+    SELECT subject_urn, last_accessed_at FROM api_keys WHERE organization_id = demo_org
+  ), recent AS (
+    SELECT a.id, a.project_id, a.owner_user_id FROM agents a
+    JOIN evidence e ON e.subject_urn = 'agent:' || a.id::text
+    WHERE a.organization_id = demo_org AND e.used_at >= now() - interval '24 hours'
+    GROUP BY a.id
+  )
+  SELECT CASE WHEN count(*) = 8 AND count(*) FILTER (WHERE project_id IS NULL) = 4
+    AND count(*) FILTER (WHERE project_id = proj_a) = 4
+    AND count(DISTINCT d.attributes->>'department_name') = 4 THEN 0 ELSE 1 END INTO stray
+  FROM recent r JOIN directory_users d ON d.organization_id = demo_org AND d.user_id = r.owner_user_id;
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 8 recent agents across 4 departments and both scopes';
+  END IF;
+
+  SELECT count(*) INTO stray FROM (
+    SELECT a.created_at, a.suspended_at, a.revoked_at, us.last_used_at AS used_at, us.deleted_at
+    FROM agents a JOIN user_sessions us ON us.subject_urn = 'agent:' || a.id::text
+    WHERE a.organization_id = demo_org AND us.organization_id = demo_org
+    UNION ALL
+    SELECT a.created_at, a.suspended_at, a.revoked_at, k.last_accessed_at, k.deleted_at
+    FROM agents a JOIN api_keys k ON k.subject_urn = 'agent:' || a.id::text
+    WHERE a.organization_id = demo_org AND k.organization_id = demo_org
+  ) evidence WHERE used_at > now() OR used_at < created_at
+    OR used_at > suspended_at OR used_at > revoked_at OR used_at > deleted_at
+    OR (revoked_at IS NOT NULL AND deleted_at IS DISTINCT FROM revoked_at);
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: credential history contradicts agent lifecycle';
+  END IF;
+  SELECT count(*) INTO stray FROM user_sessions
+  WHERE organization_id = demo_org AND subject_urn LIKE 'agent:%'
+    AND (expires_at >= now() OR refresh_expires_at >= now()
+      OR refresh_token_hash NOT LIKE 'DEMO-NOT-A-VALID-HASH-%'
+      OR delegated_grants IS DISTINCT FROM '[]'::jsonb);
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: agent sessions must be expired and inert';
+  END IF;
+  SELECT count(*) INTO stray FROM user_sessions
+  WHERE organization_id = demo_org
+    AND subject_urn = 'agent:' || demo.det_uuid('gram-demo-managed-agent-9')::text
+    AND last_used_at < now() - interval '24 hours';
+  IF stray <> 1 OR EXISTS (
+    SELECT 1 FROM user_sessions WHERE organization_id = demo_org
+      AND subject_urn = 'agent:' || demo.det_uuid('gram-demo-managed-agent-10')::text
+    UNION ALL SELECT 1 FROM api_keys WHERE organization_id = demo_org
+      AND subject_urn = 'agent:' || demo.det_uuid('gram-demo-managed-agent-10')::text
+  ) THEN
+    RAISE EXCEPTION 'demo seed postflight: old and never-used controls changed';
+  END IF;
+  SELECT count(*) INTO stray FROM killswitch_prescriptions
+  WHERE organization_id = demo_org AND principal_kind = 'agent'
+    AND principal_key = demo.det_uuid('gram-demo-managed-agent-9')::text;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: old agent must retain recovery restriction';
+  END IF;
+
+  SELECT count(*) INTO stray FROM assistants WHERE project_id = proj_a;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 assistants, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray FROM assistant_threads WHERE project_id = proj_a;
+  IF stray <> 5 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 5 explicitly linked assistant threads, found %', stray;
+  END IF;
+  WITH latest AS (
+    SELECT c.id FROM chats c JOIN chat_messages m ON m.chat_id = c.id
+    WHERE c.organization_id = demo_org AND c.project_id = proj_a
+    GROUP BY c.id ORDER BY max(m.created_at) DESC LIMIT 50
+  )
+  SELECT count(DISTINCT t.assistant_id) INTO stray FROM assistant_threads t
+  JOIN latest ON latest.id = t.chat_id
+  WHERE t.project_id = proj_a AND t.last_event_at >= now() - interval '24 hours';
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: all 3 assistants must have recent evidence in the initial 50 captures';
+  END IF;
+  SELECT count(*) INTO stray FROM assistant_threads t
+  JOIN chats c ON c.id = t.chat_id JOIN assistants a ON a.id = t.assistant_id
+  WHERE t.project_id = proj_a AND (a.project_id <> proj_a OR c.project_id <> proj_a
+    OR t.last_event_at > now() OR t.last_event_at < a.created_at);
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: assistant thread tenancy or timestamps disagree';
+  END IF;
+  SELECT count(*) INTO stray FROM chat_messages
+  WHERE project_id = proj_a AND chat_messages.chat_id IN (
+    SELECT demo.det_uuid('gram-demo-fleet-chat-' || n) FROM generate_series(1,8) n);
+  IF stray <> 32 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 32 Fleet transcript messages, found %', stray;
+  END IF;
+  SELECT count(*) INTO stray FROM chats
+  WHERE organization_id = demo_org AND user_id IS NULL AND (
+    (id = demo.det_uuid('gram-demo-fleet-chat-5') AND external_user_id = 'gram-demo-external-contractor')
+    OR (id = demo.det_uuid('gram-demo-fleet-chat-6') AND external_user_id = demo_user_ids[3])
+    OR (id = demo.det_uuid('gram-demo-fleet-chat-7') AND external_user_id IS NULL));
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: external, collision and unknown capture attribution changed';
+  END IF;
+  SELECT count(*) INTO stray FROM risk_results
+  WHERE organization_id = demo_org AND id = demo.det_uuid('gram-demo-fleet-risk')
+    AND chat_message_id = demo.det_uuid('gram-demo-fleet-message-2-1') AND risk_results.found IS TRUE;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: Fleet flagged transcript must carry one real finding';
+  END IF;
+
+  SELECT count(*) INTO stray FROM assistant_threads
+  WHERE project_id = proj_a AND last_event_at < now() - interval '24 hours';
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected one historical assistant thread';
+  END IF;
+  SELECT count(*) INTO stray FROM user_sessions
+  WHERE organization_id = demo_org AND subject_urn LIKE 'agent:%' AND deleted_at IS NOT NULL;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected two revoked agent sessions';
+  END IF;
+  SELECT count(*) INTO stray FROM api_keys
+  WHERE organization_id = demo_org AND deleted_at IS NOT NULL;
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected one revoked agent key';
   END IF;
 
   -- This External OAuth row drives the metadata recommendation. Keep its count
@@ -3137,8 +3402,8 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   SELECT count(*) INTO stray FROM user_sessions
   WHERE project_id = proj_a AND deleted IS FALSE
     AND subject_urn LIKE 'agent:%';
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 project-scoped managed agent session, found %', stray;
+  IF stray <> 6 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 6 non-deleted project-scoped managed agent sessions, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_sessions

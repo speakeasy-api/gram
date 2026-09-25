@@ -1,3 +1,5 @@
+import { useOrganization } from "@/contexts/Auth";
+import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useFleetParamUpdate } from "./useFleetParamUpdate";
 import { restoreFleetFocus } from "./fleet-focus";
 import { useEffect, useRef } from "react";
@@ -98,6 +100,7 @@ function InspectorContents({
   const [params] = useSearchParams();
   const update = useFleetParamUpdate();
   const access = useKillswitchAccess();
+  const isDemo = useOrganization().slug === DEMO_ORG_SLUG;
   const heading = useRef<HTMLHeadingElement>(null);
   const chatActions = useChatDetailSheet();
   const requestedTab = params.get("detail");
@@ -196,7 +199,13 @@ function InspectorContents({
                   Latest recorded credential authentication at Gram. Credential
                   sessions for this identity:
                 </p>
-                <ManagedAgentSessions agent={row.agent} />
+                {!isDemo ? (
+                  <ManagedAgentSessions agent={row.agent} />
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    Credential details are unavailable in the read-only demo.
+                  </p>
+                )}
               </>
             )}
             {assistantId && (
@@ -266,14 +275,24 @@ function InspectorContents({
                     {row.agent.createdAt.toLocaleString()}
                   </Fact>
                 </dl>
-                <AgentPolicySection agent={row.agent} />
-                <Link
-                  className="fleet-text-link"
-                  to={`${routes.agents.href()}?id=${encodeURIComponent(row.agent.id)}`}
-                >
-                  Manage agent identity and credentials
-                  <ArrowUpRight size={14} />
-                </Link>
+                {!isDemo && row.agent.permissions.write ? (
+                  <AgentPolicySection agent={row.agent} />
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    {isDemo
+                      ? "Policy details are unavailable in the read-only demo."
+                      : "Policy details require agent write access."}
+                  </p>
+                )}
+                {!isDemo && (
+                  <Link
+                    className="fleet-text-link"
+                    to={`${routes.agents.href()}?id=${encodeURIComponent(row.agent.id)}`}
+                  >
+                    Manage agent identity and credentials
+                    <ArrowUpRight size={14} />
+                  </Link>
+                )}
               </>
             )}
             {row.assistant && (
@@ -296,8 +315,9 @@ function InspectorContents({
             )}
             {row.agent && !access.canAccess && (
               <p className="text-muted-foreground text-sm">
-                MCP kill switches require an ordinary organization-administrator
-                session and enabled kill-switch access.
+                {access.reason === "demo"
+                  ? "MCP kill switches are unavailable in the read-only demo."
+                  : "MCP kill switches require an ordinary organization-administrator session and enabled kill-switch access."}
               </p>
             )}
             {!row.agent && (
@@ -307,7 +327,7 @@ function InspectorContents({
                 separate from the acting credential.
               </p>
             )}
-            {row.agent && (
+            {row.agent && !isDemo && (
               <Link
                 className="fleet-text-link"
                 to={`${routes.agents.href()}?id=${encodeURIComponent(row.agent.id)}`}

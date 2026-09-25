@@ -278,7 +278,9 @@ export function AppSidebar({
                 ? [{ item: routes.explore, ...accessFor(routes.explore) }]
                 : []),
               { item: routes.insights, ...accessFor(routes.insights) },
-              { item: routes.fleet, ...accessFor(routes.fleet) },
+              ...(navAccess.has(routes.fleet.url)
+                ? [{ item: routes.fleet, ...accessFor(routes.fleet) }]
+                : []),
               {
                 item: routes.agentSessions,
                 ...accessFor(routes.agentSessions),

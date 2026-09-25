@@ -1,3 +1,4 @@
+import { DEMO_ORG_SLUG } from "@/lib/demo";
 import {
   Select,
   SelectContent,
@@ -46,6 +47,18 @@ const SOURCES = [
   { value: "session", label: "Captured sessions" },
 ];
 export default function Fleet(): JSX.Element {
+  const flag = useFeatureFlag(FEATURE_FLAGS.fleet);
+  if (flag.status === "loading") return <SkeletonTable />;
+  if (flag.status !== "enabled") {
+    return (
+      <div className="p-8">
+        <h1 className="text-xl font-semibold">Fleet is not available</h1>
+        <p className="text-muted-foreground text-sm">
+          Fleet is restricted during rollout.
+        </p>
+      </div>
+    );
+  }
   return (
     <RequireScope scope="project:read" level="page">
       <FleetPage />
@@ -264,7 +277,8 @@ function FleetPage(): JSX.Element {
       }
       hideToolbar
       primaryAction={
-        agentFlag.status === "enabled" ? (
+        agentFlag.status === "enabled" &&
+        organization.slug !== DEMO_ORG_SLUG ? (
           <Link to={routes.agents.href()}>
             <Button variant="secondary">Manage agent identities</Button>
           </Link>
