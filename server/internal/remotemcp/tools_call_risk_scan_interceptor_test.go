@@ -327,7 +327,7 @@ func newRiskScanTestProxyWithEvaluator(t *testing.T, upstreamURL string, evaluat
 	policy, err := guardian.NewUnsafePolicy(tracerProvider, nil)
 	require.NoError(t, err)
 	manager := NewProxyManager(logger, tracerProvider, testenv.NewMeterProvider(t),
-		nil, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, evaluator, nil)
+		nil, policy, nil, nil, nil, nil, nil, nil, nil, nil, nil, evaluator)
 	if tunnel {
 		return manager.BuildTarget(logger, proxy.ServerIdentity{
 			RemoteMCPServerID:   "",

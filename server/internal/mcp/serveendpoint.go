@@ -787,14 +787,14 @@ func (s *Service) serveTunneledBackend(
 		return err
 	}
 
-	if !mcpServer.UserSessionIssuerID.Valid && s.remoteProxyManager.IssuesCallerAssertions(mcpServer.Visibility, true) {
+	if !mcpServer.UserSessionIssuerID.Valid && s.tunnelManager.issuesCallerAssertions(mcpServer.Visibility) {
 		resourceIdentifier, err = s.resolveUpstreamResource(ctx, logger, endpoint.ProjectID, mcpServer)
 		if err != nil {
 			return err
 		}
 	}
 
-	p, err := s.tunnelManager.buildProxy(ctx, tunnelrouting.ClientAffinityKeyFromRequest(r), logger, endpoint.ProjectID, organizationID, mcpServer, upstreamAuth, wwwAuthenticate, selection, remotemcp.WithCallerAssertionResource(resourceIdentifier))
+	p, err := s.tunnelManager.buildProxy(ctx, tunnelrouting.ClientAffinityKeyFromRequest(r), logger, endpoint.ProjectID, organizationID, mcpServer, resourceIdentifier, upstreamAuth, wwwAuthenticate, selection)
 	if err != nil {
 		return err
 	}
