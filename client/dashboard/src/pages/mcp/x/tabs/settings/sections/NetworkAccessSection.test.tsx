@@ -51,6 +51,19 @@ const testState = vi.hoisted(() => ({
     | undefined,
 }));
 
+vi.mock("./NetworkTrafficPanel", () => ({
+  NetworkTrafficPanel: (props: {
+    mcpServerId?: string;
+    metaMcpServerId?: string;
+  }) => (
+    <div
+      data-testid="network-traffic-panel"
+      data-mcp-server-id={props.mcpServerId ?? ""}
+      data-meta-mcp-server-id={props.metaMcpServerId ?? ""}
+    />
+  ),
+}));
+
 vi.mock("@/components/ui/CopyButton", () => ({
   CopyButton: ({ text }: { text: string }) => (
     <button type="button" aria-label={`Copy ${text}`} />
@@ -299,6 +312,36 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("NetworkAccessSection", () => {
+  it("hides the traffic graph while the server is public only", () => {
+    render(
+      <NetworkAccessSection mcpServer={baseServer} endpoints={endpoints} />,
+    );
+    expect(screen.queryByTestId("network-traffic-panel")).toBeNull();
+  });
+
+  it("shows the traffic graph for a dual mode server", () => {
+    render(
+      <NetworkAccessSection
+        mcpServer={{ ...baseServer, networkAccessMode: "dual" }}
+        endpoints={endpoints}
+      />,
+    );
+    const panel = screen.getByTestId("network-traffic-panel");
+    expect(panel.getAttribute("data-mcp-server-id")).toBe(baseServer.id);
+    expect(panel.getAttribute("data-meta-mcp-server-id")).toBe("");
+  });
+
+  it("shows the traffic graph for a private only gateway", () => {
+    render(
+      <NetworkAccessSection
+        metaMcpServer={{ ...gateway, networkAccessMode: "private_only" }}
+        endpoints={[{ ...endpoints[0], metaMcpServerId: gateway.id }]}
+      />,
+    );
+    const panel = screen.getByTestId("network-traffic-panel");
+    expect(panel.getAttribute("data-meta-mcp-server-id")).toBe(gateway.id);
+  });
+
   it.each(["base", "payg"] as const)(
     "blocks private choices for %s even with staff entitlement",
     (tier) => {

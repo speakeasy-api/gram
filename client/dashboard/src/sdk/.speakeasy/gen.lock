@@ -623,6 +623,7 @@ trackedFiles:
   src/funcs/telemetryCaptureEvent.ts: {}
   src/funcs/telemetryGetEmployeeDataFlowGraph.ts: {}
   src/funcs/telemetryGetHooksSummary.ts: {}
+  src/funcs/telemetryGetMcpNetworkTraffic.ts: {}
   src/funcs/telemetryGetMcpServerActivity.ts: {}
   src/funcs/telemetryGetMetaMcpServerUsage.ts: {}
   src/funcs/telemetryGetObservabilityOverview.ts: {}
@@ -1055,6 +1056,8 @@ trackedFiles:
   src/models/components/getkeyusageresponsebody.ts: {}
   src/models/components/getlatestdeploymentresult.ts: {}
   src/models/components/getmcpmetadataresponsebody.ts: {}
+  src/models/components/getmcpnetworktrafficpayload.ts: {}
+  src/models/components/getmcpnetworktrafficresult.ts: {}
   src/models/components/getmcpserveractivitypayload.ts: {}
   src/models/components/getmcpserveractivityresult.ts: {}
   src/models/components/getmetamcpserverusagepayload.ts: {}
@@ -1331,6 +1334,7 @@ trackedFiles:
   src/models/components/mcpexportauthheader.ts: {}
   src/models/components/mcpexporttool.ts: {}
   src/models/components/mcpmetadata.ts: {}
+  src/models/components/mcpnetworktrafficpoint.ts: {}
   src/models/components/mcpregistry.ts: {}
   src/models/components/mcpserver.ts: {}
   src/models/components/mcpserveractivity.ts: {}
@@ -2079,6 +2083,7 @@ trackedFiles:
   src/models/operations/getmcpapprovalrequest.ts: {}
   src/models/operations/getmcpendpoint.ts: {}
   src/models/operations/getmcpmetadata.ts: {}
+  src/models/operations/getmcpnetworktraffic.ts: {}
   src/models/operations/getmcpserver.ts: {}
   src/models/operations/getmcpserveractivity.ts: {}
   src/models/operations/getmcpserverdetails.ts: {}
@@ -2862,6 +2867,8 @@ trackedFiles:
   src/react-query/getMcpEndpoint.ts: {}
   src/react-query/getMcpMetadata.core.ts: {}
   src/react-query/getMcpMetadata.ts: {}
+  src/react-query/getMcpNetworkTraffic.core.ts: {}
+  src/react-query/getMcpNetworkTraffic.ts: {}
   src/react-query/getMcpServer.core.ts: {}
   src/react-query/getMcpServer.ts: {}
   src/react-query/getMcpServerActivity.core.ts: {}
@@ -6558,6 +6565,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getMcpNetworkTraffic:
+    speakeasy-default-get-mcp-network-traffic:
+      requestBody:
+        application/json: {"window": "7d"}
+      responses:
+        "200":
+          application/json: {"from": "2025-11-18T22:18:13.709Z", "points": [{"bucket_start": "2026-07-16T11:41:13.680Z", "private_requests": 686161, "public_requests": 445032}], "to": "2025-04-30T05:11:29.589Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getMcpServer:
     speakeasy-default-get-mcp-server:
       responses:

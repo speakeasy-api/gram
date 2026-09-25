@@ -82,6 +82,10 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 ) error {
 	ctx := r.Context()
 
+	// Agent gateways are synthetic and have no network access panel to feed.
+	if agentID == uuid.Nil {
+		s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, uuid.Nil, metaServer.ID, metaServer.OrganizationID)
+	}
 	logger = logger.With(attr.SlogMetaMcpServerID(metaServer.ID.String()))
 
 	// Stamped provisionally with the surface's newest revision so responses

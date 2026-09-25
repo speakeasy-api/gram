@@ -278,6 +278,35 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetObservabilityOverview", "type": "query"}`)
 	})
 
+	Method("getMcpNetworkTraffic", func() {
+		Description("Observed inbound public and private MCP request counts for a server or gateway over a recent window")
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			Extend(GetMcpNetworkTrafficPayload)
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetMcpNetworkTrafficResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getMcpNetworkTraffic")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMcpNetworkTraffic")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMcpNetworkTraffic")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMcpNetworkTraffic", "type": "query"}`)
+	})
+
 	Method("getMetaMcpServerUsage", func() {
 		Description("Discovery funnel and per-member execution breakdown for one gateway (meta MCP server), from gateway-attributed telemetry.")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -2944,6 +2973,46 @@ var GetMcpServerActivityResult = Type("GetMcpServerActivityResult", func() {
 	Attribute("lookback_days", Int, "The overall lookback window size in days (bounded by telemetry retention)")
 
 	Required("activity", "recent_window_days", "lookback_days")
+})
+
+var GetMcpNetworkTrafficPayload = Type("GetMcpNetworkTrafficPayload", func() {
+	Attribute("mcp_server_id", String, "MCP server ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("meta_mcp_server_id", String, "Gateway ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("window", String, "Recent traffic window", func() {
+		Enum("24h", "7d")
+	})
+	Required("window")
+})
+
+var McpNetworkTrafficPoint = Type("McpNetworkTrafficPoint", func() {
+	Attribute("bucket_start", String, "Start of the UTC hour", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("public_requests", Int64, "Observed public requests")
+	Attribute("private_requests", Int64, "Observed private requests")
+	Required("bucket_start", "public_requests", "private_requests")
+})
+
+var GetMcpNetworkTrafficResult = Type("GetMcpNetworkTrafficResult", func() {
+	Description("Observed resolved inbound MCP requests, not a guarantee of every client. No observations does not prove a route is unused.")
+	Attribute("from", String, "Start of the window", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("to", String, "End of the window", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("points", ArrayOf(McpNetworkTrafficPoint), "Hourly request counts")
+	Attribute("last_public_at", String, "Most recent observed public request in the window", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("last_private_at", String, "Most recent observed private request in the window", func() {
+		Format(FormatDateTime)
+	})
+	Required("from", "to", "points")
 })
 
 var GetMetaMcpServerUsagePayload = Type("GetMetaMcpServerUsagePayload", func() {

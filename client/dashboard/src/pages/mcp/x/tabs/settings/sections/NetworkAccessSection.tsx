@@ -47,6 +47,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { NetworkTrafficPanel } from "./NetworkTrafficPanel";
 
 const NETWORK_ACCESS_LABELS: Record<
   UpdateMcpServerFormNetworkAccessMode,
@@ -394,6 +395,13 @@ function NetworkAccessSectionContent({
                 </FieldDescription>
               </Field>
             )}
+          {server.networkAccessMode !==
+            McpServerNetworkAccessMode.PublicOnly && (
+            <NetworkTrafficPanel
+              mcpServerId={mcpServer?.id}
+              metaMcpServerId={metaMcpServer?.id}
+            />
+          )}
         </SettingsSection.Body>
         <SettingsSection.Footer>
           <SettingsSection.FooterHint>

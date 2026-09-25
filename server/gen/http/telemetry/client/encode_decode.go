@@ -2204,6 +2204,249 @@ func DecodeGetObservabilityOverviewResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// BuildGetMcpNetworkTrafficRequest instantiates a HTTP request object with
+// method and path set to call the "telemetry" service "getMcpNetworkTraffic"
+// endpoint
+func (c *Client) BuildGetMcpNetworkTrafficRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMcpNetworkTrafficTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getMcpNetworkTraffic", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMcpNetworkTrafficRequest returns an encoder for requests sent to
+// the telemetry getMcpNetworkTraffic server.
+func EncodeGetMcpNetworkTrafficRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetMcpNetworkTrafficPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getMcpNetworkTraffic", "*telemetry.GetMcpNetworkTrafficPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewGetMcpNetworkTrafficRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getMcpNetworkTraffic", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetMcpNetworkTrafficResponse returns a decoder for responses returned
+// by the telemetry getMcpNetworkTraffic endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeGetMcpNetworkTrafficResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMcpNetworkTrafficResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMcpNetworkTrafficResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			err = ValidateGetMcpNetworkTrafficResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			res := NewGetMcpNetworkTrafficResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMcpNetworkTrafficUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			err = ValidateGetMcpNetworkTrafficUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			return nil, NewGetMcpNetworkTrafficUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMcpNetworkTrafficForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			err = ValidateGetMcpNetworkTrafficForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			return nil, NewGetMcpNetworkTrafficForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMcpNetworkTrafficBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			err = ValidateGetMcpNetworkTrafficBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			return nil, NewGetMcpNetworkTrafficBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMcpNetworkTrafficNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			err = ValidateGetMcpNetworkTrafficNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			return nil, NewGetMcpNetworkTrafficNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMcpNetworkTrafficConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			err = ValidateGetMcpNetworkTrafficConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			return nil, NewGetMcpNetworkTrafficConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMcpNetworkTrafficUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			err = ValidateGetMcpNetworkTrafficUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			return nil, NewGetMcpNetworkTrafficUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMcpNetworkTrafficInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			err = ValidateGetMcpNetworkTrafficInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			return nil, NewGetMcpNetworkTrafficInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMcpNetworkTrafficInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getMcpNetworkTraffic", err)
+				}
+				err = ValidateGetMcpNetworkTrafficInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getMcpNetworkTraffic", err)
+				}
+				return nil, NewGetMcpNetworkTrafficInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMcpNetworkTrafficUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getMcpNetworkTraffic", err)
+				}
+				err = ValidateGetMcpNetworkTrafficUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getMcpNetworkTraffic", err)
+				}
+				return nil, NewGetMcpNetworkTrafficUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getMcpNetworkTraffic", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMcpNetworkTrafficGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			err = ValidateGetMcpNetworkTrafficGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getMcpNetworkTraffic", err)
+			}
+			return nil, NewGetMcpNetworkTrafficGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getMcpNetworkTraffic", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetMetaMcpServerUsageRequest instantiates a HTTP request object with
 // method and path set to call the "telemetry" service "getMetaMcpServerUsage"
 // endpoint
@@ -9086,6 +9329,19 @@ func unmarshalToolMetricResponseBodyToTelemetryToolMetric(v *ToolMetricResponseB
 		FailureCount: *v.FailureCount,
 		AvgLatencyMs: *v.AvgLatencyMs,
 		FailureRate:  *v.FailureRate,
+	}
+
+	return res
+}
+
+// unmarshalMcpNetworkTrafficPointResponseBodyToTelemetryMcpNetworkTrafficPoint
+// builds a value of type *telemetry.McpNetworkTrafficPoint from a value of
+// type *McpNetworkTrafficPointResponseBody.
+func unmarshalMcpNetworkTrafficPointResponseBodyToTelemetryMcpNetworkTrafficPoint(v *McpNetworkTrafficPointResponseBody) *telemetry.McpNetworkTrafficPoint {
+	res := &telemetry.McpNetworkTrafficPoint{
+		BucketStart:     *v.BucketStart,
+		PublicRequests:  *v.PublicRequests,
+		PrivateRequests: *v.PrivateRequests,
 	}
 
 	return res
