@@ -285,6 +285,7 @@ func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaM
 		s.withGatewayCapabilities(ctx, views[0])
 		for _, view := range views[1:] {
 			view.DiscoveryModesEnabled = views[0].DiscoveryModesEnabled
+			view.FrozenToolsetsEnabled = views[0].FrozenToolsetsEnabled
 		}
 	}
 	return &gen.ListMetaMcpServersResult{MetaMcpServers: views}, nil

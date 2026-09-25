@@ -67,6 +67,10 @@ export type MetaMcpServer = {
    */
   discoveryModesEnabled?: boolean | undefined;
   /**
+   * Whether the organization allows new frozen toolsets. Read through the gateway without requiring organization feature-management access.
+   */
+  frozenToolsetsEnabled?: boolean | undefined;
+  /**
    * The ID of the meta MCP server
    */
   id: string;
@@ -134,6 +138,7 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
     ),
     discovery_mode: DiscoveryMode$inboundSchema,
     discovery_modes_enabled: z.optional(z.boolean()),
+    frozen_toolsets_enabled: z.optional(z.boolean()),
     id: z.string(),
     instructions: z.optional(z.string()),
     member_count: z.optional(z.int()),
@@ -153,6 +158,7 @@ export const MetaMcpServer$inboundSchema: z.ZodMiniType<
       "created_at": "createdAt",
       "discovery_mode": "discoveryMode",
       "discovery_modes_enabled": "discoveryModesEnabled",
+      "frozen_toolsets_enabled": "frozenToolsetsEnabled",
       "member_count": "memberCount",
       "network_access_mode": "networkAccessMode",
       "organization_id": "organizationId",
