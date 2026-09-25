@@ -432,6 +432,12 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Switching Match to _Wildcard_ clears it. Selecting `Acme CI` instead
     disables the Wildcard option and says why.
 
+25. **Gateway discovery modes**
+    - Enable the gateway discovery product feature and open a gateway with tools.
+    - In Settings, save Direct, then open Inspect: its default connection lists qualified member tools.
+    - Select Progressive and reconnect: expect three discovery tools plus `execute_tool`. Reload Inspect and confirm the selected mode is retained.
+    - Restore the gateway default to Progressive. Connections with no override follow it; explicit Direct connections keep their mode.
+
 ## On failure
 
 Fix the seed SQL (see rules in `PAGES.md`), then re-run the target that owns

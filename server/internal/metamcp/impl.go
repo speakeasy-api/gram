@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	gatewaymcp "github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -41,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
@@ -49,6 +51,7 @@ import (
 )
 
 type Service struct {
+	productFeatures          *productfeatures.Client
 	tracer                   trace.Tracer
 	logger                   *slog.Logger
 	db                       *pgxpool.Pool
@@ -74,10 +77,12 @@ func NewService(
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
 	networkAccessEligibility networkaccess.EligibilityChecker,
+	productFeatures *productfeatures.Client,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("metamcp"))
 
 	return &Service{
+		productFeatures:          productFeatures,
 		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
 		logger:                   logger,
 		db:                       db,
@@ -224,7 +229,7 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
 
-	return mv.BuildMetaMcpServerView(created), nil
+	return s.withGatewayCapabilities(ctx, mv.BuildMetaMcpServerView(created)), nil
 }
 
 func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpServerPayload) (*types.MetaMcpServer, error) {
@@ -254,7 +259,7 @@ func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpS
 		return nil, oops.E(oops.CodeUnexpected, err, "get meta mcp server").LogError(ctx, s.logger)
 	}
 
-	return mv.BuildMetaMcpServerView(row), nil
+	return s.withGatewayCapabilities(ctx, mv.BuildMetaMcpServerView(row)), nil
 }
 
 func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaMcpServersPayload) (*gen.ListMetaMcpServersResult, error) {
@@ -275,7 +280,14 @@ func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaM
 		return nil, oops.E(oops.CodeUnexpected, err, "list meta mcp servers").LogError(ctx, s.logger)
 	}
 
-	return &gen.ListMetaMcpServersResult{MetaMcpServers: mv.BuildMetaMcpServerListView(rows)}, nil
+	views := mv.BuildMetaMcpServerListView(rows)
+	if len(views) > 0 {
+		s.withGatewayCapabilities(ctx, views[0])
+		for _, view := range views[1:] {
+			view.DiscoveryModesEnabled = views[0].DiscoveryModesEnabled
+		}
+	}
+	return &gen.ListMetaMcpServersResult{MetaMcpServers: views}, nil
 }
 
 func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMetaMcpServerPayload) (*types.MetaMcpServer, error) {
@@ -286,6 +298,16 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
+	}
+
+	if payload.DiscoveryMode != nil {
+		if !gatewaymcp.DiscoveryMode(*payload.DiscoveryMode).Valid() {
+			return nil, oops.E(oops.CodeBadRequest, nil, "unsupported discovery mode")
+		}
+		enabled, err := s.productFeatures.IsFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayDiscoveryModes)
+		if err != nil || !enabled {
+			return nil, oops.E(oops.CodeForbidden, err, "gateway discovery settings are not available")
+		}
 	}
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
@@ -404,6 +426,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		NetworkAccessModeSet: payload.NetworkAccessMode != nil,
 		NetworkAccessMode:    storedMode,
 		InstructionsSet:      payload.Instructions != nil,
+		DiscoveryMode:        conv.PtrToPGText(payload.DiscoveryMode),
 		// A blank submission restores the built-in instructions (NULL).
 		Instructions:   instructions,
 		ID:             serverID,
@@ -474,7 +497,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 	}
 	s.signalPluginPublish(ctx, *authCtx.ProjectID, authCtx.UserID, serverID, false)
 
-	return afterView, nil
+	return s.withGatewayCapabilities(ctx, afterView), nil
 }
 
 // UpdateMetaMCPServerNetworkAccessModeInTransaction changes only an existing

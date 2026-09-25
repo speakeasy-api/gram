@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	metarepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -118,4 +120,27 @@ func TestGetMCPConnectionSettingsScopesExactTargetToProjectAndOrganization(t *te
 		_, err = service.Get(ctx, principal, input)
 		require.ErrorIs(t, err, ErrMCPConnectionSettingsInvalid)
 	}
+}
+
+func TestGatewayConnectionSettingsReportsStoredDiscoveryMode(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "gateway_discovery_settings")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	q := metarepo.New(conn)
+	gateway, err := q.CreateMetaMCPServer(ctx, metarepo.CreateMetaMCPServerParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, Name: "Gateway", Visibility: "public", UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, NetworkAccessMode: conv.ToPGText("public_only")})
+	require.NoError(t, err)
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID), authz.NewGrant(authz.ScopeMCPRead, gateway.ID.String()), authz.NewGrant(authz.ScopeProjectRead, project.ID.String())})
+	service := NewMCPConnectionSettingsService(conn)
+	input := GetMCPConnectionSettingsInput{ProjectID: project.ID.String(), TargetKind: MCPConnectionSettingsGateway, TargetID: gateway.ID.String()}
+	got, err := service.Get(ctx, principal, input)
+	require.NoError(t, err)
+	require.Equal(t, "progressive", got.DiscoveryMode)
+	_, err = q.UpdateMetaMCPServer(ctx, metarepo.UpdateMetaMCPServerParams{ID: gateway.ID, ProjectID: project.ID, OrganizationID: principal.OrganizationID, Name: gateway.Name, UserSessionIssuerID: gateway.UserSessionIssuerID, Instructions: gateway.Instructions, DiscoveryMode: conv.ToPGText("direct")})
+	require.NoError(t, err)
+	updated, err := service.Get(ctx, principal, input)
+	require.NoError(t, err)
+	require.Equal(t, "direct", updated.DiscoveryMode)
+	require.Equal(t, got.Version, updated.Version, "discovery mode does not alter the address/network mutation version")
 }

@@ -24,7 +24,7 @@ func TestMetaServerDiscover_InstructionsAndCacheScope(t *testing.T) {
 				Instructions:        instructions,
 				UserSessionIssuerID: uuid.NullUUID{UUID: uuid.New(), Valid: gated},
 			}
-			bs, err := (&Service{}).handleMetaServerDiscover(t.Context(), testenv.NewLogger(t), meta, &rawRequest{ID: mcpjsonrpc.NumberID(7)})
+			bs, err := (&Service{}).handleMetaServerDiscover(t.Context(), testenv.NewLogger(t), meta, &metaGateContext{}, &rawRequest{ID: mcpjsonrpc.NumberID(7)})
 			require.NoError(t, err)
 			var response struct {
 				Result struct {

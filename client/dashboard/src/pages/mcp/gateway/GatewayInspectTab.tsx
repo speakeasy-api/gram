@@ -1,3 +1,4 @@
+import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -19,7 +20,7 @@ import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js"
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { gatewayTabHref } from "./GatewayDetailsRouting";
 import { GATEWAY_INSTRUCTIONS_SECTION_ID } from "./GatewaySettingsTab";
@@ -52,6 +53,36 @@ export function GatewayInspectTab({
   isLoadingEndpoints: boolean;
 }): JSX.Element {
   const routes = useRoutes();
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedMode = searchParams.get("discovery_mode");
+  const [modeDraft, setModeDraft] = useState<
+    "default" | "direct" | "progressive"
+  >(
+    requestedMode === "direct" || requestedMode === "progressive"
+      ? requestedMode
+      : "default",
+  );
+  const [connection, setConnection] = useState(() => ({
+    mode: modeDraft,
+    version: crypto.randomUUID(),
+  }));
+  function applyMode(mode: "default" | "direct" | "progressive") {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (mode === "default") next.delete("discovery_mode");
+        else next.set("discovery_mode", mode);
+        return next;
+      },
+      { replace: true },
+    );
+    setModeDraft(mode);
+    setConnection({ mode, version: crypto.randomUUID() });
+  }
+  const discoveryMode =
+    connection.mode === "default" ? undefined : connection.mode;
+  const configurationKey = `${connection.mode}:${connection.version}:${metaMcpServer.discoveryMode}`;
   const { mcpUrl, loading } = useResolvedMcpServerUrl(
     endpoints,
     isLoadingEndpoints,
@@ -61,8 +92,18 @@ export function GatewayInspectTab({
   // Connect as the signed-in user rather than anonymously, so the tab shows
   // the members this operator can actually reach. The mint RPC requires the
   // same mcp:connect the runtime enforces, so this grants nothing extra.
-  const { accessToken, isLoading: isMintingToken } = useUserSessionToken({
-    target: { kind: "metaMcpServer", id: metaMcpServer.id },
+  const {
+    accessToken,
+    isLoading: isMintingToken,
+    error: mintError,
+    retry: retryMint,
+  } = useUserSessionToken({
+    target: {
+      kind: "metaMcpServer",
+      id: metaMcpServer.id,
+      discoveryMode,
+      connectionVersion: connection.version,
+    },
     userSessionIssuerId: metaMcpServer.userSessionIssuerId,
   });
   const headers = accessToken
@@ -72,7 +113,13 @@ export function GatewayInspectTab({
   const { data, isLoading, isError, needsAuth, error, refetch } =
     useGatewayInspection(connectUrl, {
       headers,
-      enabled: !loading && !!connectUrl && !isMintingToken,
+      enabled:
+        !loading &&
+        !!connectUrl &&
+        !isMintingToken &&
+        !mintError &&
+        (!metaMcpServer.userSessionIssuerId || !!accessToken),
+      configurationKey,
     });
   // Configured membership, to explain a shortfall against what the endpoint
   // actually serves this connection.
@@ -99,18 +146,67 @@ export function GatewayInspectTab({
         </Button>
       </Page.Section.CTA>
       <Page.Section.Body>
+        {metaMcpServer.discoveryModesEnabled &&
+          metaMcpServer.userSessionIssuerId && (
+            <Page.Toolbar>
+              <Page.Toolbar.Leading>
+                <Select
+                  value={modeDraft}
+                  onValueChange={(value) => {
+                    if (
+                      value === "default" ||
+                      value === "direct" ||
+                      value === "progressive"
+                    )
+                      setModeDraft(value);
+                  }}
+                >
+                  <SelectTrigger aria-label="Inspect discovery mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Use gateway default</SelectItem>
+                    <SelectItem value="progressive">Progressive</SelectItem>
+                    <SelectItem value="direct">Direct</SelectItem>
+                  </SelectContent>
+                </Select>
+                <ReleaseStageBadge stage="preview" />
+              </Page.Toolbar.Leading>
+              <Page.Toolbar.Actions>
+                <Button
+                  variant="secondary"
+                  disabled={isMintingToken}
+                  onClick={() => {
+                    applyMode(modeDraft);
+                  }}
+                >
+                  <Button.Text>Apply and reconnect</Button.Text>
+                </Button>
+              </Page.Toolbar.Actions>
+            </Page.Toolbar>
+          )}
+        {!metaMcpServer.discoveryModesEnabled &&
+          connection.mode !== "default" && (
+            <Button
+              variant="secondary"
+              disabled={isMintingToken}
+              onClick={() => applyMode("default")}
+            >
+              <Button.Text>Use gateway default and reconnect</Button.Text>
+            </Button>
+          )}
         <InspectBody
           data={data}
           isLoading={isLoading || loading || isMintingToken}
-          isError={isError}
+          isError={isError || !!mintError}
           needsAuth={needsAuth}
-          error={error}
+          error={mintError ?? error}
           hasUrl={!!connectUrl}
           configuredMembers={rows.length}
           hasIssuer={!!metaMcpServer.userSessionIssuerId}
           connectUrl={connectUrl}
           headers={headers}
-          onRetry={refetch}
+          onRetry={mintError ? retryMint : refetch}
           settingsHref={gatewayTabHref(routes, metaMcpServer.id, "settings")}
         />
       </Page.Section.Body>
@@ -192,11 +288,8 @@ function InspectBody({
   // argument names, the way the wire contract is easiest to scan.
   const nameWidth =
     Math.max(...data.tools.map((tool) => tool.name.length), 0) + 2;
-  const memberCount = data.servers?.length ?? 0;
   const toolSignatures = [
-    `// ${data.tools.length} tools fronting ${memberCount} member ${
-      memberCount === 1 ? "server" : "servers"
-    }`,
+    `// ${data.tools.length} tools (${data.discoveryMode})`,
     ...data.tools.map(
       (tool) =>
         `${tool.name.padEnd(nameWidth)}${argumentNames(tool.inputSchema)}`,
@@ -254,28 +347,30 @@ function InspectBody({
           </pre>
         </InspectCard>
 
-        <InspectCard title="list_servers" meta="bundle state">
-          {data.servers === undefined ? (
-            <Text muted small>
-              The gateway couldn&apos;t report its member state.
-            </Text>
-          ) : (
-            <div className="flex flex-col gap-2">
-              <CodeSnippet
-                language="json"
-                code={JSON.stringify({ servers: data.servers }, null, 2)}
-                fontSize="small"
-              />
-              {data.servers.length < configuredMembers && (
-                <Text muted className="text-xs">
-                  {hasIssuer
-                    ? `${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served to you. Private members need mcp:connect on their backing resource (the member server for proxied members, the backing toolset for hosted members), and disabled, unproxied, or slugless members are never served.`
-                    : `${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served. This gateway has no sign-in attached, so every caller — including this tab — is anonymous and private members are hidden. Attach an issuer under Settings → Authentication.`}
-                </Text>
-              )}
-            </div>
-          )}
-        </InspectCard>
+        {data.discoveryMode === "progressive" && (
+          <InspectCard title="list_servers" meta="bundle state">
+            {data.servers === undefined ? (
+              <Text muted small>
+                The gateway couldn&apos;t report its member state.
+              </Text>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <CodeSnippet
+                  language="json"
+                  code={JSON.stringify({ servers: data.servers }, null, 2)}
+                  fontSize="small"
+                />
+                {data.servers.length < configuredMembers && (
+                  <Text muted className="text-xs">
+                    {hasIssuer
+                      ? `${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served to you. Private members need mcp:connect on their backing resource (the member server for proxied members, the backing toolset for hosted members), and disabled, unproxied, or slugless members are never served.`
+                      : `${configuredMembers - data.servers.length} of ${configuredMembers} configured members aren't served. This gateway has no sign-in attached, so every caller — including this tab — is anonymous and private members are hidden. Attach an issuer under Settings → Authentication.`}
+                  </Text>
+                )}
+              </div>
+            )}
+          </InspectCard>
+        )}
       </div>
     </div>
   );

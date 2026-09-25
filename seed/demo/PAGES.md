@@ -222,3 +222,9 @@ confirmed zero bindings/sessions and no client secret. No dedicated preparation
 dashboard, provider acceptance, or usable human access is demonstrated.
 
 [Browser evidence and supplementary checks](https://github.com/speakeasy-api/gram/pull/6438#issuecomment-5798502630).
+
+### Gateway discovery
+
+Browser verification: [~] — follow check 25 in `seed/demo/verify.md`.
+
+The seeded gateway uses Progressive discovery. With the seeded gateway discovery product feature enabled, Settings shows this default and Inspect can reconnect in Direct mode to show qualified member tools. Choosing a mode in Inspect leaves the gateway default unchanged.

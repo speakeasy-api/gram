@@ -1338,6 +1338,9 @@ type ProductFeatures struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled bool
+	// Whether gateway defaults and per-connection discovery choices can be
+	// configured
+	GatewayDiscoveryModesEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -1777,6 +1780,9 @@ func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
 	if vres.NetworkIngressEnabled != nil {
 		res.NetworkIngressEnabled = *vres.NetworkIngressEnabled
 	}
+	if vres.GatewayDiscoveryModesEnabled != nil {
+		res.GatewayDiscoveryModesEnabled = *vres.GatewayDiscoveryModesEnabled
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -1806,6 +1812,7 @@ func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesVie
 		ConsentToolFilteringEnabled:             &res.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               &res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
+		GatewayDiscoveryModesEnabled:            &res.GatewayDiscoveryModesEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
 	}
 	return vres

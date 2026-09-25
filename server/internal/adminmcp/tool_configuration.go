@@ -32,6 +32,7 @@ type OrganizationFeatures struct {
 	RemoteSessionAutoRefreshEnforced     bool   `json:"remote_session_auto_refresh_enforced_enabled"`
 	ConsentToolFilteringEnabled          bool   `json:"consent_tool_filtering_enabled"`
 	SessionPortabilityEnabled            bool   `json:"session_portability_enabled"`
+	GatewayDiscoveryModesEnabled         bool   `json:"gateway_discovery_modes_enabled"`
 	NetworkIngressEnabled                bool   `json:"network_ingress_enabled"`
 }
 
@@ -73,7 +74,8 @@ func registerConfigurationTools(server *mcp.Server, organizations OrganizationRe
 			RemoteSessionAutoRefreshEnabled:      features.RemoteSessionAutoRefreshEnabled,
 			RemoteSessionAutoRefreshEnforced:     features.RemoteSessionAutoRefreshEnforcedEnabled,
 			ConsentToolFilteringEnabled:          features.ConsentToolFilteringEnabled, SessionPortabilityEnabled: features.SessionPortabilityEnabled,
-			NetworkIngressEnabled: features.NetworkIngressEnabled,
+			GatewayDiscoveryModesEnabled: features.GatewayDiscoveryModesEnabled,
+			NetworkIngressEnabled:        features.NetworkIngressEnabled,
 		}, nil
 	})
 

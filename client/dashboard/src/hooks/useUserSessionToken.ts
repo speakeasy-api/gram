@@ -15,12 +15,19 @@ import { useQuery } from "@tanstack/react-query";
 export type UserSessionTokenTarget =
   | { kind: "toolset"; id: string | undefined }
   | { kind: "mcpServer"; id: string | undefined }
-  | { kind: "metaMcpServer"; id: string | undefined };
+  | {
+      kind: "metaMcpServer";
+      id: string | undefined;
+      discoveryMode?: "direct" | "progressive";
+      connectionVersion?: string;
+    };
 
 export interface UseUserSessionTokenResult {
   /** The minted user-session JWT, or undefined while loading / not gated. */
   accessToken: string | undefined;
   isLoading: boolean;
+  error: Error | null;
+  retry: () => void;
 }
 
 function mintRequestBody(
@@ -32,7 +39,10 @@ function mintRequestBody(
     case "mcpServer":
       return { mcpServerId: target.id };
     case "metaMcpServer":
-      return { metaMcpServerId: target.id };
+      return {
+        metaMcpServerId: target.id,
+        discoveryMode: target.discoveryMode,
+      };
   }
 }
 
@@ -67,7 +77,7 @@ export function useUserSessionToken({
 }): UseUserSessionTokenResult {
   const session = useSession();
   const project = useProject();
-  const mintMutation = useMintUserSessionMutation();
+  const mintMutation = useMintUserSessionMutation({ throwOnError: false });
 
   const { kind, id } = target;
   const isIssuerGated = !!userSessionIssuerId;
@@ -81,6 +91,8 @@ export function useUserSessionToken({
       id,
       userSessionIssuerId,
       session.user.id,
+      target.kind === "metaMcpServer" ? target.discoveryMode : undefined,
+      target.kind === "metaMcpServer" ? target.connectionVersion : undefined,
     ],
     queryFn: async () => {
       if (!id) return null;
@@ -103,6 +115,7 @@ export function useUserSessionToken({
     refetchInterval: 1000 * 60 * 45,
     refetchOnWindowFocus: false,
     retry: false,
+    throwOnError: false,
   });
 
   return {
@@ -111,5 +124,9 @@ export function useUserSessionToken({
     // connection.
     accessToken: enabled ? query.data?.accessToken : undefined,
     isLoading: enabled && query.isLoading,
+    error: enabled ? query.error : null,
+    retry: () => {
+      if (enabled) void query.refetch();
+    },
   };
 }

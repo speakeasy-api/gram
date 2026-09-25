@@ -2174,17 +2174,19 @@ func DecodeRemoveMetaMcpMemberResponse(decoder func(*http.Response) goahttp.Deco
 // type *types.MetaMcpServer from a value of type *MetaMcpServerResponseBody.
 func unmarshalMetaMcpServerResponseBodyToTypesMetaMcpServer(v *MetaMcpServerResponseBody) *types.MetaMcpServer {
 	res := &types.MetaMcpServer{
-		ID:                  *v.ID,
-		OrganizationID:      *v.OrganizationID,
-		ProjectID:           *v.ProjectID,
-		Name:                *v.Name,
-		UserSessionIssuerID: v.UserSessionIssuerID,
-		Visibility:          types.MetaMcpServerVisibility(*v.Visibility),
-		NetworkAccessMode:   types.NetworkAccessMode(*v.NetworkAccessMode),
-		Instructions:        v.Instructions,
-		CreatedAt:           *v.CreatedAt,
-		UpdatedAt:           *v.UpdatedAt,
-		MemberCount:         v.MemberCount,
+		ID:                    *v.ID,
+		OrganizationID:        *v.OrganizationID,
+		ProjectID:             *v.ProjectID,
+		Name:                  *v.Name,
+		UserSessionIssuerID:   v.UserSessionIssuerID,
+		Visibility:            types.MetaMcpServerVisibility(*v.Visibility),
+		NetworkAccessMode:     types.NetworkAccessMode(*v.NetworkAccessMode),
+		Instructions:          v.Instructions,
+		DiscoveryModesEnabled: v.DiscoveryModesEnabled,
+		DiscoveryMode:         *v.DiscoveryMode,
+		CreatedAt:             *v.CreatedAt,
+		UpdatedAt:             *v.UpdatedAt,
+		MemberCount:           v.MemberCount,
 	}
 
 	return res

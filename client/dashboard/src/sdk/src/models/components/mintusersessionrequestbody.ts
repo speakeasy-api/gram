@@ -4,8 +4,27 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
+
+/**
+ * An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.
+ */
+export const MintUserSessionRequestBodyDiscoveryMode = {
+  Progressive: "progressive",
+  Direct: "direct",
+} as const;
+/**
+ * An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.
+ */
+export type MintUserSessionRequestBodyDiscoveryMode = ClosedEnum<
+  typeof MintUserSessionRequestBodyDiscoveryMode
+>;
 
 export type MintUserSessionRequestBody = {
+  /**
+   * An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.
+   */
+  discoveryMode?: MintUserSessionRequestBodyDiscoveryMode | undefined;
   /**
    * Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
    */
@@ -21,7 +40,14 @@ export type MintUserSessionRequestBody = {
 };
 
 /** @internal */
+export const MintUserSessionRequestBodyDiscoveryMode$outboundSchema:
+  z.ZodMiniEnum<typeof MintUserSessionRequestBodyDiscoveryMode> = z.enum(
+    MintUserSessionRequestBodyDiscoveryMode,
+  );
+
+/** @internal */
 export type MintUserSessionRequestBody$Outbound = {
+  discovery_mode?: string | undefined;
   mcp_server_id?: string | undefined;
   meta_mcp_server_id?: string | undefined;
   toolset_id?: string | undefined;
@@ -33,12 +59,16 @@ export const MintUserSessionRequestBody$outboundSchema: z.ZodMiniType<
   MintUserSessionRequestBody
 > = z.pipe(
   z.object({
+    discoveryMode: z.optional(
+      MintUserSessionRequestBodyDiscoveryMode$outboundSchema,
+    ),
     mcpServerId: z.optional(z.string()),
     metaMcpServerId: z.optional(z.string()),
     toolsetId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      discoveryMode: "discovery_mode",
       mcpServerId: "mcp_server_id",
       metaMcpServerId: "meta_mcp_server_id",
       toolsetId: "toolset_id",

@@ -122,7 +122,10 @@ type MintUserSessionPayload struct {
 	// Bind the JWT to this meta MCP server's user_session_issuer audience.
 	// Mutually exclusive with the other targets; exactly one must be set. Must be
 	// issuer-gated and live in the caller's project.
-	MetaMcpServerID  *string
+	MetaMcpServerID *string
+	// An explicit discovery mode for a gateway Inspect connection. Valid only with
+	// meta_mcp_server_id. Omit to follow the gateway default.
+	DiscoveryMode    *string
 	SessionToken     *string
 	ProjectSlugInput *string
 }

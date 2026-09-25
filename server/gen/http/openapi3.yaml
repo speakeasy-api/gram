@@ -91738,6 +91738,15 @@ components:
                     type: string
                     description: When the meta MCP server was created
                     format: date-time
+                discovery_mode:
+                    type: string
+                    description: The effective default discovery mode. Unconfigured connections follow this value.
+                    enum:
+                        - progressive
+                        - direct
+                discovery_modes_enabled:
+                    type: boolean
+                    description: Whether the organization allows new discovery choices. Read through the gateway without requiring organization feature-management access.
                 id:
                     type: string
                     description: The ID of the meta MCP server
@@ -91788,6 +91797,7 @@ components:
                 - name
                 - visibility
                 - network_access_mode
+                - discovery_mode
                 - created_at
                 - updated_at
         MeterUsageBreakdown:
@@ -92053,6 +92063,12 @@ components:
         MintUserSessionRequestBody:
             type: object
             properties:
+                discovery_mode:
+                    type: string
+                    description: An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.
+                    enum:
+                        - progressive
+                        - direct
                 mcp_server_id:
                     type: string
                     description: Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
@@ -94341,6 +94357,9 @@ components:
                 device_agent:
                     type: boolean
                     description: Whether the organization uses the device agent (any device has polled agent.getPlugins). Derived from device-agent syncs, not an admin-settable feature.
+                gateway_discovery_modes_enabled:
+                    type: boolean
+                    description: Whether gateway defaults and per-connection discovery choices can be configured
                 hooks_browser_login_enabled:
                     type: boolean
                     description: Whether generated hook plugins may mint per-user keys via the interactive browser login
@@ -94403,6 +94422,7 @@ components:
                 - consent_tool_filtering_enabled
                 - session_portability_enabled
                 - network_ingress_enabled
+                - gateway_discovery_modes_enabled
                 - device_agent
         Project:
             type: object
@@ -99557,6 +99577,7 @@ components:
                         - consent_tool_filtering
                         - session_portability
                         - network_ingress
+                        - gateway_discovery_modes
                     maxLength: 60
                 organization_id:
                     type: string
@@ -99660,6 +99681,7 @@ components:
                         - consent_tool_filtering
                         - session_portability
                         - network_ingress
+                        - gateway_discovery_modes
                     maxLength: 60
                 organization_id:
                     type: string
@@ -105567,6 +105589,12 @@ components:
         UpdateMetaMcpServerForm:
             type: object
             properties:
+                discovery_mode:
+                    type: string
+                    description: The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+                    enum:
+                        - progressive
+                        - direct
                 id:
                     type: string
                     description: The ID of the meta MCP server to update

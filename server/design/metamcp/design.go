@@ -291,6 +291,8 @@ var UpdateMetaMcpServerForm = Type("UpdateMetaMcpServerForm", func() {
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The allowed network surfaces. Omit to preserve the stored mode.")
 	Attribute("instructions", String, "Custom server instructions replace Gram's built-in gateway instructions in MCP initialize and server/discover responses. Omit to leave them unchanged; send an empty string to restore Gram's built-in gateway instructions. Limited to 10000 Unicode characters after removing NUL characters and trimming whitespace.")
 
+	Attribute("discovery_mode", String, "The default discovery mode for connections without an explicit override. Omit to preserve the stored default.", func() { Enum("progressive", "direct") })
+
 	Required("id", "name")
 })
 
@@ -313,6 +315,9 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 	Attribute("visibility", MetaMcpServerVisibility, "The visibility of the gateway.")
 	Attribute("network_access_mode", shared.NetworkAccessMode, "The effective allowed network surfaces. Existing NULL rows are public_only.")
 	Attribute("instructions", String, "Operator-authored server instructions returned in the gateway's MCP initialize response. Null when the gateway serves Gram's built-in instructions.")
+	Attribute("discovery_modes_enabled", Boolean, "Whether the organization allows new discovery choices. Read through the gateway without requiring organization feature-management access.")
+	Attribute("discovery_mode", String, "The effective default discovery mode. Unconfigured connections follow this value.", func() { Enum("progressive", "direct") })
+
 	Attribute("created_at", String, func() {
 		Description("When the meta MCP server was created")
 		Format(FormatDateTime)
@@ -323,7 +328,7 @@ var MetaMcpServer = Type("MetaMcpServer", func() {
 	})
 	Attribute("member_count", Int, "The number of live members. Only populated by listMetaMcpServers.")
 
-	Required("id", "organization_id", "project_id", "name", "visibility", "network_access_mode", "created_at", "updated_at")
+	Required("id", "organization_id", "project_id", "name", "visibility", "network_access_mode", "discovery_mode", "created_at", "updated_at")
 })
 
 var AddMetaMcpMemberForm = Type("AddMetaMcpMemberForm", func() {

@@ -239,7 +239,9 @@ func (s *Service) serveResolvedMCPEndpoint(
 		ctx = newCtx
 		r = r.WithContext(ctx)
 		pendingIssuerGate = authentication
-		sessionToolSelection = toolSelection
+		if toolSelection != nil {
+			sessionToolSelection = toolSelection.Selection
+		}
 
 		// Issuer-gated clients authenticate with this server's AS, so an
 		// upstream 401/403 relayed by the proxy must challenge them with

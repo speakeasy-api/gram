@@ -95,6 +95,8 @@ var _ = Service("userSessions", func() {
 			Attribute("meta_mcp_server_id", String, "Bind the JWT to this meta MCP server's user_session_issuer audience. Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.", func() {
 				Format(FormatUUID)
 			})
+			Attribute("discovery_mode", String, "An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.", func() { Enum("progressive", "direct") })
+
 			security.SessionPayload()
 			security.ProjectPayload()
 		})

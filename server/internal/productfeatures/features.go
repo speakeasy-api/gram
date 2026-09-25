@@ -10,6 +10,10 @@ import (
 type Feature string
 
 const (
+	// FeatureGatewayDiscoveryModes enables new gateway defaults and per-session
+	// discovery choices. Stored choices remain effective when it is disabled.
+	FeatureGatewayDiscoveryModes Feature = "gateway_discovery_modes"
+
 	FeatureLogs           Feature = "logs"
 	FeatureToolIOLogs     Feature = "tool_io_logs"
 	FeatureSessionCapture Feature = "session_capture"

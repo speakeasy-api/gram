@@ -54,6 +54,7 @@ type MCPConnectionPluginMembership struct {
 }
 
 type MCPConnectionSettings struct {
+	DiscoveryMode     string                          `json:"discovery_mode,omitempty"`
 	ProjectID         string                          `json:"project_id"`
 	TargetKind        MCPConnectionSettingsTargetKind `json:"target_kind"`
 	TargetID          string                          `json:"target_id"`
@@ -153,7 +154,7 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, queries *platfor
 	}
 	settings := MCPConnectionSettings{
 		ProjectID: projectID.String(), TargetKind: input.TargetKind, TargetID: targetID.String(),
-		Name: row.Name, Visibility: row.Visibility, NetworkMode: row.NetworkMode,
+		Name: row.Name, Visibility: row.Visibility, NetworkMode: row.NetworkMode, DiscoveryMode: row.DiscoveryMode,
 		Version: "", Endpoints: endpoints, Ingress: ingress, PluginMemberships: memberships,
 	}
 	version := connectionAddressVersion{ProjectID: settings.ProjectID, TargetKind: settings.TargetKind, TargetID: settings.TargetID, NetworkMode: settings.NetworkMode, Endpoints: nil}
