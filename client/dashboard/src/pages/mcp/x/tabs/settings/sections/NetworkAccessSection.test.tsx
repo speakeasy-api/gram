@@ -89,7 +89,7 @@ vi.mock("@/routes", () => ({
   useOrgRoutes: () => ({
     domains: {
       Link: ({ children }: { children: React.ReactNode }) => (
-        <a href="/org/network-access">{children}</a>
+        <a href="/org/org-1/domains">{children}</a>
       ),
     },
   }),
@@ -388,7 +388,7 @@ describe("NetworkAccessSection", () => {
       screen
         .getByRole("link", { name: "Configure organization network access" })
         .getAttribute("href"),
-    ).toBe("/org/network-access");
+    ).toBe("/org/org-1/domains");
   });
 
   it("shows network access before staff enables Tailscale", () => {
