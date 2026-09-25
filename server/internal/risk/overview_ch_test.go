@@ -235,10 +235,11 @@ func TestGetRiskOverview_MCPServerFilterIncludesGatewayFindings(t *testing.T) {
 	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{gateway, anchored, otherServer}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
+	nonCanonicalServerID := "{" + serverID + "}"
 	result, err := ti.service.GetRiskOverview(ctx, &gen.GetRiskOverviewPayload{
 		From:        new(from.Format(time.RFC3339)),
 		To:          new(to.Format(time.RFC3339)),
-		McpServerID: &serverID,
+		McpServerID: &nonCanonicalServerID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(2), result.Findings)

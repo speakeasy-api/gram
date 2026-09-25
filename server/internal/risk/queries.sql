@@ -1765,10 +1765,13 @@ FROM risk_results
 WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[]);
 
+-- name: LockRiskResultFalsePositiveTransition :exec
+SELECT pg_advisory_xact_lock(hashtext(@id::text));
+
 -- name: MarkRiskResultsFalsePositive :many
 -- Returns the full rows the UPDATE actually changed for audit logging.
--- ClickHouse copies are selected independently by requested id, so retries can
--- repair a post-commit ClickHouse failure even when this UPDATE matches nothing.
+-- ClickHouse copies are selected independently by requested id so a retry can
+-- repair a successful append followed by a failed Postgres commit.
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
   , false_positive_reason = sqlc.narg(reason)
@@ -2306,3 +2309,9 @@ WHERE id = @id;
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
 WHERE id = @id;
+
+-- name: GetRiskResultFalsePositiveForTest :one
+SELECT false_positive_at
+FROM risk_results
+WHERE project_id = @project_id
+  AND id = @id;

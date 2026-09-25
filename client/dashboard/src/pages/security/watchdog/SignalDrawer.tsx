@@ -310,6 +310,7 @@ export function SignalDrawer({
     collectionToken.current += 1;
     setPendingDismiss(null);
     setCollecting(false);
+    setOpenChat(null);
   }, [signal?.key, mcpServerId]);
 
   // The editor follows the scoped signal. A server change must not retain

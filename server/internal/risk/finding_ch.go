@@ -339,10 +339,6 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			category = string(categories.Classify(message.GetSource(), message.GetRuleId()))
 		}
 
-		// Messages may carry false-positive state for producers that append
-		// state changes through the ingest path. A parse failure must skip the
-		// message rather than append a fresh, dedup-winning row that silently
-		// clears the true state.
 		// Set only on messages that republish an already-persisted finding's
 		// state (the offline risk_results backfill, legacy producers); empty on
 		// every finding a scanner produces. A parse failure must skip the message

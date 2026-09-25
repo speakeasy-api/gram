@@ -82,6 +82,61 @@ func TestWatchdogAlertsClickHouse(t *testing.T) {
 	require.Equal(t, []chrepo.WatchdogAlertGroup{{RuleID: "rule-a", Value: "pii", Count: 4}, {RuleID: "rule-b", Value: "pii", Count: 1}}, groups)
 }
 
+func TestWatchdogAlertsClickHouseMCPServerScope(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	projectID := *auth.ProjectID
+	from := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	to := from.Add(2 * time.Hour)
+	serverA := uuid.NewString()
+	serverB := uuid.NewString()
+
+	findingA := chOverviewFinding(t, projectID, auth.ActiveOrganizationID, uuid.New(), uuid.New(), from.Add(10*time.Minute), "gitleaks", "rule-a", "user-a@example.com")
+	findingA.MCPServerID = serverA
+	findingB := chOverviewFinding(t, projectID, auth.ActiveOrganizationID, uuid.New(), uuid.New(), from.Add(20*time.Minute), "gitleaks", "rule-b", "user-b@example.com")
+	findingB.MCPServerID = serverB
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{findingA, findingB}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	q := chrepo.New(ti.chConn)
+	params := chrepo.RiskSignalWindowParams{
+		OrganizationID: auth.ActiveOrganizationID,
+		ProjectID:      projectID.String(),
+		MCPServerID:    serverA,
+		From:           from,
+		To:             to,
+	}
+	alerts, err := q.ListWatchdogAlerts(ctx, params, chrepo.WatchdogAlertLimit)
+	require.NoError(t, err)
+	require.Len(t, alerts, 1)
+	require.Equal(t, "rule-a", alerts[0].RuleID)
+	require.Equal(t, uint64(1), alerts[0].FindingCount)
+
+	groups, err := q.GroupWatchdogAlerts(ctx, params, []string{"rule-a", "rule-b"}, "user")
+	require.NoError(t, err)
+	require.Equal(t, []chrepo.WatchdogAlertGroup{{RuleID: "rule-a", Value: "user-a@example.com", Count: 1}}, groups)
+
+	params.MCPServerID = serverB
+	alerts, err = q.ListWatchdogAlerts(ctx, params, chrepo.WatchdogAlertLimit)
+	require.NoError(t, err)
+	require.Len(t, alerts, 1)
+	require.Equal(t, "rule-b", alerts[0].RuleID)
+	require.Equal(t, uint64(1), alerts[0].FindingCount)
+
+	groups, err = q.GroupWatchdogAlerts(ctx, params, []string{"rule-a", "rule-b"}, "user")
+	require.NoError(t, err)
+	require.Equal(t, []chrepo.WatchdogAlertGroup{{RuleID: "rule-b", Value: "user-b@example.com", Count: 1}}, groups)
+
+	params.MCPServerID = uuid.NewString()
+	alerts, err = q.ListWatchdogAlerts(ctx, params, chrepo.WatchdogAlertLimit)
+	require.NoError(t, err)
+	require.Empty(t, alerts)
+	groups, err = q.GroupWatchdogAlerts(ctx, params, []string{"rule-a", "rule-b"}, "user")
+	require.NoError(t, err)
+	require.Empty(t, groups)
+}
+
 func TestWatchdogAlertsClickHouseArrayOverflow(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

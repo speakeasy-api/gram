@@ -2,6 +2,8 @@ package risk
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -52,6 +54,20 @@ func parseResultIDs(raw []string) ([]uuid.UUID, error) {
 	return ids, nil
 }
 
+func lockFalsePositiveTransitions(ctx context.Context, queries *repo.Queries, ids []uuid.UUID) error {
+	lockIDs := make([]string, len(ids))
+	for i, id := range ids {
+		lockIDs[i] = id.String()
+	}
+	sort.Strings(lockIDs)
+	for _, id := range lockIDs {
+		if err := queries.LockRiskResultFalsePositiveTransition(ctx, id); err != nil {
+			return fmt.Errorf("lock false positive transition for result %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
 func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen.MarkRiskResultsFalsePositivePayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -75,7 +91,12 @@ func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	marked, err := repo.New(dbtx).MarkRiskResultsFalsePositive(ctx, repo.MarkRiskResultsFalsePositiveParams{
+	queries := repo.New(dbtx)
+	if err := lockFalsePositiveTransitions(ctx, queries, ids); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock risk result false positive transitions").LogError(ctx, s.logger)
+	}
+
+	marked, err := queries.MarkRiskResultsFalsePositive(ctx, repo.MarkRiskResultsFalsePositiveParams{
 		ProjectID: *authCtx.ProjectID,
 		Ids:       ids,
 		Reason:    nullableText(payloadReason(payload.Reason)),
@@ -98,13 +119,8 @@ func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen
 		}
 	}
 
-	// ClickHouse is updated after the Postgres transaction commits. A failed
-	// append returns an error, and a retry repairs it because the copy is
-	// selected by the requested ids rather than the Postgres UPDATE result.
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit mark risk results false positive").LogError(ctx, s.logger)
-	}
+	// Keep the per-result locks through both writes so Postgres and ClickHouse
+	// observe concurrent transitions in the same order.
 	now := time.Now().UTC()
 	if err := s.findingsCH.AppendFalsePositiveSuppression(
 		ctx,
@@ -117,7 +133,9 @@ func (s *Service) MarkRiskResultsFalsePositive(ctx context.Context, payload *gen
 	); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "record dismissal in the findings store").LogError(ctx, s.logger)
 	}
-
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit mark risk results false positive").LogError(ctx, s.logger)
+	}
 	return nil
 }
 
@@ -144,7 +162,12 @@ func (s *Service) UnmarkRiskResultsFalsePositive(ctx context.Context, payload *g
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	restored, err := repo.New(dbtx).UnmarkRiskResultsFalsePositive(ctx, repo.UnmarkRiskResultsFalsePositiveParams{
+	queries := repo.New(dbtx)
+	if err := lockFalsePositiveTransitions(ctx, queries, ids); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock risk result false positive transitions").LogError(ctx, s.logger)
+	}
+
+	restored, err := queries.UnmarkRiskResultsFalsePositive(ctx, repo.UnmarkRiskResultsFalsePositiveParams{
 		ProjectID: *authCtx.ProjectID,
 		Ids:       ids,
 	})
@@ -166,12 +189,8 @@ func (s *Service) UnmarkRiskResultsFalsePositive(ctx context.Context, payload *g
 		}
 	}
 
-	// The ClickHouse copy uses the requested ids, so a retry can repair a
-	// prior post-commit ClickHouse failure even when Postgres matches nothing.
-
-	if err := dbtx.Commit(ctx); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "commit unmark risk results false positive").LogError(ctx, s.logger)
-	}
+	// The requested ids make a retry safe if the append succeeds and the
+	// Postgres commit fails.
 	now := time.Now().UTC()
 	if err := s.findingsCH.AppendFalsePositiveReversal(
 		ctx,
@@ -181,6 +200,9 @@ func (s *Service) UnmarkRiskResultsFalsePositive(ctx context.Context, payload *g
 		ids,
 	); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "record restore in the findings store").LogError(ctx, s.logger)
+	}
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "commit unmark risk results false positive").LogError(ctx, s.logger)
 	}
 
 	return nil

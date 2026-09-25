@@ -5,11 +5,7 @@ import {
   StatTileSkeleton,
 } from "@/components/chart/stat-tile";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import {
-  defineFilters,
-  useFilterState,
-  type FilterValue,
-} from "@/components/filters";
+import { defineFilters, useFilterState } from "@/components/filters";
 import {
   formatDateRangeLabel,
   useDateRangeFilter,
@@ -158,13 +154,25 @@ function WatchdogContent(): JSX.Element {
     () => values.category ?? [],
     [values.category],
   );
-  const {
-    values: serverFilterValues,
-    setValue: setServerFilterValue,
-    clearValue: clearServerFilterValue,
-    clearAll: clearServerFilters,
-  } = useFilterState(WATCHDOG_SERVER_FILTERS);
+  const { values: serverFilterValues } = useFilterState(
+    WATCHDOG_SERVER_FILTERS,
+  );
   const mcpServerFilter = serverFilterValues.mcp_server_id ?? "";
+  const setMCPServerFilter = (value: string | null) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) {
+          next.set("mcp_server_id", value);
+        } else {
+          next.delete("mcp_server_id");
+        }
+        next.delete("signal");
+        return next;
+      },
+      { replace: true },
+    );
+  };
   const { data: mcpServersData } = useMcpServers({ gramProject }, undefined, {
     throwOnError: false,
   });
@@ -329,11 +337,11 @@ function WatchdogContent(): JSX.Element {
         schema={WATCHDOG_SERVER_FILTERS}
         values={serverFilterValues}
         optionsById={{ mcp_server_id: mcpServerOptions }}
-        onChange={
-          setServerFilterValue as (id: string, value: FilterValue) => void
+        onChange={(_id, value) =>
+          setMCPServerFilter(typeof value === "string" ? value : null)
         }
-        onClear={clearServerFilterValue as (id: string) => void}
-        onClearAll={clearServerFilters}
+        onClear={() => setMCPServerFilter(null)}
+        onClearAll={() => setMCPServerFilter(null)}
       />
       <Page.Toolbar.Leading>
         <TimeRangePicker

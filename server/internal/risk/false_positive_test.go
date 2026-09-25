@@ -138,6 +138,77 @@ func TestMarkUnmarkRiskResultsFalsePositive(t *testing.T) {
 	require.Equal(t, int64(0), dismissedAfterUnmark.TotalCount)
 }
 
+func TestMarkUnmarkRiskResultsFalsePositive_ConcurrentStateConverges(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Concurrent False Positive Test")})
+	require.NoError(t, err)
+	policyID := uuid.MustParse(policy.ID)
+	chatID, msgID := seedChatMessage(t, ti, projectID, orgID)
+	resultIDs := []uuid.UUID{
+		seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "secret.github_pat", "token-a"),
+		seedRiskResultWith(t, ti, projectID, orgID, policyID, msgID, "gitleaks", "secret.aws_access_token", "token-b"),
+	}
+	resultIDStrings := []string{resultIDs[0].String(), resultIDs[1].String()}
+	reversedIDStrings := []string{resultIDStrings[1], resultIDStrings[0]}
+
+	chQueries := chrepo.New(ti.chConn)
+	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{
+		chDismissalCopy(t, projectID, orgID, policy.ID, resultIDs[0], chatID, msgID, time.Time{}, chrepo.EventKindFinding),
+		chDismissalCopy(t, projectID, orgID, policy.ID, resultIDs[1], chatID, msgID, time.Time{}, chrepo.EventKindFinding),
+	}))
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+	pgQueries := riskrepo.New(ti.conn)
+
+	for round := range 20 {
+		start := make(chan struct{})
+		errs := make(chan error, 2)
+		go func() {
+			<-start
+			errs <- ti.service.MarkRiskResultsFalsePositive(ctx, &gen.MarkRiskResultsFalsePositivePayload{
+				ResultIds: resultIDStrings,
+				Reason:    new("noise"),
+			})
+		}()
+		go func() {
+			<-start
+			errs <- ti.service.UnmarkRiskResultsFalsePositive(ctx, &gen.UnmarkRiskResultsFalsePositivePayload{
+				ResultIds: reversedIDStrings,
+			})
+		}()
+		close(start)
+		require.NoError(t, <-errs)
+		require.NoError(t, <-errs)
+		testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+		dismissed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
+		require.NoError(t, err)
+		dismissedIDs := make(map[string]struct{}, len(dismissed.Results))
+		for _, result := range dismissed.Results {
+			dismissedIDs[result.ID] = struct{}{}
+		}
+
+		for _, resultID := range resultIDs {
+			falsePositiveAt, err := pgQueries.GetRiskResultFalsePositiveForTest(ctx, riskrepo.GetRiskResultFalsePositiveForTestParams{
+				ProjectID: projectID,
+				ID:        resultID,
+			})
+			require.NoError(t, err)
+			pgDismissed := falsePositiveAt.Valid
+			_, chDismissed := dismissedIDs[resultID.String()]
+			require.Equalf(t, pgDismissed, chDismissed, "round %d result %s diverged", round, resultID)
+		}
+	}
+}
+
 func TestMarkUnmarkRiskResultsFalsePositive_ClickHouseOnlyMediatedFinding(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

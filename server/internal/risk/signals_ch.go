@@ -73,7 +73,10 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 
 	organizationID := authCtx.ActiveOrganizationID
 	projectID := authCtx.ProjectID.String()
-	mcpServerID := conv.PtrValOr(payload.McpServerID, "")
+	mcpServerID, err := parseOptionalMCPServerID(payload.McpServerID)
+	if err != nil {
+		return nil, err
+	}
 	wideFrom := from.Add(-to.Sub(from))
 
 	doubled := chrepo.RiskSignalWindowParams{

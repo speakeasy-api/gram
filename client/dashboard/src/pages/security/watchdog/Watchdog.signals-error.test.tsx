@@ -163,7 +163,7 @@ describe("Watchdog with a failing signals query", () => {
     expect(screen.getByText("Suppressed section")).toBeTruthy();
   });
 
-  it("round-trips the MCP server filter through the URL and signals request", async () => {
+  it("round-trips the MCP server filter and clears stale signal selection", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -171,7 +171,7 @@ describe("Watchdog with a failing signals query", () => {
       <QueryClientProvider client={queryClient}>
         <MemoryRouter
           initialEntries={[
-            `/acme/projects/default/watchdog?mcp_server_id=${mocks.selectedServerId}`,
+            `/acme/projects/default/watchdog?mcp_server_id=${mocks.selectedServerId}&signal=rule%3Asecret.github_pat`,
           ]}
         >
           <Watchdog />

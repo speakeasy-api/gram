@@ -194,21 +194,32 @@ func TestGetRiskSignals_MCPServerFilter(t *testing.T) {
 	from := time.Now().UTC().Add(-14 * 24 * time.Hour).Truncate(24 * time.Hour)
 	to := from.Add(7 * 24 * time.Hour)
 	serverID := uuid.NewString()
+	otherServerID := uuid.NewString()
 
 	current := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), from.Add(time.Hour), "gitleaks", "secret.github_pat", "selected@example.com")
 	current.MCPServerID = serverID
 	previous := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), from.Add(-time.Hour), "gitleaks", "secret.github_pat", "selected@example.com")
 	previous.MCPServerID = serverID
 	otherServer := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), from.Add(2*time.Hour), "presidio", "pii.email_address", "other@example.com")
-	otherServer.MCPServerID = uuid.NewString()
+	otherServer.MCPServerID = otherServerID
 
-	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{current, previous, otherServer}))
+	// A dismissal copy carries the finding's server id, so the pre-dedup
+	// server filter still sees it and the dismissed finding stays hidden.
+	dismissed := chOverviewFinding(t, projectID, orgID, uuid.New(), uuid.New(), from.Add(3*time.Hour), "gitleaks", "secret.github_pat", "dismissed@example.com")
+	dismissed.MCPServerID = serverID
+	dismissedAt := from.Add(4 * time.Hour)
+	dismissal := dismissed
+	dismissal.EventKind = chrepo.EventKindSuppression
+	dismissal.FalsePositiveAt = &dismissedAt
+
+	require.NoError(t, chrepo.New(ti.chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{current, previous, otherServer, dismissed, dismissal}))
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
+	nonCanonicalServerID := "{" + serverID + "}"
 	result, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
 		From:        new(from.Format(time.RFC3339)),
 		To:          new(to.Format(time.RFC3339)),
-		McpServerID: &serverID,
+		McpServerID: &nonCanonicalServerID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), result.Findings)
@@ -216,6 +227,18 @@ func TestGetRiskSignals_MCPServerFilter(t *testing.T) {
 	require.Equal(t, int64(1), result.UsersExposed)
 	require.Len(t, result.Signals, 1)
 	require.Equal(t, "secret.github_pat", result.Signals[0].RuleID)
+	require.Equal(t, int64(1), result.Signals[0].Findings)
+
+	otherResult, err := ti.service.GetRiskSignals(ctx, &gen.GetRiskSignalsPayload{
+		From:        new(from.Format(time.RFC3339)),
+		To:          new(to.Format(time.RFC3339)),
+		McpServerID: &otherServerID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), otherResult.Findings)
+	require.Zero(t, otherResult.PreviousFindings)
+	require.Len(t, otherResult.Signals, 1)
+	require.Equal(t, "pii.email_address", otherResult.Signals[0].RuleID)
 }
 
 // TestGetRiskSignals_EmptyWindow asserts an org with no findings gets a clean
