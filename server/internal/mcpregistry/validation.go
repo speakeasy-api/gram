@@ -15,6 +15,9 @@ import (
 
 const RecordInputByteLimit = 8 << 20
 
+// StoredRecordByteLimit bounds PostgreSQL jsonb::text, not compressed storage.
+const StoredRecordByteLimit = 8 << 20
+
 type Issue struct {
 	Path    string
 	Message string
@@ -37,7 +40,15 @@ func LoadValidator() (*Validator, error) {
 }
 
 func (v *Validator) Validate(raw json.RawMessage) []Issue {
-	if len(raw) > RecordInputByteLimit {
+	return v.validate(raw, RecordInputByteLimit)
+}
+
+func (v *Validator) ValidateStored(raw json.RawMessage) []Issue {
+	return v.validate(raw, StoredRecordByteLimit)
+}
+
+func (v *Validator) validate(raw json.RawMessage, byteLimit int) []Issue {
+	if len(raw) > byteLimit {
 		return []Issue{{Path: "", Message: "record exceeds byte limit"}}
 	}
 	value, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
