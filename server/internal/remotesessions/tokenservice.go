@@ -738,6 +738,20 @@ func (s *RefreshService) refreshSessionTokens(
 		return zero, noToken, fmt.Errorf("persist refreshed session: %w", err)
 	}
 
+	// Whether the provider rotates refresh tokens, and how long it says they
+	// live, is what tells an upstream expiry policy apart from an upstream
+	// revocation when a later refresh fails with invalid_grant.
+	refreshedAttrs := []any{
+		attr.SlogRemoteSessionID(sess.ID.String()),
+		attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+		attr.SlogOAuthIssuer(client.IssuerUrl),
+		attr.SlogOAuthRefreshTokenRotated(refreshRotated),
+	}
+	if refreshTimeoutReported {
+		refreshedAttrs = append(refreshedAttrs, attr.SlogOAuthRefreshTokenLifetime(refreshTimeout))
+	}
+	s.logger.InfoContext(ctx, "upstream remote session tokens refreshed", refreshedAttrs...)
+
 	return updated, tok, nil
 }
 
