@@ -32,6 +32,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  IssuerScopeOverrideAlert,
+  LegacyCallbackAlert,
+} from "@/pages/remote-identity-providers/clientAlerts";
+import {
   ClientAssertionAudienceField,
   ClientCredentialsFields,
   EndpointsFields,
@@ -499,6 +503,12 @@ function ModifyRemoteIdentityProviderSheetBody({
           onResetEndpoints={handleResetEndpoints}
         />
 
+        {primaryClient && (
+          <LegacyCallbackAlert
+            legacyCallbackUrl={primaryClient.legacyCallbackUrl}
+          />
+        )}
+
         {isLoadingClient ? (
           <Text muted small>
             Loading client credentials…
@@ -535,6 +545,12 @@ function ModifyRemoteIdentityProviderSheetBody({
           audienceOverride={audienceOverride}
           onScopeOverrideChange={setScopeOverride}
           onAudienceOverrideChange={setAudienceOverride}
+          scopeWarning={
+            <IssuerScopeOverrideAlert
+              issuerId={issuer.id}
+              scopeOverride={issuer.scopeOverride}
+            />
+          }
         />
 
         {submitError && (
