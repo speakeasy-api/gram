@@ -205,6 +205,18 @@ func (s *StaffOAuthAuthorization) connectGet(w http.ResponseWriter, r *http.Requ
 		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
 		return
 	}
+	// Chrome also checks form-action on the 303 after consent. Only this
+	// registered callback may receive the resulting browser navigation.
+	callback, err := url.Parse(challenge.RedirectURI)
+	if err != nil {
+		staffOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
+		return
+	}
+	callbackSource := callback.Scheme + ":"
+	if callback.Host != "" {
+		callbackSource = callback.Scheme + "://" + callback.Host
+	}
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' "+callbackSource+"; base-uri 'none'; frame-ancestors 'none'")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(page.String()))
 }
