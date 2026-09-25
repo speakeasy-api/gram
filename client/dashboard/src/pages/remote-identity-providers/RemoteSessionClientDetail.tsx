@@ -13,7 +13,6 @@ import { useRoutes } from "@/routes";
 import { useOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
 import { useOrganizationRemoteSessionIssuer } from "@gram/client/react-query/organizationRemoteSessionIssuer.js";
 import { Link, Navigate, useLocation, useParams } from "react-router";
-import { ClientIssuerLink } from "./ClientIssuerLink";
 import { ScopeBadge } from "./ScopeBadge";
 import { remoteSessionClientDisplayName } from "./clientDisplay";
 import { issuerDisplayName } from "./issuerDisplay";
@@ -103,11 +102,6 @@ export default function RemoteSessionClientDetail(): JSX.Element {
               />
             )}
           </div>
-          {issuer && (
-            <Text small muted className="mt-2 block">
-              <ClientIssuerLink issuer={issuer} />
-            </Text>
-          )}
           <Heading variant="h1" className="break-all normal-case">
             {label}
           </Heading>
