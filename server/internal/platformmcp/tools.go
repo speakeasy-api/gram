@@ -195,6 +195,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 			"Registration never distributes an MCP: use list_plugins to show the project's plugins, ask the user which one should carry it, then call distribute_mcp_to_plugin naming that plugin exactly. There is no implicit default.",
 			"To change an existing MCP server or gateway address or network access, first read its exact connection settings in the selected project. Show the current and proposed address or mode, and wait for explicit confirmation before changing it. Re-read that same target afterwards. A publication request means the plugin update was requested, not that its packages or downstream users have converged; verify the publication evidence before reporting completion.",
 			"Creating a data export is a mutation: first show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask for explicit confirmation. Never request or accept authorization header values in chat; create the export without headers and send the user to the returned management URL to add authentication securely.",
+			"When an administrator describes a risk in their own words, call suggest_risk_policy with that description before choosing detectors yourself; list_risk_presets explains the presets it draws from. Present the draft as what it detects, what happens when it fires, how severe findings are, and that it is enabled the moment it is created unless they want it off, then create it with create_risk_policy only after explicit confirmation, passing the preset id and any agreed overrides including enabled. Read the result, then call get_risk_policy with the returned policy id and confirm the stored policy matches what the administrator approved.",
 		}, "\n\n"),
 		PageSize: 32,
 	})
@@ -216,6 +217,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		}
 		registerRiskToolsWithMutations(reg, postgresReader.riskReads, postgresReader.riskAnalysisStatus, riskMutations)
 		registerRiskFindingsTool(reg, postgresReader.riskFindings)
+		registerRiskPresetTools(reg)
 		if postgresReader.dataExports == nil {
 			registerUnavailableDataExportTools(reg)
 		} else {
@@ -245,6 +247,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableReviewRequestTools(reg)
 		registerRiskAnalysisStatusTool(reg, nil)
 		registerRiskFindingsTool(reg, nil)
+		registerRiskPresetTools(reg)
 		registerUnavailableRiskToolsWithMutations(reg, riskMutations)
 		registerUnavailableDataExportTools(reg)
 		registerUnavailableDataExportMutationTool(reg)

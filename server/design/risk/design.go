@@ -700,6 +700,61 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCategories"}`)
 	})
 
+	Method("listRiskPresets", func() {
+		Description("Return the use-case presets a risk policy can start from. Each preset resolves to a complete create payload (policy type, detectors, action, severity and, for prompt-based presets, the judge instruction) so the dashboard and the Platform MCP offer the same starting points.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(RiskPresetsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listPresets")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskPresets")
+		Meta("openapi:extension:x-speakeasy-group", "risk.presets")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskPresets"}`)
+	})
+
+	Method("suggestRiskPolicy", func() {
+		Description("Map a plain-language description of a risk to a policy draft: the closest preset with its detectors, action and severity, or a bespoke prompt-based guardrail when no preset fits. Uses the configured LLM when available and a deterministic keyword match otherwise. Nothing is created.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("prompt", String, "Plain-language description of what the policy should catch or prevent.", func() {
+				MinLength(3)
+				MaxLength(500)
+			})
+			Required("prompt")
+		})
+
+		Result(SuggestRiskPolicyResult)
+
+		HTTP(func() {
+			POST("/rpc/risk.suggestPolicy")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "suggestRiskPolicy")
+		Meta("openapi:extension:x-speakeasy-group", "risk.presets")
+		Meta("openapi:extension:x-speakeasy-name-override", "suggest")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskSuggestPolicy", "type": "mutation"}`)
+	})
+
 	Method("compileExpr", func() {
 		Description("Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).")
 
@@ -1963,6 +2018,63 @@ var RiskCategoriesResult = Type("RiskCategoriesResult", func() {
 	Attribute("recommended_scopes_version", Int64, "Version of the recommended-scope registry; bumps when any recommendation changes.")
 
 	Required("categories", "recommended_scopes_version")
+})
+
+var RiskPreset = Type("RiskPreset", func() {
+	Description("One use-case preset a risk policy can start from.")
+
+	Attribute("id", String, "Stable preset identifier (e.g. 'secrets_and_credentials').")
+	Attribute("label", String, "Human-readable preset name.")
+	Attribute("description", String, "What the preset protects against, in plain language.")
+	Attribute("policy_type", String, "Policy type the preset creates.", func() {
+		Enum("standard", "prompt_based")
+	})
+	Attribute("sources", ArrayOf(String), "Detector sources enabled by a standard preset; empty for prompt-based presets.")
+	Attribute("presidio_entities", ArrayOf(String), "Presidio entities enabled when sources include presidio.")
+	Attribute("action", String, "Default enforcement action.", func() {
+		Enum("flag", "warn", "block", "quarantine")
+	})
+	Attribute("score", Float64, "Default CVSS-style severity (0.1-10).")
+	Attribute("prompt", String, "Judge instruction for a prompt-based preset; empty otherwise.")
+	Attribute("user_message", String, "Default message shown to the user when the policy warns or blocks; empty when none.")
+	Attribute("requires_approved_email_domains", Boolean, "True when the preset is inert until approved_email_domains is supplied.")
+
+	Required("id", "label", "description", "policy_type", "sources", "presidio_entities", "action", "score", "prompt", "user_message", "requires_approved_email_domains")
+})
+
+var RiskPresetsResult = Type("RiskPresetsResult", func() {
+	Attribute("presets", ArrayOf(RiskPreset), "Presets in display order.")
+	Required("presets")
+})
+
+var RiskPresetMatch = Type("RiskPresetMatch", func() {
+	Attribute("preset_id", String, "Preset identifier.")
+	Attribute("label", String, "Preset label.")
+	Attribute("confidence", Float64, "Fit between 0 and 1.")
+	Required("preset_id", "label", "confidence")
+})
+
+var SuggestRiskPolicyResult = Type("SuggestRiskPolicyResult", func() {
+	Description("A policy draft derived from a plain-language description. The fields mirror createRiskPolicy so the dashboard can prefill the create form.")
+
+	Attribute("preset_id", String, "Matched preset identifier; empty when the draft is a bespoke prompt-based guardrail.")
+	Attribute("policy_type", String, "Policy type of the draft.", func() {
+		Enum("standard", "prompt_based")
+	})
+	Attribute("name", String, "Suggested policy name.")
+	Attribute("action", String, "Suggested enforcement action.", func() {
+		Enum("flag", "warn", "block", "quarantine")
+	})
+	Attribute("score", Float64, "Suggested CVSS-style severity (0.1-10).")
+	Attribute("sources", ArrayOf(String), "Detector sources for a standard draft; empty for prompt-based drafts.")
+	Attribute("presidio_entities", ArrayOf(String), "Presidio entities for a standard draft that includes presidio.")
+	Attribute("prompt", String, "Judge instruction for a prompt-based draft; empty otherwise.")
+	Attribute("user_message", String, "Suggested user-facing message when the policy warns or blocks; empty when none.")
+	Attribute("rationale", String, "Why this draft was chosen.")
+	Attribute("confidence", Float64, "Fit between 0 and 1; 0 for a bespoke draft.")
+	Attribute("alternatives", ArrayOf(RiskPresetMatch), "Other presets that partially matched, best first.")
+
+	Required("preset_id", "policy_type", "name", "action", "score", "sources", "presidio_entities", "prompt", "user_message", "rationale", "confidence", "alternatives")
 })
 
 var ExprCompileResult = Type("ExprCompileResult", func() {

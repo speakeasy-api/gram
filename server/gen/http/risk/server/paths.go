@@ -97,6 +97,16 @@ func ListRiskCategoriesRiskPath() string {
 	return "/rpc/risk.listCategories"
 }
 
+// ListRiskPresetsRiskPath returns the URL path to the risk service listRiskPresets HTTP endpoint.
+func ListRiskPresetsRiskPath() string {
+	return "/rpc/risk.listPresets"
+}
+
+// SuggestRiskPolicyRiskPath returns the URL path to the risk service suggestRiskPolicy HTTP endpoint.
+func SuggestRiskPolicyRiskPath() string {
+	return "/rpc/risk.suggestPolicy"
+}
+
 // CompileExprRiskPath returns the URL path to the risk service compileExpr HTTP endpoint.
 func CompileExprRiskPath() string {
 	return "/rpc/risk.compileCELExpression"

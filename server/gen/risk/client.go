@@ -34,6 +34,8 @@ type Client struct {
 	ListDismissedRiskResultsEndpoint       goa.Endpoint
 	GetRiskOverviewEndpoint                goa.Endpoint
 	ListRiskCategoriesEndpoint             goa.Endpoint
+	ListRiskPresetsEndpoint                goa.Endpoint
+	SuggestRiskPolicyEndpoint              goa.Endpoint
 	CompileExprEndpoint                    goa.Endpoint
 	GetRiskUserBreakdownEndpoint           goa.Endpoint
 	GetRiskRuleBreakdownEndpoint           goa.Endpoint
@@ -70,7 +72,7 @@ type Client struct {
 }
 
 // NewClient initializes a "risk" service client given the endpoints.
-func NewClient(createRiskPolicy, listRiskPolicies, listRiskPoliciesForMcpServer, listBuiltinExclusions, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listSessionQuarantines, releaseSessionQuarantine, listRiskResults, listRiskResultsForAgent, unmaskRiskResult, listRiskResultsByChat, markRiskResultsFalsePositive, unmarkRiskResultsFalsePositive, listDismissedRiskResults, getRiskOverview, listRiskCategories, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskSignals, getRiskAnalysisStatus, getRiskPolicyStatus, createRiskPolicyBypassRequest, acknowledgeRiskPolicyChallenge, getRiskPolicyChallenge, declineRiskPolicyChallenge, getRiskBlock, submitRiskBlockFeedback, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, suggestExclusion, testDetectionRule, evaluatePromptGuardrail, saveRiskEvalReview, listRiskEvalReviews, deleteRiskEvalReview goa.Endpoint) *Client {
+func NewClient(createRiskPolicy, listRiskPolicies, listRiskPoliciesForMcpServer, listBuiltinExclusions, getRiskPolicy, updateRiskPolicy, deleteRiskPolicy, listSessionQuarantines, releaseSessionQuarantine, listRiskResults, listRiskResultsForAgent, unmaskRiskResult, listRiskResultsByChat, markRiskResultsFalsePositive, unmarkRiskResultsFalsePositive, listDismissedRiskResults, getRiskOverview, listRiskCategories, listRiskPresets, suggestRiskPolicy, compileExpr, getRiskUserBreakdown, getRiskRuleBreakdown, getRiskSignals, getRiskAnalysisStatus, getRiskPolicyStatus, createRiskPolicyBypassRequest, acknowledgeRiskPolicyChallenge, getRiskPolicyChallenge, declineRiskPolicyChallenge, getRiskBlock, submitRiskBlockFeedback, listRiskPolicyBypassRequests, approveRiskPolicyBypassRequest, denyRiskPolicyBypassRequest, revokeRiskPolicyBypassRequest, triggerRiskAnalysis, createCustomDetectionRule, listCustomDetectionRules, getCustomDetectionRule, updateCustomDetectionRule, deleteCustomDetectionRule, listRiskExclusions, createRiskExclusion, updateRiskExclusion, deleteRiskExclusion, suggestCustomDetectionRule, suggestExclusion, testDetectionRule, evaluatePromptGuardrail, saveRiskEvalReview, listRiskEvalReviews, deleteRiskEvalReview goa.Endpoint) *Client {
 	return &Client{
 		CreateRiskPolicyEndpoint:               createRiskPolicy,
 		ListRiskPoliciesEndpoint:               listRiskPolicies,
@@ -90,6 +92,8 @@ func NewClient(createRiskPolicy, listRiskPolicies, listRiskPoliciesForMcpServer,
 		ListDismissedRiskResultsEndpoint:       listDismissedRiskResults,
 		GetRiskOverviewEndpoint:                getRiskOverview,
 		ListRiskCategoriesEndpoint:             listRiskCategories,
+		ListRiskPresetsEndpoint:                listRiskPresets,
+		SuggestRiskPolicyEndpoint:              suggestRiskPolicy,
 		CompileExprEndpoint:                    compileExpr,
 		GetRiskUserBreakdownEndpoint:           getRiskUserBreakdown,
 		GetRiskRuleBreakdownEndpoint:           getRiskRuleBreakdown,
@@ -518,6 +522,51 @@ func (c *Client) ListRiskCategories(ctx context.Context, p *ListRiskCategoriesPa
 		return
 	}
 	return ires.(*RiskCategoriesResult), nil
+}
+
+// ListRiskPresets calls the "listRiskPresets" endpoint of the "risk" service.
+// ListRiskPresets may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListRiskPresets(ctx context.Context, p *ListRiskPresetsPayload) (res *RiskPresetsResult, err error) {
+	var ires any
+	ires, err = c.ListRiskPresetsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RiskPresetsResult), nil
+}
+
+// SuggestRiskPolicy calls the "suggestRiskPolicy" endpoint of the "risk"
+// service.
+// SuggestRiskPolicy may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SuggestRiskPolicy(ctx context.Context, p *SuggestRiskPolicyPayload) (res *SuggestRiskPolicyResult, err error) {
+	var ires any
+	ires, err = c.SuggestRiskPolicyEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*SuggestRiskPolicyResult), nil
 }
 
 // CompileExpr calls the "compileExpr" endpoint of the "risk" service.

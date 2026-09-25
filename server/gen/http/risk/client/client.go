@@ -89,6 +89,14 @@ type Client struct {
 	// listRiskCategories endpoint.
 	ListRiskCategoriesDoer goahttp.Doer
 
+	// ListRiskPresets Doer is the HTTP client used to make requests to the
+	// listRiskPresets endpoint.
+	ListRiskPresetsDoer goahttp.Doer
+
+	// SuggestRiskPolicy Doer is the HTTP client used to make requests to the
+	// suggestRiskPolicy endpoint.
+	SuggestRiskPolicyDoer goahttp.Doer
+
 	// CompileExpr Doer is the HTTP client used to make requests to the compileExpr
 	// endpoint.
 	CompileExprDoer goahttp.Doer
@@ -259,6 +267,8 @@ func NewClient(
 		ListDismissedRiskResultsDoer:       doer,
 		GetRiskOverviewDoer:                doer,
 		ListRiskCategoriesDoer:             doer,
+		ListRiskPresetsDoer:                doer,
+		SuggestRiskPolicyDoer:              doer,
 		CompileExprDoer:                    doer,
 		GetRiskUserBreakdownDoer:           doer,
 		GetRiskRuleBreakdownDoer:           doer,
@@ -727,6 +737,54 @@ func (c *Client) ListRiskCategories() goa.Endpoint {
 		resp, err := c.ListRiskCategoriesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("risk", "listRiskCategories", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListRiskPresets returns an endpoint that makes HTTP requests to the risk
+// service listRiskPresets server.
+func (c *Client) ListRiskPresets() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListRiskPresetsRequest(c.encoder)
+		decodeResponse = DecodeListRiskPresetsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListRiskPresetsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListRiskPresetsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "listRiskPresets", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SuggestRiskPolicy returns an endpoint that makes HTTP requests to the risk
+// service suggestRiskPolicy server.
+func (c *Client) SuggestRiskPolicy() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSuggestRiskPolicyRequest(c.encoder)
+		decodeResponse = DecodeSuggestRiskPolicyResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSuggestRiskPolicyRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SuggestRiskPolicyDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("risk", "suggestRiskPolicy", err)
 		}
 		return decodeResponse(resp)
 	}

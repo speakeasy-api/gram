@@ -70,6 +70,16 @@ type Service interface {
 	// rule_id prefix) used to bucket findings. Dashboards and CLIs should call
 	// this instead of maintaining their own copy of the mapping.
 	ListRiskCategories(context.Context, *ListRiskCategoriesPayload) (res *RiskCategoriesResult, err error)
+	// Return the use-case presets a risk policy can start from. Each preset
+	// resolves to a complete create payload (policy type, detectors, action,
+	// severity and, for prompt-based presets, the judge instruction) so the
+	// dashboard and the Platform MCP offer the same starting points.
+	ListRiskPresets(context.Context, *ListRiskPresetsPayload) (res *RiskPresetsResult, err error)
+	// Map a plain-language description of a risk to a policy draft: the closest
+	// preset with its detectors, action and severity, or a bespoke prompt-based
+	// guardrail when no preset fits. Uses the configured LLM when available and a
+	// deterministic keyword match otherwise. Nothing is created.
+	SuggestRiskPolicy(context.Context, *SuggestRiskPolicyPayload) (res *SuggestRiskPolicyResult, err error)
 	// Compile a single CEL expression (a detection predicate or a policy scope
 	// predicate) without evaluating it, so the editor can validate as the author
 	// types. Returns ok=true when it compiles, otherwise ok=false with the
@@ -207,7 +217,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [51]string{"createRiskPolicy", "listRiskPolicies", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskAnalysisStatus", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [53]string{"createRiskPolicy", "listRiskPolicies", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "listRiskPresets", "suggestRiskPolicy", "compileExpr", "getRiskUserBreakdown", "getRiskRuleBreakdown", "getRiskSignals", "getRiskAnalysisStatus", "getRiskPolicyStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -765,6 +775,14 @@ type ListRiskPolicyBypassRequestsResult struct {
 	Requests []*RiskPolicyBypassRequest
 }
 
+// ListRiskPresetsPayload is the payload type of the risk service
+// listRiskPresets method.
+type ListRiskPresetsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // ListRiskResultsByChatPayload is the payload type of the risk service
 // listRiskResultsByChat method.
 type ListRiskResultsByChatPayload struct {
@@ -1185,6 +1203,50 @@ type RiskPolicyBypassRequest struct {
 	UpdatedAt string
 }
 
+// One use-case preset a risk policy can start from.
+type RiskPreset struct {
+	// Stable preset identifier (e.g. 'secrets_and_credentials').
+	ID string
+	// Human-readable preset name.
+	Label string
+	// What the preset protects against, in plain language.
+	Description string
+	// Policy type the preset creates.
+	PolicyType string
+	// Detector sources enabled by a standard preset; empty for prompt-based
+	// presets.
+	Sources []string
+	// Presidio entities enabled when sources include presidio.
+	PresidioEntities []string
+	// Default enforcement action.
+	Action string
+	// Default CVSS-style severity (0.1-10).
+	Score float64
+	// Judge instruction for a prompt-based preset; empty otherwise.
+	Prompt string
+	// Default message shown to the user when the policy warns or blocks; empty
+	// when none.
+	UserMessage string
+	// True when the preset is inert until approved_email_domains is supplied.
+	RequiresApprovedEmailDomains bool
+}
+
+type RiskPresetMatch struct {
+	// Preset identifier.
+	PresetID string
+	// Preset label.
+	Label string
+	// Fit between 0 and 1.
+	Confidence float64
+}
+
+// RiskPresetsResult is the result type of the risk service listRiskPresets
+// method.
+type RiskPresetsResult struct {
+	// Presets in display order.
+	Presets []*RiskPreset
+}
+
 type RiskRuleBreakdownEntry struct {
 	// Rule identifier (e.g. 'secret.aws-access-key'). Empty when the finding has
 	// no rule_id (treat as 'unspecified').
@@ -1439,6 +1501,47 @@ type SuggestExclusionResult struct {
 	RuleIDFilter *string
 	// Only apply within this source. Empty means any.
 	SourceFilter *string
+}
+
+// SuggestRiskPolicyPayload is the payload type of the risk service
+// suggestRiskPolicy method.
+type SuggestRiskPolicyPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Plain-language description of what the policy should catch or prevent.
+	Prompt string
+}
+
+// SuggestRiskPolicyResult is the result type of the risk service
+// suggestRiskPolicy method.
+type SuggestRiskPolicyResult struct {
+	// Matched preset identifier; empty when the draft is a bespoke prompt-based
+	// guardrail.
+	PresetID string
+	// Policy type of the draft.
+	PolicyType string
+	// Suggested policy name.
+	Name string
+	// Suggested enforcement action.
+	Action string
+	// Suggested CVSS-style severity (0.1-10).
+	Score float64
+	// Detector sources for a standard draft; empty for prompt-based drafts.
+	Sources []string
+	// Presidio entities for a standard draft that includes presidio.
+	PresidioEntities []string
+	// Judge instruction for a prompt-based draft; empty otherwise.
+	Prompt string
+	// Suggested user-facing message when the policy warns or blocks; empty when
+	// none.
+	UserMessage string
+	// Why this draft was chosen.
+	Rationale string
+	// Fit between 0 and 1; 0 for a bespoke draft.
+	Confidence float64
+	// Other presets that partially matched, best first.
+	Alternatives []*RiskPresetMatch
 }
 
 type TestDetectionRuleMatch struct {

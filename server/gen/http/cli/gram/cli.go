@@ -178,7 +178,7 @@ func UsageCommands() []string {
 		"organization-remote-sessions (list-client-sessions|revoke-session|refresh-session|revoke-all-client-sessions)",
 		"remote-sessions (list-bindings|attach-binding|detach-binding|commit-server-identity-configuration|list-remote-sessions|revoke-remote-session)",
 		"resources list-resources",
-		"risk (create-risk-policy|list-risk-policies|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
+		"risk (create-risk-policy|list-risk-policies|list-risk-policies-for-mcp-server|list-builtin-exclusions|get-risk-policy|update-risk-policy|delete-risk-policy|list-session-quarantines|release-session-quarantine|list-risk-results|list-risk-results-for-agent|unmask-risk-result|list-risk-results-by-chat|mark-risk-results-false-positive|unmark-risk-results-false-positive|list-dismissed-risk-results|get-risk-overview|list-risk-categories|list-risk-presets|suggest-risk-policy|compile-expr|get-risk-user-breakdown|get-risk-rule-breakdown|get-risk-signals|get-risk-analysis-status|get-risk-policy-status|create-risk-policy-bypass-request|acknowledge-risk-policy-challenge|get-risk-policy-challenge|decline-risk-policy-challenge|get-risk-block|submit-risk-block-feedback|list-risk-policy-bypass-requests|approve-risk-policy-bypass-request|deny-risk-policy-bypass-request|revoke-risk-policy-bypass-request|trigger-risk-analysis|create-custom-detection-rule|list-custom-detection-rules|get-custom-detection-rule|update-custom-detection-rule|delete-custom-detection-rule|list-risk-exclusions|create-risk-exclusion|update-risk-exclusion|delete-risk-exclusion|suggest-custom-detection-rule|suggest-exclusion|test-detection-rule|evaluate-prompt-guardrail|save-risk-eval-review|list-risk-eval-reviews|delete-risk-eval-review)",
 		"skill-efficacy (get-settings|upsert-settings|query-insights)",
 		"skills (create|add-version|restore-version|update|list|list-tags|list-suggestions|list-feedback|trigger-suggestion|approve-suggestion|dismiss-suggestion|list-suggestion-feedback|approve-all-suggestions|get|list-unknown-activations|list-versions|archive|distribute|undistribute|share|unshare|get-shared|list-distributions)",
 		"spend-rules (create-spend-rule|list-spend-rules|get-spend-rule|update-spend-rule|archive-spend-rule|preview-spend-rule|list-spend-rule-events|get-spend-rules-overview|list-actor-attributes)",
@@ -2974,6 +2974,17 @@ func ParseEndpoint(
 		riskListRiskCategoriesSessionTokenFlag     = riskListRiskCategoriesFlags.String("session-token", "", "")
 		riskListRiskCategoriesProjectSlugInputFlag = riskListRiskCategoriesFlags.String("project-slug-input", "", "")
 
+		riskListRiskPresetsFlags                = flag.NewFlagSet("list-risk-presets", flag.ExitOnError)
+		riskListRiskPresetsApikeyTokenFlag      = riskListRiskPresetsFlags.String("apikey-token", "", "")
+		riskListRiskPresetsSessionTokenFlag     = riskListRiskPresetsFlags.String("session-token", "", "")
+		riskListRiskPresetsProjectSlugInputFlag = riskListRiskPresetsFlags.String("project-slug-input", "", "")
+
+		riskSuggestRiskPolicyFlags                = flag.NewFlagSet("suggest-risk-policy", flag.ExitOnError)
+		riskSuggestRiskPolicyBodyFlag             = riskSuggestRiskPolicyFlags.String("body", "REQUIRED", "")
+		riskSuggestRiskPolicyApikeyTokenFlag      = riskSuggestRiskPolicyFlags.String("apikey-token", "", "")
+		riskSuggestRiskPolicySessionTokenFlag     = riskSuggestRiskPolicyFlags.String("session-token", "", "")
+		riskSuggestRiskPolicyProjectSlugInputFlag = riskSuggestRiskPolicyFlags.String("project-slug-input", "", "")
+
 		riskCompileExprFlags                = flag.NewFlagSet("compile-expr", flag.ExitOnError)
 		riskCompileExprExprFlag             = riskCompileExprFlags.String("expr", "", "")
 		riskCompileExprApikeyTokenFlag      = riskCompileExprFlags.String("apikey-token", "", "")
@@ -5113,6 +5124,8 @@ func ParseEndpoint(
 	riskListDismissedRiskResultsFlags.Usage = riskListDismissedRiskResultsUsage
 	riskGetRiskOverviewFlags.Usage = riskGetRiskOverviewUsage
 	riskListRiskCategoriesFlags.Usage = riskListRiskCategoriesUsage
+	riskListRiskPresetsFlags.Usage = riskListRiskPresetsUsage
+	riskSuggestRiskPolicyFlags.Usage = riskSuggestRiskPolicyUsage
 	riskCompileExprFlags.Usage = riskCompileExprUsage
 	riskGetRiskUserBreakdownFlags.Usage = riskGetRiskUserBreakdownUsage
 	riskGetRiskRuleBreakdownFlags.Usage = riskGetRiskRuleBreakdownUsage
@@ -7424,6 +7437,12 @@ func ParseEndpoint(
 
 			case "list-risk-categories":
 				epf = riskListRiskCategoriesFlags
+
+			case "list-risk-presets":
+				epf = riskListRiskPresetsFlags
+
+			case "suggest-risk-policy":
+				epf = riskSuggestRiskPolicyFlags
 
 			case "compile-expr":
 				epf = riskCompileExprFlags
@@ -10156,6 +10175,12 @@ func ParseEndpoint(
 			case "list-risk-categories":
 				endpoint = c.ListRiskCategories()
 				data, err = riskc.BuildListRiskCategoriesPayload(*riskListRiskCategoriesApikeyTokenFlag, *riskListRiskCategoriesSessionTokenFlag, *riskListRiskCategoriesProjectSlugInputFlag)
+			case "list-risk-presets":
+				endpoint = c.ListRiskPresets()
+				data, err = riskc.BuildListRiskPresetsPayload(*riskListRiskPresetsApikeyTokenFlag, *riskListRiskPresetsSessionTokenFlag, *riskListRiskPresetsProjectSlugInputFlag)
+			case "suggest-risk-policy":
+				endpoint = c.SuggestRiskPolicy()
+				data, err = riskc.BuildSuggestRiskPolicyPayload(*riskSuggestRiskPolicyBodyFlag, *riskSuggestRiskPolicyApikeyTokenFlag, *riskSuggestRiskPolicySessionTokenFlag, *riskSuggestRiskPolicyProjectSlugInputFlag)
 			case "compile-expr":
 				endpoint = c.CompileExpr()
 				data, err = riskc.BuildCompileExprPayload(*riskCompileExprExprFlag, *riskCompileExprApikeyTokenFlag, *riskCompileExprSessionTokenFlag, *riskCompileExprProjectSlugInputFlag)
@@ -23092,6 +23117,8 @@ func riskUsage() {
 	fmt.Fprintln(os.Stderr, `    list-dismissed-risk-results: List suppressed risk results for the current project — findings hidden by an exclusion rule, a manual dismissal, or the automated false-positive sweep. Kept separate from listRiskResults, which never returns suppressed results.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-overview: Get risk overview metrics and trend data for the current project.`)
 	fmt.Fprintln(os.Stderr, `    list-risk-categories: Return the canonical risk category definitions: metadata (label/description/icon) plus the classification (source / rule_id list / rule_id prefix) used to bucket findings. Dashboards and CLIs should call this instead of maintaining their own copy of the mapping.`)
+	fmt.Fprintln(os.Stderr, `    list-risk-presets: Return the use-case presets a risk policy can start from. Each preset resolves to a complete create payload (policy type, detectors, action, severity and, for prompt-based presets, the judge instruction) so the dashboard and the Platform MCP offer the same starting points.`)
+	fmt.Fprintln(os.Stderr, `    suggest-risk-policy: Map a plain-language description of a risk to a policy draft: the closest preset with its detectors, action and severity, or a bespoke prompt-based guardrail when no preset fits. Uses the configured LLM when available and a deterministic keyword match otherwise. Nothing is created.`)
 	fmt.Fprintln(os.Stderr, `    compile-expr: Compile a single CEL expression (a detection predicate or a policy scope predicate) without evaluating it, so the editor can validate as the author types. Returns ok=true when it compiles, otherwise ok=false with the compiler error message. An empty expression is valid (ok=true).`)
 	fmt.Fprintln(os.Stderr, `    get-risk-user-breakdown: Per-user breakdowns of findings by category and by rule_id within a time window. Powers the user drill-down on /risk-overview.`)
 	fmt.Fprintln(os.Stderr, `    get-risk-rule-breakdown: Get per-rule_id finding counts for a category within a time window. Powers the per-category drill-down chart on /risk-overview.`)
@@ -23611,6 +23638,52 @@ func riskListRiskCategoriesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-categories --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskListRiskPresetsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk list-risk-presets", os.Args[0])
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Return the use-case presets a risk policy can start from. Each preset resolves to a complete create payload (policy type, detectors, action, severity and, for prompt-based presets, the judge instruction) so the dashboard and the Platform MCP offer the same starting points.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk list-risk-presets --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func riskSuggestRiskPolicyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] risk suggest-risk-policy", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Map a plain-language description of a risk to a policy draft: the closest preset with its detectors, action and severity, or a bespoke prompt-based guardrail when no preset fits. Uses the configured LLM when available and a deterministic keyword match otherwise. Nothing is created.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "risk suggest-risk-policy --body '{\n      \"prompt\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func riskCompileExprUsage() {

@@ -52307,6 +52307,106 @@ paths:
       x-speakeasy-name-override: list
       x-speakeasy-react-hook:
         name: RiskListPolicyBypassRequests
+  /rpc/risk.listPresets:
+    get:
+      description: Return the use-case presets a risk policy can start from. Each preset resolves to a complete create payload (policy type, detectors, action, severity and, for prompt-based presets, the judge instruction) so the dashboard and the Platform MCP offer the same starting points.
+      operationId: listRiskPresets
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskPresetsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listRiskPresets risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.presets
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: RiskPresets
   /rpc/risk.listResults:
     get:
       description: List risk analysis results for the current project.
@@ -53669,6 +53769,113 @@ paths:
       x-speakeasy-name-override: suggest
       x-speakeasy-react-hook:
         name: RiskSuggestExclusion
+        type: mutation
+  /rpc/risk.suggestPolicy:
+    post:
+      description: 'Map a plain-language description of a risk to a policy draft: the closest preset with its detectors, action and severity, or a bespoke prompt-based guardrail when no preset fits. Uses the configured LLM when available and a deterministic keyword match otherwise. Nothing is created.'
+      operationId: suggestRiskPolicy
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuggestRiskPolicyRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestRiskPolicyResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: suggestRiskPolicy risk
+      tags:
+        - risk
+      x-speakeasy-group: risk.presets
+      x-speakeasy-name-override: suggest
+      x-speakeasy-react-hook:
+        name: RiskSuggestPolicy
         type: mutation
   /rpc/risk.testRule:
     post:
@@ -91899,6 +92106,95 @@ components:
         - pending_messages
         - findings_count
         - workflow_status
+    RiskPreset:
+      type: object
+      properties:
+        action:
+          type: string
+          description: Default enforcement action.
+          enum:
+            - flag
+            - warn
+            - block
+            - quarantine
+        description:
+          type: string
+          description: What the preset protects against, in plain language.
+        id:
+          type: string
+          description: Stable preset identifier (e.g. 'secrets_and_credentials').
+        label:
+          type: string
+          description: Human-readable preset name.
+        policy_type:
+          type: string
+          description: Policy type the preset creates.
+          enum:
+            - standard
+            - prompt_based
+        presidio_entities:
+          type: array
+          items:
+            type: string
+          description: Presidio entities enabled when sources include presidio.
+        prompt:
+          type: string
+          description: Judge instruction for a prompt-based preset; empty otherwise.
+        requires_approved_email_domains:
+          type: boolean
+          description: True when the preset is inert until approved_email_domains is supplied.
+        score:
+          type: number
+          description: Default CVSS-style severity (0.1-10).
+          format: double
+        sources:
+          type: array
+          items:
+            type: string
+          description: Detector sources enabled by a standard preset; empty for prompt-based presets.
+        user_message:
+          type: string
+          description: Default message shown to the user when the policy warns or blocks; empty when none.
+      description: One use-case preset a risk policy can start from.
+      required:
+        - id
+        - label
+        - description
+        - policy_type
+        - sources
+        - presidio_entities
+        - action
+        - score
+        - prompt
+        - user_message
+        - requires_approved_email_domains
+    RiskPresetMatch:
+      type: object
+      properties:
+        confidence:
+          type: number
+          description: Fit between 0 and 1.
+          format: double
+        label:
+          type: string
+          description: Preset label.
+        preset_id:
+          type: string
+          description: Preset identifier.
+      required:
+        - preset_id
+        - label
+        - confidence
+    RiskPresetsResult:
+      type: object
+      properties:
+        presets:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskPreset'
+          description: Presets in display order.
+      required:
+        - presets
     RiskResult:
       type: object
       properties:
@@ -96168,6 +96464,85 @@ components:
       required:
         - match_type
         - match_value
+    SuggestRiskPolicyRequestBody:
+      type: object
+      properties:
+        prompt:
+          type: string
+          description: Plain-language description of what the policy should catch or prevent.
+          minLength: 3
+          maxLength: 500
+      required:
+        - prompt
+    SuggestRiskPolicyResult:
+      type: object
+      properties:
+        action:
+          type: string
+          description: Suggested enforcement action.
+          enum:
+            - flag
+            - warn
+            - block
+            - quarantine
+        alternatives:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskPresetMatch'
+          description: Other presets that partially matched, best first.
+        confidence:
+          type: number
+          description: Fit between 0 and 1; 0 for a bespoke draft.
+          format: double
+        name:
+          type: string
+          description: Suggested policy name.
+        policy_type:
+          type: string
+          description: Policy type of the draft.
+          enum:
+            - standard
+            - prompt_based
+        preset_id:
+          type: string
+          description: Matched preset identifier; empty when the draft is a bespoke prompt-based guardrail.
+        presidio_entities:
+          type: array
+          items:
+            type: string
+          description: Presidio entities for a standard draft that includes presidio.
+        prompt:
+          type: string
+          description: Judge instruction for a prompt-based draft; empty otherwise.
+        rationale:
+          type: string
+          description: Why this draft was chosen.
+        score:
+          type: number
+          description: Suggested CVSS-style severity (0.1-10).
+          format: double
+        sources:
+          type: array
+          items:
+            type: string
+          description: Detector sources for a standard draft; empty for prompt-based drafts.
+        user_message:
+          type: string
+          description: Suggested user-facing message when the policy warns or blocks; empty when none.
+      description: A policy draft derived from a plain-language description. The fields mirror createRiskPolicy so the dashboard can prefill the create form.
+      required:
+        - preset_id
+        - policy_type
+        - name
+        - action
+        - score
+        - sources
+        - presidio_entities
+        - prompt
+        - user_message
+        - rationale
+        - confidence
+        - alternatives
     SummarizeChatResult:
       type: object
       properties:
