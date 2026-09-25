@@ -285,7 +285,7 @@ func TestService_DirectoryRoleMapping_GrantsRoleToMatchingMember(t *testing.T) {
 	require.True(t, ok)
 	orgID := authCtx.ActiveOrganizationID
 
-	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
+	builderID := seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
 	builder := seededRolePrincipal(t, ctx, ti.conn, orgID, "builder")
 	seedConnectedUser(t, ctx, ti.conn, orgID, "local_sales_user", "sales@test.com", "Sales User", "user_sales", "membership_sales")
 	seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "local_sales_user", "sales@test.com", `{"department_name":"Sales"}`)
@@ -307,4 +307,14 @@ func TestService_DirectoryRoleMapping_GrantsRoleToMatchingMember(t *testing.T) {
 	principals, err = authz.ResolveUserPrincipals(ctx, ti.conn, orgID, "local_sales_user")
 	require.NoError(t, err)
 	require.Contains(t, principals, builder)
+
+	role, err := ti.service.GetRole(ctx, &gen.GetRolePayload{ID: builderID})
+	require.NoError(t, err)
+	require.Equal(t, 1, role.MemberCount)
+
+	// A direct assignment of the same role is counted once, not twice.
+	seedRoleAssignment(t, ctx, ti.conn, orgID, "local_sales_user", mockMember(mockidp.MockOrgID, "membership_sales", "user_sales", "builder"))
+	role, err = ti.service.GetRole(ctx, &gen.GetRolePayload{ID: builderID})
+	require.NoError(t, err)
+	require.Equal(t, 1, role.MemberCount)
 }

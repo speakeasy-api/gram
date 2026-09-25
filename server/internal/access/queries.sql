@@ -1291,6 +1291,71 @@ WHERE drm.organization_id = @organization_id
     )
   );
 
+-- name: ListDirectoryMappedRoleMemberCounts :many
+-- Per role, the active members who hold it only through a directory role
+-- mapping. Members with a live direct assignment of the same role are left
+-- out, so callers add this to the direct member count. Each member's
+-- directory profile is chosen the same way as in
+-- ListDirectoryRoleMappingPrincipalsByUser.
+WITH members AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  JOIN organization_user_relationships AS our
+    ON our.user_id = u.id
+    AND our.organization_id = @organization_id
+    AND our.deleted_at IS NULL
+  WHERE u.deleted_at IS NULL
+),
+profiles AS (
+  SELECT members.id AS user_id, p.id AS directory_user_id, p.attributes
+  FROM members
+  CROSS JOIN LATERAL (
+    SELECT d.id, d.attributes
+    FROM directory_users AS d
+    WHERE d.organization_id = @organization_id
+      AND d.deleted IS FALSE
+      AND d.workos_deleted IS FALSE
+      AND (d.user_id = members.id OR LOWER(d.email) = LOWER(members.email))
+    ORDER BY (d.user_id = members.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+    LIMIT 1
+  ) AS p
+)
+SELECT
+  drm.role_urn::text AS role_urn,
+  COUNT(DISTINCT profiles.user_id)::bigint AS member_count
+FROM directory_role_mappings AS drm
+JOIN profiles
+  ON (
+    drm.source_kind = 'group'
+    AND EXISTS (
+      SELECT 1
+      FROM directory_user_group_memberships AS m
+      JOIN directory_groups AS dg
+        ON dg.id = m.directory_group_id
+        AND dg.organization_id = drm.organization_id
+        AND dg.deleted IS FALSE
+        AND dg.workos_deleted IS FALSE
+      WHERE m.directory_user_id = profiles.directory_user_id
+        AND m.directory_group_id = drm.directory_group_id
+        AND m.deleted IS FALSE
+    )
+  )
+  OR (
+    drm.source_kind = 'attribute'
+    AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
+  )
+WHERE drm.organization_id = @organization_id
+  AND drm.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM organization_role_assignments AS ora
+    WHERE ora.organization_id = drm.organization_id
+      AND ora.role_urn = drm.role_urn
+      AND ora.user_id = profiles.user_id
+      AND ora.deleted_at IS NULL
+  )
+GROUP BY drm.role_urn;
+
 -- name: ListDirectoryRoleMappings :many
 SELECT
   drm.id,
