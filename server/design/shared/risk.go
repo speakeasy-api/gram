@@ -135,9 +135,7 @@ var RiskMCPServerScope = Type("RiskMCPServerScope", func() {
 	Attribute("mcp_server_id", String, "The selected MCP server or gateway ID.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("tools", ArrayOf(String), "Custom tool names for this server. Omit to follow the policy tool rule.", func() {
-		MinLength(1)
-	})
+	Attribute("tools", ArrayOf(String), "Custom tool names for this server. Omit to follow the policy tool rule.")
 
 	Required("mcp_server_id")
 })
