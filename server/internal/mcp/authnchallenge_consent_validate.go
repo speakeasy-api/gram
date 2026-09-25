@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -197,7 +198,14 @@ func (s *Service) resolveValidationTarget(
 		return ctx, none, fmt.Errorf("stamp consent subject context: %w", err)
 	}
 
-	ctx = s.stampConsentDiscovery(ctx, challengeState)
+	// Discovery identity belongs to the user who authenticated this challenge.
+	ctx = mcpidentity.WithoutIdentity(ctx)
+	if subject.Kind == urn.SessionSubjectKindUser &&
+		challengeState.AuthorizerImpersonated != nil && !*challengeState.AuthorizerImpersonated &&
+		challengeState.AuthorizerUserID != "" && subject.ID == challengeState.AuthorizerUserID &&
+		challengeState.Federation == nil && !challengeState.CreatedAt.IsZero() && !challengeState.CreatedAt.After(time.Now().Add(time.Minute)) {
+		ctx = s.identityValidator.StampConsentDiscovery(ctx, subject.ID, challengeState.CreatedAt.Add(challengeState.TTL()))
+	}
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
 		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, sessionID, subject)
