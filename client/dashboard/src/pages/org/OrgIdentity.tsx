@@ -290,7 +290,7 @@ function IdentitySection({
           href={learnMoreHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-muted-foreground hover:text-foreground mt-4 ml-auto block text-sm underline underline-offset-4 transition-colors"
+          className="text-muted-foreground hover:text-foreground mt-2 ml-auto block text-sm underline underline-offset-4 transition-colors"
         >
           {learnMoreText}
         </a>
@@ -380,7 +380,7 @@ function SingleSignOnTab(): JSX.Element {
   else if (scimBlocked) scimSubtitle = "Verify a domain first.";
 
   return (
-    <div className="flex max-w-4xl flex-col gap-8">
+    <div className="flex max-w-4xl flex-col gap-4">
       <IdentitySection
         sectionId="domain_verification"
         heading="Domain verification"

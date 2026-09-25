@@ -6,8 +6,8 @@ import {
   Plus,
   RefreshCw,
 } from "lucide-react";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
 import { InlineEmptyState } from "@/components/inline-empty-state";
@@ -46,6 +46,12 @@ import {
 } from "@gram/client/react-query/roles.js";
 import { useSetDirectoryRoleMappingMutation } from "@gram/client/react-query/setDirectoryRoleMapping.js";
 import { useSyncDirectoryGroupsMutation } from "@gram/client/react-query/syncDirectoryGroups.js";
+
+import {
+  clearPendingMappingParams,
+  createRoleForMappingParams,
+  pendingMappingFromParams,
+} from "./directoryMappingFlow";
 
 const UNMAPPED = "__unmapped";
 const CREATE_ROLE = "__create_role";
@@ -125,6 +131,35 @@ export function DirectoryRoleMappings(): JSX.Element {
 
   const roles = useMemo(() => rolesData?.roles ?? [], [rolesData?.roles]);
   const rows = useMemo(() => (data ? groupRows(data) : []), [data]);
+
+  // Back from creating a role for a group or attribute: map it, then drop the
+  // round-trip parameters so a reload does not save it again.
+  const [params, setParams] = useSearchParams();
+  const pending = pendingMappingFromParams(params);
+  const queryClient = useQueryClient();
+  const savePending = useSetDirectoryRoleMappingMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateAllDirectoryRoleMappings(queryClient),
+        invalidateAllRoles(queryClient),
+      ]);
+      toast.success("Role created and mapped");
+    },
+    onError: (error) => {
+      toast.error(errorMessage(error, "Failed to map the new role"));
+    },
+  });
+  const savedPending = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pending) return;
+    const pendingKey = JSON.stringify(pending);
+    if (savedPending.current === pendingKey) return;
+    savedPending.current = pendingKey;
+    setParams((previous) => clearPendingMappingParams(previous), {
+      replace: true,
+    });
+    savePending.mutate({ request: { setDirectoryRoleMappingForm: pending } });
+  }, [pending, savePending, setParams]);
 
   // Unmapped groups sort first. Each row's place is fixed by whether it was
   // mapped when it first loaded, so picking a role does not move the row
@@ -399,7 +434,8 @@ function RolePicker({
 
   const pick = (value: string) => {
     if (value === CREATE_ROLE) {
-      void navigate(orgRoutes.createRole.href());
+      const params = createRoleForMappingParams(row.form);
+      void navigate(`${orgRoutes.createRole.href()}?${params.toString()}`);
       return;
     }
     if (value === (row.mapping?.roleUrn ?? UNMAPPED)) return;
@@ -415,10 +451,9 @@ function RolePicker({
   const current = roles.find(
     (role) => role.principalUrn === row.mapping?.roleUrn,
   );
-  let label = "Not mapped";
+  let label = "Assign role";
   if (saving) label = "Saving…";
   else if (row.mapping) label = current?.name ?? "Deleted role";
-  else if (row.key === "draft") label = "Pick a role";
 
   return (
     <Combobox
@@ -427,23 +462,24 @@ function RolePicker({
       onSelectionChange={(item) => pick(item.value)}
       searchable
       searchPlaceholder="Search roles…"
-      variant="tertiary"
-      className="h-auto w-full justify-start py-1 text-left"
+      // An unmapped row is a call to action, so its picker is a bordered
+      // button; a mapped row reads as settled state.
+      variant={row.mapping ? "tertiary" : "secondary"}
+      className={cn(
+        "h-auto w-full justify-start py-1 text-left",
+        !row.mapping && "border-dashed",
+      )}
       contentClassName="w-[min(24rem,90vw)]"
       disabledMessage={saving ? "Saving mapping" : disabledMessage}
     >
-      <span
-        className={cn(
-          "flex items-center gap-2",
-          !row.mapping && "text-muted-foreground font-normal",
-        )}
-      >
+      <span className="flex items-center gap-2">
         {row.mapping && !saving && (
           <CircleCheck
             className="text-default-success size-4 shrink-0"
             aria-label="Mapped"
           />
         )}
+        {!row.mapping && !saving && <Plus className="size-4 shrink-0" />}
         {label}
       </span>
     </Combobox>
