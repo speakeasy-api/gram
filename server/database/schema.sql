@@ -3078,25 +3078,31 @@ CREATE TABLE IF NOT EXISTS workload_issuers (
   jwks_uri TEXT NOT NULL,
 
   -- Whether this issuer's admissions and agent assignments may match a subject
-  -- by a trailing wildcard rather than in full. Off unless an operator turns it
-  -- on when the issuer is created.
+  -- by a trailing wildcard rather than in full. On by default, and not asked for
+  -- when an issuer is registered.
   --
-  -- The gate lives here, not on the admission, because whether a wildcard can
-  -- ever be safe is a property of the platform rather than of one row. It is
-  -- sound only where the varying part of sub is minted by the issuer and cannot
-  -- be forged by the caller: Claude Tag's agent id, or a SPIFFE path assigned by
-  -- a registration entry. It is unsound where the caller controls that part
-  -- (GitHub Actions puts the git ref in sub, so `repo:org/repo:*` admits every
-  -- branch and so everyone who can open a pull request) and meaningless where
-  -- sub is an opaque identifier (Entra's GUID, Google's numeric id), because a
-  -- leading portion of those is a truncation that collides with unrelated
-  -- principals.
+  -- Revised 2026-09-25. This began as a setup-time gate, on the reasoning that
+  -- whether a wildcard is sound is a property of the platform: it holds only
+  -- where the varying part of sub is assigned by the issuer and cannot be chosen
+  -- by the caller. That reasoning is unchanged and still worth knowing — a CI
+  -- provider that puts the git ref in sub turns `repo:org/repo:*` into "anyone
+  -- who can push a branch", and for an opaque sub a leading portion is a
+  -- truncation that collides with unrelated principals.
   --
-  -- A per-admission confirmation cannot make that judgement: it asks whoever is
-  -- admitting a subject to re-derive their platform's sub semantics every time.
-  -- Recorded once here, an issuer whose subjects are opaque or caller-influenced
-  -- simply cannot carry a wildcard rule, whatever a later operator ticks.
-  allow_wildcard_admission boolean NOT NULL DEFAULT false,
+  -- What changed is who should answer it and when. Asking at registration put a
+  -- question in front of an operator before they had a rule in mind, about a
+  -- platform whose sub semantics they may not know, and the answer is theirs to
+  -- make about their own system rather than ours to withhold. The dialog now
+  -- states the consequence at the point a wildcard is actually written — which
+  -- subjects it admits, and which agent they would inherit — where it is
+  -- concrete and actionable instead of abstract.
+  --
+  -- The column stays because it does a second job the gate obscured: it is
+  -- checked on every lookup, not at write time, so clearing it makes every
+  -- wildcard rule under that issuer inert immediately, with nothing withdrawn.
+  -- That is an incident control, not a configuration step, and it is deliberately
+  -- absent from the registration UI.
+  allow_wildcard_admission boolean NOT NULL DEFAULT true,
 
   -- The last discovery document captured for this issuer, verbatim. The typed
   -- columns above model only what Gram acts on; the rest of a document is kept
