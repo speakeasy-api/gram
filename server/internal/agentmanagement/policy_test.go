@@ -1,14 +1,18 @@
 package agentmanagement
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -44,31 +48,29 @@ func TestAgentPolicyCRUDIsExactAllowOnlyAndAudited(t *testing.T) {
 	require.Equal(t, created.ID, updated.ID)
 	require.Equal(t, string(authz.ScopeProjectRead), updated.Scope)
 
-	var principal, effect string
-	err = conn.QueryRow(t.Context(), `SELECT principal_urn, COALESCE(effect, 'allow') FROM principal_grants WHERE id = $1`, created.ID).Scan(&principal, &effect) //nolint:glint // notestingrawsql: verifies the persisted security boundary
+	// The list is allow-only and filtered to the agent principal, so finding the
+	// row proves both its principal and its effect.
+	persisted, err := accessrepo.New(conn).ListPrincipalGrantsByOrg(t.Context(), accessrepo.ListPrincipalGrantsByOrgParams{
+		OrganizationID: "org-policy", PrincipalUrn: "agent:" + agent.ID.String(),
+	})
 	require.NoError(t, err)
-	require.Equal(t, "agent:"+agent.ID.String(), principal)
-	require.Equal(t, "allow", effect)
+	require.True(t, slices.ContainsFunc(persisted, func(row accessrepo.ListPrincipalGrantsByOrgRow) bool {
+		return row.ID.String() == created.ID
+	}), "created grant must persist as an allow row for the agent principal")
 
 	require.NoError(t, service.DeletePolicyGrant(ctx, &gen.DeletePolicyGrantPayload{AgentID: agent.ID.String(), GrantID: created.ID}))
 	listed, err = service.ListPolicyGrants(ctx, &gen.ListPolicyGrantsPayload{AgentID: agent.ID.String()})
 	require.NoError(t, err)
 	require.Empty(t, listed)
 
-	rows, err := conn.Query(t.Context(), `SELECT action, actor_id, actor_type, subject_id, subject_type FROM audit_logs WHERE organization_id = $1 AND subject_id = $2 ORDER BY seq`, "org-policy", agent.ID.String()) //nolint:glint // notestingrawsql: verifies transactional attribution
-	require.NoError(t, err)
-	defer rows.Close()
 	var actions []string
-	for rows.Next() {
-		var action, actorID, actorType, subjectID, subjectType string
-		require.NoError(t, rows.Scan(&action, &actorID, &actorType, &subjectID, &subjectType))
-		actions = append(actions, action)
-		require.Equal(t, "owner", actorID)
-		require.Equal(t, "user", actorType)
-		require.Equal(t, agent.ID.String(), subjectID)
-		require.Equal(t, "agent", subjectType)
+	for _, row := range auditLogs(t, conn, "org-policy", agent.ID.String()) {
+		actions = append(actions, row.Action)
+		require.Equal(t, "owner", row.ActorID)
+		require.Equal(t, "user", row.ActorType)
+		require.Equal(t, agent.ID.String(), row.SubjectID)
+		require.Equal(t, "agent", row.SubjectType)
 	}
-	require.NoError(t, rows.Err())
 	require.Equal(t, []string{"agent:policy_grant_create", "agent:policy_grant_update", "agent:policy_grant_delete"}, actions)
 	require.Equal(t, actions, agentWebhookOutboxActions(t, conn, "org-policy"))
 }
@@ -138,9 +140,11 @@ func TestAgentPolicyDoesNotNormalizeOrDeleteExistingDenyRows(t *testing.T) {
 	err = service.DeletePolicyGrant(ctx, &gen.DeletePolicyGrantPayload{AgentID: agent.ID.String(), GrantID: denyID.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
-	var effect string
-	require.NoError(t, conn.QueryRow(t.Context(), `SELECT effect FROM principal_grants WHERE id = $1`, denyID).Scan(&effect)) //nolint:glint // notestingrawsql: verifies deny state was not normalized
-	require.Equal(t, "deny", effect)
+	effect, err := testrepo.New(conn).GetPrincipalGrantEffectFixture(t.Context(), testrepo.GetPrincipalGrantEffectFixtureParams{
+		OrganizationID: "org-deny-row", PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), Scope: string(authz.ScopeProjectRead), Selectors: selector,
+	})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToPGText("deny"), effect)
 }
 
 func TestAgentPolicyGrantIDsCannotCrossAgentOrTenant(t *testing.T) {

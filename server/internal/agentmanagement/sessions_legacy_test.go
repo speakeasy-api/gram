@@ -4,9 +4,12 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/stretchr/testify/require"
+	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestAgentSessionLegacyOrganizationFallback(t *testing.T) {
@@ -42,12 +45,12 @@ func TestAgentSessionLegacyOrganizationFallback(t *testing.T) {
 			if projectOrg == "" {
 				projectOrg = "org-a"
 			}
-			_, err := db.Exec(t.Context(), `INSERT INTO projects (id, organization_id, name, slug) VALUES ($1,$2,'Legacy project','legacy')`, project, projectOrg) //nolint:glint // notestingrawsql: legacy project-tier fixture
+			_, err := testrepo.New(db).CreateProjectFixture(t.Context(), testrepo.CreateProjectFixtureParams{ID: project, Name: "Legacy project", Slug: "legacy", OrganizationID: projectOrg})
 			require.NoError(t, err)
 			_, err = db.Exec(t.Context(), `UPDATE user_session_issuers SET project_id=$1, organization_id=$2 WHERE id=$3`, uuid.NullUUID{UUID: project, Valid: tc.projectOrg != ""}, tc.issuerOrg, issuer) //nolint:glint // notestingrawsql: legacy nullable issuer tenancy
 			require.NoError(t, err)
 			sessionProject := uuid.New()
-			_, err = db.Exec(t.Context(), `INSERT INTO projects (id, organization_id, name, slug) VALUES ($1,$2,'Session project','session')`, sessionProject, tc.sessionProjectOrg) //nolint:glint // notestingrawsql: independently test the session's project tenancy
+			_, err = testrepo.New(db).CreateProjectFixture(t.Context(), testrepo.CreateProjectFixtureParams{ID: sessionProject, Name: "Session project", Slug: "session", OrganizationID: tc.sessionProjectOrg})
 			require.NoError(t, err)
 			_, err = db.Exec(t.Context(), `UPDATE user_sessions SET project_id=$1, organization_id=$2 WHERE id=$3`, sessionProject, tc.sessionOrg, session) //nolint:glint // notestingrawsql: legacy nullable session tenancy
 			require.NoError(t, err)
@@ -69,9 +72,9 @@ func TestAgentSessionLegacyOrganizationFallback(t *testing.T) {
 				require.NoError(t, err)
 				if upstream != uuid.Nil {
 					require.Equal(t, 1, revoker.credentials)
-					var deleted bool
-					require.NoError(t, db.QueryRow(ctx, `SELECT deleted FROM remote_sessions WHERE id=$1`, upstream).Scan(&deleted)) //nolint:glint // notestingrawsql: mismatched same-org projects still cascade upstream
-					require.True(t, deleted)
+					stored, err := remoterepo.New(db).GetRemoteSessionByIDIncludingDeleted(ctx, remoterepo.GetRemoteSessionByIDIncludingDeletedParams{ID: upstream, ProjectID: uuid.NullUUID{UUID: project, Valid: true}})
+					require.NoError(t, err)
+					require.True(t, stored.Deleted, "mismatched same-org projects still cascade upstream")
 				}
 			} else {
 				require.Empty(t, listed.Items)

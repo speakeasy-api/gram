@@ -1,6 +1,7 @@
 package agentmanagement
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -10,10 +11,12 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/agentownership"
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
+	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestTransferAtomicallyReplacesOwnerAndPreservesDirectPolicy(t *testing.T) {
@@ -54,17 +57,20 @@ func TestTransferAtomicallyReplacesOwnerAndPreservesDirectPolicy(t *testing.T) {
 	_, err = service.Get(validatedHumanContext(t, "org-a", "replacement"), &gen.GetPayload{ID: created.ID})
 	require.NoError(t, err)
 
-	var action, actorID, beforeOwner, afterOwner string
-	//nolint:glint // notestingrawsql: verifies transactional ownership audit fields
-	err = conn.QueryRow(t.Context(), `
-		SELECT action, actor_id, before_snapshot->>'owner_user_id', after_snapshot->>'owner_user_id'
-		FROM audit_logs WHERE organization_id = $1 AND subject_id = $2 AND action = 'agent:transfer'`,
-		"org-a", created.ID).Scan(&action, &actorID, &beforeOwner, &afterOwner)
+	transfers, err := auditrepo.New(conn).ListAuditLogs(t.Context(), auditrepo.ListAuditLogsParams{
+		OrganizationID: "org-a", SubjectID: conv.ToPGText(created.ID), Action: conv.ToPGText("agent:transfer"), IncludeAssistantEvents: true,
+	})
 	require.NoError(t, err)
-	require.Equal(t, "agent:transfer", action)
-	require.Equal(t, "owner", actorID)
-	require.Equal(t, "owner", beforeOwner)
-	require.Equal(t, "replacement", afterOwner)
+	require.Len(t, transfers, 1)
+	var before, after struct {
+		OwnerUserID string `json:"owner_user_id"`
+	}
+	require.NoError(t, json.Unmarshal(transfers[0].BeforeSnapshot, &before))
+	require.NoError(t, json.Unmarshal(transfers[0].AfterSnapshot, &after))
+	require.Equal(t, "agent:transfer", transfers[0].Action)
+	require.Equal(t, "owner", transfers[0].ActorID)
+	require.Equal(t, "owner", before.OwnerUserID)
+	require.Equal(t, "replacement", after.OwnerUserID)
 	require.Equal(t, []string{"agent:create", "agent:policy_grant_create", "agent:transfer"}, agentWebhookOutboxActions(t, conn, "org-a"))
 }
 
@@ -99,16 +105,7 @@ func TestExplicitReassignmentIsTheOnlyOwnershipOperationThatClearsLatch(t *testi
 	_, err = service.Reassign(adminCtx, &gen.ReassignPayload{AgentID: agent.ID.String(), OwnerUserID: "former-owner"})
 	requireOopsCode(t, err, oops.CodeConflict)
 
-	var actions []string
-	rows, err := conn.Query(t.Context(), `SELECT action FROM audit_logs WHERE subject_id = $1 ORDER BY seq`, agent.ID) //nolint:glint // notestingrawsql: verifies owner-loss and reassignment event order
-	require.NoError(t, err)
-	defer rows.Close()
-	for rows.Next() {
-		var action string
-		require.NoError(t, rows.Scan(&action))
-		actions = append(actions, action)
-	}
-	require.NoError(t, rows.Err())
+	actions := auditActions(t, conn, "org-a", agent.ID.String())
 	require.Equal(t, []string{"agent:owner_loss", "agent:reassign"}, actions)
 	require.Equal(t, actions, agentWebhookOutboxActions(t, conn, "org-a"))
 }
@@ -123,8 +120,7 @@ func TestOwnerChangeRejectsIneligibleAndCrossTenantTargets(t *testing.T) {
 	seedOrganizationUser(t, conn, "org-a", "inactive")
 	seedOrganizationUser(t, conn, "org-b", "other-tenant")
 	agent := createAgent(t, conn, "org-a", "owner", "Target validation agent")
-	_, err := conn.Exec(t.Context(), `UPDATE users SET deleted_at = clock_timestamp() WHERE id = 'inactive'`) //nolint:glint // notestingrawsql: creates an ineligible target
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).ForceSoftDeleteUser(t.Context(), "inactive"))
 
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "owner")

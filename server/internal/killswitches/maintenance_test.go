@@ -9,31 +9,48 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/repo"
 )
 
 // insertVersionRow fabricates one prescription header and version directly so
-// eligibility timestamps can be controlled exactly. Interval expressions are
-// evaluated by the database clock, which is authoritative for expiry.
-func insertVersionRow(t *testing.T, conn *pgxpool.Pool, orgID, state, expiresAtSQL, supersededAtSQL string) PrescriptionID {
+// eligibility timestamps can be controlled exactly. Offsets are applied to a
+// single database clock reading, which is authoritative for expiry; a nil
+// offset leaves the column NULL.
+func insertVersionRow(t *testing.T, conn *pgxpool.Pool, orgID, state string, expiresIn, supersededIn *time.Duration) PrescriptionID {
 	t.Helper()
-	var id uuid.UUID
-	//nolint:glint // notestingrawsql: fabricates private killswitch rows with SQL-computed timestamps that production lifecycle writes cannot produce
-	require.NoError(t, conn.QueryRow(t.Context(), `
-		INSERT INTO killswitch_prescriptions (organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version)
-		VALUES ($1, 'block-tools', 'user', 'user:fabricated', 'tool', 1)
-		RETURNING id
-	`, orgID).Scan(&id))
-	//nolint:glint // notestingrawsql: fabricates private killswitch rows with SQL-computed timestamps that production lifecycle writes cannot produce
-	_, err := conn.Exec(t.Context(), fmt.Sprintf(`
-		INSERT INTO killswitch_prescription_versions (organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, superseded_at, internal_note, external_note)
-		VALUES ($1, $2, 1, $3, 'all', clock_timestamp() - interval '3 hours', %s, clock_timestamp() - interval '3 hours', %s, $4, 'Access paused.')
-	`, expiresAtSQL, supersededAtSQL), orgID, id, state, sentinelInternalNote)
+	queries := repo.New(conn)
+	clock, err := queries.GetKillswitchDatabaseTime(t.Context())
 	require.NoError(t, err)
+	at := func(offset *time.Duration) pgtype.Timestamptz {
+		if offset == nil {
+			return pgtype.Timestamptz{}
+		}
+		return conv.ToPGTimestamptz(clock.Time.Add(*offset))
+	}
+	id, err := queries.CreateKillswitchPrescriptionHeader(t.Context(), repo.CreateKillswitchPrescriptionHeaderParams{
+		OrganizationID: orgID, DefinitionKey: "block-tools", PrincipalKind: "user", PrincipalKey: "user:fabricated", ResourceKind: "tool",
+	})
+	require.NoError(t, err)
+	inserted, err := queries.CreateKillswitchPrescriptionVersion(t.Context(), repo.CreateKillswitchPrescriptionVersionParams{
+		OrganizationID: orgID, PrescriptionID: id, Version: 1, State: state, ResourceScope: "all",
+		StartsAt: at(new(-3 * time.Hour)), ExpiresAt: at(expiresIn), ActivatedAt: at(new(-3 * time.Hour)),
+		InternalNote: sentinelInternalNote, ExternalNote: "Access paused.",
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), inserted)
+	if supersededIn != nil {
+		superseded, err := queries.SupersedeKillswitchPrescriptionVersion(t.Context(), repo.SupersedeKillswitchPrescriptionVersionParams{
+			SupersededAt: at(supersededIn), OrganizationID: orgID, PrescriptionID: id, Version: 1,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), superseded)
+	}
 	return PrescriptionID(id.String())
 }
 
@@ -59,18 +76,15 @@ func TestExpirySweepRecordsOnlyGenuinelyExpiredVersions(t *testing.T) {
 	conn, orgID := newLifecycleDatabase(t, "killswitch_expiry_matrix")
 	maintenance := NewMaintenanceService(conn, audit.NewLogger())
 
-	dueCurrent := insertVersionRow(t, conn, orgID, "active", "clock_timestamp() - interval '1 hour'", "NULL")
-	expiredThenSuperseded := insertVersionRow(t, conn, orgID, "active", "clock_timestamp() - interval '2 hours'", "clock_timestamp() - interval '1 hour'")
-	supersededBeforeExpiry := insertVersionRow(t, conn, orgID, "active", "clock_timestamp() - interval '1 hour'", "clock_timestamp() - interval '2 hours'")
-	expiryEqualsSupersession := insertVersionRow(t, conn, orgID, "active", "clock_timestamp() - interval '1 hour'", "clock_timestamp() - interval '1 hour'")
-	notYetExpired := insertVersionRow(t, conn, orgID, "active", "clock_timestamp() + interval '1 hour'", "NULL")
-	inactive := insertVersionRow(t, conn, orgID, "inactive", "clock_timestamp() - interval '1 hour'", "NULL")
-	unbounded := insertVersionRow(t, conn, orgID, "active", "NULL", "NULL")
-	// Force the equality boundary to exact identity: interval arithmetic above
-	// evaluates clock_timestamp() per call.
-	//nolint:glint // notestingrawsql: forces superseded_at to equal expires_at exactly to test the expiry boundary
-	_, err := conn.Exec(t.Context(), `UPDATE killswitch_prescription_versions SET superseded_at = expires_at WHERE prescription_id = $1`, string(expiryEqualsSupersession))
-	require.NoError(t, err)
+	dueCurrent := insertVersionRow(t, conn, orgID, "active", new(-time.Hour), nil)
+	expiredThenSuperseded := insertVersionRow(t, conn, orgID, "active", new(-2*time.Hour), new(-time.Hour))
+	supersededBeforeExpiry := insertVersionRow(t, conn, orgID, "active", new(-time.Hour), new(-2*time.Hour))
+	// Both offsets apply to one database clock reading, so superseded_at equals
+	// expires_at exactly.
+	expiryEqualsSupersession := insertVersionRow(t, conn, orgID, "active", new(-time.Hour), new(-time.Hour))
+	notYetExpired := insertVersionRow(t, conn, orgID, "active", new(time.Hour), nil)
+	inactive := insertVersionRow(t, conn, orgID, "inactive", new(-time.Hour), nil)
+	unbounded := insertVersionRow(t, conn, orgID, "active", nil, nil)
 
 	result, err := maintenance.RecordDueExpiries(t.Context(), 100)
 	require.NoError(t, err)
@@ -118,32 +132,28 @@ func TestExpirySweepDoesNotAlterEffectiveState(t *testing.T) {
 
 	conn, orgID := newLifecycleDatabase(t, "killswitch_expiry_state")
 	maintenance := NewMaintenanceService(conn, audit.NewLogger())
-	prescription := insertVersionRow(t, conn, orgID, "active", "clock_timestamp() - interval '1 hour'", "NULL")
+	prescription := insertVersionRow(t, conn, orgID, "active", new(-time.Hour), nil)
 
 	result, err := maintenance.RecordDueExpiries(t.Context(), 100)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), result.Recorded)
 
-	var state string
-	var supersededAt *time.Time
-	var currentVersion int64
-	//nolint:glint // notestingrawsql: reads private maintenance state that no production query exposes
-	require.NoError(t, conn.QueryRow(t.Context(), `
-		SELECT version.state, version.superseded_at, prescription.current_version
-		FROM killswitch_prescription_versions AS version
-		JOIN killswitch_prescriptions AS prescription ON prescription.id = version.prescription_id
-		WHERE version.prescription_id = $1
-	`, string(prescription)).Scan(&state, &supersededAt, &currentVersion))
-	require.Equal(t, "active", state, "expiry recording never rewrites version state; enforcement expires at query time")
-	require.Nil(t, supersededAt)
-	require.Equal(t, int64(1), currentVersion)
+	queries := repo.New(conn)
+	prescriptionID := uuid.MustParse(string(prescription))
+	identity, err := queries.GetKillswitchPrescriptionIdentity(t.Context(), repo.GetKillswitchPrescriptionIdentityParams{OrganizationID: orgID, PrescriptionID: prescriptionID})
+	require.NoError(t, err)
+	version, err := queries.GetKillswitchPrescriptionVersion(t.Context(), repo.GetKillswitchPrescriptionVersionParams{OrganizationID: orgID, PrescriptionID: prescriptionID, Version: 1})
+	require.NoError(t, err)
+	require.Equal(t, "active", version.State, "expiry recording never rewrites version state; enforcement expires at query time")
+	require.False(t, version.SupersededAt.Valid)
+	require.Equal(t, int64(1), identity.CurrentVersion)
 }
 
 func TestExpiryConcurrentSweepsRecordExactlyOnce(t *testing.T) {
 	t.Parallel()
 
 	conn, orgID := newLifecycleDatabase(t, "killswitch_expiry_concurrency")
-	prescription := insertVersionRow(t, conn, orgID, "active", "clock_timestamp() - interval '1 hour'", "NULL")
+	prescription := insertVersionRow(t, conn, orgID, "active", new(-time.Hour), nil)
 
 	const sweeps = 4
 	totals := make([]ExpiryBatchResult, sweeps)
@@ -173,7 +183,7 @@ func TestExpirySweepSerializesWithLifecycleHeaderLock(t *testing.T) {
 	t.Parallel()
 
 	conn, orgID := newLifecycleDatabase(t, "killswitch_expiry_lifecycle_lock")
-	prescription := insertVersionRow(t, conn, orgID, "active", "clock_timestamp() - interval '1 hour'", "NULL")
+	prescription := insertVersionRow(t, conn, orgID, "active", new(-time.Hour), nil)
 	prescriptionID := uuid.MustParse(string(prescription))
 	maintenance := NewMaintenanceService(conn, audit.NewLogger())
 
@@ -181,12 +191,8 @@ func TestExpirySweepSerializesWithLifecycleHeaderLock(t *testing.T) {
 	tx, err := conn.Begin(t.Context())
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
-	//nolint:glint // notestingrawsql: takes the lifecycle header row lock inside the blocking transaction
-	_, err = tx.Exec(t.Context(), `
-		SELECT id FROM killswitch_prescriptions
-		WHERE organization_id = $1 AND id = $2
-		FOR UPDATE
-	`, orgID, prescriptionID)
+	txQueries := repo.New(tx)
+	_, err = txQueries.LockKillswitchPrescriptionCurrent(t.Context(), repo.LockKillswitchPrescriptionCurrentParams{OrganizationID: orgID, PrescriptionID: prescriptionID})
 	require.NoError(t, err)
 
 	type expiryResult struct {
@@ -205,13 +211,14 @@ func TestExpirySweepSerializesWithLifecycleHeaderLock(t *testing.T) {
 	case <-time.After(150 * time.Millisecond):
 	}
 
-	//nolint:glint // notestingrawsql: forces superseded_at to equal expires_at exactly to test the expiry boundary
-	_, err = tx.Exec(t.Context(), `
-		UPDATE killswitch_prescription_versions
-		SET superseded_at = expires_at
-		WHERE organization_id = $1 AND prescription_id = $2 AND version = 1
-	`, orgID, prescriptionID)
+	// Supersede exactly at expiry so the version is no longer eligible.
+	version, err := txQueries.GetKillswitchPrescriptionVersion(t.Context(), repo.GetKillswitchPrescriptionVersionParams{OrganizationID: orgID, PrescriptionID: prescriptionID, Version: 1})
 	require.NoError(t, err)
+	superseded, err := txQueries.SupersedeKillswitchPrescriptionVersion(t.Context(), repo.SupersedeKillswitchPrescriptionVersionParams{
+		SupersededAt: version.ExpiresAt, OrganizationID: orgID, PrescriptionID: prescriptionID, Version: 1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), superseded)
 	require.NoError(t, tx.Commit(t.Context()))
 
 	select {
@@ -230,7 +237,7 @@ func TestExpiryRetryRecovery(t *testing.T) {
 	t.Parallel()
 
 	conn, orgID := newLifecycleDatabase(t, "killswitch_expiry_retry")
-	insertVersionRow(t, conn, orgID, "active", "clock_timestamp() - interval '1 hour'", "NULL")
+	insertVersionRow(t, conn, orgID, "active", new(-time.Hour), nil)
 
 	maintenance := NewMaintenanceService(conn, audit.NewLogger())
 	maintenance.beforeExpiryCommit = func(context.Context) error { return errors.New("forced pre-commit failure") }

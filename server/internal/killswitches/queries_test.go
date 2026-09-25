@@ -11,8 +11,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/repo"
 )
 
@@ -50,9 +52,9 @@ type evaluationFixture struct {
 func TestEvaluateCurrentPrescriptionsIntegration(t *testing.T) {
 	conn, organizationID := newLifecycleDatabase(t, "killswitch_evaluator")
 	queries := repo.New(conn)
-	var databaseNow time.Time
-	//nolint:glint // notestingrawsql: reads the database clock to anchor fixture timestamps
-	require.NoError(t, conn.QueryRow(t.Context(), "SELECT clock_timestamp()").Scan(&databaseNow))
+	clock, err := queries.GetKillswitchDatabaseTime(t.Context())
+	require.NoError(t, err)
+	databaseNow := clock.Time
 	past := databaseNow.Add(-time.Hour)
 	older := databaseNow.Add(-2 * time.Hour)
 	future := databaseNow.Add(time.Hour)
@@ -86,7 +88,7 @@ func TestEvaluateCurrentPrescriptionsIntegration(t *testing.T) {
 
 	insert(evaluationFixture{ID: evaluationUUID(1), DefinitionKey: "block-tools", PrincipalKind: "user", PrincipalKey: "user:interval", Version: 1, State: "active", Scope: "selected", StartsAt: future, ExpiresAt: nil, ActivatedAt: &activated, ExternalNote: "Scheduled.", Resources: []string{"tool:interval"}})
 	insert(evaluationFixture{ID: evaluationUUID(2), DefinitionKey: "block-tools", PrincipalKind: "user", PrincipalKey: "user:interval", Version: 1, State: "active", Scope: "selected", StartsAt: older, ExpiresAt: &databaseNow, ActivatedAt: &activated, ExternalNote: "Expired exactly.", Resources: []string{"tool:interval"}})
-	_, err := evaluate([]string{"user"}, []string{"user:interval"}, []string{"block-tools"}, "tool:interval")
+	_, err = evaluate([]string{"user"}, []string{"user:interval"}, []string{"block-tools"}, "tool:interval")
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 
 	insert(evaluationFixture{ID: evaluationUUID(3), DefinitionKey: "block-tools", PrincipalKind: "user", PrincipalKey: "user:dynamic", Version: 1, State: "active", Scope: "all", StartsAt: past, ExpiresAt: &activeUntil, ActivatedAt: &activated, ExternalNote: "Dynamic all."})
@@ -329,25 +331,24 @@ func insertEvaluationFixture(t *testing.T, conn repo.DBTX, fixture evaluationFix
 
 func insertEvaluationVersion(t *testing.T, conn repo.DBTX, fixture evaluationFixture) {
 	t.Helper()
-	var startsAt any = fixture.StartsAt
+	startsAt := conv.ToPGTimestamptz(fixture.StartsAt)
 	if fixture.Immediate {
-		startsAt = nil
+		startsAt = pgtype.Timestamptz{}
 	}
-	//nolint:glint // notestingrawsql: inserts evaluation fixtures with explicit ids and timestamps that production lifecycle writes do not accept
-	_, err := conn.Exec(t.Context(), `
-		INSERT INTO killswitch_prescription_versions (
-		  organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'private fixture note', $9)
-	`, fixture.OrganizationID, fixture.ID, fixture.Version, fixture.State, fixture.Scope, startsAt, fixture.ExpiresAt, fixture.ActivatedAt, fixture.ExternalNote)
+	queries := repo.New(conn)
+	inserted, err := queries.CreateKillswitchPrescriptionVersion(t.Context(), repo.CreateKillswitchPrescriptionVersionParams{
+		OrganizationID: fixture.OrganizationID, PrescriptionID: fixture.ID, Version: fixture.Version,
+		State: fixture.State, ResourceScope: fixture.Scope, StartsAt: startsAt,
+		ExpiresAt: conv.PtrToPGTimestamptz(fixture.ExpiresAt), ActivatedAt: conv.PtrToPGTimestamptz(fixture.ActivatedAt),
+		InternalNote: "private fixture note", ExternalNote: fixture.ExternalNote,
+	})
 	require.NoError(t, err)
-	for _, resource := range fixture.Resources {
-		//nolint:glint // notestingrawsql: inserts evaluation fixtures with explicit ids and timestamps that production lifecycle writes do not accept
-		_, err = conn.Exec(t.Context(), `
-			INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
-			VALUES ($1, $2, $3, $4)
-		`, fixture.OrganizationID, fixture.ID, fixture.Version, resource)
-		require.NoError(t, err)
-	}
+	require.Equal(t, int64(1), inserted)
+	inserted, err = queries.CreateKillswitchPrescriptionVersionResources(t.Context(), repo.CreateKillswitchPrescriptionVersionResourcesParams{
+		OrganizationID: fixture.OrganizationID, PrescriptionID: fixture.ID, Version: fixture.Version, ResourceKeys: fixture.Resources,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(len(fixture.Resources)), inserted)
 }
 
 func evaluationUUID(value int) uuid.UUID {

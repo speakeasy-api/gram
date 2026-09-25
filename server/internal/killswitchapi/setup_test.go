@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -15,7 +16,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -47,15 +51,8 @@ func newIntegrationServiceWithAdmin(t *testing.T, grantAdmin bool) (*Service, *p
 	require.NoError(t, err)
 	orgID := "org_" + uuid.NewString()
 	userID := "user_" + uuid.NewString()
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
-	_, err = db.Exec(t.Context(), `INSERT INTO organization_metadata (id, name, slug) VALUES ($1, 'Test Organization', $1)`, orgID)
-	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
-	_, err = db.Exec(t.Context(), `INSERT INTO users (id, email, display_name) VALUES ($1, $1 || '@example.test', 'Test User')`, userID)
-	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
-	_, err = db.Exec(t.Context(), `INSERT INTO organization_user_relationships (organization_id, user_id) VALUES ($1, $2)`, orgID, userID)
-	require.NoError(t, err)
+	require.NoError(t, orgrepo.New(db).CreateOrganizationMetadata(t.Context(), orgrepo.CreateOrganizationMetadataParams{ID: orgID, Name: "Test Organization", Slug: orgID}))
+	seedOrganizationMember(t, db, orgID, userID, "Test User")
 	if grantAdmin {
 		selectors, selectorErr := authz.NewSelector(authz.ScopeOrgAdmin, orgID).MarshalJSON()
 		require.NoError(t, selectorErr)
@@ -64,18 +61,7 @@ func newIntegrationServiceWithAdmin(t *testing.T, grantAdmin bool) (*Service, *p
 		})
 		require.NoError(t, grantErr)
 	}
-	var projectID uuid.UUID
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
-	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO projects (name, slug, organization_id) VALUES ('project', $1, $2) RETURNING id`, "p-"+uuid.NewString()[:12], orgID).Scan(&projectID))
-	servers := make([]uuid.UUID, 2)
-	for i := range servers {
-		slug := "ts-" + uuid.NewString()[:12]
-		var toolsetID uuid.UUID
-		//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
-		require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO toolsets (organization_id, project_id, name, slug) VALUES ($1, $2, $3, $3) RETURNING id`, orgID, projectID, slug).Scan(&toolsetID))
-		//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
-		require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO mcp_servers (project_id, name, toolset_id, visibility) VALUES ($1, $2, $3, 'private') RETURNING id`, projectID, "Server", toolsetID).Scan(&servers[i]))
-	}
+	_, servers := seedProjectServers(t, db, orgID, "project", "Server", "Server")
 	registry, err := mcptoolexecution.NewRegistry(db)
 	require.NoError(t, err)
 	lifecycle, err := killswitches.NewLifecycleService(db, registry, mcptoolexecution.NewCustomerLifecycleValidator(), killswitches.NewAuditBeforeCommitHook(audit.NewLogger()))
@@ -95,18 +81,43 @@ func newIntegrationServiceWithAdmin(t *testing.T, grantAdmin bool) (*Service, *p
 func insertForeignServer(t *testing.T, db *pgxpool.Pool) uuid.UUID {
 	t.Helper()
 	orgID := "org_" + uuid.NewString()
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
-	_, err := db.Exec(t.Context(), `INSERT INTO organization_metadata (id, name, slug) VALUES ($1, 'Other Organization', $1)`, orgID)
+	require.NoError(t, orgrepo.New(db).CreateOrganizationMetadata(t.Context(), orgrepo.CreateOrganizationMetadataParams{ID: orgID, Name: "Other Organization", Slug: orgID}))
+	_, servers := seedProjectServers(t, db, orgID, "other", "Foreign Server")
+	return servers[0]
+}
+
+// seedOrganizationMember inserts a user and their membership in orgID.
+func seedOrganizationMember(t *testing.T, db *pgxpool.Pool, orgID string, userID string, displayName string) {
+	t.Helper()
+	queries := testrepo.New(db)
+	require.NoError(t, queries.InsertUserFixture(t.Context(), testrepo.InsertUserFixtureParams{ID: userID, Email: userID + "@example.test", DisplayName: displayName}))
+	require.NoError(t, queries.CreateOrganizationUserRelationshipFixture(t.Context(), testrepo.CreateOrganizationUserRelationshipFixtureParams{
+		OrganizationID: orgID, UserID: pgtype.Text{String: userID, Valid: true},
+	}))
+}
+
+// seedProjectServers inserts a project in orgID and one private MCP server,
+// backed by its own toolset, per server name.
+func seedProjectServers(t *testing.T, db *pgxpool.Pool, orgID string, projectName string, serverNames ...string) (uuid.UUID, []uuid.UUID) {
+	t.Helper()
+	queries := testrepo.New(db)
+	projectID, err := queries.CreateProjectFixture(t.Context(), testrepo.CreateProjectFixtureParams{
+		ID: uuid.Must(uuid.NewV7()), Name: projectName, Slug: "p-" + uuid.NewString()[:12], OrganizationID: orgID,
+	})
 	require.NoError(t, err)
-	var projectID uuid.UUID
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
-	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO projects (name, slug, organization_id) VALUES ('other', $1, $2) RETURNING id`, "p-"+uuid.NewString()[:12], orgID).Scan(&projectID))
-	slug := "ts-" + uuid.NewString()[:12]
-	var toolsetID uuid.UUID
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
-	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO toolsets (organization_id, project_id, name, slug) VALUES ($1, $2, $3, $3) RETURNING id`, orgID, projectID, slug).Scan(&toolsetID))
-	var serverID uuid.UUID
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture used only by these integration tests; killswitchapi has no queries.sql
-	require.NoError(t, db.QueryRow(t.Context(), `INSERT INTO mcp_servers (project_id, name, toolset_id, visibility) VALUES ($1, 'Foreign Server', $2, 'private') RETURNING id`, projectID, toolsetID).Scan(&serverID))
-	return serverID
+	servers := make([]uuid.UUID, len(serverNames))
+	for i, name := range serverNames {
+		slug := "ts-" + uuid.NewString()[:12]
+		toolsetID, err := queries.CreateToolsetFixture(t.Context(), testrepo.CreateToolsetFixtureParams{
+			ID: uuid.Must(uuid.NewV7()), OrganizationID: orgID, ProjectID: projectID, Name: slug, Slug: slug,
+		})
+		require.NoError(t, err)
+		server, err := mcpserversrepo.New(db).CreateMCPServer(t.Context(), mcpserversrepo.CreateMCPServerParams{
+			ID: uuid.Must(uuid.NewV7()), ProjectID: projectID, Name: pgtype.Text{String: name, Valid: true},
+			ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: "private",
+		})
+		require.NoError(t, err)
+		servers[i] = server.ID
+	}
+	return projectID, servers
 }

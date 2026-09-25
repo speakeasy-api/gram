@@ -805,15 +805,9 @@ func TestConcurrentVersionProtectedAssignmentWritesSerialize(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 	results := make(chan error, 2)
-	write := func(principalURN string) {
+	write := func(tx pgx.Tx, principalURN string) {
 		defer wg.Done()
 		<-start
-		tx, beginErr := conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction contains only package APIs and SQLc-generated queries
-		if beginErr != nil {
-			results <- beginErr
-			return
-		}
-		defer func() { _ = tx.Rollback(ctx) }()
 		locked, lockErr := pluginassignments.Lock(ctx, tx, principal.OrganizationID, project.ID, plugin.ID)
 		if lockErr != nil {
 			results <- lockErr
@@ -837,8 +831,13 @@ func TestConcurrentVersionProtectedAssignmentWritesSerialize(t *testing.T) {
 		}
 		results <- tx.Commit(ctx)
 	}
-	go write(urn.PrincipalWildcard)
-	go write("email:member@example.com")
+	// Both transactions are opened up front because testenv.BeginTx must run
+	// on the test goroutine; under READ COMMITTED each statement takes its own
+	// snapshot, so the writers still race on the assignment lock after start.
+	wildcardTx := testenv.BeginTx(t, ctx, conn)
+	memberTx := testenv.BeginTx(t, ctx, conn)
+	go write(wildcardTx, urn.PrincipalWildcard)
+	go write(memberTx, "email:member@example.com")
 	close(start)
 	wg.Wait()
 	close(results)

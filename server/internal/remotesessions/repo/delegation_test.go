@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
@@ -26,21 +27,17 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	const org = "org_delegation_test"
 	const subject = "user:delegation_test"
 	issuer, client := uuid.New(), uuid.New()
-	//nolint:glint // notestingrawsql: tenant fixtures across owner domains with caller-chosen ids
-	_, err = conn.Exec(ctx, `INSERT INTO organization_metadata (id,name,slug) VALUES ($1,'Test organization','delegation-test')`, org)
-	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: tenant fixtures across owner domains with caller-chosen ids
-	_, err = conn.Exec(ctx, `INSERT INTO users (id,email,display_name) VALUES ('delegation_test','delegation@example.test','Test user')`)
-	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: tenant fixtures across owner domains with caller-chosen ids
-	_, err = conn.Exec(ctx, `INSERT INTO organization_user_relationships (organization_id,user_id) VALUES ($1,'delegation_test')`, org)
-	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: tenant fixtures across owner domains with caller-chosen ids
-	_, err = conn.Exec(ctx, `INSERT INTO remote_session_issuers (id,organization_id,slug,issuer) VALUES ($1,$2,'delegation-test','https://issuer.example.test')`, issuer, org)
-	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: tenant fixtures across owner domains with caller-chosen ids
-	_, err = conn.Exec(ctx, `INSERT INTO remote_session_clients (id,organization_id,remote_session_issuer_id,client_id) VALUES ($1,$2,$3,'test-client')`, client, org, issuer)
-	require.NoError(t, err)
+	fixtures := testrepo.New(conn)
+	require.NoError(t, fixtures.SeedDelegationLoaderOrganizationFixture(ctx, testrepo.SeedDelegationLoaderOrganizationFixtureParams{OrganizationID: org, Name: "Test organization", Slug: "delegation-test"}))
+	require.NoError(t, fixtures.InsertUserFixture(ctx, testrepo.InsertUserFixtureParams{ID: "delegation_test", Email: "delegation@example.test", DisplayName: "Test user"}))
+	require.NoError(t, fixtures.CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{OrganizationID: org, UserID: pgtype.Text{String: "delegation_test", Valid: true}}))
+	require.NoError(t, fixtures.SeedDelegationLoaderIssuerFixture(ctx, testrepo.SeedDelegationLoaderIssuerFixtureParams{
+		ID: issuer, OrganizationID: pgtype.Text{String: org, Valid: true}, Slug: "delegation-test", Issuer: "https://issuer.example.test",
+		AuthorizationEndpoint: pgtype.Text{}, TokenEndpoint: pgtype.Text{}, JwksUri: pgtype.Text{},
+	}))
+	require.NoError(t, fixtures.SeedDelegationLoaderClientFixture(ctx, testrepo.SeedDelegationLoaderClientFixtureParams{
+		ID: client, OrganizationID: org, RemoteSessionIssuerID: issuer, ClientID: "test-client", Scope: nil,
+	}))
 	//nolint:glint // notestingrawsql: tenant fixtures across owner domains with caller-chosen ids
 	_, err = conn.Exec(ctx, `INSERT INTO user_session_issuers (organization_id,slug,authn_challenge_mode,session_duration,trusted_remote_session_issuer_id,trusted_remote_session_client_id) VALUES ($1,'delegation-test','interactive',interval '1 hour',$2,$3)`, org, issuer, client)
 	require.NoError(t, err)
@@ -87,11 +84,9 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	marked, err = q.MarkTrustedDelegationRefreshAttempt(ctx, attempt)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), marked)
-	var attempted bool
-	//nolint:glint // notestingrawsql: reads private credential columns that no production query exposes
-	err = conn.QueryRow(ctx, `SELECT last_refresh_attempt_at IS NOT NULL FROM trusted_issuer_sessions WHERE id=$1`, row.ID).Scan(&attempted)
+	attempted, err := fixtures.GetDelegationRefreshClaimFixture(ctx, testrepo.GetDelegationRefreshClaimFixtureParams{OrganizationID: org, ClientID: client, Subject: subject})
 	require.NoError(t, err)
-	require.True(t, attempted)
+	require.True(t, attempted.LastRefreshAttemptAt.Valid)
 
 	// Claim acquisition invalidates callback snapshots that might preserve a spent token.
 	_, err = q.UpsertTrustedDelegationCredential(ctx, params)
@@ -134,9 +129,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	claimID = uuid.New()
 	claimed, err = q.ClaimTrustedDelegationRefresh(ctx, repo.ClaimTrustedDelegationRefreshParams{OrganizationID: org, ClientID: client, IssuerID: issuer, SubjectUrn: subject, ExpectedGeneration: completed.CredentialGeneration.Int64, RefreshClaimID: claimID})
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-	_, err = conn.Exec(ctx, `UPDATE user_session_issuers SET deleted_at=clock_timestamp() WHERE organization_id=$1`, org)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.RevokeDelegationUserIssuersFixture(ctx, org))
 	release := repo.ReleaseTrustedDelegationRefreshParams{OrganizationID: org, IssuerID: issuer, ClientID: client, SubjectUrn: subject, ExpectedGeneration: claimed.CredentialGeneration.Int64, RefreshClaimID: claimID}
 	for _, wrong := range []string{"organization", "issuer", "client", "subject", "generation", "claim"} {
 		bad := release
@@ -238,8 +231,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.Zero(t, count)
 	// An invalid project-scoped row is maintenance-orphaned, not skipped forever.
 	project := uuid.New()
-	//nolint:glint // notestingrawsql: tenant fixtures across owner domains with caller-chosen ids
-	_, err = conn.Exec(ctx, `INSERT INTO projects (id,organization_id,name,slug) VALUES ($1,$2,'Cleanup test','cleanup-test')`, project, org)
+	_, err = fixtures.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{ID: project, Name: "Cleanup test", Slug: "cleanup-test", OrganizationID: org})
 	require.NoError(t, err)
 	//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
 	_, err = conn.Exec(ctx, `UPDATE trusted_issuer_sessions SET project_id=$2 WHERE id=$1`, row.ID, project)
@@ -255,9 +247,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	row, err = q.UpsertTrustedDelegationCredential(ctx, params)
 	require.NoError(t, err)
 	// Explicit revocation must work after removal of trust, without a live read.
-	//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-	_, err = conn.Exec(ctx, `UPDATE user_session_issuers SET deleted_at=clock_timestamp() WHERE organization_id=$1`, org)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.RevokeDelegationUserIssuersFixture(ctx, org))
 	revocation := repo.RevokeTrustedDelegationCredentialParams{OrganizationID: org, ClientID: client, IssuerID: uuid.New(), SubjectUrn: subject}
 	revoked, err := q.RevokeTrustedDelegationCredential(ctx, revocation)
 	require.NoError(t, err)
@@ -274,9 +264,7 @@ func TestTrustedDelegationCredentialCASAndCleanup(t *testing.T) {
 	require.False(t, secretsRemain)
 	require.Greater(t, generation, row.CredentialGeneration.Int64)
 	// A removed membership blocks all reads before any decryption, and cleanup erases residue.
-	//nolint:glint // notestingrawsql: forces lifecycle and expiry state that production writes cannot produce
-	_, err = conn.Exec(ctx, `UPDATE organization_user_relationships SET deleted_at=clock_timestamp() WHERE organization_id=$1`, org)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx, org))
 	_, err = q.GetTrustedDelegationCredential(ctx, get)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	count, err = q.CleanupTrustedDelegationCredentialsBatch(ctx, repo.CleanupTrustedDelegationCredentialsBatchParams{OrganizationID: text(org), BatchSize: 1})

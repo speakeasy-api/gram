@@ -80,11 +80,14 @@ WHERE id = $1`, created.TrackingID).Scan(
 	require.NoError(t, err)
 	_, err = service.Submit(ctx, principal, FeedbackInput{Category: "other", Note: "Fresh", IdempotencyKey: "feedback-after-expiry"})
 	require.NoError(t, err)
-	var expiredCount int
-	//nolint:glint // notestingrawsql: counts the expired row to assert the retention purge
-	err = conn.QueryRow(ctx, `SELECT COUNT(*) FROM platform_mcp_feedback WHERE id = $1`, created.TrackingID).Scan(&expiredCount)
-	require.NoError(t, err)
-	require.Zero(t, expiredCount)
+	// The idempotency key identifies the created row (the replay above returned
+	// its tracking ID), so its absence proves the retention purge removed it.
+	_, err = platformrepo.New(conn).GetPlatformMCPFeedbackByIdempotencyKey(ctx, platformrepo.GetPlatformMCPFeedbackByIdempotencyKeyParams{
+		OrganizationID: principal.OrganizationID,
+		SubjectUrn:     userSubjectURN(principal.UserID),
+		IdempotencyKey: "feedback-replay",
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
 func TestFeedbackServiceEnforcesConnectionLimitAndRejectsReplacedGeneration(t *testing.T) {

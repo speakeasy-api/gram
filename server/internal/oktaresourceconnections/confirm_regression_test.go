@@ -15,6 +15,7 @@ import (
 	idprepo "github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 //nolint:paralleltest,tparallel // subtests share one service and assert on its row and audit counts
@@ -81,10 +82,8 @@ func TestConfirm_AgentChangesWhileWaitingForConnectionLock(t *testing.T) {
 			ctx, si := newTestService(t)
 			recordAgent(t, ctx, si, "wlp1")
 			f := capableServer(t, ctx, si, "Concurrent")
-			tx, err := si.conn.Begin(ctx) //nolint:glint // notestingrawsql: runs only SQLc-generated queries; it exists to hold the connection lock Confirm must wait on
-			require.NoError(t, err)
-			defer func() { _ = tx.Rollback(ctx) }()
-			_, err = repo.New(tx).LockLiveConnection(ctx, repo.LockLiveConnectionParams{ID: si.connectionID, OrganizationID: si.orgID})
+			tx := testenv.BeginTx(t, ctx, si.conn)
+			_, err := repo.New(tx).LockLiveConnection(ctx, repo.LockLiveConnectionParams{ID: si.connectionID, OrganizationID: si.orgID})
 			require.NoError(t, err)
 			done := make(chan error, 1)
 			go func() {

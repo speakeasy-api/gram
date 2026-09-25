@@ -10,6 +10,7 @@ import (
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -63,8 +64,7 @@ func TestEnqueuePersistsDeterministicReadings(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tx, err := conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction contains only package APIs and SQLc-generated queries
-	require.NoError(t, err)
+	tx := testenv.BeginTx(t, ctx, conn)
 	require.NoError(t, metering.Enqueue(ctx, tx, []metering.Reading{ordinary, positiveAdjustment, negativeAdjustment}))
 	require.NoError(t, tx.Commit(ctx))
 
@@ -145,8 +145,7 @@ func TestEnqueueRejectsMixedOrganizationBatchAtomically(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tx, err := conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction contains only package APIs and SQLc-generated queries
-	require.NoError(t, err)
+	tx := testenv.BeginTx(t, ctx, conn)
 	require.Error(t, metering.Enqueue(ctx, tx, []metering.Reading{first, second}))
 	require.NoError(t, tx.Commit(ctx))
 
@@ -161,8 +160,7 @@ func TestEnqueueRejectsZeroReading(t *testing.T) {
 	ctx := t.Context()
 	var reading metering.Reading
 
-	tx, err := conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction contains only package APIs and SQLc-generated queries
-	require.NoError(t, err)
+	tx := testenv.BeginTx(t, ctx, conn)
 	require.Error(t, metering.Enqueue(ctx, tx, []metering.Reading{reading}))
 	require.NoError(t, tx.Commit(ctx))
 
@@ -188,8 +186,7 @@ func TestEnqueueRollsBackWithCallerTransaction(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tx, err := conn.Begin(ctx) //nolint:glint // notestingrawsql: transaction contains only package APIs and SQLc-generated queries
-	require.NoError(t, err)
+	tx := testenv.BeginTx(t, ctx, conn)
 	require.NoError(t, metering.Enqueue(ctx, tx, []metering.Reading{reading}))
 	require.NoError(t, tx.Rollback(ctx))
 

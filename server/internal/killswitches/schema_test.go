@@ -6,11 +6,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	killswitchrepo "github.com/speakeasy-api/gram/server/internal/killswitches/repo"
 	"github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	"github.com/stretchr/testify/require"
 )
 
 func TestKillswitchSchemaConstraintsAndCascade(t *testing.T) {
@@ -23,43 +27,35 @@ func TestKillswitchSchemaConstraintsAndCascade(t *testing.T) {
 	orgID := "org_" + uuid.NewString()
 	insertOrganization(t, conn, orgID)
 
-	prescriptionID := uuid.New()
-	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
-	_, err = conn.Exec(ctx, `
-		INSERT INTO killswitch_prescriptions (
-			id, organization_id, definition_key, principal_kind, principal_key, resource_kind, current_version
-		) VALUES ($1, $2, 'test_capability', 'user', 'user_1', 'test_resource', 1)
-	`, prescriptionID, orgID)
+	queries := killswitchrepo.New(conn)
+	clock, err := queries.GetKillswitchDatabaseTime(ctx)
+	require.NoError(t, err)
+	prescriptionID, err := queries.CreateKillswitchPrescriptionHeader(ctx, killswitchrepo.CreateKillswitchPrescriptionHeaderParams{
+		OrganizationID: orgID, DefinitionKey: "test_capability", PrincipalKind: "user", PrincipalKey: "user_1", ResourceKind: "test_resource",
+	})
 	require.NoError(t, err)
 
-	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
-	_, err = conn.Exec(ctx, `
-		INSERT INTO killswitch_prescription_versions (
-			organization_id, prescription_id, version, state, resource_scope, starts_at, expires_at, activated_at, internal_note, external_note
-		) VALUES ($1, $2, 1, 'active', 'selected', clock_timestamp(), clock_timestamp() + interval '1 hour', clock_timestamp(), 'internal', 'external')
-	`, orgID, prescriptionID)
+	inserted, err := queries.CreateKillswitchPrescriptionVersion(ctx, killswitchrepo.CreateKillswitchPrescriptionVersionParams{
+		OrganizationID: orgID, PrescriptionID: prescriptionID, Version: 1, State: "active", ResourceScope: "selected",
+		StartsAt: clock, ExpiresAt: conv.ToPGTimestamptz(clock.Time.Add(time.Hour)), ActivatedAt: clock,
+		InternalNote: "internal", ExternalNote: "external",
+	})
 	require.NoError(t, err)
+	require.Equal(t, int64(1), inserted)
 
-	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
-	_, err = conn.Exec(ctx, `
-		INSERT INTO killswitch_prescription_version_resources (organization_id, prescription_id, version, resource_key)
-		VALUES ($1, $2, 1, 'resource_1')
-	`, orgID, prescriptionID)
+	inserted, err = queries.CreateKillswitchPrescriptionVersionResources(ctx, killswitchrepo.CreateKillswitchPrescriptionVersionResourcesParams{
+		OrganizationID: orgID, PrescriptionID: prescriptionID, Version: 1, ResourceKeys: []string{"resource_1"},
+	})
 	require.NoError(t, err)
+	require.Equal(t, int64(1), inserted)
 
-	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
-	_, err = conn.Exec(ctx, `
-		INSERT INTO killswitch_expiry_events (organization_id, prescription_id, version)
-		VALUES ($1, $2, 1)
-	`, orgID, prescriptionID)
+	inserted, err = queries.RecordKillswitchExpiryEvent(ctx, killswitchrepo.RecordKillswitchExpiryEventParams{OrganizationID: orgID, PrescriptionID: prescriptionID, Version: 1})
 	require.NoError(t, err)
+	require.Equal(t, int64(1), inserted)
 
-	operationID := uuid.New()
-	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
-	_, err = conn.Exec(ctx, `
-		INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, expires_at)
-		VALUES ($1, $2, 'user_1', 'activate', 'request_hash', clock_timestamp() + interval '30 days')
-	`, orgID, operationID)
+	_, err = queries.ClaimKillswitchOperation(ctx, killswitchrepo.ClaimKillswitchOperationParams{
+		OrganizationID: orgID, OperationID: uuid.New(), ActorUserID: "user_1", Operation: "activate", RequestHash: "request_hash",
+	})
 	require.NoError(t, err)
 
 	//nolint:glint // notestingrawsql: constraint test writes killswitch rows directly, including invalid rows SQLc-generated production queries cannot express
@@ -400,14 +396,10 @@ func TestInsertKillswitchPrescriptionFixtureValidatesResourceScope(t *testing.T)
 			}
 
 			require.Error(t, err)
-			var prescriptions int
-			//nolint:glint // notestingrawsql: counts killswitch rows directly to assert the cascade or rollback left nothing behind
-			require.NoError(t, conn.QueryRow(t.Context(), `
-				SELECT count(*)
-				FROM killswitch_prescriptions
-				WHERE id = $1
-			`, prescriptionID).Scan(&prescriptions))
-			require.Zero(t, prescriptions)
+			_, err = killswitchrepo.New(conn).GetKillswitchPrescriptionIdentity(t.Context(), killswitchrepo.GetKillswitchPrescriptionIdentityParams{
+				OrganizationID: organizationID, PrescriptionID: prescriptionID,
+			})
+			require.ErrorIs(t, err, pgx.ErrNoRows, "a rejected fixture must roll back its prescription header")
 		})
 	}
 }

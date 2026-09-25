@@ -5,13 +5,16 @@ import (
 	"log"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -45,69 +48,66 @@ func newTestDatabase(t *testing.T, name string) (*pgxpool.Pool, string) {
 
 func insertOrganization(t *testing.T, conn *pgxpool.Pool, organizationID string) {
 	t.Helper()
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture with optional deleted_at state; mcptoolexecution has no queries.sql
-	_, err := conn.Exec(t.Context(), `
-		INSERT INTO organization_metadata (id, name, slug)
-		VALUES ($1, 'Test Organization', $1)
-	`, organizationID)
+	err := orgrepo.New(conn).CreateOrganizationMetadata(t.Context(), orgrepo.CreateOrganizationMetadataParams{
+		ID: organizationID, Name: "Test Organization", Slug: organizationID,
+	})
 	require.NoError(t, err)
 }
 
-func insertUser(t *testing.T, conn *pgxpool.Pool, userID string, deletedAt *time.Time) {
+func insertUser(t *testing.T, conn *pgxpool.Pool, userID string, deleted bool) {
 	t.Helper()
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture with optional deleted_at state; mcptoolexecution has no queries.sql
-	_, err := conn.Exec(t.Context(), `
-		INSERT INTO users (id, email, display_name, deleted_at)
-		VALUES ($1, $1 || '@example.test', 'Test User', $2)
-	`, userID, deletedAt)
+	queries := testrepo.New(conn)
+	err := queries.InsertUserFixture(t.Context(), testrepo.InsertUserFixtureParams{ID: userID, Email: userID + "@example.test", DisplayName: "Test User"})
 	require.NoError(t, err)
+	if deleted {
+		require.NoError(t, queries.ForceSoftDeleteUser(t.Context(), userID))
+	}
 }
 
-func insertMembership(t *testing.T, conn *pgxpool.Pool, organizationID, userID string, deletedAt *time.Time) {
+func insertMembership(t *testing.T, conn *pgxpool.Pool, organizationID, userID string, deleted bool) {
 	t.Helper()
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture with optional deleted_at state; mcptoolexecution has no queries.sql
-	_, err := conn.Exec(t.Context(), `
-		INSERT INTO organization_user_relationships (organization_id, user_id, deleted_at)
-		VALUES ($1, $2, $3)
-	`, organizationID, userID, deletedAt)
+	queries := testrepo.New(conn)
+	userText := pgtype.Text{String: userID, Valid: true}
+	err := queries.CreateOrganizationUserRelationshipFixture(t.Context(), testrepo.CreateOrganizationUserRelationshipFixtureParams{OrganizationID: organizationID, UserID: userText})
 	require.NoError(t, err)
+	if deleted {
+		err = queries.ForceSoftDeleteOrganizationUserRelationship(t.Context(), testrepo.ForceSoftDeleteOrganizationUserRelationshipParams{OrganizationID: organizationID, UserID: userText})
+		require.NoError(t, err)
+	}
 }
 
-func insertProject(t *testing.T, conn *pgxpool.Pool, organizationID, slug string, deletedAt *time.Time) uuid.UUID {
+func insertProject(t *testing.T, conn *pgxpool.Pool, organizationID, slug string, deleted bool) uuid.UUID {
 	t.Helper()
-	var id uuid.UUID
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture with optional deleted_at state; mcptoolexecution has no queries.sql
-	err := conn.QueryRow(t.Context(), `
-		INSERT INTO projects (name, slug, organization_id, deleted_at)
-		VALUES ($1, $1, $2, $3)
-		RETURNING id
-	`, slug, organizationID, deletedAt).Scan(&id)
+	id, err := testrepo.New(conn).CreateProjectFixture(t.Context(), testrepo.CreateProjectFixtureParams{
+		ID: uuid.Must(uuid.NewV7()), Name: slug, Slug: slug, OrganizationID: organizationID,
+	})
 	require.NoError(t, err)
+	if deleted {
+		_, err = projectsrepo.New(conn).DeleteProject(t.Context(), id)
+		require.NoError(t, err)
+	}
 	return id
 }
 
 // insertMCPServer creates a toolset-backed mcp_servers row; the table
 // requires exactly one backend reference.
-func insertMCPServer(t *testing.T, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, deletedAt *time.Time) uuid.UUID {
+func insertMCPServer(t *testing.T, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, deleted bool) uuid.UUID {
 	t.Helper()
+	queries := testrepo.New(conn)
 	slug := "ts-" + uuid.NewString()[:26]
-	var toolsetID uuid.UUID
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture with optional deleted_at state; mcptoolexecution has no queries.sql
-	err := conn.QueryRow(t.Context(), `
-		INSERT INTO toolsets (organization_id, project_id, name, slug)
-		VALUES ($1, $2, $3, $3)
-		RETURNING id
-	`, organizationID, projectID, slug).Scan(&toolsetID)
+	toolsetID, err := queries.CreateToolsetFixture(t.Context(), testrepo.CreateToolsetFixtureParams{
+		ID: uuid.Must(uuid.NewV7()), OrganizationID: organizationID, ProjectID: projectID, Name: slug, Slug: slug,
+	})
 	require.NoError(t, err)
 
-	var id uuid.UUID
-	//nolint:glint // notestingrawsql: owner-domain tenant fixture with optional deleted_at state; mcptoolexecution has no queries.sql
-	err = conn.QueryRow(t.Context(), `
-		INSERT INTO mcp_servers (project_id, toolset_id, visibility, deleted_at)
-		VALUES ($1, $2, 'private', $3)
-		RETURNING id
-	`, projectID, toolsetID, deletedAt).Scan(&id)
+	id, err := queries.CreateRemoteMCPServerFixture(t.Context(), testrepo.CreateRemoteMCPServerFixtureParams{
+		ID: uuid.Must(uuid.NewV7()), ProjectID: projectID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: "private",
+	})
 	require.NoError(t, err)
+	if deleted {
+		_, err = mcpserversrepo.New(conn).DeleteMCPServer(t.Context(), mcpserversrepo.DeleteMCPServerParams{ID: id, ProjectID: projectID})
+		require.NoError(t, err)
+	}
 	return id
 }
 

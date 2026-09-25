@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -14,8 +15,10 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/platform_killswitches"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 const sentinelInternalNote = "SENTINEL-INTERNAL-NOTE-d0f1"
@@ -33,38 +36,37 @@ type auditRow struct {
 
 func listAuditRows(t *testing.T, conn *pgxpool.Pool, orgID string) []auditRow {
 	t.Helper()
-	//nolint:glint // notestingrawsql: scans full audit_logs rows to prove the internal note never leaks into any column
-	rows, err := conn.Query(t.Context(), `
-		SELECT action, actor_id, coalesce(actor_display_name, ''), subject_id, subject_type, coalesce(after_snapshot, 'null'::jsonb), coalesce(metadata, 'null'::jsonb), coalesce(acting_surface, '')
-		FROM audit_logs
-		WHERE organization_id = $1
-		ORDER BY seq
-	`, orgID)
+	logs, err := auditrepo.New(conn).ListAuditLogs(t.Context(), auditrepo.ListAuditLogsParams{OrganizationID: orgID, IncludeAssistantEvents: true})
 	require.NoError(t, err)
-	defer rows.Close()
-	var result []auditRow
-	for rows.Next() {
-		var row auditRow
-		require.NoError(t, rows.Scan(&row.Action, &row.ActorID, &row.ActorDisplayName, &row.SubjectID, &row.SubjectType, &row.AfterSnapshot, &row.Metadata, &row.ActingSurface))
-		result = append(result, row)
+	// ListAuditLogs pages newest first; these assertions read history in seq order.
+	slices.Reverse(logs)
+	jsonOrNull := func(value []byte) []byte {
+		if value == nil {
+			return []byte("null")
+		}
+		return value
 	}
-	require.NoError(t, rows.Err())
+	result := make([]auditRow, 0, len(logs))
+	for _, entry := range logs {
+		result = append(result, auditRow{
+			Action: entry.Action, ActorID: entry.ActorID, ActorDisplayName: entry.ActorDisplayName.String,
+			SubjectID: entry.SubjectID, SubjectType: entry.SubjectType,
+			AfterSnapshot: jsonOrNull(entry.AfterSnapshot), Metadata: jsonOrNull(entry.Metadata), ActingSurface: entry.ActingSurface.String,
+		})
+	}
 	return result
 }
 
 func listOutboxMessages(t *testing.T, conn *pgxpool.Pool, orgID string) [][]byte {
 	t.Helper()
-	//nolint:glint // notestingrawsql: reads raw outbox message bytes to assert the published payload
-	rows, err := conn.Query(t.Context(), `SELECT message FROM publish_outbox WHERE organization_id = $1 ORDER BY id`, orgID)
+	rows, err := testrepo.New(conn).ListPublishOutboxRows(t.Context())
 	require.NoError(t, err)
-	defer rows.Close()
 	var messages [][]byte
-	for rows.Next() {
-		var message []byte
-		require.NoError(t, rows.Scan(&message))
-		messages = append(messages, message)
+	for _, row := range rows {
+		if row.OrganizationID == orgID {
+			messages = append(messages, row.Message)
+		}
 	}
-	require.NoError(t, rows.Err())
 	return messages
 }
 

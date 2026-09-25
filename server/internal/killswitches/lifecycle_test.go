@@ -12,8 +12,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/killswitches/repo"
 )
 
 func TestLifecycleVersionsSnapshotsAndStaleReferences(t *testing.T) {
@@ -614,14 +617,8 @@ func TestLifecycleSuccessorRollbackRestoresCurrentVersion(t *testing.T) {
 	require.Nil(t, v1.SupersededAt)
 	require.Equal(t, []ResourceKey{ResourceKey(orgID + ":tool:a")}, v1.SelectedResourceKeys)
 
-	var operationCount int
-	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
-	require.NoError(t, conn.QueryRow(t.Context(), `
-		SELECT count(*)
-		FROM killswitch_operations
-		WHERE organization_id = $1 AND operation_id = $2
-	`, orgID, operationID).Scan(&operationCount))
-	require.Zero(t, operationCount)
+	_, err = repo.New(conn).LockKillswitchOperation(t.Context(), repo.LockKillswitchOperationParams{OrganizationID: orgID, OperationID: operationID})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "the rolled-back successor must not leave an operation receipt")
 }
 
 func TestLifecycleRejectsInvalidTransitionsAndReceiptPayload(t *testing.T) {
@@ -805,58 +802,41 @@ func getPrescriptionForTest(ctx context.Context, conn *pgxpool.Pool, organizatio
 	if err != nil {
 		return testPrescription{}, fmt.Errorf("parse test prescription ID: %w", err)
 	}
-	var result testPrescription
-	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
-	err = conn.QueryRow(ctx, `
-		SELECT current_version
-		FROM killswitch_prescriptions
-		WHERE organization_id = $1 AND id = $2
-	`, organizationID, id).Scan(&result.CurrentVersion)
+	queries := repo.New(conn)
+	identity, err := queries.GetKillswitchPrescriptionIdentity(ctx, repo.GetKillswitchPrescriptionIdentityParams{OrganizationID: string(organizationID), PrescriptionID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return testPrescription{}, ErrPrescriptionNotFound
 	}
 	if err != nil {
 		return testPrescription{}, fmt.Errorf("get test prescription: %w", err)
 	}
-	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
-	rows, err := conn.Query(ctx, `
-		SELECT
-		  version.version,
-		  version.state,
-		  version.resource_scope,
-		  version.starts_at,
-		  version.expires_at,
-		  version.activated_at,
-		  version.superseded_at,
-		  version.internal_note,
-		  version.external_note,
-		  ARRAY(
-		    SELECT resource.resource_key
-		    FROM killswitch_prescription_version_resources AS resource
-		    WHERE resource.organization_id = version.organization_id
-		      AND resource.prescription_id = version.prescription_id
-		      AND resource.version = version.version
-		    ORDER BY resource.resource_key
-		  )::text[]
-		FROM killswitch_prescription_versions AS version
-		WHERE version.organization_id = $1 AND version.prescription_id = $2
-		ORDER BY version.version
-	`, organizationID, id)
-	if err != nil {
-		return testPrescription{}, fmt.Errorf("list test prescription versions: %w", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var version testPrescriptionVersion
-		var state, scope string
-		var storedStartsAt *time.Time
-		var resources []string
-		if err := rows.Scan(&version.Version, &state, &scope, &storedStartsAt, &version.ExpiresAt, &version.ActivatedAt, &version.SupersededAt, &version.InternalNote, &version.ExternalNote, &resources); err != nil {
-			return testPrescription{}, fmt.Errorf("scan test prescription version: %w", err)
+	result := testPrescription{CurrentVersion: identity.CurrentVersion, Versions: nil}
+	// Versions are written contiguously from 1, so probing until the first
+	// missing version also surfaces any stray successor past current_version.
+	for number := int64(1); ; number++ {
+		row, err := queries.GetKillswitchPrescriptionVersion(ctx, repo.GetKillswitchPrescriptionVersionParams{OrganizationID: string(organizationID), PrescriptionID: id, Version: number})
+		if errors.Is(err, pgx.ErrNoRows) {
+			break
 		}
-		version.State = PrescriptionState(state)
-		version.ResourceScope = ResourceScope(scope)
-		version.StartMode = StartModeAt
+		if err != nil {
+			return testPrescription{}, fmt.Errorf("get test prescription version %d: %w", number, err)
+		}
+		resources, err := queries.ListKillswitchPrescriptionVersionResources(ctx, repo.ListKillswitchPrescriptionVersionResourcesParams{OrganizationID: string(organizationID), PrescriptionID: id, Version: number})
+		if err != nil {
+			return testPrescription{}, fmt.Errorf("list test prescription version %d resources: %w", number, err)
+		}
+		version := testPrescriptionVersion{
+			Version:       number,
+			State:         PrescriptionState(row.State),
+			ResourceScope: ResourceScope(row.ResourceScope),
+			StartMode:     StartModeAt,
+			ExpiresAt:     utcTime(row.ExpiresAt),
+			ActivatedAt:   utcTime(row.ActivatedAt),
+			SupersededAt:  utcTime(row.SupersededAt),
+			InternalNote:  row.InternalNote,
+			ExternalNote:  row.ExternalNote,
+		}
+		storedStartsAt := utcTime(row.StartsAt)
 		if storedStartsAt == nil {
 			version.StartMode = StartModeNow
 			storedStartsAt = version.ActivatedAt
@@ -864,22 +844,21 @@ func getPrescriptionForTest(ctx context.Context, conn *pgxpool.Pool, organizatio
 		if storedStartsAt == nil {
 			return testPrescription{}, errors.New("test prescription version has no effective start time")
 		}
-		version.StartsAt = storedStartsAt.UTC()
-		for _, value := range []*time.Time{version.ExpiresAt, version.ActivatedAt, version.SupersededAt} {
-			if value != nil {
-				*value = value.UTC()
-			}
-		}
+		version.StartsAt = *storedStartsAt
 		version.SelectedResourceKeys = make([]ResourceKey, len(resources))
 		for i, resource := range resources {
 			version.SelectedResourceKeys[i] = ResourceKey(resource)
 		}
 		result.Versions = append(result.Versions, version)
 	}
-	if err := rows.Err(); err != nil {
-		return testPrescription{}, fmt.Errorf("iterate test prescription versions: %w", err)
-	}
 	return result, nil
+}
+
+func utcTime(value pgtype.Timestamptz) *time.Time {
+	if !value.Valid {
+		return nil
+	}
+	return new(value.Time.UTC())
 }
 
 func requireVersion(t *testing.T, prescription testPrescription, version int64) testPrescriptionVersion {

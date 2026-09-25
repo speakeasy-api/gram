@@ -8,16 +8,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 type testAgentSessionRevoker struct {
@@ -61,22 +64,92 @@ func (r *testAgentSessionRevoker) RevokeAllDetached(_ context.Context, creds []r
 
 func seedManagedSession(t *testing.T, db *pgxpool.Pool, orgID, subject string) (uuid.UUID, uuid.UUID) {
 	t.Helper()
-	issuerID, sessionID := uuid.New(), uuid.New()
-	_, err := db.Exec(t.Context(), `INSERT INTO user_session_issuers (id, organization_id, slug, authn_challenge_mode, session_duration) VALUES ($1,$2,$3,'interactive','1 hour')`, issuerID, orgID, "issuer-"+issuerID.String()) //nolint:glint // notestingrawsql: agent-bound issuer fixture
+	issuer, err := usersessionsrepo.New(db).CreateOrganizationUserSessionIssuer(t.Context(), usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(orgID),
+		Slug:                         "issuer-" + uuid.NewString(),
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TrustedRemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
 	require.NoError(t, err)
-	_, err = db.Exec(t.Context(), `INSERT INTO user_sessions (id, organization_id, user_session_issuer_id, subject_urn, authorizer_user_id, jti, refresh_token_hash, expires_at, refresh_expires_at) VALUES ($1,$2,$3,$4,'owner',$5,$6,clock_timestamp()+'1 hour',clock_timestamp()+'1 day')`, sessionID, orgID, issuerID, subject, "jti-"+sessionID.String(), "hash-"+sessionID.String()) //nolint:glint // notestingrawsql: agent-bound session fixture, no real credential material
+	session := createManagedUserSession(t, db, issuer.ID, subject, "jti-"+uuid.NewString(), "hash-"+uuid.NewString())
+	return session, issuer.ID
+}
+
+// createManagedUserSession mints an agent-bound session on an existing issuer.
+// It carries no real credential material.
+func createManagedUserSession(t *testing.T, db *pgxpool.Pool, issuerID uuid.UUID, subject, jti, refreshHash string) uuid.UUID {
+	t.Helper()
+	sessionSubject, err := urn.ParseSessionSubject(subject)
 	require.NoError(t, err)
-	return sessionID, issuerID
+	now := time.Now()
+	session, err := usersessionsrepo.New(db).CreateUserSession(t.Context(), usersessionsrepo.CreateUserSessionParams{
+		UserSessionIssuerID: issuerID,
+		SubjectUrn:          sessionSubject,
+		AuthorizerUserID:    conv.ToPGText("owner"),
+		Jti:                 jti,
+		RefreshTokenHash:    conv.ToPGText(refreshHash),
+		ExpiresAt:           pgtype.Timestamptz{Time: now.Add(time.Hour), InfinityModifier: 0, Valid: true},
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: now.Add(24 * time.Hour), InfinityModifier: 0, Valid: true},
+	})
+	require.NoError(t, err)
+	return session.ID
+}
+
+// liveUserSession reads a session through the tenancy-scoped production query,
+// which only returns live rows.
+func liveUserSession(ctx context.Context, db *pgxpool.Pool, orgID string, sessionID uuid.UUID) (usersessionsrepo.UserSession, error) {
+	session, err := usersessionsrepo.New(db).GetUserSessionByID(ctx, usersessionsrepo.GetUserSessionByIDParams{ID: sessionID, ProjectID: uuid.Nil, OrganizationID: orgID})
+	if err != nil {
+		return usersessionsrepo.UserSession{}, fmt.Errorf("get user session: %w", err)
+	}
+	return session, nil
 }
 
 func seedManagedUpstream(t *testing.T, db *pgxpool.Pool, orgID string, issuerID uuid.UUID, subject string) uuid.UUID {
 	t.Helper()
-	remoteIssuer, client, session := uuid.New(), uuid.New(), uuid.New()
-	_, err := db.Exec(t.Context(), `INSERT INTO remote_session_issuers (id, organization_id, slug, issuer) VALUES ($1,$2,$3,'https://idp.example.test')`, remoteIssuer, orgID, "remote-"+remoteIssuer.String()) //nolint:glint // notestingrawsql: minimal upstream cascade fixture
+	return seedManagedUpstreamWith(t, db, orgID, issuerID, subject, nil).ID
+}
+
+// seedManagedUpstreamWith seeds a minimal upstream cascade fixture. The
+// ciphertext is never decrypted by the cascade tests.
+func seedManagedUpstreamWith(t *testing.T, db *pgxpool.Pool, orgID string, issuerID uuid.UUID, subject string, customize func(*remoterepo.UpsertRemoteSessionParams)) remoterepo.RemoteSession {
+	t.Helper()
+	q := remoterepo.New(db)
+	slug := "remote-" + uuid.NewString()
+	remoteIssuer, err := q.CreateRemoteSessionIssuer(t.Context(), remoterepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:                    conv.ToPGText(orgID),
+		Slug:                              slug,
+		Issuer:                            "https://idp.example.test",
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{},
+		ResponseTypesSupported:            []string{},
+		TokenEndpointAuthMethodsSupported: []string{},
+	})
 	require.NoError(t, err)
-	_, err = db.Exec(t.Context(), `INSERT INTO remote_session_clients (id, organization_id, remote_session_issuer_id, client_id) VALUES ($1,$2,$3,'fixture')`, client, orgID, remoteIssuer) //nolint:glint // notestingrawsql: minimal upstream cascade fixture
+	client, err := q.CreateRemoteSessionClient(t.Context(), remoterepo.CreateRemoteSessionClientParams{
+		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:        conv.ToPGText(orgID),
+		RemoteSessionIssuerID: remoteIssuer.ID,
+		ClientID:              "fixture",
+	})
 	require.NoError(t, err)
-	_, err = db.Exec(t.Context(), `INSERT INTO remote_sessions (id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, refresh_token_encrypted) VALUES ($1,$2,$3,$4,'fixture-not-a-token','fixture-refresh')`, session, subject, issuerID, client) //nolint:glint // notestingrawsql: ciphertext is never decrypted by this cascade test
+	sessionSubject, err := urn.ParseSessionSubject(subject)
+	require.NoError(t, err)
+	params := remoterepo.UpsertRemoteSessionParams{
+		SubjectUrn:            sessionSubject,
+		UserSessionIssuerID:   issuerID,
+		RemoteSessionClientID: client.ID,
+		AccessTokenEncrypted:  "fixture-not-a-token",
+		RefreshTokenEncrypted: conv.ToPGText("fixture-refresh"),
+		Scopes:                []string{},
+	}
+	if customize != nil {
+		customize(&params)
+	}
+	session, err := q.UpsertRemoteSession(t.Context(), params)
 	require.NoError(t, err)
 	return session
 }
@@ -123,9 +196,8 @@ func TestAgentSessionsScopeAndRevocationCascade(t *testing.T) {
 		requireOopsCode(t, service.RevokeSession(denied, &gen.RevokeSessionPayload{AgentID: agent.ID.String(), SessionID: session.String()}), oops.CodeForbidden)
 	}
 	revoker.afterCommit = func() {
-		var deleted bool
-		require.NoError(t, db.QueryRow(ctx, `SELECT deleted FROM user_sessions WHERE id=$1`, session).Scan(&deleted)) //nolint:glint // notestingrawsql: confirms commit precedes token invalidation
-		require.True(t, deleted)
+		_, err := liveUserSession(ctx, db, "org-a", session)
+		require.ErrorIs(t, err, pgx.ErrNoRows, "revocation must commit before token invalidation")
 	}
 	require.NoError(t, service.RevokeSession(ctx, &gen.RevokeSessionPayload{AgentID: agent.ID.String(), SessionID: session.String()}))
 	require.Equal(t, []string{"cascade", "token", "upstream"}, revoker.events)
@@ -147,9 +219,17 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	seedOrganizationUser(t, db, "org-a", "owner")
 	agent := createAgent(t, db, "org-a", "owner", "Agent")
 	session, issuer := seedManagedSession(t, db, "org-a", "agent:"+agent.ID.String())
-	upstream := seedManagedUpstream(t, db, "org-a", issuer, "agent:"+agent.ID.String())
-	_, err := db.Exec(t.Context(), `UPDATE remote_sessions SET upstream_subject='fixture-subject', upstream_email='fixture@example.test', upstream_display_name='Fixture', identity_source='id_token', enrichment='{"team":"fixture"}' WHERE id=$1`, upstream) //nolint:glint // notestingrawsql: exercise identity cleanup on retryable tombstones
+	seededSession, err := liveUserSession(t.Context(), db, "org-a", session)
 	require.NoError(t, err)
+	// Identity fields exercise identity cleanup on retryable tombstones.
+	seededUpstream := seedManagedUpstreamWith(t, db, "org-a", issuer, "agent:"+agent.ID.String(), func(params *remoterepo.UpsertRemoteSessionParams) {
+		params.UpstreamSubject = conv.ToPGText("fixture-subject")
+		params.UpstreamEmail = conv.ToPGText("fixture@example.test")
+		params.UpstreamDisplayName = conv.ToPGText("Fixture")
+		params.IdentitySource = conv.ToPGText("id_token")
+		params.Enrichment = []byte(`{"team":"fixture"}`)
+	})
+	upstream := seededUpstream.ID
 	service := newTestService(db, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	ctx := validatedHumanContext(t, "org-a", "owner")
 	revoker := &testAgentSessionRevoker{cascadeErr: errors.New("cascade unavailable")}
@@ -157,21 +237,30 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	payload := &gen.RevokeSessionPayload{AgentID: agent.ID.String(), SessionID: session.String()}
 	require.Error(t, service.RevokeSession(ctx, payload))
 	require.Equal(t, []string{"cascade"}, revoker.events)
-	var deleted bool
-	require.NoError(t, db.QueryRow(ctx, `SELECT deleted FROM user_sessions WHERE id=$1`, session).Scan(&deleted)) //nolint:glint // notestingrawsql: rollback must preserve refresh credentials
-	require.False(t, deleted)
+	_, err = liveUserSession(ctx, db, "org-a", session)
+	require.NoError(t, err, "rollback must preserve refresh credentials")
 	revoker.cascadeErr = nil
 	revoker.pushErr = errors.New("cache unavailable")
 	revoker.events = nil
 	requireOopsCode(t, service.RevokeSession(ctx, payload), oops.CodeUnexpected)
 	require.Equal(t, []string{"cascade", "token", "upstream"}, revoker.events)
 	// Reconnect on the same issuer and remote client after the committed revoke.
-	freshSession := uuid.New()
-	_, err = db.Exec(ctx, `INSERT INTO user_sessions (id, organization_id, user_session_issuer_id, subject_urn, authorizer_user_id, jti, refresh_token_hash, expires_at, refresh_expires_at) SELECT $2, organization_id, user_session_issuer_id, subject_urn, authorizer_user_id, 'fresh-jti', 'fresh-hash', expires_at, refresh_expires_at FROM user_sessions WHERE id=$1`, session, freshSession) //nolint:glint // notestingrawsql: reconnect must retain its distinct session and tokens
+	// The reconnect must retain its distinct session and tokens.
+	freshSession := createManagedUserSession(t, db, issuer, "agent:"+agent.ID.String(), "fresh-jti", "fresh-hash")
+	// Same subject and client, but fresh live credentials. The original row is
+	// a committed tombstone, so this inserts a new live row beside it.
+	fresh, err := remoterepo.New(db).UpsertRemoteSession(ctx, remoterepo.UpsertRemoteSessionParams{
+		SubjectUrn:            seededUpstream.SubjectUrn,
+		UserSessionIssuerID:   seededUpstream.UserSessionIssuerID,
+		RemoteSessionClientID: seededUpstream.RemoteSessionClientID,
+		AccessTokenEncrypted:  "fresh-access",
+		RefreshTokenEncrypted: conv.ToPGText("fresh-refresh"),
+		Scopes:                []string{},
+		UpstreamSubject:       conv.ToPGText("fresh-identity"),
+	})
 	require.NoError(t, err)
-	freshUpstream := uuid.New()
-	_, err = db.Exec(ctx, `INSERT INTO remote_sessions (id, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, refresh_token_encrypted, upstream_subject) SELECT $2, subject_urn, user_session_issuer_id, remote_session_client_id, 'fresh-access', 'fresh-refresh', 'fresh-identity' FROM remote_sessions WHERE id=$1`, upstream, freshUpstream) //nolint:glint // notestingrawsql: same subject/client but fresh live credentials
-	require.NoError(t, err)
+	require.NotEqual(t, upstream, fresh.ID)
+	freshUpstream := fresh.ID
 	_, err = db.Exec(ctx, `INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, deleted_at) SELECT subject_urn, user_session_issuer_id, remote_session_client_id, 'unrelated-old-access', deleted_at - interval '1 second' FROM remote_sessions WHERE id=$1`, upstream) //nolint:glint // notestingrawsql: an older unrelated tombstone must not match the retry boundary
 	require.NoError(t, err)
 	var sameBoundary bool
@@ -183,17 +272,18 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	require.Len(t, revoker.lastCredentials, 1)
 	require.Equal(t, "fixture-not-a-token", revoker.lastCredentials[0].AccessTokenEncrypted)
 	require.Equal(t, "fixture-refresh", revoker.lastCredentials[0].RefreshTokenEncrypted.String)
-	require.Equal(t, []string{"jti-" + session.String(), "jti-" + session.String()}, revoker.revokedJTIs)
+	require.Equal(t, []string{seededSession.Jti, seededSession.Jti}, revoker.revokedJTIs)
 	var freshPreserved bool
 	require.NoError(t, db.QueryRow(ctx, `SELECT NOT deleted AND access_token_encrypted='fresh-access' AND refresh_token_encrypted='fresh-refresh' AND upstream_subject='fresh-identity' FROM remote_sessions WHERE id=$1`, freshUpstream).Scan(&freshPreserved)) //nolint:glint // notestingrawsql: retry cannot alter the reconnect's credentials or identity
 	require.True(t, freshPreserved)
-	require.NoError(t, db.QueryRow(ctx, `SELECT NOT deleted AND jti='fresh-jti' AND refresh_token_hash='fresh-hash' FROM user_sessions WHERE id=$1`, freshSession).Scan(&freshPreserved)) //nolint:glint // notestingrawsql: reconnect's JWT and refresh session remain live
-	require.True(t, freshPreserved)
+	// The reconnect's JWT and refresh session remain live.
+	freshStored, err := liveUserSession(ctx, db, "org-a", freshSession)
+	require.NoError(t, err)
+	require.Equal(t, "fresh-jti", freshStored.Jti)
+	require.Equal(t, conv.ToPGText("fresh-hash"), freshStored.RefreshTokenHash)
 	require.Equal(t, []string{"cascade", "token", "upstream"}, revoker.events)
 	require.Equal(t, 2, revoker.credentials, "retry must repeat upstream revocation with retained credentials")
-	var count int
-	require.NoError(t, db.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE organization_id=$1 AND subject_id=$2`, "org-a", session.String()).Scan(&count)) //nolint:glint // notestingrawsql: audit idempotency across a committed retry
-	require.Equal(t, 1, count)
+	require.Len(t, auditLogs(t, db, "org-a", session.String()), 1, "audit idempotency across a committed retry")
 	var identityCleared bool
 	require.NoError(t, db.QueryRow(ctx, `SELECT upstream_subject IS NULL AND upstream_email IS NULL AND upstream_display_name IS NULL AND identity_source IS NULL AND enrichment IS NULL FROM remote_sessions WHERE id=$1 AND deleted`, upstream).Scan(&identityCleared)) //nolint:glint // notestingrawsql: retries retain credentials but must remove identity
 	require.True(t, identityCleared)
