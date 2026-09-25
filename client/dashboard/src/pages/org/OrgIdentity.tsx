@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { FolderSync, Globe, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 
+import { DirectoryRoleMappings } from "./identity-provider/DirectoryRoleMappings";
 import { EnterpriseManagedAuth } from "./identity-provider/EnterpriseManagedAuth";
 import {
   enterpriseManagedAuthHref,
@@ -441,7 +442,9 @@ function SingleSignOnTab(): JSX.Element {
             Sync members and roles directly from your identity provider:
             <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
               <li>Members are provisioned automatically from your directory</li>
-              <li>Roles are assigned from your IDP group mappings</li>
+              <li>
+                Roles are assigned from the group and attribute mappings below
+              </li>
               <li>Members can&apos;t be invited manually</li>
               <li>Roles can&apos;t be assigned to members manually</li>
             </ul>
@@ -460,7 +463,9 @@ function SingleSignOnTab(): JSX.Element {
             active={scimActive}
           />
         }
-      />
+      >
+        {scimActive && <DirectoryRoleMappings />}
+      </IdentitySection>
     </div>
   );
 }
