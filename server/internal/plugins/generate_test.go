@@ -2077,6 +2077,10 @@ func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
 	require.Contains(t, string(shim), "bootstrap.sh")
 	require.Contains(t, string(shim), `"x-gram-agent-provider": "opencode"`)
 	require.Contains(t, string(shim), `"x-gram-agent-turn-id": messageID`)
+	require.Contains(t, string(shim), `export default { id: "speakeasy.observability", setup, server: legacy }`)
+	require.Contains(t, string(shim), `ctx.session.hook("model.request"`)
+	require.Contains(t, string(shim), `ev.headers["x-gram-agent-turn-id"] = messageID`)
+	require.NotRegexp(t, `(?m)^export[ \t]+(const|let|var|function|class|type|interface|enum|\{|\*)`, string(shim), "named exports are invoked as a second V1 plugin")
 
 	_, ok = files["speakeasy.json"]
 	require.True(t, ok, "opencode package must ship speakeasy.json alongside the shim")
