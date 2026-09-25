@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -157,6 +158,13 @@ func (p *OAuthProvider) Refresh(ctx context.Context, refreshToken string) (*Toke
 		return nil, providerFailure("transport")
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+	if resp.StatusCode == http.StatusTooManyRequests {
+		seconds, err := strconv.Atoi(resp.Header.Get("Retry-After"))
+		if err != nil || seconds < 1 {
+			seconds = 60
+		}
+		return nil, fmt.Errorf("authorize workspace: %w", &ProviderError{Code: "rate_limited", RetryAfter: time.Duration(min(seconds, 86400)) * time.Second})
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, providerFailure("http_status")
 	}
@@ -181,11 +189,14 @@ func (p *OAuthProvider) Refresh(ctx context.Context, refreshToken string) (*Toke
 }
 
 // ProviderError contains only an allowlisted code. Raw Slack errors may include response bodies.
-type ProviderError struct{ Code string }
+type ProviderError struct {
+	Code       string
+	RetryAfter time.Duration
+}
 
 func (e *ProviderError) Error() string { return "Slack authorization: " + e.Code }
 func providerFailure(code string) error {
-	return fmt.Errorf("authorize workspace: %w", &ProviderError{Code: code})
+	return fmt.Errorf("authorize workspace: %w", &ProviderError{Code: code, RetryAfter: 0})
 }
 func slackErrorCode(code string) string {
 	switch code {

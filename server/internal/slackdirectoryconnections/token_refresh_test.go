@@ -93,13 +93,16 @@ func TestSyncLeavesAFreshTokenAlone(t *testing.T) {
 func TestSyncRefreshFailures(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name      string
-		err       error
-		code      string
-		retryable bool
+		name       string
+		err        error
+		code       string
+		retryable  bool
+		retryAfter time.Duration
 	}{
-		{name: "rejected", err: &slackdirectoryconnections.ProviderError{Code: "invalid_grant"}, code: "authorization_expired", retryable: false},
-		{name: "transient", err: &slackdirectoryconnections.ProviderError{Code: "transport"}, code: "refresh_unavailable", retryable: true},
+		{name: "rejected", err: &slackdirectoryconnections.ProviderError{Code: "invalid_grant", RetryAfter: 0}, code: "authorization_expired", retryable: false, retryAfter: 0},
+		{name: "transient", err: &slackdirectoryconnections.ProviderError{Code: "transport", RetryAfter: 0}, code: "refresh_unavailable", retryable: true, retryAfter: 0},
+		{name: "rate limited", err: &slackdirectoryconnections.ProviderError{Code: "rate_limited", RetryAfter: 7 * time.Minute}, code: "rate_limited", retryable: true, retryAfter: 7 * time.Minute},
+		{name: "rate limited without delay", err: &slackdirectoryconnections.ProviderError{Code: "ratelimited", RetryAfter: 0}, code: "rate_limited", retryable: true, retryAfter: time.Minute},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -116,6 +119,7 @@ func TestSyncRefreshFailures(t *testing.T) {
 			require.ErrorAs(t, err, &syncErr)
 			require.Equal(t, tc.code, syncErr.Code)
 			require.Equal(t, tc.retryable, syncErr.Retryable)
+			require.Equal(t, tc.retryAfter, syncErr.RetryAfter)
 			require.Equal(t, "old-refresh", storedTokens(t, ctx, f, c).RefreshToken)
 		})
 	}
@@ -190,6 +194,21 @@ func TestProviderRefreshRotatesTokens(t *testing.T) {
 			require.WithinDuration(t, time.Now().Add(12*time.Hour), *tokens.ExpiresAt, time.Minute)
 		})
 	}
+}
+
+func TestProviderRefreshRateLimitKeepsRetryAfter(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "420")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	t.Cleanup(server.Close)
+	p := slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient(server.URL, server.Client()), "synthetic-client", "synthetic-secret", "")
+	_, err := p.Refresh(t.Context(), "old-refresh")
+	var providerErr *slackdirectoryconnections.ProviderError
+	require.ErrorAs(t, err, &providerErr)
+	require.Equal(t, "rate_limited", providerErr.Code)
+	require.Equal(t, 7*time.Minute, providerErr.RetryAfter)
 }
 
 func TestSweepBacksOffAFailingWorkspace(t *testing.T) {

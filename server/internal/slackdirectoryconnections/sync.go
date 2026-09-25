@@ -94,7 +94,13 @@ func (s *DirectorySync) freshTokens(ctx context.Context, queries *repo.Queries, 
 	if err != nil {
 		if providerErr, ok := errors.AsType[*ProviderError](err); ok {
 			switch providerErr.Code {
-			case "transport", "http_status", "decode", "internal_error", "ratelimited", "rate_limited":
+			case "ratelimited", "rate_limited":
+				retryAfter := providerErr.RetryAfter
+				if retryAfter <= 0 {
+					retryAfter = time.Minute
+				}
+				return nil, &SyncError{Code: "rate_limited", Retryable: true, Reconnect: false, RetryAfter: retryAfter}
+			case "transport", "http_status", "decode", "internal_error":
 				return nil, &SyncError{Code: "refresh_unavailable", Retryable: true, Reconnect: false, RetryAfter: 0}
 			}
 		}
