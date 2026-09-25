@@ -1,5 +1,5 @@
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { useOrganization } from "@/contexts/Auth";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/Badge";
@@ -22,7 +22,7 @@ import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js"
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import { useMemo, useState } from "react";
 import { Pencil } from "lucide-react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { gatewayTabHref } from "./GatewayDetailsRouting";
 import { GATEWAY_INSTRUCTIONS_SECTION_ID } from "./GatewaySettingsTab";
@@ -55,14 +55,38 @@ export function GatewayInspectTab({
   isLoadingEndpoints: boolean;
 }): JSX.Element {
   const routes = useRoutes();
-  const rollout = useFeatureFlag(FEATURE_FLAGS.gatewayDiscoveryModes);
+  const organization = useOrganization();
+  const { data: features } = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedMode = searchParams.get("discovery_mode");
   const [modeDraft, setModeDraft] = useState<
     "default" | "direct" | "progressive"
-  >("default");
+  >(
+    requestedMode === "direct" || requestedMode === "progressive"
+      ? requestedMode
+      : "default",
+  );
   const [connection, setConnection] = useState(() => ({
     mode: modeDraft,
     version: crypto.randomUUID(),
   }));
+  function applyMode(mode: "default" | "direct" | "progressive") {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (mode === "default") next.delete("discovery_mode");
+        else next.set("discovery_mode", mode);
+        return next;
+      },
+      { replace: true },
+    );
+    setModeDraft(mode);
+    setConnection({ mode, version: crypto.randomUUID() });
+  }
   const discoveryMode =
     connection.mode === "default" ? undefined : connection.mode;
   const configurationKey = `${connection.mode}:${connection.version}:${metaMcpServer.discoveryMode}`;
@@ -129,47 +153,55 @@ export function GatewayInspectTab({
         </Button>
       </Page.Section.CTA>
       <Page.Section.Body>
-        {rollout.status === "enabled" && metaMcpServer.userSessionIssuerId && (
-          <Page.Toolbar>
-            <Page.Toolbar.Leading>
-              <Select
-                value={modeDraft}
-                onValueChange={(value) => {
-                  if (
-                    value === "default" ||
-                    value === "direct" ||
-                    value === "progressive"
-                  )
-                    setModeDraft(value);
-                }}
-              >
-                <SelectTrigger aria-label="Inspect discovery mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="default">Use gateway default</SelectItem>
-                  <SelectItem value="progressive">Progressive</SelectItem>
-                  <SelectItem value="direct">Direct</SelectItem>
-                </SelectContent>
-              </Select>
-              <ReleaseStageBadge stage="preview" />
-            </Page.Toolbar.Leading>
-            <Page.Toolbar.Actions>
-              <Button
-                variant="secondary"
-                disabled={isMintingToken}
-                onClick={() =>
-                  setConnection({
-                    mode: modeDraft,
-                    version: crypto.randomUUID(),
-                  })
-                }
-              >
-                <Button.Text>Apply and reconnect</Button.Text>
-              </Button>
-            </Page.Toolbar.Actions>
-          </Page.Toolbar>
-        )}
+        {features?.gatewayDiscoveryModesEnabled &&
+          metaMcpServer.userSessionIssuerId && (
+            <Page.Toolbar>
+              <Page.Toolbar.Leading>
+                <Select
+                  value={modeDraft}
+                  onValueChange={(value) => {
+                    if (
+                      value === "default" ||
+                      value === "direct" ||
+                      value === "progressive"
+                    )
+                      setModeDraft(value);
+                  }}
+                >
+                  <SelectTrigger aria-label="Inspect discovery mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Use gateway default</SelectItem>
+                    <SelectItem value="progressive">Progressive</SelectItem>
+                    <SelectItem value="direct">Direct</SelectItem>
+                  </SelectContent>
+                </Select>
+                <ReleaseStageBadge stage="preview" />
+              </Page.Toolbar.Leading>
+              <Page.Toolbar.Actions>
+                <Button
+                  variant="secondary"
+                  disabled={isMintingToken}
+                  onClick={() => {
+                    applyMode(modeDraft);
+                  }}
+                >
+                  <Button.Text>Apply and reconnect</Button.Text>
+                </Button>
+              </Page.Toolbar.Actions>
+            </Page.Toolbar>
+          )}
+        {!features?.gatewayDiscoveryModesEnabled &&
+          connection.mode !== "default" && (
+            <Button
+              variant="secondary"
+              disabled={isMintingToken}
+              onClick={() => applyMode("default")}
+            >
+              <Button.Text>Use gateway default and reconnect</Button.Text>
+            </Button>
+          )}
         <InspectBody
           data={data}
           isLoading={isLoading || loading || isMintingToken}

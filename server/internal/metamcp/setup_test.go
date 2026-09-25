@@ -21,11 +21,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -61,10 +61,10 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	features       *feature.InMemory
-	service        *metamcp.Service
-	conn           *pgxpool.Pool
-	sessionManager *sessions.Manager
+	productFeatures *productfeatures.Client
+	service         *metamcp.Service
+	conn            *pgxpool.Pool
+	sessionManager  *sessions.Manager
 }
 
 func newTestService(t *testing.T) (context.Context, *testInstance) {
@@ -87,14 +87,14 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	flags := new(feature.InMemory)
-	svc := metamcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, networkaccess.DenyAllChecker{}, flags)
+	productFeatures := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
+	svc := metamcp.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, networkaccess.DenyAllChecker{}, productFeatures)
 
 	return ctx, &testInstance{
-		features:       flags,
-		service:        svc,
-		conn:           conn,
-		sessionManager: sessionManager,
+		productFeatures: productFeatures,
+		service:         svc,
+		conn:            conn,
+		sessionManager:  sessionManager,
 	}
 }
 

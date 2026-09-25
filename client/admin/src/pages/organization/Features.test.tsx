@@ -36,6 +36,7 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
 
 const ORG = anOrganization();
 const FEATURES: ProductFeatures = {
+  gatewayDiscoveryModesEnabled: false,
   aiPlatformPushIntegrationsEnabled: false,
   authzChallengeLoggingEnabled: true,
   consentToolFilteringEnabled: false,
@@ -59,6 +60,7 @@ const FEATURES: ProductFeatures = {
 };
 
 const FEATURES_RESPONSE = {
+  gateway_discovery_modes_enabled: false,
   ai_platform_push_integrations_enabled: false,
   authz_challenge_logging_enabled: true,
   consent_tool_filtering_enabled: false,
@@ -82,6 +84,11 @@ const FEATURES_RESPONSE = {
 };
 
 const TOGGLE_FEATURES = [
+  {
+    featureName: "gateway_discovery_modes",
+    enabledKey: "gatewayDiscoveryModesEnabled",
+    label: "Gateway discovery modes",
+  },
   {
     featureName: "ai_platform_push_integrations",
     enabledKey: "aiPlatformPushIntegrationsEnabled",

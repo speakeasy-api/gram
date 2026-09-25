@@ -60,7 +60,7 @@ func TestSessionPolicyRejectsMalformedGatewayOptions(t *testing.T) {
 		`{"version":1,"resource":"` + resource + `","gateway":{"discovery_mode":"unknown"}}`,
 		`{"version":1,"resource":"` + resource + `","gateway":{}}`,
 		`{"version":1,"resource":"` + resource + `","gateway":{"discovery_mode":"direct","extra":true}}`,
-		`{"version":1,"resource":"` + resource + `","gateway":{"discovery_mode":"direct"},"allow":[]}`,
+		`{"version":1,"resource":"` + resource + `","gateway":{"discovery_mode":"direct"},"selection":{}}`,
 		valid + ` {}`,
 	}
 	for _, raw := range invalid {

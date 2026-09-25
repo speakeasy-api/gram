@@ -1,3 +1,4 @@
+import { RequireScope } from "@/components/require-scope";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -18,16 +19,21 @@ import {
   SelectValue,
 } from "@/components/ui/Select";
 import { ReleaseStageBadge } from "@/components/release-stage-badge";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useOrganization } from "@/contexts/Auth";
+import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 
 export function GatewayDiscoverySection({
   metaMcpServer,
 }: {
   metaMcpServer: MetaMcpServer;
 }): JSX.Element | null {
-  const rollout = useFeatureFlag(FEATURE_FLAGS.gatewayDiscoveryModes);
+  const organization = useOrganization();
+  const { data: features } = useProductFeatures(
+    { organizationId: organization.id },
+    undefined,
+    { throwOnError: false },
+  );
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
   const [mode, setMode] = useState(metaMcpServer.discoveryMode);
@@ -42,7 +48,7 @@ export function GatewayDiscoverySection({
       toast.success("Gateway discovery updated");
     },
   });
-  if (rollout.status !== "enabled") return null;
+  if (!features?.gatewayDiscoveryModesEnabled) return null;
   return (
     <SettingsSection id="discovery">
       <SettingsSection.Header>
@@ -88,25 +94,31 @@ export function GatewayDiscoverySection({
             to reconnect to refresh their tool list.
           </SettingsSection.FooterHint>
           <SettingsSection.FooterActions>
-            <FooterSaveButton
-              pending={update.isPending}
-              disabled={
-                !canWrite ||
-                mode === metaMcpServer.discoveryMode ||
-                update.isPending
-              }
-              onClick={() =>
-                update.mutate({
-                  request: {
-                    updateMetaMcpServerForm: {
-                      id: metaMcpServer.id,
-                      name: metaMcpServer.name,
-                      discoveryMode: mode,
+            <RequireScope
+              scope="mcp:write"
+              resourceId={metaMcpServer.projectId}
+              level="component"
+            >
+              <FooterSaveButton
+                pending={update.isPending}
+                disabled={
+                  !canWrite ||
+                  mode === metaMcpServer.discoveryMode ||
+                  update.isPending
+                }
+                onClick={() =>
+                  update.mutate({
+                    request: {
+                      updateMetaMcpServerForm: {
+                        id: metaMcpServer.id,
+                        name: metaMcpServer.name,
+                        discoveryMode: mode,
+                      },
                     },
-                  },
-                })
-              }
-            />
+                  })
+                }
+              />
+            </RequireScope>
           </SettingsSection.FooterActions>
         </SettingsSection.Footer>
       </SettingsSection.Panel>

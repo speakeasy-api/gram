@@ -7,9 +7,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -25,7 +25,7 @@ func TestMintGatewayDiscoveryOverride(t *testing.T) {
 	payload := &sessionsgen.MintUserSessionPayload{MetaMcpServerID: conv.PtrEmpty(gateway.ID.String()), DiscoveryMode: conv.PtrEmpty("direct")}
 	_, err := ti.service.MintUserSession(ctx, payload)
 	require.ErrorContains(t, err, "not available")
-	ti.features.SetFlag(feature.FlagGatewayDiscoveryModes, authCtx.ActiveOrganizationID, true)
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayDiscoveryModes, true))
 	got, err := ti.service.MintUserSession(ctx, payload)
 	require.NoError(t, err)
 	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(got.AccessToken, urn.NewUserSessionIssuer(issuerID).String())
@@ -34,12 +34,14 @@ func TestMintGatewayDiscoveryOverride(t *testing.T) {
 	require.NoError(t, err)
 	policy, err := toolfilter.ParseSessionPolicy(row.ToolSelection)
 	require.NoError(t, err)
+	require.NotNil(t, policy)
+	require.NotNil(t, policy.Gateway)
+	require.NotNil(t, policy.Gateway.DiscoveryMode)
 	require.Equal(t, "meta_mcp_server:"+gateway.ID.String(), policy.Resource)
 	require.Equal(t, metamcp.DiscoveryModeDirect, *policy.Gateway.DiscoveryMode)
 	require.Nil(t, policy.Selection)
 
 	payload.DiscoveryMode = nil
-	ti.features.SetFlag(feature.FlagGatewayDiscoveryModes, authCtx.ActiveOrganizationID, false)
 	got, err = ti.service.MintUserSession(ctx, payload)
 	require.NoError(t, err)
 	claims, err = usersessions.NewSigner("test-jwt-secret").Validate(got.AccessToken, urn.NewUserSessionIssuer(issuerID).String())

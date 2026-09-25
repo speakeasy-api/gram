@@ -10,7 +10,6 @@ export const FEATURE_FLAGS = {
   explore: "gram-explore",
   functions: "gram-functions",
   gatewayEndpoints: "gram-gateway-endpoints",
-  gatewayDiscoveryModes: "gateway-discovery-modes",
   headlessModeSwitcher: "headless-mode-switcher",
   killswitches: "gram-killswitches",
   mcpResearch: "gram-mcp-research",

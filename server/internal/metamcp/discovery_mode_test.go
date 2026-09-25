@@ -9,11 +9,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/stretchr/testify/require"
 )
 
-func TestGatewayDiscoverySettingsRolloutAndAudit(t *testing.T) {
+func TestGatewayDiscoverySettingsProductFeatureAndAudit(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
@@ -23,7 +23,7 @@ func TestGatewayDiscoverySettingsRolloutAndAudit(t *testing.T) {
 	update := &gen.UpdateMetaMcpServerPayload{ID: gateway.ID, Name: gateway.Name, DiscoveryMode: conv.PtrEmpty("direct")}
 	_, err = ti.service.UpdateMetaMcpServer(ctx, update)
 	require.ErrorContains(t, err, "not available")
-	ti.features.SetFlag(feature.FlagGatewayDiscoveryModes, authCtx.ActiveOrganizationID, true)
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayDiscoveryModes, true))
 	gateway, err = ti.service.UpdateMetaMcpServer(ctx, update)
 	require.NoError(t, err)
 	require.Equal(t, "direct", gateway.DiscoveryMode)
@@ -32,8 +32,8 @@ func TestGatewayDiscoverySettingsRolloutAndAudit(t *testing.T) {
 	var after map[string]any
 	require.NoError(t, json.Unmarshal(event.AfterSnapshot, &after))
 	require.Equal(t, "direct", after["DiscoveryMode"])
-	ti.features.SetFlag(feature.FlagGatewayDiscoveryModes, authCtx.ActiveOrganizationID, false)
+	require.NoError(t, ti.productFeatures.SetFeatureEnabled(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureGatewayDiscoveryModes, false))
 	gateway, err = ti.service.UpdateMetaMcpServer(ctx, &gen.UpdateMetaMcpServerPayload{ID: gateway.ID, Name: "Renamed gateway"})
 	require.NoError(t, err)
-	require.Equal(t, "direct", gateway.DiscoveryMode, "unrelated writes preserve mode while rollout is disabled")
+	require.Equal(t, "direct", gateway.DiscoveryMode, "unrelated writes preserve mode while the product feature is disabled")
 }
