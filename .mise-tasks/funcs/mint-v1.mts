@@ -1,4 +1,4 @@
-#!/usr/bin/env -S node
+#!/usr/bin/env node
 
 //MISE description="Create a V1 Bearer token for calling a Gram Functions runner. Combines well with curl and other CLIs."
 //MISE quiet=true
