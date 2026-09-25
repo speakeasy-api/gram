@@ -34,7 +34,7 @@ import (
 // discovered here. ExternalProvidersConfigured covers all external billing
 // providers, including Stripe and Polar.
 type Config struct {
-	// Root is the canonical secondary worktree directory.
+	// Root is the canonical primary checkout or secondary worktree directory.
 	Root string
 
 	// Environment must be local.
@@ -85,7 +85,8 @@ type Config struct {
 	// TemporalAddress is the loopback Temporal address.
 	TemporalAddress string
 
-	// TemporalNamespace must equal ComposeProject and cannot be default.
+	// TemporalNamespace must equal ComposeProject; only the primary gram checkout
+	// may use default with the main queue and a checkout-owned Temporal server.
 	TemporalNamespace string
 
 	// TemporalTaskQueue is the worktree Temporal task queue.
@@ -107,8 +108,9 @@ type Target struct {
 	WorkOSOrganizationID string
 }
 
-// Validate checks configuration and the database/Redis containers' actual
-// Compose worktree labels and port bindings. It does not connect to PostgreSQL.
+// Validate checks configuration and the PostgreSQL, Redis, and Temporal
+// containers' actual Compose checkout labels and port bindings. It does not
+// connect to PostgreSQL.
 func Validate(ctx context.Context, c Config) (*pgxpool.Config, error) {
 	pc, err := validateConfig(c)
 	if err != nil {
@@ -123,14 +125,13 @@ func Validate(ctx context.Context, c Config) (*pgxpool.Config, error) {
 	if err := checkContainer(ctx, c, "gram-cache", "35299/tcp", c.ExpectedRedisPort); err != nil {
 		return nil, err
 	}
+	if err := checkTemporalContainer(ctx, c); err != nil {
+		return nil, err
+	}
 	return pc, nil
 }
 
 func validateConfig(c Config) (*pgxpool.Config, error) {
-	gitInfo, gitErr := os.Stat(filepath.Join(c.Root, ".git"))
-	if (gitErr == nil && gitInfo.IsDir()) || c.ComposeProject == "" || c.TemporalNamespace == "default" {
-		return nil, errors.New("local account profiles support initialized secondary worktrees only; create a secondary Git worktree, run ./zero there, and retry with an explicit Compose project and matching non-default Temporal namespace")
-	}
 	if c.Environment != "local" {
 		return nil, errors.New("local accounts require GRAM_ENVIRONMENT=local")
 	}
@@ -172,6 +173,9 @@ func validateConfig(c Config) (*pgxpool.Config, error) {
 		return nil, err
 	}
 	if err := validateRedis(c); err != nil {
+		return nil, err
+	}
+	if err := validateTemporal(c); err != nil {
 		return nil, err
 	}
 	return databaseConfig(c)
@@ -557,7 +561,10 @@ func CheckQuiescent(ctx context.Context, c Config) error {
 
 // CheckWorkflows refuses queued or retrying trial demotions, even for a plan.
 func CheckWorkflows(ctx context.Context, c Config) error {
-	if err := validateTemporal(c); err != nil {
+	if err := checkLocalDocker(ctx, c); err != nil {
+		return err
+	}
+	if err := checkTemporalContainer(ctx, c); err != nil {
 		return err
 	}
 	address := c.TemporalAddress
@@ -580,11 +587,31 @@ func CheckWorkflows(ctx context.Context, c Config) error {
 	return nil
 }
 
+// A loopback address alone may be the legacy shared Temporal server. Require
+// the actual published port on this checkout's running Compose service before
+// dialing, including on the final pre-write workflow recheck.
+func checkTemporalContainer(ctx context.Context, c Config) error {
+	if err := validateTemporal(c); err != nil {
+		return err
+	}
+	_, port, _ := net.SplitHostPort(c.TemporalAddress)
+	n, _ := strconv.ParseUint(port, 10, 16)
+	return checkContainer(ctx, c, "gram-temporal", "7233/tcp", uint16(n))
+}
+
 func validateTemporal(c Config) error {
 	host, port, err := net.SplitHostPort(c.TemporalAddress)
 	n, pe := strconv.Atoi(port)
-	if err != nil || pe != nil || n < 1 || n > 65535 || !localHost(host) || c.TemporalNamespace != c.ComposeProject || c.TemporalNamespace == "default" || !safeName.MatchString(c.TemporalNamespace) || !safeName.MatchString(c.TemporalTaskQueue) {
+	if err != nil || pe != nil || n < 1 || n > 65535 || !localHost(host) || !safeName.MatchString(c.TemporalNamespace) || !safeName.MatchString(c.TemporalTaskQueue) {
 		return errors.New("temporal must use a loopback endpoint and this worktree's explicit namespace and queue")
+	}
+	if c.TemporalNamespace == "default" {
+		gitInfo, err := os.Stat(filepath.Join(c.Root, ".git"))
+		if err != nil || !gitInfo.IsDir() || c.ComposeProject != "gram" || c.TemporalTaskQueue != "main" {
+			return errors.New("default Temporal namespace requires the primary gram checkout and main queue")
+		}
+	} else if c.TemporalNamespace != c.ComposeProject {
+		return errors.New("temporal namespace must match this checkout's Compose project")
 	}
 	return nil
 }
