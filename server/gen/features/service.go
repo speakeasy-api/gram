@@ -112,6 +112,8 @@ type ProductFeatures struct {
 	// Whether the organization has the staff-managed private network ingress
 	// entitlement
 	NetworkIngressEnabled bool
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -264,6 +266,9 @@ func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeature
 	if vres.NetworkIngressEnabled != nil {
 		res.NetworkIngressEnabled = *vres.NetworkIngressEnabled
 	}
+	if vres.SignalsIntelligenceEnabled != nil {
+		res.SignalsIntelligenceEnabled = *vres.SignalsIntelligenceEnabled
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -293,6 +298,7 @@ func newProductFeaturesView(res *ProductFeatures) *featuresviews.ProductFeatures
 		ConsentToolFilteringEnabled:             &res.ConsentToolFilteringEnabled,
 		SessionPortabilityEnabled:               &res.SessionPortabilityEnabled,
 		NetworkIngressEnabled:                   &res.NetworkIngressEnabled,
+		SignalsIntelligenceEnabled:              &res.SignalsIntelligenceEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
 	}
 	return vres
