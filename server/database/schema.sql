@@ -9628,6 +9628,8 @@ CREATE TABLE IF NOT EXISTS remote_session_ema_credentials (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
   CONSTRAINT remote_session_ema_credentials_pkey PRIMARY KEY (id),
+  CONSTRAINT remote_session_ema_credentials_project_ref_check CHECK ((organization_id IS NULL) = (project_id IS NULL)),
+  CONSTRAINT remote_session_ema_credentials_client_ref_check CHECK ((remote_session_client_id IS NULL) = (remote_session_issuer_id IS NULL)),
   CONSTRAINT remote_session_ema_credentials_project_id_fkey FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON UPDATE CASCADE ON DELETE SET NULL,
   CONSTRAINT remote_session_ema_credentials_user_session_issuer_id_fkey FOREIGN KEY (user_session_issuer_id) REFERENCES user_session_issuers (id) ON DELETE SET NULL,
   CONSTRAINT remote_session_ema_credentials_remote_session_client_id_fkey FOREIGN KEY (remote_session_client_id, remote_session_issuer_id) REFERENCES remote_session_clients (id, remote_session_issuer_id) ON DELETE SET NULL,
