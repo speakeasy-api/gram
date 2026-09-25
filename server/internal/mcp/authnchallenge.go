@@ -688,7 +688,7 @@ func (s *Service) contextForSessionSubject(
 }
 
 func (s *Service) endpointNeedsCallerProfile(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
-	if s.remoteProxyManager == nil || !s.remoteProxyManager.IssuesCallerAssertions(mcpservers.VisibilityPrivate, true) {
+	if !s.tunnelManager.issuesCallerAssertions(mcpservers.VisibilityPrivate) {
 		return false, nil
 	}
 	// Meta dispatch can select a private tunneled member after authentication.
@@ -704,7 +704,7 @@ func (s *Service) endpointNeedsCallerProfile(ctx context.Context, endpoint *Reso
 	if err != nil {
 		return false, fmt.Errorf("%w: resolve destination: %w", errIssuerGateCallerProfile, err)
 	}
-	return s.remoteProxyManager.IssuesCallerAssertions(server.Visibility, server.TunneledMcpServerID.Valid), nil
+	return server.TunneledMcpServerID.Valid && s.tunnelManager.issuesCallerAssertions(server.Visibility), nil
 }
 
 // AuthenticateChallengeHeader builds the WWW-Authenticate value (RFC 9728

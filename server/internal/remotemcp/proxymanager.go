@@ -1,11 +1,8 @@
 package remotemcp
 
 import (
-	"context"
-	"fmt"
 	"log/slog"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -17,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
-	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
@@ -39,9 +35,8 @@ import (
 // [ProxyManager.Build] so the closure over the per-server correlation ids
 // stays request-scoped.
 type proxyBuildOptions struct {
-	recordIdentityCoverage  bool
-	metaMCPServerID         string
-	callerAssertionResource string
+	recordIdentityCoverage bool
+	metaMCPServerID        string
 }
 
 // BuildOption customizes one proxy without changing the defaults used by
@@ -66,23 +61,14 @@ func WithMetaMCPServerID(metaMCPServerID string) BuildOption {
 	}}
 }
 
-// WithCallerAssertionResource sets the audience from the destination's saved
-// resource identifier. An empty value uses the tunneled server's Gram identifier.
-func WithCallerAssertionResource(resourceIdentifier string) BuildOption {
-	return BuildOption{apply: func(options *proxyBuildOptions) {
-		options.callerAssertionResource = resourceIdentifier
-	}}
-}
-
 type ProxyManager struct {
-	logger           *slog.Logger
-	tracer           trace.Tracer
-	guardianPolicy   *guardian.Policy
-	authz            *authz.Engine
-	posthog          *posthog.Posthog
-	telemLogger      *tm.Logger
-	scanEvaluator    *mcpriskscan.Evaluator
-	callerAssertions *mcpauthz.Issuer
+	logger         *slog.Logger
+	tracer         trace.Tracer
+	guardianPolicy *guardian.Policy
+	authz          *authz.Engine
+	posthog        *posthog.Posthog
+	telemLogger    *tm.Logger
+	scanEvaluator  *mcpriskscan.Evaluator
 
 	proxyMetrics         *proxy.Metrics
 	mcpMetrics           *ProxyMetrics
@@ -129,7 +115,6 @@ func NewProxyManager(
 	witnessStore *toolfilter.SessionToolWitnessStore,
 	killswitchCheckpoint *mcptoolexecution.Checkpoint,
 	scanEvaluator *mcpriskscan.Evaluator,
-	callerAssertions *mcpauthz.Issuer,
 ) *ProxyManager {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotemcp")
@@ -137,7 +122,6 @@ func NewProxyManager(
 
 	return &ProxyManager{
 		logger:                                logger,
-		callerAssertions:                      callerAssertions,
 		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
 		guardianPolicy:                        guardianPolicy,
 		authz:                                 authzEngine,
@@ -230,7 +214,7 @@ func (f *ProxyManager) BuildTarget(
 	selection *toolfilter.SessionSelection,
 	buildOptions ...BuildOption,
 ) *proxy.Proxy {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", callerAssertionResource: ""}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: ""}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -349,20 +333,6 @@ func (f *ProxyManager) BuildTarget(
 		toolsCallResponseInterceptors = append(toolsCallResponseInterceptors, NewPlatformMCPSelectedUseInterceptor(f.platformMCPSelectedUseRecorder, identity))
 	}
 
-	var callerAssertion func(context.Context) (string, error)
-	if f.IssuesCallerAssertions(visibility, identity.TunneledMCPServerID != "") {
-		callerAssertion = func(ctx context.Context) (string, error) {
-			tunnelID, err := uuid.Parse(identity.TunneledMCPServerID)
-			if err != nil {
-				return "", fmt.Errorf("parse caller assertion destination: %w", err)
-			}
-			projectUUID, err := uuid.Parse(projectID)
-			if err != nil {
-				return "", fmt.Errorf("parse caller assertion destination: %w", err)
-			}
-			return f.callerAssertions.Mint(ctx, mcpauthz.Target{OrganizationID: organizationID, ProjectID: projectUUID, MCPServerID: identity.McpServerID, TunnelID: tunnelID, ResourceIdentifier: options.callerAssertionResource})
-		}
-	}
 	return &proxy.Proxy{
 		GuardianPolicy:              f.guardianPolicy,
 		GuardianClientOptions:       nil,
@@ -376,7 +346,7 @@ func (f *ProxyManager) BuildTarget(
 		RemoteURL:                   upstreamURL,
 		Headers:                     headers,
 		AuthorizationOverride:       upstreamAuth,
-		CallerAssertion:             callerAssertion,
+		CallerAssertion:             nil,
 		UpstreamResponseRetryer:     nil,
 		UpstreamResponseInterceptor: nil,
 		DisableRedirects:            false,
@@ -407,9 +377,4 @@ func (f *ProxyManager) BuildTarget(
 		ResourcesListRequestInterceptors:  nil,
 		ResourcesListResponseInterceptors: nil,
 	}
-}
-
-// IssuesCallerAssertions reports whether Gram adds caller identity to a destination's requests.
-func (f *ProxyManager) IssuesCallerAssertions(visibility string, tunneled bool) bool {
-	return f != nil && f.callerAssertions != nil && visibility == mcpservers.VisibilityPrivate && tunneled
 }

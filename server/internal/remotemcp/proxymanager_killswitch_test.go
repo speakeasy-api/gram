@@ -22,7 +22,6 @@ func TestProxyManagerAttachesKillswitchToEveryPrivateBackend(t *testing.T) {
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		nil,
 		nil,
-		nil,
 	)
 
 	canonicalServerID := uuid.NewString()
