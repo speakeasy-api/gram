@@ -6,11 +6,8 @@ import { AnthropicAdminControlsStep } from "./components/steps/anthropic-admin-c
 import { AnthropicInferenceHooksStep } from "./components/steps/anthropic-inference-hooks-step";
 import { ConfigurePoliciesStep } from "./components/steps/configure-policies-step";
 import { ConfirmTrafficStep } from "./components/steps/confirm-traffic-step";
-import { ConnectIdpStep } from "./components/steps/connect-idp-step";
 import { CreateMarketplaceStep } from "./components/steps/create-marketplace-step";
-import { DirectorySyncStep } from "./components/steps/directory-sync-step";
 import { DistributeServersStep } from "./components/steps/distribute-servers-step";
-import { DomainVerificationStep } from "./components/steps/domain-verification-step";
 import { IdentityProviderStep } from "./components/steps/identity-provider-step";
 import { InstrumentAgentsStep } from "./components/steps/instrument-agents-step";
 import { LiteLLMSetupStep } from "./components/steps/litellm-setup-step";
@@ -42,26 +39,6 @@ export interface SetupCard {
  * Adding a card is a catalog entry there and an entry here.
  */
 export const SETUP_CARDS: Record<string, SetupCard> = {
-  "domain-verification": {
-    slug: "domain",
-    Step: ({ onComplete }) => (
-      <DomainVerificationStep onComplete={onComplete} />
-    ),
-  },
-  "connect-idp": {
-    Step: ({ onComplete, onClose }) => (
-      <ConnectIdpStep onComplete={onComplete} onSkip={onClose} />
-    ),
-  },
-  "directory-sync": {
-    Step: ({ onComplete, onClose }) => (
-      <DirectorySyncStep
-        onComplete={onComplete}
-        onSkip={onClose}
-        onBack={onClose}
-      />
-    ),
-  },
   "create-marketplace": {
     Step: ({ onComplete, onClose }) => (
       <CreateMarketplaceStep onComplete={onComplete} onBack={onClose} />

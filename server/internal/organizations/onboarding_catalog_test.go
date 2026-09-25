@@ -34,3 +34,18 @@ func TestSetupTaskCatalogKeysAreUniqueAndPrerequisitesExist(t *testing.T) {
 		}
 	}
 }
+
+func TestIdentitySetupUsesOneCombinedTask(t *testing.T) {
+	t.Parallel()
+	identity := setupTaskDefinitionForKey("identity-provider")
+	require.NotNil(t, identity)
+	require.Empty(t, identity.Prerequisites, "domain verification is a nested step, not a task dependency")
+	require.Equal(t, "identity-provider", setupTaskCatalog[0].Key)
+	security := onboardingPresetByKey("security")
+	require.NotNil(t, security)
+	require.Contains(t, security.TaskKeys, "identity-provider")
+	for _, retired := range []string{"domain-verification", "connect-idp", "directory-sync"} {
+		require.Nil(t, setupTaskDefinitionForKey(retired))
+		require.NotContains(t, security.TaskKeys, retired)
+	}
+}

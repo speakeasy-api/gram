@@ -1,9 +1,16 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import { JourneyStepsProvider } from "../journey-steps-provider";
+import { useJourneyView } from "../journey-steps";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityProviderStep } from "./identity-provider-step";
-import { ConnectIdpStep } from "./connect-idp-step";
-import { DirectorySyncStep } from "./directory-sync-step";
 import { toast } from "sonner";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 
@@ -13,12 +20,19 @@ const onboardingStatus = vi.hoisted(() => ({
       ssoConfigured: false,
       dsyncConfigured: false,
       domainVerified: true,
+      verifiedDomains: [] as string[],
     },
     isLoading: false,
     refetch: vi.fn(),
   },
 }));
-const portal = vi.hoisted(() => ({ mutate: vi.fn(), isPending: false }));
+const portal = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  isPending: false,
+  // Options of the section whose mutate ran last, so a test can fire its
+  // onError. Each section registers its own options.
+  options: undefined as { onError?: (error: unknown) => void } | undefined,
+}));
 const queryOptions = vi.hoisted(() => vi.fn());
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 vi.mock("@/lib/safe-external-url", () => ({
@@ -32,18 +46,13 @@ vi.mock("@gram/client/react-query/onboardingStatus", () => ({
   },
 }));
 vi.mock("@gram/client/react-query/generateWorkOSAdminPortalLink.js", () => ({
-  useGenerateWorkOSAdminPortalLinkMutation: () => portal,
-}));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    setup: {
-      Link: ({
-        queryParams,
-        children,
-      }: {
-        queryParams: { task: string };
-        children: ReactNode;
-      }) => <a href={`/acme/setup?task=${queryParams.task}`}>{children}</a>,
+  useGenerateWorkOSAdminPortalLinkMutation: (
+    options: typeof portal.options,
+  ) => ({
+    isPending: portal.isPending,
+    mutate: (...args: unknown[]) => {
+      portal.options = options;
+      return portal.mutate(...args);
     },
   }),
 }));
@@ -58,58 +67,101 @@ beforeEach(() => {
       ssoConfigured: false,
       dsyncConfigured: false,
       domainVerified: true,
+      verifiedDomains: [],
     },
     isLoading: false,
     refetch: vi.fn(),
   };
   portal.mutate.mockReset();
+  portal.options = undefined;
   queryOptions.mockClear();
   vi.mocked(toast.error).mockClear();
   vi.mocked(openSafeExternalUrl).mockReturnValue(true);
 });
 
 describe("IdentityProviderStep", () => {
+  it("keeps domain, SSO, and directory sync as nested wizard steps", () => {
+    onboardingStatus.current.data.domainVerified = false;
+    function Rail() {
+      const { steps, setActiveIndex } = useJourneyView();
+      return (
+        <nav aria-label="Identity steps">
+          {steps.map((step) => (
+            <button key={step.slug} onClick={() => setActiveIndex(step.index)}>
+              {step.title}
+            </button>
+          ))}
+        </nav>
+      );
+    }
+    render(
+      <MemoryRouter initialEntries={["/org/setup?task=idp"]}>
+        <JourneyStepsProvider>
+          <Rail />
+          <IdentityProviderStep onComplete={() => {}} />
+        </JourneyStepsProvider>
+      </MemoryRouter>,
+    );
+    const rail = screen.getByRole("navigation", { name: "Identity steps" });
+    expect(
+      within(rail)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Verify domain", "Single sign-on", "Directory sync"]);
+    expect(screen.getByRole("heading", { name: "Verify domain" })).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Single sign-on" }),
+    ).toBeNull();
+    fireEvent.click(
+      within(rail).getByRole("button", { name: "Single sign-on" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Single sign-on" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Connect" }).hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.click(
+      within(rail).getByRole("button", { name: "Directory sync" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Directory sync" }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Connect directory" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+  });
+
   it("does not reopen the portal when directory sync is connected", () => {
     onboardingStatus.current.data.dsyncConfigured = true;
     const complete = vi.fn<() => void>();
-    render(
-      <DirectorySyncStep
-        onComplete={complete}
-        onSkip={() => {}}
-        onBack={() => {}}
-      />,
-    );
-    expect(screen.getByText("Directory sync is connected.")).toBeTruthy();
-    expect(screen.queryByText("Setup opens in a new tab")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    render(<IdentityProviderStep onComplete={complete} />);
+    expect(screen.getByText("Directory sync is connected")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Connect directory" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Mark done" }));
     expect(complete).toHaveBeenCalledOnce();
     expect(portal.mutate).not.toHaveBeenCalled();
   });
-  it.each([
-    { Component: ConnectIdpStep, button: "Connect" },
-    {
-      Component: DirectorySyncStep,
-      button: "Connect directory",
-    },
-  ])(
+  it.each([{ button: "Connect" }, { button: "Connect directory" }])(
     "recovers inline from blocked portals in $button",
-    ({ Component, button }) => {
+    ({ button }) => {
       vi.mocked(openSafeExternalUrl).mockReturnValue(false);
-      render(
-        <Component onComplete={() => {}} onSkip={() => {}} onBack={() => {}} />,
-      );
+      render(<IdentityProviderStep onComplete={() => {}} />);
       expect(queryOptions).toHaveBeenCalledWith(
         undefined,
         undefined,
         expect.objectContaining({ throwOnError: false }),
       );
-      // Both steps need live facts: SSO uses them for the domain prerequisite.
       expect(queryOptions).not.toHaveBeenCalledWith(
         undefined,
         undefined,
         expect.objectContaining({ enabled: false }),
       );
-      if (Component === ConnectIdpStep) {
+      if (button === "Connect") {
         fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
       }
       fireEvent.click(screen.getByRole("button", { name: button }));
@@ -123,28 +175,12 @@ describe("IdentityProviderStep", () => {
     },
   );
   it.each([
-    {
-      Component: ConnectIdpStep,
-      intent: "sso",
-      task: "connect-idp",
-      button: "Connect",
-    },
-    {
-      Component: DirectorySyncStep,
-      intent: "dsync",
-      task: "directory-sync",
-      button: "Connect directory",
-    },
+    { intent: "sso", button: "Connect" },
+    { intent: "dsync", button: "Connect directory" },
   ])(
-    "preserves the $task origin through the portal callback",
-    ({ Component, intent, task, button }) => {
-      render(
-        <Component
-          onComplete={vi.fn<() => void>()}
-          onSkip={vi.fn<() => void>()}
-          onBack={vi.fn<() => void>()}
-        />,
-      );
+    "sends the $intent intent through the portal callback",
+    ({ intent, button }) => {
+      render(<IdentityProviderStep onComplete={vi.fn<() => void>()} />);
       if (intent === "sso")
         fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
       fireEvent.click(screen.getByRole("button", { name: button }));
@@ -153,8 +189,8 @@ describe("IdentityProviderStep", () => {
           request: {
             generateWorkOSAdminPortalLinkRequestBody: expect.objectContaining({
               intent,
-              successUrl: expect.stringContaining(
-                `/v1/setup/callback?intent=${intent}&task=${task}`,
+              successUrl: expect.stringMatching(
+                new RegExp(`/v1/setup/callback\\?intent=${intent}$`),
               ),
               returnUrl: window.location.href,
             }),
@@ -193,6 +229,7 @@ describe("IdentityProviderStep", () => {
         ssoConfigured: true,
         dsyncConfigured: true,
         domainVerified: true,
+        verifiedDomains: [],
       },
       isLoading: false,
       refetch: vi.fn(),
@@ -214,6 +251,7 @@ describe("IdentityProviderStep", () => {
         ssoConfigured: false,
         dsyncConfigured: false,
         domainVerified: false,
+        verifiedDomains: [],
       },
       isLoading: false,
       refetch: vi.fn(),
@@ -221,12 +259,8 @@ describe("IdentityProviderStep", () => {
 
     render(<IdentityProviderStep onComplete={() => {}} />);
 
-    expect(screen.getByText(/Verify a domain first/)).toBeTruthy();
-    expect(
-      screen
-        .getByRole("link", { name: "Go to domain verification" })
-        .getAttribute("href"),
-    ).toBe("/acme/setup?task=domain");
+    expect(screen.getByText("Verify a domain above first.")).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
     const connect = screen.getByRole<HTMLButtonElement>("button", {
@@ -244,7 +278,7 @@ describe("IdentityProviderStep", () => {
 
     render(<IdentityProviderStep onComplete={() => {}} />);
 
-    expect(screen.queryByText(/Verify a domain first/)).toBeNull();
+    expect(screen.queryByText("Verify a domain above first.")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
     const connect = screen.getByRole<HTMLButtonElement>("button", {
       name: "Connect",
@@ -253,63 +287,208 @@ describe("IdentityProviderStep", () => {
   });
 });
 
-describe("split identity prerequisites", () => {
+describe("IdentityProviderStep domain verification", () => {
+  function unverified() {
+    onboardingStatus.current.data = {
+      ssoConfigured: false,
+      dsyncConfigured: false,
+      domainVerified: false,
+      verifiedDomains: [],
+    };
+  }
+  function mockPortalOpens() {
+    portal.mutate.mockImplementation((_vars, opts) =>
+      opts.onSuccess({ url: "https://workos.test/portal" }),
+    );
+  }
+  it("orders domain verification before single sign-on and directory sync", () => {
+    render(<IdentityProviderStep onComplete={() => {}} />);
+    expect(
+      screen.getAllByRole("region").map((section) => section.textContent),
+    ).toEqual([
+      expect.stringMatching(/^1?Verify domain/),
+      expect.stringMatching(/^2?Single sign-on/),
+      expect.stringMatching(/^3?Directory sync/),
+    ]);
+  });
+
+  it("opens the WorkOS portal with the domain verification intent", () => {
+    unverified();
+    render(<IdentityProviderStep onComplete={() => {}} />);
+
+    expect(screen.queryByRole("list", { name: "Verified domains" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Verify domain" }));
+
+    expect(portal.mutate).toHaveBeenCalledOnce();
+    const body =
+      portal.mutate.mock.calls[0]?.[0].request
+        .generateWorkOSAdminPortalLinkRequestBody;
+    expect(body.intent).toBe("domain_verification");
+    expect(body.successUrl).toMatch(
+      /\/v1\/setup\/callback\?intent=domain_verification$/,
+    );
+    expect(body.returnUrl).toBe(window.location.href);
+  });
+
+  it("shows the verified state once a verification check succeeds", async () => {
+    unverified();
+    const verifiedData = {
+      ssoConfigured: false,
+      dsyncConfigured: false,
+      domainVerified: true,
+      verifiedDomains: ["example.com"],
+    };
+    const refetch = vi.fn(async () => {
+      onboardingStatus.current = {
+        ...onboardingStatus.current,
+        data: verifiedData,
+      };
+      return { data: verifiedData };
+    });
+    onboardingStatus.current = { ...onboardingStatus.current, refetch };
+    mockPortalOpens();
+
+    const view = render(<IdentityProviderStep onComplete={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Verify domain" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check verification" }));
+
+    await waitFor(() => expect(refetch).toHaveBeenCalledOnce());
+    // The mocked query does not notify subscribers, so re-render to stand in
+    // for react-query pushing the refetched status to the parent.
+    view.rerender(<IdentityProviderStep onComplete={() => {}} />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Your domain is verified")).toBeTruthy(),
+    );
+    expect(
+      within(screen.getByRole("list", { name: "Verified domains" })).getByText(
+        "example.com",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Verify domain" })).toBeNull();
+    expect(screen.queryByText("Verify a domain above first.")).toBeNull();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("reports a portal link the browser cannot open", () => {
+    unverified();
+    vi.mocked(openSafeExternalUrl).mockReturnValueOnce(false);
+    mockPortalOpens();
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Verify domain" }));
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "Unable to open the WorkOS portal",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Check verification" }),
+    ).toBeNull();
+  });
+
+  it("keeps the unverified state when a verification check fails", async () => {
+    unverified();
+    const refetch = vi.fn(async () => ({
+      data: { ...onboardingStatus.current.data },
+    }));
+    onboardingStatus.current = { ...onboardingStatus.current, refetch };
+    mockPortalOpens();
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Verify domain" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check verification" }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "Domain not verified yet. Finish setup in the WorkOS tab, then try again.",
+      ),
+    );
+    expect(refetch).toHaveBeenCalledOnce();
+    expect(screen.queryByText("Your domain is verified")).toBeNull();
+    expect(screen.queryByText("Verified")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Check verification" }),
+    ).toBeTruthy();
+  });
+
+  it("reports a portal link request that fails", () => {
+    unverified();
+    portal.mutate.mockImplementation(() =>
+      portal.options?.onError?.(new Error("Portal unavailable")),
+    );
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Verify domain" }));
+
+    expect(toast.error).toHaveBeenCalledWith("Portal unavailable");
+    expect(screen.getByRole("button", { name: "Verify domain" })).toBeTruthy();
+  });
+
+  it("shows the verified state once the server says so", () => {
+    onboardingStatus.current.data.verifiedDomains = ["example.com"];
+    const onComplete = vi.fn();
+
+    render(<IdentityProviderStep onComplete={() => void onComplete()} />);
+
+    expect(screen.getByText("Your domain is verified")).toBeTruthy();
+    expect(screen.getByText("Verified")).toBeTruthy();
+    expect(
+      within(screen.getByRole("list", { name: "Verified domains" })).getByText(
+        "example.com",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Verify domain" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark done" }));
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  // Matches the server: active SSO completes domain verification even when no
+  // verified domain was tracked for the org.
+  it("treats an active SSO connection as verified", () => {
+    onboardingStatus.current.data = {
+      ssoConfigured: true,
+      dsyncConfigured: false,
+      domainVerified: false,
+      verifiedDomains: [],
+    };
+
+    render(<IdentityProviderStep onComplete={() => {}} />);
+
+    expect(screen.getByText("Your domain is verified")).toBeTruthy();
+    expect(screen.getByText("Verified")).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "Verified domains" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Verify domain" })).toBeNull();
+    expect(screen.queryByText("Verify a domain above first.")).toBeNull();
+  });
+});
+
+describe("IdentityProviderStep prerequisites", () => {
   it.each([
-    { domainVerified: false, ssoConfigured: false, blocked: true },
-    { domainVerified: false, ssoConfigured: true, blocked: false },
-    { domainVerified: true, ssoConfigured: false, blocked: false },
-    { domainVerified: undefined, ssoConfigured: false, blocked: false },
+    { domainVerified: false, blocked: true },
+    { domainVerified: true, blocked: false },
+    { domainVerified: undefined, blocked: false },
   ])(
-    "gates SSO only for an explicitly unverified new connection: $domainVerified / $ssoConfigured",
-    ({ domainVerified, ssoConfigured, blocked }) => {
+    "gates SSO only for an explicitly unverified domain: $domainVerified",
+    ({ domainVerified, blocked }) => {
       onboardingStatus.current.data = {
         dsyncConfigured: false,
         domainVerified,
-        ssoConfigured,
+        ssoConfigured: false,
       } as typeof onboardingStatus.current.data;
-      render(
-        <ConnectIdpStep
-          onComplete={vi.fn<() => void>()}
-          onSkip={vi.fn<() => void>()}
-        />,
-      );
+      render(<IdentityProviderStep onComplete={vi.fn<() => void>()} />);
       fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
       const connect = screen.getByRole<HTMLButtonElement>("button", {
         name: "Connect",
       });
       expect(connect.disabled).toBe(blocked);
-      expect(
-        !!screen.queryByRole("link", { name: "Go to domain verification" }),
-      ).toBe(blocked);
       fireEvent.click(connect);
       expect(portal.mutate).toHaveBeenCalledTimes(blocked ? 0 : 1);
     },
   );
-  it("leaves split SSO ungated when status is unavailable", () => {
-    onboardingStatus.current = {
-      data: undefined,
-      isLoading: false,
-      refetch: vi.fn(),
-    } as unknown as typeof onboardingStatus.current;
-    render(
-      <ConnectIdpStep
-        onComplete={vi.fn<() => void>()}
-        onSkip={vi.fn<() => void>()}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /Okta/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
-    expect(portal.mutate).toHaveBeenCalledOnce();
-  });
   it("does not gate directory sync on domain verification", () => {
     onboardingStatus.current.data.domainVerified = false;
-    render(
-      <DirectorySyncStep
-        onBack={vi.fn<() => void>()}
-        onComplete={vi.fn<() => void>()}
-        onSkip={vi.fn<() => void>()}
-      />,
-    );
+    render(<IdentityProviderStep onComplete={vi.fn<() => void>()} />);
     fireEvent.click(screen.getByRole("button", { name: "Connect directory" }));
     expect(portal.mutate).toHaveBeenCalledOnce();
   });

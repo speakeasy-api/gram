@@ -165,10 +165,11 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     dispatch carries a "via Acme Agent Gateway" marker. Back on the MCP
     listing, the gateway card shows no "never used" marker.
 17. **Organization setup wizard** — open `/acme-demo/setup` (no setup feature
-    flag required). Confirm the task rail shows 11 tasks: the 10 visible seeded
-    selections plus **Verify your domain**, supplied by the catalog default.
+    flag required). Confirm the task rail shows the 9 visible seeded tasks.
+    **Set up identity provider** contains the nested **Verify domain**,
+    **Single sign-on**, and **Directory sync** steps.
     **Distribute MCP servers** and **Configure policies** are included;
-    **Set up identity provider**, **Set up Anthropic admin controls**,
+    **Set up Anthropic admin controls**,
     **Set up Platform MCP**, and the default-hidden **Set up LiteLLM** are absent.
     The wizard has no hidden-task toggle or assignment/status columns.
     - Confirm **Configure policies** is marked complete. Other completion marks

@@ -1138,8 +1138,7 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	originTask := r.URL.Query().Get("task")
 	validOrigin := originTask == "" ||
-		(intent == "sso" && (originTask == "connect-idp" || originTask == "identity-provider")) ||
-		(intent == "dsync" && (originTask == "directory-sync" || originTask == "identity-provider"))
+		((intent == "domain_verification" || intent == "sso" || intent == "dsync") && originTask == "identity-provider")
 	if !validOrigin {
 		span.SetStatus(codes.Error, "invalid originating task")
 		http.Error(w, "invalid originating task", http.StatusBadRequest)
@@ -1194,47 +1193,16 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 	for _, task := range config.Tasks {
 		visible[task.Key] = !task.Hidden
 	}
-	firstVisible := func(keys ...string) string {
-		for _, key := range keys {
-			if visible[key] {
-				return key
-			}
+	// All identity setup steps belong to the combined card. Refresh domains even
+	// when DNS is still pending, but never navigate to a hidden or absent task.
+	if intent == "domain_verification" && workosOrgID != "" {
+		if _, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains); err != nil {
+			s.logger.ErrorContext(ctx, "setup callback: check domain verification", attr.SlogError(err))
 		}
-		return ""
 	}
-
-	var nextTask string
-	switch intent {
-	case "domain_verification":
-		// DNS may still be pending when the portal returns. Only advance
-		// to a configured identity task after verification is confirmed.
-		nextTask = firstVisible("domain-verification")
-		if workosOrgID != "" {
-			verified, err := s.refreshVerifiedDomains(ctx, org.ID, workosOrgID, org.VerifiedDomains)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "setup callback: check domain verification", attr.SlogError(err))
-			}
-			if len(verified) > 0 {
-				nextTask = firstVisible("connect-idp", "identity-provider")
-			}
-		}
-	case "sso":
-		nextTask = firstVisible("connect-idp", "identity-provider")
-		if workosOrgID != "" {
-			connections, err := s.orgs.ListConnections(ctx, workosOrgID)
-			if err != nil {
-				s.logger.ErrorContext(ctx, "setup callback: list connections", attr.SlogError(err))
-			}
-			if workos.HasActiveConnection(connections) {
-				nextTask = firstVisible("directory-sync", "identity-provider", "connect-idp")
-			}
-		}
-	case "dsync":
-		// Sync may still be pending; return to its configured task.
-		nextTask = firstVisible("directory-sync", "identity-provider")
-	}
-	if visible[originTask] {
-		nextTask = originTask
+	nextTask := ""
+	if visible["identity-provider"] {
+		nextTask = "identity-provider"
 	}
 
 	redirectURL := fmt.Sprintf("%s/%s/setup", s.siteURL, orgSlug)

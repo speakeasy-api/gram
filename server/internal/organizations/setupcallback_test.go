@@ -23,22 +23,15 @@ func TestSetupCallbackUsesVisibleConfiguredTask(t *testing.T) {
 		query   string
 		visible []string
 		task    string
-		active  bool
 	}{
-		{"intent=sso&task=connect-idp", []string{"connect-idp"}, "connect-idp", true},
-		{"intent=sso&task=connect-idp", []string{"connect-idp"}, "connect-idp", false},
-		{"intent=dsync&task=directory-sync", []string{"directory-sync"}, "directory-sync", false},
-		{"intent=sso&task=identity-provider", []string{"identity-provider"}, "identity-provider", true},
-		{"intent=dsync&task=identity-provider", []string{"identity-provider"}, "identity-provider", false},
-		{"intent=sso", []string{"connect-idp", "directory-sync"}, "directory-sync", true},
-		{"intent=sso", []string{"connect-idp", "directory-sync"}, "connect-idp", false},
-		{"intent=sso", []string{"identity-provider"}, "identity-provider", true},
-		{"intent=dsync", []string{"directory-sync"}, "directory-sync", false},
-		{"intent=dsync", []string{"identity-provider"}, "identity-provider", false},
-		{"intent=sso&task=identity-provider", []string{"connect-idp"}, "connect-idp", false},
-		{"intent=dsync&task=directory-sync", []string{"identity-provider"}, "identity-provider", false},
-		{"intent=sso&task=connect-idp", []string{}, "", true},
-		{"intent=dsync", []string{}, "", false},
+		{"intent=sso&task=identity-provider", []string{"identity-provider"}, "identity-provider"},
+		{"intent=dsync&task=identity-provider", []string{"identity-provider"}, "identity-provider"},
+		{"intent=sso", []string{"identity-provider"}, "identity-provider"},
+		{"intent=dsync", []string{"identity-provider"}, "identity-provider"},
+		{"intent=sso&task=identity-provider", []string{"instrument-agents"}, ""},
+		{"intent=dsync&task=identity-provider", []string{}, ""},
+		{"intent=sso", []string{}, ""},
+		{"intent=dsync", []string{}, ""},
 	} {
 		t.Run(tc.query+"/"+tc.task, func(t *testing.T) {
 			ctx, ti := newTestOrganizationsService(t)
@@ -50,11 +43,6 @@ func TestSetupCallbackUsesVisibleConfiguredTask(t *testing.T) {
 			require.NoError(t, err)
 			_, err = organizations.SaveOnboardingConfiguration(ctx, ti.conn, audit.NewLogger(), org.ID, tc.visible, nil, urn.NewPrincipal(urn.PrincipalTypeUser, "staff-test"), nil)
 			require.NoError(t, err)
-			state := "inactive"
-			if tc.active {
-				state = "active"
-			}
-			ti.orgs.On("ListConnections", mock.Anything, org.WorkosID.String).Return([]workos.Connection{{State: state}}, nil).Maybe()
 			mux := goahttp.NewMuxer()
 			organizations.Attach(mux, ti.service)
 			rec := httptest.NewRecorder()
@@ -79,13 +67,13 @@ func TestSetupCallbackDomainVerification(t *testing.T) {
 		lookupErr error
 		task      string
 	}{
-		{name: "pending", visible: []string{"domain-verification", "connect-idp"}, state: workos.OrganizationDomainStatePending, task: "domain-verification"},
-		{name: "verified split identity", visible: []string{"domain-verification", "connect-idp"}, state: workos.OrganizationDomainStateVerified, task: "connect-idp"},
-		{name: "verified combined identity", visible: []string{"domain-verification", "identity-provider"}, state: workos.OrganizationDomainStateLegacyVerified, task: "identity-provider"},
-		{name: "stored verification", visible: []string{"connect-idp"}, stored: true, task: "connect-idp"},
-		{name: "no visible identity task", visible: []string{"domain-verification"}, state: workos.OrganizationDomainStateVerified},
+		{name: "pending", visible: []string{"identity-provider"}, state: workos.OrganizationDomainStatePending, task: "identity-provider"},
+		{name: "verified domain", visible: []string{"identity-provider"}, state: workos.OrganizationDomainStateVerified, task: "identity-provider"},
+		{name: "verified combined identity", visible: []string{"identity-provider"}, state: workos.OrganizationDomainStateLegacyVerified, task: "identity-provider"},
+		{name: "stored verification", visible: []string{"identity-provider"}, stored: true, task: "identity-provider"},
+		{name: "no visible identity task", visible: []string{}, state: workos.OrganizationDomainStateVerified},
 		{name: "hidden pending task", visible: []string{}, state: workos.OrganizationDomainStatePending},
-		{name: "lookup failure", visible: []string{"domain-verification", "connect-idp"}, lookupErr: errors.New("workos unavailable"), task: "domain-verification"},
+		{name: "lookup failure", visible: []string{"identity-provider"}, lookupErr: errors.New("workos unavailable"), task: "identity-provider"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, ti := newTestOrganizationsService(t)
@@ -106,7 +94,7 @@ func TestSetupCallbackDomainVerification(t *testing.T) {
 			mux := goahttp.NewMuxer()
 			organizations.Attach(mux, ti.service)
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/setup/callback?intent=domain_verification", nil))
+			mux.ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/setup/callback?intent=domain_verification&task=identity-provider", nil))
 			want := "http://localhost:5173/" + org.Slug + "/setup"
 			if tc.task != "" {
 				want += "?task=" + tc.task
@@ -132,6 +120,8 @@ func TestSetupCallbackRejectsInvalidOrigin(t *testing.T) {
 	organizations.Attach(mux, ti.service)
 	for _, query := range []string{
 		"intent=sso&task=directory-sync", "intent=dsync&task=connect-idp",
+		"intent=sso&task=connect-idp", "intent=dsync&task=directory-sync",
+		"intent=domain_verification&task=domain-verification",
 		"intent=dsync&task=anthropic-observability", "intent=sso&task=unknown",
 		"intent=sso&task=https://example.test", "intent=unknown&task=connect-idp",
 	} {

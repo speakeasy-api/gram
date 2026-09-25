@@ -56,10 +56,10 @@ func TestOnboardingHTTP(t *testing.T) {
 	legacy, err := organizations.LoadOnboardingConfiguration(ctx, conn, orgID)
 	require.NoError(t, err)
 	require.Nil(t, legacy.Preset)
-	require.Len(t, legacy.Tasks, 15)
+	require.Len(t, legacy.Tasks, 12)
 	require.Len(t, legacy.Presets, 2)
-	require.Len(t, legacy.Presets[1].VisibleTaskKeys, 11)
-	require.Contains(t, legacy.Presets[1].VisibleTaskKeys, "domain-verification")
+	require.Len(t, legacy.Presets[1].VisibleTaskKeys, 9)
+	require.NotContains(t, legacy.Presets[1].VisibleTaskKeys, "domain-verification")
 	response := request(http.MethodGet, "", session)
 	require.Equal(t, http.StatusOK, response.Code)
 	var returned adminserver.GetOrganizationOnboardingResponseBody

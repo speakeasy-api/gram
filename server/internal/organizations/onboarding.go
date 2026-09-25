@@ -29,7 +29,7 @@ type onboardingPreset struct {
 // all read from it.
 var onboardingPresets = []onboardingPreset{
 	{Key: "gateway", Title: "Gateway", TaskKeys: []string{"create-marketplace", "distribute-servers"}},
-	{Key: "security", Title: "Security", TaskKeys: []string{"domain-verification", "connect-idp", "directory-sync", "create-marketplace", "enable-logging", "anthropic-observability", "instrument-agents", "additional-agent-config", "confirm-traffic", "anthropic-admin-controls", "configure-policies"}},
+	{Key: "security", Title: "Security", TaskKeys: []string{"identity-provider", "create-marketplace", "enable-logging", "anthropic-observability", "instrument-agents", "additional-agent-config", "confirm-traffic", "anthropic-admin-controls", "configure-policies"}},
 }
 
 func onboardingPresetByKey(key string) *onboardingPreset {

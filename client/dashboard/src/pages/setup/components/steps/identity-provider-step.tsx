@@ -10,8 +10,6 @@ import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { cn, getServerURL } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
-import { setupTaskSlug } from "../../setup-cards";
 import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
 import { IDP_PROVIDERS } from "../../providers";
@@ -23,11 +21,12 @@ interface IdentityProviderStepProps {
   onComplete: () => void;
 }
 
-// One card for the whole identity outcome: single sign-on and directory sync
-// are two round trips through the WorkOS admin portal, but what the admin is
-// setting up is "our identity provider runs sign-in and membership". Each
-// sub-step carries its own inline action and flips to Connected from the
-// server's onboarding status, so the card's Continue is always available.
+// One card for the whole identity outcome: domain verification, single
+// sign-on, and directory sync are three round trips through the WorkOS admin
+// portal, but what the admin is setting up is "our identity provider runs
+// sign-in and membership". Each sub-step carries its own inline action and
+// flips to done from the server's onboarding status, so the card's Continue
+// is always available.
 export function IdentityProviderStep({
   onComplete,
 }: IdentityProviderStepProps): JSX.Element {
@@ -40,12 +39,23 @@ export function IdentityProviderStep({
   return (
     <StepContainer
       title="Set up identity provider"
-      description="Connect your SSO provider so your team signs in with existing credentials, then sync its directory so users, groups, and roles stay in step with your identity provider. Both can be finished later from organization settings."
+      description="Verify your email domain, connect your SSO provider so your team signs in with existing credentials, then sync its directory so users, groups, and roles stay in step with your identity provider. All can be finished later from organization settings."
       onContinue={onComplete}
     >
       <div className="space-y-8">
-        <SingleSignOnSection
+        <DomainVerificationSection
           index={1}
+          // Active SSO proves a domain was verified, even for orgs set up
+          // before verified domains were tracked.
+          configured={
+            !!onboardingStatus?.domainVerified ||
+            !!onboardingStatus?.ssoConfigured
+          }
+          verifiedDomains={onboardingStatus?.verifiedDomains ?? []}
+          isLoading={isLoading}
+        />
+        <SingleSignOnSection
+          index={2}
           configured={!!onboardingStatus?.ssoConfigured}
           // Only a status response can say the domain is unverified; while
           // loading or after an error, WorkOS still enforces the rule.
@@ -53,7 +63,7 @@ export function IdentityProviderStep({
           isLoading={isLoading}
         />
         <DirectorySyncSection
-          index={2}
+          index={3}
           configured={!!onboardingStatus?.dsyncConfigured}
           isLoading={isLoading}
         />
@@ -138,13 +148,166 @@ interface SectionProps {
   isLoading: boolean;
 }
 
+// WorkOS only lets an organization set up single sign-on once it has proved
+// it owns an email domain (a DNS record added in the WorkOS admin portal).
+function DomainVerificationSection({
+  index,
+  configured,
+  verifiedDomains,
+  isLoading,
+}: SectionProps & { verifiedDomains: string[] }): JSX.Element {
+  const [portalOpened, setPortalOpened] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const { refetch: refetchOnboardingStatus } = useOnboardingStatus(
+    undefined,
+    undefined,
+    { throwOnError: false },
+  );
+
+  const generatePortalLink = useGenerateWorkOSAdminPortalLinkMutation({
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to launch domain verification portal",
+      );
+    },
+  });
+
+  const handleConnect = () => {
+    generatePortalLink.mutate(
+      {
+        request: {
+          generateWorkOSAdminPortalLinkRequestBody: {
+            intent: "domain_verification",
+            successUrl: `${getServerURL()}/v1/setup/callback?intent=domain_verification`,
+            returnUrl: window.location.href,
+          },
+        },
+      },
+      {
+        onSuccess: (data) => {
+          if (openSafeExternalUrl(data.url)) {
+            setPortalOpened(true);
+          } else {
+            toast.error("Unable to open the WorkOS portal");
+          }
+        },
+      },
+    );
+  };
+
+  const handleVerify = async () => {
+    setVerifying(true);
+    try {
+      const result = await refetchOnboardingStatus();
+      if (!result.data?.domainVerified) {
+        toast.error(
+          "Domain not verified yet. Finish setup in the WorkOS tab, then try again.",
+        );
+      }
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const isPending = generatePortalLink.isPending;
+
+  let body: JSX.Element;
+  if (isLoading) {
+    body = <SectionSkeleton />;
+  } else if (configured) {
+    body = (
+      <div className="border-border bg-card border p-4">
+        <p className="text-foreground text-sm font-medium">
+          Your domain is verified
+        </p>
+        <p className="text-muted-foreground mt-1 text-sm">
+          You can now connect your identity provider for single sign-on.
+        </p>
+        {verifiedDomains.length > 0 && (
+          <>
+            <p className="text-muted-foreground mt-3 text-sm">
+              SSO applies to users on these domains:
+            </p>
+            <ul
+              aria-label="Verified domains"
+              className="mt-2 flex flex-wrap gap-2"
+            >
+              {verifiedDomains.map((domain) => (
+                <li key={domain}>
+                  <Badge variant="neutral" background>
+                    <Badge.Text>{domain}</Badge.Text>
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    );
+  } else {
+    body = (
+      <div className="space-y-4">
+        <PortalNote>
+          {portalOpened
+            ? "Add the DNS record shown in the WorkOS tab, then verify it here."
+            : "After clicking Verify domain, the WorkOS portal opens in a new browser tab. Add the DNS record it shows, then come back and verify."}
+        </PortalNote>
+        <div className="flex justify-end">
+          {portalOpened ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => void handleVerify()}
+              disabled={verifying}
+            >
+              {verifying ? "Verifying..." : "Check verification"}
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleConnect}
+              disabled={isPending}
+            >
+              {isPending ? "Opening..." : "Verify domain"}
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <StepSection
+      index={index}
+      slug="verify-domain"
+      title="Verify domain"
+      description="Add a DNS record to prove you own your email domain. Single sign-on needs a verified domain."
+      complete={configured}
+      aside={
+        configured ? (
+          <Badge variant="success" background>
+            <Badge.LeftIcon>
+              <Check className="h-3 w-3" />
+            </Badge.LeftIcon>
+            <Badge.Text>Verified</Badge.Text>
+          </Badge>
+        ) : null
+      }
+    >
+      {body}
+    </StepSection>
+  );
+}
+
 function SingleSignOnSection({
   index,
   configured,
   domainVerified,
   isLoading,
 }: SectionProps & { domainVerified: boolean }): JSX.Element {
-  const orgRoutes = useOrgRoutes();
   // WorkOS rejects a new SSO connection until the org has a verified domain.
   const needsDomain = !domainVerified && !configured;
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
@@ -328,13 +491,7 @@ function SingleSignOnSection({
 
         {needsDomain && (
           <p className="text-muted-foreground text-sm">
-            Verify a domain first.{" "}
-            <orgRoutes.setup.Link
-              queryParams={{ task: setupTaskSlug("domain-verification") }}
-              className="text-foreground underline underline-offset-2"
-            >
-              Go to domain verification
-            </orgRoutes.setup.Link>
+            Verify a domain above first.
           </p>
         )}
 

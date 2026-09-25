@@ -35,10 +35,6 @@ const (
 	setupTaskStatusDone            = "done"
 )
 
-// setupDomainCheckTimeout bounds the live WorkOS domain check that
-// ListSetupTasks runs for orgs with no stored verified domains.
-const setupDomainCheckTimeout = 3 * time.Second
-
 type setupTaskDefinition struct {
 	Key           string
 	Title         string
@@ -58,10 +54,7 @@ type setupTaskDefinition struct {
 // Tests on both sides fail if the catalog, SETUP_CARDS, and presets disagree.
 var setupTaskCatalog = []setupTaskDefinition{
 	// Identity
-	{Key: "domain-verification", Title: "Verify your domain", Description: "Prove the organization owns its email domain. Single sign-on cannot be set up until a domain is verified.", Prerequisites: nil, HiddenByDefault: false},
-	{Key: "connect-idp", Title: "Connect identity provider", Description: "Configure single sign-on for the organization.", Prerequisites: []string{"domain-verification"}, HiddenByDefault: true},
-	{Key: "directory-sync", Title: "Set up directory sync", Description: "Sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: true},
-	{Key: "identity-provider", Title: "Set up identity provider", Description: "Connect single sign-on and sync people and groups from the identity provider.", Prerequisites: []string{"domain-verification"}, HiddenByDefault: false},
+	{Key: "identity-provider", Title: "Set up identity provider", Description: "Verify a domain, connect single sign-on, and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false},
 	// Observe
 	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil, HiddenByDefault: true},
 	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false},
@@ -95,25 +88,6 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 	}
 
 	repo := orgrepo.New(s.db)
-	org, err := repo.GetOrganizationMetadata(ctx, ac.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "get organization for setup tasks").LogError(ctx, s.logger)
-	}
-	// Orgs verified in WorkOS before the event sync tracked domains have an
-	// empty stored list. Filling it here keeps the identity provider card
-	// from showing blocked until someone opens the onboarding status. Active
-	// SSO already completes the domain task, so it needs no check.
-	workosOrgID := conv.FromPGTextOrEmpty[string](org.WorkosID)
-	// The check is best effort, so a slow WorkOS cannot hold up the board.
-	if workosOrgID != "" && !org.SsoEnabled.Bool {
-		refreshCtx, cancel := context.WithTimeout(ctx, setupDomainCheckTimeout)
-		_, err := s.refreshVerifiedDomains(refreshCtx, org.ID, workosOrgID, org.VerifiedDomains)
-		cancel()
-		if err != nil {
-			s.logger.WarnContext(ctx, "setup tasks: check domain verification", attr.SlogError(err), attr.SlogWorkOSOrganizationID(workosOrgID))
-		}
-	}
-
 	tasks, err := projectSetupTasks(ctx, repo, ac.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "project setup tasks").LogError(ctx, s.logger)
@@ -376,16 +350,8 @@ func projectSetupTasks(ctx context.Context, repo *orgrepo.Queries, organizationI
 		// who skips directory sync marks the card done by hand.
 		var completedByFact bool
 		switch definition.Key {
-		case "domain-verification":
-			// An active SSO connection proves a domain was verified, even for
-			// orgs set up before verified_domains was tracked.
-			completedByFact = facts.DomainVerified || facts.SsoConfigured
 		case "identity-provider":
 			completedByFact = facts.SsoConfigured && facts.DsyncConfigured
-		case "connect-idp":
-			completedByFact = facts.SsoConfigured
-		case "directory-sync":
-			completedByFact = facts.DsyncConfigured
 		case "create-marketplace":
 			completedByFact = facts.MarketplacePublished
 		case "enable-logging":
