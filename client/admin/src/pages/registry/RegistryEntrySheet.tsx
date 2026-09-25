@@ -188,9 +188,6 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
             or URLs. Metadata edits remain available. Create publishes; Save
             preserves publication status.
           </p>
-          {detail.error && !base && id && (
-            <p role="alert">{errorText(detail.error)}</p>
-          )}
           {failure !== null && (
             <div id="registry-request-error" role="alert">
               {errorText(failure)}{" "}
@@ -199,7 +196,20 @@ function Editor({ id, open, onOpenChange }: Props): JSX.Element {
             </div>
           )}
           {!loaded ? (
-            <p>Loading entry…</p>
+            detail.error ? (
+              <div role="alert">
+                <p>{errorText(detail.error)}</p>
+                <Button
+                  variant="outline"
+                  disabled={detail.isFetching}
+                  onClick={() => void detail.refetch()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : (
+              <p>Loading entry…</p>
+            )
           ) : (
             <>
               <label

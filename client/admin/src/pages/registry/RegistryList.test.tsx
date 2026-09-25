@@ -23,19 +23,26 @@ afterEach(() => {
 });
 
 it("bounds pages, sends search and publication filters, resets cursor and shows invalid summaries", async () => {
-  list.mockImplementation(({ cursor }) =>
-    Promise.resolve({
-      entries: [
-        {
-          id: "00000000-0000-4000-8000-000000000001",
-          name: "example.test/demo",
-          published: false,
-          updatedAt: "opaque",
-          issues: [{ path: "/server", message: "repair required" }],
-        },
-      ],
-      nextCursor: cursor ? undefined : "next-page",
-    }),
+  list.mockImplementation(
+    ({ cursor }) =>
+      new Promise((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              entries: [
+                {
+                  id: "00000000-0000-4000-8000-000000000001",
+                  name: "example.test/demo",
+                  published: false,
+                  updatedAt: "opaque",
+                  issues: [{ path: "/server", message: "repair required" }],
+                },
+              ],
+              nextCursor: cursor ? undefined : "next-page",
+            }),
+          cursor ? 100 : 0,
+        ),
+      ),
   );
   await renderWithApp(<RegistryList />);
   await screen.findByText("1 issues");
@@ -61,6 +68,12 @@ it("bounds pages, sends search and publication filters, resets cursor and shows 
       (screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true),
+  );
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Previous" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
   );
   fireEvent.click(screen.getByRole("button", { name: "Previous" }));
   await screen.findByText("Page 1");

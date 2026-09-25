@@ -24,3 +24,27 @@ describe("registry syntax and size validation", () => {
     ).toMatch(/16 MiB/);
   });
 });
+
+it.each(["\ud800", "\udfff", "x\ud800y", "\ud800\ud800", "\udc00\ud800"])(
+  "rejects literal unpaired UTF-16 in raw text: %j",
+  (value) => {
+    const raw = '{"extension":"' + value + '"}';
+    expect(() => JSON.parse(raw)).not.toThrow();
+    expect(validateRegistryText(raw)).toEqual([
+      {
+        path: "/",
+        message:
+          "Record contains an unpaired UTF-16 surrogate. Use a JSON escape (\\uXXXX) or a valid Unicode character.",
+      },
+    ]);
+  },
+);
+
+it.each([
+  '{"extension":"😀"}',
+  '{"extension":"\\ud800"}',
+  '{"extension":"\\udc00"}',
+  '{"extension":"\\ud83d\\ude00"}',
+])("accepts lossless raw text without parsing its string values: %s", (raw) =>
+  expect(validateRegistryText(raw)).toEqual([]),
+);

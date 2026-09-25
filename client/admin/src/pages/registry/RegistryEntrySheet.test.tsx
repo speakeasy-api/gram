@@ -372,3 +372,48 @@ it("does not prompt to discard while existing detail is loading", async () => {
   expect(router.state.location.pathname).toBe("/projects");
   expect(window.confirm).not.toHaveBeenCalled();
 });
+
+it("retries an initial detail failure without showing perpetual loading", async () => {
+  client.removeQueries({ queryKey: registryEntryQuery(id).queryKey });
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
+  vi.stubGlobal("fetch", fetch);
+  await mount();
+  await screen.findByRole("alert");
+  expect(screen.queryByText("Loading entry…")).toBeNull();
+  fetch.mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        id,
+        data_json: raw,
+        updated_at: token,
+        created_at: token,
+        published: false,
+        issues: [],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(
+    ((await screen.findByLabelText("Record JSON")) as HTMLTextAreaElement)
+      .value,
+  ).toBe(raw);
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  expect(mutations.save).not.toHaveBeenCalled();
+});
+
+it("opens create without fetching or retrying the disabled detail query", async () => {
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  await renderWithApp(
+    <RegistryEntrySheet id={null} open onOpenChange={vi.fn()} />,
+    { queryClient: client },
+  );
+  await screen.findByLabelText("Record JSON");
+  expect(screen.queryByText("Loading entry…")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  expect(fetch).not.toHaveBeenCalled();
+  expect(mutations.create).not.toHaveBeenCalled();
+});
