@@ -28,6 +28,7 @@ type ProductFeaturesSnapshot struct {
 	SessionPortabilityEnabled               bool
 	NetworkIngressEnabled                   bool
 	GatewayDiscoveryModesEnabled            bool
+	GatewayFrozenToolsetsEnabled            bool
 	DeviceAgent                             bool
 }
 
@@ -107,6 +108,7 @@ func (c *Client) snapshot(ctx context.Context, organizationID string, strict boo
 		SessionPortabilityEnabled:               isEnabled(FeatureSessionPortability),
 		NetworkIngressEnabled:                   isEnabled(FeatureNetworkIngress),
 		GatewayDiscoveryModesEnabled:            isEnabled(FeatureGatewayDiscoveryModes),
+		GatewayFrozenToolsetsEnabled:            isEnabled(FeatureGatewayFrozenToolsets),
 		DeviceAgent:                             deviceAgent,
 	}
 	if readErr != nil {

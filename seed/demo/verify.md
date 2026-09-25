@@ -432,8 +432,13 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Switching Match to _Wildcard_ clears it. Selecting `Acme CI` instead
     disables the Wildcard option and says why.
 
-25. **Gateway discovery modes**
-    - Enable the gateway discovery product feature and open a gateway with tools.
+25. **Gateway discovery and optional frozen toolsets**
+    - With both gateway product features enabled, open **Frozen Toolset Demo → Inspect**.
+    - Progressive lists four wrappers. Select Direct and reconnect: expect 13 qualified member tools in the shared demo, or 14 locally (the local MCP app adds `show_dashboard`).
+    - Review and freeze one tool, then reconnect: Direct lists exactly the approved tool.
+    - Choose **Use live tools and reconnect**: Direct lists all tools again.
+    - At a 390px viewport, discovery and freeze controls remain visible without horizontal overflow.
+    - Verified locally on 2026-09-25. Preview and external harness checks are separate.
     - In Settings, save Direct, then open Inspect: its default connection lists qualified member tools.
     - Select Progressive and reconnect: expect three discovery tools plus `execute_tool`. Reload Inspect and confirm the selected mode is retained.
     - Restore the gateway default to Progressive. Connections with no override follow it; explicit Direct connections keep their mode.

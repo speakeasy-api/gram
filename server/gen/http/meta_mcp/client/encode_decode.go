@@ -2183,6 +2183,7 @@ func unmarshalMetaMcpServerResponseBodyToTypesMetaMcpServer(v *MetaMcpServerResp
 		NetworkAccessMode:     types.NetworkAccessMode(*v.NetworkAccessMode),
 		Instructions:          v.Instructions,
 		DiscoveryModesEnabled: v.DiscoveryModesEnabled,
+		FrozenToolsetsEnabled: v.FrozenToolsetsEnabled,
 		DiscoveryMode:         *v.DiscoveryMode,
 		CreatedAt:             *v.CreatedAt,
 		UpdatedAt:             *v.UpdatedAt,

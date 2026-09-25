@@ -17,6 +17,16 @@ func ListFacetsUserSessionsPath() string {
 	return "/rpc/userSessions.listFacets"
 }
 
+// PreviewGatewayToolsetUserSessionsPath returns the URL path to the userSessions service previewGatewayToolset HTTP endpoint.
+func PreviewGatewayToolsetUserSessionsPath() string {
+	return "/rpc/userSessions.previewGatewayToolset"
+}
+
+// MintFrozenGatewaySessionUserSessionsPath returns the URL path to the userSessions service mintFrozenGatewaySession HTTP endpoint.
+func MintFrozenGatewaySessionUserSessionsPath() string {
+	return "/rpc/userSessions.mintFrozenGateway"
+}
+
 // MintUserSessionUserSessionsPath returns the URL path to the userSessions service mintUserSession HTTP endpoint.
 func MintUserSessionUserSessionsPath() string {
 	return "/rpc/userSessions.mint"

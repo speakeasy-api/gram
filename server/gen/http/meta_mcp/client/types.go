@@ -98,6 +98,9 @@ type CreateMetaMcpServerResponseBody struct {
 	// Whether the organization allows new discovery choices. Read through the
 	// gateway without requiring organization feature-management access.
 	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
+	// Whether the organization allows new frozen toolsets. Read through the
+	// gateway without requiring organization feature-management access.
+	FrozenToolsetsEnabled *bool `form:"frozen_toolsets_enabled,omitempty" json:"frozen_toolsets_enabled,omitempty" xml:"frozen_toolsets_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
@@ -134,6 +137,9 @@ type GetMetaMcpServerResponseBody struct {
 	// Whether the organization allows new discovery choices. Read through the
 	// gateway without requiring organization feature-management access.
 	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
+	// Whether the organization allows new frozen toolsets. Read through the
+	// gateway without requiring organization feature-management access.
+	FrozenToolsetsEnabled *bool `form:"frozen_toolsets_enabled,omitempty" json:"frozen_toolsets_enabled,omitempty" xml:"frozen_toolsets_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
@@ -176,6 +182,9 @@ type UpdateMetaMcpServerResponseBody struct {
 	// Whether the organization allows new discovery choices. Read through the
 	// gateway without requiring organization feature-management access.
 	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
+	// Whether the organization allows new frozen toolsets. Read through the
+	// gateway without requiring organization feature-management access.
+	FrozenToolsetsEnabled *bool `form:"frozen_toolsets_enabled,omitempty" json:"frozen_toolsets_enabled,omitempty" xml:"frozen_toolsets_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
@@ -1922,6 +1931,9 @@ type MetaMcpServerResponseBody struct {
 	// Whether the organization allows new discovery choices. Read through the
 	// gateway without requiring organization feature-management access.
 	DiscoveryModesEnabled *bool `form:"discovery_modes_enabled,omitempty" json:"discovery_modes_enabled,omitempty" xml:"discovery_modes_enabled,omitempty"`
+	// Whether the organization allows new frozen toolsets. Read through the
+	// gateway without requiring organization feature-management access.
+	FrozenToolsetsEnabled *bool `form:"frozen_toolsets_enabled,omitempty" json:"frozen_toolsets_enabled,omitempty" xml:"frozen_toolsets_enabled,omitempty"`
 	// The effective default discovery mode. Unconfigured connections follow this
 	// value.
 	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
@@ -2020,6 +2032,7 @@ func NewCreateMetaMcpServerMetaMcpServerOK(body *CreateMetaMcpServerResponseBody
 		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
 		Instructions:          body.Instructions,
 		DiscoveryModesEnabled: body.DiscoveryModesEnabled,
+		FrozenToolsetsEnabled: body.FrozenToolsetsEnabled,
 		DiscoveryMode:         *body.DiscoveryMode,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
@@ -2192,6 +2205,7 @@ func NewGetMetaMcpServerMetaMcpServerOK(body *GetMetaMcpServerResponseBody) *typ
 		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
 		Instructions:          body.Instructions,
 		DiscoveryModesEnabled: body.DiscoveryModesEnabled,
+		FrozenToolsetsEnabled: body.FrozenToolsetsEnabled,
 		DiscoveryMode:         *body.DiscoveryMode,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,
@@ -2530,6 +2544,7 @@ func NewUpdateMetaMcpServerMetaMcpServerOK(body *UpdateMetaMcpServerResponseBody
 		NetworkAccessMode:     types.NetworkAccessMode(*body.NetworkAccessMode),
 		Instructions:          body.Instructions,
 		DiscoveryModesEnabled: body.DiscoveryModesEnabled,
+		FrozenToolsetsEnabled: body.FrozenToolsetsEnabled,
 		DiscoveryMode:         *body.DiscoveryMode,
 		CreatedAt:             *body.CreatedAt,
 		UpdatedAt:             *body.UpdatedAt,

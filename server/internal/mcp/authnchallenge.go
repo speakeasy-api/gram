@@ -120,8 +120,9 @@ type EndpointRef struct {
 // round-trip through the IDP and land on /connect, short enough that
 // abandoned flows don't pile up.
 type AuthnChallengeState struct {
-	Browser    *ChallengeBrowserBinding `json:"browser,omitempty"`
-	Federation *FederatedChallenge      `json:"federation,omitempty"`
+	GatewayReviewFingerprint string                   `json:"gateway_review_fingerprint,omitempty"`
+	Browser                  *ChallengeBrowserBinding `json:"browser,omitempty"`
+	Federation               *FederatedChallenge      `json:"federation,omitempty"`
 	// Preserve only non-secret login binding and retry budget through consent.
 	FederatedBinding    *FederatedConsentBinding `json:"federated_binding,omitempty"`
 	DelegationRetryUsed bool                     `json:"delegation_retry_used,omitempty"`
@@ -259,6 +260,7 @@ var _ cache.CacheableObject[UserSessionGrant] = (*UserSessionGrant)(nil)
 const agentAuthorizationCodePrefix = "agent-v1."
 
 const gatewayAuthorizationCodePrefix = "gateway-v1."
+const frozenAuthorizationCodePrefix = "gateway-frozen-v2."
 
 // CacheKey implements cache.CacheableObject. Agent authorization grants use a
 // namespace that older binaries do not read, so a mixed-version deployment
@@ -269,7 +271,9 @@ func (g UserSessionGrant) CacheKey() string {
 
 func userSessionGrantCacheKey(issuerID uuid.UUID, code string, agentAuthorization bool) string {
 	prefix := "userSessionGrant:"
-	if strings.HasPrefix(code, gatewayAuthorizationCodePrefix) {
+	if strings.HasPrefix(code, frozenAuthorizationCodePrefix) {
+		prefix = "frozenGatewayUserSessionGrant:"
+	} else if strings.HasPrefix(code, gatewayAuthorizationCodePrefix) {
 		prefix = "gatewayUserSessionGrant:"
 	}
 	if agentAuthorization {

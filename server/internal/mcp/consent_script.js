@@ -58,6 +58,22 @@
   if (form) {
     var button = form.querySelector('button[type="submit"]');
     var submitted = false;
+    var frozenInput = document.querySelector('input[name="gateway_freeze"]');
+    function syncFrozenAction() {
+      if (!button || button.getAttribute("data-agent-selected") === "true")
+        return;
+      button.value =
+        frozenInput && frozenInput.checked && !frozenInput.disabled
+          ? "approve_frozen"
+          : "approve";
+      if (frozenInput && frozenInput.hasAttribute("data-review-unavailable")) {
+        button.disabled =
+          frozenInput.checked ||
+          button.getAttribute("data-consent-self-ready") !== "true";
+      }
+    }
+    if (frozenInput) frozenInput.addEventListener("change", syncFrozenAction);
+    syncFrozenAction();
     var agentInputs = document.querySelectorAll("input[data-agent-select]");
     var agentPolicy = document.querySelector("[data-agent-policy]");
     var agentPolicyName = document.querySelector("[data-agent-policy-name]");
@@ -371,12 +387,14 @@
         Array.prototype.forEach.call(selfOnlySections, function (section) {
           section.hidden = authorizingAgent;
         });
-        var discoveryMode = document.querySelector(
-          'select[name="discovery_mode"]',
-        );
-        if (discoveryMode) {
-          discoveryMode.disabled = authorizingAgent;
-        }
+        document
+          .querySelectorAll(
+            'select[name="discovery_mode"], input[name="gateway_freeze"], input[name="gateway_tools"]',
+          )
+          .forEach(function (input) {
+            input.disabled =
+              authorizingAgent || input.hasAttribute("data-unavailable");
+          });
         if (subjectDisplay && selected) {
           subjectDisplay.textContent = selectedDisplay;
         }
@@ -397,6 +415,7 @@
           button.disabled = authorizingAgent
             ? true
             : button.getAttribute("data-consent-self-ready") !== "true";
+          syncFrozenAction();
         }
         var selectedID = authorizingAgent ? selected.value : "";
         try {

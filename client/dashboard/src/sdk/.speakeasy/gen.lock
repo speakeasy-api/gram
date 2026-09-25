@@ -739,6 +739,8 @@ trackedFiles:
   src/funcs/userSessionsList.ts: {}
   src/funcs/userSessionsListFacets.ts: {}
   src/funcs/userSessionsMint.ts: {}
+  src/funcs/userSessionsMintFrozenGateway.ts: {}
+  src/funcs/userSessionsPreviewGatewayToolset.ts: {}
   src/funcs/userSessionsRevoke.ts: {}
   src/funcs/variationsCreateGlobal.ts: {}
   src/funcs/variationsDeleteGlobal.ts: {}
@@ -1028,9 +1030,11 @@ trackedFiles:
   src/models/components/fetchissuermetadatarequestbody.ts: {}
   src/models/components/fetchopenapiv3fromurlform2.ts: {}
   src/models/components/filteroption.ts: {}
+  src/models/components/frozengatewayreview.ts: {}
   src/models/components/functionenvironmentvariable.ts: {}
   src/models/components/functionresourcedefinition.ts: {}
   src/models/components/functiontooldefinition.ts: {}
+  src/models/components/gatewayreviewedtool.ts: {}
   src/models/components/gcpiamcredential.ts: {}
   src/models/components/gcpkmskey.ts: {}
   src/models/components/gcpsetupinfo.ts: {}
@@ -1093,6 +1097,7 @@ trackedFiles:
   src/models/components/getusermetricssummarypayload.ts: {}
   src/models/components/getusermetricssummaryresult.ts: {}
   src/models/components/globalremotesessionissuer.ts: {}
+  src/models/components/gramgatewaytoolsetreview.ts: {}
   src/models/components/hookingestdata.ts: {}
   src/models/components/hookingestevent.ts: {}
   src/models/components/hookingestsession.ts: {}
@@ -1351,6 +1356,8 @@ trackedFiles:
   src/models/components/migrateorganizationusersessionissuerresult.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerresult.ts: {}
+  src/models/components/mintfrozengatewaysessionrequestbody.ts: {}
+  src/models/components/mintfrozengatewaysessionresponsebody.ts: {}
   src/models/components/mintusersessionrequestbody.ts: {}
   src/models/components/mintusersessionresponsebody.ts: {}
   src/models/components/modelproviderkey.ts: {}
@@ -2337,6 +2344,7 @@ trackedFiles:
   src/models/operations/migrateorganizationremotesessionissuer.ts: {}
   src/models/operations/migrateorganizationusersessionissuer.ts: {}
   src/models/operations/migratetoglobalremotesessionissuer.ts: {}
+  src/models/operations/mintfrozengatewaysession.ts: {}
   src/models/operations/mintusersession.ts: {}
   src/models/operations/moveorganizationremotesessionissuer.ts: {}
   src/models/operations/moveorganizationusersessionissuer.ts: {}
@@ -2348,6 +2356,7 @@ trackedFiles:
   src/models/operations/platformkillswitchesnumberlistdefinitions.ts: {}
   src/models/operations/platformkillswitchesnumberlistprescriptions.ts: {}
   src/models/operations/prepareema.ts: {}
+  src/models/operations/previewgatewaytoolset.ts: {}
   src/models/operations/previewspendrule.ts: {}
   src/models/operations/proberemotemcpurl.ts: {}
   src/models/operations/promotemcpapprovalrequest.ts: {}
@@ -3121,6 +3130,7 @@ trackedFiles:
   src/react-query/migrateOrganizationRemoteSessionIssuer.ts: {}
   src/react-query/migrateOrganizationUserSessionIssuer.ts: {}
   src/react-query/migrateToGlobalRemoteSessionIssuer.ts: {}
+  src/react-query/mintFrozenGatewaySession.ts: {}
   src/react-query/mintUserSession.ts: {}
   src/react-query/modelProviderKeys.core.ts: {}
   src/react-query/modelProviderKeys.ts: {}
@@ -3194,6 +3204,8 @@ trackedFiles:
   src/react-query/pluginsDownloadObservabilityPlugin.ts: {}
   src/react-query/pluginsDownloadPluginPackage.core.ts: {}
   src/react-query/pluginsDownloadPluginPackage.ts: {}
+  src/react-query/previewGatewayToolset.core.ts: {}
+  src/react-query/previewGatewayToolset.ts: {}
   src/react-query/previewKillswitchOverlaps.ts: {}
   src/react-query/probeRemoteMcpURL.ts: {}
   src/react-query/productFeatures.core.ts: {}
@@ -6868,7 +6880,7 @@ examples:
           organization_id: "<id>"
       responses:
         "200":
-          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "gateway_discovery_modes_enabled": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "network_ingress_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "session_portability_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
+          application/json: {"ai_platform_push_integrations_enabled": false, "authz_challenge_logging_enabled": false, "consent_tool_filtering_enabled": false, "custom_model_keys_enabled": false, "customer_managed_encryption_keys_enabled": false, "device_agent": false, "gateway_discovery_modes_enabled": false, "gateway_frozen_toolsets_enabled": false, "hooks_browser_login_enabled": false, "hooks_fail_open_enabled": false, "logs_enabled": false, "network_ingress_enabled": false, "platform_mcp_enabled": false, "remote_session_auto_refresh_enabled": false, "remote_session_auto_refresh_enforced_enabled": false, "scim_enabled": false, "session_capture_enabled": true, "session_portability_enabled": false, "skill_capture_metadata_only": false, "skills_enabled": false, "sso_enabled": false, "tool_io_logs_enabled": true}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -9619,6 +9631,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  mintFrozenGatewaySession:
+    speakeasy-default-mint-frozen-gateway-session:
+      requestBody:
+        application/json: {"frozen_toolset": {"fingerprint": "<value>", "tools": ["<value 1>", "<value 2>", "<value 3>"]}, "meta_mcp_server_id": "1043a5c6-14cd-43e5-893f-8e6da21ac98f"}
+      responses:
+        "200":
+          application/json: {"access_token": "<value>", "expires_in": 718236, "frozen_tool_count": 822571}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   mintUserSession:
     speakeasy-default-mint-user-session:
       requestBody:
@@ -9766,6 +9789,20 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  previewGatewayToolset:
+    speakeasy-default-preview-gateway-toolset:
+      parameters:
+        query:
+          meta_mcp_server_id: "43839d58-6d7b-49b6-9056-844911fa44fc"
+      requestBody:
+        application/json: {"meta_mcp_server_id": "43839d58-6d7b-49b6-9056-844911fa44fc"}
+      responses:
+        "200":
+          application/json: {"fingerprint": "<value>", "tools": [{"definition": "<value>", "fingerprint": "<value>", "name": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   previewSpendRule:
     speakeasy-default-preview-spend-rule:
       requestBody:

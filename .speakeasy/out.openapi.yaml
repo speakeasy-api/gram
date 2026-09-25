@@ -71085,6 +71085,201 @@ paths:
       x-speakeasy-name-override: mint
       x-speakeasy-react-hook:
         name: MintUserSession
+  /rpc/userSessions.mintFrozenGateway:
+    post:
+      description: Mint a gateway connection from a freshly validated tool-definition review. This separate route prevents older servers from ignoring frozen options.
+      operationId: mintFrozenGatewaySession
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MintFrozenGatewaySessionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MintFrozenGatewaySessionResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: mintFrozenGatewaySession userSessions
+      tags:
+        - userSessions
+      x-speakeasy-name-override: mintFrozenGateway
+      x-speakeasy-react-hook:
+        name: MintFrozenGatewaySession
+  /rpc/userSessions.previewGatewayToolset:
+    get:
+      description: Read the complete currently permitted gateway inventory for an optional frozen connection. Does not execute tools. Unavailable members prevent approval.
+      operationId: previewGatewayToolset
+      parameters:
+        - allowEmptyValue: true
+          description: The gateway to review.
+          in: query
+          name: meta_mcp_server_id
+          required: true
+          schema:
+            description: The gateway to review.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GramGatewayToolsetReview'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: previewGatewayToolset userSessions
+      tags:
+        - userSessions
+      x-speakeasy-name-override: previewGatewayToolset
+      x-speakeasy-react-hook:
+        name: PreviewGatewayToolset
   /rpc/userSessions.revoke:
     post:
       description: Push the session's jti into the revocation cache and soft-delete the row.
@@ -79882,6 +80077,20 @@ components:
         - id
         - label
         - count
+    FrozenGatewayReview:
+      type: object
+      properties:
+        fingerprint:
+          type: string
+          description: Fingerprint returned by the complete inventory review.
+        tools:
+          type: array
+          items:
+            type: string
+          description: Qualified tool names approved for this connection. Empty means no tools.
+      required:
+        - fingerprint
+        - tools
     FunctionEnvironmentVariable:
       type: object
       properties:
@@ -80048,6 +80257,22 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    GatewayReviewedTool:
+      type: object
+      properties:
+        definition:
+          type: string
+          description: Full MCP tool definition as formatted JSON text, preserving exact schema numbers for human review.
+        fingerprint:
+          type: string
+          description: Fingerprint of the full definition and routing identity.
+        name:
+          type: string
+          description: Qualified tool name.
+      required:
+        - name
+        - fingerprint
+        - definition
     GcpIamCredential:
       type: object
       properties:
@@ -81413,6 +81638,20 @@ components:
         - global_client_count
         - tenant_client_count
         - trusted_user_session_issuer_count
+    GramGatewayToolsetReview:
+      type: object
+      properties:
+        fingerprint:
+          type: string
+          description: Fingerprint of the complete permitted inventory.
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewayReviewedTool'
+          description: Tools available for review.
+      required:
+        - fingerprint
+        - tools
     HTTPToolDefinition:
       type: object
       properties:
@@ -86248,6 +86487,9 @@ components:
         discovery_modes_enabled:
           type: boolean
           description: Whether the organization allows new discovery choices. Read through the gateway without requiring organization feature-management access.
+        frozen_toolsets_enabled:
+          type: boolean
+          description: Whether the organization allows new frozen toolsets. Read through the gateway without requiring organization feature-management access.
         id:
           type: string
           description: The ID of the meta MCP server
@@ -86561,6 +86803,42 @@ components:
         - issuer
         - clients_migrated
         - source_deleted
+    MintFrozenGatewaySessionRequestBody:
+      type: object
+      properties:
+        discovery_mode:
+          type: string
+          description: Optional explicit discovery mode.
+          enum:
+            - direct
+            - progressive
+        frozen_toolset:
+          $ref: '#/components/schemas/FrozenGatewayReview'
+        meta_mcp_server_id:
+          type: string
+          description: Gateway to connect.
+          format: uuid
+      required:
+        - meta_mcp_server_id
+        - frozen_toolset
+    MintFrozenGatewaySessionResponseBody:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: Gateway bearer token.
+        expires_in:
+          type: integer
+          description: Lifetime in seconds.
+          format: int64
+        frozen_tool_count:
+          type: integer
+          description: Number of approved tools in this frozen connection.
+          format: int64
+      required:
+        - access_token
+        - expires_in
+        - frozen_tool_count
     MintUserSessionRequestBody:
       type: object
       properties:
@@ -88836,6 +89114,9 @@ components:
         gateway_discovery_modes_enabled:
           type: boolean
           description: Whether gateway defaults and per-connection discovery choices can be configured
+        gateway_frozen_toolsets_enabled:
+          type: boolean
+          description: Whether new gateway connections can freeze reviewed tool definitions
         hooks_browser_login_enabled:
           type: boolean
           description: Whether generated hook plugins may mint per-user keys via the interactive browser login
@@ -88899,6 +89180,7 @@ components:
         - session_portability_enabled
         - network_ingress_enabled
         - gateway_discovery_modes_enabled
+        - gateway_frozen_toolsets_enabled
         - device_agent
     Project:
       type: object
@@ -93900,6 +94182,7 @@ components:
             - session_portability
             - network_ingress
             - gateway_discovery_modes
+            - gateway_frozen_toolsets
           maxLength: 60
         organization_id:
           type: string

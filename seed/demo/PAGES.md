@@ -228,3 +228,9 @@ dashboard, provider acceptance, or usable human access is demonstrated.
 Browser verification: [~] — follow check 25 in `seed/demo/verify.md`.
 
 The seeded gateway uses Progressive discovery. With the seeded gateway discovery product feature enabled, Settings shows this default and Inspect can reconnect in Direct mode to show qualified member tools. Choosing a mode in Inspect leaves the gateway default unchanged.
+
+### Frozen toolsets
+
+Open **Frozen Toolset Demo → Inspect** with the frozen-toolset product feature enabled. Its hosted members provide a complete review without external accounts. Review the definitions, select tools, and choose **Freeze tools and reconnect**. Both discovery modes show only that connection's approved definitions. **Review changes** compares the current definitions with the approved ones; **Use live tools and reconnect** starts a live connection.
+
+Browser verification: `[x]` (local, 2026-09-25). Direct shows 13 member tools in the shared demo, or 14 locally (including the local MCP app's `show_dashboard`); Progressive shows four wrappers. Freezing one tool narrows Direct to one, and returning to live restores the full catalog. See check 25 in `verify.md`.

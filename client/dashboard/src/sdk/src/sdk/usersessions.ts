@@ -5,9 +5,13 @@
 import { userSessionsList } from "../funcs/userSessionsList.js";
 import { userSessionsListFacets } from "../funcs/userSessionsListFacets.js";
 import { userSessionsMint } from "../funcs/userSessionsMint.js";
+import { userSessionsMintFrozenGateway } from "../funcs/userSessionsMintFrozenGateway.js";
+import { userSessionsPreviewGatewayToolset } from "../funcs/userSessionsPreviewGatewayToolset.js";
 import { userSessionsRevoke } from "../funcs/userSessionsRevoke.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { GramGatewayToolsetReview } from "../models/components/gramgatewaytoolsetreview.js";
 import { ListUserSessionFacetsResult } from "../models/components/listusersessionfacetsresult.js";
+import { MintFrozenGatewaySessionResponseBody } from "../models/components/mintfrozengatewaysessionresponsebody.js";
 import { MintUserSessionResponseBody } from "../models/components/mintusersessionresponsebody.js";
 import {
   ListUserSessionFacetsRequest,
@@ -19,9 +23,17 @@ import {
   ListUserSessionsSecurity,
 } from "../models/operations/listusersessions.js";
 import {
+  MintFrozenGatewaySessionRequest,
+  MintFrozenGatewaySessionSecurity,
+} from "../models/operations/mintfrozengatewaysession.js";
+import {
   MintUserSessionRequest,
   MintUserSessionSecurity,
 } from "../models/operations/mintusersession.js";
+import {
+  PreviewGatewayToolsetRequest,
+  PreviewGatewayToolsetSecurity,
+} from "../models/operations/previewgatewaytoolset.js";
 import {
   RevokeUserSessionRequest,
   RevokeUserSessionSecurity,
@@ -80,6 +92,44 @@ export class UserSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<MintUserSessionResponseBody> {
     return unwrapAsync(userSessionsMint(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * mintFrozenGatewaySession userSessions
+   *
+   * @remarks
+   * Mint a gateway connection from a freshly validated tool-definition review. This separate route prevents older servers from ignoring frozen options.
+   */
+  async mintFrozenGateway(
+    request: MintFrozenGatewaySessionRequest,
+    security?: MintFrozenGatewaySessionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<MintFrozenGatewaySessionResponseBody> {
+    return unwrapAsync(userSessionsMintFrozenGateway(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * previewGatewayToolset userSessions
+   *
+   * @remarks
+   * Read the complete currently permitted gateway inventory for an optional frozen connection. Does not execute tools. Unavailable members prevent approval.
+   */
+  async previewGatewayToolset(
+    request: PreviewGatewayToolsetRequest,
+    security?: PreviewGatewayToolsetSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GramGatewayToolsetReview> {
+    return unwrapAsync(userSessionsPreviewGatewayToolset(
       this,
       request,
       security,

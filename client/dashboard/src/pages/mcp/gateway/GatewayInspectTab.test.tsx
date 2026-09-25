@@ -38,6 +38,7 @@ vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
 vi.mock("./GatewayDetailsRouting", () => ({
   gatewayTabHref: () => "/settings",
 }));
+vi.mock("./GatewayFrozenToolset", () => ({ GatewayFrozenToolset: () => null }));
 vi.mock("./GatewaySettingsTab", () => ({
   GATEWAY_INSTRUCTIONS_SECTION_ID: "instructions",
 }));

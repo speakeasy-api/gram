@@ -33,6 +33,7 @@ type OrganizationFeatures struct {
 	ConsentToolFilteringEnabled          bool   `json:"consent_tool_filtering_enabled"`
 	SessionPortabilityEnabled            bool   `json:"session_portability_enabled"`
 	GatewayDiscoveryModesEnabled         bool   `json:"gateway_discovery_modes_enabled"`
+	GatewayFrozenToolsetsEnabled         bool   `json:"gateway_frozen_toolsets_enabled"`
 	NetworkIngressEnabled                bool   `json:"network_ingress_enabled"`
 }
 
@@ -75,6 +76,7 @@ func registerConfigurationTools(server *mcp.Server, organizations OrganizationRe
 			RemoteSessionAutoRefreshEnforced:     features.RemoteSessionAutoRefreshEnforcedEnabled,
 			ConsentToolFilteringEnabled:          features.ConsentToolFilteringEnabled, SessionPortabilityEnabled: features.SessionPortabilityEnabled,
 			GatewayDiscoveryModesEnabled: features.GatewayDiscoveryModesEnabled,
+			GatewayFrozenToolsetsEnabled: features.GatewayFrozenToolsetsEnabled,
 			NetworkIngressEnabled:        features.NetworkIngressEnabled,
 		}, nil
 	})

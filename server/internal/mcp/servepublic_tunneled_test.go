@@ -49,6 +49,7 @@ func requestID(body string) string {
 }
 
 type fakeTunnelGateway struct {
+	toolNames      []string
 	t              *testing.T
 	agentSessionID string
 	// backendSessionID is the Mcp-Session-Id the fake customer backend mints
@@ -148,6 +149,15 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if g.backendSessionID != "" && r.Header.Get("Mcp-Session-Id") != g.backendSessionID {
 			http.Error(w, "unknown session", http.StatusNotFound)
+			return
+		}
+		if g.toolNames != nil && strings.Contains(buf.String(), `"tools/list"`) {
+			tools := make([]map[string]any, 0, len(g.toolNames))
+			for _, name := range g.toolNames {
+				tools = append(tools, map[string]any{"name": name, "inputSchema": map[string]any{"type": "object"}})
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(requestID(buf.String())), "result": map[string]any{"tools": tools}})
 			return
 		}
 		if strings.Contains(buf.String(), `"tools/call"`) {

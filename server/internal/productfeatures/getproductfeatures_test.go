@@ -109,3 +109,21 @@ func TestGatewayDiscoveryFeatureRequiresStaffAndInvalidatesCachedState(t *testin
 	require.NoError(t, err)
 	require.False(t, disabled.GatewayDiscoveryModesEnabled)
 }
+
+func TestGatewayFrozenFeatureIsIndependentOfDiscoveryChoices(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	request := &gen.GetProductFeaturesPayload{OrganizationID: requestedOrganizationID(ctx)}
+	update := &gen.SetProductFeaturePayload{OrganizationID: request.OrganizationID, FeatureName: gen.ProductFeatureName(productfeatures.FeatureGatewayFrozenToolsets), Enabled: true}
+	require.Error(t, ti.service.SetProductFeature(ctx, update))
+	require.NoError(t, ti.service.SetProductFeature(withPlatformAdmin(t, ctx), update))
+	enabled, err := ti.service.GetProductFeatures(ctx, request)
+	require.NoError(t, err)
+	require.True(t, enabled.GatewayFrozenToolsetsEnabled)
+	require.False(t, enabled.GatewayDiscoveryModesEnabled)
+	update.Enabled = false
+	require.NoError(t, ti.service.SetProductFeature(withPlatformAdmin(t, ctx), update))
+	disabled, err := ti.service.GetProductFeatures(ctx, request)
+	require.NoError(t, err)
+	require.False(t, disabled.GatewayFrozenToolsetsEnabled)
+}

@@ -10,8 +10,20 @@ package client
 import (
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	usersessions "github.com/speakeasy-api/gram/server/gen/user_sessions"
+	usersessionsviews "github.com/speakeasy-api/gram/server/gen/user_sessions/views"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// MintFrozenGatewaySessionRequestBody is the type of the "userSessions"
+// service "mintFrozenGatewaySession" endpoint HTTP request body.
+type MintFrozenGatewaySessionRequestBody struct {
+	// Gateway to connect.
+	MetaMcpServerID string `form:"meta_mcp_server_id" json:"meta_mcp_server_id" xml:"meta_mcp_server_id"`
+	// Optional explicit discovery mode.
+	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
+	// The reviewed inventory and exact approved tools.
+	FrozenToolset *FrozenGatewayReviewRequestBody `form:"frozen_toolset" json:"frozen_toolset" xml:"frozen_toolset"`
+}
 
 // MintUserSessionRequestBody is the type of the "userSessions" service
 // "mintUserSession" endpoint HTTP request body.
@@ -53,6 +65,26 @@ type ListFacetsResponseBody struct {
 	Users []*UserSessionFacetOptionResponseBody `form:"users,omitempty" json:"users,omitempty" xml:"users,omitempty"`
 	// Issuer/server facets.
 	Servers []*UserSessionFacetOptionResponseBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
+}
+
+// PreviewGatewayToolsetResponseBody is the type of the "userSessions" service
+// "previewGatewayToolset" endpoint HTTP response body.
+type PreviewGatewayToolsetResponseBody struct {
+	// Fingerprint of the complete permitted inventory.
+	Fingerprint *string `form:"fingerprint,omitempty" json:"fingerprint,omitempty" xml:"fingerprint,omitempty"`
+	// Tools available for review.
+	Tools []*GatewayReviewedToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+}
+
+// MintFrozenGatewaySessionResponseBody is the type of the "userSessions"
+// service "mintFrozenGatewaySession" endpoint HTTP response body.
+type MintFrozenGatewaySessionResponseBody struct {
+	// Gateway bearer token.
+	AccessToken *string `form:"access_token,omitempty" json:"access_token,omitempty" xml:"access_token,omitempty"`
+	// Lifetime in seconds.
+	ExpiresIn *int `form:"expires_in,omitempty" json:"expires_in,omitempty" xml:"expires_in,omitempty"`
+	// Number of approved tools in this frozen connection.
+	FrozenToolCount *int `form:"frozen_tool_count,omitempty" json:"frozen_tool_count,omitempty" xml:"frozen_tool_count,omitempty"`
 }
 
 // MintUserSessionResponseBody is the type of the "userSessions" service
@@ -422,6 +454,386 @@ type ListFacetsUnexpectedResponseBody struct {
 // ListFacetsGatewayErrorResponseBody is the type of the "userSessions" service
 // "listFacets" endpoint HTTP response body for the "gateway_error" error.
 type ListFacetsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewGatewayToolsetUnauthorizedResponseBody is the type of the
+// "userSessions" service "previewGatewayToolset" endpoint HTTP response body
+// for the "unauthorized" error.
+type PreviewGatewayToolsetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewGatewayToolsetForbiddenResponseBody is the type of the "userSessions"
+// service "previewGatewayToolset" endpoint HTTP response body for the
+// "forbidden" error.
+type PreviewGatewayToolsetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewGatewayToolsetBadRequestResponseBody is the type of the
+// "userSessions" service "previewGatewayToolset" endpoint HTTP response body
+// for the "bad_request" error.
+type PreviewGatewayToolsetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewGatewayToolsetNotFoundResponseBody is the type of the "userSessions"
+// service "previewGatewayToolset" endpoint HTTP response body for the
+// "not_found" error.
+type PreviewGatewayToolsetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewGatewayToolsetConflictResponseBody is the type of the "userSessions"
+// service "previewGatewayToolset" endpoint HTTP response body for the
+// "conflict" error.
+type PreviewGatewayToolsetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewGatewayToolsetUnsupportedMediaResponseBody is the type of the
+// "userSessions" service "previewGatewayToolset" endpoint HTTP response body
+// for the "unsupported_media" error.
+type PreviewGatewayToolsetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewGatewayToolsetInvalidResponseBody is the type of the "userSessions"
+// service "previewGatewayToolset" endpoint HTTP response body for the
+// "invalid" error.
+type PreviewGatewayToolsetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewGatewayToolsetInvariantViolationResponseBody is the type of the
+// "userSessions" service "previewGatewayToolset" endpoint HTTP response body
+// for the "invariant_violation" error.
+type PreviewGatewayToolsetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewGatewayToolsetUnexpectedResponseBody is the type of the
+// "userSessions" service "previewGatewayToolset" endpoint HTTP response body
+// for the "unexpected" error.
+type PreviewGatewayToolsetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// PreviewGatewayToolsetGatewayErrorResponseBody is the type of the
+// "userSessions" service "previewGatewayToolset" endpoint HTTP response body
+// for the "gateway_error" error.
+type PreviewGatewayToolsetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MintFrozenGatewaySessionUnauthorizedResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "unauthorized" error.
+type MintFrozenGatewaySessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MintFrozenGatewaySessionForbiddenResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "forbidden" error.
+type MintFrozenGatewaySessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MintFrozenGatewaySessionBadRequestResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "bad_request" error.
+type MintFrozenGatewaySessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MintFrozenGatewaySessionNotFoundResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "not_found" error.
+type MintFrozenGatewaySessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MintFrozenGatewaySessionConflictResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "conflict" error.
+type MintFrozenGatewaySessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MintFrozenGatewaySessionUnsupportedMediaResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "unsupported_media" error.
+type MintFrozenGatewaySessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MintFrozenGatewaySessionInvalidResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "invalid" error.
+type MintFrozenGatewaySessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MintFrozenGatewaySessionInvariantViolationResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "invariant_violation" error.
+type MintFrozenGatewaySessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MintFrozenGatewaySessionUnexpectedResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "unexpected" error.
+type MintFrozenGatewaySessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// MintFrozenGatewaySessionGatewayErrorResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "gateway_error" error.
+type MintFrozenGatewaySessionGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -964,6 +1376,41 @@ type UserSessionFacetOptionResponseBody struct {
 	Count *int64 `form:"count,omitempty" json:"count,omitempty" xml:"count,omitempty"`
 }
 
+// GatewayReviewedToolResponseBody is used to define fields on response body
+// types.
+type GatewayReviewedToolResponseBody struct {
+	// Qualified tool name.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Fingerprint of the full definition and routing identity.
+	Fingerprint *string `form:"fingerprint,omitempty" json:"fingerprint,omitempty" xml:"fingerprint,omitempty"`
+	// Full MCP tool definition as formatted JSON text, preserving exact schema
+	// numbers for human review.
+	Definition *string `form:"definition,omitempty" json:"definition,omitempty" xml:"definition,omitempty"`
+}
+
+// FrozenGatewayReviewRequestBody is used to define fields on request body
+// types.
+type FrozenGatewayReviewRequestBody struct {
+	// Fingerprint returned by the complete inventory review.
+	Fingerprint string `form:"fingerprint" json:"fingerprint" xml:"fingerprint"`
+	// Qualified tool names approved for this connection. Empty means no tools.
+	Tools []string `form:"tools" json:"tools" xml:"tools"`
+}
+
+// NewMintFrozenGatewaySessionRequestBody builds the HTTP request body from the
+// payload of the "mintFrozenGatewaySession" endpoint of the "userSessions"
+// service.
+func NewMintFrozenGatewaySessionRequestBody(p *usersessions.MintFrozenGatewaySessionPayload) *MintFrozenGatewaySessionRequestBody {
+	body := &MintFrozenGatewaySessionRequestBody{
+		MetaMcpServerID: p.MetaMcpServerID,
+		DiscoveryMode:   p.DiscoveryMode,
+	}
+	if p.FrozenToolset != nil {
+		body.FrozenToolset = marshalUsersessionsFrozenGatewayReviewToFrozenGatewayReviewRequestBody(p.FrozenToolset)
+	}
+	return body
+}
+
 // NewMintUserSessionRequestBody builds the HTTP request body from the payload
 // of the "mintUserSession" endpoint of the "userSessions" service.
 func NewMintUserSessionRequestBody(p *usersessions.MintUserSessionPayload) *MintUserSessionRequestBody {
@@ -1314,6 +1761,336 @@ func NewListFacetsUnexpected(body *ListFacetsUnexpectedResponseBody) *goa.Servic
 // NewListFacetsGatewayError builds a userSessions service listFacets endpoint
 // gateway_error error.
 func NewListFacetsGatewayError(body *ListFacetsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewGatewayToolsetGatewayToolsetReviewOK builds a "userSessions"
+// service "previewGatewayToolset" endpoint result from a HTTP "OK" response.
+func NewPreviewGatewayToolsetGatewayToolsetReviewOK(body *PreviewGatewayToolsetResponseBody) *usersessionsviews.GatewayToolsetReviewView {
+	v := &usersessionsviews.GatewayToolsetReviewView{
+		Fingerprint: body.Fingerprint,
+	}
+	v.Tools = make([]*usersessionsviews.GatewayReviewedToolView, len(body.Tools))
+	for i, val := range body.Tools {
+		if val == nil {
+			v.Tools[i] = nil
+			continue
+		}
+		v.Tools[i] = unmarshalGatewayReviewedToolResponseBodyToUsersessionsviewsGatewayReviewedToolView(val)
+	}
+
+	return v
+}
+
+// NewPreviewGatewayToolsetUnauthorized builds a userSessions service
+// previewGatewayToolset endpoint unauthorized error.
+func NewPreviewGatewayToolsetUnauthorized(body *PreviewGatewayToolsetUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewGatewayToolsetForbidden builds a userSessions service
+// previewGatewayToolset endpoint forbidden error.
+func NewPreviewGatewayToolsetForbidden(body *PreviewGatewayToolsetForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewGatewayToolsetBadRequest builds a userSessions service
+// previewGatewayToolset endpoint bad_request error.
+func NewPreviewGatewayToolsetBadRequest(body *PreviewGatewayToolsetBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewGatewayToolsetNotFound builds a userSessions service
+// previewGatewayToolset endpoint not_found error.
+func NewPreviewGatewayToolsetNotFound(body *PreviewGatewayToolsetNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewGatewayToolsetConflict builds a userSessions service
+// previewGatewayToolset endpoint conflict error.
+func NewPreviewGatewayToolsetConflict(body *PreviewGatewayToolsetConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewGatewayToolsetUnsupportedMedia builds a userSessions service
+// previewGatewayToolset endpoint unsupported_media error.
+func NewPreviewGatewayToolsetUnsupportedMedia(body *PreviewGatewayToolsetUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewGatewayToolsetInvalid builds a userSessions service
+// previewGatewayToolset endpoint invalid error.
+func NewPreviewGatewayToolsetInvalid(body *PreviewGatewayToolsetInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewGatewayToolsetInvariantViolation builds a userSessions service
+// previewGatewayToolset endpoint invariant_violation error.
+func NewPreviewGatewayToolsetInvariantViolation(body *PreviewGatewayToolsetInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewGatewayToolsetUnexpected builds a userSessions service
+// previewGatewayToolset endpoint unexpected error.
+func NewPreviewGatewayToolsetUnexpected(body *PreviewGatewayToolsetUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewPreviewGatewayToolsetGatewayError builds a userSessions service
+// previewGatewayToolset endpoint gateway_error error.
+func NewPreviewGatewayToolsetGatewayError(body *PreviewGatewayToolsetGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMintFrozenGatewaySessionResultOK builds a "userSessions" service
+// "mintFrozenGatewaySession" endpoint result from a HTTP "OK" response.
+func NewMintFrozenGatewaySessionResultOK(body *MintFrozenGatewaySessionResponseBody) *usersessions.MintFrozenGatewaySessionResult {
+	v := &usersessions.MintFrozenGatewaySessionResult{
+		AccessToken:     *body.AccessToken,
+		ExpiresIn:       *body.ExpiresIn,
+		FrozenToolCount: *body.FrozenToolCount,
+	}
+
+	return v
+}
+
+// NewMintFrozenGatewaySessionUnauthorized builds a userSessions service
+// mintFrozenGatewaySession endpoint unauthorized error.
+func NewMintFrozenGatewaySessionUnauthorized(body *MintFrozenGatewaySessionUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMintFrozenGatewaySessionForbidden builds a userSessions service
+// mintFrozenGatewaySession endpoint forbidden error.
+func NewMintFrozenGatewaySessionForbidden(body *MintFrozenGatewaySessionForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMintFrozenGatewaySessionBadRequest builds a userSessions service
+// mintFrozenGatewaySession endpoint bad_request error.
+func NewMintFrozenGatewaySessionBadRequest(body *MintFrozenGatewaySessionBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMintFrozenGatewaySessionNotFound builds a userSessions service
+// mintFrozenGatewaySession endpoint not_found error.
+func NewMintFrozenGatewaySessionNotFound(body *MintFrozenGatewaySessionNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMintFrozenGatewaySessionConflict builds a userSessions service
+// mintFrozenGatewaySession endpoint conflict error.
+func NewMintFrozenGatewaySessionConflict(body *MintFrozenGatewaySessionConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMintFrozenGatewaySessionUnsupportedMedia builds a userSessions service
+// mintFrozenGatewaySession endpoint unsupported_media error.
+func NewMintFrozenGatewaySessionUnsupportedMedia(body *MintFrozenGatewaySessionUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMintFrozenGatewaySessionInvalid builds a userSessions service
+// mintFrozenGatewaySession endpoint invalid error.
+func NewMintFrozenGatewaySessionInvalid(body *MintFrozenGatewaySessionInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMintFrozenGatewaySessionInvariantViolation builds a userSessions service
+// mintFrozenGatewaySession endpoint invariant_violation error.
+func NewMintFrozenGatewaySessionInvariantViolation(body *MintFrozenGatewaySessionInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMintFrozenGatewaySessionUnexpected builds a userSessions service
+// mintFrozenGatewaySession endpoint unexpected error.
+func NewMintFrozenGatewaySessionUnexpected(body *MintFrozenGatewaySessionUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewMintFrozenGatewaySessionGatewayError builds a userSessions service
+// mintFrozenGatewaySession endpoint gateway_error error.
+func NewMintFrozenGatewaySessionGatewayError(body *MintFrozenGatewaySessionGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1685,6 +2462,21 @@ func ValidateListFacetsResponseBody(body *ListFacetsResponseBody) (err error) {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
+	}
+	return
+}
+
+// ValidateMintFrozenGatewaySessionResponseBody runs the validations defined on
+// MintFrozenGatewaySessionResponseBody
+func ValidateMintFrozenGatewaySessionResponseBody(body *MintFrozenGatewaySessionResponseBody) (err error) {
+	if body.AccessToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("access_token", "body"))
+	}
+	if body.ExpiresIn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expires_in", "body"))
+	}
+	if body.FrozenToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("frozen_tool_count", "body"))
 	}
 	return
 }
@@ -2160,6 +2952,489 @@ func ValidateListFacetsUnexpectedResponseBody(body *ListFacetsUnexpectedResponse
 // ValidateListFacetsGatewayErrorResponseBody runs the validations defined on
 // listFacets_gateway_error_response_body
 func ValidateListFacetsGatewayErrorResponseBody(body *ListFacetsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewGatewayToolsetUnauthorizedResponseBody runs the validations
+// defined on previewGatewayToolset_unauthorized_response_body
+func ValidatePreviewGatewayToolsetUnauthorizedResponseBody(body *PreviewGatewayToolsetUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewGatewayToolsetForbiddenResponseBody runs the validations
+// defined on previewGatewayToolset_forbidden_response_body
+func ValidatePreviewGatewayToolsetForbiddenResponseBody(body *PreviewGatewayToolsetForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewGatewayToolsetBadRequestResponseBody runs the validations
+// defined on previewGatewayToolset_bad_request_response_body
+func ValidatePreviewGatewayToolsetBadRequestResponseBody(body *PreviewGatewayToolsetBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewGatewayToolsetNotFoundResponseBody runs the validations
+// defined on previewGatewayToolset_not_found_response_body
+func ValidatePreviewGatewayToolsetNotFoundResponseBody(body *PreviewGatewayToolsetNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewGatewayToolsetConflictResponseBody runs the validations
+// defined on previewGatewayToolset_conflict_response_body
+func ValidatePreviewGatewayToolsetConflictResponseBody(body *PreviewGatewayToolsetConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewGatewayToolsetUnsupportedMediaResponseBody runs the
+// validations defined on previewGatewayToolset_unsupported_media_response_body
+func ValidatePreviewGatewayToolsetUnsupportedMediaResponseBody(body *PreviewGatewayToolsetUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewGatewayToolsetInvalidResponseBody runs the validations
+// defined on previewGatewayToolset_invalid_response_body
+func ValidatePreviewGatewayToolsetInvalidResponseBody(body *PreviewGatewayToolsetInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewGatewayToolsetInvariantViolationResponseBody runs the
+// validations defined on
+// previewGatewayToolset_invariant_violation_response_body
+func ValidatePreviewGatewayToolsetInvariantViolationResponseBody(body *PreviewGatewayToolsetInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewGatewayToolsetUnexpectedResponseBody runs the validations
+// defined on previewGatewayToolset_unexpected_response_body
+func ValidatePreviewGatewayToolsetUnexpectedResponseBody(body *PreviewGatewayToolsetUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidatePreviewGatewayToolsetGatewayErrorResponseBody runs the validations
+// defined on previewGatewayToolset_gateway_error_response_body
+func ValidatePreviewGatewayToolsetGatewayErrorResponseBody(body *PreviewGatewayToolsetGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMintFrozenGatewaySessionUnauthorizedResponseBody runs the
+// validations defined on mintFrozenGatewaySession_unauthorized_response_body
+func ValidateMintFrozenGatewaySessionUnauthorizedResponseBody(body *MintFrozenGatewaySessionUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMintFrozenGatewaySessionForbiddenResponseBody runs the validations
+// defined on mintFrozenGatewaySession_forbidden_response_body
+func ValidateMintFrozenGatewaySessionForbiddenResponseBody(body *MintFrozenGatewaySessionForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMintFrozenGatewaySessionBadRequestResponseBody runs the validations
+// defined on mintFrozenGatewaySession_bad_request_response_body
+func ValidateMintFrozenGatewaySessionBadRequestResponseBody(body *MintFrozenGatewaySessionBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMintFrozenGatewaySessionNotFoundResponseBody runs the validations
+// defined on mintFrozenGatewaySession_not_found_response_body
+func ValidateMintFrozenGatewaySessionNotFoundResponseBody(body *MintFrozenGatewaySessionNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMintFrozenGatewaySessionConflictResponseBody runs the validations
+// defined on mintFrozenGatewaySession_conflict_response_body
+func ValidateMintFrozenGatewaySessionConflictResponseBody(body *MintFrozenGatewaySessionConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMintFrozenGatewaySessionUnsupportedMediaResponseBody runs the
+// validations defined on
+// mintFrozenGatewaySession_unsupported_media_response_body
+func ValidateMintFrozenGatewaySessionUnsupportedMediaResponseBody(body *MintFrozenGatewaySessionUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMintFrozenGatewaySessionInvalidResponseBody runs the validations
+// defined on mintFrozenGatewaySession_invalid_response_body
+func ValidateMintFrozenGatewaySessionInvalidResponseBody(body *MintFrozenGatewaySessionInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMintFrozenGatewaySessionInvariantViolationResponseBody runs the
+// validations defined on
+// mintFrozenGatewaySession_invariant_violation_response_body
+func ValidateMintFrozenGatewaySessionInvariantViolationResponseBody(body *MintFrozenGatewaySessionInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMintFrozenGatewaySessionUnexpectedResponseBody runs the validations
+// defined on mintFrozenGatewaySession_unexpected_response_body
+func ValidateMintFrozenGatewaySessionUnexpectedResponseBody(body *MintFrozenGatewaySessionUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateMintFrozenGatewaySessionGatewayErrorResponseBody runs the
+// validations defined on mintFrozenGatewaySession_gateway_error_response_body
+func ValidateMintFrozenGatewaySessionGatewayErrorResponseBody(body *MintFrozenGatewaySessionGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2859,6 +4134,30 @@ func ValidateUserSessionFacetOptionResponseBody(body *UserSessionFacetOptionResp
 	}
 	if body.Count == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("count", "body"))
+	}
+	return
+}
+
+// ValidateGatewayReviewedToolResponseBody runs the validations defined on
+// GatewayReviewedToolResponseBody
+func ValidateGatewayReviewedToolResponseBody(body *GatewayReviewedToolResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Fingerprint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fingerprint", "body"))
+	}
+	if body.Definition == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("definition", "body"))
+	}
+	return
+}
+
+// ValidateFrozenGatewayReviewRequestBody runs the validations defined on
+// FrozenGatewayReviewRequestBody
+func ValidateFrozenGatewayReviewRequestBody(body *FrozenGatewayReviewRequestBody) (err error) {
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
 	return
 }

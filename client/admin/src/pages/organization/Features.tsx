@@ -41,6 +41,13 @@ type ProductFeatureDecision =
   | { kind: "omitted"; where: string };
 
 const PRODUCT_FEATURES = {
+  gateway_frozen_toolsets: {
+    kind: "toggle",
+    enabledKey: "gatewayFrozenToolsetsEnabled",
+    label: "Gateway frozen toolsets",
+    description:
+      "Allows users to freeze reviewed tool definitions for a gateway connection. Disabling this preserves existing frozen approvals.",
+  },
   gateway_discovery_modes: {
     kind: "toggle",
     enabledKey: "gatewayDiscoveryModesEnabled",

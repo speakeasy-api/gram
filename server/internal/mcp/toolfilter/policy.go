@@ -9,12 +9,14 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 )
 
 // GatewayOptions contains explicit connection choices. An absent mode follows
 // the owner's current default on every request.
 type GatewayOptions struct {
+	Frozen *FrozenToolset `json:"frozen,omitempty"`
 	// DiscoveryMode overrides the gateway default for this connection.
 	DiscoveryMode *metamcp.DiscoveryMode `json:"discovery_mode,omitempty"`
 }
@@ -78,8 +80,14 @@ func ParseSessionPolicy(raw []byte) (*SessionPolicy, error) {
 	if err := decoder.Decode(new(json.RawMessage)); !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("gateway policy carries trailing data")
 	}
-	if document.Version != 1 {
+	if document.Version != 1 && document.Version != 2 {
 		return nil, fmt.Errorf("unsupported gateway policy version")
+	}
+	if document.Version == 2 && (document.Gateway == nil || document.Gateway.Frozen == nil) {
+		return nil, fmt.Errorf("policy version 2 requires a frozen toolset")
+	}
+	if document.Version == 1 && document.Gateway != nil && document.Gateway.Frozen != nil {
+		return nil, fmt.Errorf("frozen toolsets require policy version 2")
 	}
 	policy := &SessionPolicy{Resource: document.Resource, Selection: document.Selection, Gateway: document.Gateway}
 	if err := policy.validateGateway(); err != nil {
@@ -94,8 +102,13 @@ func (p *SessionPolicy) validateGateway() error {
 	if !ok || kind != "meta_mcp_server" || err != nil || parsed == uuid.Nil || parsed.String() != id {
 		return fmt.Errorf("gateway policy carries an invalid resource binding")
 	}
-	if p.Gateway == nil || p.Gateway.DiscoveryMode == nil || !p.Gateway.DiscoveryMode.Valid() {
+	if p.Gateway == nil || (p.Gateway.DiscoveryMode == nil && p.Gateway.Frozen == nil) || (p.Gateway.DiscoveryMode != nil && !p.Gateway.DiscoveryMode.Valid()) {
 		return fmt.Errorf("gateway policy requires a supported discovery mode")
+	}
+	if p.Gateway.Frozen != nil {
+		if err := p.Gateway.Frozen.Validate(); err != nil {
+			return err
+		}
 	}
 	// Gateway tool restrictions use definition snapshots, not a legacy
 	// member-local name selection that could match another member's tool.
@@ -127,9 +140,16 @@ func (p *SessionPolicy) MarshalJSON() ([]byte, error) {
 	if err := p.validateGateway(); err != nil {
 		return nil, err
 	}
-	raw, err := json.Marshal(gatewayPolicyDocument{Version: 1, Resource: p.Resource, Gateway: p.Gateway, Selection: p.Selection})
+	version := 1
+	if p.Gateway.Frozen != nil {
+		version = 2
+	}
+	raw, err := json.Marshal(gatewayPolicyDocument{Version: version, Resource: p.Resource, Gateway: p.Gateway, Selection: p.Selection})
 	if err != nil {
 		return nil, fmt.Errorf("marshal gateway policy: %w", err)
+	}
+	if len(raw) > selectionMaxRawBytes {
+		return nil, fmt.Errorf("session policy exceeds 2 MiB")
 	}
 	return raw, nil
 }
