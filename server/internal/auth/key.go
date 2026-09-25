@@ -126,6 +126,11 @@ func GenerateAPIKeyMaterial(keyPrefix string) (plaintext, keyHash, displayPrefix
 // observability-download flows. The generated name embeds the first six token
 // characters while keyPrefix stores the first five, so authentication can
 // verify minting provenance instead of trusting a formerly-unrestricted name.
+//
+// The name shape parsed here is mirrored by the name pattern in
+// RevokePluginHooksAPIKeysByProject / ExpirePluginHooksAPIKeysByProject
+// (server/internal/keys/queries.sql), which is how credential rotation picks
+// the keys it may revoke or expire.
 func IsOrgWidePluginHooksAPIKey(name, key, keyPrefix string) bool {
 	var suffix string
 	switch {
@@ -385,7 +390,13 @@ func principalAPIKeySupportsTransportScopes(requiredScopes []string) bool {
 
 func classifyPrincipalAPIKey(apiKey repo.GetAPIKeyByKeyHashRow, now time.Time) (urn.Principal, contextvalues.PrincipalCredential, bool, error) {
 	var emptyPrincipal urn.Principal
-	profilePresent := apiKey.SubjectUrn.Valid || apiKey.DelegatedGrants != nil || apiKey.DelegatedGrantsVersion.Valid || apiKey.ExpiresAt.Valid
+	// expires_at is deliberately NOT a profile signal. Scoped keys can carry an
+	// expiry too -- an observability credential rotation gives the previous
+	// hooks key a grace window -- and treating that as an agent-principal
+	// profile would fail the validation below and 401 the key on the spot.
+	// Expiry itself is enforced by GetAPIKeyByKeyHash, which never returns an
+	// expired row.
+	profilePresent := apiKey.SubjectUrn.Valid || apiKey.DelegatedGrants != nil || apiKey.DelegatedGrantsVersion.Valid
 	if !profilePresent {
 		return emptyPrincipal, contextvalues.PrincipalCredential{AuthorizerUserID: "", DelegatedGrants: nil, DelegatedGrantsVersion: 0}, false, nil
 	}

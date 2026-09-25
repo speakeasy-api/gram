@@ -37,6 +37,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
+import { MoreActions } from "@/components/ui/MoreActions";
 import { Stack } from "@/components/ui/Stack";
 import { Switch } from "@/components/ui/Switch";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -53,6 +54,9 @@ import {
 } from "./MarketplaceCard";
 import { PluginCard } from "./PluginCard";
 import { PluginInstallButton } from "./PluginInstallButton";
+import type { ObservabilityDownloadPlatform } from "./observability-platforms";
+import { OBSERVABILITY_DOWNLOAD_PLATFORMS } from "./observability-platforms";
+import { RotateObservabilityCredentialDialog } from "./RotateObservabilityCredentialDialog";
 import { downloadResponse } from "./downloadPluginPackage";
 import {
   matchesPluginFilters,
@@ -118,12 +122,11 @@ function PluginsContent({
   const { fetch: authFetch } = useFetcher();
   const [isObservabilityDownloadMenuOpen, setIsObservabilityDownloadMenuOpen] =
     useState(false);
-  const [isDownloadingObservability, setIsDownloadingObservability] = useState<
-    "claude" | "cursor" | "codex" | "opencode" | "openclaw" | "pi" | null
-  >(null);
+  const [isDownloadingObservability, setIsDownloadingObservability] =
+    useState<ObservabilityDownloadPlatform | null>(null);
 
   const handleObservabilityDownload = async (
-    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw" | "pi",
+    platform: ObservabilityDownloadPlatform,
   ) => {
     setIsObservabilityDownloadMenuOpen(false);
     setIsDownloadingObservability(platform);
@@ -676,11 +679,14 @@ function ObservabilityPluginCard({
   isDownloadMenuOpen: boolean;
   onDownloadMenuOpenChange: (open: boolean) => void;
   isDownloading: boolean;
-  onDownload: (
-    platform: "claude" | "cursor" | "codex" | "opencode" | "openclaw" | "pi",
-  ) => void;
+  onDownload: (platform: ObservabilityDownloadPlatform) => void;
 }) {
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
+  const [isRotateDialogOpen, setIsRotateDialogOpen] = useState(false);
+  const { hasScope } = useRBAC();
+  // Rotation mints an org-wide ingest credential, so it matches the plugin
+  // download's org:admin gate rather than the page's read access.
+  const canRotateCredential = hasScope("org:admin");
   const isConnected = !!publishStatus?.connected;
   const installTarget =
     isConnected && publishStatus?.repoOwner && publishStatus.repoName
@@ -733,85 +739,78 @@ function ObservabilityPluginCard({
           {observabilityInstallHint(enabled, isConnected)}
         </Text>
         {enabled ? (
-          <DropdownMenu
-            open={isDownloadMenuOpen}
-            onOpenChange={onDownloadMenuOpenChange}
-          >
-            <DropdownMenuTrigger asChild>
-              <PluginInstallButton size="sm" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                disabled={!installTarget}
-                onClick={() => {
-                  // Defer until after the dropdown has fully closed to avoid a
-                  // Radix focus-trap/body-lock conflict between the closing
-                  // menu and the opening sheet (same pattern as MCPDetails.tsx).
-                  setTimeout(() => setIsInstallSheetOpen(true), 0);
-                }}
-              >
-                <div className="flex flex-col">
-                  <span>GitHub installation (preferred)</span>
-                  {!installTarget && (
-                    <span className="text-muted-foreground text-xs">
-                      Requires marketplace setup
-                    </span>
-                  )}
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                disabled={isDownloading}
-                onClick={() => {
-                  onDownload("claude");
-                }}
-              >
-                Download as zip — Claude
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isDownloading}
-                onClick={() => {
-                  onDownload("cursor");
-                }}
-              >
-                Download as zip — Cursor
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isDownloading}
-                onClick={() => {
-                  onDownload("codex");
-                }}
-              >
-                Download as zip — Codex
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isDownloading}
-                onClick={() => {
-                  onDownload("opencode");
-                }}
-              >
-                Download as zip — OpenCode
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isDownloading}
-                onClick={() => {
-                  onDownload("openclaw");
-                }}
-              >
-                Download as zip — OpenClaw
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isDownloading}
-                onClick={() => {
-                  onDownload("pi");
-                }}
-              >
-                Download as zip — Pi
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-1">
+            <MoreActions
+              triggerAriaLabel="Observability plugin actions"
+              triggerDisabled={!canRotateCredential}
+              actions={[
+                {
+                  label: "Rotate credential",
+                  icon: "rotate-ccw-key",
+                  disabled: !canRotateCredential,
+                  description: canRotateCredential
+                    ? undefined
+                    : "Requires an organization admin",
+                  onClick: () => {
+                    setIsRotateDialogOpen(true);
+                  },
+                },
+              ]}
+            />
+            <DropdownMenu
+              open={isDownloadMenuOpen}
+              onOpenChange={onDownloadMenuOpenChange}
+            >
+              <DropdownMenuTrigger asChild>
+                <PluginInstallButton size="sm" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={!installTarget}
+                  onClick={() => {
+                    // Defer until after the dropdown has fully closed to avoid a
+                    // Radix focus-trap/body-lock conflict between the closing
+                    // menu and the opening sheet (same pattern as MCPDetails.tsx).
+                    setTimeout(() => setIsInstallSheetOpen(true), 0);
+                  }}
+                >
+                  <div className="flex flex-col">
+                    <span>GitHub installation (preferred)</span>
+                    {!installTarget && (
+                      <span className="text-muted-foreground text-xs">
+                        Requires marketplace setup
+                      </span>
+                    )}
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {OBSERVABILITY_DOWNLOAD_PLATFORMS.map(({ platform, label }) => (
+                  <DropdownMenuItem
+                    key={platform}
+                    disabled={isDownloading}
+                    onClick={() => {
+                      onDownload(platform);
+                    }}
+                  >
+                    Download as zip — {label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         ) : null}
       </div>
+
+      {/* Mounted only while open so the rotation mutation is not instantiated
+          for every render of this card. */}
+      {isRotateDialogOpen && (
+        <RotateObservabilityCredentialDialog
+          open
+          onOpenChange={setIsRotateDialogOpen}
+          isDownloading={isDownloading}
+          onDownload={onDownload}
+        />
+      )}
 
       {/* Reuses the onboarding wizard's platform-by-platform setup sheet
           (real per-platform slugs, API key minting, full instructions)

@@ -1999,7 +1999,9 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		// bumps and installed copies refresh. The hooks component is still gated
 		// by the rollout inside publishProject — clicking Publish cannot force a
 		// hooks upgrade onto an org the rollout hasn't cleared.
-		SkipIfUnchanged: false,
+		SkipIfUnchanged:   false,
+		RotateHooksKey:    false,
+		HooksKeyCandidate: nil,
 	})
 	if err != nil {
 		return nil, err
@@ -2110,9 +2112,11 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 			Slug:            nil,
 			CreatedByUserID: input.CreatedByUserID,
 		},
-		GitHubUsernames: nil,
-		CommitMessage:   conv.Default(input.CommitMessage, "Update plugin packages"),
-		SkipIfUnchanged: input.SkipIfUnchanged,
+		GitHubUsernames:   nil,
+		CommitMessage:     conv.Default(input.CommitMessage, "Update plugin packages"),
+		SkipIfUnchanged:   input.SkipIfUnchanged,
+		RotateHooksKey:    false,
+		HooksKeyCandidate: nil,
 	})
 	if err != nil {
 		return nil, err
@@ -2138,6 +2142,15 @@ type publishProjectInput struct {
 	GitHubUsernames  []string
 	CommitMessage    string
 	SkipIfUnchanged  bool
+	// RotateHooksKey makes this a hooks-only publish: the hooks subtree
+	// regenerates so HooksKeyCandidate is baked into the published observability
+	// plugin, and the MCP component is carried untouched so the consumer key
+	// customers already installed keeps working.
+	RotateHooksKey bool
+	// HooksKeyCandidate is the already-minted hooks key to embed when
+	// RotateHooksKey is set. persistPluginAPIKeys writes it after a successful
+	// GitHub push.
+	HooksKeyCandidate *pluginAPIKeyCandidate
 }
 
 // publishOutcome is the internal result of publishProject. Skipped is true when
@@ -2274,9 +2287,12 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	// Platform-only transition deliberately carries those customer packages
 	// unchanged. Hooks change independently based on their version and
 	// output-affecting config.
-	mcpChanged := firstPublish ||
+	// A credential rotation is hooks-only: it must never treat MCP as changed,
+	// so the consumer packages customers installed -- and the consumer key baked
+	// into them -- are carried untouched.
+	mcpChanged := !input.RotateHooksKey && (firstPublish ||
 		!input.SkipIfUnchanged ||
-		!maps.Equal(mcpFingerprints, publishedMCPFingerprints)
+		!maps.Equal(mcpFingerprints, publishedMCPFingerprints))
 
 	// Snapshot the hook-output-affecting config (resolved marketplace name,
 	// browser login, server URL, etc.). A rename or browser-login toggle
@@ -2331,6 +2347,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		hooksConfigDeferred = false
 	}
 	hooksChanged := firstPublish ||
+		input.RotateHooksKey ||
 		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion ||
 		publishedHooksConfigHash != targetHooksConfigHash
 
@@ -2377,6 +2394,10 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	files := make(map[string][]byte)
 	var candidates []pluginAPIKeyCandidate
 	var hooksCandidate *pluginAPIKeyCandidate
+	if input.RotateHooksKey && input.HooksKeyCandidate != nil {
+		hooksCandidate = input.HooksKeyCandidate
+		candidates = append(candidates, *input.HooksKeyCandidate)
+	}
 
 	// MCP component: carry when unchanged, otherwise regenerate with a fresh key.
 	carriedMCP := false
@@ -2511,7 +2532,15 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		pluginSlugs = append(pluginSlugs, p.Slug)
 	}
 
-	mcpFingerprintsJSON, err := json.Marshal(mcpFingerprints)
+	// Persist the fingerprints of what the repo now actually holds. When the MCP
+	// component was carried verbatim, that is still the previously published set
+	// -- recording the live one would mark a pending MCP change as published and
+	// let the next publish skip it.
+	persistedMCPFingerprints := mcpFingerprints
+	if carriedMCP {
+		persistedMCPFingerprints = publishedMCPFingerprints
+	}
+	mcpFingerprintsJSON, err := json.Marshal(persistedMCPFingerprints)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "marshal mcp fingerprints").LogError(ctx, s.logger)
 	}
@@ -2738,7 +2767,9 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 				// which still republishes real drift (an org rename moves the
 				// default name without touching these settings) but spares the
 				// marketplace a commit for a no-op save.
-				SkipIfUnchanged: !settingsChanged,
+				SkipIfUnchanged:   !settingsChanged,
+				RotateHooksKey:    false,
+				HooksKeyCandidate: nil,
 			})
 			if err != nil {
 				return nil, err

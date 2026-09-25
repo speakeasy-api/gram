@@ -47,11 +47,15 @@ INSERT INTO api_keys (
 RETURNING *;
 
 -- name: GetAPIKeyByKeyHash :one
+-- expires_at is enforced here rather than in Go so every credential shape --
+-- agent principal keys and scoped keys given a grace expiry by a rotation --
+-- stops authenticating at the same moment.
 SELECT api_keys.*, users.email
 FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = @key_hash
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+  AND (expires_at IS NULL OR expires_at > clock_timestamp());
 
 -- name: GetActivePrincipalAPIKeyForAdmission :one
 SELECT id
@@ -67,6 +71,40 @@ WHERE id = @id
   AND expires_at > statement_timestamp()
   AND expires_at > created_at
   AND expires_at <= created_at + INTERVAL '365 days';
+
+-- Plugin distribution mints hooks keys as plugins-hooks-<timestamp>-<token>
+-- (publish) or plugins-hooks-download-<timestamp>-<token> (ZIP download). The
+-- name pattern below mirrors the shape auth.IsOrgWidePluginHooksAPIKey parses,
+-- so a key that merely starts with the reserved plugins- prefix is not swept up
+-- by a rotation. Both statements are set-based and exclude the replacement key
+-- by hash, so two concurrent rotations can still race for "newest key" but
+-- neither can leave a pre-rotation credential behind.
+
+-- name: RevokePluginHooksAPIKeysByProject :many
+UPDATE api_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND key_hash <> @replacement_key_hash
+  AND scopes @> ARRAY['hooks']::text[]
+  AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+RETURNING id, organization_id, project_id, name, key_prefix, scopes;
+
+-- name: ExpirePluginHooksAPIKeysByProject :many
+-- Already-expired keys are left alone: handing a dead credential a fresh grace
+-- window would resurrect it.
+UPDATE api_keys
+SET expires_at = @expires_at
+  , updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND key_hash <> @replacement_key_hash
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
+  AND scopes @> ARRAY['hooks']::text[]
+  AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+RETURNING id, organization_id, project_id, name, key_prefix, scopes;
 
 -- name: ListAPIKeysByOrganization :many
 -- Deliberately does NOT join users the way GetAPIKeyByKeyHash does. A key
