@@ -126,6 +126,22 @@ describe("PageHeader.Breadcrumbs", () => {
     );
   });
 
+  it("links a session client back to its identity provider", () => {
+    render(
+      <PageHeader>
+        <PageHeader.Breadcrumbs substitutions={{ "issuer-1": "Okta" }} />
+      </PageHeader>,
+      {
+        at: "/placeholder-organization/projects/placeholder-project/remote-identity-providers/issuer-1/clients/client-1/overview",
+      },
+    );
+
+    const back = screen.getByRole("link", { name: "Okta" });
+    expect(back.getAttribute("href")).toBe(
+      "/placeholder-organization/projects/placeholder-project/remote-identity-providers/issuer-1",
+    );
+  });
+
   it("stays hidden on pages that are not nested", () => {
     render(
       <PageHeader>
