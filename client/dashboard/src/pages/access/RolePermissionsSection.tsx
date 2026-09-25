@@ -23,7 +23,7 @@ import { Text } from "@/components/ui/Text";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { Check, Plus, X } from "lucide-react";
-import { useState, type JSX, type ReactNode } from "react";
+import { useRef, useState, type JSX, type ReactNode } from "react";
 import type { ResourceType } from "./types";
 
 export interface ScopeGroup {
@@ -66,6 +66,8 @@ export function RolePermissionsSection({
 }): JSX.Element {
   const [tab, setTab] = useState("mcp");
   const [pickerOpen, setPickerOpen] = useState(false);
+  // A pick from the empty state waits here until the picker has closed.
+  const pendingScope = useRef<Scope | null>(null);
 
   const mcpGroups = groups.filter((group) => group.resourceType === "mcp");
   const otherGroups = groups.filter((group) => group.resourceType !== "mcp");
@@ -120,6 +122,13 @@ export function RolePermissionsSection({
             <PopoverContent
               align="end"
               className="w-[min(24rem,calc(100vw-2rem))] p-0"
+              // Runs once the picker has fully closed.
+              onCloseAutoFocus={() => {
+                if (pendingScope.current) {
+                  onToggleScope(pendingScope.current);
+                  pendingScope.current = null;
+                }
+              }}
             >
               <Command className="[&_[data-slot=command-input-wrapper]]:h-10 [&_[data-slot=command-input]]:h-10">
                 <CommandInput placeholder="Search permissions" />
@@ -131,7 +140,18 @@ export function RolePermissionsSection({
                         <CommandItem
                           key={scope.slug}
                           value={`${scope.slug} ${scope.description}`}
-                          onSelect={() => onToggleScope(scope.slug as Scope)}
+                          onSelect={() => {
+                            // The first pick moves the trigger from the empty
+                            // state to the header. Close first and add once
+                            // the picker is gone, so it never flashes at the
+                            // header while it animates out.
+                            if (activeSelected.length === 0) {
+                              pendingScope.current = scope.slug as Scope;
+                              setPickerOpen(false);
+                              return;
+                            }
+                            onToggleScope(scope.slug as Scope);
+                          }}
                           className="items-start gap-2"
                         >
                           <div className="min-w-0 flex-1">
