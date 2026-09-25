@@ -778,8 +778,7 @@ WHERE m.organization_id = $1 AND c.disconnected_at IS NULL
   AND ($7::boolean OR m.member_type NOT IN ('guest', 'single_channel_guest'))
 ORDER BY CASE WHEN NOT EXISTS (SELECT 1 FROM slack_identity_mappings h
     WHERE h.organization_id = m.organization_id AND h.slack_team_id = m.slack_team_id AND h.slack_user_id = m.slack_user_id
-      AND h.created_at <= $8::timestamptz AND (h.revoked_at IS NULL OR h.revoked_at > $8::timestamptz)) THEN 0
-  WHEN m.mapping_conflict_detected_at <= $8::timestamptz THEN 1 ELSE 2 END,
+      AND h.created_at <= $8::timestamptz AND (h.revoked_at IS NULL OR h.revoked_at > $8::timestamptz)) THEN 0 ELSE 1 END,
  lower(coalesce(nullif(m.display_name, ''), nullif(m.email, ''), m.slack_user_id)), m.id
 LIMIT $10 OFFSET $9
 `
@@ -824,7 +823,8 @@ type ListSlackDirectoryMembersPageRow struct {
 	ObservedInLastSync        bool
 }
 
-// Rank by mapping state at @sort_as_of so later edits keep rows in place.
+// Unmapped members first, judged from mapping history at @sort_as_of so later
+// edits keep rows in place. Review findings are cleared in place, so they cannot rank.
 func (q *Queries) ListSlackDirectoryMembersPage(ctx context.Context, arg ListSlackDirectoryMembersPageParams) ([]ListSlackDirectoryMembersPageRow, error) {
 	rows, err := q.db.Query(ctx, listSlackDirectoryMembersPage,
 		arg.OrganizationID,

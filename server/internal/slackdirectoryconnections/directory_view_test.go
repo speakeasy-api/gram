@@ -138,3 +138,45 @@ func TestDirectoryOrderStaysStableAfterMappingUntilRefreshed(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"Ben", "Ada"}, names(page))
 }
+
+func TestDirectoryPagesStayStableWhenReviewIsCleared(t *testing.T) {
+	t.Parallel()
+	ctx, f := newService(t)
+	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
+	require.NoError(t, syncer(f, directory(
+		entry("UEXAMPLE01", "Ada", "ada@example.com", "active", "person"),
+		entry("UEXAMPLE02", "Zara", "zara@example.com", "active", "person"),
+	)).Run(ctx, syncRequest(f, c), nil))
+	for _, m := range members(t, ctx, f) {
+		_, err := f.service.SetMapping(ctx, mappingRequest(readMapping(t, ctx, f, m.ID.String()), new(addPerson(t, ctx, f))))
+		require.NoError(t, err)
+	}
+	require.NoError(t, syncer(f, directory(
+		entry("UEXAMPLE01", "Ada", "ada@example.com", "active", "person"),
+		entry("UEXAMPLE02", "Zara", "zara.changed@example.com", "active", "person"),
+	)).Run(ctx, syncRequest(f, c), nil))
+
+	p := memberRequest()
+	p.Limit = 1
+	first, err := f.service.ListMembers(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, first.Members, 1)
+	seen := names(first)
+
+	// Clearing a review finding between pages must not move rows under the pinned order.
+	cleared := 0
+	for _, m := range members(t, ctx, f) {
+		if member := readMapping(t, ctx, f, m.ID.String()); member.MappingConflictReason != nil {
+			_, err := f.service.SetMapping(ctx, mappingRequest(member, &member.Mapping.UserID))
+			require.NoError(t, err)
+			cleared++
+		}
+	}
+	require.Equal(t, 1, cleared, "the changed email raises one review finding")
+	p.SortAsOf = &first.SortAsOf
+	p.Page = 2
+	second, err := f.service.ListMembers(ctx, p)
+	require.NoError(t, err)
+	seen = append(seen, names(second)...)
+	require.ElementsMatch(t, []string{"Ada", "Zara"}, seen)
+}
