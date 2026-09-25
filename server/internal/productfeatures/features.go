@@ -54,6 +54,8 @@ const (
 	// FeatureNetworkIngress is the durable staff-managed entitlement for private
 	// network ingress. It is never included in default bundles or demo seed data.
 	FeatureNetworkIngress Feature = "network_ingress"
+	// FeatureSignalsIntelligence gates signals intelligence configuration access.
+	FeatureSignalsIntelligence Feature = "signals_intelligence"
 )
 
 // RequiresPlatformAdmin reports whether toggling f through productFeatures.set

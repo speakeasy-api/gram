@@ -213,6 +213,12 @@ export const AUDIT_ACTIONS = [
   "risk_result:unmask",
   "session_quarantine:open",
   "session_quarantine:release",
+  "sigint-sensor:create",
+  "sigint-sensor:delete",
+  "sigint-sensor:update",
+  "sigint-signal:create",
+  "sigint-signal:delete",
+  "sigint-signal:update",
   "skill:add_version",
   "skill:archive",
   "skill:create",
@@ -734,6 +740,19 @@ export function staticActionPhrase(action: AuditAction): string {
       return "quarantined agent session";
     case "session_quarantine:release":
       return "released quarantined agent session";
+
+    case "sigint-sensor:create":
+      return "created signals intelligence sensor";
+    case "sigint-sensor:update":
+      return "updated signals intelligence sensor";
+    case "sigint-sensor:delete":
+      return "deleted signals intelligence sensor";
+    case "sigint-signal:create":
+      return "created signals intelligence signal";
+    case "sigint-signal:update":
+      return "updated signals intelligence signal";
+    case "sigint-signal:delete":
+      return "deleted signals intelligence signal";
 
     case "skill:create":
       return "created skill";

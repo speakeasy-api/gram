@@ -59046,6 +59046,1100 @@ paths:
             x-speakeasy-react-hook:
                 name: RiskSaveEvalReview
                 type: mutation
+    /rpc/sigint.createSensor:
+        post:
+            description: Create a sensor. multi_label permits independently applicable labels, exclusive makes attached signals compete and permits at most 255, and ordered_score uses ordered levels and permits at most 10. Empty and one-signal sensors are valid drafts. Omitted signal_ids creates an empty sensor; [] is explicitly empty. Repeated, deleted, missing, or cross-project signal IDs are rejected atomically.
+            operationId: createSigintSensor
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSigintSensorForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSensor'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createSensor sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: createSensor
+            x-speakeasy-react-hook:
+                name: CreateSigintSensor
+    /rpc/sigint.createSignal:
+        post:
+            description: Create a reusable custom signal. Names are trimmed and must contain 1 to 200 characters. Description and classifier criteria are optional authoring metadata; an empty string clears either field.
+            operationId: createSigintSignal
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateSigintSignalForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSignal'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: createSignal sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: createSignal
+            x-speakeasy-react-hook:
+                name: CreateSigintSignal
+    /rpc/sigint.deleteSensor:
+        delete:
+            description: Soft-delete a sensor and its memberships. Shared custom signals remain active.
+            operationId: deleteSigintSensor
+            parameters:
+                - allowEmptyValue: true
+                  description: Sensor ID
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Sensor ID
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSensor'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteSensor sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: deleteSensor
+            x-speakeasy-react-hook:
+                name: DeleteSigintSensor
+    /rpc/sigint.deleteSignal:
+        delete:
+            description: Soft-delete a custom signal and detach it from every sensor in the selected project. Surviving sensor signal order is compacted; sensors may remain incomplete drafts.
+            operationId: deleteSigintSignal
+            parameters:
+                - allowEmptyValue: true
+                  description: Custom signal ID
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Custom signal ID
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSignal'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: deleteSignal sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: deleteSignal
+            x-speakeasy-react-hook:
+                name: DeleteSigintSignal
+    /rpc/sigint.getSensor:
+        get:
+            description: Get an active sensor with its ordered signal_ids. The collection is always returned and is [] when no signals are attached.
+            operationId: getSigintSensor
+            parameters:
+                - allowEmptyValue: true
+                  description: Sensor ID
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Sensor ID
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSensor'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getSensor sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: getSensor
+            x-speakeasy-react-hook:
+                name: GetSigintSensor
+    /rpc/sigint.getSignal:
+        get:
+            description: Get an active custom signal by ID in the selected project.
+            operationId: getSigintSignal
+            parameters:
+                - allowEmptyValue: true
+                  description: Custom signal ID
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Custom signal ID
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSignal'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getSignal sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: getSignal
+            x-speakeasy-react-hook:
+                name: GetSigintSignal
+    /rpc/sigint.listSensors:
+        get:
+            description: List active sensors in deterministic ID order with each sensor's ordered signal_ids from one consistent database snapshot. The collection is [] for an unattached sensor.
+            operationId: listSigintSensors
+            parameters:
+                - allowEmptyValue: true
+                  description: Sensor ID after which to continue
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Sensor ID after which to continue
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Page size
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSigintSensorsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listSensors sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: listSensors
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: SigintSensors
+    /rpc/sigint.listSignals:
+        get:
+            description: List active custom signals in deterministic ID order. The cursor is the final ID from the previous page.
+            operationId: listSigintSignals
+            parameters:
+                - allowEmptyValue: true
+                  description: Signal ID after which to continue
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Signal ID after which to continue
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Page size
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListSigintSignalsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: listSignals sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: listSignals
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: SigintSignals
+    /rpc/sigint.updateSensor:
+        post:
+            description: 'Partially update a sensor. Omitted fields and JSON null preserve stored values. Empty optional text clears it. Omitted signal_ids preserves membership, while [] clears it and a non-empty array replaces and reorders it atomically. Mode changes validate the final membership: exclusive permits at most 255 signals and ordered_score at most 10; incomplete drafts remain valid.'
+            operationId: updateSigintSensor
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSigintSensorForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSensor'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateSensor sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: updateSensor
+            x-speakeasy-react-hook:
+                name: UpdateSigintSensor
+    /rpc/sigint.updateSignal:
+        post:
+            description: Partially update a custom signal. Omitted fields and JSON null leave existing values unchanged. Supplying an empty optional-text value clears it. A supplied name is trimmed and must contain 1 to 200 characters.
+            operationId: updateSigintSignal
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UpdateSigintSignalForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SigintSignal'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: updateSignal sigint
+            tags:
+                - sigint
+            x-speakeasy-name-override: updateSignal
+            x-speakeasy-react-hook:
+                name: UpdateSigintSignal
     /rpc/skillEfficacy.getSettings:
         get:
             description: Get effective organization-wide skill efficacy sampling settings.
@@ -81930,6 +83024,48 @@ components:
             required:
                 - url
                 - expires_at
+        CreateSigintSensorForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Optional description; empty stores no value
+                instructions:
+                    type: string
+                    description: Optional classification instructions; empty stores no value
+                mode:
+                    type: string
+                    description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'
+                    enum:
+                        - multi_label
+                        - exclusive
+                        - ordered_score
+                name:
+                    type: string
+                    description: Display name; trimmed before enforcing the 1 to 200 character limit
+                signal_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Initial ordered signal IDs. Omitted and [] both create an empty sensor.
+            required:
+                - name
+                - mode
+        CreateSigintSignalForm:
+            type: object
+            properties:
+                classifier_criteria:
+                    type: string
+                    description: Optional classifier criteria; empty stores no value
+                description:
+                    type: string
+                    description: Optional description; empty stores no value
+                name:
+                    type: string
+                    description: Display name; trimmed before enforcing the 1 to 200 character limit
+            required:
+                - name
         CreateSignedChatAttachmentURLForm:
             type: object
             properties:
@@ -89726,6 +90862,34 @@ components:
                         $ref: '#/components/schemas/ShadowMCPInventoryUser'
             required:
                 - users
+        ListSigintSensorsResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Final returned sensor ID when another page exists
+                    format: uuid
+                sensors:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SigintSensor'
+                    description: Sensors in this page
+            required:
+                - sensors
+        ListSigintSignalsResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: Final returned signal ID when another page exists
+                    format: uuid
+                signals:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SigintSignal'
+                    description: Signals in this page
+            required:
+                - signals
         ListSkillDistributionsResult:
             type: object
             properties:
@@ -99782,6 +100946,91 @@ components:
                 - display_name
                 - content
                 - updated_at
+        SigintSensor:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: Creation time
+                    format: date-time
+                description:
+                    type: string
+                    description: Optional author-facing description
+                id:
+                    type: string
+                    description: Sensor ID
+                    format: uuid
+                instructions:
+                    type: string
+                    description: Optional framing instructions for classification
+                mode:
+                    type: string
+                    description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'
+                    enum:
+                        - multi_label
+                        - exclusive
+                        - ordered_score
+                name:
+                    type: string
+                    description: Display name
+                project_id:
+                    type: string
+                    description: Owning project ID
+                    format: uuid
+                signal_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Ordered signal IDs. In ordered_score mode the zero-based array index is the score level.
+                updated_at:
+                    type: string
+                    description: Last update time
+                    format: date-time
+            description: A project-scoped sensor with ordered live references to custom signals. signal_ids is always present, including when empty.
+            required:
+                - id
+                - project_id
+                - name
+                - mode
+                - signal_ids
+                - created_at
+                - updated_at
+        SigintSignal:
+            type: object
+            properties:
+                classifier_criteria:
+                    type: string
+                    description: Optional criteria describing when this signal applies
+                created_at:
+                    type: string
+                    description: Creation time
+                    format: date-time
+                description:
+                    type: string
+                    description: Optional author-facing description
+                id:
+                    type: string
+                    description: Signal ID
+                    format: uuid
+                name:
+                    type: string
+                    description: Display name
+                project_id:
+                    type: string
+                    description: Owning project ID
+                    format: uuid
+                updated_at:
+                    type: string
+                    description: Last update time
+                    format: date-time
+            description: A reusable project-scoped custom signal.
+            required:
+                - id
+                - project_id
+                - name
+                - created_at
+                - updated_at
         Skill:
             type: object
             properties:
@@ -105757,6 +107006,55 @@ components:
                 - project_id
                 - server_url
                 - name
+        UpdateSigintSensorForm:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Replacement description; empty clears it
+                id:
+                    type: string
+                    description: Sensor ID
+                    format: uuid
+                instructions:
+                    type: string
+                    description: Replacement instructions; empty clears it
+                mode:
+                    type: string
+                    description: 'How a sensor interprets its ordered signals: independently applicable labels, an exclusive choice, or ordered score levels.'
+                    enum:
+                        - multi_label
+                        - exclusive
+                        - ordered_score
+                name:
+                    type: string
+                    description: Replacement display name; trimmed before enforcing the 1 to 200 character limit
+                signal_ids:
+                    type: array
+                    items:
+                        type: string
+                        format: uuid
+                    description: Authoritative ordered signal IDs. Omit or send null to preserve; send [] to clear.
+            required:
+                - id
+        UpdateSigintSignalForm:
+            type: object
+            properties:
+                classifier_criteria:
+                    type: string
+                    description: Replacement classifier criteria; empty clears it
+                description:
+                    type: string
+                    description: Replacement description; empty clears it
+                id:
+                    type: string
+                    description: Signal ID
+                    format: uuid
+                name:
+                    type: string
+                    description: Replacement display name; trimmed before enforcing the 1 to 200 character limit
+            required:
+                - id
         UpdateSkillRequestBody:
             type: object
             properties:
@@ -107517,6 +108815,8 @@ tags:
       description: Dashboard API for interacting with resources.
     - name: risk
       description: Manage risk analysis policies and view scan results.
+    - name: sigint
+      description: Manage project-scoped custom signals and sensors. Signals are reusable live definitions; sensors attach an ordered set of signals in multi-label, exclusive, or ordered-score mode.
     - name: skillEfficacy
       description: Manage organization-wide skill efficacy sampling settings.
     - name: skills
