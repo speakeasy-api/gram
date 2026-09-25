@@ -216,9 +216,24 @@ var directoryFixtureUsers = []directoryFixtureUser{
 // are derived from the org and name, so concurrent first reads converge on
 // the same rows.
 func (h *Handler) ensureDirectoryFixtures(ctx context.Context, orgID uuid.UUID) error {
-	queries := repo.New(h.db)
+	count, err := repo.New(h.db).CountDirectoryGroups(ctx, orgID)
+	if err != nil {
+		return fmt.Errorf("count directory groups: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
 
-	count, err := queries.CountDirectoryGroups(ctx, orgID)
+	// Seed in one transaction so a failed or concurrent first read never
+	// leaves groups without their users and memberships.
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin directory fixture seed: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	queries := repo.New(tx)
+
+	count, err = queries.CountDirectoryGroups(ctx, orgID)
 	if err != nil {
 		return fmt.Errorf("count directory groups: %w", err)
 	}
@@ -240,7 +255,7 @@ func (h *Handler) ensureDirectoryFixtures(ctx context.Context, orgID uuid.UUID) 
 	}
 
 	users := append([]directoryFixtureUser(nil), directoryFixtureUsers...)
-	members, err := h.orgMemberFixtureUsers(ctx, orgID)
+	members, err := orgMemberFixtureUsers(ctx, queries, orgID)
 	if err != nil {
 		return err
 	}
@@ -271,20 +286,23 @@ func (h *Handler) ensureDirectoryFixtures(ctx context.Context, orgID uuid.UUID) 
 		}
 		for _, g := range u.groups {
 			if err := queries.InsertDirectoryGroupMember(ctx, repo.InsertDirectoryGroupMemberParams{
-				GroupID: groupIDs[g],
-				UserID:  id,
+				GroupID:        groupIDs[g],
+				UserID:         id,
+				OrganizationID: orgID,
 			}); err != nil {
 				return fmt.Errorf("insert directory group member %q/%q: %w", g, u.email, err)
 			}
 		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit directory fixture seed: %w", err)
 	}
 	return nil
 }
 
 // orgMemberFixtureUsers puts the org's real dev-idp members in the directory
 // so rules written against the fixtures match the person logged in locally.
-func (h *Handler) orgMemberFixtureUsers(ctx context.Context, orgID uuid.UUID) ([]directoryFixtureUser, error) {
-	queries := repo.New(h.db)
+func orgMemberFixtureUsers(ctx context.Context, queries *repo.Queries, orgID uuid.UUID) ([]directoryFixtureUser, error) {
 	memberships, err := queries.ListMemberships(ctx, repo.ListMembershipsParams{
 		After:          uuid.Nil,
 		UserID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},

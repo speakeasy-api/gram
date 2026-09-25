@@ -1512,16 +1512,24 @@ func (q *Queries) InsertDirectoryGroup(ctx context.Context, arg InsertDirectoryG
 
 const insertDirectoryGroupMember = `-- name: InsertDirectoryGroupMember :exec
 INSERT OR IGNORE INTO directory_group_members (group_id, user_id)
-VALUES (?1, ?2)
+SELECT g.id, u.id
+FROM directory_groups g
+JOIN directory_users u ON u.organization_id = g.organization_id
+WHERE g.id = ?1
+  AND u.id = ?2
+  AND g.organization_id = ?3
 `
 
 type InsertDirectoryGroupMemberParams struct {
-	GroupID uuid.UUID
-	UserID  uuid.UUID
+	GroupID        uuid.UUID
+	UserID         uuid.UUID
+	OrganizationID uuid.UUID
 }
 
+// InsertDirectoryGroupMember only links a group and a user that both belong
+// to the given org, so a membership can never span two orgs.
 func (q *Queries) InsertDirectoryGroupMember(ctx context.Context, arg InsertDirectoryGroupMemberParams) error {
-	_, err := q.db.ExecContext(ctx, insertDirectoryGroupMember, arg.GroupID, arg.UserID)
+	_, err := q.db.ExecContext(ctx, insertDirectoryGroupMember, arg.GroupID, arg.UserID, arg.OrganizationID)
 	return err
 }
 

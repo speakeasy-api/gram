@@ -256,9 +256,16 @@ INSERT OR IGNORE INTO directory_users (
   @id, @organization_id, @email, @first_name, @last_name, @job_title, @custom_attributes
 );
 
+-- InsertDirectoryGroupMember only links a group and a user that both belong
+-- to the given org, so a membership can never span two orgs.
 -- name: InsertDirectoryGroupMember :exec
 INSERT OR IGNORE INTO directory_group_members (group_id, user_id)
-VALUES (@group_id, @user_id);
+SELECT g.id, u.id
+FROM directory_groups g
+JOIN directory_users u ON u.organization_id = g.organization_id
+WHERE g.id = @group_id
+  AND u.id = @user_id
+  AND g.organization_id = @organization_id;
 
 -- name: GetDirectoryGroup :one
 SELECT * FROM directory_groups WHERE id = @id;
