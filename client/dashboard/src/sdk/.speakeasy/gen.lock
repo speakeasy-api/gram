@@ -484,6 +484,7 @@ trackedFiles:
   src/funcs/pluginsListPlugins.ts: {}
   src/funcs/pluginsPublishPlugins.ts: {}
   src/funcs/pluginsRemovePluginServer.ts: {}
+  src/funcs/pluginsRotateObservabilityCredential.ts: {}
   src/funcs/pluginsSetPluginAssignments.ts: {}
   src/funcs/pluginsUpdateMarketplaceSettings.ts: {}
   src/funcs/pluginsUpdatePlugin.ts: {}
@@ -1544,7 +1545,10 @@ trackedFiles:
   src/models/components/rolesummary.ts: {}
   src/models/components/rootmcpserveroption.ts: {}
   src/models/components/rotatecredentialsrequestbody.ts: {}
+  src/models/components/rotatedobservabilitykey.ts: {}
   src/models/components/rotatekeyform.ts: {}
+  src/models/components/rotateobservabilitycredentialrequestbody.ts: {}
+  src/models/components/rotateobservabilitycredentialresult.ts: {}
   src/models/components/rotatetunneledmcpserverkeyform.ts: {}
   src/models/components/rotatetunneledmcpserverkeyresult.ts: {}
   src/models/components/saveriskevalreviewrequestbody.ts: {}
@@ -2433,6 +2437,7 @@ trackedFiles:
   src/models/operations/rotateapikey.ts: {}
   src/models/operations/rotatelitellminstancekey.ts: {}
   src/models/operations/rotatenetworkingresscredentials.ts: {}
+  src/models/operations/rotateobservabilitycredential.ts: {}
   src/models/operations/rotateorganizationremotesessionclient.ts: {}
   src/models/operations/rotatetunneledmcpserverkey.ts: {}
   src/models/operations/saveriskevalreview.ts: {}
@@ -3387,6 +3392,7 @@ trackedFiles:
   src/react-query/rootMcpServers.ts: {}
   src/react-query/rotateLiteLLMInstanceKey.ts: {}
   src/react-query/rotateNetworkIngressCredentials.ts: {}
+  src/react-query/rotateObservabilityCredential.ts: {}
   src/react-query/rotateOrganizationRemoteSessionClient.ts: {}
   src/react-query/rotateTunneledMcpServerKey.ts: {}
   src/react-query/searchBusinessMemories.ts: {}
@@ -10640,6 +10646,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  rotateObservabilityCredential:
+    speakeasy-default-rotate-observability-credential:
+      requestBody:
+        application/json: {"previous_key_fate": "grace"}
+      responses:
+        "200":
+          application/json: {"key": "<key>", "key_prefix": "<value>", "marketplace_republished": false, "previous_key_fate": "revoke_immediately", "previous_keys": [{"id": "21110a23-0302-4578-b2f3-b2757f944ca0", "key_prefix": "<value>", "name": "<value>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   rotateOrganizationRemoteSessionClient:
     speakeasy-default-rotate-organization-remote-session-client:
       requestBody:

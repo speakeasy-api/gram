@@ -269,6 +269,70 @@ func (q *Queries) DeleteAgentAPIKey(ctx context.Context, arg DeleteAgentAPIKeyPa
 	return i, err
 }
 
+const expirePluginHooksAPIKeysByProject = `-- name: ExpirePluginHooksAPIKeysByProject :many
+UPDATE api_keys
+SET expires_at = $1
+  , updated_at = clock_timestamp()
+WHERE organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+  AND key_hash <> $4
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
+  AND scopes @> ARRAY['hooks']::text[]
+  AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+RETURNING id, organization_id, project_id, name, key_prefix, scopes
+`
+
+type ExpirePluginHooksAPIKeysByProjectParams struct {
+	ExpiresAt          pgtype.Timestamptz
+	OrganizationID     string
+	ProjectID          uuid.NullUUID
+	ReplacementKeyHash string
+}
+
+type ExpirePluginHooksAPIKeysByProjectRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	KeyPrefix      string
+	Scopes         []string
+}
+
+// Already-expired keys are left alone: handing a dead credential a fresh grace
+// window would resurrect it.
+func (q *Queries) ExpirePluginHooksAPIKeysByProject(ctx context.Context, arg ExpirePluginHooksAPIKeysByProjectParams) ([]ExpirePluginHooksAPIKeysByProjectRow, error) {
+	rows, err := q.db.Query(ctx, expirePluginHooksAPIKeysByProject,
+		arg.ExpiresAt,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ReplacementKeyHash,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ExpirePluginHooksAPIKeysByProjectRow
+	for rows.Next() {
+		var i ExpirePluginHooksAPIKeysByProjectRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.KeyPrefix,
+			&i.Scopes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAPIKeyByID = `-- name: GetAPIKeyByID :one
 SELECT id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes, subject_urn, delegated_grants, delegated_grants_version, expires_at, created_at, updated_at, deleted_at, deleted, last_accessed_at
 FROM api_keys
@@ -350,6 +414,7 @@ FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = $1
   AND deleted IS FALSE
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
 `
 
 type GetAPIKeyByKeyHashRow struct {
@@ -373,6 +438,9 @@ type GetAPIKeyByKeyHashRow struct {
 	Email                  string
 }
 
+// expires_at is enforced here rather than in Go so every credential shape --
+// agent principal keys and scoped keys given a grace expiry by a rotation --
+// stops authenticating at the same moment.
 func (q *Queries) GetAPIKeyByKeyHash(ctx context.Context, keyHash string) (GetAPIKeyByKeyHashRow, error) {
 	row := q.db.QueryRow(ctx, getAPIKeyByKeyHash, keyHash)
 	var i GetAPIKeyByKeyHashRow
@@ -610,6 +678,68 @@ func (q *Queries) RepairOrphanedAPIKeyCreators(ctx context.Context) (int64, erro
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const revokePluginHooksAPIKeysByProject = `-- name: RevokePluginHooksAPIKeysByProject :many
+
+UPDATE api_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND project_id = $2
+  AND deleted IS FALSE
+  AND key_hash <> $3
+  AND scopes @> ARRAY['hooks']::text[]
+  AND name ~ '^plugins-hooks-(download-)?[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+RETURNING id, organization_id, project_id, name, key_prefix, scopes
+`
+
+type RevokePluginHooksAPIKeysByProjectParams struct {
+	OrganizationID     string
+	ProjectID          uuid.NullUUID
+	ReplacementKeyHash string
+}
+
+type RevokePluginHooksAPIKeysByProjectRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+	Name           string
+	KeyPrefix      string
+	Scopes         []string
+}
+
+// Plugin distribution mints hooks keys as plugins-hooks-<timestamp>-<token>
+// (publish) or plugins-hooks-download-<timestamp>-<token> (ZIP download). The
+// name pattern below mirrors the shape auth.IsOrgWidePluginHooksAPIKey parses,
+// so a key that merely starts with the reserved plugins- prefix is not swept up
+// by a rotation. Both statements are set-based and exclude the replacement key
+// by hash, so two concurrent rotations can still race for "newest key" but
+// neither can leave a pre-rotation credential behind.
+func (q *Queries) RevokePluginHooksAPIKeysByProject(ctx context.Context, arg RevokePluginHooksAPIKeysByProjectParams) ([]RevokePluginHooksAPIKeysByProjectRow, error) {
+	rows, err := q.db.Query(ctx, revokePluginHooksAPIKeysByProject, arg.OrganizationID, arg.ProjectID, arg.ReplacementKeyHash)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RevokePluginHooksAPIKeysByProjectRow
+	for rows.Next() {
+		var i RevokePluginHooksAPIKeysByProjectRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.KeyPrefix,
+			&i.Scopes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateAPIKeyLastAccessedAt = `-- name: UpdateAPIKeyLastAccessedAt :exec

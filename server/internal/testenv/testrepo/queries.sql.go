@@ -4372,6 +4372,24 @@ func (q *Queries) SeedUserAccountFixture(ctx context.Context, arg SeedUserAccoun
 	return id, err
 }
 
+const setAPIKeyExpiresAtFixture = `-- name: SetAPIKeyExpiresAtFixture :exec
+UPDATE api_keys
+SET expires_at = $1
+WHERE key_hash = $2
+`
+
+type SetAPIKeyExpiresAtFixtureParams struct {
+	ExpiresAt pgtype.Timestamptz
+	KeyHash   string
+}
+
+// Fast-forwards or rewinds an API key's expiry so tests can observe the
+// authentication boundary a credential rotation's grace window creates.
+func (q *Queries) SetAPIKeyExpiresAtFixture(ctx context.Context, arg SetAPIKeyExpiresAtFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAPIKeyExpiresAtFixture, arg.ExpiresAt, arg.KeyHash)
+	return err
+}
+
 const setAgentInvalidLifecycleFixture = `-- name: SetAgentInvalidLifecycleFixture :exec
 UPDATE agents
 SET suspended_at = clock_timestamp(), revoked_at = clock_timestamp()
