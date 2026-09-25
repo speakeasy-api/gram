@@ -34,7 +34,7 @@ func protocolProvider(t *testing.T, change func(map[string]any), verifiedTeam st
 				require.True(t, check.BasicAuth)
 				require.Equal(t, "synthetic-client", check.ClientID)
 				require.Equal(t, "synthetic-secret", check.Secret)
-				require.Equal(t, "https://dashboard.example/slack-directory/callback", check.RedirectURI)
+				require.Equal(t, "https://dashboard.example/rpc/slackDirectoryConnections.callback", check.RedirectURI)
 			} else {
 				require.Equal(t, "Bearer synthetic-bot-token", check.Authorization)
 			}
@@ -60,7 +60,7 @@ func protocolProvider(t *testing.T, change func(map[string]any), verifiedTeam st
 	})
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
-	return slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient(server.URL, server.Client()), "synthetic-client", "synthetic-secret", "https://dashboard.example/slack-directory/callback")
+	return slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient(server.URL, server.Client()), "synthetic-client", "synthetic-secret", "https://dashboard.example/rpc/slackDirectoryConnections.callback")
 }
 
 func TestProviderExpiryStartsBeforeVerification(t *testing.T) {

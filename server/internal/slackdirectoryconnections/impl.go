@@ -322,7 +322,8 @@ func (s *Service) Disconnect(ctx context.Context, p *gen.DisconnectPayload) (*ge
 }
 
 // CallbackPath is shared by the raw callback handler and OAuth redirect URI.
-const CallbackPath = "/slack-directory/callback"
+// It sits under /rpc so every environment's ingress routes it to the server.
+const CallbackPath = "/rpc/slackDirectoryConnections.callback"
 
 type CallbackPayload struct {
 	SessionToken *string
