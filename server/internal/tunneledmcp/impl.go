@@ -113,6 +113,9 @@ func normalizeResourceIdentifier(raw string) (string, error) {
 	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || strings.Contains(trimmed, "#") {
 		return "", errors.New("resource identifier must be an absolute http(s) URI without a fragment")
 	}
+	if u.String() != trimmed || strings.ContainsAny(trimmed, " \t\r\n") {
+		return "", errors.New("resource identifier must be a percent-encoded URI")
+	}
 	return trimmed, nil
 }
 

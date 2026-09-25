@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"time"
 
 	"github.com/go-jose/go-jose/v4"
 )
@@ -94,11 +95,5 @@ func (s *Set) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=300, must-revalidate")
 	w.Header().Set("ETag", s.etag)
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	if r.Header.Get("If-None-Match") == s.etag {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	if r.Method == http.MethodGet {
-		_, _ = w.Write(s.document)
-	}
+	http.ServeContent(w, r, "jwks.json", time.Time{}, bytes.NewReader(s.document))
 }
