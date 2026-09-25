@@ -1541,6 +1541,7 @@ type MetaMcpServer struct {
 	UserSessionIssuerID uuid.NullUUID
 	Name                string
 	Instructions        pgtype.Text
+	DiscoveryMode       pgtype.Text
 	Visibility          string
 	NetworkAccessMode   pgtype.Text
 	CreatedAt           pgtype.Timestamptz
