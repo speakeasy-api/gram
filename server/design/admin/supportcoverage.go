@@ -53,6 +53,10 @@ var SupportCoverageResult = Type("SupportCoverageResult", func() {
 	Required("cells", "unmapped", "window_days", "from", "to")
 })
 
+// MCP parity: exposed through Staff Admin MCP as
+// get_organization_support_coverage, which is the audience this endpoint
+// serves. Deliberately not a Platform MCP tool — that surface serves an
+// organization's own administrators and members, and this one refuses them.
 func supportCoverageMethods() {
 	Method("getSupportCoverage", func() {
 		Meta("openapi:operationId", "adminGetSupportCoverage")

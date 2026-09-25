@@ -24,9 +24,13 @@ func (s *Service) GetSupportCoverage(ctx context.Context, payload *gen.GetSuppor
 	result, err := s.supportCoverage.SupportCoverageForOrganization(ctx, payload.OrganizationID, payload.WindowDays)
 	if err != nil {
 		// The reader classifies its own failures — a blank organization id is
-		// invalid input, not a server fault — so a shareable error passes
-		// through with its code rather than being flattened to a 500.
+		// invalid input, not a server fault — so a shareable error keeps its
+		// code rather than being flattened to a 500. Its server faults still
+		// need an application log line, which only this boundary writes.
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+			if shareable.Code == oops.CodeUnexpected {
+				return nil, shareable.LogError(ctx, s.logger)
+			}
 			return nil, shareable
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "read support coverage").LogError(ctx, s.logger)
