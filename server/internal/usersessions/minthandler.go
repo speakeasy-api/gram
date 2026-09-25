@@ -78,6 +78,9 @@ type mintTarget struct {
 // otherwise identical to a /token-issued session so userSessions.list,
 // userSessions.revoke, and the runtime revocation cache all work unchanged.
 func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSessionPayload) (*gen.MintUserSessionResult, error) {
+	return s.mintUserSession(ctx, payload, nil)
+}
+func (s *Service) mintUserSession(ctx context.Context, payload *gen.MintUserSessionPayload, frozenReview *gen.FrozenGatewayReview) (*gen.MintUserSessionResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.UserID == "" || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -121,6 +124,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 	}
 
 	var toolPolicy []byte
+	var options *toolfilter.GatewayOptions
 	if payload.DiscoveryMode != nil {
 		mode := metamcp.DiscoveryMode(*payload.DiscoveryMode)
 		if !hasMeta || !mode.Valid() {
@@ -130,13 +134,29 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		if flagErr != nil || !enabled {
 			return nil, oops.E(oops.CodeForbidden, flagErr, "gateway discovery settings are not available")
 		}
-		toolPolicy, err = json.Marshal(&toolfilter.SessionPolicy{
-			Resource:  "meta_mcp_server:" + target.resourceID,
-			Selection: nil,
-			Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: &mode},
-		})
+		options = &toolfilter.GatewayOptions{DiscoveryMode: &mode, Frozen: nil}
+	}
+	if frozenReview != nil {
+		if !hasMeta {
+			return nil, oops.E(oops.CodeBadRequest, nil, "frozen_toolset requires a gateway")
+		}
+		inventory, err := s.reviewGatewayInventory(ctx, *payload.MetaMcpServerID)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "encode gateway connection options").LogError(ctx, s.logger)
+			return nil, err
+		}
+		selected, err := inventory.Select(frozenReview.Fingerprint, frozenReview.Tools)
+		if err != nil {
+			return nil, oops.E(oops.CodeConflict, err, "tool definitions changed or the selection is invalid; review again")
+		}
+		if options == nil {
+			options = &toolfilter.GatewayOptions{DiscoveryMode: nil, Frozen: nil}
+		}
+		options.Frozen = selected
+	}
+	if options != nil {
+		toolPolicy, err = json.Marshal(&toolfilter.SessionPolicy{Resource: "meta_mcp_server:" + target.resourceID, Selection: nil, Gateway: options})
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "gateway connection options exceed the supported limits")
 		}
 	}
 
@@ -433,4 +453,15 @@ func (s *Service) resolveMetaServerMintTarget(ctx context.Context, metaServerIDS
 		resourceID: metaServer.ID.String(),
 		logAttr:    attr.SlogMetaMcpServerID(metaServer.ID.String()),
 	}, nil
+}
+
+func (s *Service) MintFrozenGatewaySession(ctx context.Context, payload *gen.MintFrozenGatewaySessionPayload) (*gen.MintFrozenGatewaySessionResult, error) {
+	if payload.FrozenToolset == nil {
+		return nil, oops.E(oops.CodeBadRequest, nil, "a frozen tool review is required")
+	}
+	result, err := s.mintUserSession(ctx, &gen.MintUserSessionPayload{MetaMcpServerID: &payload.MetaMcpServerID, ToolsetID: nil, McpServerID: nil, DiscoveryMode: payload.DiscoveryMode, SessionToken: payload.SessionToken, ProjectSlugInput: payload.ProjectSlugInput}, payload.FrozenToolset)
+	if err != nil {
+		return nil, err
+	}
+	return &gen.MintFrozenGatewaySessionResult{AccessToken: result.AccessToken, ExpiresIn: result.ExpiresIn, FrozenToolCount: len(payload.FrozenToolset.Tools)}, nil
 }

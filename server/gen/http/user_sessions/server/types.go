@@ -9,8 +9,27 @@ package server
 
 import (
 	usersessions "github.com/speakeasy-api/gram/server/gen/user_sessions"
+	usersessionsviews "github.com/speakeasy-api/gram/server/gen/user_sessions/views"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// PreviewGatewayToolsetRequestBody is the type of the "userSessions" service
+// "previewGatewayToolset" endpoint HTTP request body.
+type PreviewGatewayToolsetRequestBody struct {
+	// The gateway to review.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+}
+
+// MintFrozenGatewaySessionRequestBody is the type of the "userSessions"
+// service "mintFrozenGatewaySession" endpoint HTTP request body.
+type MintFrozenGatewaySessionRequestBody struct {
+	// Gateway to connect.
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// Optional explicit discovery mode.
+	DiscoveryMode *string `form:"discovery_mode,omitempty" json:"discovery_mode,omitempty" xml:"discovery_mode,omitempty"`
+	// The reviewed inventory and exact approved tools.
+	FrozenToolset *FrozenGatewayReviewRequestBody `form:"frozen_toolset,omitempty" json:"frozen_toolset,omitempty" xml:"frozen_toolset,omitempty"`
+}
 
 // MintUserSessionRequestBody is the type of the "userSessions" service
 // "mintUserSession" endpoint HTTP request body.
@@ -52,6 +71,26 @@ type ListFacetsResponseBody struct {
 	Users []*UserSessionFacetOptionResponseBody `form:"users" json:"users" xml:"users"`
 	// Issuer/server facets.
 	Servers []*UserSessionFacetOptionResponseBody `form:"servers" json:"servers" xml:"servers"`
+}
+
+// PreviewGatewayToolsetResponseBody is the type of the "userSessions" service
+// "previewGatewayToolset" endpoint HTTP response body.
+type PreviewGatewayToolsetResponseBody struct {
+	// Fingerprint of the complete permitted inventory.
+	Fingerprint string `form:"fingerprint" json:"fingerprint" xml:"fingerprint"`
+	// Tools available for review.
+	Tools []*GatewayReviewedToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+}
+
+// MintFrozenGatewaySessionResponseBody is the type of the "userSessions"
+// service "mintFrozenGatewaySession" endpoint HTTP response body.
+type MintFrozenGatewaySessionResponseBody struct {
+	// Gateway bearer token.
+	AccessToken string `form:"access_token" json:"access_token" xml:"access_token"`
+	// Lifetime in seconds.
+	ExpiresIn int `form:"expires_in" json:"expires_in" xml:"expires_in"`
+	// Number of approved tools in this frozen connection.
+	FrozenToolCount int `form:"frozen_tool_count" json:"frozen_tool_count" xml:"frozen_tool_count"`
 }
 
 // MintUserSessionResponseBody is the type of the "userSessions" service
@@ -421,6 +460,386 @@ type ListFacetsUnexpectedResponseBody struct {
 // ListFacetsGatewayErrorResponseBody is the type of the "userSessions" service
 // "listFacets" endpoint HTTP response body for the "gateway_error" error.
 type ListFacetsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewGatewayToolsetUnauthorizedResponseBody is the type of the
+// "userSessions" service "previewGatewayToolset" endpoint HTTP response body
+// for the "unauthorized" error.
+type PreviewGatewayToolsetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewGatewayToolsetForbiddenResponseBody is the type of the "userSessions"
+// service "previewGatewayToolset" endpoint HTTP response body for the
+// "forbidden" error.
+type PreviewGatewayToolsetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewGatewayToolsetBadRequestResponseBody is the type of the
+// "userSessions" service "previewGatewayToolset" endpoint HTTP response body
+// for the "bad_request" error.
+type PreviewGatewayToolsetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewGatewayToolsetNotFoundResponseBody is the type of the "userSessions"
+// service "previewGatewayToolset" endpoint HTTP response body for the
+// "not_found" error.
+type PreviewGatewayToolsetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewGatewayToolsetConflictResponseBody is the type of the "userSessions"
+// service "previewGatewayToolset" endpoint HTTP response body for the
+// "conflict" error.
+type PreviewGatewayToolsetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewGatewayToolsetUnsupportedMediaResponseBody is the type of the
+// "userSessions" service "previewGatewayToolset" endpoint HTTP response body
+// for the "unsupported_media" error.
+type PreviewGatewayToolsetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewGatewayToolsetInvalidResponseBody is the type of the "userSessions"
+// service "previewGatewayToolset" endpoint HTTP response body for the
+// "invalid" error.
+type PreviewGatewayToolsetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewGatewayToolsetInvariantViolationResponseBody is the type of the
+// "userSessions" service "previewGatewayToolset" endpoint HTTP response body
+// for the "invariant_violation" error.
+type PreviewGatewayToolsetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewGatewayToolsetUnexpectedResponseBody is the type of the
+// "userSessions" service "previewGatewayToolset" endpoint HTTP response body
+// for the "unexpected" error.
+type PreviewGatewayToolsetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// PreviewGatewayToolsetGatewayErrorResponseBody is the type of the
+// "userSessions" service "previewGatewayToolset" endpoint HTTP response body
+// for the "gateway_error" error.
+type PreviewGatewayToolsetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintFrozenGatewaySessionUnauthorizedResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "unauthorized" error.
+type MintFrozenGatewaySessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintFrozenGatewaySessionForbiddenResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "forbidden" error.
+type MintFrozenGatewaySessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintFrozenGatewaySessionBadRequestResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "bad_request" error.
+type MintFrozenGatewaySessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintFrozenGatewaySessionNotFoundResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "not_found" error.
+type MintFrozenGatewaySessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintFrozenGatewaySessionConflictResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "conflict" error.
+type MintFrozenGatewaySessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintFrozenGatewaySessionUnsupportedMediaResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "unsupported_media" error.
+type MintFrozenGatewaySessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintFrozenGatewaySessionInvalidResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "invalid" error.
+type MintFrozenGatewaySessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintFrozenGatewaySessionInvariantViolationResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "invariant_violation" error.
+type MintFrozenGatewaySessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintFrozenGatewaySessionUnexpectedResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "unexpected" error.
+type MintFrozenGatewaySessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MintFrozenGatewaySessionGatewayErrorResponseBody is the type of the
+// "userSessions" service "mintFrozenGatewaySession" endpoint HTTP response
+// body for the "gateway_error" error.
+type MintFrozenGatewaySessionGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -963,6 +1382,26 @@ type UserSessionFacetOptionResponseBody struct {
 	Count int64 `form:"count" json:"count" xml:"count"`
 }
 
+// GatewayReviewedToolResponseBody is used to define fields on response body
+// types.
+type GatewayReviewedToolResponseBody struct {
+	// Qualified tool name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Fingerprint of the full definition and routing identity.
+	Fingerprint string `form:"fingerprint" json:"fingerprint" xml:"fingerprint"`
+	// Full MCP tool definition.
+	Definition any `form:"definition" json:"definition" xml:"definition"`
+}
+
+// FrozenGatewayReviewRequestBody is used to define fields on request body
+// types.
+type FrozenGatewayReviewRequestBody struct {
+	// Fingerprint returned by the complete inventory review.
+	Fingerprint *string `form:"fingerprint,omitempty" json:"fingerprint,omitempty" xml:"fingerprint,omitempty"`
+	// Qualified tool names approved for this connection. Empty means no tools.
+	Tools []string `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+}
+
 // NewListUserSessionsResponseBody builds the HTTP response body from the
 // result of the "listUserSessions" endpoint of the "userSessions" service.
 func NewListUserSessionsResponseBody(res *usersessions.ListUserSessionsResult) *ListUserSessionsResponseBody {
@@ -1023,6 +1462,39 @@ func NewListFacetsResponseBody(res *usersessions.ListUserSessionFacetsResult) *L
 		}
 	} else {
 		body.Servers = []*UserSessionFacetOptionResponseBody{}
+	}
+	return body
+}
+
+// NewPreviewGatewayToolsetResponseBody builds the HTTP response body from the
+// result of the "previewGatewayToolset" endpoint of the "userSessions" service.
+func NewPreviewGatewayToolsetResponseBody(res *usersessionsviews.GatewayToolsetReviewView) *PreviewGatewayToolsetResponseBody {
+	body := &PreviewGatewayToolsetResponseBody{
+		Fingerprint: *res.Fingerprint,
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*GatewayReviewedToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalUsersessionsviewsGatewayReviewedToolViewToGatewayReviewedToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*GatewayReviewedToolResponseBody{}
+	}
+	return body
+}
+
+// NewMintFrozenGatewaySessionResponseBody builds the HTTP response body from
+// the result of the "mintFrozenGatewaySession" endpoint of the "userSessions"
+// service.
+func NewMintFrozenGatewaySessionResponseBody(res *usersessions.MintFrozenGatewaySessionResult) *MintFrozenGatewaySessionResponseBody {
+	body := &MintFrozenGatewaySessionResponseBody{
+		AccessToken:     res.AccessToken,
+		ExpiresIn:       res.ExpiresIn,
+		FrozenToolCount: res.FrozenToolCount,
 	}
 	return body
 }
@@ -1311,6 +1783,306 @@ func NewListFacetsUnexpectedResponseBody(res *goa.ServiceError) *ListFacetsUnexp
 // result of the "listFacets" endpoint of the "userSessions" service.
 func NewListFacetsGatewayErrorResponseBody(res *goa.ServiceError) *ListFacetsGatewayErrorResponseBody {
 	body := &ListFacetsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewGatewayToolsetUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "previewGatewayToolset" endpoint of the
+// "userSessions" service.
+func NewPreviewGatewayToolsetUnauthorizedResponseBody(res *goa.ServiceError) *PreviewGatewayToolsetUnauthorizedResponseBody {
+	body := &PreviewGatewayToolsetUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewGatewayToolsetForbiddenResponseBody builds the HTTP response body
+// from the result of the "previewGatewayToolset" endpoint of the
+// "userSessions" service.
+func NewPreviewGatewayToolsetForbiddenResponseBody(res *goa.ServiceError) *PreviewGatewayToolsetForbiddenResponseBody {
+	body := &PreviewGatewayToolsetForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewGatewayToolsetBadRequestResponseBody builds the HTTP response body
+// from the result of the "previewGatewayToolset" endpoint of the
+// "userSessions" service.
+func NewPreviewGatewayToolsetBadRequestResponseBody(res *goa.ServiceError) *PreviewGatewayToolsetBadRequestResponseBody {
+	body := &PreviewGatewayToolsetBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewGatewayToolsetNotFoundResponseBody builds the HTTP response body
+// from the result of the "previewGatewayToolset" endpoint of the
+// "userSessions" service.
+func NewPreviewGatewayToolsetNotFoundResponseBody(res *goa.ServiceError) *PreviewGatewayToolsetNotFoundResponseBody {
+	body := &PreviewGatewayToolsetNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewGatewayToolsetConflictResponseBody builds the HTTP response body
+// from the result of the "previewGatewayToolset" endpoint of the
+// "userSessions" service.
+func NewPreviewGatewayToolsetConflictResponseBody(res *goa.ServiceError) *PreviewGatewayToolsetConflictResponseBody {
+	body := &PreviewGatewayToolsetConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewGatewayToolsetUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "previewGatewayToolset" endpoint of the
+// "userSessions" service.
+func NewPreviewGatewayToolsetUnsupportedMediaResponseBody(res *goa.ServiceError) *PreviewGatewayToolsetUnsupportedMediaResponseBody {
+	body := &PreviewGatewayToolsetUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewGatewayToolsetInvalidResponseBody builds the HTTP response body
+// from the result of the "previewGatewayToolset" endpoint of the
+// "userSessions" service.
+func NewPreviewGatewayToolsetInvalidResponseBody(res *goa.ServiceError) *PreviewGatewayToolsetInvalidResponseBody {
+	body := &PreviewGatewayToolsetInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewGatewayToolsetInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "previewGatewayToolset" endpoint of the
+// "userSessions" service.
+func NewPreviewGatewayToolsetInvariantViolationResponseBody(res *goa.ServiceError) *PreviewGatewayToolsetInvariantViolationResponseBody {
+	body := &PreviewGatewayToolsetInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewGatewayToolsetUnexpectedResponseBody builds the HTTP response body
+// from the result of the "previewGatewayToolset" endpoint of the
+// "userSessions" service.
+func NewPreviewGatewayToolsetUnexpectedResponseBody(res *goa.ServiceError) *PreviewGatewayToolsetUnexpectedResponseBody {
+	body := &PreviewGatewayToolsetUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewPreviewGatewayToolsetGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "previewGatewayToolset" endpoint of the
+// "userSessions" service.
+func NewPreviewGatewayToolsetGatewayErrorResponseBody(res *goa.ServiceError) *PreviewGatewayToolsetGatewayErrorResponseBody {
+	body := &PreviewGatewayToolsetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintFrozenGatewaySessionUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "mintFrozenGatewaySession" endpoint of the
+// "userSessions" service.
+func NewMintFrozenGatewaySessionUnauthorizedResponseBody(res *goa.ServiceError) *MintFrozenGatewaySessionUnauthorizedResponseBody {
+	body := &MintFrozenGatewaySessionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintFrozenGatewaySessionForbiddenResponseBody builds the HTTP response
+// body from the result of the "mintFrozenGatewaySession" endpoint of the
+// "userSessions" service.
+func NewMintFrozenGatewaySessionForbiddenResponseBody(res *goa.ServiceError) *MintFrozenGatewaySessionForbiddenResponseBody {
+	body := &MintFrozenGatewaySessionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintFrozenGatewaySessionBadRequestResponseBody builds the HTTP response
+// body from the result of the "mintFrozenGatewaySession" endpoint of the
+// "userSessions" service.
+func NewMintFrozenGatewaySessionBadRequestResponseBody(res *goa.ServiceError) *MintFrozenGatewaySessionBadRequestResponseBody {
+	body := &MintFrozenGatewaySessionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintFrozenGatewaySessionNotFoundResponseBody builds the HTTP response
+// body from the result of the "mintFrozenGatewaySession" endpoint of the
+// "userSessions" service.
+func NewMintFrozenGatewaySessionNotFoundResponseBody(res *goa.ServiceError) *MintFrozenGatewaySessionNotFoundResponseBody {
+	body := &MintFrozenGatewaySessionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintFrozenGatewaySessionConflictResponseBody builds the HTTP response
+// body from the result of the "mintFrozenGatewaySession" endpoint of the
+// "userSessions" service.
+func NewMintFrozenGatewaySessionConflictResponseBody(res *goa.ServiceError) *MintFrozenGatewaySessionConflictResponseBody {
+	body := &MintFrozenGatewaySessionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintFrozenGatewaySessionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "mintFrozenGatewaySession" endpoint of
+// the "userSessions" service.
+func NewMintFrozenGatewaySessionUnsupportedMediaResponseBody(res *goa.ServiceError) *MintFrozenGatewaySessionUnsupportedMediaResponseBody {
+	body := &MintFrozenGatewaySessionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintFrozenGatewaySessionInvalidResponseBody builds the HTTP response body
+// from the result of the "mintFrozenGatewaySession" endpoint of the
+// "userSessions" service.
+func NewMintFrozenGatewaySessionInvalidResponseBody(res *goa.ServiceError) *MintFrozenGatewaySessionInvalidResponseBody {
+	body := &MintFrozenGatewaySessionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintFrozenGatewaySessionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "mintFrozenGatewaySession" endpoint of
+// the "userSessions" service.
+func NewMintFrozenGatewaySessionInvariantViolationResponseBody(res *goa.ServiceError) *MintFrozenGatewaySessionInvariantViolationResponseBody {
+	body := &MintFrozenGatewaySessionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintFrozenGatewaySessionUnexpectedResponseBody builds the HTTP response
+// body from the result of the "mintFrozenGatewaySession" endpoint of the
+// "userSessions" service.
+func NewMintFrozenGatewaySessionUnexpectedResponseBody(res *goa.ServiceError) *MintFrozenGatewaySessionUnexpectedResponseBody {
+	body := &MintFrozenGatewaySessionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMintFrozenGatewaySessionGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "mintFrozenGatewaySession" endpoint of the
+// "userSessions" service.
+func NewMintFrozenGatewaySessionGatewayErrorResponseBody(res *goa.ServiceError) *MintFrozenGatewaySessionGatewayErrorResponseBody {
+	body := &MintFrozenGatewaySessionGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1639,6 +2411,32 @@ func NewListFacetsPayload(sessionToken *string, apikeyToken *string, projectSlug
 	return v
 }
 
+// NewPreviewGatewayToolsetPayload builds a userSessions service
+// previewGatewayToolset endpoint payload.
+func NewPreviewGatewayToolsetPayload(body *PreviewGatewayToolsetRequestBody, sessionToken *string, projectSlugInput *string) *usersessions.PreviewGatewayToolsetPayload {
+	v := &usersessions.PreviewGatewayToolsetPayload{
+		MetaMcpServerID: *body.MetaMcpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewMintFrozenGatewaySessionPayload builds a userSessions service
+// mintFrozenGatewaySession endpoint payload.
+func NewMintFrozenGatewaySessionPayload(body *MintFrozenGatewaySessionRequestBody, sessionToken *string, projectSlugInput *string) *usersessions.MintFrozenGatewaySessionPayload {
+	v := &usersessions.MintFrozenGatewaySessionPayload{
+		MetaMcpServerID: *body.MetaMcpServerID,
+		DiscoveryMode:   body.DiscoveryMode,
+	}
+	v.FrozenToolset = unmarshalFrozenGatewayReviewRequestBodyToUsersessionsFrozenGatewayReview(body.FrozenToolset)
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewMintUserSessionPayload builds a userSessions service mintUserSession
 // endpoint payload.
 func NewMintUserSessionPayload(body *MintUserSessionRequestBody, sessionToken *string, projectSlugInput *string) *usersessions.MintUserSessionPayload {
@@ -1666,6 +2464,43 @@ func NewRevokeUserSessionPayload(id string, sessionToken *string, apikeyToken *s
 	return v
 }
 
+// ValidatePreviewGatewayToolsetRequestBody runs the validations defined on
+// PreviewGatewayToolsetRequestBody
+func ValidatePreviewGatewayToolsetRequestBody(body *PreviewGatewayToolsetRequestBody) (err error) {
+	if body.MetaMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("meta_mcp_server_id", "body"))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateMintFrozenGatewaySessionRequestBody runs the validations defined on
+// MintFrozenGatewaySessionRequestBody
+func ValidateMintFrozenGatewaySessionRequestBody(body *MintFrozenGatewaySessionRequestBody) (err error) {
+	if body.MetaMcpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("meta_mcp_server_id", "body"))
+	}
+	if body.FrozenToolset == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("frozen_toolset", "body"))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	if body.DiscoveryMode != nil {
+		if !(*body.DiscoveryMode == "direct" || *body.DiscoveryMode == "progressive") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"direct", "progressive"}))
+		}
+	}
+	if body.FrozenToolset != nil {
+		if err2 := ValidateFrozenGatewayReviewRequestBody(body.FrozenToolset); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateMintUserSessionRequestBody runs the validations defined on
 // MintUserSessionRequestBody
 func ValidateMintUserSessionRequestBody(body *MintUserSessionRequestBody) (err error) {
@@ -1682,6 +2517,18 @@ func ValidateMintUserSessionRequestBody(body *MintUserSessionRequestBody) (err e
 		if !(*body.DiscoveryMode == "progressive" || *body.DiscoveryMode == "direct") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.discovery_mode", *body.DiscoveryMode, []any{"progressive", "direct"}))
 		}
+	}
+	return
+}
+
+// ValidateFrozenGatewayReviewRequestBody runs the validations defined on
+// FrozenGatewayReviewRequestBody
+func ValidateFrozenGatewayReviewRequestBody(body *FrozenGatewayReviewRequestBody) (err error) {
+	if body.Fingerprint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fingerprint", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
 	return
 }

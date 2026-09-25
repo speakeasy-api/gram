@@ -51,3 +51,11 @@ func TestGatewayGrantNamespaceSeparatesOldReaders(t *testing.T) {
 	require.Equal(t, "gatewayUserSessionGrant:"+uuid.Nil.String()+":"+code, userSessionGrantCacheKey(uuid.Nil, code, false))
 	require.NotEqual(t, "userSessionGrant:"+uuid.Nil.String()+":"+code, userSessionGrantCacheKey(uuid.Nil, code, false))
 }
+
+func TestFrozenGrantNamespaceSeparatesModeOnlyReaders(t *testing.T) {
+	t.Parallel()
+	code := frozenAuthorizationCodePrefix + "opaque-code"
+	require.Equal(t, "frozenGatewayUserSessionGrant:"+uuid.Nil.String()+":"+code, userSessionGrantCacheKey(uuid.Nil, code, false))
+	require.NotEqual(t, "userSessionGrant:"+uuid.Nil.String()+":"+code, userSessionGrantCacheKey(uuid.Nil, code, false))
+	require.NotEqual(t, "gatewayUserSessionGrant:"+uuid.Nil.String()+":"+code, userSessionGrantCacheKey(uuid.Nil, code, false))
+}

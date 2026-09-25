@@ -105,8 +105,9 @@ type memberProxyBuilder func(ctx context.Context) (*proxy.Proxy, error)
 // memberDial is a routed member's proxy builder plus whether routing found
 // no credential, so a 401 can name the gateway's gap, not a rejected token.
 type memberDial struct {
-	build     memberProxyBuilder
-	anonymous bool
+	build           memberProxyBuilder
+	anonymous       bool
+	routingIdentity string
 }
 
 // memberAuthFailure names the member-scoped meaning of an upstream 401/403.
@@ -156,9 +157,14 @@ func (s *Service) routeMetaMember(
 		return memberDial{}, "", fmt.Errorf("load meta MCP member server: %w", err)
 	}
 
-	// gate.toolSelection is provably nil today: meta endpoints mint no tool
-	// selections. If they ever do, its names are meta-MCP-qualified and would
-	// have to be translated before reaching a member proxy's strict filter.
+	// The backend used for dispatch must still be the one in the authorized
+	// member snapshot. In particular, a tunnel replacement cannot inherit
+	// the old tunnel's approval or credentials.
+	if serverRow.ToolsetID != member.toolsetID || serverRow.RemoteMcpServerID != member.remoteServerID || serverRow.TunneledMcpServerID != member.tunneledServerID || serverRow.EnvironmentID != member.environmentID || serverRow.Visibility != member.visibility {
+		return memberDial{}, "", &metaMemberError{message: fmt.Sprintf("server %q configuration changed; retry discovery", member.slug)}
+	}
+
+	// Frozen calls project the selected qualified name onto this member.
 	switch {
 	case member.remoteServerID.Valid:
 		remoteServer, rerr := remotemcp_repo.New(s.db).GetServerByID(ctx, remotemcp_repo.GetServerByIDParams{
@@ -182,7 +188,7 @@ func (s *Service) routeMetaMember(
 		if terr != nil {
 			return memberDial{}, "remote", terr
 		}
-		return memberDial{anonymous: upstreamToken == "", build: func(context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", routingIdentity: memberRouting(member, remoteServer.Url), build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
 			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
@@ -199,7 +205,7 @@ func (s *Service) routeMetaMember(
 		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
-		return memberDial{anonymous: upstreamToken == "", build: func(ctx context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", routingIdentity: memberRouting(member, member.tunneledResourceIdentifier), build: func(ctx context.Context) (*proxy.Proxy, error) {
 			p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, member.projectID, gate.organizationID, &serverRow, upstreamToken, "", gate.toolSelection, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
 			if berr != nil {
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)
@@ -626,6 +632,20 @@ func (s *Service) executeProxiedMemberTool(
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}
 
+	if gate.frozen != nil {
+		catalog, err := s.describeProxiedMemberWithDial(ctx, logger, dial, member)
+		if err != nil {
+			return nil, err
+		}
+		catalog, err = s.filterFrozenMemberCatalog(ctx, gate, member, catalog)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := catalog.byName[toolName]; !ok {
+			return nil, oops.E(oops.CodeForbidden, nil, "tool is not in the approved frozen toolset or has changed; review this connection")
+		}
+	}
+
 	// The caller's _meta stays on our side of the wire: WireMeta is a lossy
 	// observability parse (re-serializing it emits empty/null fields that
 	// strict vendors reject with 400), and the per-call handshake already
@@ -669,10 +689,17 @@ const maxProxiedListPages = 8
 // describeMetaMember reads one member's tool catalog through whichever
 // path serves it: the hosted model view, or the member's own tools/list.
 func (s *Service) describeMetaMember(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
+	var catalog *memberCatalog
+	var err error
 	if member.backend == metaMemberBackendHosted {
-		return s.describeMemberToolset(ctx, logger, gate, member)
+		catalog, err = s.describeMemberToolset(ctx, logger, gate, member)
+	} else {
+		catalog, err = s.describeProxiedMember(ctx, logger, gate, member)
 	}
-	return s.describeProxiedMember(ctx, logger, gate, member)
+	if err != nil {
+		return nil, err
+	}
+	return s.filterFrozenMemberCatalog(ctx, gate, member, catalog)
 }
 
 // describeProxiedMember pages a proxied member's tools/list into a catalog,
@@ -687,6 +714,10 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 		return nil, fmt.Errorf("dial meta MCP member: %w", err)
 	}
 
+	return s.describeProxiedMemberWithDial(ctx, logger, dial, member)
+}
+
+func (s *Service) describeProxiedMemberWithDial(ctx context.Context, logger *slog.Logger, dial memberDial, member metaMember) (*memberCatalog, error) {
 	// One deadline and one upstream session cover the whole pagination.
 	ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
 	defer cancel()
@@ -754,7 +785,7 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 	}
 
 	// Rebuild entries from the kept set, matching the hosted path's output.
-	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete}
+	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete, routingIdentity: dial.routingIdentity}
 	for _, entry := range entries {
 		if kept, ok := byName[entry.Name]; ok && kept == entry {
 			catalog.entries = append(catalog.entries, entry)

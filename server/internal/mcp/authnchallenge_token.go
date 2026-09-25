@@ -752,11 +752,15 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	var toolSelection []byte
 	policy := toolfilter.PolicyForSelection(grant.ToolSelection)
 	if grant.GatewayPolicy != nil {
-		if policy != nil || !strings.HasPrefix(req.Code, gatewayAuthorizationCodePrefix) {
+		expectedPrefix := gatewayAuthorizationCodePrefix
+		if grant.GatewayPolicy.Gateway != nil && grant.GatewayPolicy.Gateway.Frozen != nil {
+			expectedPrefix = frozenAuthorizationCodePrefix
+		}
+		if policy != nil || !strings.HasPrefix(req.Code, expectedPrefix) {
 			return rejectGrant("invalid gateway connection options; reauthorize")
 		}
 		policy = grant.GatewayPolicy
-	} else if strings.HasPrefix(req.Code, gatewayAuthorizationCodePrefix) {
+	} else if strings.HasPrefix(req.Code, gatewayAuthorizationCodePrefix) || strings.HasPrefix(req.Code, frozenAuthorizationCodePrefix) {
 		return rejectGrant("missing gateway connection options; reauthorize")
 	}
 	if policy != nil {

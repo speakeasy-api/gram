@@ -371,12 +371,14 @@
         Array.prototype.forEach.call(selfOnlySections, function (section) {
           section.hidden = authorizingAgent;
         });
-        var discoveryMode = document.querySelector(
-          'select[name="discovery_mode"]',
-        );
-        if (discoveryMode) {
-          discoveryMode.disabled = authorizingAgent;
-        }
+        document
+          .querySelectorAll(
+            'select[name="discovery_mode"], input[name="gateway_freeze"], input[name="gateway_tools"]',
+          )
+          .forEach(function (input) {
+            input.disabled =
+              authorizingAgent || input.hasAttribute("data-unavailable");
+          });
         if (subjectDisplay && selected) {
           subjectDisplay.textContent = selectedDisplay;
         }

@@ -35,7 +35,7 @@ func TestSessionPolicyEmptyAllowRemainsRestrictive(t *testing.T) {
 func TestSessionPolicyGatewayModeHasNoRestriction(t *testing.T) {
 	t.Parallel()
 	mode := metamcp.DiscoveryModeDirect
-	original := &SessionPolicy{Resource: "meta_mcp_server:" + uuid.NewString(), Gateway: &GatewayOptions{DiscoveryMode: &mode}}
+	original := &SessionPolicy{Resource: "meta_mcp_server:" + uuid.NewString(), Gateway: &GatewayOptions{Frozen: nil, DiscoveryMode: &mode}}
 	raw, err := json.Marshal(original)
 	require.NoError(t, err)
 	parsed, err := ParseSessionPolicy(raw)

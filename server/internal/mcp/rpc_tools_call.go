@@ -260,6 +260,9 @@ func handleToolsCall(
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").LogError(ctx, logger)
 		}
+		if err := validateFrozenHostedTool(ctx, tool, plan); err != nil {
+			return nil, err
+		}
 	}
 
 	// Per-tool RBAC check: if the user is authenticated on a private MCP,

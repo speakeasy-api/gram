@@ -323,3 +323,11 @@ func newTestAttestor(t *testing.T, upstream *httptest.Server, tokenPath string) 
 	require.NoError(t, err)
 	return handler
 }
+
+func TestFrozenConsentPrivateRoutes(t *testing.T) {
+	t.Parallel()
+	for _, prefix := range []string{"/mcp/", "/x/mcp/"} {
+		require.True(t, IsPrivateRoute(http.MethodPost, prefix+"gateway/connect/frozen-v2"))
+		require.False(t, IsPrivateRoute(http.MethodGet, prefix+"gateway/connect/frozen-v2"))
+	}
+}

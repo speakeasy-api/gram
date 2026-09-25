@@ -64,6 +64,7 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	productFeatures     *productfeatures.Client
+	gatewayInventory *testGatewayInventory
 	service             *usersessions.Service
 	conn                *pgxpool.Pool
 	sessionManager      *sessions.Manager
@@ -115,6 +116,7 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 	}
 
 	productFeatures := productfeaturestest.NewClient(t, logger, tracerProvider, conn)
+	inventory := &testGatewayInventory{snapshot: nil}
 	svc := usersessions.NewService(
 		logger,
 		tracerProvider,
@@ -131,10 +133,12 @@ func newTestServiceWithRevoker(t *testing.T, revoker usersessions.TokenRevoker, 
 		"http://0.0.0.0",
 		ratelimit.NewRedisStore(redisClient),
 		productFeatures,
+		inventory,
 	)
 
 	return ctx, &testInstance{
 		productFeatures:     productFeatures,
+		gatewayInventory: inventory,
 		service:             svc,
 		conn:                conn,
 		sessionManager:      sessionManager,

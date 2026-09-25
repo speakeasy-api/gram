@@ -25,6 +25,14 @@ type Client struct {
 	// endpoint.
 	ListFacetsDoer goahttp.Doer
 
+	// PreviewGatewayToolset Doer is the HTTP client used to make requests to the
+	// previewGatewayToolset endpoint.
+	PreviewGatewayToolsetDoer goahttp.Doer
+
+	// MintFrozenGatewaySession Doer is the HTTP client used to make requests to
+	// the mintFrozenGatewaySession endpoint.
+	MintFrozenGatewaySessionDoer goahttp.Doer
+
 	// MintUserSession Doer is the HTTP client used to make requests to the
 	// mintUserSession endpoint.
 	MintUserSessionDoer goahttp.Doer
@@ -53,15 +61,17 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListUserSessionsDoer:  doer,
-		ListFacetsDoer:        doer,
-		MintUserSessionDoer:   doer,
-		RevokeUserSessionDoer: doer,
-		RestoreResponseBody:   restoreBody,
-		scheme:                scheme,
-		host:                  host,
-		decoder:               dec,
-		encoder:               enc,
+		ListUserSessionsDoer:         doer,
+		ListFacetsDoer:               doer,
+		PreviewGatewayToolsetDoer:    doer,
+		MintFrozenGatewaySessionDoer: doer,
+		MintUserSessionDoer:          doer,
+		RevokeUserSessionDoer:        doer,
+		RestoreResponseBody:          restoreBody,
+		scheme:                       scheme,
+		host:                         host,
+		decoder:                      dec,
+		encoder:                      enc,
 	}
 }
 
@@ -108,6 +118,54 @@ func (c *Client) ListFacets() goa.Endpoint {
 		resp, err := c.ListFacetsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("userSessions", "listFacets", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// PreviewGatewayToolset returns an endpoint that makes HTTP requests to the
+// userSessions service previewGatewayToolset server.
+func (c *Client) PreviewGatewayToolset() goa.Endpoint {
+	var (
+		encodeRequest  = EncodePreviewGatewayToolsetRequest(c.encoder)
+		decodeResponse = DecodePreviewGatewayToolsetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildPreviewGatewayToolsetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.PreviewGatewayToolsetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("userSessions", "previewGatewayToolset", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MintFrozenGatewaySession returns an endpoint that makes HTTP requests to the
+// userSessions service mintFrozenGatewaySession server.
+func (c *Client) MintFrozenGatewaySession() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMintFrozenGatewaySessionRequest(c.encoder)
+		decodeResponse = DecodeMintFrozenGatewaySessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMintFrozenGatewaySessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MintFrozenGatewaySessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("userSessions", "mintFrozenGatewaySession", err)
 		}
 		return decodeResponse(resp)
 	}

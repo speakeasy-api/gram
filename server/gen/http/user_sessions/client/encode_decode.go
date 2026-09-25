@@ -17,6 +17,7 @@ import (
 
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	usersessions "github.com/speakeasy-api/gram/server/gen/user_sessions"
+	usersessionsviews "github.com/speakeasy-api/gram/server/gen/user_sessions/views"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -512,6 +513,486 @@ func DecodeListFacetsResponse(decoder func(*http.Response) goahttp.Decoder, rest
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("userSessions", "listFacets", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildPreviewGatewayToolsetRequest instantiates a HTTP request object with
+// method and path set to call the "userSessions" service
+// "previewGatewayToolset" endpoint
+func (c *Client) BuildPreviewGatewayToolsetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: PreviewGatewayToolsetUserSessionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("userSessions", "previewGatewayToolset", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodePreviewGatewayToolsetRequest returns an encoder for requests sent to
+// the userSessions previewGatewayToolset server.
+func EncodePreviewGatewayToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usersessions.PreviewGatewayToolsetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("userSessions", "previewGatewayToolset", "*usersessions.PreviewGatewayToolsetPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewPreviewGatewayToolsetRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("userSessions", "previewGatewayToolset", err)
+		}
+		return nil
+	}
+}
+
+// DecodePreviewGatewayToolsetResponse returns a decoder for responses returned
+// by the userSessions previewGatewayToolset endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodePreviewGatewayToolsetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodePreviewGatewayToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body PreviewGatewayToolsetResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "previewGatewayToolset", err)
+			}
+			p := NewPreviewGatewayToolsetGatewayToolsetReviewOK(&body)
+			view := "default"
+			vres := &usersessionsviews.GatewayToolsetReview{Projected: p, View: view}
+			if err = usersessionsviews.ValidateGatewayToolsetReview(vres); err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "previewGatewayToolset", err)
+			}
+			res := usersessions.NewGatewayToolsetReview(vres)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body PreviewGatewayToolsetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "previewGatewayToolset", err)
+			}
+			err = ValidatePreviewGatewayToolsetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "previewGatewayToolset", err)
+			}
+			return nil, NewPreviewGatewayToolsetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body PreviewGatewayToolsetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "previewGatewayToolset", err)
+			}
+			err = ValidatePreviewGatewayToolsetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "previewGatewayToolset", err)
+			}
+			return nil, NewPreviewGatewayToolsetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body PreviewGatewayToolsetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "previewGatewayToolset", err)
+			}
+			err = ValidatePreviewGatewayToolsetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "previewGatewayToolset", err)
+			}
+			return nil, NewPreviewGatewayToolsetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body PreviewGatewayToolsetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "previewGatewayToolset", err)
+			}
+			err = ValidatePreviewGatewayToolsetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "previewGatewayToolset", err)
+			}
+			return nil, NewPreviewGatewayToolsetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body PreviewGatewayToolsetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "previewGatewayToolset", err)
+			}
+			err = ValidatePreviewGatewayToolsetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "previewGatewayToolset", err)
+			}
+			return nil, NewPreviewGatewayToolsetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body PreviewGatewayToolsetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "previewGatewayToolset", err)
+			}
+			err = ValidatePreviewGatewayToolsetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "previewGatewayToolset", err)
+			}
+			return nil, NewPreviewGatewayToolsetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body PreviewGatewayToolsetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "previewGatewayToolset", err)
+			}
+			err = ValidatePreviewGatewayToolsetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "previewGatewayToolset", err)
+			}
+			return nil, NewPreviewGatewayToolsetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body PreviewGatewayToolsetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessions", "previewGatewayToolset", err)
+				}
+				err = ValidatePreviewGatewayToolsetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessions", "previewGatewayToolset", err)
+				}
+				return nil, NewPreviewGatewayToolsetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body PreviewGatewayToolsetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessions", "previewGatewayToolset", err)
+				}
+				err = ValidatePreviewGatewayToolsetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessions", "previewGatewayToolset", err)
+				}
+				return nil, NewPreviewGatewayToolsetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("userSessions", "previewGatewayToolset", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body PreviewGatewayToolsetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "previewGatewayToolset", err)
+			}
+			err = ValidatePreviewGatewayToolsetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "previewGatewayToolset", err)
+			}
+			return nil, NewPreviewGatewayToolsetGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("userSessions", "previewGatewayToolset", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildMintFrozenGatewaySessionRequest instantiates a HTTP request object with
+// method and path set to call the "userSessions" service
+// "mintFrozenGatewaySession" endpoint
+func (c *Client) BuildMintFrozenGatewaySessionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MintFrozenGatewaySessionUserSessionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("userSessions", "mintFrozenGatewaySession", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMintFrozenGatewaySessionRequest returns an encoder for requests sent
+// to the userSessions mintFrozenGatewaySession server.
+func EncodeMintFrozenGatewaySessionRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usersessions.MintFrozenGatewaySessionPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("userSessions", "mintFrozenGatewaySession", "*usersessions.MintFrozenGatewaySessionPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewMintFrozenGatewaySessionRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("userSessions", "mintFrozenGatewaySession", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMintFrozenGatewaySessionResponse returns a decoder for responses
+// returned by the userSessions mintFrozenGatewaySession endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeMintFrozenGatewaySessionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMintFrozenGatewaySessionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body MintFrozenGatewaySessionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			err = ValidateMintFrozenGatewaySessionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			res := NewMintFrozenGatewaySessionResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body MintFrozenGatewaySessionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			err = ValidateMintFrozenGatewaySessionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			return nil, NewMintFrozenGatewaySessionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MintFrozenGatewaySessionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			err = ValidateMintFrozenGatewaySessionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			return nil, NewMintFrozenGatewaySessionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MintFrozenGatewaySessionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			err = ValidateMintFrozenGatewaySessionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			return nil, NewMintFrozenGatewaySessionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MintFrozenGatewaySessionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			err = ValidateMintFrozenGatewaySessionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			return nil, NewMintFrozenGatewaySessionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MintFrozenGatewaySessionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			err = ValidateMintFrozenGatewaySessionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			return nil, NewMintFrozenGatewaySessionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MintFrozenGatewaySessionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			err = ValidateMintFrozenGatewaySessionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			return nil, NewMintFrozenGatewaySessionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MintFrozenGatewaySessionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			err = ValidateMintFrozenGatewaySessionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			return nil, NewMintFrozenGatewaySessionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MintFrozenGatewaySessionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessions", "mintFrozenGatewaySession", err)
+				}
+				err = ValidateMintFrozenGatewaySessionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessions", "mintFrozenGatewaySession", err)
+				}
+				return nil, NewMintFrozenGatewaySessionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MintFrozenGatewaySessionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("userSessions", "mintFrozenGatewaySession", err)
+				}
+				err = ValidateMintFrozenGatewaySessionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("userSessions", "mintFrozenGatewaySession", err)
+				}
+				return nil, NewMintFrozenGatewaySessionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("userSessions", "mintFrozenGatewaySession", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MintFrozenGatewaySessionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			err = ValidateMintFrozenGatewaySessionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("userSessions", "mintFrozenGatewaySession", err)
+			}
+			return nil, NewMintFrozenGatewaySessionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("userSessions", "mintFrozenGatewaySession", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -1094,6 +1575,57 @@ func unmarshalUserSessionFacetOptionResponseBodyToUsersessionsUserSessionFacetOp
 		Value:       *v.Value,
 		DisplayName: *v.DisplayName,
 		Count:       *v.Count,
+	}
+
+	return res
+}
+
+// unmarshalGatewayReviewedToolResponseBodyToUsersessionsviewsGatewayReviewedToolView
+// builds a value of type *usersessionsviews.GatewayReviewedToolView from a
+// value of type *GatewayReviewedToolResponseBody.
+func unmarshalGatewayReviewedToolResponseBodyToUsersessionsviewsGatewayReviewedToolView(v *GatewayReviewedToolResponseBody) *usersessionsviews.GatewayReviewedToolView {
+	res := &usersessionsviews.GatewayReviewedToolView{
+		Name:        v.Name,
+		Fingerprint: v.Fingerprint,
+		Definition:  v.Definition,
+	}
+
+	return res
+}
+
+// marshalUsersessionsFrozenGatewayReviewToFrozenGatewayReviewRequestBody
+// builds a value of type *FrozenGatewayReviewRequestBody from a value of type
+// *usersessions.FrozenGatewayReview.
+func marshalUsersessionsFrozenGatewayReviewToFrozenGatewayReviewRequestBody(v *usersessions.FrozenGatewayReview) *FrozenGatewayReviewRequestBody {
+	res := &FrozenGatewayReviewRequestBody{
+		Fingerprint: v.Fingerprint,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	} else {
+		res.Tools = []string{}
+	}
+
+	return res
+}
+
+// marshalFrozenGatewayReviewRequestBodyToUsersessionsFrozenGatewayReview
+// builds a value of type *usersessions.FrozenGatewayReview from a value of
+// type *FrozenGatewayReviewRequestBody.
+func marshalFrozenGatewayReviewRequestBodyToUsersessionsFrozenGatewayReview(v *FrozenGatewayReviewRequestBody) *usersessions.FrozenGatewayReview {
+	res := &usersessions.FrozenGatewayReview{
+		Fingerprint: v.Fingerprint,
+	}
+	if v.Tools != nil {
+		res.Tools = make([]string, len(v.Tools))
+		for i, val := range v.Tools {
+			res.Tools[i] = val
+		}
+	} else {
+		res.Tools = []string{}
 	}
 
 	return res
