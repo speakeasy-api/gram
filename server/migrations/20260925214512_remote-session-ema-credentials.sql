@@ -23,9 +23,9 @@ CREATE TABLE "remote_session_ema_credentials" (
   "deleted_at" timestamptz NULL,
   "deleted" boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) STORED,
   PRIMARY KEY ("id"),
+  CONSTRAINT "remote_session_ema_credentials_binding_id_fkey" FOREIGN KEY ("remote_session_ema_binding_id") REFERENCES "remote_session_ema_bindings" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "remote_session_ema_credentials_project_id_fkey" FOREIGN KEY ("organization_id", "project_id") REFERENCES "projects" ("organization_id", "id") ON UPDATE CASCADE ON DELETE SET NULL,
   CONSTRAINT "remote_session_ema_credentials_remote_session_client_id_fkey" FOREIGN KEY ("remote_session_client_id", "remote_session_issuer_id") REFERENCES "remote_session_clients" ("id", "remote_session_issuer_id") ON UPDATE NO ACTION ON DELETE SET NULL,
-  CONSTRAINT "remote_session_ema_credentials_remote_session_ema_binding_id_fk" FOREIGN KEY ("remote_session_ema_binding_id") REFERENCES "remote_session_ema_bindings" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "remote_session_ema_credentials_trusted_issuer_session_id_fkey" FOREIGN KEY ("trusted_issuer_session_id") REFERENCES "trusted_issuer_sessions" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "remote_session_ema_credentials_user_session_issuer_id_fkey" FOREIGN KEY ("user_session_issuer_id") REFERENCES "user_session_issuers" ("id") ON UPDATE NO ACTION ON DELETE SET NULL,
   CONSTRAINT "remote_session_ema_credentials_client_ref_check" CHECK ((remote_session_client_id IS NULL) = (remote_session_issuer_id IS NULL)),
@@ -33,12 +33,12 @@ CREATE TABLE "remote_session_ema_credentials" (
 );
 -- Create index "remote_session_ema_credentials_access_expires_at_idx" to table: "remote_session_ema_credentials"
 CREATE INDEX "remote_session_ema_credentials_access_expires_at_idx" ON "remote_session_ema_credentials" ("access_expires_at", "id");
+-- Create index "remote_session_ema_credentials_binding_id_idx" to table: "remote_session_ema_credentials"
+CREATE INDEX "remote_session_ema_credentials_binding_id_idx" ON "remote_session_ema_credentials" ("remote_session_ema_binding_id");
 -- Create index "remote_session_ema_credentials_project_id_idx" to table: "remote_session_ema_credentials"
 CREATE INDEX "remote_session_ema_credentials_project_id_idx" ON "remote_session_ema_credentials" ("project_id");
 -- Create index "remote_session_ema_credentials_remote_session_client_id_idx" to table: "remote_session_ema_credentials"
 CREATE INDEX "remote_session_ema_credentials_remote_session_client_id_idx" ON "remote_session_ema_credentials" ("remote_session_client_id");
--- Create index "remote_session_ema_credentials_remote_session_ema_binding_id_id" to table: "remote_session_ema_credentials"
-CREATE INDEX "remote_session_ema_credentials_remote_session_ema_binding_id_id" ON "remote_session_ema_credentials" ("remote_session_ema_binding_id");
 -- Create index "remote_session_ema_credentials_subject_key" to table: "remote_session_ema_credentials"
 CREATE UNIQUE INDEX "remote_session_ema_credentials_subject_key" ON "remote_session_ema_credentials" ("project_id", "user_session_issuer_id", "remote_session_client_id", "resource", "subject_urn") WHERE (deleted IS FALSE);
 -- Create index "remote_session_ema_credentials_trusted_issuer_session_id_idx" to table: "remote_session_ema_credentials"
