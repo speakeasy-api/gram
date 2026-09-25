@@ -30,6 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	gatewaymcp "github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -49,6 +51,7 @@ import (
 )
 
 type Service struct {
+	featureFlags             feature.Provider
 	tracer                   trace.Tracer
 	logger                   *slog.Logger
 	db                       *pgxpool.Pool
@@ -74,10 +77,12 @@ func NewService(
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
 	networkAccessEligibility networkaccess.EligibilityChecker,
+	featureFlags feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("metamcp"))
 
 	return &Service{
+		featureFlags:             featureFlags,
 		tracer:                   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/metamcp"),
 		logger:                   logger,
 		db:                       db,
@@ -288,6 +293,16 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, err
 	}
 
+	if payload.DiscoveryMode != nil {
+		if !gatewaymcp.DiscoveryMode(*payload.DiscoveryMode).Valid() {
+			return nil, oops.E(oops.CodeBadRequest, nil, "unsupported discovery mode")
+		}
+		enabled, err := s.featureFlags.IsFlagEnabled(ctx, feature.FlagGatewayDiscoveryModes, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+		if err != nil || !enabled {
+			return nil, oops.E(oops.CodeForbidden, err, "gateway discovery settings are not available")
+		}
+	}
+
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	// Validate the same normalized text that will be persisted, not the raw input.
@@ -404,6 +419,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		NetworkAccessModeSet: payload.NetworkAccessMode != nil,
 		NetworkAccessMode:    storedMode,
 		InstructionsSet:      payload.Instructions != nil,
+		DiscoveryMode:        conv.PtrToPGText(payload.DiscoveryMode),
 		// A blank submission restores the built-in instructions (NULL).
 		Instructions:   instructions,
 		ID:             serverID,

@@ -86239,6 +86239,12 @@ components:
           type: string
           description: When the meta MCP server was created
           format: date-time
+        discovery_mode:
+          type: string
+          description: The effective default discovery mode. Unconfigured connections follow this value.
+          enum:
+            - progressive
+            - direct
         id:
           type: string
           description: The ID of the meta MCP server
@@ -86289,6 +86295,7 @@ components:
         - name
         - visibility
         - network_access_mode
+        - discovery_mode
         - created_at
         - updated_at
     MeterUsageBreakdown:
@@ -86554,6 +86561,12 @@ components:
     MintUserSessionRequestBody:
       type: object
       properties:
+        discovery_mode:
+          type: string
+          description: An explicit discovery mode for a gateway Inspect connection. Valid only with meta_mcp_server_id. Omit to follow the gateway default.
+          enum:
+            - progressive
+            - direct
         mcp_server_id:
           type: string
           description: Bind the JWT to this MCP server's user_session_issuer audience (any issuer-gated backend, hosted servers included). Mutually exclusive with the other targets; exactly one must be set. Must be issuer-gated and live in the caller's project.
@@ -99350,6 +99363,12 @@ components:
     UpdateMetaMcpServerForm:
       type: object
       properties:
+        discovery_mode:
+          type: string
+          description: The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+          enum:
+            - progressive
+            - direct
         id:
           type: string
           description: The ID of the meta MCP server to update

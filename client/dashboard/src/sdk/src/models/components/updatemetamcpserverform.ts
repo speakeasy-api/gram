@@ -7,6 +7,20 @@ import { remap as remap$ } from "../../lib/primitives.js";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
+ * The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+ */
+export const UpdateMetaMcpServerFormDiscoveryMode = {
+  Progressive: "progressive",
+  Direct: "direct",
+} as const;
+/**
+ * The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+ */
+export type UpdateMetaMcpServerFormDiscoveryMode = ClosedEnum<
+  typeof UpdateMetaMcpServerFormDiscoveryMode
+>;
+
+/**
  * The network surfaces through which a Gram-hosted MCP server may be reached.
  */
 export const UpdateMetaMcpServerFormNetworkAccessMode = {
@@ -40,6 +54,10 @@ export type UpdateMetaMcpServerFormVisibility = ClosedEnum<
  */
 export type UpdateMetaMcpServerForm = {
   /**
+   * The default discovery mode for connections without an explicit override. Omit to preserve the stored default.
+   */
+  discoveryMode?: UpdateMetaMcpServerFormDiscoveryMode | undefined;
+  /**
    * The ID of the meta MCP server to update
    */
   id: string;
@@ -66,6 +84,11 @@ export type UpdateMetaMcpServerForm = {
 };
 
 /** @internal */
+export const UpdateMetaMcpServerFormDiscoveryMode$outboundSchema: z.ZodMiniEnum<
+  typeof UpdateMetaMcpServerFormDiscoveryMode
+> = z.enum(UpdateMetaMcpServerFormDiscoveryMode);
+
+/** @internal */
 export const UpdateMetaMcpServerFormNetworkAccessMode$outboundSchema:
   z.ZodMiniEnum<typeof UpdateMetaMcpServerFormNetworkAccessMode> = z.enum(
     UpdateMetaMcpServerFormNetworkAccessMode,
@@ -78,6 +101,7 @@ export const UpdateMetaMcpServerFormVisibility$outboundSchema: z.ZodMiniEnum<
 
 /** @internal */
 export type UpdateMetaMcpServerForm$Outbound = {
+  discovery_mode?: string | undefined;
   id: string;
   instructions?: string | undefined;
   name: string;
@@ -92,6 +116,9 @@ export const UpdateMetaMcpServerForm$outboundSchema: z.ZodMiniType<
   UpdateMetaMcpServerForm
 > = z.pipe(
   z.object({
+    discoveryMode: z.optional(
+      UpdateMetaMcpServerFormDiscoveryMode$outboundSchema,
+    ),
     id: z.string(),
     instructions: z.optional(z.string()),
     name: z.string(),
@@ -103,6 +130,7 @@ export const UpdateMetaMcpServerForm$outboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      discoveryMode: "discovery_mode",
       networkAccessMode: "network_access_mode",
       userSessionIssuerId: "user_session_issuer_id",
     });

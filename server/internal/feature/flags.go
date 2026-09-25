@@ -3,6 +3,9 @@ package feature
 type Flag string
 
 const (
+	// FlagGatewayDiscoveryModes gates new mode settings after all readers deploy.
+	FlagGatewayDiscoveryModes Flag = "gateway-discovery-modes"
+
 	FlagSpeakeasyOpenAPIParserV0 Flag = "speakeasy-openapi-parser-v0"
 	FlagClickhouseToolMetrics    Flag = "clickhouse-tool-metrics"
 	FlagAssistants               Flag = "assistants"

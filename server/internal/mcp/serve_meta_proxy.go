@@ -700,10 +700,10 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 	byName := map[string]*toolListEntry{}
 	dropped := map[string]struct{}{}
 	cursor := ""
+	seenCursors := map[string]bool{}
 	for page := 0; ; page++ {
 		if page >= maxProxiedListPages {
-			logger.WarnContext(ctx, "meta MCP member tool listing truncated at the page cap", attr.SlogMcpServerID(member.serverID.String()))
-			break
+			return nil, &metaMemberError{message: fmt.Sprintf("server %q exceeded the tool listing page limit", member.slug)}
 		}
 		params := map[string]any{}
 		if cursor != "" {
@@ -740,9 +740,13 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 			}
 			byName[entry.Name] = entry
 		}
-		if listing.NextCursor == "" || listing.NextCursor == cursor {
+		if listing.NextCursor == "" {
 			break
 		}
+		if listing.NextCursor == cursor || seenCursors[listing.NextCursor] {
+			return nil, &metaMemberError{message: fmt.Sprintf("server %q returned a repeated tool listing cursor", member.slug)}
+		}
+		seenCursors[listing.NextCursor] = true
 		cursor = listing.NextCursor
 	}
 

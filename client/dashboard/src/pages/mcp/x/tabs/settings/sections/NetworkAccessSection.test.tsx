@@ -226,6 +226,7 @@ const baseServer: McpServer = {
 };
 
 const gateway: MetaMcpServer = {
+  discoveryMode: "progressive",
   id: "gateway-1",
   name: "My Gateway",
   organizationId: "org-1",

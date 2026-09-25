@@ -1,0 +1,1 @@
+This gateway exposes the tools from its MCP servers directly. Use tools/list to discover tool definitions, then call each tool by its qualified server--tool name.

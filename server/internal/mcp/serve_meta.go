@@ -56,6 +56,7 @@ type metaGateContext struct {
 	organizationID  string
 	tokens          map[uuid.UUID]remotesessions.UpstreamToken
 	toolSelection   *toolfilter.SessionSelection
+	discoveryMode   metamcp.DiscoveryMode
 	authenticated   bool
 	sessionID       string
 	chatID          string
@@ -132,7 +133,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	}
 
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
-	var gateToolSelection *toolfilter.SessionSelection
+	var gatePolicy *toolfilter.SessionPolicy
 	if metaServer.UserSessionIssuerID.Valid {
 		resolvedEndpoint, err := s.BuildResolvedMcpEndpointForMetaServer(ctx, logger, mcpEndpoint, metaServer, "mcp")
 		if err != nil {
@@ -145,7 +146,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		ctx = newCtx
 		r = r.WithContext(ctx)
 		gateTokens = tokens
-		gateToolSelection = toolSelection
+		gatePolicy = toolSelection
 	}
 	if prepared.empty() {
 		return nil
@@ -163,7 +164,8 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		agentID:        agentID,
 		organizationID: metaServer.OrganizationID,
 		tokens:         gateTokens,
-		toolSelection:  gateToolSelection,
+		toolSelection:  nil,
+		discoveryMode:  metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode.String),
 		authenticated:  false,
 		sessionID:      parseMcpSessionID(r.Header),
 		chatID:         r.Header.Get("Gram-Chat-ID"),
@@ -173,6 +175,15 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		// Member dispatch carries this InEffect verbatim; nothing on the
 		// tools/call path reads it (upstream dials pin their own version).
 		protocolVersion: resolution,
+	}
+	if gatePolicy != nil {
+		gate.toolSelection = gatePolicy.Selection
+		if gatePolicy.Gateway != nil && gatePolicy.Gateway.DiscoveryMode != nil {
+			gate.discoveryMode = *gatePolicy.Gateway.DiscoveryMode
+		}
+	}
+	if agentID != uuid.Nil {
+		gate.discoveryMode = metamcp.DiscoveryModeProgressive
 	}
 	// Identity comes from the issuer gate alone: this surface runs no
 	// identity-auth ladder, so ungated meta endpoints serve anonymously —
@@ -255,10 +266,13 @@ func (s *Service) handleMetaMCPRequest(
 	case "initialize":
 		return s.handleMetaInitialize(ctx, logger, metaServer, gate, req, gate.protocolVersion.InEffect)
 	case "server/discover":
-		return s.handleMetaServerDiscover(ctx, logger, metaServer, req)
+		return s.handleMetaServerDiscover(ctx, logger, metaServer, gate, req)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
+		if gate.discoveryMode == metamcp.DiscoveryModeDirect {
+			return s.listDirectGatewayTools(ctx, logger, mcpEndpoint, metaServer, gate, req)
+		}
 		return s.listMetaServerTools(ctx, logger, req)
 	case "tools/call":
 		return s.callMetaServerTool(ctx, logger, mcpEndpoint, metaServer, gate, req)
@@ -389,7 +403,7 @@ func (s *Service) handleMetaInitialize(
 				"tools": json.RawMessage("{}"),
 			},
 			ServerInfo:   serverInfoMetaServer,
-			Instructions: metamcp.ResolveInstructions(conv.FromPGText[string](metaServer.Instructions)),
+			Instructions: metamcp.ResolveDiscoveryInstructions(conv.FromPGText[string](metaServer.Instructions), gate.discoveryMode),
 		},
 		serverIdentity: serverInfoMetaServer,
 		cacheHints:     nil,
@@ -405,6 +419,7 @@ func (s *Service) handleMetaServerDiscover(
 	ctx context.Context,
 	logger *slog.Logger,
 	metaServer *metamcprepo.MetaMcpServer,
+	gate *metaGateContext,
 	req *rawRequest,
 ) (json.RawMessage, error) {
 	hints := cacheHintsCallerUniform
@@ -422,7 +437,7 @@ func (s *Service) handleMetaServerDiscover(
 				"tools": json.RawMessage("{}"),
 			},
 			ServerInfo:   serverInfoMetaServer,
-			Instructions: metamcp.ResolveInstructions(conv.FromPGText[string](metaServer.Instructions)),
+			Instructions: metamcp.ResolveDiscoveryInstructions(conv.FromPGText[string](metaServer.Instructions), gate.discoveryMode),
 		},
 		serverIdentity: serverInfoMetaServer,
 		cacheHints:     hints,
@@ -439,6 +454,7 @@ func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, 
 	tools := make([]*toolListEntry, 0, len(contract))
 	for _, tool := range contract {
 		tools = append(tools, &toolListEntry{
+			Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
 			Name:        tool.Name,
 			Description: tool.Description,
 			InputSchema: tool.InputSchema,
@@ -477,12 +493,14 @@ func (s *Service) callMetaServerTool(
 		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").LogError(ctx, logger)
 	}
 
-	switch params.Name {
-	case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteTool:
-	default:
-		return nil, oops.E(oops.CodeNotFound, nil, "unknown tool %q", params.Name).LogError(ctx, logger)
-	}
+	if gate.discoveryMode != metamcp.DiscoveryModeDirect {
+		switch params.Name {
+		case metamcp.ToolListServers, metamcp.ToolDescribeServer, metamcp.ToolDescribeTools, metamcp.ToolExecuteTool:
+		default:
+			return nil, oops.E(oops.CodeNotFound, nil, "unknown tool %q", params.Name).LogError(ctx, logger)
+		}
 
+	}
 	start := time.Now()
 
 	// One snapshot per request: every meta MCP tool answers from the same
@@ -506,6 +524,9 @@ func (s *Service) callMetaServerTool(
 		return nil, err
 	}
 
+	if gate.discoveryMode == metamcp.DiscoveryModeDirect {
+		return s.executeMetaMemberTool(ctx, logger, gate, members, req, params.Name, params.Arguments, params.Meta)
+	}
 	var body json.RawMessage
 	switch params.Name {
 	case metamcp.ToolListServers:

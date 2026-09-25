@@ -346,6 +346,12 @@
         Array.prototype.forEach.call(selfOnlySections, function (section) {
           section.hidden = authorizingAgent;
         });
+        var discoveryMode = document.querySelector(
+          'select[name="discovery_mode"]',
+        );
+        if (discoveryMode) {
+          discoveryMode.disabled = authorizingAgent;
+        }
         if (subjectDisplay && selected) {
           subjectDisplay.textContent = selectedDisplay;
         }

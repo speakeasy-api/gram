@@ -91,6 +91,8 @@ var remoteSetHashEmpty = func() string {
 
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
+	// ShowDiscoveryMode exposes optional gateway connection settings.
+	ShowDiscoveryMode  bool
 	ClientName         string
 	MCPSlug            string
 	MCPRouteBase       string
@@ -666,6 +668,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		AutoRefreshOn:           autoRefreshOn,
 		AutoRefreshHasSessions:  autoRefreshHasSessions,
 		ShowToolsIsland:         showToolsIsland,
+		ShowDiscoveryMode:       !challengeState.FirstParty && s.gatewayDiscoveryOptionsEnabled(ctx, endpoint),
 		ConsentToolsURL:         fmt.Sprintf("/%s/%s/connect/mcp", endpoint.RouteBase, endpoint.Slug),
 		ConsentToolsScriptURL:   consentToolsScriptURL,
 		ConsentToolsPrefill:     prefillAttr,
@@ -862,6 +865,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 	}
 
+	toolPolicy, err := s.consentGatewayPolicy(ctx, endpoint, challengeState, selectedAgentID, r.PostForm.Get("discovery_mode"), toolSelection)
+	if err != nil {
+		return err
+	}
+
 	// Resolve the user_session_clients row id for the consent FK.
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 	if err != nil {
@@ -946,6 +954,8 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	if agentAuthorization != nil {
 		code = agentAuthorizationCodePrefix + code
+	} else if toolPolicy != nil {
+		code = gatewayAuthorizationCodePrefix + code
 	}
 
 	// The POST may arrive through a global continuation surface. Preserve the
@@ -965,6 +975,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		AgentAuthorization:          agentAuthorization,
 		DesiredSessionDurationHours: desiredSessionDurationHours(r.PostForm.Get("session_duration_hours")),
 		ToolSelection:               toolSelection,
+		GatewayPolicy:               toolPolicy,
 		CreatedAt:                   time.Now(),
 	}
 	if err := s.userSessionGrantCache.Store(ctx, grant); err != nil {

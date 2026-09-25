@@ -2,6 +2,7 @@ package usersessions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -17,6 +18,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -116,6 +120,26 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		return nil, fmt.Errorf("authorize MCP session mint: %w", mcpaccess.ServerPermissionDenied(err, ""))
 	}
 
+	var toolPolicy []byte
+	if payload.DiscoveryMode != nil {
+		mode := metamcp.DiscoveryMode(*payload.DiscoveryMode)
+		if !hasMeta || !mode.Valid() {
+			return nil, oops.E(oops.CodeBadRequest, nil, "discovery_mode requires a gateway and a supported mode")
+		}
+		enabled, flagErr := s.features.IsFlagEnabled(ctx, feature.FlagGatewayDiscoveryModes, authCtx.ActiveOrganizationID, feature.OrgProjectGroups(authCtx.OrganizationSlug, ""))
+		if flagErr != nil || !enabled {
+			return nil, oops.E(oops.CodeForbidden, flagErr, "gateway discovery settings are not available")
+		}
+		toolPolicy, err = json.Marshal(&toolfilter.SessionPolicy{
+			Resource:  "meta_mcp_server:" + target.resourceID,
+			Selection: nil,
+			Gateway:   &toolfilter.GatewayOptions{DiscoveryMode: &mode},
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "encode gateway connection options").LogError(ctx, s.logger)
+		}
+	}
+
 	issuer, err := repo.New(s.db).GetUserSessionIssuerByID(ctx, repo.GetUserSessionIssuerByIDParams{
 		ID:             target.issuerID,
 		ProjectID:      *authCtx.ProjectID,
@@ -168,7 +192,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		RefreshTokenHash: conv.ToPGText(fmt.Sprintf("%s:%s", dashboardMintRefreshTokenHashPrefix, jti)),
 		ExpiresAt:        pgtype.Timestamptz{Time: now.Add(mintAccessTokenLifetime), InfinityModifier: 0, Valid: true},
 		RefreshExpiresAt: pgtype.Timestamptz{Time: now.Add(refreshLifetime), InfinityModifier: 0, Valid: true},
-		ToolSelection:    nil,
+		ToolSelection:    toolPolicy,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, s.logger)

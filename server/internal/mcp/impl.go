@@ -1102,7 +1102,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		}
 		ctx = newCtx
 		pendingIssuerGate = authentication
-		callerToolSelection = gateToolSelection
+		if gateToolSelection != nil {
+			callerToolSelection = gateToolSelection.Selection
+		}
 	}
 
 	isHostedToolsCall := req.Method == "tools/call" && cfg.mcpServerID != nil

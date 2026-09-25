@@ -37,11 +37,15 @@ type toolsListResultTools struct {
 }
 
 type toolListEntry struct {
-	Name        string                       `json:"name"`
-	Description string                       `json:"description"`
-	InputSchema json.RawMessage              `json:"inputSchema,omitempty,omitzero"`
-	Annotations *externalmcp.ToolAnnotations `json:"annotations,omitempty"`
-	Meta        map[string]any               `json:"_meta,omitempty"`
+	Title        string                       `json:"title,omitempty"`
+	OutputSchema json.RawMessage              `json:"outputSchema,omitempty"`
+	Icons        json.RawMessage              `json:"icons,omitempty"`
+	Execution    json.RawMessage              `json:"execution,omitempty"`
+	Name         string                       `json:"name"`
+	Description  string                       `json:"description"`
+	InputSchema  json.RawMessage              `json:"inputSchema,omitempty,omitzero"`
+	Annotations  *externalmcp.ToolAnnotations `json:"annotations,omitempty"`
+	Meta         map[string]any               `json:"_meta,omitempty"`
 }
 
 func handleToolsList(
@@ -268,6 +272,7 @@ func buildToolListEntries(
 
 		for _, extTool := range proxyTools {
 			tools = append(tools, &toolListEntry{
+				Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
 				Name:        extTool.Name,
 				Description: extTool.Description,
 				InputSchema: extTool.Schema,
@@ -302,6 +307,7 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 	}
 
 	return &toolListEntry{
+		Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
 		Name:        toolEntry.Name,
 		Description: toolEntry.Description,
 		InputSchema: toolEntry.InputSchema,

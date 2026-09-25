@@ -555,6 +555,31 @@
                 </select>
               </dd>
             </div>
+            {{end}} {{if .ShowDiscoveryMode}}
+            <div data-agent-self-only>
+              <dt class="text-eyebrow">Tool discovery</dt>
+              <dd class="mt-1 ml-0">
+                <select
+                  name="discovery_mode"
+                  form="consent-approve-form"
+                  aria-label="Tool discovery"
+                  aria-describedby="discovery-mode-help"
+                  class="bg-card border px-2 py-1.5 font-mono text-sm"
+                >
+                  <option value="">Use gateway default</option>
+                  <option value="progressive">Progressive</option>
+                  <option value="direct">Direct</option>
+                </select>
+                <p
+                  id="discovery-mode-help"
+                  class="text-muted-foreground mt-2 text-sm"
+                >
+                  Progressive discovers tools as needed. Direct lists every
+                  available tool. Use Direct if your client cannot discover
+                  tools progressively.
+                </p>
+              </dd>
+            </div>
             {{end}} {{if .RemoteSessionCards}}
             <div>
               <dt class="text-eyebrow">Auto refresh</dt>

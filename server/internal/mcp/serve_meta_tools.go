@@ -174,10 +174,15 @@ func (s *Service) handleMetaDescribeToolsCall(
 				continue
 			}
 			described = append(described, metamcp.SchemaTool{
-				Name:        metamcp.QualifyName(mr.member.slug, entry.Name),
-				Description: entry.Description,
-				InputSchema: entry.InputSchema,
-				Annotations: entry.Annotations,
+				Title:        entry.Title,
+				OutputSchema: entry.OutputSchema,
+				Icons:        entry.Icons,
+				Execution:    entry.Execution,
+				Meta:         entry.Meta,
+				Name:         metamcp.QualifyName(mr.member.slug, entry.Name),
+				Description:  entry.Description,
+				InputSchema:  entry.InputSchema,
+				Annotations:  entry.Annotations,
 			})
 		}
 	}
@@ -210,6 +215,11 @@ func (s *Service) handleMetaExecuteToolCall(
 		return nil, err
 	}
 
+	return s.executeMetaMemberTool(ctx, logger, gate, members, req, qualified, arguments, meta)
+}
+
+// executeMetaMemberTool is shared by Direct calls and Progressive execute_tool.
+func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta) (json.RawMessage, error) {
 	serverSlug, toolName, err := metamcp.SplitQualifiedName(qualified)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)

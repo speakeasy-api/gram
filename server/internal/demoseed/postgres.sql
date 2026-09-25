@@ -1282,9 +1282,9 @@ BEGIN
   -- Leave instructions NULL so Settings starts with the editable built-in
   -- instructions, matching the gateway's initialize and server/discover text.
   INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
-                                user_session_issuer_id) VALUES
+                                user_session_issuer_id, discovery_mode) VALUES
     (demo.det_uuid('gram-demo-metamcp-1'), demo_org, proj_a, 'Acme Agent Gateway',
-     demo.det_uuid('gram-demo-issuer-gateway'));
+     demo.det_uuid('gram-demo-issuer-gateway'), 'progressive');
 
   -- sort_order is the order agents see members in list_servers.
   INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
