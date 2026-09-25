@@ -539,7 +539,12 @@ function RolePicker({
 
   const pick = (value: string) => {
     if (value === CREATE_ROLE) {
-      const params = createRoleForMappingParams(row.form);
+      // Start the new role with the group's name, or the attribute value.
+      const suggestedName =
+        row.form.sourceKind === "attribute"
+          ? (row.form.attributeValue ?? "")
+          : row.label;
+      const params = createRoleForMappingParams(row.form, suggestedName);
       void navigate(`${orgRoutes.createRole.href()}?${params.toString()}`);
       return;
     }

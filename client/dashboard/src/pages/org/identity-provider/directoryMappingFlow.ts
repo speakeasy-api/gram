@@ -12,6 +12,7 @@ const MAP_ROLE = "mapRole";
 const GROUP = "groupId";
 const ATTRIBUTE_KEY = "attributeKey";
 const ATTRIBUTE_VALUE = "attributeValue";
+const SUGGESTED_NAME = "name";
 
 type MappingSource = Omit<SetDirectoryRoleMappingForm, "roleUrn">;
 
@@ -41,13 +42,23 @@ function readSource(params: URLSearchParams): MappingSource | undefined {
   return undefined;
 }
 
-/** Query string that opens the role editor for a mapping source. */
+/**
+ * Query string that opens the role editor for a mapping source, with the
+ * name the new role should start with (the group name or attribute value).
+ */
 export function createRoleForMappingParams(
   source: MappingSource,
+  suggestedName: string,
 ): URLSearchParams {
   const params = new URLSearchParams({ from: DIRECTORY_MAPPING_FLOW });
   writeSource(params, source);
+  if (suggestedName) params.set(SUGGESTED_NAME, suggestedName);
   return params;
+}
+
+/** The name the role editor should start with, if the flow suggested one. */
+export function suggestedRoleName(params: URLSearchParams): string {
+  return params.get(SUGGESTED_NAME) ?? "";
 }
 
 /** Query string that returns to the mapping panel with a created role. */

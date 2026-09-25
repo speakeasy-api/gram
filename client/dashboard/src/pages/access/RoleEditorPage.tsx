@@ -10,6 +10,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router";
 import {
   DIRECTORY_MAPPING_FLOW,
   directoryMappingReturnParams,
+  suggestedRoleName,
 } from "../org/identity-provider/directoryMappingFlow";
 import { CreateRoleDialog } from "./CreateRoleDialog";
 
@@ -80,6 +81,7 @@ export function RoleEditorPage(): JSX.Element {
                   presentation="page"
                   editingRole={role ?? null}
                   hideAssignments={fromMapping}
+                  defaultName={fromMapping ? suggestedRoleName(params) : ""}
                   onOpenChange={(open) => {
                     if (!open && !created.current) leave();
                   }}

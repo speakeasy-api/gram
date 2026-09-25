@@ -26,12 +26,9 @@ import { useAgents } from "@gram/client/react-query/agents.js";
 import { invalidateAllRoles } from "@gram/client/react-query/roles.js";
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
-import { Alert } from "@/components/ui/Alert";
 import { Dialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router";
-import { useOrgRoutes } from "@/routes";
 import {
   ArrowLeft,
   Bot,
@@ -140,6 +137,8 @@ interface CreateRoleDialogProps {
    * other way, such as mapping it to a directory group.
    */
   hideAssignments?: boolean;
+  /** Pre-fills the name of a new role, such as the group it is created for. */
+  defaultName?: string;
 }
 
 export function CreateRoleDialog({
@@ -150,12 +149,13 @@ export function CreateRoleDialog({
   confirmAssignmentFor,
   presentation = "sheet",
   hideAssignments = false,
+  defaultName = "",
 }: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
 
   // ─── Form state ───────────────────────────────────────────────
-  const [name, setName] = useState("");
+  const [name, setName] = useState(defaultName);
   const [description, setDescription] = useState("");
   const [grants, setGrants] = useState<Record<string, RoleGrant>>({});
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(
@@ -182,7 +182,6 @@ export function CreateRoleDialog({
   // ─── Hooks ────────────────────────────────────────────────────
   const queryClient = useQueryClient();
   const organization = useOrganization();
-  const orgRoutes = useOrgRoutes();
   const { data: membersData } = useMembers();
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
@@ -698,18 +697,6 @@ export function CreateRoleDialog({
               isPage ? "pt-2" : "px-4 pt-3",
             )}
           >
-            {organization.scimEnabled && (
-              <Alert variant="info" dismissible={false} className="text-sm">
-                Assign this role from{" "}
-                <Link
-                  to={orgRoutes.identity.href()}
-                  className="whitespace-nowrap underline underline-offset-2"
-                >
-                  Identity → SCIM → Configure
-                </Link>
-                .
-              </Alert>
-            )}
             <InputField
               label="Name"
               placeholder="e.g., Project Manager"
@@ -1117,7 +1104,11 @@ export function CreateRoleDialog({
       )}
 
       {(dialogStep === "form" || isPage) && (
-        <Footer className="border-border flex-col border-t">
+        <Footer
+          // On a page the permissions table right above already draws a
+          // border; a second one would read as a double line.
+          className={cn("border-border flex-col", !isPage && "border-t")}
+        >
           {confirmAssignmentFor && !isEditing && (
             <label className="flex cursor-pointer items-start gap-3 self-stretch text-left">
               <Checkbox
