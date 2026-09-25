@@ -279,8 +279,8 @@ export const PublishDialog = memo(function PublishDialog({
                 <strong className="text-foreground font-semibold">
                   Each collaborator receives an email from GitHub inviting them
                   to the repository — sent to the address on their GitHub
-                  account, which may be a personal email. They must accept it
-                  before they can install the plugins.
+                  account. They must accept it before they can install the
+                  plugins.
                 </strong>
               </Dialog.Description>
             </>
