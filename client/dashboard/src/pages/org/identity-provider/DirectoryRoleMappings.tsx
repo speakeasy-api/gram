@@ -62,6 +62,7 @@ import { useSyncDirectoryGroupsMutation } from "@gram/client/react-query/syncDir
 import {
   clearPendingMappingParams,
   createRoleForMappingParams,
+  availableRoleName,
   pendingMappingFromParams,
 } from "./directoryMappingFlow";
 
@@ -543,12 +544,16 @@ function RolePicker({
 
   const pick = (value: string) => {
     if (value === CREATE_ROLE) {
-      // Start the new role with the group's name, or the attribute value.
-      const suggestedName =
+      // Start the new role with the group's name, or the attribute value,
+      // made unique so saving does not fail on a taken name.
+      const baseName =
         row.form.sourceKind === "attribute"
           ? (row.form.attributeValue ?? "")
           : row.label;
-      const params = createRoleForMappingParams(row.form, suggestedName);
+      const params = createRoleForMappingParams(
+        row.form,
+        availableRoleName(baseName, roles),
+      );
       void navigate(`${orgRoutes.createRole.href()}?${params.toString()}`);
       return;
     }

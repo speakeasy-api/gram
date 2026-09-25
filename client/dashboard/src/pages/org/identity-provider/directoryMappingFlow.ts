@@ -1,3 +1,4 @@
+import type { Role } from "@gram/client/models/components/role.js";
 import type { SetDirectoryRoleMappingForm } from "@gram/client/models/components/setdirectoryrolemappingform.js";
 
 /**
@@ -91,4 +92,21 @@ export function clearPendingMappingParams(
     next.delete(key);
   }
   return next;
+}
+
+/**
+ * The first free role name starting from `base`: `base` itself, then
+ * "base 2", "base 3" and so on. Role names are unique regardless of case.
+ */
+export function availableRoleName(
+  base: string,
+  roles: Pick<Role, "name">[],
+): string {
+  if (base === "") return "";
+  const taken = new Set(roles.map((role) => role.name.toLowerCase()));
+  if (!taken.has(base.toLowerCase())) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base} ${n}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
 }
