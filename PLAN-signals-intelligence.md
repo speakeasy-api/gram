@@ -75,6 +75,11 @@ Membership rules:
 
 Session and producer API-key authentication with the existing project header. Never accept ownership from a body-supplied project ID.
 
+All ten configuration methods also require the organization's `signals_intelligence`
+product feature, independently of authentication type or RBAC enforcement mode.
+Disabled/missing entitlements return forbidden; lookup failures return an error
+without accessing configuration. Existing project authorization still applies.
+
 | Resource | Endpoints under `/rpc/sigint.`                                             |
 | -------- | -------------------------------------------------------------------------- |
 | Signal   | `createSignal`, `getSignal`, `listSignals`, `updateSignal`, `deleteSignal` |
