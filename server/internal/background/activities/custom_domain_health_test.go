@@ -604,3 +604,42 @@ func TestCustomDomainHealthCheckCNAMEMatchWithForeignAddressesIsMismatch(t *test
 	require.Equal(t, "unhealthy", domain.HealthStatus.String)
 	require.Equal(t, "dns_target_mismatch", domain.HealthIssue.String)
 }
+
+func TestCustomDomainHealthCheckCAAForbidden(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "custom_domain_health_caa")
+	require.NoError(t, err)
+	repository := customdomainsrepo.New(conn)
+	domainID := createActivatedCustomDomain(t, repository, "test-organization", "caa.example.com")
+
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: nil}, "custom-domain.example.com", nil, noopEmailService(t), nil, nil)
+	checker.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{
+		LookupCNAMEFunc: func(context.Context, string) (string, error) { return "custom-domain.example.com.", nil },
+		LookupNetIPFunc: func(context.Context, string, string) ([]netip.Addr, error) {
+			return nil, errors.New("no A record")
+		},
+		LookupCAAFunc: func(_ context.Context, name string) ([]dns.CAA, error) {
+			if name == "caa.example.com" {
+				return []dns.CAA{{Flag: 0, Tag: "issue", Value: "pki.goog"}}, nil
+			}
+			return nil, nil
+		},
+	}))
+
+	notification, err := checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
+		CustomDomainID: domainID,
+		OrganizationID: "test-organization",
+		CheckedAt:      time.Now().UTC(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, customdomains.HealthIssueCAAForbidden, notification.Issue)
+
+	domain, err := repository.GetCustomDomainByIDAndOrganization(t.Context(), customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
+		ID:             domainID,
+		OrganizationID: "test-organization",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "unhealthy", domain.HealthStatus.String)
+	require.Equal(t, "caa_forbidden", domain.HealthIssue.String)
+}
