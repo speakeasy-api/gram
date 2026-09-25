@@ -415,7 +415,6 @@ func TestResolveRequiresMatchingIDPMembership(t *testing.T) {
 	}
 }
 
-//nolint:paralleltest // Isolated command fixture uses t.Setenv and t.Chdir.
 func TestValidateRequiresCheckoutOwnedTemporal(t *testing.T) {
 	c := testGuardConfig(t)
 	require.NoError(t, os.Remove(filepath.Join(c.Root, ".git")))

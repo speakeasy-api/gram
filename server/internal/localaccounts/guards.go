@@ -611,7 +611,7 @@ func validateTemporal(c Config) error {
 			return errors.New("default Temporal namespace requires the primary gram checkout and main queue")
 		}
 	} else if c.TemporalNamespace != c.ComposeProject {
-		return errors.New("Temporal namespace must match this checkout's Compose project")
+		return errors.New("temporal namespace must match this checkout's Compose project")
 	}
 	return nil
 }

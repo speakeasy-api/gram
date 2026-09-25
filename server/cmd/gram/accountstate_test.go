@@ -146,7 +146,6 @@ func TestAccountStateUnsafeConfigDoesNotManageDaemons(t *testing.T) {
 	}
 }
 
-//nolint:paralleltest // Reads isolated process environment.
 func TestLocalAccountConfigComposeDefault(t *testing.T) {
 	t.Setenv("COMPOSE_PROJECT_NAME", "")
 	c, err := localAccountConfig()
