@@ -4,6 +4,8 @@
 #MISE description="Warm the Go build cache for the server/worker/streams daemons"
 #MISE hide=true
 
+#USAGE flag "--out <file>" help="Also write the cached executable to this path" default="/dev/null"
+
 set -e
 
 # `start:server`, `start:worker` and `start:streams` are the SAME Go program --
@@ -19,10 +21,10 @@ set -e
 #
 # The ldflags MUST stay byte-identical to the three start tasks: they feed the
 # link step's cache key, so any drift silently reintroduces the cold link.
-# -o /dev/null because only the cache entry is wanted, not the binary.
+# By default only warm the cache; local command wrappers can request a binary.
 GIT_SHA=$(git rev-parse HEAD)
 
 go build \
     -ldflags="-X github.com/speakeasy-api/gram/server/cmd/gram.GitSHA=${GIT_SHA} -X goa.design/clue/health.Version=${GIT_SHA}" \
-    -o /dev/null \
+    -o "${usage_out:-/dev/null}" \
     ./main.go

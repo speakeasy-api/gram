@@ -163,6 +163,7 @@ DECLARE
   policy_cd CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f007';
   policy_tb CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f008';
   policy_q  CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f009';
+  policy_ma CONSTANT uuid := 'dec0de00-0000-4000-a000-00000000f010';
 
   -- Read-only tool verbs the destructive-command policy exempts. Declared once
   -- because both of that policy's categories carry the same exemption.
@@ -317,6 +318,7 @@ E'---\nname: runbook\ndescription: General operational runbook for the Acme stac
   member_count int;
   tool_count int;
   stray int;
+  stray_detail text;
 BEGIN
   ------------------------------------------------------------------
   -- Preflight isolation asserts: refuse to run if the demo constants
@@ -935,7 +937,7 @@ BEGIN
     INSERT INTO http_tool_definitions
       (tool_urn, project_id, deployment_id, openapiv3_document_id, name, summary,
        description, server_env_var, http_method, path, schema_version, schema,
-       read_only_hint)
+       read_only_hint, destructive_hint)
     VALUES (tool_urns[i], proj_a, deploy_id, doa_id, tool_names[i],
             'Acme ' || replace(tool_names[i], '_', ' '),
             'Calls the Acme internal API operation ' || tool_names[i] || '.',
@@ -943,7 +945,8 @@ BEGIN
             CASE WHEN tool_names[i] IN ('process_refund', 'set_env') THEN 'POST' ELSE 'GET' END,
             '/' || replace(tool_names[i], '_', '/'),
             '1.0.0', '{"type":"object","properties":{}}'::jsonb,
-            tool_names[i] <> 'process_refund');
+            tool_names[i] <> 'process_refund',
+            tool_names[i] = 'process_refund');
   END LOOP;
 
   -- Keep a metadata-based External OAuth row so the authentication page can
@@ -1142,36 +1145,68 @@ BEGIN
   -- The payments workload is admitted at both tiers, so its row shows that
   -- withdrawing one admission still leaves it able to reconnect.
   ------------------------------------------------------------------
-  INSERT INTO workload_issuers (id, organization_id, project_id, name, issuer, jwks_uri)
+  -- Two issuers, deliberately of different shapes, because wildcard admission is
+  -- only sound on one of them. 'Acme CI' mints a subject that encodes a branch
+  -- ref, where a wildcard would admit anyone able to push a branch, so it does
+  -- NOT permit one. The agent platform mints an opaque identity per resource
+  -- that the caller cannot influence, which is the case the feature exists for.
+  INSERT INTO workload_issuers
+    (id, organization_id, project_id, name, issuer, jwks_uri,
+     allow_wildcard_admission)
   VALUES
-    (demo.det_uuid('gram-demo-workload-issuer-1'), demo_org, proj_a,
+    -- Organization tier. Two of the admissions below are organization-tier and
+    -- name this issuer, and an organization-tier admission may only bind an
+    -- organization-tier issuer, so a project row here would be a policy shape
+    -- the management API refuses to write.
+    (demo.det_uuid('gram-demo-workload-issuer-1'), demo_org, NULL,
      'Acme CI', 'https://ci-identity.example.com',
-     'https://ci-identity.example.com/.well-known/jwks.json');
+     'https://ci-identity.example.com/.well-known/jwks.json', FALSE),
+    (demo.det_uuid('gram-demo-workload-issuer-2'), demo_org, NULL,
+     'Acme Agent Platform', 'https://agents.example.com',
+     'https://agents.example.com/.well-known/jwks.json', TRUE);
 
   INSERT INTO workload_identity_admissions
-    (id, organization_id, project_id, workload_issuer_id, subject, name)
+    (id, organization_id, project_id, workload_issuer_id, subject, match_kind,
+     name)
   VALUES
     (demo.det_uuid('gram-demo-workload-admission-1'), demo_org, proj_a,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/payments-api:ref:refs/heads/main', 'Payments deploy'),
+     'repo:acme/payments-api:ref:refs/heads/main', 'exact', 'Payments deploy'),
     (demo.det_uuid('gram-demo-workload-admission-2'), demo_org, NULL,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/docs-site:environment:production', 'Docs publish'),
+     'repo:acme/docs-site:environment:production', 'exact', 'Docs publish'),
     (demo.det_uuid('gram-demo-workload-admission-3'), demo_org, NULL,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/payments-api:ref:refs/heads/main', 'Payments deploy (all projects)');
+     'repo:acme/payments-api:ref:refs/heads/main', 'exact',
+     'Payments deploy (all projects)'),
+    -- One rule standing for a whole fleet, which is what the trailing '*' is
+    -- for: this platform's agent id is minted per resource and is not known in
+    -- advance, so admitting each one exactly is not an onboarding flow.
+    (demo.det_uuid('gram-demo-workload-admission-4'), demo_org, NULL,
+     demo.det_uuid('gram-demo-workload-issuer-2'),
+     'wimse://agents.example.com/org/acme/agent/*', 'wildcard', 'Agent fleet');
 
+  -- Keyed on (issuer, match_kind, subject) exactly as the admission is, because
+  -- that is the tuple the lookup resolves: an assignment whose match_kind
+  -- disagreed with its admission would list as having no agent.
   INSERT INTO workload_agent_assignments
-    (id, organization_id, workload_issuer_id, subject, agent_id)
+    (id, organization_id, workload_issuer_id, subject, match_kind, agent_id)
   VALUES
     (demo.det_uuid('gram-demo-workload-assignment-1'), demo_org,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/payments-api:ref:refs/heads/main',
+     'repo:acme/payments-api:ref:refs/heads/main', 'exact',
      demo.det_uuid('gram-demo-managed-agent-1')),
     (demo.det_uuid('gram-demo-workload-assignment-2'), demo_org,
      demo.det_uuid('gram-demo-workload-issuer-1'),
-     'repo:acme/docs-site:environment:production',
-     demo.det_uuid('gram-demo-managed-agent-2'));
+     'repo:acme/docs-site:environment:production', 'exact',
+     demo.det_uuid('gram-demo-managed-agent-2')),
+    -- An active agent on purpose: this is the one rule standing for a whole
+    -- fleet, so pointing it at a suspended or revoked agent would show a
+    -- workload that authenticates and then reaches nothing.
+    (demo.det_uuid('gram-demo-workload-assignment-3'), demo_org,
+     demo.det_uuid('gram-demo-workload-issuer-2'),
+     'wimse://agents.example.com/org/acme/agent/*', 'wildcard',
+     demo.det_uuid('gram-demo-managed-agent-4'));
 
   INSERT INTO user_sessions
     (id, project_id, organization_id, user_session_issuer_id,
@@ -1773,14 +1808,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   ------------------------------------------------------------------
   INSERT INTO risk_policies (id, project_id, organization_id, name, policy_type,
                              sources, presidio_entities, analyzer_config,
-                             custom_rule_ids,
+                             custom_rule_ids, mcp_scope,
                              enabled, action, audience_type,
                              shadow_mcp_disposition, auto_name, score, version)
   VALUES
     -- OWASP LLM02 sensitive information disclosure.
     (policy_a, proj_a, demo_org, 'Acme secrets & PII policy', 'standard',
      '{gitleaks,presidio}', '{CREDIT_CARD,EMAIL_ADDRESS,PHONE_NUMBER,US_SSN}',
-     '{}'::jsonb, '{}',
+     '{}'::jsonb, '{}', NULL,
      TRUE, 'flag', 'everyone', NULL, TRUE, 8.0, 1),
     -- OWASP LLM01 prompt injection + ASI01 agent goal hijack; LLM07 covers the
     -- system-prompt-extraction half of the same category.
@@ -1788,7 +1823,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      '{prompt_injection}', NULL,
      jsonb_build_object('detection_scopes', jsonb_build_array(
        jsonb_build_object('category', 'prompt_injection',
-                          'scope_include', 'kind in ["tool_response","user_message"]'))), '{}',
+                          'scope_include', 'kind in ["tool_response","user_message"]'))), '{}', NULL,
      TRUE, 'warn', 'everyone', NULL, FALSE, 9.1, 1),
     -- OWASP LLM06 excessive agency + ASI05 unexpected code execution. Both
     -- sources are flag-only, hence action = flag. The exemption keeps
@@ -1804,19 +1839,31 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
                           'scope_exempt', ds_readonly_exempt),
        jsonb_build_object('category', 'destructive_tool',
                           'scope_include', 'kind in ["tool_request"]',
-                          'scope_exempt', ds_readonly_exempt))), '{}',
+                          'scope_exempt', ds_readonly_exempt))), '{}', NULL,
      TRUE, 'flag', 'everyone', NULL, FALSE, 8.6, 1),
+    -- MCP annotation rule scoped to the support server.
+    (policy_ma, proj_a, demo_org, 'Acme destructive MCP tool policy', 'standard',
+     '{destructive_tool}', NULL,
+     jsonb_build_object('detection_scopes', jsonb_build_array(
+       jsonb_build_object('category', 'destructive_tool',
+                          'scope_include', 'kind in ["tool_request","tool_response"]'))), '{}',
+     jsonb_build_object(
+       'tool_annotations', jsonb_build_array('destructiveHint'),
+       'servers', jsonb_build_array(
+         jsonb_build_object(
+           'mcp_server_id', demo.det_uuid('gram-demo-mcpserver-support')::text))),
+     TRUE, 'flag', 'everyone', NULL, FALSE, 8.8, 1),
     -- MCP security best practices: unapproved / unsandboxed MCP servers.
     -- Name matches shadowMCPPolicyAutoName so the UI reads consistently.
     (policy_sm, proj_a, demo_org, 'Shadow MCP Server Policy', 'standard',
-     '{shadow_mcp}', NULL, '{}'::jsonb, '{}',
+     '{shadow_mcp}', NULL, '{}'::jsonb, '{}', NULL,
      TRUE, 'block', 'everyone', 'block_all', TRUE, 9.0, 1),
     -- OWASP ASI03 identity/privilege misuse: agent sessions on a personal or
     -- off-domain AI account. flag-only source.
     (policy_ai, proj_a, demo_org, 'Acme non-corporate account policy', 'standard',
      '{account_identity}', NULL,
      '{"account_identity": {"approved_email_domains": ["demo.getgram.ai"]}}'::jsonb,
-     '{}',
+     '{}', NULL,
      TRUE, 'flag', 'everyone', NULL, FALSE, 5.5, 1),
     -- Custom CEL rules only (no built-in source): OWASP LLM02 credential-file
     -- reads, CI/CD env-secret dumps, and MCP-best-practice SSRF targets.
@@ -1825,14 +1872,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      jsonb_build_object('detection_scopes', jsonb_build_array(
        jsonb_build_object('category', 'custom',
                           'scope_include', 'kind in ["tool_request"]'))),
-     '{custom.sensitive_file_read,custom.env_secret_dump,custom.ssrf_metadata_endpoint}',
+     '{custom.sensitive_file_read,custom.env_secret_dump,custom.ssrf_metadata_endpoint}', NULL,
      TRUE, 'block', 'everyone', NULL, FALSE, 9.3, 1),
     -- OWASP LLM02, lower tier: routine customer contact data (support tickets
     -- carry it by design). Scored well below the regulated/secret policies so
     -- the highest-volume findings do not drown the Watchdog list in the same
     -- severity as a leaked key — policy score IS the signal severity.
     (policy_cd, proj_a, demo_org, 'Acme customer contact data policy', 'standard',
-     '{presidio}', '{EMAIL_ADDRESS,PHONE_NUMBER}', '{}'::jsonb, '{}',
+     '{presidio}', '{EMAIL_ADDRESS,PHONE_NUMBER}', '{}'::jsonb, '{}', NULL,
      TRUE, 'flag', 'everyone', NULL, FALSE, 6.4, 1),
     -- OWASP LLM07 / ASI01 tail: off-topic or boundary-testing conversations.
     -- Informational, hence the low score.
@@ -1843,7 +1890,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      -- (pii.topic_boundary_violation) classify as off_policy, not pii.
      (SELECT jsonb_build_object('detection_scopes', jsonb_agg(
         jsonb_build_object('category', c, 'scope_include', 'kind in ["user_message"]')))
-      FROM unnest(ARRAY['financial','government_ids','healthcare','off_policy','pii']) AS c), '{}',
+      FROM unnest(ARRAY['financial','government_ids','healthcare','off_policy','pii']) AS c), '{}', NULL,
      TRUE, 'flag', 'everyone', NULL, FALSE, 3.4, 1),
     -- Disabled so the demo can inspect quarantine configuration without
     -- freezing exploratory sessions.
@@ -1851,7 +1898,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
      '{prompt_injection}', NULL,
      jsonb_build_object('detection_scopes', jsonb_build_array(
        jsonb_build_object('category', 'prompt_injection',
-                          'scope_include', 'kind in ["tool_request","user_message"]'))), '{}',
+                          'scope_include', 'kind in ["tool_request","user_message"]'))), '{}', NULL,
      FALSE, 'quarantine', 'everyone', NULL, FALSE, 9.5, 1);
 
   -- The same canonical target has two grants, so Platform MCP demonstrates
@@ -3091,20 +3138,90 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   -- unnamed issuer with no agent, which is a real state but not the one seeded.
   SELECT count(*) INTO stray FROM workload_issuers
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 1 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 1 workload issuer, found %', stray;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 workload issuers, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM workload_identity_admissions
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 3 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 3 workload admissions, found %', stray;
+  IF stray <> 4 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 4 workload admissions, found %', stray;
+  END IF;
+
+  -- The seed writes these tables in raw SQL, so it never passes through
+  -- workloadidentity.ValidateSubjectRule the way the management API does. This
+  -- assert is that validation, applied to what was actually written, over both
+  -- tables that carry a subject rule: an admission decides whether a machine is
+  -- recognised at all, an assignment decides what it inherits, and the two have
+  -- to widen together. Anything wrong here reseeds daily into the demo
+  -- organization and reads as working configuration.
+  WITH rules AS (
+    SELECT 'admission' AS source, a.subject, a.match_kind, i.allow_wildcard_admission
+    FROM workload_identity_admissions a
+    JOIN workload_issuers i ON i.id = a.workload_issuer_id
+    WHERE a.organization_id = demo_org AND a.deleted IS FALSE
+    UNION ALL
+    SELECT 'assignment', g.subject, g.match_kind, i.allow_wildcard_admission
+    FROM workload_agent_assignments g
+    JOIN workload_issuers i ON i.id = g.workload_issuer_id
+    WHERE g.organization_id = demo_org AND g.deleted IS FALSE
+  )
+  SELECT count(*), coalesce(string_agg(format('%s %L', source, subject), ', '), '')
+  INTO stray, stray_detail
+  FROM rules
+  WHERE CASE match_kind
+    -- A subject is otherwise opaque, so no character would be reserved. A "*"
+    -- is refused anyway: no platform puts one in a sub, so its presence means
+    -- the author wanted a wildcard and instead stored a literal matching
+    -- nothing at all.
+    WHEN 'exact' THEN subject LIKE '%*%'
+    WHEN 'wildcard' THEN
+      -- Enforced on read, so clearing the issuer flag is a kill switch. A rule
+      -- written under an issuer that forbids wildcards is already inert.
+      allow_wildcard_admission IS FALSE
+      -- The terminator is mandatory and is the only "*" permitted: everything
+      -- before it is the stem, which has to be a non-empty prefix rather than
+      -- "match anything".
+      OR subject NOT LIKE '%*'
+      OR left(subject, length(subject) - 1) = ''
+      OR left(subject, length(subject) - 1) LIKE '%*%'
+    ELSE TRUE
+  END;
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % workload subject rules ValidateSubjectRule would refuse: %', stray, stray_detail;
   END IF;
 
   SELECT count(*) INTO stray FROM workload_agent_assignments
   WHERE organization_id = demo_org AND deleted IS FALSE;
-  IF stray <> 2 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 2 workload agent assignments, found %', stray;
+  IF stray <> 3 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 3 workload agent assignments, found %', stray;
+  END IF;
+
+  -- An admission may not out-reach its issuer's tier: an organization-tier
+  -- admission has to name an organization-tier issuer. The management API refuses
+  -- the pairing and the admission lookup ignores it, so a seeded row in that shape
+  -- would be silently inert — the page would list it and no workload would match.
+  SELECT count(*) INTO stray
+  FROM workload_identity_admissions a
+  JOIN workload_issuers i ON i.organization_id = a.organization_id AND i.id = a.workload_issuer_id
+  WHERE a.organization_id = demo_org AND a.deleted IS FALSE AND i.deleted IS FALSE
+    AND i.project_id IS NOT NULL
+    AND (a.project_id IS NULL OR a.project_id <> i.project_id);
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % admissions whose tier out-reaches their issuer''s', stray;
+  END IF;
+
+  -- A wildcard rule standing for a fleet is the headline of this fixture, so its
+  -- agent has to be one a workload can actually inherit. A suspended or revoked
+  -- agent resolves and is then denied, which reads as a broken feature.
+  SELECT count(*) INTO stray
+  FROM workload_agent_assignments g
+  JOIN agents ag ON ag.organization_id = g.organization_id AND ag.id = g.agent_id
+  WHERE g.organization_id = demo_org AND g.deleted IS FALSE
+    AND g.match_kind = 'wildcard'
+    AND (ag.suspended_at IS NOT NULL OR ag.revoked_at IS NOT NULL);
+  IF stray <> 0 THEN
+    RAISE EXCEPTION 'demo seed postflight: % wildcard assignments pointing at a suspended or revoked agent', stray;
   END IF;
 
   SELECT count(*) INTO stray FROM user_sessions

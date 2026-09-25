@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -106,7 +107,7 @@ describe("API key project binding", () => {
   it("defaults to organization-wide and preserves permission scope", async () => {
     render(<OrgApiKeys />);
     const user = await openForm();
-    await user.click(screen.getByRole("radio", { name: /^Producer:/ }));
+    await user.click(screen.getByRole("radio", { name: "Producer" }));
     await user.click(screen.getByRole("button", { name: "Create" }));
     expect(
       JSON.parse(
@@ -184,6 +185,23 @@ describe("API key project binding", () => {
     expect(
       mocks.mutate.mock.calls[0]?.[0].request.createKeyForm.projectId,
     ).toBeUndefined();
+  });
+
+  it("lists projects alphabetically, not in the API's creation order", async () => {
+    mocks.organization = {
+      id: "org_test",
+      projects: [
+        { id: "p3", name: "zeta", slug: "zeta" },
+        { id: "p1", name: "Alpha", slug: "alpha" },
+        { id: "p2", name: "middle", slug: "middle" },
+      ],
+    };
+    render(<OrgApiKeys />);
+    const user = await openForm();
+    await user.click(screen.getByRole("combobox", { name: "Project" }));
+    expect(
+      screen.getAllByRole("option").map((option) => option.textContent),
+    ).toEqual(["Organization-wide", "Alpha", "middle", "zeta"]);
   });
 
   it("does not silently broaden a no-longer-authorized project selection", async () => {
@@ -285,7 +303,7 @@ describe("API key project binding", () => {
     );
     expect(screen.getByText("Project binding: Test project")).toBeTruthy();
     expect(screen.getByText("synthetic-test-secret")).toBeTruthy();
-    await user.click(screen.getAllByRole("button", { name: "Close" })[0]!);
+    await user.click(screen.getByRole("button", { name: "Done" }));
     await openForm();
     expect(screen.queryByText("synthetic-test-secret")).toBeNull();
     expect(screen.getByRole("combobox").textContent).toContain(
@@ -297,5 +315,139 @@ describe("API key project binding", () => {
     mocks.admin = false;
     render(<OrgApiKeys />);
     expect(screen.queryByRole("button", { name: "New API Key" })).toBeNull();
+  });
+});
+
+describe("API key scope options", () => {
+  it("offers every scope, grouped, with the narrowest one preselected", async () => {
+    render(<OrgApiKeys />);
+    await openForm();
+    expect(
+      screen
+        .getAllByRole("radio", {
+          name: /^(Consumer|Producer|Hooks|Agent)/,
+        })
+        .map((radio) => radio.getAttribute("value")),
+    ).toEqual(["consumer", "producer", "hooks", "agent"]);
+    // The chat scope is no longer provisioned, so it must not be offered.
+    expect(screen.queryByRole("radio", { name: /^Chat/ })).toBeNull();
+    expect(
+      screen.getByRole("radio", { checked: true }).getAttribute("value"),
+    ).toBe("consumer");
+    expect(screen.getByText("Platform access")).toBeTruthy();
+    expect(screen.getByText("Purpose-built keys")).toBeTruthy();
+  });
+
+  it("summarizes each scope in one line, with the access list behind a toggle", async () => {
+    render(<OrgApiKeys />);
+    await openForm();
+    expect(
+      screen.getByText(
+        "For clients that call your MCP servers and tools at runtime.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "For automation that sets up and updates a project, such as CI.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("Call MCP servers and the tools they expose"),
+    ).toBeNull();
+    expect(
+      screen.getByText(
+        "A key's scope is fixed once it is created. Pick the narrowest scope that covers the job.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("reveals grants and exclusions on request without changing the selection", async () => {
+    render(<OrgApiKeys />);
+    const user = await openForm();
+    await user.click(
+      screen.getByRole("button", { name: "Access details for Producer" }),
+    );
+    expect(
+      screen.getByText("Upload OpenAPI documents and trigger deployments"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Sending AI traffic in, enrolling device agents"),
+    ).toBeTruthy();
+    // producer implies chat in auth.effectiveScopes, so the card must not
+    // understate itself now that the chat scope is no longer offered.
+    expect(
+      screen.getByText("Create chat sessions and run agent workflows"),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("radio", { checked: true }).getAttribute("value"),
+    ).toBe("consumer");
+    await user.click(
+      screen.getByRole("button", { name: "Access details for Producer" }),
+    );
+    expect(
+      screen.queryByText("Upload OpenAPI documents and trigger deployments"),
+    ).toBeNull();
+  });
+
+  it("keeps each scope's access details with its own card", async () => {
+    render(<OrgApiKeys />);
+    const user = await openForm();
+    // Scoped to the owning card: a global text query would also pass if a
+    // card rendered a neighbor's access list.
+    const cardFor = (scope: string) => {
+      const card = screen
+        .getByRole("button", { name: `Access details for ${scope}` })
+        .closest('[data-slot="radio-card"]');
+      expect(card).toBeTruthy();
+      return within(card as HTMLElement);
+    };
+
+    await user.click(
+      screen.getByRole("button", { name: "Access details for Agent" }),
+    );
+    expect(
+      cardFor("Agent").getByText(
+        "Store it in managed.json as org_token, or hand it to a developer for speakeasy enroll.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("Send hook events, logs, metrics, and traces"),
+    ).toBeNull();
+
+    await user.click(
+      screen.getByRole("button", { name: "Access details for Hooks" }),
+    );
+    expect(
+      cardFor("Hooks").getByText("Send hook events, logs, metrics, and traces"),
+    ).toBeTruthy();
+    expect(
+      cardFor("Agent").queryByText(
+        "Send hook events, logs, metrics, and traces",
+      ),
+    ).toBeNull();
+  });
+
+  it("sends the scope value of the card the user picks", async () => {
+    render(<OrgApiKeys />);
+    const user = await openForm();
+    await user.click(screen.getByRole("radio", { name: /^Hooks/ }));
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(
+      mocks.mutate.mock.calls[0]?.[0].request.createKeyForm.scopes,
+    ).toEqual(["hooks"]);
+  });
+
+  it("selects a scope when its card body is clicked, not just the radio", async () => {
+    render(<OrgApiKeys />);
+    const user = await openForm();
+    await user.click(
+      screen.getByText(
+        "For rolling out the Speakeasy device agent across the organization.",
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(
+      mocks.mutate.mock.calls[0]?.[0].request.createKeyForm.scopes,
+    ).toEqual(["agent"]);
   });
 });

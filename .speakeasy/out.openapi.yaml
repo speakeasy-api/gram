@@ -27110,6 +27110,102 @@ paths:
         name: PreviewKillswitchOverlaps
       security:
         - session_header_Gram-Session: []
+  /rpc/launcher.judge:
+    post:
+      description: Judge which of the supplied command palette candidates the typed query refers to, what kind of action it asks for, and whether the intent is settled enough to act on Enter. Returns probability distributions rather than text. When no intent service is configured the response carries disabled=true and the palette falls back to fuzzy ordering.
+      operationId: launcherJudge
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JudgeRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LauncherJudgment'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: judge launcher
+      tags:
+        - launcher
+      x-speakeasy-name-override: judge
+      x-speakeasy-react-hook:
+        name: LauncherJudge
   /rpc/litellm.createInstance:
     post:
       description: Provision a LiteLLM integration for a project and return its plaintext ingestion key once. Requires org:admin.
@@ -48464,6 +48560,111 @@ paths:
       tags:
         - remoteSessions
       x-speakeasy-name-override: attachBinding
+  /rpc/remoteSessions.commitServerIdentityConfiguration:
+    post:
+      description: Atomically configure identity for a Remote MCP-backed MCP server. The complete plan selects or creates a project Remote Identity Provider and links an existing client, creates a manual client, or automatically prefers CIMD over DCR. Existing-client linking requires mcp:write on the target and on every other MCP server sharing its user session issuer, because the client binding is keyed by issuer; creating a provider or client additionally requires project:write. Unsupported automatic registration returns manual_setup_required without changing local state.
+      operationId: commitServerIdentityConfiguration
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommitServerIdentityConfigurationForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommitServerIdentityConfigurationResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: commitServerIdentityConfiguration remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: commitServerIdentityConfiguration
+      x-speakeasy-react-hook:
+        name: CommitServerIdentityConfiguration
   /rpc/remoteSessions.detachBinding:
     post:
       description: Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
@@ -71704,6 +71905,531 @@ paths:
       x-speakeasy-name-override: upsertGlobal
       x-speakeasy-react-hook:
         name: UpsertGlobalVariation
+  /rpc/workloadIdentities.admitSubject:
+    post:
+      description: 'Admit a subject one of the trusted issuers asserts, and assign the agent it inherits its policy from. Both happen in one transaction: a subject admitted without an agent is refused at the token endpoint, so that half-configured state is not reachable. Requires workload:write.'
+      operationId: admitWorkloadSubject
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdmitWorkloadSubjectForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: admitSubject workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: admitSubject
+      x-speakeasy-react-hook:
+        name: AdmitWorkloadSubject
+  /rpc/workloadIdentities.list:
+    get:
+      description: 'Read the whole trust policy: every trusted issuer and every admitted subject, at both the organization and project tiers, with the agent each subject resolves to. Requires workload:read.'
+      operationId: listWorkloadIdentities
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: list workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: WorkloadIdentities
+  /rpc/workloadIdentities.registerIssuer:
+    post:
+      description: Trust an external issuer to vouch for workloads. Requires workload:write. Returns the whole policy, so a caller replaces its view rather than merging into it.
+      operationId: registerWorkloadIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterWorkloadIssuerForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: registerIssuer workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: registerIssuer
+      x-speakeasy-react-hook:
+        name: RegisterWorkloadIssuer
+  /rpc/workloadIdentities.withdrawIssuer:
+    delete:
+      description: Stop trusting an issuer. Every subject admitted under it is withdrawn in the same transaction, so no admission can outlive the issuer it names. Requires workload:write.
+      operationId: withdrawWorkloadIssuer
+      parameters:
+        - allowEmptyValue: true
+          description: The workload issuer id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The workload issuer id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: withdrawIssuer workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: withdrawIssuer
+      x-speakeasy-react-hook:
+        name: WithdrawWorkloadIssuer
+  /rpc/workloadIdentities.withdrawSubject:
+    delete:
+      description: Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.
+      operationId: withdrawWorkloadSubject
+      parameters:
+        - allowEmptyValue: true
+          description: The admission id.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The admission id.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: withdrawSubject workloadIdentities
+      tags:
+        - workloadIdentities
+      x-speakeasy-name-override: withdrawSubject
+      x-speakeasy-react-hook:
+        name: WithdrawWorkloadSubject
 components:
   schemas:
     AIDetection:
@@ -72311,10 +73037,14 @@ components:
       properties:
         display_name:
           type: string
-          description: Display name for the server. Defaults to the backing toolset or mcp_server name when omitted.
+          description: Display name for the server. Defaults to the backing server name when omitted.
         mcp_server_id:
           type: string
-          description: Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of toolset_id or mcp_server_id.
+          description: Gram MCP server ID. Provide exactly one backend ID.
+          format: uuid
+        meta_mcp_server_id:
+          type: string
+          description: MCP gateway ID. Provide exactly one backend ID.
           format: uuid
         plugin_id:
           type: string
@@ -72331,7 +73061,7 @@ components:
           format: int32
         toolset_id:
           type: string
-          description: Gram toolset ID for a toolset-backed MCP server. Provide exactly one of toolset_id or mcp_server_id.
+          description: Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or meta_mcp_server_id.
           format: uuid
       required:
         - plugin_id
@@ -72425,6 +73155,40 @@ components:
         - disabled
         - created_at
         - updated_at
+    AdmitWorkloadSubjectForm:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent whose policy the admitted workload inherits.
+          format: uuid
+        issuer:
+          type: string
+          description: The issuer identifier of an already-trusted issuer, resolved within the caller's organization. Naming one the caller cannot see is a not-found, not a permission error.
+          format: uri
+        match_kind:
+          type: string
+          description: 'How the subject is compared: exact compares the whole value; wildcard requires a trailing * and matches anything beginning with the value before it. Wildcard additionally requires the issuer to permit it. Defaults to exact.'
+          default: exact
+          enum:
+            - exact
+            - wildcard
+        name:
+          type: string
+          description: Optional label, for platforms whose subjects are not self-describing.
+          minLength: 1
+        project_scoped:
+          type: boolean
+          description: Admit the subject for the selected project alone rather than the whole organization. Defaults to false.
+          default: false
+        subject:
+          type: string
+          description: The sub claim the issuer must assert, stored and compared exactly as supplied.
+      description: Form for admitting a workload subject and assigning its agent.
+      required:
+        - issuer
+        - subject
+        - agent_id
     AgentDelegatedGrant:
       type: object
       properties:
@@ -75195,6 +75959,84 @@ components:
           type: string
           description: Reason for the decision, shown to the user
       description: Result for Codex hook events
+    CommitServerIdentityConfigurationForm:
+      type: object
+      properties:
+        client_configuration:
+          $ref: '#/components/schemas/ServerIdentityClientConfiguration'
+        client_mode:
+          type: string
+          description: How to provide the OAuth client.
+          enum:
+            - auto
+            - existing
+            - manual
+        create_provider:
+          $ref: '#/components/schemas/CreateRemoteSessionIssuerForm'
+        existing_client_id:
+          type: string
+          description: An existing visible remote-session client to link. Required only for existing mode.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The target MCP server. It must be backed directly by a Remote MCP source.
+          format: uuid
+        provider_id:
+          type: string
+          description: An existing Remote Identity Provider visible to the target project.
+          format: uuid
+      description: 'A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.'
+      required:
+        - mcp_server_id
+        - client_mode
+    CommitServerIdentityConfigurationResult:
+      type: object
+      properties:
+        client:
+          $ref: '#/components/schemas/RemoteSessionClient'
+        client_path:
+          type: string
+          description: Organization-relative dashboard path to the client detail surface.
+        client_tier:
+          type: string
+          description: The client ownership tier.
+          enum:
+            - project-specific
+            - organization-level
+        failure:
+          $ref: '#/components/schemas/ServerIdentityRegistrationFailure'
+        manual_setup_required:
+          type: boolean
+          description: True only when auto mode found neither usable CIMD nor DCR support. This is not a registration failure and no local state was changed.
+        provider:
+          $ref: '#/components/schemas/RemoteSessionIssuer'
+        provider_path:
+          type: string
+          description: Organization-relative dashboard path to the Remote Identity Provider detail surface.
+        provider_tier:
+          type: string
+          description: The provider ownership tier.
+          enum:
+            - project-specific
+            - organization-level
+            - platform-level
+        registration_method:
+          type: string
+          description: How the client was obtained. Present on success and registration failure.
+          enum:
+            - cimd
+            - dcr
+            - manual
+            - existing
+        status:
+          type: string
+          description: Successful commit status. Present only after local commit.
+          enum:
+            - registered
+            - linked
+      description: The outcome of committing a Remote MCP server user-identity plan. registered and linked are successful local commits. A registration failure is returned in failure. manual_setup_required is a preparation signal, not a registration outcome, and means auto mode found neither usable CIMD nor DCR support; no local state changed.
+      required:
+        - manual_setup_required
     ConfirmOktaResourceConnectionsRequestBody:
       type: object
       properties:
@@ -82230,6 +83072,24 @@ components:
       required:
         - client_count
         - client_ids
+    JudgeRequestBody:
+      type: object
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/LauncherCandidate'
+          description: Fuzzy-prefiltered candidates to rank.
+          maxItems: 32
+        context:
+          $ref: '#/components/schemas/LauncherContext'
+        query:
+          type: string
+          description: Text typed into the command palette so far.
+          maxLength: 200
+      required:
+        - query
+        - candidates
     Key:
       type: object
       properties:
@@ -82680,6 +83540,74 @@ components:
       required:
         - client_name
         - activity_count
+    LauncherCandidate:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Short state description, such as 'MCP server · disabled'.
+          maxLength: 160
+        id:
+          type: string
+          description: Caller-chosen stable identifier echoed back in the judgment.
+          maxLength: 200
+        kind:
+          type: string
+          description: The candidate kind, such as page, mcp_server, plugin or marketplace.
+          maxLength: 64
+        title:
+          type: string
+          description: Display title of the candidate.
+          maxLength: 120
+        verbs:
+          type: array
+          items:
+            type: string
+            maxLength: 32
+          description: Verbs the caller may run on this candidate, such as open, enable, disable or publish.
+          maxItems: 8
+      description: One item the palette could open or act on.
+      required:
+        - id
+        - kind
+        - title
+    LauncherContext:
+      type: object
+      properties:
+        route:
+          type: string
+          description: The current dashboard route path.
+          maxLength: 512
+      description: The dashboard location the palette was opened from.
+    LauncherJudgment:
+      type: object
+      properties:
+        action:
+          type: object
+          description: Probability that the query asks for each of open, enable, disable, publish or unclear.
+          additionalProperties:
+            type: number
+            format: double
+        disabled:
+          type: boolean
+          description: True when no intent service is configured; the other fields are then absent. When false, target, action, ready and latency_ms are always present.
+        latency_ms:
+          type: integer
+          description: Round trip time to the intent service in milliseconds.
+          format: int64
+        ready:
+          type: number
+          description: Probability that the query is unambiguous enough to act on the best candidate on Enter.
+          format: double
+        target:
+          type: object
+          description: Probability that each candidate id, or 'none', is the item the user means.
+          additionalProperties:
+            type: number
+            format: double
+      description: Probability distributions over the supplied candidates and verbs.
+      required:
+        - disabled
     ListAIDetectionUsersResult:
       type: object
       properties:
@@ -87782,7 +88710,11 @@ components:
           format: uuid
         mcp_server_id:
           type: string
-          description: Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one of toolset_id / mcp_server_id is set).
+          description: Gram MCP server ID. Exactly one backend ID is set.
+          format: uuid
+        meta_mcp_server_id:
+          type: string
+          description: MCP gateway ID. Exactly one backend ID is set.
           format: uuid
         policy:
           type: string
@@ -87796,7 +88728,7 @@ components:
           format: int32
         toolset_id:
           type: string
-          description: Gram toolset ID. Set when this server is toolset-backed (exactly one of toolset_id / mcp_server_id is set).
+          description: Gram toolset ID. Exactly one backend ID is set.
           format: uuid
       required:
         - id
@@ -89211,6 +90143,35 @@ components:
           description: The name of the org to register
       required:
         - org_name
+    RegisterWorkloadIssuerForm:
+      type: object
+      properties:
+        allow_wildcard_admission:
+          type: boolean
+          description: Whether subjects under this issuer may be admitted by a wildcard rule. Defaults to false, and is re-checked on every lookup, so clearing it revokes wildcard rules already written.
+          default: false
+        issuer:
+          type: string
+          description: The issuer identifier the assertion's iss claim must carry. Must be an https URL on a fully qualified domain name, with no query or fragment.
+          format: uri
+        jwks_uri:
+          type: string
+          description: Where the issuer publishes the keys its assertions are signed with. Must be an https URL on a fully qualified domain name.
+          format: uri
+        name:
+          type: string
+          description: The label an operator works with. Unique within its tier.
+          minLength: 1
+          maxLength: 100
+        project_scoped:
+          type: boolean
+          description: Register the issuer for the selected project alone rather than the whole organization. Defaults to false.
+          default: false
+      description: Form for trusting an external workload issuer.
+      required:
+        - name
+        - issuer
+        - jwks_uri
     RemoteMcpServer:
       type: object
       properties:
@@ -92791,6 +93752,68 @@ components:
       required:
         - chat_id
         - accepted
+    ServerIdentityClientConfiguration:
+      type: object
+      properties:
+        audience:
+          type: string
+          description: Optional upstream OAuth audience.
+          pattern: ^[!-~]+$
+          maxLength: 512
+        client_id:
+          type: string
+          description: The out-of-band OAuth client identifier. Manual mode only.
+        client_secret:
+          type: string
+          description: The out-of-band OAuth client secret. Manual mode only; encrypted before persistence.
+        scope:
+          type: array
+          items:
+            type: string
+            pattern: ^[!#-[\]-~]+$
+            maxLength: 128
+          description: Each value must be an RFC 6749 scope token.
+        token_endpoint_auth_method:
+          type: string
+          description: How the client authenticates at the provider token endpoint, or the preferred method for DCR.
+          enum:
+            - client_secret_basic
+            - client_secret_post
+            - none
+      description: Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.
+    ServerIdentityRegistrationFailure:
+      type: object
+      properties:
+        http_status:
+          type: integer
+          description: Optional upstream HTTP status.
+          format: int64
+        outcome:
+          type: string
+          enum:
+            - unreachable
+            - refused
+        provider_message:
+          type: string
+          description: Optional sanitized and truncated provider-controlled message.
+        reason:
+          type: string
+          enum:
+            - dns_error
+            - tls_error
+            - timeout
+            - network_error
+            - rate_limited
+            - upstream_unavailable
+            - authorization_rejected
+            - invalid_success_response
+        retryable:
+          type: boolean
+      description: A completed automatic registration failure using the bounded OAuth registration taxonomy.
+      required:
+        - outcome
+        - reason
+        - retryable
     ServerNameOverride:
       type: object
       properties:
@@ -100865,6 +101888,132 @@ components:
       required:
         - scores_available
         - buckets
+    WorkloadAdmission:
+      type: object
+      properties:
+        agent_id:
+          type: string
+          description: The agent whose policy this workload inherits. Empty when the assignment is missing, which the token endpoint refuses.
+          format: uuid
+        agent_name:
+          type: string
+          description: The assigned agent's name; empty when the assignment is missing.
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          description: The admission id.
+          format: uuid
+        issuer:
+          type: string
+          description: The issuer identifier, denormalized so a list does not need a second lookup.
+        issuer_name:
+          type: string
+          description: The issuer's operator-facing label.
+        match_kind:
+          type: string
+          description: 'How the subject is compared: exact | wildcard.'
+          enum:
+            - exact
+            - wildcard
+        name:
+          type: string
+          description: Optional label; empty when none was supplied.
+        organization_id:
+          type: string
+          description: The owning organization id.
+        project_id:
+          type: string
+          description: The owning project id; empty for an organization-tier admission.
+        subject:
+          type: string
+          description: The sub claim, exactly as stored.
+        updated_at:
+          type: string
+          format: date-time
+        wildcard_active:
+          type: boolean
+          description: 'False when this is a wildcard rule under an issuer that no longer permits wildcard matching. Such a rule is inert: it is stored, listed, and matches nothing.'
+        workload_issuer_id:
+          type: string
+          description: The issuer that must assert this subject.
+          format: uuid
+      description: A subject an organization admits, with the agent it inherits its policy from.
+      required:
+        - id
+        - organization_id
+        - project_id
+        - workload_issuer_id
+        - issuer
+        - issuer_name
+        - subject
+        - match_kind
+        - name
+        - agent_id
+        - agent_name
+        - wildcard_active
+        - created_at
+        - updated_at
+    WorkloadIdentityPolicy:
+      type: object
+      properties:
+        admissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadAdmission'
+          description: Admitted subjects.
+        issuers:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadIssuer'
+          description: Trusted issuers, organization tier first.
+      description: The whole trust policy visible to the caller. Every write returns this, so a client replaces its view rather than merging into it and cannot show a stale list after a mutation.
+      required:
+        - issuers
+        - admissions
+    WorkloadIssuer:
+      type: object
+      properties:
+        allow_wildcard_admission:
+          type: boolean
+          description: Whether subjects under this issuer may be admitted by a wildcard rule.
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          description: The workload issuer id.
+          format: uuid
+        issuer:
+          type: string
+          description: The issuer identifier the assertion's iss claim must carry.
+        jwks_uri:
+          type: string
+          description: Where the issuer publishes its signing keys.
+        name:
+          type: string
+          description: The label an operator works with.
+        organization_id:
+          type: string
+          description: The owning organization id.
+        project_id:
+          type: string
+          description: The owning project id; empty for an organization-tier issuer.
+        updated_at:
+          type: string
+          format: date-time
+      description: An external issuer an organization trusts to vouch for its workloads.
+      required:
+        - id
+        - organization_id
+        - project_id
+        - name
+        - issuer
+        - jwks_uri
+        - allow_wildcard_admission
+        - created_at
+        - updated_at
     KillswitchCapabilityKey: {type: string, enum: [mcp_tool_calls]}
     KillswitchStatus: {type: string, enum: [active, scheduled, expired, lifted]}
     KillswitchListStatus: {type: string, enum: [active, scheduled, expired, lifted]}
@@ -101033,6 +102182,8 @@ tags:
     description: Manage organization-level JSON Web Key Sets — published public keys backed by customer KMS keys — and the publish/activate/retire/revoke lifecycle of their keys.
   - name: keys
     description: Managing system api keys.
+  - name: launcher
+    description: Rank command palette candidates by the intent behind the text the user typed.
   - name: litellm
     description: Receives LiteLLM Generic Guardrail callbacks and OpenTelemetry exports.
   - name: mcpApproval
@@ -101090,7 +102241,7 @@ tags:
   - name: organizationRemoteSessions
     description: Organization-administrator visibility into remote_sessions Gram is holding on a principal's behalf, across every project in the caller's organization. access_token_encrypted and refresh_token_encrypted are never returned.
   - name: remoteSessions
-    description: Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned.
+    description: Operator visibility into remote_sessions Gram is holding on a principal's behalf. Read + revoke; sessions are written by /mcp/{slug}/remote_login_callback and the silent-refresh path. access_token_encrypted and refresh_token_encrypted are never returned. Also hosts composite dashboard operations that configure a single MCP server's identity in one atomic call.
   - name: resources
     description: Dashboard API for interacting with resources.
   - name: risk
@@ -101131,6 +102282,8 @@ tags:
     description: Manage organization-owned user_session_issuer records inherited by every project in the caller's organization.
   - name: userSessions
     description: Operator visibility into issued user_sessions. List + revoke; sessions are written by /mcp/{slug}/token.
+  - name: workloadIdentities
+    description: 'Configure which workloads an organization recognises as its own: the issuers it trusts, the subjects those issuers may present, and the agent each admitted workload inherits its policy from.'
   - name: variations
     description: Manage variations of tools.
   - name: external

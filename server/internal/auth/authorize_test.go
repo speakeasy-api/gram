@@ -249,7 +249,7 @@ func TestAuthorizePrincipalAPIKeyUsesLiveAgentAdmission(t *testing.T) {
 	userInfo := defaultMockUserInfo()
 	organizationID := userInfo.Organizations[0].ID
 	ownerUserID := userInfo.UserID
-	key := createTestAPIKey(t, ctx, instance, nil)
+	key := "gram_local_" + uuid.NewString()
 	keyHash, err := auth.GetAPIKeyHash(key)
 	require.NoError(t, err)
 
@@ -265,9 +265,17 @@ func TestAuthorizePrincipalAPIKeyUsesLiveAgentAdmission(t *testing.T) {
 	require.NoError(t, err)
 	rawPolicy, err := runtimepolicy.EncodeDelegatedPolicy(runtimepolicy.CurrentDelegatedPolicyVersion, policy)
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: AIM-194 owns the future principal-key writer; this exercises the loaded-row admission path only
-	_, err = instance.conn.Exec(ctx, `UPDATE api_keys SET scopes = '{}', subject_urn = $1, delegated_grants = $2, delegated_grants_version = $3, expires_at = $4 WHERE key_hash = $5`,
-		"agent:"+agent.ID.String(), rawPolicy, int32(runtimepolicy.CurrentDelegatedPolicyVersion), time.Now().Add(24*time.Hour), keyHash)
+	_, err = keysrepo.New(instance.conn).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{
+		OrganizationID:         organizationID,
+		CreatedByUserID:        ownerUserID,
+		Name:                   "project-access-key",
+		KeyPrefix:              key[:16],
+		KeyHash:                keyHash,
+		SubjectUrn:             pgtype.Text{String: "agent:" + agent.ID.String(), Valid: true},
+		DelegatedGrants:        rawPolicy,
+		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(runtimepolicy.CurrentDelegatedPolicyVersion), Valid: true},
+		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+	})
 	require.NoError(t, err)
 
 	admitted, err := instance.authorizer.Authorize(ctx, key, apiKeyScheme)

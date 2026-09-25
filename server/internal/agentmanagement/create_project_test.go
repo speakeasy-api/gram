@@ -190,10 +190,9 @@ func TestCreateAgentSerializesWithConcurrentProjectDeletion(t *testing.T) {
 	ctx := validatedHumanContext(t, organizationID, "owner")
 	projectID := project.ID.String()
 
-	deletion, err := conn.Begin(t.Context()) //nolint:glint // notestingrawsql: hold the deletion transaction open to verify concurrent creation blocks
-	require.NoError(t, err)
-	defer func() { _ = deletion.Rollback(t.Context()) }()
-	_, err = projectsrepo.New(deletion).DeleteProject(t.Context(), project.ID)
+	// Hold the deletion transaction open to verify concurrent creation blocks.
+	deletion := testenv.BeginTx(t, t.Context(), conn)
+	_, err := projectsrepo.New(deletion).DeleteProject(t.Context(), project.ID)
 	require.NoError(t, err)
 	deletingPID := deletion.Conn().PgConn().PID()
 

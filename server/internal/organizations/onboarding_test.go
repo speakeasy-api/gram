@@ -307,3 +307,37 @@ func TestOnboardingAuditFailureRollsBackSelection(t *testing.T) {
 		})
 	}
 }
+
+func TestOnboardingStorageIsOrganizationScoped(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := infra.CloneTestDatabase(t, "testdb")
+	require.NoError(t, err)
+	queries := orgrepo.New(conn)
+
+	org := orgrepo.CreateOrganizationMetadataParams{ID: "org_onboarding_storage_test", Name: "Test organization", Slug: "onboarding-storage-test"}
+	require.NoError(t, queries.CreateOrganizationMetadata(ctx, org))
+
+	// The second write upserts on organization_onboarding_organization_id_key,
+	// so it fails if that unique index is missing and the organization keeps a
+	// single onboarding row.
+	for _, preset := range []string{"gateway", "security"} {
+		err = queries.SetOrganizationOnboardingPreset(ctx, orgrepo.SetOrganizationOnboardingPresetParams{OrganizationID: org.ID, Preset: conv.ToPGText(preset)})
+		require.NoError(t, err)
+	}
+	selection, err := queries.GetOrganizationOnboardingSelection(ctx, org.ID)
+	require.NoError(t, err)
+	require.Len(t, selection, 1)
+	require.Equal(t, conv.ToPGText("security"), selection[0].OnboardingPreset)
+
+	// Onboarding state has no lifetime beyond its organization: deleting the
+	// organization cascades, so a recreated organization starts without a preset.
+	//nolint:glint // notestingrawsql: organizations are never hard-deleted by application code, so no SQLc query exercises the ON DELETE CASCADE foreign key
+	_, err = conn.Exec(ctx, `DELETE FROM organization_metadata WHERE id = $1`, org.ID)
+	require.NoError(t, err)
+	require.NoError(t, queries.CreateOrganizationMetadata(ctx, org))
+	selection, err = queries.GetOrganizationOnboardingSelection(ctx, org.ID)
+	require.NoError(t, err)
+	require.Len(t, selection, 1)
+	require.False(t, selection[0].OnboardingPreset.Valid)
+}

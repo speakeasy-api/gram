@@ -388,6 +388,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// Goa lazily assigns a nil error formatter inside a shared request closure.
 	// Supply its default eagerly so concurrent error responses do not race.
 	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, goahttp.NewErrorResponse)
+	server.Callback = scopeMCPAdminCookie(server.Callback)
 	server.ListOrganizations = service.rejectEmptyOrganizationStatus(server.ListOrganizations)
 	server.GetSession = service.preauthorizeAdmin(server.GetSession)
 	server.GetOrganizationOnboarding = service.preauthorizeAdmin(server.GetOrganizationOnboarding)
@@ -418,6 +419,42 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
 	adminserver.Mount(mux, server)
 
+}
+
+// Keep the dashboard's /admin session cookie unchanged. A successful MCP
+// login also needs the same session on /admin-mcp for browser consent. A
+// dashboard login clears any older MCP-scoped browser cookie.
+func scopeMCPAdminCookie(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(&adminCallbackWriter{ResponseWriter: w}, r)
+	})
+}
+
+type adminCallbackWriter struct{ http.ResponseWriter }
+
+func (w *adminCallbackWriter) WriteHeader(status int) {
+	if status == http.StatusTemporaryRedirect {
+		for _, cookie := range (&http.Response{Header: w.Header()}).Cookies() { //nolint:exhaustruct // Only response headers are needed to parse cookies.
+			if cookie.Name != constants.AdminSessionCookie || cookie.Value == "" {
+				continue
+			}
+			mcpCookie := &http.Cookie{ //nolint:exhaustruct // No Domain so middleware controls cookie sharing.
+				Name:     constants.AdminSessionCookie,
+				Path:     "/admin-mcp",
+				Secure:   true,
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			}
+			if strings.HasPrefix(w.Header().Get("Location"), "/admin-mcp/connect?state=") {
+				mcpCookie.Value = cookie.Value
+			} else {
+				mcpCookie.MaxAge = -1
+			}
+			http.SetCookie(w.ResponseWriter, mcpCookie)
+			break
+		}
+	}
+	w.ResponseWriter.WriteHeader(status)
 }
 
 // Goa's optional string query decoder treats present-but-empty values as absent,

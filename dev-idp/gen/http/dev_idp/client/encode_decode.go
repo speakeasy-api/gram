@@ -257,3 +257,19 @@ func unmarshalWorkosCurrentUserResponseBodyToDevidpWorkosCurrentUser(v *WorkosCu
 
 	return res
 }
+
+// unmarshalCurrentUserProvenanceResponseBodyToDevidpCurrentUserProvenance
+// builds a value of type *devidp.CurrentUserProvenance from a value of type
+// *CurrentUserProvenanceResponseBody.
+func unmarshalCurrentUserProvenanceResponseBodyToDevidpCurrentUserProvenance(v *CurrentUserProvenanceResponseBody) *devidp.CurrentUserProvenance {
+	if v == nil {
+		return nil
+	}
+	res := &devidp.CurrentUserProvenance{
+		Backend:      *v.Backend,
+		WorktreeRoot: *v.WorktreeRoot,
+		DatabasePath: *v.DatabasePath,
+	}
+
+	return res
+}

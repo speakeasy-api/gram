@@ -46,6 +46,9 @@ type GetCurrentUserResponseBody struct {
 	User *UserResponseBody `form:"user,omitempty" json:"user,omitempty" xml:"user,omitempty"`
 	// Live WorkOS profile. Populated for workos mode only.
 	Workos *WorkosCurrentUserResponseBody `form:"workos,omitempty" json:"workos,omitempty" xml:"workos,omitempty"`
+	// Best-effort local provenance, only on getCurrentUser for the oauth2-1 slot
+	// with a local backend and verifiable disk storage and worktree origin.
+	Provenance *CurrentUserProvenanceResponseBody `form:"provenance,omitempty" json:"provenance,omitempty" xml:"provenance,omitempty"`
 }
 
 // SetCurrentUserResponseBody is the type of the "devIdp" service
@@ -57,6 +60,9 @@ type SetCurrentUserResponseBody struct {
 	User *UserResponseBody `form:"user,omitempty" json:"user,omitempty" xml:"user,omitempty"`
 	// Live WorkOS profile. Populated for workos mode only.
 	Workos *WorkosCurrentUserResponseBody `form:"workos,omitempty" json:"workos,omitempty" xml:"workos,omitempty"`
+	// Best-effort local provenance, only on getCurrentUser for the oauth2-1 slot
+	// with a local backend and verifiable disk storage and worktree origin.
+	Provenance *CurrentUserProvenanceResponseBody `form:"provenance,omitempty" json:"provenance,omitempty" xml:"provenance,omitempty"`
 }
 
 // UserResponseBody is used to define fields on response body types.
@@ -91,6 +97,17 @@ type WorkosCurrentUserResponseBody struct {
 	ProfilePictureURL *string `form:"profile_picture_url,omitempty" json:"profile_picture_url,omitempty" xml:"profile_picture_url,omitempty"`
 	// Default WorkOS organization id, when set.
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+}
+
+// CurrentUserProvenanceResponseBody is used to define fields on response body
+// types.
+type CurrentUserProvenanceResponseBody struct {
+	// Parsed running backend (local).
+	Backend *string `form:"backend,omitempty" json:"backend,omitempty" xml:"backend,omitempty"`
+	// Canonical absolute process worktree root.
+	WorktreeRoot *string `form:"worktree_root,omitempty" json:"worktree_root,omitempty" xml:"worktree_root,omitempty"`
+	// Canonical absolute opened SQLite main database path.
+	DatabasePath *string `form:"database_path,omitempty" json:"database_path,omitempty" xml:"database_path,omitempty"`
 }
 
 // NewGetCurrentUserRequestBody builds the HTTP request body from the payload
@@ -134,6 +151,9 @@ func NewGetCurrentUserCurrentUserOK(body *GetCurrentUserResponseBody) *devidp.Cu
 	if body.Workos != nil {
 		v.Workos = unmarshalWorkosCurrentUserResponseBodyToDevidpWorkosCurrentUser(body.Workos)
 	}
+	if body.Provenance != nil {
+		v.Provenance = unmarshalCurrentUserProvenanceResponseBodyToDevidpCurrentUserProvenance(body.Provenance)
+	}
 
 	return v
 }
@@ -149,6 +169,9 @@ func NewSetCurrentUserCurrentUserOK(body *SetCurrentUserResponseBody) *devidp.Cu
 	}
 	if body.Workos != nil {
 		v.Workos = unmarshalWorkosCurrentUserResponseBodyToDevidpWorkosCurrentUser(body.Workos)
+	}
+	if body.Provenance != nil {
+		v.Provenance = unmarshalCurrentUserProvenanceResponseBodyToDevidpCurrentUserProvenance(body.Provenance)
 	}
 
 	return v
@@ -175,6 +198,11 @@ func ValidateGetCurrentUserResponseBody(body *GetCurrentUserResponseBody) (err e
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.Provenance != nil {
+		if err2 := ValidateCurrentUserProvenanceResponseBody(body.Provenance); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	return
 }
 
@@ -196,6 +224,11 @@ func ValidateSetCurrentUserResponseBody(body *SetCurrentUserResponseBody) (err e
 	}
 	if body.Workos != nil {
 		if err2 := ValidateWorkosCurrentUserResponseBody(body.Workos); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Provenance != nil {
+		if err2 := ValidateCurrentUserProvenanceResponseBody(body.Provenance); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -242,6 +275,21 @@ func ValidateUserResponseBody(body *UserResponseBody) (err error) {
 func ValidateWorkosCurrentUserResponseBody(body *WorkosCurrentUserResponseBody) (err error) {
 	if body.WorkosSub == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("workos_sub", "body"))
+	}
+	return
+}
+
+// ValidateCurrentUserProvenanceResponseBody runs the validations defined on
+// CurrentUserProvenanceResponseBody
+func ValidateCurrentUserProvenanceResponseBody(body *CurrentUserProvenanceResponseBody) (err error) {
+	if body.Backend == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("backend", "body"))
+	}
+	if body.WorktreeRoot == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("worktree_root", "body"))
+	}
+	if body.DatabasePath == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("database_path", "body"))
 	}
 	return
 }
