@@ -126,6 +126,13 @@ vi.mock("@gram/client/react-query/listToolsets.js", () => ({
               toolUrn: "tools:deleteTicket",
               type: "http",
             },
+            {
+              annotations: { readOnlyHint: true },
+              id: "tool-2",
+              name: "listTickets",
+              toolUrn: "tools:listTickets",
+              type: "http",
+            },
           ],
         },
       ],
@@ -442,6 +449,40 @@ describe("PolicyMCPScopePicker all-server selection", () => {
       JSON.parse(screen.getByTestId("mcp-scope-payload").textContent ?? "null"),
     ).toEqual({
       allServers: true,
+      toolAnnotations: [],
+      servers: [],
+    });
+  });
+
+  it("cherry-picks a tool on a server that is not yet in scope", () => {
+    render(<ScopePickerHarness />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "listTickets" }));
+
+    expect(
+      JSON.parse(screen.getByTestId("mcp-scope-payload").textContent ?? "null"),
+    ).toEqual({
+      allServers: false,
+      toolAnnotations: [],
+      servers: [
+        {
+          mcpServerId: "11111111-1111-4111-8111-111111111111",
+          tools: ["listTickets"],
+        },
+      ],
+    });
+  });
+
+  it("clears every server when All MCP servers is unchecked", () => {
+    render(<ScopePickerHarness />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "All MCP servers" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "All MCP servers" }));
+
+    expect(
+      JSON.parse(screen.getByTestId("mcp-scope-payload").textContent ?? "null"),
+    ).toEqual({
+      allServers: false,
       toolAnnotations: [],
       servers: [],
     });
