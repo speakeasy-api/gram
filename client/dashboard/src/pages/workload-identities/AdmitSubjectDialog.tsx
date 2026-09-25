@@ -15,17 +15,23 @@ import type { WorkloadIssuer } from "@gram/client/models/components/workloadissu
 import { useEffect, useMemo, useState } from "react";
 import {
   canAdmit,
-  composeSubject,
+  inferMatchKind,
   type MatchKind,
-  shouldSwitchToWildcard,
   subjectRuleWarning,
-  typedSubjectForMatchKind,
 } from "./subjectRule";
 
 export interface AdmitSubjectValues {
   issuer: string;
   subject: string;
   matchKind: MatchKind;
+  name: string;
+  agentId: string;
+}
+
+/** The form's own state. matchKind is derived, so it is not held here. */
+interface AdmitSubjectForm {
+  issuer: string;
+  subject: string;
   name: string;
   agentId: string;
 }
@@ -39,10 +45,9 @@ interface AdmitSubjectDialogProps {
   agents: { id: string; name: string }[];
 }
 
-const EMPTY: AdmitSubjectValues = {
+const EMPTY: AdmitSubjectForm = {
   issuer: "",
   subject: "",
-  matchKind: "exact",
   name: "",
   agentId: "",
 };
@@ -55,7 +60,7 @@ export function AdmitSubjectDialog({
   issuers,
   agents,
 }: AdmitSubjectDialogProps): JSX.Element {
-  const [values, setValues] = useState<AdmitSubjectValues>(EMPTY);
+  const [values, setValues] = useState<AdmitSubjectForm>(EMPTY);
 
   // A successful admission closes the dialog through the parent's own state,
   // which never reaches handleOpenChange — so without this the next admission
@@ -97,15 +102,29 @@ export function AdmitSubjectDialog({
   // the stem and the "*" is rendered after it, so selecting Wildcard is the only
   // place breadth is stated. Validate and submit the composed value, which is
   // what the row will actually hold.
-  const storedSubject = composeSubject(values.matchKind, values.subject);
-  const warning = subjectRuleWarning(values.matchKind, storedSubject);
+  // Read off the value rather than selected: the terminator is how a rule states
+  // its own breadth, so a separate control would only be a second way to say the
+  // same thing — and a way for the two to disagree.
+  const matchKind = inferMatchKind(values.subject);
+  const storedSubject = values.subject.trim();
+  // The issuer's permission is a state the operator can reach — an older row, or
+  // one cleared during an incident — and with the match control gone the field is
+  // the only place left to say so. Without this the submit would sit disabled
+  // with no reason, which is the failure the caution below exists to avoid.
+  const warning =
+    subjectRuleWarning(matchKind, storedSubject) ??
+    (matchKind === "wildcard" &&
+    !wildcardAvailable &&
+    selectedIssuerUrl.length > 0
+      ? "This issuer does not permit wildcard matching, so a rule ending in \u201c*\u201d cannot be admitted under it. Give the subject in full, or turn wildcard admission back on for the issuer."
+      : null);
 
   // Stated where the rule is written rather than asked when the issuer is
   // registered. An operator registering an issuer has no rule in mind yet, and
   // whether a wildcard is sound is a judgement about their own platform. Naming
   // the stem and the agent makes the reach of the rule concrete.
   const wildcardStem =
-    values.matchKind === "wildcard" && storedSubject.length > 1
+    matchKind === "wildcard" && storedSubject.endsWith("*")
       ? storedSubject.slice(0, -1)
       : "";
   const selectedAgentName =
@@ -118,18 +137,14 @@ export function AdmitSubjectDialog({
     agentId: values.agentId,
     warning,
     issuerExists: selectedIssuer !== undefined,
-    matchKindPermitted: values.matchKind !== "wildcard" || wildcardAvailable,
+    matchKindPermitted: matchKind !== "wildcard" || wildcardAvailable,
   });
 
   const handleIssuerChange = (issuer: string) => {
-    const next = issuers.find((candidate) => candidate.issuer === issuer);
-    setValues({
-      ...values,
-      issuer,
-      // Switching to an issuer that forbids wildcards must not leave a wildcard
-      // selected, which would submit a rule the server refuses.
-      matchKind: next?.allowWildcardAdmission ? values.matchKind : "exact",
-    });
+    // No kind to carry across: it is read off the subject, so switching to an
+    // issuer that forbids wildcards leaves the rule as written and canAdmit
+    // refuses it, with the reason shown under the field.
+    setValues({ ...values, issuer });
   };
 
   return (
@@ -165,85 +180,24 @@ export function AdmitSubjectDialog({
           </Stack>
 
           <Stack gap={2}>
-            <Label htmlFor="admit-match-kind">Match</Label>
-            <Select
-              value={values.matchKind}
-              onValueChange={(matchKind) =>
-                setValues({
-                  ...values,
-                  matchKind: matchKind as MatchKind,
-                  subject: typedSubjectForMatchKind(
-                    values.subject,
-                    matchKind as MatchKind,
-                  ),
-                })
-              }
-            >
-              <SelectTrigger id="admit-match-kind">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="exact">Exact subject</SelectItem>
-                <SelectItem value="wildcard" disabled={!wildcardAvailable}>
-                  Wildcard
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            {!wildcardAvailable && selectedIssuerUrl.length > 0 && (
-              <Text muted small>
-                This issuer does not permit wildcard matching. Turn on wildcard
-                admission on the issuer to use it.
-              </Text>
-            )}
-          </Stack>
-
-          <Stack gap={2}>
             <Label htmlFor="admit-subject">Subject</Label>
-            <Stack direction="horizontal" align="center" gap={2}>
-              <Input
-                id="admit-subject"
-                className="flex-1"
-                value={values.subject}
-                placeholder={
-                  values.matchKind === "wildcard"
-                    ? "wimse://identity.example.com/org/acme/agent/"
-                    : "wimse://identity.example.com/org/acme/agent/a-1"
-                }
-                aria-describedby={warning ? "admit-subject-warning" : undefined}
-                aria-invalid={warning !== null}
-                onChange={(value) =>
-                  shouldSwitchToWildcard(
-                    value,
-                    values.matchKind,
-                    wildcardAvailable,
-                  )
-                    ? setValues({
-                        ...values,
-                        matchKind: "wildcard",
-                        subject: typedSubjectForMatchKind(value, "wildcard"),
-                      })
-                    : setValues({ ...values, subject: value })
-                }
-              />
-              {/* The terminator, shown rather than typed. It is part of the
-                  stored subject, so an operator can see the breadth of the rule
-                  they are about to create without having to keep it in step with
-                  the match kind themselves. */}
-              {values.matchKind === "wildcard" && (
-                <Text aria-hidden className="font-mono text-base">
-                  *
-                </Text>
-              )}
-            </Stack>
+            <Input
+              id="admit-subject"
+              value={values.subject}
+              placeholder="wimse://identity.example.com/org/acme/agent/a-1"
+              aria-describedby={warning ? "admit-subject-warning" : undefined}
+              aria-invalid={warning !== null}
+              onChange={(value) => setValues({ ...values, subject: value })}
+            />
             {warning !== null ? (
               <Text id="admit-subject-warning" role="alert" small destructive>
                 {warning}
               </Text>
             ) : (
               <Text muted small>
-                {values.matchKind === "wildcard"
-                  ? `Stored as ${storedSubject || "the value above plus *"}, and compared against anything beginning with it. Gram does not normalize it.`
-                  : "Stored and compared exactly as entered. Gram does not normalize it."}
+                Stored and compared exactly as entered, and not normalized. End
+                it with <code>*</code> to admit every subject beginning with the
+                part before the <code>*</code>.
               </Text>
             )}
           </Stack>
@@ -312,6 +266,7 @@ export function AdmitSubjectDialog({
                 ...values,
                 issuer: selectedIssuerUrl,
                 subject: storedSubject,
+                matchKind,
               })
             }
             disabled={!canSubmit || isPending}

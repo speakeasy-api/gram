@@ -8,68 +8,20 @@ const WILDCARD_SUFFIX = "*";
 export type MatchKind = "exact" | "wildcard";
 
 /**
- * The subject a rule will be stored with, given the match kind and what the
- * operator typed.
+ * The match kind a subject states, read off the value itself.
  *
- * A wildcard rule's terminator is owned by the match kind rather than typed: the
- * dialog shows it as a fixed suffix, so selecting Wildcard is the only place
- * breadth is stated. Before this, an operator had to say it twice — pick Wildcard
- * *and* type the `*` — and the warnings below existed largely to police the two
- * disagreeing.
+ * There is no separate control for this. An operator writes the rule they mean
+ * and the terminator says how broad it is — which is what the stored value has
+ * always meant, so nothing is inferred that was not already there.
  *
- * An exact subject is passed through verbatim, including any `*`, so the warning
- * about a literal star still fires. Silently stripping it would hide the mistake
- * this function exists to surface.
+ * Lossless, because an exact subject may never contain a `*`: ValidateSubjectRule
+ * refuses one outright, so there is no legitimate exact value this could
+ * misread. A `*` anywhere therefore means a wildcard was intended, and a
+ * misplaced one is reported as a misplaced terminator rather than as a literal
+ * star, which is the more useful of the two messages.
  */
-export function composeSubject(matchKind: MatchKind, typed: string): string {
-  const trimmed = typed.trim();
-  if (matchKind !== "wildcard" || trimmed.length === 0) {
-    return trimmed;
-  }
-  return trimmed.endsWith(WILDCARD_SUFFIX)
-    ? trimmed
-    : trimmed + WILDCARD_SUFFIX;
-}
-
-/**
- * What the field should hold after switching to `next`.
- *
- * Switching to Wildcard lifts a typed terminator out of the field, so the suffix
- * the dialog renders does not end up doubled. Switching to Exact leaves the text
- * alone: the operator may have meant that star, and the warning will say so.
- */
-export function typedSubjectForMatchKind(
-  typed: string,
-  next: MatchKind,
-): string {
-  if (next !== "wildcard") {
-    return typed;
-  }
-  const trimmedEnd = typed.trimEnd();
-  return trimmedEnd.endsWith(WILDCARD_SUFFIX)
-    ? trimmedEnd.slice(0, -WILDCARD_SUFFIX.length)
-    : typed;
-}
-
-/**
- * Whether typing this value should switch the match kind to wildcard.
- *
- * Pasting a rule copied from elsewhere is the case that matters: it arrives with
- * its terminator, and leaving the kind on Exact would store a literal star that
- * matches nothing. Only offered where the issuer permits wildcards, so this
- * cannot select a kind the server would refuse.
- */
-export function shouldSwitchToWildcard(
-  typed: string,
-  current: MatchKind,
-  wildcardPermitted: boolean,
-): boolean {
-  return (
-    current === "exact" &&
-    wildcardPermitted &&
-    typed.trimEnd().endsWith(WILDCARD_SUFFIX) &&
-    typed.trimEnd().length > WILDCARD_SUFFIX.length
-  );
+export function inferMatchKind(subject: string): MatchKind {
+  return subject.trim().includes(WILDCARD_SUFFIX) ? "wildcard" : "exact";
 }
 
 /**
@@ -132,10 +84,10 @@ export function canAdmit(input: {
    */
   issuerExists: boolean;
   /**
-   * Whether the rule as typed is permitted by that issuer. The picker disables
-   * the wildcard option, but the selected match kind is held in state: switching
-   * issuers, or the issuer's permission being cleared elsewhere, can leave a
-   * wildcard selected under an issuer that forbids it.
+   * Whether the kind this subject states is permitted by the selected issuer.
+   * An issuer that forbids wildcards is a state the operator can reach — an
+   * older row, or one cleared during an incident — so a rule stating one has to
+   * be refused here rather than only by the server.
    */
   matchKindPermitted: boolean;
 }): boolean {
