@@ -4686,6 +4686,10 @@ type SkillVersionResponseBody struct {
 	Metadata map[string]any `form:"metadata" json:"metadata" xml:"metadata"`
 	// All top-level frontmatter fields parsed from this manifest version.
 	Frontmatter map[string]any `form:"frontmatter" json:"frontmatter" xml:"frontmatter"`
+	// Supporting files this manifest points at, relative to the skill directory
+	// root. Gram stores a skill as a single SKILL.md, so these files are neither
+	// ingested nor distributed.
+	ResourceReferences []*SkillResourceReferenceResponseBody `form:"resource_references" json:"resource_references" xml:"resource_references"`
 	// Whether this manifest version conforms to the Agent Skills specification.
 	SpecValid bool `form:"spec_valid" json:"spec_valid" xml:"spec_valid"`
 	// Specification validation problems recorded for this manifest version.
@@ -4702,6 +4706,15 @@ type SkillVersionResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of activations attributed to this exact version.
 	SeenCount int64 `form:"seen_count" json:"seen_count" xml:"seen_count"`
+}
+
+// SkillResourceReferenceResponseBody is used to define fields on response body
+// types.
+type SkillResourceReferenceResponseBody struct {
+	// The referenced path, relative to the skill directory root.
+	Path string `form:"path" json:"path" xml:"path"`
+	// The optional directory the Agent Skills specification reserves for this path.
+	Kind string `form:"kind" json:"kind" xml:"kind"`
 }
 
 // SkillValidationErrorResponseBody is used to define fields on response body

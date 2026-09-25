@@ -5609,6 +5609,18 @@ func marshalTypesSkillVersionToSkillVersionResponseBody(v *types.SkillVersion) *
 			res.Frontmatter[tk] = tv
 		}
 	}
+	if v.ResourceReferences != nil {
+		res.ResourceReferences = make([]*SkillResourceReferenceResponseBody, len(v.ResourceReferences))
+		for i, val := range v.ResourceReferences {
+			if val == nil {
+				res.ResourceReferences[i] = nil
+				continue
+			}
+			res.ResourceReferences[i] = marshalTypesSkillResourceReferenceToSkillResourceReferenceResponseBody(val)
+		}
+	} else {
+		res.ResourceReferences = []*SkillResourceReferenceResponseBody{}
+	}
 	if v.ValidationErrors != nil {
 		res.ValidationErrors = make([]*SkillValidationErrorResponseBody, len(v.ValidationErrors))
 		for i, val := range v.ValidationErrors {
@@ -5620,6 +5632,18 @@ func marshalTypesSkillVersionToSkillVersionResponseBody(v *types.SkillVersion) *
 		}
 	} else {
 		res.ValidationErrors = []*SkillValidationErrorResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTypesSkillResourceReferenceToSkillResourceReferenceResponseBody
+// builds a value of type *SkillResourceReferenceResponseBody from a value of
+// type *types.SkillResourceReference.
+func marshalTypesSkillResourceReferenceToSkillResourceReferenceResponseBody(v *types.SkillResourceReference) *SkillResourceReferenceResponseBody {
+	res := &SkillResourceReferenceResponseBody{
+		Path: v.Path,
+		Kind: v.Kind,
 	}
 
 	return res

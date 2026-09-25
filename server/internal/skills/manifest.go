@@ -21,7 +21,9 @@ import (
 	"golang.org/x/text/unicode/norm"
 	"gopkg.in/yaml.v3"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 )
 
 const (
@@ -45,17 +47,18 @@ type validationError struct {
 }
 
 type parsedSkillManifest struct {
-	RawContent       string
-	Name             string
-	DisplayName      string
-	Description      *string
-	Metadata         map[string]any
-	Frontmatter      map[string]any
-	SpecValid        bool
-	ValidationErrors []validationError
-	RawSHA256        string
-	CanonicalSHA256  string
-	canonicalContent string
+	RawContent         string
+	Name               string
+	DisplayName        string
+	Description        *string
+	Metadata           map[string]any
+	Frontmatter        map[string]any
+	ResourceReferences []skillResourceReference
+	SpecValid          bool
+	ValidationErrors   []validationError
+	RawSHA256          string
+	CanonicalSHA256    string
+	canonicalContent   string
 }
 
 // ValidatedSkillSuggestion is a proposed SKILL.md that differs canonically
@@ -255,17 +258,18 @@ func parseSkillManifest(content string) (parsedSkillManifest, error) {
 	manifestDigest := sha256.Sum256(manifestPreimage)
 
 	return parsedSkillManifest{
-		RawContent:       content,
-		Name:             name,
-		DisplayName:      displayName,
-		Description:      description,
-		Metadata:         metadata,
-		Frontmatter:      frontmatterValues,
-		SpecValid:        len(validationErrors) == 0,
-		ValidationErrors: validationErrors,
-		RawSHA256:        hex.EncodeToString(rawDigest[:]),
-		CanonicalSHA256:  hex.EncodeToString(manifestDigest[:]),
-		canonicalContent: canonicalContent,
+		RawContent:         content,
+		Name:               name,
+		DisplayName:        displayName,
+		Description:        description,
+		Metadata:           metadata,
+		Frontmatter:        frontmatterValues,
+		ResourceReferences: parseSkillResourceReferences(body),
+		SpecValid:          len(validationErrors) == 0,
+		ValidationErrors:   validationErrors,
+		RawSHA256:          hex.EncodeToString(rawDigest[:]),
+		CanonicalSHA256:    hex.EncodeToString(manifestDigest[:]),
+		canonicalContent:   canonicalContent,
 	}, nil
 }
 
@@ -799,14 +803,26 @@ func frontmatterFields(fields map[string]*yaml.Node) map[string]any {
 	return frontmatter
 }
 
-// manifestFrontmatter re-derives the top-level frontmatter fields from stored
-// manifest content, which is guaranteed to have parsed at write time.
-func manifestFrontmatter(content string) map[string]any {
+// manifestFacts re-derives the manifest values that are not stored as columns
+// from stored manifest content, which is guaranteed to have parsed at write
+// time.
+func manifestFacts(content string) mv.SkillManifestFacts {
 	parsed, err := parseSkillManifest(content)
 	if err != nil {
-		return map[string]any{}
+		return mv.SkillManifestFacts{Frontmatter: map[string]any{}, ResourceReferences: nil}
 	}
-	return parsed.Frontmatter
+	return mv.SkillManifestFacts{
+		Frontmatter:        parsed.Frontmatter,
+		ResourceReferences: skillResourceReferenceViews(parsed.ResourceReferences),
+	}
+}
+
+func skillResourceReferenceViews(references []skillResourceReference) []*types.SkillResourceReference {
+	views := make([]*types.SkillResourceReference, len(references))
+	for i, reference := range references {
+		views[i] = &types.SkillResourceReference{Path: reference.Path, Kind: reference.Kind}
+	}
+	return views
 }
 
 func metadataField(fields map[string]*yaml.Node) map[string]any {

@@ -941,6 +941,7 @@ var SkillVersion = Type("SkillVersion", func() {
 	Attribute("description", String, "The optional description from this manifest version.")
 	Attribute("metadata", MapOf(String, Any), "Metadata parsed from this manifest version.")
 	Attribute("frontmatter", MapOf(String, Any), "All top-level frontmatter fields parsed from this manifest version.")
+	Attribute("resource_references", ArrayOf(SkillResourceReference), "Supporting files this manifest points at, relative to the skill directory root. Gram stores a skill as a single SKILL.md, so these files are neither ingested nor distributed.")
 	Attribute("spec_valid", Boolean, "Whether this manifest version conforms to the Agent Skills specification.")
 	Attribute("validation_errors", ArrayOf(SkillValidationError), "Specification validation problems recorded for this manifest version.")
 	Attribute("derived_from_version_id", String, "The source version this version was derived from.", func() { Format(FormatUUID) })
@@ -952,7 +953,19 @@ var SkillVersion = Type("SkillVersion", func() {
 	Attribute("last_seen_at", String, "When this exact version was most recently activated.", func() { Format(FormatDateTime) })
 	Attribute("seen_count", Int64, "The number of activations attributed to this exact version.")
 
-	Required("id", "skill_id", "content", "canonical_sha256", "raw_sha256", "metadata", "frontmatter", "spec_valid", "validation_errors", "created_at", "created_by_user_id", "seen_count")
+	Required("id", "skill_id", "content", "canonical_sha256", "raw_sha256", "metadata", "frontmatter", "resource_references", "spec_valid", "validation_errors", "created_at", "created_by_user_id", "seen_count")
+})
+
+var SkillResourceReference = Type("SkillResourceReference", func() {
+	Meta("struct:pkg:path", "types")
+	Description("A supporting file a SKILL.md points at, named relative to the skill directory root.")
+
+	Attribute("path", String, "The referenced path, relative to the skill directory root.")
+	Attribute("kind", String, "The optional directory the Agent Skills specification reserves for this path.", func() {
+		Enum("script", "reference", "asset", "other")
+	})
+
+	Required("path", "kind")
 })
 
 var SkillEditSuggestion = Type("SkillEditSuggestion", func() {

@@ -16,6 +16,7 @@ function version(id: string): SkillVersion {
     createdByUserId: "user_a",
     metadata: {},
     frontmatter: {},
+    resourceReferences: [],
     specValid: true,
     validationErrors: [],
     seenCount: 0,

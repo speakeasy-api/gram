@@ -4684,6 +4684,10 @@ type SkillVersionResponseBody struct {
 	Metadata map[string]any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
 	// All top-level frontmatter fields parsed from this manifest version.
 	Frontmatter map[string]any `form:"frontmatter,omitempty" json:"frontmatter,omitempty" xml:"frontmatter,omitempty"`
+	// Supporting files this manifest points at, relative to the skill directory
+	// root. Gram stores a skill as a single SKILL.md, so these files are neither
+	// ingested nor distributed.
+	ResourceReferences []*SkillResourceReferenceResponseBody `form:"resource_references,omitempty" json:"resource_references,omitempty" xml:"resource_references,omitempty"`
 	// Whether this manifest version conforms to the Agent Skills specification.
 	SpecValid *bool `form:"spec_valid,omitempty" json:"spec_valid,omitempty" xml:"spec_valid,omitempty"`
 	// Specification validation problems recorded for this manifest version.
@@ -4700,6 +4704,15 @@ type SkillVersionResponseBody struct {
 	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
 	// The number of activations attributed to this exact version.
 	SeenCount *int64 `form:"seen_count,omitempty" json:"seen_count,omitempty" xml:"seen_count,omitempty"`
+}
+
+// SkillResourceReferenceResponseBody is used to define fields on response body
+// types.
+type SkillResourceReferenceResponseBody struct {
+	// The referenced path, relative to the skill directory root.
+	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// The optional directory the Agent Skills specification reserves for this path.
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 }
 
 // SkillValidationErrorResponseBody is used to define fields on response body
@@ -15068,6 +15081,9 @@ func ValidateSkillVersionResponseBody(body *SkillVersionResponseBody) (err error
 	if body.Frontmatter == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("frontmatter", "body"))
 	}
+	if body.ResourceReferences == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("resource_references", "body"))
+	}
 	if body.SpecValid == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("spec_valid", "body"))
 	}
@@ -15089,6 +15105,13 @@ func ValidateSkillVersionResponseBody(body *SkillVersionResponseBody) (err error
 	if body.SkillID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.skill_id", *body.SkillID, goa.FormatUUID))
 	}
+	for _, e := range body.ResourceReferences {
+		if e != nil {
+			if err2 := ValidateSkillResourceReferenceResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	for _, e := range body.ValidationErrors {
 		if e != nil {
 			if err2 := ValidateSkillValidationErrorResponseBody(e); err2 != nil {
@@ -15107,6 +15130,23 @@ func ValidateSkillVersionResponseBody(body *SkillVersionResponseBody) (err error
 	}
 	if body.LastSeenAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_seen_at", *body.LastSeenAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateSkillResourceReferenceResponseBody runs the validations defined on
+// SkillResourceReferenceResponseBody
+func ValidateSkillResourceReferenceResponseBody(body *SkillResourceReferenceResponseBody) (err error) {
+	if body.Path == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("path", "body"))
+	}
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "script" || *body.Kind == "reference" || *body.Kind == "asset" || *body.Kind == "other") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"script", "reference", "asset", "other"}))
+		}
 	}
 	return
 }

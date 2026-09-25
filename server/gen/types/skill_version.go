@@ -25,6 +25,10 @@ type SkillVersion struct {
 	Metadata map[string]any
 	// All top-level frontmatter fields parsed from this manifest version.
 	Frontmatter map[string]any
+	// Supporting files this manifest points at, relative to the skill directory
+	// root. Gram stores a skill as a single SKILL.md, so these files are neither
+	// ingested nor distributed.
+	ResourceReferences []*SkillResourceReference
 	// Whether this manifest version conforms to the Agent Skills specification.
 	SpecValid bool
 	// Specification validation problems recorded for this manifest version.

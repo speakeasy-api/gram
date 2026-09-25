@@ -77,6 +77,55 @@ func TestSkillsCreateValidManifestRoundTrip(t *testing.T) {
 	require.Nil(t, versions.NextCursor)
 }
 
+func TestSkillsSurfaceSupportingFileReferences(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	content := strings.Join([]string{
+		"---",
+		"name: pdf-processing",
+		"description: Extracts text from PDFs. Use when handling PDF documents.",
+		"---",
+		"",
+		"See [the reference guide](references/REFERENCE.md).",
+		"",
+		"Run `scripts/extract.py` against the input, then apply assets/report.docx.",
+	}, "\n")
+
+	expected := []*types.SkillResourceReference{
+		{Path: "assets/report.docx", Kind: "asset"},
+		{Path: "references/REFERENCE.md", Kind: "reference"},
+		{Path: "scripts/extract.py", Kind: "script"},
+	}
+
+	result, err := ti.service.Create(ctx, &gen.CreatePayload{Content: content, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.True(t, result.Version.SpecValid, "referencing supporting files must stay spec-valid")
+	require.Equal(t, expected, result.Version.ResourceReferences)
+
+	got, err := ti.service.Get(ctx, &gen.GetPayload{ID: result.Skill.ID, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Equal(t, expected, got.LatestVersion.ResourceReferences)
+
+	versions, err := ti.service.ListVersions(ctx, &gen.ListVersionsPayload{ID: result.Skill.ID, Cursor: nil, Limit: 10, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, versions.Versions, 1)
+	require.Equal(t, expected, versions.Versions[0].ResourceReferences)
+}
+
+func TestSkillsSurfaceNoSupportingFileReferences(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	content := "---\nname: deploy-helper\ndescription: Deploys the current application.\n---\n\n# Deploy helper\n"
+	result, err := ti.service.Create(ctx, &gen.CreatePayload{Content: content, SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.NotNil(t, result.Version.ResourceReferences)
+	require.Empty(t, result.Version.ResourceReferences)
+}
+
 func TestSkillsCreateSpecInvalidAcceptedAndMalformedRejected(t *testing.T) {
 	t.Parallel()
 

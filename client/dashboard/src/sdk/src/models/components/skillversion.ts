@@ -8,6 +8,10 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  SkillResourceReference,
+  SkillResourceReference$inboundSchema,
+} from "./skillresourcereference.js";
+import {
   SkillValidationError,
   SkillValidationError$inboundSchema,
 } from "./skillvalidationerror.js";
@@ -65,6 +69,10 @@ export type SkillVersion = {
    */
   rawSha256: string;
   /**
+   * Supporting files this manifest points at, relative to the skill directory root. Gram stores a skill as a single SKILL.md, so these files are neither ingested nor distributed.
+   */
+  resourceReferences: Array<SkillResourceReference>;
+  /**
    * The number of activations attributed to this exact version.
    */
   seenCount: number;
@@ -105,6 +113,7 @@ export const SkillVersion$inboundSchema: z.ZodMiniType<SkillVersion, unknown> =
       ),
       metadata: z.record(z.string(), z.any()),
       raw_sha256: z.string(),
+      resource_references: z.array(SkillResourceReference$inboundSchema),
       seen_count: z.int(),
       skill_id: z.string(),
       spec_valid: z.boolean(),
@@ -119,6 +128,7 @@ export const SkillVersion$inboundSchema: z.ZodMiniType<SkillVersion, unknown> =
         "first_seen_at": "firstSeenAt",
         "last_seen_at": "lastSeenAt",
         "raw_sha256": "rawSha256",
+        "resource_references": "resourceReferences",
         "seen_count": "seenCount",
         "skill_id": "skillId",
         "spec_valid": "specValid",

@@ -94725,6 +94725,24 @@ components:
         - rule_id
         - description
         - confidence
+    SkillResourceReference:
+      type: object
+      properties:
+        kind:
+          type: string
+          description: The optional directory the Agent Skills specification reserves for this path.
+          enum:
+            - script
+            - reference
+            - asset
+            - other
+        path:
+          type: string
+          description: The referenced path, relative to the skill directory root.
+      description: A supporting file a SKILL.md points at, named relative to the skill directory root.
+      required:
+        - path
+        - kind
     SkillShareLink:
       type: object
       properties:
@@ -94897,6 +94915,11 @@ components:
         raw_sha256:
           type: string
           description: The SHA-256 digest of the exact uploaded SKILL.md content.
+        resource_references:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillResourceReference'
+          description: Supporting files this manifest points at, relative to the skill directory root. Gram stores a skill as a single SKILL.md, so these files are neither ingested nor distributed.
         seen_count:
           type: integer
           description: The number of activations attributed to this exact version.
@@ -94922,6 +94945,7 @@ components:
         - raw_sha256
         - metadata
         - frontmatter
+        - resource_references
         - spec_valid
         - validation_errors
         - created_at

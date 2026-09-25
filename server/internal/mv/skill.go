@@ -82,7 +82,14 @@ type SkillVersionSightingStats struct {
 	SeenCount   int64
 }
 
-func BuildSkillVersionView(version repo.SkillVersion, derivedFromVersionID uuid.NullUUID, frontmatter map[string]any, sightings SkillVersionSightingStats) (*types.SkillVersion, error) {
+// SkillManifestFacts holds the manifest values that are re-derived from stored
+// SKILL.md content on read rather than persisted as columns.
+type SkillManifestFacts struct {
+	Frontmatter        map[string]any
+	ResourceReferences []*types.SkillResourceReference
+}
+
+func BuildSkillVersionView(version repo.SkillVersion, derivedFromVersionID uuid.NullUUID, facts SkillManifestFacts, sightings SkillVersionSightingStats) (*types.SkillVersion, error) {
 	metadata := make(map[string]any)
 	metadataDecoder := json.NewDecoder(bytes.NewReader(version.Metadata))
 	metadataDecoder.UseNumber()
@@ -93,8 +100,14 @@ func BuildSkillVersionView(version repo.SkillVersion, derivedFromVersionID uuid.
 		metadata = make(map[string]any)
 	}
 
+	frontmatter := facts.Frontmatter
 	if frontmatter == nil {
 		frontmatter = make(map[string]any)
+	}
+
+	resourceReferences := facts.ResourceReferences
+	if resourceReferences == nil {
+		resourceReferences = make([]*types.SkillResourceReference, 0)
 	}
 
 	validationErrors := make([]*types.SkillValidationError, 0)
@@ -115,6 +128,7 @@ func BuildSkillVersionView(version repo.SkillVersion, derivedFromVersionID uuid.
 		Description:          conv.FromPGText[string](version.Description),
 		Metadata:             metadata,
 		Frontmatter:          frontmatter,
+		ResourceReferences:   resourceReferences,
 		SpecValid:            version.SpecValid,
 		ValidationErrors:     validationErrors,
 		DerivedFromVersionID: conv.FromNullableUUID(derivedFromVersionID),
@@ -126,10 +140,10 @@ func BuildSkillVersionView(version repo.SkillVersion, derivedFromVersionID uuid.
 	}, nil
 }
 
-func BuildSkillVersionListView(rows []repo.ListSkillVersionsRow, frontmatter func(content string) map[string]any) ([]*types.SkillVersion, error) {
+func BuildSkillVersionListView(rows []repo.ListSkillVersionsRow, facts func(content string) SkillManifestFacts) ([]*types.SkillVersion, error) {
 	result := make([]*types.SkillVersion, len(rows))
 	for i, row := range rows {
-		view, err := BuildSkillVersionView(row.SkillVersion, row.DerivedFromVersionID, frontmatter(row.SkillVersion.Content), SkillVersionSightingStats{
+		view, err := BuildSkillVersionView(row.SkillVersion, row.DerivedFromVersionID, facts(row.SkillVersion.Content), SkillVersionSightingStats{
 			FirstSeenAt: row.FirstSeenAt,
 			LastSeenAt:  row.LastSeenAt,
 			SeenCount:   row.SeenCount,

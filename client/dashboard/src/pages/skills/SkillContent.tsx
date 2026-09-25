@@ -5,6 +5,7 @@ import { MemberWorkflowCTA } from "@/components/platform-mcp/member-workflow-cta
 import { RequireScope } from "@/components/require-scope";
 import { SettingsSection } from "@/components/detail/settings-section";
 import { SkillManifestDialog } from "./SkillManifestDialog";
+import { SkillSupportingFiles } from "./SkillSupportingFiles";
 import { SkillValidationErrors } from "./SkillValidationErrors";
 import type { SkillVersion } from "@gram/client/models/components/skillversion.js";
 import { Text } from "@/components/ui/Text";
@@ -88,6 +89,9 @@ export default function SkillContent(): JSX.Element {
           )}
         </SettingsSection.Panel>
       </SettingsSection>
+      <SkillSupportingFiles
+        references={latestVersion?.resourceReferences ?? []}
+      />
       {frontmatterEntries.length > 0 && (
         <SettingsSection>
           <SettingsSection.Header>
