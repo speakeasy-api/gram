@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Ban, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
-import { AGENT_PLATFORMS } from "../setup-data";
+import { AGENT_PLATFORMS, platformSteps } from "../setup-data";
 import type { AgentPlatform } from "../types";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
 import { usePlatformApiKeys } from "./platform-setup-values";
@@ -42,7 +42,11 @@ export function PlatformInstrumentationSheet({
   );
 
   const gate = activePlatform?.setupSteps[0]?.eligibility;
-  const gated = !!gate && eligibility[activePlatform!.id] !== true;
+  const gated = !!gate && eligibility[activePlatform!.id] === undefined;
+  // "No" to the plan check swaps in the per-user steps for personal plans.
+  const steps = activePlatform
+    ? platformSteps(activePlatform, eligibility[activePlatform.id])
+    : [];
 
   // Mint the key the snippets need as soon as a platform is picked, unless its
   // first step still has to establish the org qualifies. Guarded by a ref so a
@@ -69,7 +73,7 @@ export function PlatformInstrumentationSheet({
 
   const advanceStep = (platform: AgentPlatform) => {
     const currentIdx = activeStepIndex[platform.id] ?? 0;
-    if (currentIdx < platform.setupSteps.length - 1) {
+    if (currentIdx < steps.length - 1) {
       setActiveStepIndex((prev) => ({
         ...prev,
         [platform.id]: currentIdx + 1,
@@ -97,8 +101,7 @@ export function PlatformInstrumentationSheet({
   const currentStepIdx = activePlatform
     ? (activeStepIndex[activePlatform.id] ?? 0)
     : 0;
-  const totalSteps =
-    PICKER_OFFSET + Math.max(activePlatform?.setupSteps.length ?? 0, 1);
+  const totalSteps = PICKER_OFFSET + Math.max(steps.length, 1);
   const overallStepIndex = !activePlatform ? 0 : PICKER_OFFSET + currentStepIdx;
 
   const goToDot = (idx: number) => {
@@ -165,40 +168,8 @@ export function PlatformInstrumentationSheet({
   const renderPlatformSteps = () => {
     if (!activePlatform) return null;
 
-    const blocked = eligibility[activePlatform.id] === false ? gate : undefined;
-    if (blocked) {
-      return (
-        <>
-          <SheetHeader className="sr-only">
-            <SheetTitle>Set up {activePlatform.name}</SheetTitle>
-            <SheetDescription>{activePlatform.description}</SheetDescription>
-          </SheetHeader>
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 pb-6 text-center">
-            <div className="bg-destructive/10 text-destructive flex h-12 w-12 items-center justify-center rounded-full">
-              <Ban className="h-6 w-6" />
-            </div>
-            <h4 className="text-foreground text-base font-medium">
-              {blocked.blockedTitle}
-            </h4>
-            <p className="text-muted-foreground max-w-sm text-sm leading-relaxed">
-              {blocked.blockedDescription}
-            </p>
-          </div>
-          <div className="border-border flex items-center justify-end border-t px-6 py-4">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => onOpenChange(false)}
-            >
-              <Button.Text>Close</Button.Text>
-            </Button>
-          </div>
-        </>
-      );
-    }
-
-    const stepCount = activePlatform.setupSteps.length;
-    const currentStep = activePlatform.setupSteps[currentStepIdx];
+    const stepCount = steps.length;
+    const currentStep = steps[currentStepIdx];
     const isLastStep = currentStepIdx === stepCount - 1;
 
     return (
@@ -213,7 +184,7 @@ export function PlatformInstrumentationSheet({
             className="flex h-full transition-transform duration-300 ease-in-out"
             style={{ transform: `translateX(-${currentStepIdx * 100}%)` }}
           >
-            {activePlatform.setupSteps.map((step, idx) => (
+            {steps.map((step, idx) => (
               <div
                 key={step.title}
                 className="w-full shrink-0 overflow-y-auto px-6 pb-4"
@@ -230,10 +201,13 @@ export function PlatformInstrumentationSheet({
                       ...prev,
                       [activePlatform.id]: answer,
                     }));
-                    if (answer) {
-                      ensure(activePlatform);
-                      advanceStep(activePlatform);
-                    }
+                    // Set the index directly: advanceStep would read the steps
+                    // from before this answer swapped them.
+                    ensure(activePlatform);
+                    setActiveStepIndex((prev) => ({
+                      ...prev,
+                      [activePlatform.id]: 1,
+                    }));
                   }}
                 />
               </div>

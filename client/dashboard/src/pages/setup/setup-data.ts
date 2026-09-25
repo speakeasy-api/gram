@@ -7,6 +7,34 @@ import {
 } from "@/components/agent-providers/agent-providers";
 import type { AgentPlatform } from "./types";
 
+// Claude Code reads the same keys from Managed Settings (org rollout) and from
+// a user's ~/.claude/settings.json (personal plans), so both paths share it.
+const CLAUDE_CODE_SETTINGS_JSON = `{
+  "env": {
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://app.getgram.ai/otel",
+    "OTEL_EXPORTER_OTLP_HEADERS": "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+    "OTEL_LOGS_EXPORTER": "otlp",
+    "OTEL_METRICS_EXPORTER": "otlp",
+    "OTEL_TRACES_EXPORTER": "otlp",
+    "FORCE_AUTOUPDATE_PLUGINS": "1"
+  },
+  "extraKnownMarketplaces": {
+    "{{GRAM_MARKETPLACE_NAME}}": {
+      "autoUpdate": true,
+      "source": {
+        "source": "git",
+        "url": "{{GRAM_MARKETPLACE_URL}}"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "{{GRAM_CLAUDE_PLUGIN_NAME}}@{{GRAM_MARKETPLACE_NAME}}": true
+  }
+}`;
+
 const SETUP_AGENT_PLATFORMS: Array<{
   id: AgentProviderId;
   setupSteps: AgentPlatform["setupSteps"];
@@ -25,9 +53,15 @@ const SETUP_AGENT_PLATFORMS: Array<{
         },
         eligibility: {
           question: "Do you have a Teams or Enterprise Claude plan?",
-          blockedTitle: "Per-user setup flow coming soon",
-          blockedDescription:
-            "Without a Teams or Enterprise plan, Managed Settings can't be applied centrally. We're building a per-user setup flow for this case — for now, skip Claude Code or upgrade your plan to continue.",
+          personalSteps: [
+            {
+              title: "Add the settings to each developer's Claude Code",
+              description: `Without a Teams or Enterprise plan there are no Managed Settings, so each developer merges this block into their own ~/.claude/settings.json. It registers your private marketplace, enables the observability plugin, and sends logs, metrics, and traces to Speakeasy. The marketplace URL carries an access token, so share it only with your team. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
+              code: CLAUDE_CODE_SETTINGS_JSON,
+              language: "json",
+              requiresApiKey: true,
+            },
+          ],
         },
       },
       {
@@ -55,31 +89,7 @@ const SETUP_AGENT_PLATFORMS: Array<{
           alt: "Claude Code Managed settings JSON editor dialog with Update settings button",
           caption: 'Paste in the JSON below and click "Update settings"',
         },
-        code: `{
-  "env": {
-    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
-    "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://app.getgram.ai/otel",
-    "OTEL_EXPORTER_OTLP_HEADERS": "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
-    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
-    "OTEL_LOGS_EXPORTER": "otlp",
-    "OTEL_METRICS_EXPORTER": "otlp",
-    "OTEL_TRACES_EXPORTER": "otlp",
-    "FORCE_AUTOUPDATE_PLUGINS": "1"
-  },
-  "extraKnownMarketplaces": {
-    "{{GRAM_MARKETPLACE_NAME}}": {
-      "autoUpdate": true,
-      "source": {
-        "source": "git",
-        "url": "{{GRAM_MARKETPLACE_URL}}"
-      }
-    }
-  },
-  "enabledPlugins": {
-    "{{GRAM_CLAUDE_PLUGIN_NAME}}@{{GRAM_MARKETPLACE_NAME}}": true
-  }
-}`,
+        code: CLAUDE_CODE_SETTINGS_JSON,
         language: "json",
         requiresApiKey: true,
       },
@@ -88,6 +98,41 @@ const SETUP_AGENT_PLATFORMS: Array<{
   {
     id: "claude-cowork",
     setupSteps: [
+      {
+        title: "Plan check",
+        description:
+          "Organization plugin settings are only available on Teams and Enterprise Claude plans. Confirm your plan so we can pick the right setup flow.",
+        helpLink: {
+          url: "https://claude.ai/admin-settings/billing",
+          linkLabel: "Claude.ai",
+          sentence: "Visit {LINK} to check your plan",
+        },
+        eligibility: {
+          question: "Do you have a Teams or Enterprise Claude plan?",
+          // Cowork can't sync a private GitHub marketplace for a personal
+          // account (anthropics/claude-code#28125), so upload the ZIP instead.
+          personalSteps: [
+            {
+              title: "Download the observability plugin",
+              description:
+                "Without a Teams or Enterprise plan there is no organization to sync your repo to, so each person installs the plugin from a file. Download it here and send it to your team.",
+              download: {
+                platform: "claude",
+                label: "Download for Claude Cowork",
+              },
+            },
+            {
+              title: "Upload it in Claude",
+              description: `Each person opens Customize → Plugins in Claude, chooses the upload option, and selects the downloaded ZIP. It doesn't update on its own, so repeat this after each publish. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
+              helpLink: {
+                url: "https://claude.com/docs/cowork/guide/plugins",
+                linkLabel: "Install plugins in Cowork",
+                sentence: "See {LINK} for details",
+              },
+            },
+          ],
+        },
+      },
       {
         title: "Open Organization settings on Claude.ai",
         description:
@@ -194,6 +239,50 @@ const SETUP_AGENT_PLATFORMS: Array<{
     id: "cursor",
     setupSteps: [
       {
+        title: "Plan check",
+        description:
+          "Team marketplaces are only available on Cursor Teams and Enterprise plans. Confirm your plan so we can pick the right setup flow.",
+        helpLink: {
+          url: "https://cursor.com/dashboard",
+          linkLabel: "cursor.com/dashboard",
+          sentence: "Visit {LINK} to check your plan",
+        },
+        eligibility: {
+          question: "Do you have a Cursor Teams or Enterprise plan?",
+          personalSteps: [
+            {
+              title: "Download the observability plugin",
+              description:
+                "Individual Cursor plans can't import a team marketplace, so each person installs the plugin as a local plugin. Download it here and send it to your team.",
+              download: {
+                platform: "cursor",
+                label: "Download for Cursor",
+              },
+            },
+            {
+              title: "Unzip it into Cursor's local plugins folder",
+              description:
+                "Each person runs this in a terminal. It replaces any earlier copy, so rerun it after each publish.",
+              code: `test -f ~/Downloads/observability-cursor.zip &&
+rm -rf ~/.cursor/plugins/local/{{GRAM_CURSOR_PLUGIN_NAME}} &&
+mkdir -p ~/.cursor/plugins/local/{{GRAM_CURSOR_PLUGIN_NAME}} &&
+unzip -q ~/Downloads/observability-cursor.zip -d ~/.cursor/plugins/local/{{GRAM_CURSOR_PLUGIN_NAME}}`,
+              language: "bash",
+            },
+            {
+              title: "Reload Cursor",
+              description:
+                "Run Developer: Reload Window, then check the plugin appears under Customize. If it doesn't, turn on Allow Local Plugin Imports in Cursor's settings.",
+              helpLink: {
+                url: "https://cursor.com/docs/plugins",
+                linkLabel: "Cursor plugins docs",
+                sentence: "See the {LINK} for local plugins",
+              },
+            },
+          ],
+        },
+      },
+      {
         title: "Open your Cursor team dashboard",
         description:
           "Sign in to cursor.com/dashboard as a team admin. The marketplace you import here syncs to every team member automatically — no per-user install needed.",
@@ -291,3 +380,18 @@ export const AGENT_PLATFORMS: AgentPlatform[] = [
     toAgentPlatform(id, [] as AgentPlatform["setupSteps"], false),
   ),
 ];
+
+/**
+ * The steps a platform shows given the answer to its plan question: the org
+ * rollout until answered "no", then the per-user path for personal plans.
+ */
+export function platformSteps(
+  platform: AgentPlatform,
+  eligible: boolean | null | undefined,
+): AgentPlatform["setupSteps"] {
+  const [gate] = platform.setupSteps;
+  if (eligible === false && gate?.eligibility) {
+    return [gate, ...gate.eligibility.personalSteps];
+  }
+  return platform.setupSteps;
+}

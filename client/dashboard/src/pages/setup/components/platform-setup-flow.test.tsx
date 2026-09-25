@@ -64,12 +64,13 @@ describe("PlatformSetupFlow", () => {
         onStatusChange={() => {}}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
 
     expect(
-      screen.getByText("Step 1: Open your Cursor team dashboard"),
+      screen.getByText("Step 2: Open your Cursor team dashboard"),
     ).toBeTruthy();
     expect(
-      screen.getByText("Step 2: Import the Speakeasy marketplace"),
+      screen.getByText("Step 3: Import the Speakeasy marketplace"),
     ).toBeTruthy();
     expect(mocks.ensure).toHaveBeenCalledOnce();
   });
@@ -97,7 +98,7 @@ describe("PlatformSetupFlow", () => {
     expect(mocks.ensure).toHaveBeenCalledOnce();
   });
 
-  it("explains why an ineligible org is stuck instead of listing steps", () => {
+  it("swaps in the per-user steps for a personal plan", () => {
     const onStatusChange = vi.fn();
     render(
       <PlatformSetupFlow
@@ -109,12 +110,16 @@ describe("PlatformSetupFlow", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "No" }));
 
-    expect(onStatusChange).toHaveBeenCalledWith("blocked");
-    expect(screen.getByText("Per-user setup flow coming soon")).toBeTruthy();
-    expect(screen.queryByText(/Step 2:/)).toBeNull();
+    expect(onStatusChange).toHaveBeenCalledWith("not_started");
     expect(
-      screen.queryByRole("button", { name: /Mark Claude Code/ }),
-    ).toBeNull();
+      screen.getByText(
+        "Step 2: Add the settings to each developer's Claude Code",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Open Claude Code managed settings/)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Mark Claude Code as connected" }),
+    ).toBeTruthy();
   });
 
   it("marks the platform connected, and lets that be taken back", () => {
@@ -126,6 +131,7 @@ describe("PlatformSetupFlow", () => {
         onStatusChange={(next) => void onStatusChange(next)}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
 
     fireEvent.click(
       screen.getByRole("button", { name: "Mark Cursor as connected" }),
