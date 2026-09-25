@@ -404,3 +404,33 @@ WHERE organization_id = @organization_id;
 
 -- name: DeleteOrganizationDirectoryUsersFixture :exec
 DELETE FROM directory_users WHERE organization_id = @organization_id;
+
+-- name: UpsertListedDirectoryGroup :execrows
+-- Saves a group read from a live WorkOS listing. Events stay the source of
+-- truth: this never restores a group an event deleted, never overwrites a row
+-- with an older snapshot, and leaves the event cursor untouched.
+INSERT INTO directory_groups (
+  organization_id,
+  workos_directory_group_id,
+  name,
+  attributes,
+  workos_created_at,
+  workos_updated_at
+)
+VALUES (
+  @organization_id,
+  @workos_directory_group_id,
+  @name,
+  @attributes,
+  @workos_created_at,
+  @workos_updated_at
+)
+ON CONFLICT (workos_directory_group_id) DO UPDATE SET
+  name = EXCLUDED.name,
+  attributes = EXCLUDED.attributes,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  updated_at = clock_timestamp()
+WHERE directory_groups.organization_id = EXCLUDED.organization_id
+  AND directory_groups.deleted IS FALSE
+  AND directory_groups.workos_deleted IS FALSE
+  AND directory_groups.workos_updated_at < EXCLUDED.workos_updated_at;

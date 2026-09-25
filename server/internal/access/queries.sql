@@ -1224,3 +1224,170 @@ ORDER BY LOWER(name), id;
 -- ends. The role row lock is not enough on its own: a system role lives in
 -- global_roles and has no per-organization row to lock.
 SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || sqlc.arg(role_urn)::text, 0));
+
+-- name: ListDirectoryRoleMappingPrincipalsByUser :many
+-- Roles granted to a member through directory role mappings: every live
+-- mapping whose group contains the member's directory profile, or whose
+-- attribute value matches it. The profile is the directory user linked to the
+-- member, falling back to an email match. Mappings that point at a deleted
+-- role are skipped.
+WITH member AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  WHERE u.id = @user_id
+),
+profile AS (
+  SELECT d.id, d.attributes
+  FROM directory_users AS d
+  CROSS JOIN member
+  WHERE d.organization_id = @organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = member.id OR LOWER(d.email) = LOWER(member.email))
+  ORDER BY (d.user_id = member.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+)
+SELECT DISTINCT drm.role_urn::text AS principal_urn
+FROM directory_role_mappings AS drm
+CROSS JOIN profile
+WHERE drm.organization_id = @organization_id
+  AND drm.deleted IS FALSE
+  AND (
+    (
+      drm.source_kind = 'group'
+      AND EXISTS (
+        SELECT 1
+        FROM directory_user_group_memberships AS m
+        JOIN directory_groups AS dg
+          ON dg.id = m.directory_group_id
+          AND dg.organization_id = drm.organization_id
+          AND dg.deleted IS FALSE
+          AND dg.workos_deleted IS FALSE
+        WHERE m.directory_user_id = profile.id
+          AND m.directory_group_id = drm.directory_group_id
+          AND m.deleted IS FALSE
+      )
+    )
+    OR (
+      drm.source_kind = 'attribute'
+      AND profile.attributes ->> drm.attribute_key = drm.attribute_value
+    )
+  )
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM organization_roles AS r
+      WHERE drm.role_urn = 'role:organization:' || r.id::text
+        AND r.organization_id = drm.organization_id
+        AND r.deleted IS FALSE
+        AND r.workos_deleted IS FALSE
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM global_roles AS g
+      WHERE drm.role_urn = 'role:global:' || g.id::text
+        AND g.deleted IS FALSE
+        AND g.workos_deleted IS FALSE
+    )
+  );
+
+-- name: ListDirectoryRoleMappings :many
+SELECT
+  drm.id,
+  drm.source_kind,
+  drm.directory_group_id,
+  dg.name AS directory_group_name,
+  drm.attribute_key,
+  drm.attribute_value,
+  drm.role_urn,
+  drm.created_at,
+  drm.updated_at
+FROM directory_role_mappings AS drm
+LEFT JOIN directory_groups AS dg
+  ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+WHERE drm.organization_id = @organization_id
+  AND drm.deleted IS FALSE
+ORDER BY drm.source_kind, dg.name, drm.attribute_key, drm.attribute_value, drm.id;
+
+-- name: UpsertDirectoryGroupRoleMapping :one
+INSERT INTO directory_role_mappings (
+  organization_id,
+  source_kind,
+  directory_group_id,
+  role_urn
+)
+VALUES (
+  @organization_id,
+  'group',
+  @directory_group_id,
+  @role_urn
+)
+ON CONFLICT (organization_id, directory_group_id)
+  WHERE deleted IS FALSE AND directory_group_id IS NOT NULL
+DO UPDATE SET
+  role_urn = EXCLUDED.role_urn,
+  updated_at = clock_timestamp()
+RETURNING id, role_urn, created_at, updated_at;
+
+-- name: UpsertDirectoryAttributeRoleMapping :one
+INSERT INTO directory_role_mappings (
+  organization_id,
+  source_kind,
+  attribute_key,
+  attribute_value,
+  role_urn
+)
+VALUES (
+  @organization_id,
+  'attribute',
+  @attribute_key,
+  @attribute_value,
+  @role_urn
+)
+ON CONFLICT (organization_id, attribute_key, attribute_value)
+  WHERE deleted IS FALSE AND attribute_key IS NOT NULL
+DO UPDATE SET
+  role_urn = EXCLUDED.role_urn,
+  updated_at = clock_timestamp()
+RETURNING id, role_urn, created_at, updated_at;
+
+-- name: GetLiveDirectoryRoleMappingRoleForSource :one
+-- The role a group or attribute value is mapped to now, locked so a
+-- concurrent set cannot slip between this read and the upsert.
+SELECT role_urn
+FROM directory_role_mappings
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND (
+    (sqlc.narg('directory_group_id')::uuid IS NOT NULL AND directory_group_id = sqlc.narg('directory_group_id')::uuid)
+    OR (
+      sqlc.narg('attribute_key')::text IS NOT NULL
+      AND attribute_key = sqlc.narg('attribute_key')::text
+      AND attribute_value = sqlc.narg('attribute_value')::text
+    )
+  )
+FOR UPDATE;
+
+-- name: GetActiveDirectoryGroupName :one
+SELECT name
+FROM directory_groups
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE;
+
+-- name: GetDirectoryRoleMapping :one
+SELECT id, source_kind, directory_group_id, attribute_key, attribute_value, role_urn
+FROM directory_role_mappings
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
+-- name: DeleteDirectoryRoleMapping :execrows
+UPDATE directory_role_mappings
+SET deleted_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;

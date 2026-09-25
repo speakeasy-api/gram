@@ -960,3 +960,58 @@ func (q *Queries) UpsertDirectoryUser(ctx context.Context, arg UpsertDirectoryUs
 	err := row.Scan(&id)
 	return id, err
 }
+
+const upsertListedDirectoryGroup = `-- name: UpsertListedDirectoryGroup :execrows
+INSERT INTO directory_groups (
+  organization_id,
+  workos_directory_group_id,
+  name,
+  attributes,
+  workos_created_at,
+  workos_updated_at
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6
+)
+ON CONFLICT (workos_directory_group_id) DO UPDATE SET
+  name = EXCLUDED.name,
+  attributes = EXCLUDED.attributes,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  updated_at = clock_timestamp()
+WHERE directory_groups.organization_id = EXCLUDED.organization_id
+  AND directory_groups.deleted IS FALSE
+  AND directory_groups.workos_deleted IS FALSE
+  AND directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
+`
+
+type UpsertListedDirectoryGroupParams struct {
+	OrganizationID         string
+	WorkosDirectoryGroupID string
+	Name                   string
+	Attributes             []byte
+	WorkosCreatedAt        pgtype.Timestamptz
+	WorkosUpdatedAt        pgtype.Timestamptz
+}
+
+// Saves a group read from a live WorkOS listing. Events stay the source of
+// truth: this never restores a group an event deleted, never overwrites a row
+// with an older snapshot, and leaves the event cursor untouched.
+func (q *Queries) UpsertListedDirectoryGroup(ctx context.Context, arg UpsertListedDirectoryGroupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertListedDirectoryGroup,
+		arg.OrganizationID,
+		arg.WorkosDirectoryGroupID,
+		arg.Name,
+		arg.Attributes,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

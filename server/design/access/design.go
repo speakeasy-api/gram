@@ -148,6 +148,114 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteRole"}`)
 	})
 
+	Method("listDirectoryRoleMappings", func() {
+		Description("List the organization's directory groups and attribute values, and the roles mapped to them.")
+		Security(security.ByKey, func() {
+			Scope("consumer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(ListDirectoryRoleMappingsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listDirectoryRoleMappings")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listDirectoryRoleMappings")
+		Meta("openapi:extension:x-speakeasy-name-override", "listDirectoryRoleMappings")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DirectoryRoleMappings"}`)
+	})
+
+	Method("syncDirectoryGroups", func() {
+		Description("Fetch the organization's directory groups from WorkOS and save any that are new or changed.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(SyncDirectoryGroupsResult)
+
+		HTTP(func() {
+			POST("/rpc/access.syncDirectoryGroups")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "syncDirectoryGroups")
+		Meta("openapi:extension:x-speakeasy-name-override", "syncDirectoryGroups")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SyncDirectoryGroups", "type": "mutation"}`)
+	})
+
+	Method("setDirectoryRoleMapping", func() {
+		Description("Map a directory group or attribute value to a role, replacing any role it was mapped to before.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(SetDirectoryRoleMappingForm)
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		Result(DirectoryRoleMappingModel)
+
+		HTTP(func() {
+			POST("/rpc/access.setDirectoryRoleMapping")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-name-override", "setDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "SetDirectoryRoleMapping", "type": "mutation"}`)
+	})
+
+	Method("deleteDirectoryRoleMapping", func() {
+		Description("Remove a directory role mapping.")
+		Security(security.ByKey, func() {
+			Scope("producer")
+		})
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the mapping to remove.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.ByKeyPayload()
+			security.SessionPayload()
+		})
+
+		HTTP(func() {
+			DELETE("/rpc/access.deleteDirectoryRoleMapping")
+			Param("id")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			Response(StatusNoContent)
+		})
+
+		Meta("openapi:operationId", "deleteDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-name-override", "deleteDirectoryRoleMapping")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteDirectoryRoleMapping", "type": "mutation"}`)
+	})
+
 	Method("listScopes", func() {
 		Description("List all available scopes and their resource types.")
 		Security(security.ByKey, func() {
@@ -1603,4 +1711,78 @@ var ListIdentityAccessResult = Type("ListIdentityAccessResult", func() {
 	Required("servers", "skills")
 	Attribute("servers", ArrayOf(AccessibleMCPServerModel), "MCP servers accessible to this identity.")
 	Attribute("skills", ArrayOf(AccessibleSkillModel), "Skills accessible to this identity.")
+})
+
+var DirectoryRoleMappingModel = Type("DirectoryRoleMapping", func() {
+	Required("id", "source_kind", "role_urn", "created_at", "updated_at")
+
+	Attribute("id", String, "Unique mapping identifier.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("source_kind", String, "What the mapping matches: a directory group or an attribute value.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_id", String, "The mapped directory group. Set when source_kind is group.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("directory_group_name", String, "Display name of the mapped directory group.")
+	Attribute("attribute_key", String, "The directory attribute key. Set when source_kind is attribute.")
+	Attribute("attribute_value", String, "The directory attribute value. Set when source_kind is attribute.")
+	Attribute("role_urn", String, "Principal URN of the role granted to matching members.")
+	Attribute("created_at", String, func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var DirectoryGroupOptionModel = Type("DirectoryGroupOption", func() {
+	Required("id", "name", "member_count")
+
+	Attribute("id", String, "Directory group identifier.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("name", String, "Directory group name.")
+	Attribute("member_count", Int64, "Number of directory users in the group.")
+})
+
+var DirectoryAttributeOptionModel = Type("DirectoryAttributeOption", func() {
+	Required("key", "value", "member_count")
+
+	Attribute("key", String, "Directory attribute key, e.g. department_name.")
+	Attribute("value", String, "Directory attribute value.")
+	Attribute("member_count", Int64, "Number of directory users with this value.")
+})
+
+var ListDirectoryRoleMappingsResult = Type("ListDirectoryRoleMappingsResult", func() {
+	Required("groups", "attributes", "mappings")
+
+	Attribute("groups", ArrayOf(DirectoryGroupOptionModel), "Active directory groups in the organization.")
+	Attribute("attributes", ArrayOf(DirectoryAttributeOptionModel), "Distinct attribute values set on active directory users.")
+	Attribute("mappings", ArrayOf(DirectoryRoleMappingModel), "Live directory role mappings.")
+})
+
+var SyncDirectoryGroupsResult = Type("SyncDirectoryGroupsResult", func() {
+	Required("group_count")
+
+	Attribute("group_count", Int, "Number of groups WorkOS returned across the organization's directories.")
+})
+
+var SetDirectoryRoleMappingForm = Type("SetDirectoryRoleMappingForm", func() {
+	Required("source_kind", "role_urn")
+
+	Attribute("source_kind", String, "What the mapping matches.", func() {
+		Enum("group", "attribute")
+	})
+	Attribute("directory_group_id", String, "Directory group to map. Required when source_kind is group.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("attribute_key", String, "Attribute key to match. Required when source_kind is attribute.", func() {
+		MinLength(1)
+	})
+	Attribute("attribute_value", String, "Attribute value to match. Required when source_kind is attribute.", func() {
+		MinLength(1)
+	})
+	Attribute("role_urn", String, "Principal URN of the role to grant, from Role.principal_urn.")
 })

@@ -114,6 +114,28 @@ func ResolveUserPrincipals(ctx context.Context, db repo.DBTX, organizationID str
 		principals = append(principals, principal)
 	}
 
+	// Directory role mappings add roles on top of the ones WorkOS assigns.
+	mappedRoleURNs, err := q.ListDirectoryRoleMappingPrincipalsByUser(ctx, repo.ListDirectoryRoleMappingPrincipalsByUserParams{
+		OrganizationID: organizationID,
+		UserID:         userID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("resolve directory role mapping principals: %w", err)
+	}
+
+	for _, raw := range mappedRoleURNs {
+		principal, err := parseRolePrincipalURN(raw)
+		if err != nil {
+			return nil, err
+		}
+		key := principal.String()
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		principals = append(principals, principal)
+	}
+
 	return principals, nil
 }
 
