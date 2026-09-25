@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -324,6 +325,11 @@ const probeDrainTimeout = 20 * time.Second
 func mcpRuntimeFlags() []cli.Flag {
 	flags := []cli.Flag{
 		pluginPublicationEmitFlag(),
+		&cli.StringSliceFlag{
+			Name:    "platform-hosts",
+			Usage:   "First-party hosts that serve the full product, e.g. app.getgram.ai,ai.speakeasy.com. The server URL's host is always included. Login on the other hosts completes on the same host.",
+			EnvVars: []string{"GRAM_PLATFORM_HOSTS"},
+		},
 		&cli.StringFlag{
 			Name:    "presidio-analyzer-url",
 			Usage:   "Base URL of the Presidio Analyzer service (e.g. http://presidio-analyzer:3000). Empty disables PII scanning.",
@@ -846,6 +852,10 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("invalid authentication host url: %w", err)
 			}
+			platformHosts, err := parsePlatformHosts(c, mcpAuthenticationHost)
+			if err != nil {
+				return err
+			}
 
 			trialEmailNotifier := &background.TemporalTrialEmailNotifier{TemporalEnv: temporalEnv}
 			loopsWorkflowClient := loops.NewWorkflowClient(ctx, logger, guardianPolicy, c.String("loops-api-key"))
@@ -1358,7 +1368,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.MCPProtocolVersionTelemetry)
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 			mux.Use(middleware.NewRecovery(logger))
-			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessionsManager))
+			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), platformOrigins(platformHosts), chatSessionsManager))
 			// Must stay below CORSMiddleware: chatSessionsCORS runs inside it and
 			// marks requests whose Origin matched the chat-session audience claim,
 			// which MCPSecurity reads to exempt Elements. The Gram first-party
@@ -1367,7 +1377,7 @@ func newStartCommand() *cli.Command {
 			// onto the platform host (mcp_endpoint rows resolve by slug + custom
 			// domain). site-url and server-url are the same origin in production and
 			// differ only in local development.
-			mcpSecurity, err := middleware.MCPSecurity(logger, []string{c.String("server-url"), c.String("site-url")})
+			mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{c.String("server-url"), c.String("site-url")}, platformOrigins(platformHosts)...))
 			if err != nil {
 				return fmt.Errorf("configure mcp security middleware: %w", err)
 			}
@@ -1377,7 +1387,7 @@ func newStartCommand() *cli.Command {
 			// which refuses hosts it does not know.
 			mux.Use(mcpAuthenticationHost.Middleware)
 			mux.Use(mcpSecurity)
-			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
+			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL, platformHosts))
 			// Ordering invariant: recovery and context-enrichment middleware stay
 			// outside bandwidth metering so panics and pre-handler rejections are
 			// not billable and validated custom-domain context is available.
@@ -2172,4 +2182,23 @@ func newStartCommand() *cli.Command {
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)
 		},
 	}
+}
+
+// parsePlatformHosts reads --platform-hosts. It refuses the alternate
+// authentication host, whose middleware runs first and would divert that host
+// to its MCP-only routes.
+func parsePlatformHosts(c *cli.Context, authenticationHost *mcp.AuthenticationHost) (map[string]string, error) {
+	hosts, err := customdomains.ParsePlatformHosts(c.StringSlice("platform-hosts"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid platform hosts: %w", err)
+	}
+	if _, ok := hosts[authenticationHost.Host()]; ok {
+		return nil, fmt.Errorf("invalid platform hosts: %s is the authentication host", authenticationHost.Host())
+	}
+	return hosts, nil
+}
+
+// platformOrigins lists the browser origins of the platform hosts.
+func platformOrigins(hosts map[string]string) []string {
+	return slices.Sorted(maps.Values(hosts))
 }

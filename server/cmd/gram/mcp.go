@@ -440,8 +440,12 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	mux.Use(middleware.MCPProtocolVersionTelemetry)
 	mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 	mux.Use(middleware.NewRecovery(logger))
-	mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessions))
-	mcpSecurity, err := middleware.MCPSecurity(logger, []string{c.String("server-url"), c.String("site-url")})
+	platformHosts, err := parsePlatformHosts(c, authenticationHost)
+	if err != nil {
+		return nil, err
+	}
+	mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), platformOrigins(platformHosts), chatSessions))
+	mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{c.String("server-url"), c.String("site-url")}, platformOrigins(platformHosts)...))
 	if err != nil {
 		return nil, fmt.Errorf("configure mcp security middleware: %w", err)
 	}
@@ -451,7 +455,7 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	// which refuses hosts it does not know.
 	mux.Use(authenticationHost.Middleware)
 	mux.Use(mcpSecurity)
-	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
+	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL, platformHosts))
 	mux.Use(metering.NewMCPBandwidthMiddleware(logger, publishers.MeterReadings))
 	mux.Use(middleware.SessionMiddleware)
 	return mux, nil
