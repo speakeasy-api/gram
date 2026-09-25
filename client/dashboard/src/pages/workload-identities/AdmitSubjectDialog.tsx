@@ -100,6 +100,18 @@ export function AdmitSubjectDialog({
   const storedSubject = composeSubject(values.matchKind, values.subject);
   const warning = subjectRuleWarning(values.matchKind, storedSubject);
 
+  // Stated where the rule is written rather than asked when the issuer is
+  // registered. An operator registering an issuer has no rule in mind yet, and
+  // whether a wildcard is sound is a judgement about their own platform. Naming
+  // the stem and the agent makes the reach of the rule concrete.
+  const wildcardStem =
+    values.matchKind === "wildcard" && storedSubject.length > 1
+      ? storedSubject.slice(0, -1)
+      : "";
+  const selectedAgentName =
+    agents.find((agent) => agent.id === values.agentId)?.name ?? "";
+  const showCaution = wildcardStem.length > 0 && warning === null;
+
   const canSubmit = canAdmit({
     issuer: selectedIssuerUrl,
     subject: storedSubject,
@@ -257,6 +269,18 @@ export function AdmitSubjectDialog({
               Choose the most narrowly scoped agent that can do the job. The
               workload inherits its policy in full.
             </Text>
+            {showCaution && (
+              <Text role="status" small className="text-amber-700">
+                This admits <strong>any</strong> subject beginning{" "}
+                <code>{wildcardStem}</code>
+                {selectedAgentName
+                  ? `, and each will inherit ${selectedAgentName}'s policy. `
+                  : ". "}
+                Check that the varying part is assigned by the issuer rather
+                than chosen by the caller — where a caller can influence it,
+                this admits anyone who can.
+              </Text>
+            )}
           </Stack>
 
           <Stack gap={2}>
