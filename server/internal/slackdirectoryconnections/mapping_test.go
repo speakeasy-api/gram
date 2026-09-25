@@ -463,3 +463,21 @@ func TestSharedDemoRejectsMappingChanges(t *testing.T) {
 	_, err = f.service.SetMapping(ctx, mappingRequest(m, nil))
 	requireMappingCode(t, err, oops.CodeForbidden)
 }
+
+func TestDisconnectForgetsRevokedMappings(t *testing.T) {
+	t.Parallel()
+	ctx, f, c, m := mappingFixture(t)
+	m, err := f.service.SetMapping(ctx, mappingRequest(m, &f.auth.UserID))
+	require.NoError(t, err)
+	_, err = f.service.SetMapping(ctx, mappingRequest(m, nil))
+	require.NoError(t, err)
+	revoked, err := repo.New(f.db).CountSlackIdentityMappingsForTest(ctx, f.auth.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), revoked, "unmapping keeps the revoked row")
+	// Mapping rows are removed before memberships, so the membership delete never meets a revoked mapping.
+	_, err = f.service.Disconnect(ctx, &gen.DisconnectPayload{SessionToken: nil, ID: c.ID, Generation: c.Generation})
+	require.NoError(t, err)
+	remaining, err := repo.New(f.db).CountSlackIdentityMappingsForTest(ctx, f.auth.ActiveOrganizationID)
+	require.NoError(t, err)
+	require.Zero(t, remaining)
+}
