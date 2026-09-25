@@ -19,9 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	oauthregistration "github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
@@ -58,19 +56,18 @@ type CatalogIdentityProviderAttachment interface {
 
 type CatalogIdentityProviderAttachmentService struct {
 	db                    *pgxpool.Pool
-	enc                   *encryption.Client
+	identity              *remotesessions.IdentityCommitter
 	policy                *guardian.Policy
-	audit                 *audit.Logger
 	serverURL             *url.URL
 	registrationTelemetry oauthregistration.Recorder
 }
 
-func NewCatalogIdentityProviderAttachmentService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, auditLogger *audit.Logger, serverURL *url.URL) *CatalogIdentityProviderAttachmentService {
+func NewCatalogIdentityProviderAttachmentService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, identity *remotesessions.IdentityCommitter, policy *guardian.Policy, serverURL *url.URL) *CatalogIdentityProviderAttachmentService {
 	if serverURL == nil {
 		return &CatalogIdentityProviderAttachmentService{}
 	}
 	serverURLCopy := *serverURL
-	return &CatalogIdentityProviderAttachmentService{db: db, enc: enc, policy: policy, audit: auditLogger, serverURL: &serverURLCopy, registrationTelemetry: oauthregistration.NewMetrics(logger, meterProvider)}
+	return &CatalogIdentityProviderAttachmentService{db: db, identity: identity, policy: policy, serverURL: &serverURLCopy, registrationTelemetry: oauthregistration.NewMetrics(logger, meterProvider)}
 }
 
 // Attach discovers the exact provider advertised by the lifecycle-owned Remote
@@ -78,7 +75,7 @@ func NewCatalogIdentityProviderAttachmentService(logger *slog.Logger, meterProvi
 // and binds it to the registration's existing user-session issuer. It is safe
 // to retry after a successful call: the existing matching binding is reused.
 func (s *CatalogIdentityProviderAttachmentService) Attach(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (CatalogIdentityProviderAttachmentResult, error) {
-	if s == nil || s.db == nil || s.enc == nil || s.policy == nil || s.audit == nil || s.serverURL == nil || principal.UserID == "" || principal.OrganizationID == "" || project.ID == uuid.Nil || registrationID == uuid.Nil {
+	if s == nil || s.db == nil || s.identity == nil || s.policy == nil || s.serverURL == nil || principal.UserID == "" || principal.OrganizationID == "" || project.ID == uuid.Nil || registrationID == uuid.Nil {
 		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnavailable
 	}
 
@@ -164,37 +161,55 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{}, err
 	}
 
-	// This is server-to-server; any client secret stays in the stack frame only
-	// until createAndAttachClient encrypts it for persistence.
-	scope := strings.Join(resourceMetadata.ScopesSupported, " ")
-	registered, err := remotesessions.RegisterDynamicClient(ctx, s.policy, nil, s.serverURL, remotesessions.ProxyRegisterRequest{
-		RegistrationEndpoint:    metadata.RegistrationEndpoint,
-		Scope:                   optionalString(scope),
-		TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
-		TunneledMcpServerID:     nil,
-	}, s.registrationTelemetry)
+	provider := remotesessions.CreateProvider(discoveredIssuerParams(principal, project, registrationID, metadata))
+	if reuse {
+		provider = remotesessions.UseProvider(existing.ID)
+	}
+	commit := s.identity.Prepare(remotesessions.IdentityPlan{
+		Scope: remotesessions.IdentityScope{
+			OrganizationID:   principal.OrganizationID,
+			ProjectID:        project.ID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+			ActorDisplayName: nil,
+		},
+		UserSessionIssuerID: registration.UserSessionIssuerID.UUID,
+		Provider:            provider,
+		Client: remotesessions.RegisterClient(remotesessions.RegistrationPolicy{
+			Scope:                   append([]string(nil), resourceMetadata.ScopesSupported...),
+			Audience:                nil,
+			TokenEndpointAuthMethod: optionalString(browserCatalogDCRAuthMethod),
+			RequireClientSecret:     true,
+			AllowCIMD:               false,
+		}),
+		Bound:           remotesessions.ReuseBound,
+		ResourceDisplay: &remotesessions.ResourceDisplay{ResourceURL: remote.Url, Metadata: resourceMetadata},
+	})
+	if err := commit.Preflight(ctx); err != nil {
+		return CatalogIdentityProviderAttachmentResult{}, attachmentCommitError("check identity-provider attachment", err)
+	}
+	reg, err := commit.Register(ctx)
 	if err != nil {
-		return CatalogIdentityProviderAttachmentResult{}, identityProviderDynamicRegistrationError(err)
+		return CatalogIdentityProviderAttachmentResult{}, attachmentCommitError("register identity-provider client", err)
 	}
-	if !validBrowserCatalogDynamicClient(registered) {
-		if s.registrationTelemetry != nil {
-			s.registrationTelemetry.RecordFailure(ctx, oauthregistration.MethodDCR, oauthregistration.InvalidSuccessResponse(0))
-		}
-		return CatalogIdentityProviderAttachmentResult{}, ErrIdentityProviderAttachmentUnsupported
-	}
-	issuer := existing
-	if !reuse {
-		issuer, err = s.createIssuer(ctx, principal, project, registrationID, metadata)
-		if err != nil {
-			return CatalogIdentityProviderAttachmentResult{}, err
-		}
+	if !reg.Ready() {
+		return CatalogIdentityProviderAttachmentResult{}, identityProviderRegistrationError(reg)
 	}
 
-	attached, err := s.createAndAttachClient(ctx, principal, project, registration.UserSessionIssuerID.UUID, issuer.ID, registered, remote.Url, resourceMetadata)
+	tx, err := commit.Begin(ctx)
 	if err != nil {
-		return CatalogIdentityProviderAttachmentResult{}, err
+		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("begin identity-provider attachment: %w", err)
 	}
-	return CatalogIdentityProviderAttachmentResult{Attached: attached, ProviderURL: metadata.Issuer}, nil
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := commit.Lock(ctx, tx); err != nil {
+		return CatalogIdentityProviderAttachmentResult{}, attachmentCommitError("lock identity-provider attachment", err)
+	}
+	if err := commit.Bind(ctx, tx, reg); err != nil {
+		return CatalogIdentityProviderAttachmentResult{}, attachmentCommitError("bind identity-provider client", err)
+	}
+	if _, err := commit.Commit(ctx, tx); err != nil {
+		return CatalogIdentityProviderAttachmentResult{}, attachmentCommitError("commit identity-provider attachment", err)
+	}
+	return CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: metadata.Issuer}, nil
 }
 
 func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetadata(ctx context.Context, authorizationServers []string) (remotesessions.DiscoveredIssuerMetadata, error) {
@@ -274,36 +289,42 @@ func (s *CatalogIdentityProviderAttachmentService) reusableIssuer(ctx context.Co
 	return issuer, true, nil
 }
 
-// createIssuer stores a new project-owned issuer for a discovered authorization
-// server. It carries authorization-server data only; the resource's display
-// members live on the client.
-func (s *CatalogIdentityProviderAttachmentService) createIssuer(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata) (remotesessionsrepo.RemoteSessionIssuer, error) {
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("begin identity-provider issuer transaction: %w", err)
+// attachmentCommitError reports a refused identity write as an attachment
+// conflict and wraps anything else with what failed.
+func attachmentCommitError(what string, err error) error {
+	if errors.Is(err, remotesessions.ErrIdentityConflict) || errors.Is(err, remotesessions.ErrIdentityInvariant) || errors.Is(err, remotesessions.ErrIdentityOrgWideBinding) {
+		return fmt.Errorf("%s: %w: %w", what, ErrIdentityProviderAttachmentConflict, err)
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := remotesessionsrepo.New(tx)
-	issuer, err := q.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
-		ProjectID:                           conv.ToNullUUID(project.ID),
-		OrganizationID:                      conv.ToPGText(principal.OrganizationID),
-		Slug:                                attachmentIssuerSlug(registrationID),
-		Issuer:                              metadata.Issuer,
-		Name:                                conv.ToPGText("Remote identity provider"),
-		LogoAssetID:                         uuid.NullUUID{},
-		ClientSetupDocumentationUrl:         pgtype.Text{},
-		AuthorizationEndpoint:               conv.ToPGText(metadata.AuthorizationEndpoint),
-		TokenEndpoint:                       conv.ToPGText(metadata.TokenEndpoint),
-		RegistrationEndpoint:                conv.ToPGText(metadata.RegistrationEndpoint),
-		JwksUri:                             pgtype.Text{},
-		ServiceDocumentation:                pgtype.Text{},
-		OpPolicyUri:                         pgtype.Text{},
-		OpTosUri:                            pgtype.Text{},
-		ScopesSupported:                     append([]string(nil), metadata.ScopesSupported...),
-		GrantTypesSupported:                 append([]string(nil), metadata.GrantTypesSupported...),
+	if errors.Is(err, remotesessions.ErrIdentityInvalid) {
+		return fmt.Errorf("%s: %w: %w", what, ErrIdentityProviderAttachmentUnsupported, err)
+	}
+	return fmt.Errorf("%s: %w", what, err)
+}
+
+// discoveredIssuerParams describes a new project-owned issuer for a discovered
+// authorization server. It carries authorization-server data only; the
+// resource's display members live on the client.
+func discoveredIssuerParams(principal Principal, project ResolvedProject, registrationID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata) remotesessionsrepo.CreateRemoteSessionIssuerParams {
+	return remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         conv.ToNullUUID(project.ID),
+		OrganizationID:                    conv.ToPGText(principal.OrganizationID),
+		Slug:                              attachmentIssuerSlug(registrationID),
+		Issuer:                            metadata.Issuer,
+		Name:                              conv.ToPGText("Remote identity provider"),
+		LogoAssetID:                       uuid.NullUUID{},
+		ClientSetupDocumentationUrl:       pgtype.Text{},
+		AuthorizationEndpoint:             conv.ToPGText(metadata.AuthorizationEndpoint),
+		TokenEndpoint:                     conv.ToPGText(metadata.TokenEndpoint),
+		RegistrationEndpoint:              conv.ToPGText(metadata.RegistrationEndpoint),
+		JwksUri:                           pgtype.Text{},
+		ServiceDocumentation:              pgtype.Text{},
+		OpPolicyUri:                       pgtype.Text{},
+		OpTosUri:                          pgtype.Text{},
+		ScopesSupported:                   append([]string(nil), metadata.ScopesSupported...),
+		GrantTypesSupported:               append([]string(nil), metadata.GrantTypesSupported...),
 		AuthorizationGrantProfilesSupported: slices.Clone(metadata.AuthorizationGrantProfilesSupported),
-		ResponseTypesSupported:              append([]string(nil), metadata.ResponseTypesSupported...),
-		TokenEndpointAuthMethodsSupported:   append([]string(nil), metadata.TokenEndpointAuthMethodsSupported...),
+		ResponseTypesSupported:            append([]string(nil), metadata.ResponseTypesSupported...),
+		TokenEndpointAuthMethodsSupported: append([]string(nil), metadata.TokenEndpointAuthMethodsSupported...),
 		// An empty advertised list must survive as empty here: discovery ran,
 		// so the nullable column should record "advertises no methods" ({})
 		// rather than "not captured" (NULL). The plain append copy used by the
@@ -330,161 +351,19 @@ func (s *CatalogIdentityProviderAttachmentService) createIssuer(ctx context.Cont
 		MetadataFetchedAt:                          pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
 		MetadataLastError:                          metadata.UnreadableMessage,
 		MetadataLastErrorUrl:                       metadata.UnreadableURL,
-	})
-	if err != nil {
-		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("create discovered identity provider: %w", err)
 	}
-	if err := s.audit.LogRemoteSessionIssuerCreate(ctx, tx, audit.LogRemoteSessionIssuerCreateEvent{
-		OrganizationID:         principal.OrganizationID,
-		ProjectID:              project.ID,
-		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
-		ActorDisplayName:       nil,
-		ActorSlug:              nil,
-		RemoteSessionIssuerURN: urn.NewRemoteSessionIssuer(issuer.ID),
-		Slug:                   issuer.Slug,
-		IssuerURL:              issuer.Issuer,
-		Name:                   conv.FromPGText[string](issuer.Name),
-	}); err != nil {
-		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("audit discovered identity provider: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return remotesessionsrepo.RemoteSessionIssuer{}, fmt.Errorf("commit discovered identity provider: %w", err)
-	}
-	return issuer, nil
 }
 
-// createAndAttachClient binds one client for the resource at resourceURL to
-// the registration's user-session issuer, creating it when none exists, and
-// records the resource's RFC 9728 display members on that client row.
-func (s *CatalogIdentityProviderAttachmentService) createAndAttachClient(ctx context.Context, principal Principal, project ResolvedProject, userSessionIssuerID, issuerID uuid.UUID, registered remotesessions.ProxyRegisterResponse, resourceURL string, resource wellknown.OAuthProtectedResourceMetadata) (bool, error) {
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return false, fmt.Errorf("begin identity-provider client transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := remotesessionsrepo.New(tx)
-	if err := q.LockRemoteSessionIssuerForClientBinding(ctx, issuerID); err != nil {
-		return false, fmt.Errorf("lock identity provider for client attachment: %w", err)
-	}
-	if _, err := q.GetUserSessionIssuerForProject(ctx, remotesessionsrepo.GetUserSessionIssuerForProjectParams{ID: userSessionIssuerID, ProjectID: project.ID, OrganizationID: principal.OrganizationID}); err != nil {
-		return false, fmt.Errorf("validate registered MCP session issuer: %w", err)
-	}
-	bound, err := q.ListRemoteSessionClientsByProjectIDForUserSessionIssuer(ctx, remotesessionsrepo.ListRemoteSessionClientsByProjectIDForUserSessionIssuerParams{
-		ProjectID:             project.ID,
-		UserSessionIssuerID:   userSessionIssuerID,
-		OrganizationID:        principal.OrganizationID,
-		RemoteSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-		Cursor:                uuid.NullUUID{},
-		LimitValue:            2,
-	})
-	if err != nil {
-		return false, fmt.Errorf("check existing identity-provider client attachment: %w", err)
-	}
-	if len(bound) == 1 {
-		if bound[0].RemoteSessionClient.RemoteSessionIssuerID != issuerID {
-			return false, ErrIdentityProviderAttachmentConflict
-		}
-		if err := storeClientResourceDisplay(ctx, q, principal.OrganizationID, project.ID, bound[0].RemoteSessionClient.ID, resourceURL, resource); err != nil {
-			return false, err
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return false, fmt.Errorf("commit existing identity-provider attachment: %w", err)
-		}
-		return true, nil
-	}
-	if len(bound) > 1 {
-		return false, ErrIdentityProviderAttachmentConflict
-	}
-
-	var secret pgtype.Text
-	if registered.ClientSecret != "" {
-		ciphertext, err := s.enc.Encrypt([]byte(registered.ClientSecret))
-		if err != nil {
-			return false, fmt.Errorf("encrypt identity-provider client secret: %w", err)
-		}
-		secret = conv.ToPGText(ciphertext)
-	}
-	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
-		ProjectID:                    conv.ToNullUUID(project.ID),
-		OrganizationID:               conv.ToPGText(principal.OrganizationID),
-		RemoteSessionIssuerID:        issuerID,
-		ClientID:                     registered.ClientID,
-		ClientSecretEncrypted:        secret,
-		ClientIDIssuedAt:             conv.ToPGTimestamptz(time.Now().UTC()),
-		ClientSecretExpiresAt:        registered.ClientSecretExpiresAt,
-		TokenEndpointAuthMethod:      optionalText(registered.TokenEndpointAuthMethod),
-		Scope:                        append([]string(nil), resource.ScopesSupported...),
-		Audience:                     pgtype.Text{},
-		LegacyCallbackUrl:            false,
-		JsonWebKeySetID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		IdentityProviderConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
-	if err != nil {
-		return false, fmt.Errorf("create identity-provider client: %w", err)
-	}
-	if err := storeClientResourceDisplay(ctx, q, principal.OrganizationID, project.ID, client.ID, resourceURL, resource); err != nil {
-		return false, err
-	}
-	if err := q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: userSessionIssuerID}); err != nil {
-		return false, fmt.Errorf("attach identity-provider client to registered MCP: %w", err)
-	}
-	if err := s.audit.LogRemoteSessionClientCreate(ctx, tx, audit.LogRemoteSessionClientCreateEvent{
-		OrganizationID:         principal.OrganizationID,
-		ProjectID:              project.ID,
-		Actor:                  urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
-		ActorDisplayName:       nil,
-		ActorSlug:              nil,
-		RemoteSessionClientURN: urn.NewRemoteSessionClient(client.ID),
-		ClientID:               client.ClientID,
-	}); err != nil {
-		return false, fmt.Errorf("audit identity-provider client: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return false, fmt.Errorf("commit identity-provider client attachment: %w", err)
-	}
-	return true, nil
-}
-
-// identityProviderDynamicRegistrationError preserves the important distinction
-// between a provider rejecting Gram's fixed DCR contract (which cannot succeed
-// unchanged) and a temporary upstream/transport failure (which can be retried).
-// It intentionally does not carry an upstream response detail into the MCP tool
-// result or logs.
-func identityProviderDynamicRegistrationError(err error) error {
-	// The caller going away is not a registration outcome. Classifying it
-	// would report the provider as unavailable for something it never did.
-	if errors.Is(err, context.Canceled) {
-		return err
-	}
-
-	failure := oauthregistration.ClassifyDCR(err)
-	if failure.Outcome == oauthregistration.OutcomeRefused {
+// identityProviderRegistrationError preserves the important distinction
+// between a provider rejecting Gram's fixed registration contract (which cannot
+// succeed unchanged) and a temporary upstream/transport failure (which can be
+// retried). It intentionally does not carry an upstream response detail into
+// the MCP tool result or logs.
+func identityProviderRegistrationError(reg remotesessions.Registration) error {
+	if reg.Failure == nil || reg.Failure.Outcome == oauthregistration.OutcomeRefused {
 		return fmt.Errorf("register identity-provider client: %w", ErrIdentityProviderAttachmentUnsupported)
 	}
 	return fmt.Errorf("register identity-provider client: %w", ErrIdentityProviderAttachmentUnavailable)
-}
-
-// storeClientResourceDisplay writes the resource's RFC 9728 display members
-// onto its client, but only when the document names that resource: one read
-// from the origin-style well-known path may describe a sibling resource, and
-// its name or legal links must not be shown for this one.
-func storeClientResourceDisplay(ctx context.Context, q *remotesessionsrepo.Queries, organizationID string, projectID, clientID uuid.UUID, resourceURL string, resource wellknown.OAuthProtectedResourceMetadata) error {
-	if !resource.IdentifiesResource(resourceURL) {
-		return nil
-	}
-	if _, err := q.UpdateRemoteSessionClientResourceDisplay(ctx, remotesessionsrepo.UpdateRemoteSessionClientResourceDisplayParams{
-		ResourceIdentifier:    conv.ToPGText(resourceURL),
-		ResourceName:          resource.ResourceName,
-		ResourceDocumentation: resource.ResourceDocumentation,
-		ResourcePolicyUri:     resource.ResourcePolicyURI,
-		ResourceTosUri:        resource.ResourceTosURI,
-		ID:                    clientID,
-		ProjectID:             projectID,
-		OrganizationID:        organizationID,
-	}); err != nil {
-		return fmt.Errorf("store identity-provider client resource display: %w", err)
-	}
-	return nil
 }
 
 func attachmentIssuerSlug(registrationID uuid.UUID) string {
@@ -499,15 +378,6 @@ func sameIssuerURL(a, b string) bool {
 func validDynamicClientRegistrationEndpoint(raw string) bool {
 	endpoint, err := url.Parse(raw)
 	return err == nil && endpoint.Scheme == "https" && endpoint.Host != "" && endpoint.User == nil
-}
-
-// validBrowserCatalogDynamicClient requires a confidential client for the
-// browser-catalog flow. The local fixture deliberately registers public clients
-// through its separate configurator path and never reaches this boundary.
-func validBrowserCatalogDynamicClient(registered remotesessions.ProxyRegisterResponse) bool {
-	return registered.ClientID != "" &&
-		registered.ClientSecret != "" &&
-		(registered.TokenEndpointAuthMethod == "" || registered.TokenEndpointAuthMethod == browserCatalogDCRAuthMethod)
 }
 
 func optionalString(value string) *string {

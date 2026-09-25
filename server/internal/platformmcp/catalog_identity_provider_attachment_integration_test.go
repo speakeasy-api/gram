@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,10 +12,14 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -59,8 +64,9 @@ func attachmentTestResource(resourceURL, name, policyURL string) wellknown.OAuth
 	}
 }
 
-func attachmentTestService(conn *pgxpool.Pool) *CatalogIdentityProviderAttachmentService {
-	return &CatalogIdentityProviderAttachmentService{db: conn, enc: nil, policy: nil, audit: audit.NewLogger(), serverURL: nil}
+func attachmentTestService(t *testing.T, conn *pgxpool.Pool) *CatalogIdentityProviderAttachmentService {
+	t.Helper()
+	return &CatalogIdentityProviderAttachmentService{db: conn, identity: remotesessions.NewIdentityCommitter(testenv.NewLogger(t), conn, nil, audit.NewLogger(), nil, nil, nil, nil), policy: nil, serverURL: nil}
 }
 
 func attachmentTestUserSessionIssuer(t *testing.T, conn *pgxpool.Pool, projectID uuid.UUID) uuid.UUID {
@@ -87,19 +93,58 @@ func attachmentTestClients(t *testing.T, conn *pgxpool.Pool, principal Principal
 	return rows
 }
 
-// attachmentTestEnsureIssuer resolves an issuer the way attachLocked does:
-// reuse a stored one when the flow may, otherwise create it.
-func attachmentTestEnsureIssuer(t *testing.T, service *CatalogIdentityProviderAttachmentService, principal Principal, project ResolvedProject, metadata remotesessions.DiscoveredIssuerMetadata) remotesessionsrepo.RemoteSessionIssuer {
+// attachmentTestCommit commits an attachment the way attachLocked does, with
+// already-registered credentials standing in for dynamic registration: reuse a
+// stored issuer when the flow may, otherwise create one in the commit.
+func attachmentTestCommit(t *testing.T, service *CatalogIdentityProviderAttachmentService, principal Principal, project ResolvedProject, userSessionIssuerID uuid.UUID, metadata remotesessions.DiscoveredIssuerMetadata, clientID, resourceURL string, resource wellknown.OAuthProtectedResourceMetadata) error {
 	t.Helper()
-	existing, reuse, err := service.reusableIssuer(t.Context(), principal, project, metadata.Issuer)
+	ctx := t.Context()
+	existing, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
+	provider := remotesessions.CreateProvider(discoveredIssuerParams(principal, project, uuid.New(), metadata))
 	if reuse {
-		return existing
+		provider = remotesessions.UseProvider(existing.ID)
 	}
-	issuer, err := service.createIssuer(t.Context(), principal, project, uuid.New(), metadata)
+	commit := service.identity.Prepare(remotesessions.IdentityPlan{
+		Scope: remotesessions.IdentityScope{
+			OrganizationID:   principal.OrganizationID,
+			ProjectID:        project.ID,
+			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
+			ActorDisplayName: nil,
+		},
+		UserSessionIssuerID: userSessionIssuerID,
+		Provider:            provider,
+		Client: remotesessions.ManualClient(remotesessions.ClientCredentials{
+			ClientID:                clientID,
+			ClientSecret:            "",
+			SecretExpiresAt:         pgtype.Timestamptz{},
+			TokenEndpointAuthMethod: nil,
+			Scope:                   resource.ScopesSupported,
+			Audience:                nil,
+		}),
+		Bound:           remotesessions.ReuseBound,
+		ResourceDisplay: &remotesessions.ResourceDisplay{ResourceURL: resourceURL, Metadata: resource},
+	})
+	if err := commit.Preflight(ctx); err != nil {
+		return fmt.Errorf("preflight: %w", err)
+	}
+	reg, err := commit.Register(ctx)
+	if err != nil {
+		return fmt.Errorf("register: %w", err)
+	}
+	tx, err := commit.Begin(ctx)
 	require.NoError(t, err)
-	require.Equal(t, metadata.AuthorizationGrantProfilesSupported, issuer.AuthorizationGrantProfilesSupported)
-	return issuer
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := commit.Lock(ctx, tx); err != nil {
+		return fmt.Errorf("lock: %w", err)
+	}
+	if err := commit.Bind(ctx, tx, reg); err != nil {
+		return fmt.Errorf("bind: %w", err)
+	}
+	if _, err := commit.Commit(ctx, tx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
 }
 
 // Two resources behind one authorization server share the issuer row, which
@@ -111,28 +156,22 @@ func TestSharedAuthorizationServerDoesNotShareResourceBranding(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_shared_as")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := attachmentTestService(conn)
+	service := attachmentTestService(t, conn)
 	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
 	resourceA := attachmentTestResource("https://a.example.test/mcp", "Resource A", "https://a.example.test/policy")
 	resourceB := attachmentTestResource("https://b.example.test/mcp", "Resource B", "https://b.example.test/policy")
 
-	issuerA := attachmentTestEnsureIssuer(t, service, principal, project, metadata)
-	issuerB := attachmentTestEnsureIssuer(t, service, principal, project, metadata)
-	require.Equal(t, issuerA.ID, issuerB.ID, "one authorization server, one issuer")
-	require.Equal(t, "Remote identity provider", issuerB.Name.String)
-	require.False(t, issuerB.ServiceDocumentation.Valid)
-	require.False(t, issuerB.OpPolicyUri.Valid)
-
 	usiA := attachmentTestUserSessionIssuer(t, conn, project.ID)
 	usiB := attachmentTestUserSessionIssuer(t, conn, project.ID)
-	registeredA := remotesessions.ProxyRegisterResponse{ClientID: "client-a", ClientSecret: "", ClientSecretExpiresAt: pgtype.Timestamptz{}, TokenEndpointAuthMethod: ""}
-	registeredB := remotesessions.ProxyRegisterResponse{ClientID: "client-b", ClientSecret: "", ClientSecretExpiresAt: pgtype.Timestamptz{}, TokenEndpointAuthMethod: ""}
-	attachedA, err := service.createAndAttachClient(ctx, principal, project, usiA, issuerA.ID, registeredA, resourceA.Resource, resourceA)
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usiA, metadata, "client-a", resourceA.Resource, resourceA))
+
+	issuer, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.NoError(t, err)
-	require.True(t, attachedA)
-	attachedB, err := service.createAndAttachClient(ctx, principal, project, usiB, issuerB.ID, registeredB, resourceB.Resource, resourceB)
-	require.NoError(t, err)
-	require.True(t, attachedB)
+	require.True(t, reuse, "one authorization server, one issuer")
+	require.Equal(t, "Remote identity provider", issuer.Name.String)
+	require.False(t, issuer.ServiceDocumentation.Valid)
+	require.False(t, issuer.OpPolicyUri.Valid)
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usiB, metadata, "client-b", resourceB.Resource, resourceB))
 
 	clientsB := attachmentTestClients(t, conn, principal, project, usiB)
 	require.Len(t, clientsB, 1)
@@ -155,15 +194,11 @@ func TestAttachmentStoresNothingFromMismatchedResourceDocument(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_mismatch")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := attachmentTestService(conn)
+	service := attachmentTestService(t, conn)
 
-	issuer := attachmentTestEnsureIssuer(t, service, principal, project, attachmentTestIssuerMetadata("https://auth.example.test"))
 	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
 	sibling := attachmentTestResource("https://example.test/mcp/a", "Resource A", "https://a.example.test/policy")
-	registered := remotesessions.ProxyRegisterResponse{ClientID: "client-b", ClientSecret: "", ClientSecretExpiresAt: pgtype.Timestamptz{}, TokenEndpointAuthMethod: ""}
-	attached, err := service.createAndAttachClient(ctx, principal, project, usi, issuer.ID, registered, "https://example.test/mcp/b", sibling)
-	require.NoError(t, err)
-	require.True(t, attached)
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, attachmentTestIssuerMetadata("https://auth.example.test"), "client-b", "https://example.test/mcp/b", sibling))
 
 	clients := attachmentTestClients(t, conn, principal, project, usi)
 	require.Len(t, clients, 1)
@@ -180,17 +215,14 @@ func TestReattachRefreshesResourceDisplayOnExistingClient(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_reattach")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := attachmentTestService(conn)
+	service := attachmentTestService(t, conn)
 
-	issuer := attachmentTestEnsureIssuer(t, service, principal, project, attachmentTestIssuerMetadata("https://auth.example.test"))
+	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
 	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
-	registered := remotesessions.ProxyRegisterResponse{ClientID: "client-a", ClientSecret: "", ClientSecretExpiresAt: pgtype.Timestamptz{}, TokenEndpointAuthMethod: ""}
 	first := attachmentTestResource("https://a.example.test/mcp", "Resource A", "https://a.example.test/policy")
-	_, err = service.createAndAttachClient(ctx, principal, project, usi, issuer.ID, registered, first.Resource, first)
-	require.NoError(t, err)
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, metadata, "client-a", first.Resource, first))
 	renamed := attachmentTestResource("https://a.example.test/mcp", "Resource A v2", "")
-	_, err = service.createAndAttachClient(ctx, principal, project, usi, issuer.ID, registered, renamed.Resource, renamed)
-	require.NoError(t, err)
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, metadata, "client-a", renamed.Resource, renamed))
 
 	clients := attachmentTestClients(t, conn, principal, project, usi)
 	require.Len(t, clients, 1)
@@ -207,10 +239,11 @@ func TestAttachmentRefusesTunnelBoundIssuer(t *testing.T) {
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_tunnel_bound")
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-	service := attachmentTestService(conn)
+	service := attachmentTestService(t, conn)
 	metadata := attachmentTestIssuerMetadata("https://auth.private.test")
 
-	issuer := attachmentTestEnsureIssuer(t, service, principal, project, metadata)
+	issuer, err := remotesessionsrepo.New(conn).CreateRemoteSessionIssuer(ctx, discoveredIssuerParams(principal, project, uuid.New(), metadata))
+	require.NoError(t, err)
 	require.False(t, issuer.TunneledMcpServerID.Valid)
 
 	tunnel, err := tunneledmcprepo.New(conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
@@ -232,4 +265,74 @@ func TestAttachmentRefusesTunnelBoundIssuer(t *testing.T) {
 
 	_, _, err = service.reusableIssuer(ctx, principal, project, metadata.Issuer)
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentConflict)
+}
+
+// The attachment restamps the MCP servers on the registration's user session
+// issuer, so gateway token routing sees the new provider without waiting for
+// an unrelated binding change to heal it.
+func TestAttachmentStampsMCPServerRemoteSessionIssuer(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_resync")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestService(t, conn)
+	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
+	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
+	serverID := attachmentTestMCPServer(t, conn, project.ID, usi)
+
+	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, usi, metadata, "client-a", resource.Resource, resource))
+
+	issuer, _, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Equal(t, conv.ToNullUUID(issuer.ID), server.RemoteSessionIssuerID)
+}
+
+// The provider and client land in one transaction: a failure after the issuer
+// insert leaves no issuer behind for the next attempt to trip over.
+func TestAttachmentFailureLeavesNoIssuer(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_atomic")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestService(t, conn)
+	metadata := attachmentTestIssuerMetadata("https://auth.example.test")
+	usi := attachmentTestUserSessionIssuer(t, conn, project.ID)
+	testenv.RejectWritesTo(t, ctx, conn, "remote_session_clients")
+
+	resource := attachmentTestResource("https://a.example.test/mcp", "Resource A", "")
+	require.Error(t, attachmentTestCommit(t, service, principal, project, usi, metadata, "client-a", resource.Resource, resource))
+
+	_, reuse, err := service.reusableIssuer(ctx, principal, project, metadata.Issuer)
+	require.NoError(t, err)
+	require.False(t, reuse, "the issuer insert must roll back with the client insert")
+}
+
+func attachmentTestMCPServer(t *testing.T, conn *pgxpool.Pool, projectID, userSessionIssuerID uuid.UUID) uuid.UUID {
+	t.Helper()
+	slug := "attachment-" + uuid.NewString()[:8]
+	remote, err := remotemcprepo.New(conn).CreateServer(t.Context(), remotemcprepo.CreateServerParams{
+		ID:            uuid.New(),
+		ProjectID:     projectID,
+		Name:          conv.ToPGText(slug),
+		Slug:          conv.ToPGText(slug),
+		TransportType: "streamable-http",
+		Url:           "https://a.example.test/mcp",
+	})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(conn).CreateMCPServer(t.Context(), mcpserversrepo.CreateMCPServerParams{
+		ID:                  uuid.New(),
+		ProjectID:           projectID,
+		Name:                conv.ToPGText(slug),
+		Slug:                conv.ToPGText(slug),
+		UserSessionIssuerID: conv.ToNullUUID(userSessionIssuerID),
+		RemoteMcpServerID:   conv.ToNullUUID(remote.ID),
+		Visibility:          "private",
+	})
+	require.NoError(t, err)
+	return server.ID
 }
