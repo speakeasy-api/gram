@@ -175,6 +175,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/variations"
+	"github.com/speakeasy-api/gram/server/internal/workloadpolicy"
 	"github.com/speakeasy-api/gram/server/internal/xmcp"
 	"github.com/speakeasy-api/gram/tunnel/route"
 )
@@ -1799,6 +1800,7 @@ func newStartCommand() *cli.Command {
 			tm.Attach(mux, telemSvc)
 			analytics.Attach(mux, analyticsSvc)
 			explore.Attach(mux, explore.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
+			workloadpolicy.Attach(mux, workloadpolicy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
 			functions.Attach(mux, functions.NewService(logger, tracerProvider, db, encryptionClient, tigrisStore))
 			otelService := otelsvc.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, otelsvc.FeatureChecker(logsEnabled), publishers.OTELSpans, publishers.OTELLogs, publishers.OTELMetrics)
 			// Exports accepted on /otel/v1/* also run the hooks telemetry
