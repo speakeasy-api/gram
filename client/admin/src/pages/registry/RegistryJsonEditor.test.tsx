@@ -40,6 +40,7 @@ vi.mock("@monaco-editor/react", () => ({
   default: class MockMonaco extends Component<{
     onMount: (editor: unknown) => void;
     options: unknown;
+    height?: string;
     theme?: string;
     path?: string;
   }> {
@@ -71,6 +72,7 @@ vi.mock("@monaco-editor/react", () => ({
       return (
         <div
           data-testid="monaco"
+          data-height={this.props.height}
           data-theme={this.props.theme}
           data-path={this.props.path}
         />
@@ -216,3 +218,12 @@ it.each([false, true])(
     expect(mock.edits).not.toHaveBeenCalled();
   },
 );
+
+it("fills its bounded editor surface and separates the label and format toolbar", () => {
+  render(<RegistryJsonEditor {...props} />);
+  expect(screen.getByTestId("monaco").getAttribute("data-height")).toBe("100%");
+  const toolbar = screen.getByText("Record JSON").parentElement;
+  expect(
+    toolbar?.contains(screen.getByRole("button", { name: "Format JSON" })),
+  ).toBe(true);
+});
