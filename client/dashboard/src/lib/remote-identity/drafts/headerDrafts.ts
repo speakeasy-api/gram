@@ -64,9 +64,11 @@ export function headerDraftFromServer(
 // long as the user leaves that placeholder untouched, we keep the existing
 // secret rather than overwriting it with the literal redaction string.
 function isUnchangedSecret(draft: HeaderDraft): boolean {
-  return (
-    draft.isSecret && draft.hadSecret && draft.staticValue === REDACTED_SECRET
-  );
+  // Deliberately not conditioned on the current isSecret toggle: what makes
+  // the value unchanged is that the placeholder was never typed over. Reading
+  // the toggle here meant that un-ticking Secret on an untouched row stored
+  // the literal redaction string as the upstream credential.
+  return draft.hadSecret && draft.staticValue === REDACTED_SECRET;
 }
 
 export function draftsEqual(a: HeaderDraft[], b: HeaderDraft[]): boolean {
@@ -237,9 +239,11 @@ export function headerDraftToWriteFields(
   }
 
   if (isUnchangedSecret(draft)) {
+    // Omitting `value` is what tells the server to keep the stored secret, so
+    // the toggle can still travel on its own.
     return {
       ...base,
-      isSecret: true,
+      isSecret: draft.isSecret,
     };
   }
 
