@@ -8,7 +8,7 @@ import {
 import { CONTROL_HEIGHT } from "@/components/ui/Toolbar";
 import { type MeterCycleWindow } from "./use-meter-period";
 const cycleMonthFormat = new Intl.DateTimeFormat("en-US", {
-  month: "long",
+  month: "short",
   year: "numeric",
   timeZone: "UTC",
 });
@@ -47,14 +47,14 @@ export function BillingCyclePicker({
       onValueChange={handleChange}
     >
       <div className={CONTROL_HEIGHT}>
-        <SelectTrigger className="bg-background h-full! w-auto gap-1.5 py-1.5 text-sm">
+        <SelectTrigger className="bg-card h-full! w-auto gap-1.5 py-1.5 text-sm">
           <SelectValue placeholder="Billing cycle" />
         </SelectTrigger>
       </div>
       <SelectContent>
         {cycles.map((c) => (
           <SelectItem key={cycleKey(c)} value={cycleKey(c)}>
-            {cycleMonthFormat.format(c.from)} billing cycle
+            {cycleMonthFormat.format(c.from)} cycle
             {c === cycles[cycles.length - 1] ? " (current)" : ""}
           </SelectItem>
         ))}

@@ -1,4 +1,5 @@
 import { useNavArea } from "@/hooks/useNavArea";
+import { useInSettingsOverlay } from "./settings-overlay-context";
 import { cn } from "@/lib/utils";
 import * as React from "react";
 
@@ -17,7 +18,10 @@ export function PageEyebrow({
   className?: string;
 }): React.JSX.Element | null {
   const navArea = useNavArea();
-  const label = area ?? navArea;
+  // Inside global settings every page is org-level, so the derived
+  // "Organization" label says nothing; an explicit `area` still shows.
+  const inSettingsOverlay = useInSettingsOverlay();
+  const label = area ?? (inSettingsOverlay ? undefined : navArea);
   if (!label) return null;
   return <div className={cn("text-eyebrow", className)}>{label}</div>;
 }

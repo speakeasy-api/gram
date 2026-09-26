@@ -2,6 +2,7 @@ import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { PageEyebrow } from "@/components/page-eyebrow";
 import { Alert } from "@/components/ui/Alert";
 import { Icon } from "@/components/ui/Icon";
+import { cn } from "@/lib/utils";
 import { useState } from "react";
 
 export const LOG_DATA_RETENTION_MESSAGE =
@@ -21,7 +22,11 @@ function LogDataRetentionTooltip(): JSX.Element {
   );
 }
 
-export function LogDataRetentionBanner(): JSX.Element | null {
+export function LogDataRetentionBanner({
+  className,
+}: {
+  className?: string;
+} = {}): JSX.Element | null {
   const [isVisible, setIsVisible] = useState(true);
 
   if (!isVisible) return null;
@@ -31,7 +36,7 @@ export function LogDataRetentionBanner(): JSX.Element | null {
       variant="info"
       dismissible
       onDismiss={() => setIsVisible(false)}
-      className="mb-6 text-sm"
+      className={cn("mb-6 text-sm", className)}
     >
       <span className="font-medium">Data retention:</span>{" "}
       {LOG_DATA_RETENTION_MESSAGE}

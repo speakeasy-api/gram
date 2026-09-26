@@ -14,6 +14,7 @@ import { Toolbar } from "@/components/ui/Toolbar";
 import { Text } from "@/components/ui/Text";
 import { XYFade } from "@/components/ui/XyFade";
 import { PageEyebrow } from "./page-eyebrow";
+import { useInSettingsOverlay } from "./settings-overlay-context";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -43,6 +44,7 @@ function PageBody({
   overflowHidden?: boolean;
   className?: string;
 }) {
+  const inSettingsOverlay = useInSettingsOverlay();
   return (
     // Nest the max-width container inside another div so the full-width page
     // area below the header stays one block
@@ -66,6 +68,9 @@ function PageBody({
           "@container/main flex w-full flex-col gap-4",
           noPadding ? "p-0" : "p-8",
           !noPadding && "pb-24",
+          // The settings overlay has no page header above the body: start
+          // level with its close button, and keep clear of it on the right.
+          !noPadding && inSettingsOverlay && "pt-4 pr-16",
           !fullWidth && "mx-auto max-w-7xl",
           fullHeight && "h-full",
           overflowHidden && "min-h-0 flex-1",

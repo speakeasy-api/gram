@@ -7,6 +7,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { CONTROL_HEIGHT } from "@/components/ui/Toolbar";
 import { useOrganization } from "@/contexts/Auth";
+import { cn } from "@/lib/utils";
 import { useGetMeterUsage } from "@gram/client/react-query/getMeterUsage.js";
 import { useListProjects } from "@gram/client/react-query/listProjects.js";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -243,20 +244,19 @@ export function MeterUsageSection(): JSX.Element {
         estimates.
       </Page.Section.Description>
       <Page.Section.Body>
+        {/* The meter family is what is being measured, not a filter on it,
+            so it sits above the toolbar instead of competing for its row. */}
+        <SegmentedControl
+          value={family}
+          onChange={setFamily}
+          options={FAMILY_OPTIONS}
+          className="mb-3 w-fit"
+        />
         <Page.Toolbar>
           <Page.Toolbar.Row>
             <Page.Toolbar.Leading>
-              <SegmentedControl
-                value={family}
-                onChange={setFamily}
-                options={FAMILY_OPTIONS}
-              />
-            </Page.Toolbar.Leading>
-          </Page.Toolbar.Row>
-          <Page.Toolbar.Row>
-            <Page.Toolbar.Leading>
               {period && (
-                <div className="flex flex-wrap items-center gap-2">
+                <>
                   <BillingCyclePicker
                     cycles={knownCycles}
                     selected={
@@ -276,15 +276,16 @@ export function MeterUsageSection(): JSX.Element {
                     onClearCustomRange={periodState.clearCustomRange}
                     className={CONTROL_HEIGHT}
                   />
-                </div>
+                </>
               )}
               <Button
                 variant="secondary"
-                className={CONTROL_HEIGHT}
+                className={cn(CONTROL_HEIGHT, "w-10 px-0")}
                 onClick={periodState.reset}
+                aria-label="Reset to current billing cycle"
+                tooltip="Reset to current billing cycle"
               >
                 <RotateCcw className="size-4" />
-                Reset
               </Button>
             </Page.Toolbar.Leading>
             <Page.Toolbar.Refresh

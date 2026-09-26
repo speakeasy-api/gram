@@ -15,6 +15,15 @@ vi.mock("@/components/page-layout", () => {
   Header.Breadcrumbs = () => null;
   Page.Header = Header;
   Page.Body = ({ children }: { children: ReactNode }) => <>{children}</>;
+  function Section({ children }: { children: ReactNode }) {
+    return <>{children}</>;
+  }
+  Section.Title = ({ children }: { children: ReactNode }) => <>{children}</>;
+  Section.Description = ({ children }: { children: ReactNode }) => (
+    <>{children}</>
+  );
+  Section.Body = ({ children }: { children: ReactNode }) => <>{children}</>;
+  Page.Section = Section;
 
   return { Page };
 });

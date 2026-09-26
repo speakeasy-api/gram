@@ -4,16 +4,23 @@ import { cn } from "@/lib/utils";
 import { DEMO_ORG_SLUG, PRE_DEMO_ORG_KEY } from "@/lib/demo";
 import { logoutToLogin } from "@/lib/logout-to-login";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useRoutes } from "@/routes";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
 import { Icon } from "@/components/ui/Icon";
-import { ShieldAlert } from "lucide-react";
-import { useCallback } from "react";
-import { Navigate, Outlet, useLocation } from "react-router";
+import { ShieldAlert, X } from "lucide-react";
+import { useCallback, useEffect } from "react";
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import { AppSidebar } from "./app-sidebar.tsx";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ChatLaunchOverlay } from "./chat-launch-overlay.tsx";
 import { InsightsProvider } from "./insights-dock.tsx";
-import { OrgSidebar } from "./org-sidebar.tsx";
+import { SettingsNav } from "./settings-nav.tsx";
+import {
+  SettingsOverlayContext,
+  lastAppPath,
+  rememberAppPath,
+} from "./settings-overlay-context";
+import { resolveLandingProject } from "@/lib/preferredProject";
 import {
   SidePanelProvider,
   SidePanelSurface,
@@ -154,10 +161,19 @@ const AppLayoutContent = ({
 }: {
   isImpersonating: boolean;
 }) => {
+  const location = useLocation();
+  // The assistant pages are a full-bleed canvas with their own header row;
+  // the mode pill would sit on top of it.
+  const isChat = useRoutes().chat.active;
+  // Closing global settings returns here.
+  useEffect(() => {
+    rememberAppPath(location.pathname + location.search + location.hash);
+  }, [location.pathname, location.search, location.hash]);
+
   return (
     <div className="relative flex min-h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
-      <ModeSwitcher mode="canvas" />
+      {!isChat && <ModeSwitcher mode="canvas" />}
       <ModeSurface mode="canvas" className="flex w-full flex-1 overflow-x-clip">
         {/* Default (non-inset) variant: flat panes divided by a hairline
             instead of a floating bordered card. */}
@@ -241,37 +257,91 @@ const MembershipSyncGuard = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+/**
+ * Org-level pages are global settings, not a second app, so they open as a
+ * full-screen overlay with their own chrome — no app sidebar, workspace
+ * switcher or mode switcher — and close (X or Escape) back to the app page the
+ * user came from.
+ */
 export const OrgLayout = (): JSX.Element => {
   const isImpersonating = useShowsImpersonationBanner();
-  const chromeOffset = chromeTopOffset(isImpersonating);
+  const organization = useOrganization();
+  const navigate = useNavigate();
+
+  const close = useCallback(() => {
+    const landing = resolveLandingProject(organization.projects);
+    void navigate(
+      lastAppPath(organization.slug) ??
+        (landing
+          ? `/${organization.slug}/projects/${landing.slug}`
+          : `/${organization.slug}/projects`),
+    );
+  }, [navigate, organization]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      // Escape belongs to whatever a page has open (a dialog, menu or
+      // popover) or is being typed into; only a bare Escape closes settings.
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest("input, textarea, select, [contenteditable=true]") ||
+        document.querySelector(
+          "[role=dialog][data-state=open], [role=menu], [data-radix-popper-content-wrapper]",
+        )
+      ) {
+        return;
+      }
+      close();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [close]);
 
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "16rem",
-          // The mode switcher overlays the page header, so only the
-          // impersonation banner offsets the fixed app surface.
-          "--header-offset": chromeOffset,
-          "--banner-offset": chromeOffset,
-        } as React.CSSProperties
-      }
-    >
-      <div className="relative flex min-h-screen w-full flex-col">
-        {isImpersonating && <ImpersonationBanner />}
-        <ModeSwitcher mode="canvas" />
-        <ModeSurface
-          mode="canvas"
-          className="flex w-full flex-1 overflow-x-clip"
-        >
-          <OrgSidebar />
-          <SidebarInset>
-            <MembershipSyncGuard>
-              <Outlet />
-            </MembershipSyncGuard>
-          </SidebarInset>
-        </ModeSurface>
-      </div>
+    // Pages may reach for sidebar state (e.g. useSidebar), so the provider
+    // stays even though no sidebar renders here.
+    <SidebarProvider>
+      <SettingsOverlayContext.Provider value={true}>
+        <div className="bg-background fixed inset-0 z-40 flex items-center justify-center p-3 md:p-8">
+          {/* Dimmed backdrop; clicking it closes, like any modal. */}
+          <div
+            aria-hidden="true"
+            onClick={close}
+            className="animate-in fade-in-0 absolute inset-0 bg-black/50 duration-200"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="global-settings-title"
+            className="animate-in fade-in-0 zoom-in-[0.98] bg-card border-border relative flex h-full w-full max-w-[1400px] flex-col overflow-hidden border shadow-2xl duration-200"
+          >
+            {isImpersonating && <ImpersonationBanner />}
+            <button
+              type="button"
+              onClick={close}
+              aria-label="Close settings"
+              className="text-muted-foreground hover:text-foreground hover:bg-accent absolute top-4 right-4 z-30 flex size-9 items-center justify-center transition-colors"
+            >
+              <X className="size-5" />
+            </button>
+            <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+              <aside className="bg-background border-border shrink-0 overflow-y-auto border-b md:w-72 md:border-r md:border-b-0">
+                <SettingsNav />
+              </aside>
+              <main
+                className="relative min-w-0 flex-1 overflow-y-auto"
+                // Pages pin toolbars below the app header; there is none here.
+                style={{ "--page-sticky-top": "0px" } as React.CSSProperties}
+              >
+                <MembershipSyncGuard>
+                  <Outlet />
+                </MembershipSyncGuard>
+              </main>
+            </div>
+          </div>
+        </div>
+      </SettingsOverlayContext.Provider>
     </SidebarProvider>
   );
 };

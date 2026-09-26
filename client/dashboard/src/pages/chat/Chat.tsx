@@ -111,8 +111,10 @@ export function ChatHome(): ReactElement {
           <Home className="size-4" />
         </Link>
       </header>
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-3xl flex-col px-6 pt-[clamp(10rem,26vh,16rem)] pb-16">
+      {/* my-auto centres the landing in the space below the header, and
+          still lets it scroll from the top when it outgrows that space. */}
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        <div className="mx-auto my-auto flex w-full max-w-3xl flex-col px-6 pb-(--header-height)">
           <ChatLanding autoFocusInput />
         </div>
       </div>
