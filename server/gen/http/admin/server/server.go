@@ -78,6 +78,11 @@ type Server struct {
 	GetSupportMatrix                      http.Handler
 	UpdateSupportMatrix                   http.Handler
 	GetSupportCoverage                    http.Handler
+	ListRegistryEntries                   http.Handler
+	GetRegistryEntry                      http.Handler
+	CreateRegistryEntry                   http.Handler
+	SaveRegistryEntry                     http.Handler
+	SetRegistryEntryPublished             http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -164,6 +169,11 @@ func New(
 			{"GetSupportMatrix", "GET", "/admin/supportMatrix.get"},
 			{"UpdateSupportMatrix", "POST", "/admin/supportMatrix.update"},
 			{"GetSupportCoverage", "GET", "/admin/supportCoverage.get"},
+			{"ListRegistryEntries", "GET", "/admin/registry.list"},
+			{"GetRegistryEntry", "GET", "/admin/registry.get"},
+			{"CreateRegistryEntry", "POST", "/admin/registry.create"},
+			{"SaveRegistryEntry", "POST", "/admin/registry.save"},
+			{"SetRegistryEntryPublished", "POST", "/admin/registry.setPublished"},
 		},
 		Login:                                 NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                              NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -222,6 +232,11 @@ func New(
 		GetSupportMatrix:                      NewGetSupportMatrixHandler(e.GetSupportMatrix, mux, decoder, encoder, errhandler, formatter),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixHandler(e.UpdateSupportMatrix, mux, decoder, encoder, errhandler, formatter),
 		GetSupportCoverage:                    NewGetSupportCoverageHandler(e.GetSupportCoverage, mux, decoder, encoder, errhandler, formatter),
+		ListRegistryEntries:                   NewListRegistryEntriesHandler(e.ListRegistryEntries, mux, decoder, encoder, errhandler, formatter),
+		GetRegistryEntry:                      NewGetRegistryEntryHandler(e.GetRegistryEntry, mux, decoder, encoder, errhandler, formatter),
+		CreateRegistryEntry:                   NewCreateRegistryEntryHandler(e.CreateRegistryEntry, mux, decoder, encoder, errhandler, formatter),
+		SaveRegistryEntry:                     NewSaveRegistryEntryHandler(e.SaveRegistryEntry, mux, decoder, encoder, errhandler, formatter),
+		SetRegistryEntryPublished:             NewSetRegistryEntryPublishedHandler(e.SetRegistryEntryPublished, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -287,6 +302,11 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetSupportMatrix = m(s.GetSupportMatrix)
 	s.UpdateSupportMatrix = m(s.UpdateSupportMatrix)
 	s.GetSupportCoverage = m(s.GetSupportCoverage)
+	s.ListRegistryEntries = m(s.ListRegistryEntries)
+	s.GetRegistryEntry = m(s.GetRegistryEntry)
+	s.CreateRegistryEntry = m(s.CreateRegistryEntry)
+	s.SaveRegistryEntry = m(s.SaveRegistryEntry)
+	s.SetRegistryEntryPublished = m(s.SetRegistryEntryPublished)
 }
 
 // MethodNames returns the methods served.
@@ -351,6 +371,11 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetSupportMatrixHandler(mux, h.GetSupportMatrix)
 	MountUpdateSupportMatrixHandler(mux, h.UpdateSupportMatrix)
 	MountGetSupportCoverageHandler(mux, h.GetSupportCoverage)
+	MountListRegistryEntriesHandler(mux, h.ListRegistryEntries)
+	MountGetRegistryEntryHandler(mux, h.GetRegistryEntry)
+	MountCreateRegistryEntryHandler(mux, h.CreateRegistryEntry)
+	MountSaveRegistryEntryHandler(mux, h.SaveRegistryEntry)
+	MountSetRegistryEntryPublishedHandler(mux, h.SetRegistryEntryPublished)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -3412,6 +3437,272 @@ func NewGetSupportCoverageHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getSupportCoverage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListRegistryEntriesHandler configures the mux to serve the "admin"
+// service "listRegistryEntries" endpoint.
+func MountListRegistryEntriesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/registry.list", f)
+}
+
+// NewListRegistryEntriesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listRegistryEntries" endpoint.
+func NewListRegistryEntriesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListRegistryEntriesRequest(mux, decoder)
+		encodeResponse = EncodeListRegistryEntriesResponse(encoder)
+		encodeError    = EncodeListRegistryEntriesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listRegistryEntries")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetRegistryEntryHandler configures the mux to serve the "admin" service
+// "getRegistryEntry" endpoint.
+func MountGetRegistryEntryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/registry.get", f)
+}
+
+// NewGetRegistryEntryHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getRegistryEntry" endpoint.
+func NewGetRegistryEntryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetRegistryEntryRequest(mux, decoder)
+		encodeResponse = EncodeGetRegistryEntryResponse(encoder)
+		encodeError    = EncodeGetRegistryEntryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getRegistryEntry")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateRegistryEntryHandler configures the mux to serve the "admin"
+// service "createRegistryEntry" endpoint.
+func MountCreateRegistryEntryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/registry.create", f)
+}
+
+// NewCreateRegistryEntryHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "createRegistryEntry" endpoint.
+func NewCreateRegistryEntryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateRegistryEntryRequest(mux, decoder)
+		encodeResponse = EncodeCreateRegistryEntryResponse(encoder)
+		encodeError    = EncodeCreateRegistryEntryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createRegistryEntry")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSaveRegistryEntryHandler configures the mux to serve the "admin"
+// service "saveRegistryEntry" endpoint.
+func MountSaveRegistryEntryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/registry.save", f)
+}
+
+// NewSaveRegistryEntryHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "saveRegistryEntry" endpoint.
+func NewSaveRegistryEntryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSaveRegistryEntryRequest(mux, decoder)
+		encodeResponse = EncodeSaveRegistryEntryResponse(encoder)
+		encodeError    = EncodeSaveRegistryEntryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "saveRegistryEntry")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetRegistryEntryPublishedHandler configures the mux to serve the
+// "admin" service "setRegistryEntryPublished" endpoint.
+func MountSetRegistryEntryPublishedHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/registry.setPublished", f)
+}
+
+// NewSetRegistryEntryPublishedHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "setRegistryEntryPublished"
+// endpoint.
+func NewSetRegistryEntryPublishedHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetRegistryEntryPublishedRequest(mux, decoder)
+		encodeResponse = EncodeSetRegistryEntryPublishedResponse(encoder)
+		encodeError    = EncodeSetRegistryEntryPublishedError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setRegistryEntryPublished")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

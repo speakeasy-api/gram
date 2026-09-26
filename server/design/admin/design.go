@@ -1232,5 +1232,6 @@ var _ = Service("admin", func() {
 
 	supportMatrixMethods()
 	supportCoverageMethods()
+	registryDesign()
 
 })

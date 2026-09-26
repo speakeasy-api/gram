@@ -12,6 +12,8 @@ import (
 type Key = attribute.Key
 
 const (
+	RegistryEntryIDKey               = attribute.Key("gram.registry.entry.id")
+	RegistryUpdatedAtKey             = attribute.Key("gram.registry.entry.updated_at")
 	AdminOIDCSubjectKey              = attribute.Key("gram.admin.oidc_subject")
 	AuthSourceKey                    = attribute.Key("gram.auth.source")
 	AuthorizationOrganizationIDKey   = attribute.Key("gram.authorization.organization_id")
@@ -3149,3 +3151,6 @@ func SlogInferenceInputCount(v int) slog.Attr {
 func SlogInferenceAcceptedMessages(v int) slog.Attr {
 	return slog.Int(string(InferenceAcceptedMessagesKey), v)
 }
+
+func SlogRegistryEntryID(v string) slog.Attr   { return slog.String(string(RegistryEntryIDKey), v) }
+func SlogRegistryUpdatedAt(v string) slog.Attr { return slog.String(string(RegistryUpdatedAtKey), v) }
