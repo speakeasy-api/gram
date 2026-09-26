@@ -49,7 +49,7 @@ type postgresCheckpoint struct {
 
 // Begin creates request-local checkpoint state; it acquires no connection or lock.
 func (s *postgresStore) Begin(_ context.Context, config Config, frame Frame, userID string) (checkpointSession, error) {
-	return &postgresCheckpoint{userID: userID, db: s.db, expected: nil, config: config, externalID: "anthropic-inference:" + conversationID(config, frame).String(), revision: ""}, nil
+	return &postgresCheckpoint{userID: userID, db: s.db, expected: nil, config: config, externalID: externalConversationID(config, frame), revision: ""}, nil
 }
 
 func (s *postgresCheckpoint) Load(ctx context.Context) ([][]byte, error) {

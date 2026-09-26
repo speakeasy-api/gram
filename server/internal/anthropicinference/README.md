@@ -55,9 +55,12 @@ to Anthropic inference. The ingestion origin remains `anthropic-inference`.
   text, tool arguments, and tool results. The final assistant response becomes
   visible when a subsequent frame includes it; this pre-inference protocol does
   not deliver a final-response event.
-- Conversation identity is scoped to the project, Anthropic tenant, and actor.
-  Client-asserted session identifiers cannot join another actor's conversation.
-  Missing session identifiers or actor identities fall back to the request identifier.
+- Conversations correlate with other imports on the provider's session ID within
+  the organization. Joining a row also requires the same project and matching
+  actor evidence (the actor-scoped inference ID, signed provider actor, or resolved
+  owner). Missing session identifiers or actor identities remain request-local.
+  Compliance and inference deliveries share the chat row regardless of arrival
+  order. Acceptance checkpoints remain separate from archival deduplication.
 - Archival deduplication is separate from acceptance. Storage uses message hashes
   to align a delivery with the eight newest archived message identities. It tries
   the newest anchor first and scans incoming messages backward, stopping at the
@@ -147,3 +150,16 @@ network failures must not allow inference. Long transcripts
 or conservative rescans that cannot complete within the nine-second budget
 receive a deny verdict. A checkpoint reduces repeated scans; it does not remove
 the deadline or guarantee that every transcript fits within it.
+
+## Existing conversations
+
+Legacy inference rows cannot be correlated offline from their hashed external ID
+alone. A subsequent signed frame adopts the provider ID while retaining the
+original chat ID and references when no competing imported row exists. Already
+existing duplicate pairs require a separate, reviewed consolidation of their
+transcripts and references; this change does not delete or silently reparent
+historical evidence.
+
+Platform MCP assessment: existing session recall tools inherit the corrected
+conversation identity. No tool or schema change is needed. Regression tests cover
+shared conversation identity and actor/project isolation.

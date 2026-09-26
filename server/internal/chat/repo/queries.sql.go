@@ -47,6 +47,38 @@ func (q *Queries) AddUserFeedbackChatResolution(ctx context.Context, arg AddUser
 	return err
 }
 
+const adoptLegacyInferenceConversation = `-- name: AdoptLegacyInferenceConversation :exec
+UPDATE chats SET external_chat_id = $1
+WHERE chats.id = $2 AND chats.project_id = $3 AND chats.organization_id = $4
+  AND chats.external_chat_id = $5
+  AND NOT EXISTS (
+    SELECT 1 FROM chats other
+    WHERE other.organization_id = $4
+      AND other.external_chat_id = $1
+  )
+`
+
+type AdoptLegacyInferenceConversationParams struct {
+	ExternalChatID       pgtype.Text
+	ID                   uuid.UUID
+	ProjectID            uuid.UUID
+	OrganizationID       string
+	LegacyExternalChatID pgtype.Text
+}
+
+// Preserve the existing row ID and all of its references when the next frame
+// supplies the provider conversation ID that older capture did not retain.
+func (q *Queries) AdoptLegacyInferenceConversation(ctx context.Context, arg AdoptLegacyInferenceConversationParams) error {
+	_, err := q.db.Exec(ctx, adoptLegacyInferenceConversation,
+		arg.ExternalChatID,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.LegacyExternalChatID,
+	)
+	return err
+}
+
 const assistantExistsInProject = `-- name: AssistantExistsInProject :one
 SELECT EXISTS (
   SELECT 1 FROM assistants
@@ -1145,6 +1177,47 @@ func (q *Queries) GetInferenceAcceptedCheckpoint(ctx context.Context, arg GetInf
 	var inference_accepted_checkpoint []byte
 	err := row.Scan(&inference_accepted_checkpoint)
 	return inference_accepted_checkpoint, err
+}
+
+const getInferenceConversation = `-- name: GetInferenceConversation :one
+SELECT id, user_id FROM chats
+WHERE project_id = $1 AND organization_id = $2
+  AND (external_chat_id = $3 OR id = $4)
+  AND (id = $4
+    OR (external_user_id = $5::text AND $5::text <> '')
+    OR (external_user_id = $6::text AND $6::text <> ''))
+ORDER BY (external_chat_id = $3) DESC
+LIMIT 1
+`
+
+type GetInferenceConversationParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ExternalChatID pgtype.Text
+	LegacyID       uuid.UUID
+	ActorID        string
+	ActorEmail     string
+}
+
+type GetInferenceConversationRow struct {
+	ID     uuid.UUID
+	UserID pgtype.Text
+}
+
+// Session IDs alone do not prove ownership. The deterministic legacy ID or
+// the provider's signed actor must also identify the stored owner.
+func (q *Queries) GetInferenceConversation(ctx context.Context, arg GetInferenceConversationParams) (GetInferenceConversationRow, error) {
+	row := q.db.QueryRow(ctx, getInferenceConversation,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ExternalChatID,
+		arg.LegacyID,
+		arg.ActorID,
+		arg.ActorEmail,
+	)
+	var i GetInferenceConversationRow
+	err := row.Scan(&i.ID, &i.UserID)
+	return i, err
 }
 
 const getLLMClientBreakdownByMessages = `-- name: GetLLMClientBreakdownByMessages :many
@@ -4204,8 +4277,7 @@ VALUES (
 )
 ON CONFLICT (organization_id, external_chat_id) WHERE external_chat_id IS NOT NULL
 DO UPDATE SET
-    project_id = EXCLUDED.project_id
-  , user_id = COALESCE(EXCLUDED.user_id, chats.user_id)
+    user_id = COALESCE(EXCLUDED.user_id, chats.user_id)
   , external_user_id = COALESCE(EXCLUDED.external_user_id, chats.external_user_id)
   -- Two title regimes share this upsert. Feeds with authoritative titles
   -- (ChatGPT conversations, Anthropic compliance) are newest-wins: a non-null
@@ -4218,6 +4290,7 @@ DO UPDATE SET
       ELSE COALESCE(EXCLUDED.title, chats.title)
     END
   , updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
+WHERE chats.project_id = EXCLUDED.project_id
 RETURNING id
 `
 
@@ -4246,6 +4319,56 @@ func (q *Queries) UpsertExternalChat(ctx context.Context, arg UpsertExternalChat
 		arg.CreatedAt,
 		arg.UpdatedAt,
 		arg.PreferStoredTitle,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const upsertInferenceConversation = `-- name: UpsertInferenceConversation :one
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id,
+                   external_chat_id, title, created_at, updated_at)
+VALUES ($1, $2, $3, $4::text,
+        $5::text, $6,
+        'Claude inference conversation', $7, $7)
+ON CONFLICT (organization_id, external_chat_id) WHERE external_chat_id IS NOT NULL
+DO UPDATE SET
+  user_id = COALESCE(EXCLUDED.user_id, chats.user_id),
+  -- A compliance-first row keeps its provider actor ID for later signed
+  -- frames that omit email. Inference-first rows have an actor-scoped ID.
+  external_user_id = CASE WHEN chats.id = EXCLUDED.id
+    THEN COALESCE(EXCLUDED.external_user_id, chats.external_user_id)
+    ELSE COALESCE(chats.external_user_id, EXCLUDED.external_user_id) END,
+  updated_at = GREATEST(chats.updated_at, EXCLUDED.updated_at)
+WHERE chats.project_id = EXCLUDED.project_id
+  AND (chats.id = EXCLUDED.id
+    OR (chats.user_id IS NOT NULL AND chats.user_id = EXCLUDED.user_id)
+    OR (chats.external_user_id = $8::text AND $8::text <> '')
+    OR (chats.external_user_id = EXCLUDED.external_user_id AND EXCLUDED.external_user_id <> ''))
+RETURNING id
+`
+
+type UpsertInferenceConversationParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	ExternalChatID pgtype.Text
+	ObservedAt     pgtype.Timestamptz
+	ActorID        string
+}
+
+func (q *Queries) UpsertInferenceConversation(ctx context.Context, arg UpsertInferenceConversationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertInferenceConversation,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.ExternalUserID,
+		arg.ExternalChatID,
+		arg.ObservedAt,
+		arg.ActorID,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

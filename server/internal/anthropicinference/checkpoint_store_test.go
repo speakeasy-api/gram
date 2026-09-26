@@ -98,7 +98,7 @@ func testConcurrentCheckpoints(t *testing.T, singleConnection bool) {
 	}
 	require.Equal(t, "allow", (<-firstVerdict).Action)
 	readMarker := func() []byte {
-		marker, err := chatrepo.New(db).GetInferenceAcceptedCheckpoint(t.Context(), chatrepo.GetInferenceAcceptedCheckpointParams{ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText("anthropic-inference:" + conversationID(config, frame).String())})
+		marker, err := chatrepo.New(db).GetInferenceAcceptedCheckpoint(t.Context(), chatrepo.GetInferenceAcceptedCheckpointParams{ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText(externalConversationID(config, frame))})
 		require.NoError(t, err)
 		return marker
 	}
@@ -162,7 +162,7 @@ func TestPostgresCheckpointRequiresSuccessfulEvaluation(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "deny", verdict.Action)
 		raw, err := chatrepo.New(db).GetInferenceAcceptedCheckpoint(t.Context(), chatrepo.GetInferenceAcceptedCheckpointParams{
-			ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText("anthropic-inference:" + conversationID(config, frame).String()),
+			ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText(externalConversationID(config, frame)),
 		})
 		require.NoError(t, err)
 		require.Empty(t, raw)
@@ -199,7 +199,7 @@ func TestPostgresCheckpointInvalidation(t *testing.T) {
 		raw, err := json.Marshal(cp)
 		require.NoError(t, err)
 		_, err = chatrepo.New(db).SetInferenceAcceptedCheckpoint(t.Context(), chatrepo.SetInferenceAcceptedCheckpointParams{
-			ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText("anthropic-inference:" + conversationID(config, frame).String()), Checkpoint: raw, ExpectedCheckpoint: expected,
+			ProjectID: config.ProjectID, ExternalChatID: conv.ToPGText(externalConversationID(config, frame)), Checkpoint: raw, ExpectedCheckpoint: expected,
 		})
 		require.NoError(t, err)
 		expected = raw

@@ -322,9 +322,11 @@ func (s *postgresStore) ResolveActor(ctx context.Context, config Config, frame F
 			return users[0].ID, nil
 		}
 	}
-	// Conversation identity includes the provider actor, so this fallback cannot
-	// borrow the owner of another actor's conversation.
-	conversation, err := chatrepo.New(s.db).GetChat(ctx, chatrepo.GetChatParams{ID: conversationID(config, frame), ProjectID: config.ProjectID})
+	// The lookup requires matching actor evidence as well as the provider
+	// conversation ID before borrowing the last known owner.
+	conversation, err := chatrepo.New(s.db).GetInferenceConversation(ctx, chatrepo.GetInferenceConversationParams{
+		ProjectID: config.ProjectID, OrganizationID: config.OrganizationID, LegacyID: conversationID(config, frame), ExternalChatID: conv.ToPGText(externalConversationID(config, frame)), ActorID: frame.Actor.ID, ActorEmail: conv.NormalizeEmail(frame.Actor.EmailAddress),
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
 	}
@@ -345,21 +347,21 @@ func (s *postgresStore) Save(ctx context.Context, config Config, frame Frame, us
 	// that was set by an earlier frame rather than overwriting it with the actor ID.
 	externalUserIDLabel := conv.NormalizeEmail(frame.Actor.EmailAddress)
 	now := time.Now().UTC()
-	// Namespacing isolates these opaque, sometimes client-asserted session ids
-	// from native hooks and Compliance imports. Null sessions are request-local.
+	// All integrations use the provider conversation ID. The upsert also
+	// checks the signed actor and project before joining an existing chat.
 	candidateID := conversationID(config, frame)
-	externalChatID := "anthropic-inference:" + candidateID.String()
-	chatID, err := chatrepo.New(s.db).UpsertExternalChat(ctx, chatrepo.UpsertExternalChatParams{
-		ID:                candidateID,
-		ProjectID:         config.ProjectID,
-		OrganizationID:    config.OrganizationID,
-		UserID:            conv.ToPGTextEmpty(userID),
-		ExternalUserID:    conv.ToPGTextEmpty(externalUserIDLabel),
-		ExternalChatID:    conv.ToPGText(externalChatID),
-		Title:             conv.ToPGText("Claude inference conversation"),
-		CreatedAt:         conv.ToPGTimestamptz(now),
-		UpdatedAt:         conv.ToPGTimestamptz(now),
-		PreferStoredTitle: true,
+	if err := chatrepo.New(s.db).AdoptLegacyInferenceConversation(ctx, chatrepo.AdoptLegacyInferenceConversationParams{
+		ID: candidateID, ProjectID: config.ProjectID, OrganizationID: config.OrganizationID,
+		ExternalChatID:       conv.ToPGText(externalConversationID(config, frame)),
+		LegacyExternalChatID: conv.ToPGText("anthropic-inference:" + candidateID.String()),
+	}); err != nil {
+		return 0, fmt.Errorf("adopt inference conversation identity: %w", err)
+	}
+	chatID, err := chatrepo.New(s.db).UpsertInferenceConversation(ctx, chatrepo.UpsertInferenceConversationParams{
+		ID: candidateID, ProjectID: config.ProjectID, OrganizationID: config.OrganizationID,
+		UserID: conv.ToPGTextEmpty(userID), ExternalUserID: conv.ToPGTextEmpty(externalUserIDLabel),
+		ExternalChatID: conv.ToPGText(externalConversationID(config, frame)), ActorID: frame.Actor.ID,
+		ObservedAt: conv.ToPGTimestamptz(now),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("upsert inference conversation: %w", err)
@@ -516,8 +518,16 @@ func (s *postgresStore) alignFrame(ctx context.Context, config Config, chatID uu
 	return min(int(storedCount), len(messages)), nil, nil
 }
 
-// Include the actor because Claude Code session ids can be client asserted.
-// Neither another actor nor another project can append to this conversation.
+// Absent session or actor identity cannot correlate across integrations.
+func externalConversationID(config Config, frame Frame) string {
+	if frame.SessionID != "" && (frame.Actor.ID != "" || frame.Actor.EmailAddress != "") {
+		return frame.SessionID
+	}
+	return "anthropic-inference:" + conversationID(config, frame).String()
+}
+
+// The candidate row ID retains the tenant, project, and actor as ownership
+// evidence when resolving client-asserted session IDs and legacy capture rows.
 func conversationID(config Config, frame Frame) uuid.UUID {
 	actorID := conv.Default(frame.Actor.ID, conv.NormalizeEmail(frame.Actor.EmailAddress))
 	sessionID := conv.Default(frame.SessionID, frame.RequestID)
