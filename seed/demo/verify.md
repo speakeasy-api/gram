@@ -311,8 +311,16 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       policy grants are reset, and no visitor-created API keys survive the
       shared SQL. Local-only developer keys may be restored by
       `RunLocalFixtures`; do not mistake those for managed-agent seed keys.
+19. **Remote MCP identity settings** — open the settings page for each seeded
+    Remote MCP server. Linear shows the **User** identity pill, the Example
+    Workspace Identity provider, and the Session length / Client access controls
+    in Sessions. Slack shows **Agent** with the inert demo Authorization
+    credential managed under Identity. GitHub shows **None** with no provider or
+    static Authorization header. All three use the Display, Identity, Server URL,
+    Sessions, Tool Filtering, Danger Zone order, with Advanced Headers directly
+    after the Identity controls.
 
-19. **Billing meter usage** — select a custom trailing 14-day window. Storage
+20. **Billing meter usage** — select a custom trailing 14-day window. Storage
     shows s-tokens of stored content, bandwidth shows ingress and egress bytes,
     and risk content shows all six scanners. Department breakdown includes
     missing attribution and a remainder. Chart series and table totals sum to
@@ -326,7 +334,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     must not increase API usage, while the incremental summary records all 873
     deliveries. Run the seed twice and repeat.
 
-20. **Billing spend availability** — in the enterprise demo organization, open
+21. **Billing spend availability** — in the enterprise demo organization, open
     Billing. The spend heading, controls, chart, and product table must be absent,
     while the ordinary usage explorer stays visible. `usage.getSpendBreakdown`
     must return `availability: "unsupported_plan"`, `products: []`, and
@@ -350,7 +358,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     Repeat after reseeding. Local rewritten-seed checks alone do not qualify
     this shared-demo row for `[x]`.
 
-21. **Admin billing spend by product** — sign in to the admin dashboard and open
+22. **Admin billing spend by product** — sign in to the admin dashboard and open
     the enterprise demo organization's **Billing** page without impersonation or
     changing its account type. Select a trailing 14-day window. The spend section
     and `/admin/organization.spendBreakdown` must report non-zero storage,
@@ -386,7 +394,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
     recovered on retry.
     [Visual evidence on PR #6602](https://github.com/speakeasy-api/gram/pull/6602#issuecomment-5742380327).
 
-22. **Exact remote-session attachments (local only)**
+23. **Exact remote-session attachments (local only)**
     - With the feature enabled, inspect Linear session 6 for the fictional
       account and the two active release agents owned by the same human.
       Both attachments must show the same upstream session, with no token
@@ -403,7 +411,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       usable upstream credentials. This
       fixture proves display and identity relationships, not live execution.
 
-23. **Identity-chaining registration evidence**
+24. **Identity-chaining registration evidence**
     - Run `mise run seed` twice in an isolated local stack. In its `default`
       project, open **Remote Identity Providers → Identity chaining example**.
       The Overview must render `https://authorization.example.com` and
@@ -432,7 +440,7 @@ Connector` appears under **Inactive** with no connections. Its row menu's
       `[~]` to `[x]`; API-only checks and the separate synthetic consolidation
       blocker demo do not complete this fixture's display verification.
 
-24. **Workload Identities** — open `/<org>/projects/default/workload-identities`
+25. **Workload Identities** — open `/<org>/projects/default/workload-identities`
     (no sidebar entry yet; the page is pre-GA and reached by URL). Two trusted
     issuers: `Acme Agent Platform` with Wildcards **ALLOWED**, and `Acme CI`
     with **OFF** — the second must stay off, because its subjects encode a

@@ -13,6 +13,7 @@ export function Text({
   mono,
   small,
   destructive,
+  warning,
   as: Component = "p",
   ...props
 }: {
@@ -23,6 +24,8 @@ export function Text({
   small?: boolean;
   skeleton?: "word" | "phrase" | "line" | "paragraph";
   destructive?: boolean;
+  /** The orange feedback tone, for something the reader has to fix. */
+  warning?: boolean;
   as?: React.ElementType;
   children?: React.ReactNode;
 } & Omit<React.ComponentProps<"p">, "children">): JSX.Element {
@@ -82,6 +85,8 @@ export function Text({
     baseClass += " text-muted-foreground";
   } else if (destructive) {
     baseClass += " text-default-destructive";
+  } else if (warning) {
+    baseClass += " text-default-warning";
   } else {
     baseClass += " text-stone-800 dark:text-stone-200";
   }

@@ -411,4 +411,30 @@ describe("RadioCard", () => {
     rerender(<ControlledGroup orientation="horizontal" />);
     expect(group.getAttribute("data-orientation")).toBe("horizontal");
   });
+
+  it("centers a leading mark on the title's line box at each density", () => {
+    const { rerender } = render(
+      <RadioCardGroup aria-label="Choice" value="a">
+        <RadioCard value="a" leading={<span data-testid="mark" />} title="A">
+          Body copy.
+        </RadioCard>
+      </RadioCardGroup>,
+    );
+
+    // The slot takes the title's line-height and centers in it. Top-aligning a
+    // 16px mark against a 24px line leaves it sitting visibly high.
+    const slot = () =>
+      document.querySelector('[data-slot="radio-card-leading"]') as HTMLElement;
+    expect(slot().className).toContain("items-center");
+    expect(slot().className).toContain("h-6");
+
+    rerender(
+      <RadioCardGroup aria-label="Choice" size="sm" value="a">
+        <RadioCard value="a" leading={<span data-testid="mark" />} title="A">
+          Body copy.
+        </RadioCard>
+      </RadioCardGroup>,
+    );
+    expect(slot().className).toContain("h-5");
+  });
 });

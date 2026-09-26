@@ -106,6 +106,7 @@ vi.mock("@/hooks/useToolsetUrl", () => ({
 }));
 vi.mock("@/pages/mcp/x/MCPServerDetails", () => ({
   MCPServerStatusDropdown: () => null,
+  MCPServerAvailabilityToggle: () => null,
 }));
 vi.mock("@/pages/mcp/x/MCPServerDetailsRouting", () => ({
   activeTabFromPath: () => "overview",
@@ -118,10 +119,22 @@ vi.mock(
 vi.mock("@/pages/mcp/x/tabs/settings/sections/ServerUrlSection", () => ({
   MCP_SERVER_URL_SECTION_ID: "url",
 }));
-vi.mock(
-  "@/pages/mcp/x/tabs/settings/sections/authentication/useAllRemoteSessionClients",
-  () => ({ useAllRemoteSessionClients: () => ({ items: [] }) }),
-);
+vi.mock("@/lib/remote-identity", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/remote-identity")>()),
+  useAllRemoteSessionClients: () => ({
+    items: [],
+    isLoading: false,
+    isError: false,
+  }),
+  useUpstreamProbe: () => "idle",
+}));
+vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
+  useRemoteMcpServerHeaders: () => ({
+    data: { headers: [] },
+    isLoading: false,
+    isError: false,
+  }),
+}));
 vi.mock("@/components/sources/SourceCard", () => ({
   SourceMcpIcon: () => null,
 }));

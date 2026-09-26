@@ -17,7 +17,7 @@ export function resetAllProtectedResourceMetadata(
   });
 }
 
-export type ProtectedResourceProbeStatus =
+type ProtectedResourceProbeStatus =
   | "idle"
   | "loading"
   | "available"

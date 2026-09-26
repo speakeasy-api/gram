@@ -1,0 +1,914 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/Tooltip";
+import { RemoteMcpIdentitySectionBody } from "./RemoteMcpIdentitySection";
+import type { AuthTarget } from "./authTarget";
+
+const mocks = vi.hoisted(() => ({
+  headers: vi.fn(),
+  sessions: vi.fn(),
+  clients: vi.fn(),
+  siblings: vi.fn(),
+  issuers: vi.fn(),
+  source: vi.fn(),
+  rbac: vi.fn(),
+  hasScope: vi.fn(),
+  create: vi.fn(),
+  update: vi.fn(),
+  remove: vi.fn(),
+  invalidateHeaders: vi.fn(),
+  refetchHeaders: vi.fn(),
+  authenticationProbe: vi.fn(),
+  protectedResourceMetadata: vi.fn(),
+  fetchMetadata: vi.fn(),
+  commit: vi.fn(),
+  detach: vi.fn(),
+}));
+
+vi.mock("@/routes", () => ({
+  useRoutes: () => ({
+    mcp: {
+      x: {
+        overview: { href: (slug: string) => `/mcp/x/${slug}` },
+        inspect: { href: (slug: string) => `/mcp/x/${slug}/inspect` },
+        teamAccess: { href: (slug: string) => `/mcp/x/${slug}/team-access` },
+        sessions: { href: (slug: string) => `/mcp/x/${slug}/sessions` },
+        settings: { href: (slug: string) => `/mcp/x/${slug}/settings` },
+      },
+    },
+    remoteIdentityProviders: {
+      href: () => "/remote-identity-providers",
+      issuerDetail: { href: (id: string) => `/providers/${id}` },
+      clientDetail: {
+        href: (issuerId: string, clientId: string) =>
+          `/providers/${issuerId}/clients/${clientId}`,
+      },
+    },
+  }),
+}));
+
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({
+    remoteSessions: { commitServerIdentityConfiguration: mocks.commit },
+    remoteSessionIssuers: { fetchMetadata: mocks.fetchMetadata },
+  }),
+}));
+
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => mocks.rbac(),
+}));
+
+// The MCP catalog only seeds suggested header rows. Nothing here is about
+// suggestions, and the real hook drags the project-slug context in with it.
+vi.mock("@/pages/catalog/hooks", () => ({
+  useListMCPCatalog: () => ({ data: undefined }),
+}));
+
+vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
+  useRemoteMcpServerHeaders: () => mocks.headers(),
+  invalidateAllRemoteMcpServerHeaders: (...args: unknown[]) =>
+    mocks.invalidateHeaders(...args),
+}));
+
+vi.mock("@gram/client/react-query/mcpServers.js", () => ({
+  useMcpServers: () => mocks.siblings(),
+}));
+
+vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
+  useGetRemoteMcpServer: () => mocks.source(),
+}));
+
+vi.mock("@gram/client/react-query/remoteSessionIssuers.js", () => ({
+  useRemoteSessionIssuers: () => mocks.issuers(),
+  invalidateAllRemoteSessionIssuers: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/remoteSessionClients.js", () => ({
+  invalidateAllRemoteSessionClients: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/detachUserSessionIssuer.js", () => ({
+  useDetachUserSessionIssuerMutation: () => ({
+    mutateAsync: mocks.detach,
+    isPending: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/remoteSessions.js", () => ({
+  useRemoteSessions: () => mocks.sessions(),
+}));
+
+vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
+  useAllRemoteSessionClients: () => mocks.clients(),
+}));
+
+vi.mock("@/lib/remote-identity/queries/useUpstreamProbe", () => ({
+  useUpstreamProbe: (...args: unknown[]) => mocks.authenticationProbe(...args),
+}));
+
+vi.mock("@/lib/remote-identity/queries/useProtectedResourceMetadata", () => ({
+  useProtectedResourceMetadata: (...args: unknown[]) =>
+    mocks.protectedResourceMetadata(...args),
+}));
+
+vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
+  useCreateRemoteMcpServerHeaderMutation: () => ({
+    mutateAsync: mocks.create,
+    isPending: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/updateRemoteMcpServerHeader.js", () => ({
+  useUpdateRemoteMcpServerHeaderMutation: () => ({
+    mutateAsync: mocks.update,
+    isPending: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/deleteRemoteMcpServerHeader.js", () => ({
+  useDeleteRemoteMcpServerHeaderMutation: () => ({
+    mutateAsync: mocks.remove,
+    isPending: false,
+    error: null,
+  }),
+}));
+
+function renderIdentity(): ReturnType<typeof render> {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <RemoteMcpIdentitySectionBody target={target} />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+}
+
+function configuredHeader(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "header-1",
+    name: "Authorization",
+    value: "***",
+    isRequired: true,
+    isSecret: true,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+    ...overrides,
+  };
+}
+
+const target: AuthTarget = {
+  kind: "remote-mcp",
+  slug: "remote-server",
+  projectId: "project-1",
+  permissionResourceId: "mcp-server-1",
+  supportsOrganizationIssuers: true,
+  userSessionIssuerId: "user-session-issuer-1",
+  remoteMcpServerId: "remote-source-1",
+  invalidate: vi.fn(),
+};
+
+beforeEach(() => {
+  mocks.headers.mockReturnValue({
+    data: { headers: [] },
+    isLoading: false,
+    isError: false,
+    error: null,
+    refetch: mocks.refetchHeaders,
+  });
+  mocks.refetchHeaders.mockResolvedValue({
+    data: { headers: [] },
+    isError: false,
+  });
+  mocks.clients.mockReturnValue({
+    items: [],
+    isLoading: false,
+    isError: false,
+    error: null,
+  });
+  mocks.siblings.mockReturnValue({
+    data: {
+      mcpServers: [
+        {
+          id: "mcp-server-1",
+          name: "Linear",
+          remoteMcpServerId: "remote-source-1",
+        },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+  });
+  mocks.source.mockReturnValue({
+    data: { slug: "linear", url: "https://mcp.linear.app/mcp" },
+    isLoading: false,
+    isError: false,
+  });
+  mocks.issuers.mockReturnValue({ data: { result: { items: [] } } });
+  mocks.sessions.mockReturnValue({
+    data: { result: { items: [{ id: "s-1" }] } },
+  });
+  mocks.protectedResourceMetadata.mockReturnValue({
+    status: "idle",
+    metadata: null,
+  });
+  mocks.rbac.mockReturnValue({
+    isLoading: false,
+    hasScope: mocks.hasScope,
+    hasAllScopes: () => true,
+    hasAnyScope: (_scopes: string[], resourceId?: string) =>
+      resourceId === undefined || resourceId === "mcp-server-1",
+  });
+  mocks.hasScope.mockImplementation(
+    (_scope: string, resourceId?: string) => resourceId === "mcp-server-1",
+  );
+  mocks.create.mockResolvedValue({});
+  mocks.update.mockResolvedValue({});
+  mocks.remove.mockResolvedValue({});
+  mocks.commit.mockResolvedValue({
+    status: "registered",
+    manualSetupRequired: false,
+  });
+  mocks.invalidateHeaders.mockResolvedValue(undefined);
+  mocks.detach.mockResolvedValue({});
+  mocks.authenticationProbe.mockReturnValue("available");
+});
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+describe("RemoteMcpIdentitySectionBody", () => {
+  it("names the three identity modes after the upstream service", () => {
+    renderIdentity();
+
+    expect(screen.getByRole("radio", { name: /User Identity/ })).toBeDefined();
+    expect(
+      screen.getByText(
+        "Each user signs in to Linear as themselves and keeps their own permissions.",
+      ),
+    ).toBeDefined();
+    expect(screen.getByRole("radio", { name: /Agent Identity/ })).toBeDefined();
+    expect(screen.getByRole("radio", { name: /No Identity/ })).toBeDefined();
+  });
+
+  it("configures User Identity inline without OAuth vocabulary", async () => {
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Linear",
+              issuer: "https://mcp.linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              clientIdMetadataDocumentSupported: true,
+            },
+          ],
+        },
+      },
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    // One provider, one registration choice — no issuer, DCR or CIMD wording.
+    expect(screen.getByLabelText("Identity provider")).toBeDefined();
+    expect(screen.getByLabelText("Registration")).toBeDefined();
+    expect(screen.getByText("Auto-Configure")).toBeDefined();
+    expect(screen.queryByText(/CIMD/i)).toBeNull();
+    expect(screen.queryByText(/DCR/i)).toBeNull();
+    expect(screen.queryByText(/issuer/i)).toBeNull();
+    expect(screen.queryByText(/audience/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    expect(mocks.commit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          mcpServerId: "mcp-server-1",
+          providerId: "provider-1",
+          clientMode: "auto",
+        }),
+      }),
+    );
+  });
+
+  it("opens the provider and registration menus on click", () => {
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Linear",
+              issuer: "https://mcp.linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              clientIdMetadataDocumentSupported: true,
+            },
+          ],
+        },
+      },
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    // Both triggers render under <PopoverTrigger asChild>, so the props Radix
+    // clones onto them have to survive. aria-expanded flipping is the proof
+    // that the click handler and state actually reached the button.
+    for (const name of ["Identity provider", "Registration"]) {
+      const trigger = screen.getByLabelText(name);
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+      fireEvent.click(trigger);
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      fireEvent.click(trigger);
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    }
+  });
+
+  it("holds the provider control while discovery is still running", () => {
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "loading",
+      metadata: null,
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    // Not "Choose an identity provider": the control is about to answer its
+    // own question, and a pick made now would look overwritten when the
+    // discovered default lands.
+    const trigger = screen.getByLabelText(
+      "Identity provider",
+    ) as HTMLButtonElement;
+    expect(trigger.textContent).toContain("Checking");
+    expect(trigger.disabled).toBe(true);
+  });
+
+  it("offers the discovered provider as one that will be created", () => {
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "available",
+      metadata: { authorizationServers: ["https://auth.linear.app"] },
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(screen.getByText("Will be created")).toBeDefined();
+    // The derived name and the host read the same for a bare issuer URL.
+    expect(screen.getAllByText("auth.linear.app").length).toBeGreaterThan(0);
+  });
+
+  it("does not offer Auto-Configure for a provider that cannot register", async () => {
+    mocks.protectedResourceMetadata.mockReturnValue({
+      status: "available",
+      metadata: { authorizationServers: ["https://github.com/login/oauth"] },
+    });
+    // GitHub publishes no registration endpoint and no CIMD document — it can
+    // only be set up by hand, and says so through service_documentation.
+    mocks.fetchMetadata.mockResolvedValue({
+      clientIdMetadataDocumentSupported: false,
+      registrationEndpoint: undefined,
+      serviceDocumentation: "https://docs.github.com/apps",
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    await waitFor(() => expect(screen.getByText("New client")).toBeDefined());
+    expect(screen.queryByText("Auto-Configure")).toBeNull();
+    expect(screen.getByLabelText("Client ID")).toBeDefined();
+    expect(
+      screen
+        .getByRole("link", { name: /Open registration guide/i })
+        .getAttribute("href"),
+    ).toBe("https://docs.github.com/apps");
+  });
+
+  it("marks the No Identity card when the probe says auth is required", () => {
+    mocks.authenticationProbe.mockReturnValue("authentication-required");
+
+    renderIdentity();
+
+    // The warning lives on the choice it is about, not in a banner below it,
+    // and the detail waits for a hover rather than taking a row.
+    const card = screen
+      .getByLabelText("This server requires authentication")
+      .closest("[data-slot=radio-card]");
+    expect(card).not.toBeNull();
+    expect(card?.className).toContain("border-warning-default");
+    expect(screen.queryByText(/keep failing/i)).toBeNull();
+    expect(mocks.authenticationProbe).toHaveBeenCalledWith(
+      "remote-source-1",
+      true,
+    );
+  });
+
+  it("allows Agent to User, which the derivation already expects", () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+
+    renderIdentity();
+
+    // A linked client outranks a static credential, so a server holding both
+    // reads as User — AIM-230 calls that out and leaves the stale credential
+    // visible for cleanup rather than forbidding the move.
+    expect(
+      screen
+        .getByRole("radio", { name: /Agent Identity/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(
+      (
+        screen.getByRole("radio", {
+          name: /User Identity/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+  });
+
+  it("stays Linked when the provider already in force is re-picked", async () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Example provider",
+              issuer: "https://id.example",
+              slug: "example",
+              clientIdMetadataDocumentSupported: true,
+            },
+          ],
+        },
+      },
+    });
+
+    renderIdentity();
+
+    // Configured and unchanged: nothing to commit.
+    const save = () =>
+      screen.getByRole("button", { name: /^Save/ }) as HTMLButtonElement;
+    expect(save().disabled).toBe(true);
+
+    // Opening the menu and choosing what is already chosen is not a change.
+    fireEvent.click(screen.getByLabelText("Identity provider"));
+    // The trigger shows the name too, so the menu entry is the later match.
+    await waitFor(() =>
+      expect(screen.getAllByText("Example provider").length).toBeGreaterThan(1),
+    );
+    const entries = screen.getAllByText("Example provider");
+    fireEvent.click(entries[entries.length - 1] as HTMLElement);
+
+    expect(save().disabled).toBe(true);
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
+  it("holds a mode change as a draft until Save", async () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Example provider",
+              issuer: "https://id.example",
+              slug: "example",
+            },
+          ],
+        },
+      },
+    });
+
+    renderIdentity();
+
+    // The choice is not a one-way door, and picking a card writes nothing.
+    const none = screen.getByRole("radio", {
+      name: /No Identity/,
+    }) as HTMLButtonElement;
+    expect(none.disabled).toBe(false);
+    fireEvent.click(none);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mocks.detach).not.toHaveBeenCalled();
+
+    // Save is what commits it, and the dialog is where the consequence is
+    // stated — the footer stays quiet.
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByRole("dialog")).toBeDefined();
+    expect(mocks.detach).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mocks.detach).toHaveBeenCalledWith({
+        request: {
+          attachUserSessionIssuerForm: {
+            id: "client-1",
+            userSessionIssuerId: "user-session-issuer-1",
+          },
+        },
+      }),
+    );
+  });
+
+  it("links a configured provider and client to their own pages", () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Example provider",
+              issuer: "https://id.example",
+              slug: "example",
+            },
+          ],
+        },
+      },
+    });
+
+    renderIdentity();
+
+    // AIM-230 requires both to reach their management surface, and the row
+    // carries it on text that is already there rather than new chrome.
+    expect(
+      screen.getByRole("link", { name: "id.example" }).getAttribute("href"),
+    ).toBe("/providers/provider-1");
+    expect(
+      screen.getByRole("link", { name: "1 connection" }).getAttribute("href"),
+    ).toBe("/providers/provider-1/clients/client-1");
+  });
+
+  it("reports a linked client only when nobody has connected through it", () => {
+    const linked = {
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          remoteSessionIssuerId: "provider-1",
+          userSessionIssuerIds: ["user-session-issuer-1"],
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    };
+    mocks.clients.mockReturnValue(linked);
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Example provider",
+              issuer: "https://id.example",
+              slug: "example",
+            },
+          ],
+        },
+      },
+    });
+
+    // A client people already use says nothing beyond its connection count.
+    renderIdentity();
+    expect(screen.queryByText(/No one has connected yet/i)).toBeNull();
+    expect(screen.queryByText("Linked")).toBeNull();
+    cleanup();
+
+    // One nobody has signed in through links to where they would.
+    mocks.sessions.mockReturnValue({ data: { result: { items: [] } } });
+    renderIdentity();
+    expect(
+      screen
+        .getByRole("link", { name: /No one has connected yet/i })
+        .getAttribute("href"),
+    ).toBe("/mcp/x/remote-server/inspect");
+  });
+
+  it("previews the Authorization header without revealing the credential", async () => {
+    const { container } = renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+
+    const input = screen.getByLabelText("Token");
+    fireEvent.change(input, { target: { value: "bearer-secret-value" } });
+
+    expect((input as HTMLInputElement).type).toBe("password");
+    const preview = screen.getByRole("status", {
+      name: "Authorization preview",
+    });
+    expect(preview.textContent).toContain("Authorization:");
+    expect(preview.textContent).toContain("Bearer");
+    expect(container.textContent).not.toContain("bearer-secret-value");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce());
+    expect(mocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          createServerHeaderForm: expect.objectContaining({
+            name: "Authorization",
+            value: "Bearer bearer-secret-value",
+          }),
+        }),
+      }),
+    );
+    await waitFor(() => expect((input as HTMLInputElement).value).toBe(""));
+  });
+
+  it("labels Basic and Manual credential inputs without exposing their values", () => {
+    const { container } = renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Basic" }));
+
+    fireEvent.change(screen.getByLabelText("Username"), {
+      target: { value: "operator" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "basic-secret" },
+    });
+    expect((screen.getByLabelText("Password") as HTMLInputElement).type).toBe(
+      "password",
+    );
+    expect(container.textContent).not.toContain("basic-secret");
+    expect(container.textContent).not.toContain("b3BlcmF0b3I6YmFzaWMtc2VjcmV0");
+
+    fireEvent.click(screen.getByRole("button", { name: "Manual" }));
+    fireEvent.change(screen.getByLabelText("Header value"), {
+      target: { value: "Custom manual-secret" },
+    });
+    expect(
+      (screen.getByLabelText("Header value") as HTMLInputElement).type,
+    ).toBe("password");
+    expect(container.textContent).not.toContain("manual-secret");
+  });
+
+  it("separates a changed credential from a usable one", () => {
+    // A readable saved credential: complete, so the form is valid on load,
+    // which is exactly where "valid" and "changed" part ways.
+    mocks.headers.mockReturnValue({
+      data: {
+        headers: [
+          configuredHeader({ value: "Bearer seeded", isSecret: false }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+
+    renderIdentity();
+
+    expect((screen.getByLabelText("Token") as HTMLInputElement).value).toBe(
+      "seeded",
+    );
+    // Unchanged, so there is nothing to save. The old flag conflated the two
+    // and offered Save the moment the page loaded.
+    const save = () =>
+      screen.getByRole("button", { name: /^Save/ }) as HTMLButtonElement;
+    expect(save().disabled).toBe(true);
+
+    // Typing makes it dirty; typing the original back makes it clean again.
+    const token = screen.getByLabelText("Token");
+    fireEvent.change(token, { target: { value: "rotated" } });
+    expect(save().disabled).toBe(false);
+    fireEvent.change(token, { target: { value: "seeded" } });
+    expect(save().disabled).toBe(true);
+  });
+
+  it("keeps password managers out of the credential fields", () => {
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Basic" }));
+
+    // A username next to a password is exactly the shape a manager treats as a
+    // login form, but these are credentials for the upstream service.
+    for (const label of ["Username", "Password"]) {
+      const field = screen.getByLabelText(label);
+      expect(field.getAttribute("data-1p-ignore")).toBe("true");
+      expect(field.getAttribute("data-lpignore")).toBe("true");
+      expect(field.getAttribute("data-bwignore")).toBe("true");
+      expect(field.getAttribute("data-form-type")).toBe("other");
+    }
+    // Browsers ignore autocomplete="off" on password inputs.
+    expect(screen.getByLabelText("Password").getAttribute("autocomplete")).toBe(
+      "new-password",
+    );
+    expect(screen.getByLabelText("Username").getAttribute("autocomplete")).toBe(
+      "off",
+    );
+  });
+
+  it("keeps Client Credentials visible but unselectable", () => {
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+
+    expect(screen.getByText("Coming soon")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: /Client credentials/ }));
+    // Still on Bearer: the segment advertises the roadmap, it does not switch.
+    expect(screen.getByLabelText("Token")).toBeDefined();
+  });
+
+  it("blocks Agent Identity and describes legacy pass-through Authorization honestly", () => {
+    mocks.headers.mockReturnValue({
+      data: {
+        headers: [
+          configuredHeader({
+            value: undefined,
+            valueFromRequestHeader: "X-Legacy-Authorization",
+            isSecret: false,
+          }),
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+
+    renderIdentity();
+
+    // One alert above the choice, not a second copy under it.
+    expect(
+      screen.getAllByText(/legacy pass-through Authorization header/i),
+    ).toHaveLength(1);
+    expect(
+      (
+        screen.getByRole("radio", {
+          name: /Agent Identity/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("renders query failures as indeterminate instead of No Identity", () => {
+    mocks.clients.mockReturnValue({
+      items: [],
+      isLoading: false,
+      isError: true,
+      error: new Error("client lookup failed"),
+    });
+
+    renderIdentity();
+
+    expect(
+      screen.getByText(/Could not determine the current identity/i),
+    ).toBeDefined();
+    expect(screen.getByText("Identity is unavailable.")).toBeDefined();
+    expect(screen.queryByRole("radio", { name: /No Identity/ })).toBeNull();
+  });
+
+  it("fails closed without the target-specific mcp:write grant", () => {
+    mocks.rbac.mockReturnValue({
+      isLoading: false,
+      hasScope: () => false,
+      hasAllScopes: () => false,
+      hasAnyScope: () => false,
+    });
+
+    renderIdentity();
+
+    expect(
+      (
+        screen.getByRole("radio", {
+          name: /Agent Identity/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("radio", { name: /Agent Identity/ }));
+    expect(screen.queryByLabelText("Token")).toBeNull();
+  });
+
+  it("checks mode changes against the MCP target resource", () => {
+    renderIdentity();
+
+    expect(mocks.hasScope).toHaveBeenCalledWith("mcp:write", "mcp-server-1");
+  });
+
+  it("fails closed while RBAC grants are loading", () => {
+    mocks.rbac.mockReturnValue({
+      isLoading: true,
+      hasScope: () => true,
+      hasAllScopes: () => true,
+      hasAnyScope: () => true,
+    });
+
+    renderIdentity();
+
+    expect(
+      (
+        screen.getByRole("radio", {
+          name: /Agent Identity/,
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("removes the Agent credential only once Save is confirmed", async () => {
+    mocks.headers.mockReturnValue({
+      data: { headers: [configuredHeader()] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: mocks.refetchHeaders,
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /No Identity/ }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mocks.remove).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByRole("dialog")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(mocks.remove).toHaveBeenCalledWith({
+        request: { id: "header-1" },
+      }),
+    );
+  });
+
+  it("links shared-source guidance to identity provider management", () => {
+    mocks.siblings.mockReturnValue({
+      data: {
+        mcpServers: [
+          { id: "mcp-server-1", remoteMcpServerId: "remote-source-1" },
+          { id: "mcp-server-2", remoteMcpServerId: "remote-source-1" },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    renderIdentity();
+
+    expect(
+      screen
+        .getByRole("link", { name: "Remote Identity Providers" })
+        .getAttribute("href"),
+    ).toBe("/remote-identity-providers");
+  });
+});
