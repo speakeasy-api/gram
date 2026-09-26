@@ -4,6 +4,7 @@ import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
+import { getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import type { AgentPlatform, PlatformSetupStep } from "../types";
 
@@ -18,6 +19,8 @@ const CLAUDE_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CLAUDE_PLUGIN_NAME}}";
 const CURSOR_PLUGIN_NAME_PLACEHOLDER = "{{GRAM_CURSOR_PLUGIN_NAME}}";
 const MARKETPLACE_NAME_PLACEHOLDER = "{{GRAM_MARKETPLACE_NAME}}";
 const DEVICE_AGENT_URL_PLACEHOLDER = "{{GRAM_DEVICE_AGENT_URL}}";
+const SERVER_URL_PLACEHOLDER = "{{GRAM_SERVER_URL}}";
+const SERVER_HOST_PLACEHOLDER = "{{GRAM_SERVER_HOST}}";
 
 function applySubstitutions(
   input: string,
@@ -65,6 +68,9 @@ export function usePlatformPlaceholders(): PlatformPlaceholders {
   // repo, and a slug rebuilt from the current slug would name a plugin that is
   // not there — which Claude and Cursor accept in silence, enabling nothing.
   const marketplaceUrl = publishStatus?.marketplaceUrl ?? "";
+  // The host the admin is on: app.getgram.ai and ai.speakeasy.com both serve
+  // prod, so telemetry endpoints and egress allowlists follow the current one.
+  const server = new URL(getServerURL(), window.location.origin);
 
   // The API key is a live secret and must never be interpolated into a URL —
   // an href leaks it via the address bar, Referer header, browser history, and
@@ -89,6 +95,8 @@ export function usePlatformPlaceholders(): PlatformPlaceholders {
     ],
     [MARKETPLACE_NAME_PLACEHOLDER, marketplaceName],
     [DEVICE_AGENT_URL_PLACEHOLDER, deviceAgentUrl],
+    [SERVER_URL_PLACEHOLDER, server.origin],
+    [SERVER_HOST_PLACEHOLDER, server.host],
   ];
 
   return {

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/Label";
 import { Link as ExternalLink } from "@/components/ui/Link";
 import { Text } from "@/components/ui/Text";
 import { useAgentToken } from "@/hooks/useAgentToken";
+import { getServerURL } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
 import { useQuery } from "@tanstack/react-query";
 import React, { useId, useState } from "react";
@@ -370,7 +371,9 @@ export function RemoteNetworkAccessStep(): React.JSX.Element {
         so GCS and package registries remain available, and add this host on its
         own line:
       </Text>
-      <CodeBlock language="text">app.getgram.ai</CodeBlock>
+      <CodeBlock language="text">
+        {new URL(getServerURL(), window.location.origin).host}
+      </CodeBlock>
       <Text small muted>
         Without this host the agent cannot fetch policy or send hook events.
       </Text>

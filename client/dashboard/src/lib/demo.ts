@@ -6,7 +6,6 @@ export const DEMO_ORG_SLUG = "acme-demo";
 // The demo org is seeded with a single project. New visitors land here so
 // they see sample data instead of the empty org home.
 const DEMO_PROJECT_SLUG = "default";
-const DEMO_APP_ORIGIN = "https://app.getgram.ai";
 
 export const DEMO_LANDING_PATH = `/${DEMO_ORG_SLUG}/projects/${DEMO_PROJECT_SLUG}`;
 
@@ -19,7 +18,8 @@ export const DEMO_REDIRECT_PARAM = "redirect";
 /**
  * Link to the demo-org equivalent of a page. Routes through /explore-demo so
  * auth.enterDemo runs first — a direct deep link would fail for users whose
- * session is scoped to a different org.
+ * session is scoped to a different org. Relative so it stays on the current
+ * host: session cookies are host-only.
  */
 export function demoProjectPageHref(
   pathname: string,
@@ -33,7 +33,7 @@ export function demoProjectPageHref(
       : "";
 
   const demoPath = `${DEMO_LANDING_PATH}${pagePath}`;
-  return `${DEMO_APP_ORIGIN}/explore-demo?${DEMO_REDIRECT_PARAM}=${encodeURIComponent(demoPath)}`;
+  return `/explore-demo?${DEMO_REDIRECT_PARAM}=${encodeURIComponent(demoPath)}`;
 }
 
 // Set by the /explore-demo page before switching, so Exit demo can return a

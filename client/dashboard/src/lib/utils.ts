@@ -50,13 +50,20 @@ export function getApiBaseURL(): string {
   return import.meta.env.DEV ? window.location.origin : getServerURL();
 }
 
-// tunnel.speakeasy.com in prod, tunnel-pr-N.<env> in previews (single label
-// keeps the wildcard cert valid), tunnel.<host> otherwise.
-export function tunnelGatewayURL(): string {
-  const server = new URL(getServerURL());
-  const host =
-    server.host === "app.getgram.ai"
-      ? "tunnel.speakeasy.com"
+// The dashboard is served on more than one first-party host per environment.
+// Matched exactly: each host maps to that environment's shared services.
+const PROD_DASHBOARD_HOSTS = ["app.getgram.ai", "ai.speakeasy.com"];
+const DEV_DASHBOARD_HOSTS = ["dev.getgram.ai", "dev.ai.speakeasy.com"];
+
+// tunnel.speakeasy.com in prod, tunnel.dev.getgram.ai in dev, tunnel-pr-N.<env>
+// in previews (single label keeps the wildcard cert valid), tunnel.<host>
+// otherwise.
+export function tunnelGatewayURL(serverURL: string = getServerURL()): string {
+  const server = new URL(serverURL);
+  const host = PROD_DASHBOARD_HOSTS.includes(server.host)
+    ? "tunnel.speakeasy.com"
+    : DEV_DASHBOARD_HOSTS.includes(server.host)
+      ? "tunnel.dev.getgram.ai"
       : /^pr-\d+\./.test(server.host)
         ? `tunnel-${server.host}`
         : `tunnel.${server.host}`;
@@ -232,9 +239,15 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export function getCustomDomainCNAME(): string {
+export function getCustomDomainCNAME(
+  serverURL: string = getServerURL(),
+): string {
   try {
-    const url = new URL(getServerURL());
+    const url = new URL(serverURL);
+    if (PROD_DASHBOARD_HOSTS.includes(url.hostname)) return "cname.getgram.ai.";
+    if (DEV_DASHBOARD_HOSTS.includes(url.hostname)) {
+      return "cname.dev.getgram.ai.";
+    }
     const parts = url.hostname.split(".");
     if (parts.length > 2) {
       parts[0] = parts[0] === "app" ? "cname" : `cname.${parts[0]}`;

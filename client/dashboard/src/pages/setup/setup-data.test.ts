@@ -32,7 +32,7 @@ describe("AGENT_PLATFORMS", () => {
     expect(settings.env).toMatchObject({
       CLAUDE_CODE_ENABLE_TELEMETRY: "1",
       CLAUDE_CODE_ENHANCED_TELEMETRY_BETA: "1",
-      OTEL_EXPORTER_OTLP_ENDPOINT: "https://app.getgram.ai/otel",
+      OTEL_EXPORTER_OTLP_ENDPOINT: "{{GRAM_SERVER_URL}}/otel",
       OTEL_EXPORTER_OTLP_HEADERS:
         "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
       OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf",
@@ -61,7 +61,7 @@ describe("AGENT_PLATFORMS", () => {
     expect(step.description).toContain("Package managers only");
     expect(step.description).toContain("All domains");
     expect(step.fields).toEqual([
-      { label: "Additional allowed domains", value: "app.getgram.ai" },
+      { label: "Additional allowed domains", value: "{{GRAM_SERVER_HOST}}" },
     ]);
     expect(step.afterFields).toContain("no events reach Speakeasy");
     expect(step.afterFields).toContain(
@@ -83,7 +83,7 @@ describe("AGENT_PLATFORMS", () => {
       fields: [
         {
           label: "OTLP endpoint",
-          value: "https://app.getgram.ai/rpc/hooks.otel",
+          value: "{{GRAM_SERVER_URL}}/rpc/hooks.otel",
         },
         { label: "OTLP protocol", value: "http/json" },
         {

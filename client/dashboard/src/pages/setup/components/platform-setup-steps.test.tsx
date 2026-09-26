@@ -12,6 +12,11 @@ import { PlatformSetupStepBody } from "./platform-setup-steps";
 
 const mocks = vi.hoisted(() => ({
   pluginName: "example-observability" as string | undefined,
+  serverURL: "https://app.getgram.ai",
+}));
+vi.mock("@/lib/utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/utils")>()),
+  getServerURL: () => mocks.serverURL,
 }));
 vi.mock("@gram/client/react-query/publishStatus", () => ({
   usePublishStatus: () => ({
@@ -61,6 +66,7 @@ beforeEach(() => {
   writeText.mockReset().mockResolvedValue(undefined);
   retry.mockReset();
   mocks.pluginName = "example-observability";
+  mocks.serverURL = "https://app.getgram.ai";
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText },
@@ -178,6 +184,38 @@ describe("copyable setup values", () => {
       expect(screen.queryByRole("alert")).toBeNull();
     },
   );
+});
+
+describe("server host values", () => {
+  it.each([
+    "https://app.getgram.ai",
+    "https://ai.speakeasy.com",
+    "https://dev.getgram.ai",
+    "https://dev.ai.speakeasy.com",
+    "https://pr-42.dev.getgram.ai",
+  ])("points OTEL export and the egress allowlist at %s", (serverURL) => {
+    mocks.serverURL = serverURL;
+    const coworkSteps = AGENT_PLATFORMS.find(
+      ({ id }) => id === "claude-cowork",
+    )!.setupSteps;
+    const allowlistStep = coworkSteps.find(
+      ({ title }) => title === "Allow Cowork to send events to Speakeasy",
+    )!;
+    const { container } = render(
+      <>
+        {body({ apiKey: "EXAMPLE_KEY" })}
+        <PlatformSetupStepBody
+          step={allowlistStep}
+          eyebrow="Step 4"
+          onRetryApiKey={retry}
+          onEligibilityAnswer={() => {}}
+        />
+      </>,
+    );
+    expect(screen.getByText(`${serverURL}/rpc/hooks.otel`)).toBeTruthy();
+    expect(screen.getByText(new URL(serverURL).host)).toBeTruthy();
+    expect(container.textContent).not.toContain("{{GRAM_");
+  });
 });
 
 describe("inline setup identifiers", () => {
