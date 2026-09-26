@@ -130,7 +130,10 @@ func TestMemberMCPURLsFollowPlatformHost(t *testing.T) {
 		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
 		withMemberMCPConnectionReader(testMemberMCPConnectionReader{}).
 		WithInstallLinks(serverURL, serverURL)
-	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, OrganizationSlug: "example-org"}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
+	// A session makes the authorization engine enforce, so both tools check the
+	// mcp:connect grant rather than skipping authorization.
+	sessionID := "session-member-urls-platform-host"
+	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, OrganizationSlug: "example-org", SessionID: &sessionID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, mcpID.String())})
 
 	for _, tc := range []struct {
