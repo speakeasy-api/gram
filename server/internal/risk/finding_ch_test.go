@@ -707,6 +707,7 @@ func TestFindingCHWriter_ProcessBatch_ResolvesAttribution(t *testing.T) {
 		ProjectID:     *authCtx.ProjectID,
 		CorrelationID: "attribution-thread",
 		ChatID:        chatID,
+		SourceKind:    "test",
 	})
 	require.NoError(t, err)
 
