@@ -3,6 +3,7 @@ package usage
 import (
 	"context"
 	"errors"
+	"net/url"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -75,9 +76,15 @@ func (s *Service) CreateStripePortalSession(ctx context.Context, _ *gen.CreateSt
 	if err != nil {
 		return "", err
 	}
+	// The portal returns to the platform host the request came from, because
+	// the session cookie is host-only.
+	returnURL, err := url.JoinPath(s.platformHostBaseURL(ctx, s.siteURL), authCtx.OrganizationSlug, "billing")
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to build the billing return URL").LogError(ctx, s.logger)
+	}
 	portal, err := s.stripeClient.CreatePortalSession(ctx, stripeclient.CreatePortalSessionInput{
 		CustomerID: state.CustomerID,
-		ReturnURL:  s.siteURL.JoinPath(authCtx.OrganizationSlug, "billing").String(),
+		ReturnURL:  returnURL,
 	})
 	if err != nil {
 		return "", oops.E(oops.CodeUnavailable, err, "failed to create Stripe billing portal session").LogWarn(ctx, s.logger)
