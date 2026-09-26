@@ -59,7 +59,7 @@ const SETUP_AGENT_PLATFORMS: Array<{
   "env": {
     "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
     "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://app.getgram.ai/otel",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "{{GRAM_SERVER_URL}}/otel",
     "OTEL_EXPORTER_OTLP_HEADERS": "Gram-Project={{GRAM_PROJECT_SLUG}},Gram-Key={{GRAM_API_KEY}}",
     "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
     "OTEL_LOGS_EXPORTER": "otlp",
@@ -150,7 +150,7 @@ const SETUP_AGENT_PLATFORMS: Array<{
         fields: [
           {
             label: "OTLP endpoint",
-            value: "https://app.getgram.ai/rpc/hooks.otel",
+            value: "{{GRAM_SERVER_URL}}/rpc/hooks.otel",
           },
           { label: "OTLP protocol", value: "http/json" },
           {
@@ -167,7 +167,10 @@ const SETUP_AGENT_PLATFORMS: Array<{
         description:
           "On claude.ai, open Admin settings → Capabilities → Domain allowlist. If Package managers only is selected, add the domain below under Additional allowed domains and save. All domains also permits access, but adding only this domain keeps egress restricted.",
         fields: [
-          { label: "Additional allowed domains", value: "app.getgram.ai" },
+          {
+            label: "Additional allowed domains",
+            value: "{{GRAM_SERVER_HOST}}",
+          },
         ],
         afterFields:
           "Without this exception, Cowork hooks cannot leave the sandbox and no events reach Speakeasy. After completing Cowork setup, including OTEL export, start a Cowork session and confirm its events arrive in Speakeasy.",

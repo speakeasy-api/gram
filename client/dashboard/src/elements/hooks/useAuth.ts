@@ -8,6 +8,7 @@ import {
   isUnifiedStaticSession,
 } from "@/elements/lib/auth";
 import { getTokenExpiry } from "@/elements/lib/token";
+import { getServerURL } from "@/lib/utils";
 import { useCallback, useMemo } from "react";
 import { ApiConfig, GetSessionFn } from "../types";
 import { getChatSessionQueryKey, useSession } from "./useSession";
@@ -83,7 +84,7 @@ export const useAuth = ({
   const apiUrl = useMemo(() => {
     const envUrl =
       typeof __GRAM_API_URL__ !== "undefined" ? __GRAM_API_URL__ : undefined;
-    const url = auth?.url || envUrl || "https://app.getgram.ai";
+    const url = auth?.url || envUrl || getServerURL();
     return url.replace(/\/+$/, "");
   }, [auth?.url]);
 
