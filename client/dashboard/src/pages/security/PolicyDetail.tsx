@@ -28,6 +28,8 @@ import { TextArea } from "@/components/ui/Textarea";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useProject } from "@/contexts/Auth";
@@ -987,6 +989,7 @@ function PromptPolicyEditor({
           mcpScope={mcpScope}
           setMcpScope={setMcpScope}
           action={action}
+          hasStoredMcpScope={!!policy?.mcpScope}
         />
       )}
 
@@ -1154,6 +1157,7 @@ function ScopeStep({
   mcpScope,
   setMcpScope,
   action,
+  hasStoredMcpScope,
 }: {
   selectedCategories: Set<RuleCategory>;
   scopeOverrides: Map<string, ScopeOverride>;
@@ -1161,16 +1165,30 @@ function ScopeStep({
   mcpScope: PolicyMCPScopeValue;
   setMcpScope: (next: PolicyMCPScopeValue) => void;
   action: PolicyAction;
+  hasStoredMcpScope: boolean;
 }): JSX.Element {
+  const mcpScopeFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
   const mcpScoped = mcpScope.mode === "mcp";
+  // Fail closed while the flag loads or is unavailable. A stored scope or an
+  // in-progress MCP draft keeps the picker so the form never strands the user
+  // in MCP mode without the control to change it.
+  const showMcpScopePicker =
+    mcpScopeFlag.status === "enabled" || hasStoredMcpScope || mcpScoped;
   return (
     <Card>
       <Stack gap={6}>
-        <PolicyMCPScopePicker
-          value={mcpScope}
-          onChange={setMcpScope}
-          action={action}
-        />
+        {showMcpScopePicker ? (
+          <PolicyMCPScopePicker
+            value={mcpScope}
+            onChange={setMcpScope}
+            action={action}
+          />
+        ) : null}
+        {!showMcpScopePicker && selectedCategories.size === 0 ? (
+          <Text small muted>
+            Scope options appear here once you enable a detector.
+          </Text>
+        ) : null}
         {mcpScoped && !mcpScope.allServers && mcpScope.servers.length === 0 ? (
           <Text small className="text-destructive">
             Select at least one MCP server or apply the policy to all servers.
@@ -4071,6 +4089,7 @@ export function StandardPolicyEditor({
             mcpScope={mcpScope}
             setMcpScope={setMcpScope}
             action={action}
+            hasStoredMcpScope={!!policy?.mcpScope}
           />
         )}
 
