@@ -28,6 +28,24 @@ type SlackDirectoryConnection struct {
 	UpdatedAt               pgtype.Timestamptz
 }
 
+type SlackDirectoryMembership struct {
+	ID                        uuid.UUID
+	OrganizationID            string
+	SlackTeamID               string
+	SlackUserID               string
+	DisplayName               pgtype.Text
+	Email                     pgtype.Text
+	Status                    string
+	MemberType                string
+	ProviderUpdatedAt         pgtype.Timestamptz
+	LastSeenAt                pgtype.Timestamptz
+	MappingRevision           int64
+	MappingConflictReason     pgtype.Text
+	MappingConflictDetectedAt pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
 type SlackIdentityMapping struct {
 	ID             uuid.UUID
 	OrganizationID string

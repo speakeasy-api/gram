@@ -8,6 +8,23 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  SlackIdentityMapping,
+  SlackIdentityMapping$inboundSchema,
+} from "./slackidentitymapping.js";
+
+/**
+ * Mapping state, separate from source state and freshness.
+ */
+export const MappingStatus = {
+  Unmapped: "unmapped",
+  Mapped: "mapped",
+  NeedsReview: "needs_review",
+} as const;
+/**
+ * Mapping state, separate from source state and freshness.
+ */
+export type MappingStatus = ClosedEnum<typeof MappingStatus>;
 
 /**
  * Observed account type.
@@ -61,10 +78,31 @@ export type SlackDirectoryMember = {
    * Latest published observation.
    */
   lastSeenAt: Date;
+  mapping?: SlackIdentityMapping | undefined;
+  /**
+   * When the finding was first recorded.
+   */
+  mappingConflictDetectedAt?: Date | undefined;
+  /**
+   * Sticky directory review finding, cleared only by an admin decision.
+   */
+  mappingConflictReason?: string | undefined;
+  /**
+   * Version of admin mapping decisions, independent of directory sync.
+   */
+  mappingRevision: number;
+  /**
+   * Mapping state, separate from source state and freshness.
+   */
+  mappingStatus: MappingStatus;
   /**
    * Observed account type.
    */
   memberType: MemberType;
+  /**
+   * Opaque token for the directory evidence reviewed by the administrator.
+   */
+  observationToken: string;
   /**
    * Whether this row was present in its workspace's last complete snapshot.
    */
@@ -86,6 +124,10 @@ export type SlackDirectoryMember = {
    */
   workspaceName: string;
 };
+
+/** @internal */
+export const MappingStatus$inboundSchema: z.ZodMiniEnum<typeof MappingStatus> =
+  z.enum(MappingStatus);
 
 /** @internal */
 export const MemberType$inboundSchema: z.ZodMiniEnum<typeof MemberType> = z
@@ -110,7 +152,15 @@ export const SlackDirectoryMember$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    mapping: z.optional(SlackIdentityMapping$inboundSchema),
+    mapping_conflict_detected_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+    ),
+    mapping_conflict_reason: z.optional(z.string()),
+    mapping_revision: z.int(),
+    mapping_status: MappingStatus$inboundSchema,
     member_type: MemberType$inboundSchema,
+    observation_token: z.string(),
     observed_in_last_sync: z.boolean(),
     slack_user_id: z.string(),
     status: SlackDirectoryMemberStatus$inboundSchema,
@@ -122,7 +172,12 @@ export const SlackDirectoryMember$inboundSchema: z.ZodMiniType<
       "connection_id": "connectionId",
       "display_name": "displayName",
       "last_seen_at": "lastSeenAt",
+      "mapping_conflict_detected_at": "mappingConflictDetectedAt",
+      "mapping_conflict_reason": "mappingConflictReason",
+      "mapping_revision": "mappingRevision",
+      "mapping_status": "mappingStatus",
       "member_type": "memberType",
+      "observation_token": "observationToken",
       "observed_in_last_sync": "observedInLastSync",
       "slack_user_id": "slackUserId",
       "workspace_id": "workspaceId",

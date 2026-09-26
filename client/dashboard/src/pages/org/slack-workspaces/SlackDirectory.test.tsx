@@ -18,11 +18,51 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   mutate: vi.fn(),
   pending: false,
+  canEdit: true,
+  scope: vi.fn(),
   error: null as Error | null,
   rows: [] as unknown[],
+  total: null as number | null,
+  sortAsOf: new Date("2026-01-01T00:00:00Z"),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ slug: mocks.orgSlug }),
+}));
+vi.mock("./SlackPersonnelPicker", () => ({
+  SlackPersonnelPicker: ({
+    member,
+    people,
+    canEdit,
+  }: {
+    member: { id: string; mapping?: { displayName: string } };
+    people?: unknown[];
+    canEdit: boolean;
+  }) => (
+    <div data-testid={`picker-${member.id}`}>
+      {member.mapping?.displayName ?? "Not mapped"}
+      {canEdit ? "" : " · read-only"}
+      {people ? ` · ${people.length} people` : ""}
+    </div>
+  ),
+}));
+vi.mock("@gram/client/react-query/listOrganizationUsers.js", () => ({
+  useListOrganizationUsers: (
+    _r: unknown,
+    _s: unknown,
+    options: { enabled: boolean },
+  ) => ({
+    data: options.enabled
+      ? { users: [{ userId: "user_synthetic" }] }
+      : undefined,
+  }),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (scope: string) => {
+      mocks.scope(scope);
+      return mocks.canEdit;
+    },
+  }),
 }));
 vi.mock("@gram/client/react-query/slackDirectoryMembers.js", () => ({
   invalidateAllSlackDirectoryMembers: vi.fn(),
@@ -31,7 +71,11 @@ vi.mock("@gram/client/react-query/slackDirectoryMembers.js", () => ({
     return {
       data: mocks.pending
         ? undefined
-        : { members: mocks.rows, total: mocks.rows.length },
+        : {
+            members: mocks.rows,
+            total: mocks.total ?? mocks.rows.length,
+            sortAsOf: mocks.sortAsOf,
+          },
       isPending: mocks.pending,
       isFetching: mocks.pending,
       isError: Boolean(mocks.error),
@@ -82,15 +126,17 @@ function show(children: React.ReactNode, search = "") {
 }
 beforeEach(() => {
   mocks.pending = false;
+  mocks.canEdit = true;
   mocks.error = null;
   mocks.rows = [];
+  mocks.total = null;
 });
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
 
-it("shows the all-workspaces directory and search without mapping controls", async () => {
+it("shows the all-workspaces directory and search", async () => {
   show(<SlackDirectory connections={[connection]} />);
   expect(screen.getByRole("heading", { name: "Slack members" })).toBeTruthy();
   expect(screen.getByText(/Email addresses do not confirm/)).toBeTruthy();
@@ -133,6 +179,60 @@ it("labels absent profiles and missing email without inventing a person", () => 
   expect(screen.getByText("Not seen in last sync")).toBeTruthy();
   expect(screen.getByText("Not provided")).toBeTruthy();
   expect(screen.getByRole("table")).toBeTruthy();
+});
+it("hides deactivated members and bots until toggled and pages by number", async () => {
+  mocks.rows = [
+    {
+      id: "example-member",
+      connectionId: connection.id,
+      workspaceId: connection.workspaceId,
+      workspaceName: connection.workspaceName,
+      slackUserId: "UEXAMPLE01",
+      status: "active",
+      memberType: "person",
+      lastSeenAt: "2025-12-01T00:00:00Z",
+      observedInLastSync: true,
+    },
+  ];
+  mocks.total = 120;
+  show(<SlackDirectory connections={[connection]} />);
+  expect(mocks.query).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      includeDeactivated: false,
+      includeBots: false,
+      includeGuests: false,
+      page: 1,
+      limit: 50,
+    }),
+  );
+  expect(screen.queryByText("Mapping status")).toBeNull();
+  expect(screen.getByText(/Page 1 of 3/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 2 }),
+    ),
+  );
+  fireEvent.click(
+    screen.getByRole("switch", { name: "Show deactivated members" }),
+  );
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeDeactivated: true, page: 1 }),
+    ),
+  );
+  fireEvent.click(screen.getByRole("switch", { name: "Show bots and apps" }));
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeDeactivated: true, includeBots: true }),
+    ),
+  );
+  fireEvent.click(screen.getByRole("switch", { name: "Show guests" }));
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ includeGuests: true }),
+    ),
+  );
 });
 it("shows an error recovery action and never calls it an empty directory", () => {
   mocks.error = new Error("Could not load members");
@@ -231,4 +331,116 @@ it("prevents shared demo sync even with a connected workspace", () => {
   } finally {
     mocks.orgSlug = "example";
   }
+});
+
+const unmappedMember = {
+  id: "member-synthetic",
+  connectionId: connection.id,
+  workspaceId: connection.workspaceId,
+  workspaceName: connection.workspaceName,
+  slackUserId: "UEXAMPLE01",
+  displayName: "Synthetic Account",
+  status: "active",
+  memberType: "person",
+  lastSeenAt: new Date(),
+  observedInLastSync: true,
+  mappingStatus: "unmapped",
+  mappingRevision: 0,
+  observationToken: "example-evidence",
+};
+it("steps back to the last page when an edit empties the current one", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const tree = () => (
+    <QueryClientProvider client={client}>
+      <MemoryRouter
+        initialEntries={[
+          "/example/identity?tab=slack-workspaces&slack_view=members",
+        ]}
+      >
+        <TooltipProvider>
+          <SlackDirectory connections={[connection]} />
+        </TooltipProvider>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+  mocks.rows = [unmappedMember];
+  mocks.total = 51;
+  const view = render(tree());
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 2 }),
+    ),
+  );
+  // Mapping the only row on page 2 under a filter leaves 50 results.
+  mocks.rows = [];
+  mocks.total = 50;
+  view.rerender(tree());
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 1 }),
+    ),
+  );
+});
+it("renders an inline Personnel picker per row with the organization's people", () => {
+  mocks.rows = [
+    unmappedMember,
+    {
+      ...unmappedMember,
+      id: "member-mapped",
+      mappingStatus: "mapped",
+      mapping: {
+        id: "mapping-synthetic",
+        userId: "user_synthetic",
+        displayName: "Synthetic Person",
+        email: "synthetic@demo.getgram.ai",
+        active: true,
+      },
+    },
+  ];
+  show(<SlackDirectory connections={[connection]} />);
+  expect(screen.getByTestId("picker-member-synthetic").textContent).toBe(
+    "Not mapped · 1 people",
+  );
+  expect(screen.getByTestId("picker-member-mapped").textContent).toContain(
+    "Synthetic Person",
+  );
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+it("renders read-only pickers for employees without loading people", () => {
+  mocks.canEdit = false;
+  mocks.rows = [unmappedMember];
+  show(<SlackDirectory connections={[connection]} />);
+  expect(mocks.scope).toHaveBeenCalledWith("org:admin");
+  expect(screen.getByTestId("picker-member-synthetic").textContent).toBe(
+    "Not mapped · read-only",
+  );
+});
+it("pins the sort time the server returned for the life of the view", async () => {
+  const serverTime = new Date("2026-01-02T03:04:05Z");
+  mocks.sortAsOf = serverTime;
+  show(<SlackDirectory connections={[connection]} />);
+  expect(mocks.query.mock.calls[0]?.[0].sortAsOf).toBeUndefined();
+  await waitFor(() =>
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sortAsOf: serverTime }),
+    ),
+  );
+  mocks.sortAsOf = new Date("2026-02-01T00:00:00Z");
+  fireEvent.change(
+    screen.getByPlaceholderText("Search name, email or Slack ID…"),
+    { target: { value: "" } },
+  );
+  expect(mocks.query.mock.calls.at(-1)?.[0].sortAsOf).toBe(serverTime);
+});
+it("passes the mapping-status toolbar filter to the paginated query", () => {
+  show(
+    <SlackDirectory connections={[connection]} />,
+    "&slack_mapping=needs_review",
+  );
+  expect(mocks.query).toHaveBeenCalledWith(
+    expect.objectContaining({ mappingStatus: "needs_review" }),
+  );
 });

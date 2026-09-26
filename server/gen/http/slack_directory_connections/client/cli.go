@@ -65,7 +65,7 @@ func BuildSyncPayload(slackDirectoryConnectionsSyncBody string, slackDirectoryCo
 
 // BuildListMembersPayload builds the payload for the slackDirectoryConnections
 // listMembers endpoint from CLI flags.
-func BuildListMembersPayload(slackDirectoryConnectionsListMembersConnectionID string, slackDirectoryConnectionsListMembersSearch string, slackDirectoryConnectionsListMembersCursor string, slackDirectoryConnectionsListMembersLimit string, slackDirectoryConnectionsListMembersSessionToken string) (*slackdirectoryconnections.ListMembersPayload, error) {
+func BuildListMembersPayload(slackDirectoryConnectionsListMembersConnectionID string, slackDirectoryConnectionsListMembersSearch string, slackDirectoryConnectionsListMembersMappingStatus string, slackDirectoryConnectionsListMembersIncludeDeactivated string, slackDirectoryConnectionsListMembersIncludeBots string, slackDirectoryConnectionsListMembersIncludeGuests string, slackDirectoryConnectionsListMembersSortAsOf string, slackDirectoryConnectionsListMembersPage string, slackDirectoryConnectionsListMembersLimit string, slackDirectoryConnectionsListMembersSessionToken string) (*slackdirectoryconnections.ListMembersPayload, error) {
 	var err error
 	var connectionID *string
 	{
@@ -89,11 +89,67 @@ func BuildListMembersPayload(slackDirectoryConnectionsListMembersConnectionID st
 			}
 		}
 	}
-	var cursor *string
+	var mappingStatus *string
 	{
-		if slackDirectoryConnectionsListMembersCursor != "" {
-			cursor = &slackDirectoryConnectionsListMembersCursor
-			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+		if slackDirectoryConnectionsListMembersMappingStatus != "" {
+			mappingStatus = &slackDirectoryConnectionsListMembersMappingStatus
+			if !(*mappingStatus == "unmapped" || *mappingStatus == "mapped" || *mappingStatus == "needs_review") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("mapping_status", *mappingStatus, []any{"unmapped", "mapped", "needs_review"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var includeDeactivated bool
+	{
+		if slackDirectoryConnectionsListMembersIncludeDeactivated != "" {
+			includeDeactivated, err = strconv.ParseBool(slackDirectoryConnectionsListMembersIncludeDeactivated)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeDeactivated, must be BOOL")
+			}
+		}
+	}
+	var includeBots bool
+	{
+		if slackDirectoryConnectionsListMembersIncludeBots != "" {
+			includeBots, err = strconv.ParseBool(slackDirectoryConnectionsListMembersIncludeBots)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeBots, must be BOOL")
+			}
+		}
+	}
+	var includeGuests bool
+	{
+		if slackDirectoryConnectionsListMembersIncludeGuests != "" {
+			includeGuests, err = strconv.ParseBool(slackDirectoryConnectionsListMembersIncludeGuests)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeGuests, must be BOOL")
+			}
+		}
+	}
+	var sortAsOf *string
+	{
+		if slackDirectoryConnectionsListMembersSortAsOf != "" {
+			sortAsOf = &slackDirectoryConnectionsListMembersSortAsOf
+			err = goa.MergeErrors(err, goa.ValidateFormat("sort_as_of", *sortAsOf, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var page int
+	{
+		if slackDirectoryConnectionsListMembersPage != "" {
+			var v int64
+			v, err = strconv.ParseInt(slackDirectoryConnectionsListMembersPage, 10, strconv.IntSize)
+			page = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for page, must be INT")
+			}
+			if page < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("page", page, 1, true))
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -128,8 +184,81 @@ func BuildListMembersPayload(slackDirectoryConnectionsListMembersConnectionID st
 	v := &slackdirectoryconnections.ListMembersPayload{}
 	v.ConnectionID = connectionID
 	v.Search = search
-	v.Cursor = cursor
+	v.MappingStatus = mappingStatus
+	v.IncludeDeactivated = includeDeactivated
+	v.IncludeBots = includeBots
+	v.IncludeGuests = includeGuests
+	v.SortAsOf = sortAsOf
+	v.Page = page
 	v.Limit = limit
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetMemberPayload builds the payload for the slackDirectoryConnections
+// getMember endpoint from CLI flags.
+func BuildGetMemberPayload(slackDirectoryConnectionsGetMemberID string, slackDirectoryConnectionsGetMemberSessionToken string) (*slackdirectoryconnections.GetMemberPayload, error) {
+	var err error
+	var id string
+	{
+		id = slackDirectoryConnectionsGetMemberID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if slackDirectoryConnectionsGetMemberSessionToken != "" {
+			sessionToken = &slackDirectoryConnectionsGetMemberSessionToken
+		}
+	}
+	v := &slackdirectoryconnections.GetMemberPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetMappingPayload builds the payload for the slackDirectoryConnections
+// setMapping endpoint from CLI flags.
+func BuildSetMappingPayload(slackDirectoryConnectionsSetMappingBody string, slackDirectoryConnectionsSetMappingSessionToken string) (*slackdirectoryconnections.SetMappingPayload, error) {
+	var err error
+	var body SetMappingRequestBody
+	{
+		err = json.Unmarshal([]byte(slackDirectoryConnectionsSetMappingBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mapping_revision\": 1,\n      \"observation_token\": \"aa\",\n      \"user_id\": \"aa\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.MappingRevision < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.mapping_revision", body.MappingRevision, 0, true))
+		}
+		if utf8.RuneCountInString(body.ObservationToken) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.observation_token", body.ObservationToken, utf8.RuneCountInString(body.ObservationToken), 1, true))
+		}
+		if body.UserID != nil {
+			if utf8.RuneCountInString(*body.UserID) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_id", *body.UserID, utf8.RuneCountInString(*body.UserID), 1, true))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if slackDirectoryConnectionsSetMappingSessionToken != "" {
+			sessionToken = &slackDirectoryConnectionsSetMappingSessionToken
+		}
+	}
+	v := &slackdirectoryconnections.SetMappingPayload{
+		ID:               body.ID,
+		MappingRevision:  body.MappingRevision,
+		ObservationToken: body.ObservationToken,
+		UserID:           body.UserID,
+	}
 	v.SessionToken = sessionToken
 
 	return v, nil

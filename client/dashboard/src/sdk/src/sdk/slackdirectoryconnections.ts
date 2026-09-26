@@ -4,14 +4,17 @@
 
 import { slackDirectoryConnectionsBegin } from "../funcs/slackDirectoryConnectionsBegin.js";
 import { slackDirectoryConnectionsDisconnect } from "../funcs/slackDirectoryConnectionsDisconnect.js";
+import { slackDirectoryConnectionsGetMember } from "../funcs/slackDirectoryConnectionsGetMember.js";
 import { slackDirectoryConnectionsList } from "../funcs/slackDirectoryConnectionsList.js";
 import { slackDirectoryConnectionsListMembers } from "../funcs/slackDirectoryConnectionsListMembers.js";
+import { slackDirectoryConnectionsSetMapping } from "../funcs/slackDirectoryConnectionsSetMapping.js";
 import { slackDirectoryConnectionsSync } from "../funcs/slackDirectoryConnectionsSync.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BeginResponseBody } from "../models/components/beginresponsebody.js";
 import { ListMembersResponseBody } from "../models/components/listmembersresponsebody.js";
 import { ListResponseBody } from "../models/components/listresponsebody.js";
 import { SlackDirectoryConnection } from "../models/components/slackdirectoryconnection.js";
+import { SlackDirectoryMember } from "../models/components/slackdirectorymember.js";
 import { SyncResponseBody } from "../models/components/syncresponsebody.js";
 import {
   BeginSlackDirectoryConnectionRequest,
@@ -22,6 +25,10 @@ import {
   DisconnectSlackDirectoryConnectionSecurity,
 } from "../models/operations/disconnectslackdirectoryconnection.js";
 import {
+  GetSlackDirectoryMemberRequest,
+  GetSlackDirectoryMemberSecurity,
+} from "../models/operations/getslackdirectorymember.js";
+import {
   ListSlackDirectoryConnectionsRequest,
   ListSlackDirectoryConnectionsSecurity,
 } from "../models/operations/listslackdirectoryconnections.js";
@@ -29,6 +36,10 @@ import {
   ListSlackDirectoryMembersRequest,
   ListSlackDirectoryMembersSecurity,
 } from "../models/operations/listslackdirectorymembers.js";
+import {
+  SetSlackIdentityMappingRequest,
+  SetSlackIdentityMappingSecurity,
+} from "../models/operations/setslackidentitymapping.js";
 import {
   SyncSlackDirectoryRequest,
   SyncSlackDirectorySecurity,
@@ -69,6 +80,25 @@ export class SlackDirectoryConnections extends ClientSDK {
   }
 
   /**
+   * getMember slackDirectoryConnections
+   *
+   * @remarks
+   * Read current Slack profile and mapping before an administrator confirms a selection.
+   */
+  async getMember(
+    request: GetSlackDirectoryMemberRequest,
+    security?: GetSlackDirectoryMemberSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SlackDirectoryMember> {
+    return unwrapAsync(slackDirectoryConnectionsGetMember(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
    * list slackDirectoryConnections
    */
   async list(
@@ -96,6 +126,25 @@ export class SlackDirectoryConnections extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListMembersResponseBody> {
     return unwrapAsync(slackDirectoryConnectionsListMembers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setMapping slackDirectoryConnections
+   *
+   * @remarks
+   * Explicitly confirm, reassign or remove a Slack association. This grants no permissions and does not establish runtime eligibility.
+   */
+  async setMapping(
+    request: SetSlackIdentityMappingRequest,
+    security?: SetSlackIdentityMappingSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SlackDirectoryMember> {
+    return unwrapAsync(slackDirectoryConnectionsSetMapping(
       this,
       request,
       security,

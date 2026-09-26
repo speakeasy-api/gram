@@ -24,6 +24,7 @@ import { ServiceError } from "../models/errors/serviceerror.js";
 import {
   ListSlackDirectoryMembersRequest,
   ListSlackDirectoryMembersSecurity,
+  MappingStatus,
 } from "../models/operations/listslackdirectorymembers.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -119,7 +120,12 @@ export function setSlackDirectoryMembersData(
     parameters: {
       connectionId?: string | undefined;
       search?: string | undefined;
-      cursor?: string | undefined;
+      mappingStatus?: MappingStatus | undefined;
+      includeDeactivated?: boolean | undefined;
+      includeBots?: boolean | undefined;
+      includeGuests?: boolean | undefined;
+      sortAsOf?: Date | undefined;
+      page?: number | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
     },
@@ -137,7 +143,12 @@ export function invalidateSlackDirectoryMembers(
     [parameters: {
       connectionId?: string | undefined;
       search?: string | undefined;
-      cursor?: string | undefined;
+      mappingStatus?: MappingStatus | undefined;
+      includeDeactivated?: boolean | undefined;
+      includeBots?: boolean | undefined;
+      includeGuests?: boolean | undefined;
+      sortAsOf?: Date | undefined;
+      page?: number | undefined;
       limit?: number | undefined;
       gramSession?: string | undefined;
     }]

@@ -13,9 +13,9 @@ import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
 import {
-  ListMembersResponseBody,
-  ListMembersResponseBody$inboundSchema,
-} from "../models/components/listmembersresponsebody.js";
+  SlackDirectoryMember,
+  SlackDirectoryMember$inboundSchema,
+} from "../models/components/slackdirectorymember.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -31,27 +31,27 @@ import {
   ServiceError$inboundSchema,
 } from "../models/errors/serviceerror.js";
 import {
-  ListSlackDirectoryMembersRequest,
-  ListSlackDirectoryMembersRequest$outboundSchema,
-  ListSlackDirectoryMembersSecurity,
-} from "../models/operations/listslackdirectorymembers.js";
+  GetSlackDirectoryMemberRequest,
+  GetSlackDirectoryMemberRequest$outboundSchema,
+  GetSlackDirectoryMemberSecurity,
+} from "../models/operations/getslackdirectorymember.js";
 import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * listMembers slackDirectoryConnections
+ * getMember slackDirectoryConnections
  *
  * @remarks
- * Read observed Slack members across the organization or within one workspace. Does not create identity mappings.
+ * Read current Slack profile and mapping before an administrator confirms a selection.
  */
-export function slackDirectoryConnectionsListMembers(
+export function slackDirectoryConnectionsGetMember(
   client: GramCore,
-  request?: ListSlackDirectoryMembersRequest | undefined,
-  security?: ListSlackDirectoryMembersSecurity | undefined,
+  request: GetSlackDirectoryMemberRequest,
+  security?: GetSlackDirectoryMemberSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    ListMembersResponseBody,
+    SlackDirectoryMember,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -73,13 +73,13 @@ export function slackDirectoryConnectionsListMembers(
 
 async function $do(
   client: GramCore,
-  request?: ListSlackDirectoryMembersRequest | undefined,
-  security?: ListSlackDirectoryMembersSecurity | undefined,
+  request: GetSlackDirectoryMemberRequest,
+  security?: GetSlackDirectoryMemberSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      ListMembersResponseBody,
+      SlackDirectoryMember,
       | ServiceError
       | GramError
       | ResponseValidationError
@@ -95,11 +95,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(
-        z.optional(ListSlackDirectoryMembersRequest$outboundSchema),
-        value,
-      ),
+    (value) => z.parse(GetSlackDirectoryMemberRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -108,23 +104,15 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/slackDirectoryConnections.listMembers")();
+  const path = pathToFunc("/rpc/slackDirectoryConnections.getMember")();
 
   const query = encodeFormQuery({
-    "connection_id": payload?.connection_id,
-    "include_bots": payload?.include_bots,
-    "include_deactivated": payload?.include_deactivated,
-    "include_guests": payload?.include_guests,
-    "limit": payload?.limit,
-    "mapping_status": payload?.mapping_status,
-    "page": payload?.page,
-    "search": payload?.search,
-    "sort_as_of": payload?.sort_as_of,
+    "id": payload.id,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -143,7 +131,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "listSlackDirectoryMembers",
+    operationID: "getSlackDirectoryMember",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -188,7 +176,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    ListMembersResponseBody,
+    SlackDirectoryMember,
     | ServiceError
     | GramError
     | ResponseValidationError
@@ -199,7 +187,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, ListMembersResponseBody$inboundSchema),
+    M.json(200, SlackDirectoryMember$inboundSchema),
     M.jsonErr([400, 401, 403, 404, 409, 415, 422], ServiceError$inboundSchema),
     M.jsonErr([500, 502], ServiceError$inboundSchema),
     M.fail("4XX"),

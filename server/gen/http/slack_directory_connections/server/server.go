@@ -22,6 +22,8 @@ type Server struct {
 	List        http.Handler
 	Sync        http.Handler
 	ListMembers http.Handler
+	GetMember   http.Handler
+	SetMapping  http.Handler
 	Begin       http.Handler
 	Disconnect  http.Handler
 }
@@ -56,12 +58,16 @@ func New(
 			{"List", "GET", "/rpc/slackDirectoryConnections.list"},
 			{"Sync", "POST", "/rpc/slackDirectoryConnections.sync"},
 			{"ListMembers", "GET", "/rpc/slackDirectoryConnections.listMembers"},
+			{"GetMember", "GET", "/rpc/slackDirectoryConnections.getMember"},
+			{"SetMapping", "POST", "/rpc/slackDirectoryConnections.setMapping"},
 			{"Begin", "POST", "/rpc/slackDirectoryConnections.begin"},
 			{"Disconnect", "POST", "/rpc/slackDirectoryConnections.disconnect"},
 		},
 		List:        NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
 		Sync:        NewSyncHandler(e.Sync, mux, decoder, encoder, errhandler, formatter),
 		ListMembers: NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
+		GetMember:   NewGetMemberHandler(e.GetMember, mux, decoder, encoder, errhandler, formatter),
+		SetMapping:  NewSetMappingHandler(e.SetMapping, mux, decoder, encoder, errhandler, formatter),
 		Begin:       NewBeginHandler(e.Begin, mux, decoder, encoder, errhandler, formatter),
 		Disconnect:  NewDisconnectHandler(e.Disconnect, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -75,6 +81,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.List = m(s.List)
 	s.Sync = m(s.Sync)
 	s.ListMembers = m(s.ListMembers)
+	s.GetMember = m(s.GetMember)
+	s.SetMapping = m(s.SetMapping)
 	s.Begin = m(s.Begin)
 	s.Disconnect = m(s.Disconnect)
 }
@@ -87,6 +95,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListHandler(mux, h.List)
 	MountSyncHandler(mux, h.Sync)
 	MountListMembersHandler(mux, h.ListMembers)
+	MountGetMemberHandler(mux, h.GetMember)
+	MountSetMappingHandler(mux, h.SetMapping)
 	MountBeginHandler(mux, h.Begin)
 	MountDisconnectHandler(mux, h.Disconnect)
 }
@@ -232,6 +242,112 @@ func NewListMembersHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listMembers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "slackDirectoryConnections")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetMemberHandler configures the mux to serve the
+// "slackDirectoryConnections" service "getMember" endpoint.
+func MountGetMemberHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/slackDirectoryConnections.getMember", f)
+}
+
+// NewGetMemberHandler creates a HTTP handler which loads the HTTP request and
+// calls the "slackDirectoryConnections" service "getMember" endpoint.
+func NewGetMemberHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetMemberRequest(mux, decoder)
+		encodeResponse = EncodeGetMemberResponse(encoder)
+		encodeError    = EncodeGetMemberError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getMember")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "slackDirectoryConnections")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetMappingHandler configures the mux to serve the
+// "slackDirectoryConnections" service "setMapping" endpoint.
+func MountSetMappingHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/slackDirectoryConnections.setMapping", f)
+}
+
+// NewSetMappingHandler creates a HTTP handler which loads the HTTP request and
+// calls the "slackDirectoryConnections" service "setMapping" endpoint.
+func NewSetMappingHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetMappingRequest(mux, decoder)
+		encodeResponse = EncodeSetMappingResponse(encoder)
+		encodeError    = EncodeSetMappingError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setMapping")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "slackDirectoryConnections")
 		payload, err := decodeRequest(r)
 		if err != nil {

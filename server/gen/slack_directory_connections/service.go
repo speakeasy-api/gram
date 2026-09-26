@@ -25,6 +25,12 @@ type Service interface {
 	// Read observed Slack members across the organization or within one workspace.
 	// Does not create identity mappings.
 	ListMembers(context.Context, *ListMembersPayload) (res *ListMembersResult, err error)
+	// Read current Slack profile and mapping before an administrator confirms a
+	// selection.
+	GetMember(context.Context, *GetMemberPayload) (res *SlackDirectoryMember, err error)
+	// Explicitly confirm, reassign or remove a Slack association. This grants no
+	// permissions and does not establish runtime eligibility.
+	SetMapping(context.Context, *SetMappingPayload) (res *SlackDirectoryMember, err error)
 	// Begin implements begin.
 	Begin(context.Context, *BeginPayload) (res *BeginResult, err error)
 	// Disconnect implements disconnect.
@@ -51,7 +57,7 @@ const ServiceName = "slackDirectoryConnections"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"list", "sync", "listMembers", "begin", "disconnect"}
+var MethodNames = [7]string{"list", "sync", "listMembers", "getMember", "setMapping", "begin", "disconnect"}
 
 // BeginPayload is the payload type of the slackDirectoryConnections service
 // begin method.
@@ -78,16 +84,36 @@ type DisconnectPayload struct {
 	Generation string
 }
 
+// GetMemberPayload is the payload type of the slackDirectoryConnections
+// service getMember method.
+type GetMemberPayload struct {
+	SessionToken *string
+	ID           string
+}
+
 // ListMembersPayload is the payload type of the slackDirectoryConnections
 // service listMembers method.
 type ListMembersPayload struct {
 	SessionToken *string
 	// Filter to a workspace connection.
 	ConnectionID *string
+	// Filter mapping state.
+	MappingStatus *string
 	// Literal case-insensitive name, email or Slack ID search.
 	Search *string
-	// Continue after the last membership ID.
-	Cursor *string
+	// Include members deactivated in Slack.
+	IncludeDeactivated bool
+	// Include bots and apps.
+	IncludeBots bool
+	// Include guests.
+	IncludeGuests bool
+	// Sort by mapping state at this time, so mapping changes after it do not
+	// reorder pages. Pass back the sort_as_of from the first page; defaults to the
+	// database's current time.
+	SortAsOf *string
+	// One-based page number. Unmapped members sort first, then members needing
+	// review, then mapped members, each alphabetically.
+	Page int
 	// Maximum returned rows.
 	Limit int
 }
@@ -98,8 +124,9 @@ type ListMembersResult struct {
 	Members []*SlackDirectoryMember
 	// Matching retained membership rows.
 	Total int64
-	// Cursor for the next page, when present.
-	NextCursor *string
+	// Time the mapping-state sort used. Pass it back to keep the order stable
+	// across pages and edits.
+	SortAsOf string
 }
 
 // ListPayload is the payload type of the slackDirectoryConnections service
@@ -115,6 +142,20 @@ type ListResult struct {
 	Connections []*SlackDirectoryConnection
 	// Whether the deployment can start Slack OAuth.
 	AuthorizationConfigured bool
+}
+
+// SetMappingPayload is the payload type of the slackDirectoryConnections
+// service setMapping method.
+type SetMappingPayload struct {
+	SessionToken *string
+	// Membership to change.
+	ID string
+	// Mapping revision shown in the review dialog.
+	MappingRevision int64
+	// Directory evidence shown in the review dialog.
+	ObservationToken string
+	// Active same-organization person to confirm. Omit to unmap.
+	UserID *string
 }
 
 // SlackDirectoryConnection is the result type of the slackDirectoryConnections
@@ -158,6 +199,8 @@ type SlackDirectoryConnection struct {
 	UpdatedAt string
 }
 
+// SlackDirectoryMember is the result type of the slackDirectoryConnections
+// service getMember method.
 type SlackDirectoryMember struct {
 	// Durable membership ID.
 	ID string
@@ -181,6 +224,33 @@ type SlackDirectoryMember struct {
 	LastSeenAt string
 	// Whether this row was present in its workspace's last complete snapshot.
 	ObservedInLastSync bool
+	// Current admin-confirmed association; grants no permissions.
+	Mapping *SlackIdentityMapping
+	// Version of admin mapping decisions, independent of directory sync.
+	MappingRevision int64
+	// Opaque token for the directory evidence reviewed by the administrator.
+	ObservationToken string
+	// Mapping state, separate from source state and freshness.
+	MappingStatus string
+	// Sticky directory review finding, cleared only by an admin decision.
+	MappingConflictReason *string
+	// When the finding was first recorded.
+	MappingConflictDetectedAt *string
+}
+
+type SlackIdentityMapping struct {
+	// Immutable confirmation ID.
+	ID string
+	// Existing organization person ID.
+	UserID string
+	// Person's current display name.
+	DisplayName string
+	// Person's current email.
+	Email string
+	// Person's avatar URL.
+	PhotoURL *string
+	// Whether the person and organization membership are active.
+	Active bool
 }
 
 // SyncPayload is the payload type of the slackDirectoryConnections service

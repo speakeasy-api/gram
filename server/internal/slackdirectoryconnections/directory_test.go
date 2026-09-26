@@ -22,7 +22,7 @@ import (
 )
 
 func memberRequest() *gen.ListMembersPayload {
-	return &gen.ListMembersPayload{SessionToken: nil, ConnectionID: nil, Search: nil, Cursor: nil, Limit: 50}
+	return &gen.ListMembersPayload{SessionToken: nil, ConnectionID: nil, MappingStatus: nil, Search: nil, IncludeDeactivated: false, IncludeBots: false, IncludeGuests: false, SortAsOf: nil, Page: 1, Limit: 50}
 }
 
 func TestDirectoryEndpointsRequireAdminSession(t *testing.T) {
@@ -88,8 +88,7 @@ func TestDirectorySearchWorkspaceAndPagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(3), page.Total)
 	require.Len(t, page.Members, 1)
-	require.NotNil(t, page.NextCursor)
-	p.Cursor = page.NextCursor
+	p.Page = 2
 	next, err := f.service.ListMembers(ctx, p)
 	require.NoError(t, err)
 	require.NotEqual(t, page.Members[0].ID, next.Members[0].ID)

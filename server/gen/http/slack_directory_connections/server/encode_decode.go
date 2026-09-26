@@ -471,12 +471,17 @@ func DecodeListMembersRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 	return func(r *http.Request) (*slackdirectoryconnections.ListMembersPayload, error) {
 		var payload *slackdirectoryconnections.ListMembersPayload
 		var (
-			connectionID *string
-			search       *string
-			cursor       *string
-			limit        int
-			sessionToken *string
-			err          error
+			connectionID       *string
+			search             *string
+			mappingStatus      *string
+			includeDeactivated bool
+			includeBots        bool
+			includeGuests      bool
+			sortAsOf           *string
+			page               int
+			limit              int
+			sessionToken       *string
+			err                error
 		)
 		qp := r.URL.Query()
 		connectionIDRaw := qp.Get("connection_id")
@@ -495,12 +500,66 @@ func DecodeListMembersRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 200, false))
 			}
 		}
-		cursorRaw := qp.Get("cursor")
-		if cursorRaw != "" {
-			cursor = &cursorRaw
+		mappingStatusRaw := qp.Get("mapping_status")
+		if mappingStatusRaw != "" {
+			mappingStatus = &mappingStatusRaw
 		}
-		if cursor != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+		if mappingStatus != nil {
+			if !(*mappingStatus == "unmapped" || *mappingStatus == "mapped" || *mappingStatus == "needs_review") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("mapping_status", *mappingStatus, []any{"unmapped", "mapped", "needs_review"}))
+			}
+		}
+		{
+			includeDeactivatedRaw := qp.Get("include_deactivated")
+			if includeDeactivatedRaw != "" {
+				v, err2 := strconv.ParseBool(includeDeactivatedRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_deactivated", includeDeactivatedRaw, "boolean"))
+				}
+				includeDeactivated = v
+			}
+		}
+		{
+			includeBotsRaw := qp.Get("include_bots")
+			if includeBotsRaw != "" {
+				v, err2 := strconv.ParseBool(includeBotsRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_bots", includeBotsRaw, "boolean"))
+				}
+				includeBots = v
+			}
+		}
+		{
+			includeGuestsRaw := qp.Get("include_guests")
+			if includeGuestsRaw != "" {
+				v, err2 := strconv.ParseBool(includeGuestsRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("include_guests", includeGuestsRaw, "boolean"))
+				}
+				includeGuests = v
+			}
+		}
+		sortAsOfRaw := qp.Get("sort_as_of")
+		if sortAsOfRaw != "" {
+			sortAsOf = &sortAsOfRaw
+		}
+		if sortAsOf != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("sort_as_of", *sortAsOf, goa.FormatDateTime))
+		}
+		{
+			pageRaw := qp.Get("page")
+			if pageRaw == "" {
+				page = 1
+			} else {
+				v, err2 := strconv.ParseInt(pageRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("page", pageRaw, "integer"))
+				}
+				page = int(v)
+			}
+		}
+		if page < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("page", page, 1, true))
 		}
 		{
 			limitRaw := qp.Get("limit")
@@ -527,7 +586,7 @@ func DecodeListMembersRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListMembersPayload(connectionID, search, cursor, limit, sessionToken)
+		payload = NewListMembersPayload(connectionID, search, mappingStatus, includeDeactivated, includeBots, includeGuests, sortAsOf, page, limit, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -699,6 +758,448 @@ func EncodeListMembersError(encoder func(context.Context, http.ResponseWriter) g
 				body = formatter(ctx, res)
 			} else {
 				body = NewListMembersUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeGetMemberResponse returns an encoder for responses returned by the
+// slackDirectoryConnections getMember endpoint.
+func EncodeGetMemberResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*slackdirectoryconnections.SlackDirectoryMember)
+		enc := encoder(ctx, w)
+		body := NewGetMemberResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetMemberRequest returns a decoder for requests sent to the
+// slackDirectoryConnections getMember endpoint.
+func DecodeGetMemberRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*slackdirectoryconnections.GetMemberPayload, error) {
+	return func(r *http.Request) (*slackdirectoryconnections.GetMemberPayload, error) {
+		var payload *slackdirectoryconnections.GetMemberPayload
+		var (
+			id           string
+			sessionToken *string
+			err          error
+		)
+		id = r.URL.Query().Get("id")
+		if id == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetMemberPayload(id, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetMemberError returns an encoder for errors returned by the getMember
+// slackDirectoryConnections endpoint.
+func EncodeGetMemberError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMemberUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMemberForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMemberBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMemberNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMemberConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMemberUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMemberInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMemberInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMemberUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMemberGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetMemberUnavailableResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
+// EncodeSetMappingResponse returns an encoder for responses returned by the
+// slackDirectoryConnections setMapping endpoint.
+func EncodeSetMappingResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*slackdirectoryconnections.SlackDirectoryMember)
+		enc := encoder(ctx, w)
+		body := NewSetMappingResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeSetMappingRequest returns a decoder for requests sent to the
+// slackDirectoryConnections setMapping endpoint.
+func DecodeSetMappingRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*slackdirectoryconnections.SetMappingPayload, error) {
+	return func(r *http.Request) (*slackdirectoryconnections.SetMappingPayload, error) {
+		var payload *slackdirectoryconnections.SetMappingPayload
+		var (
+			body SetMappingRequestBody
+			err  error
+		)
+		err = decoder(r).Decode(&body)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return payload, goa.MissingPayloadError()
+			}
+			var gerr *goa.ServiceError
+			if errors.As(err, &gerr) {
+				return payload, gerr
+			}
+			return payload, goa.DecodePayloadError(err.Error())
+		}
+		err = ValidateSetMappingRequestBody(&body)
+		if err != nil {
+			return payload, err
+		}
+
+		var (
+			sessionToken *string
+		)
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		payload = NewSetMappingPayload(&body, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeSetMappingError returns an encoder for errors returned by the
+// setMapping slackDirectoryConnections endpoint.
+func EncodeSetMappingError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetMappingUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetMappingForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetMappingBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetMappingNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetMappingConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetMappingUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetMappingInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetMappingInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetMappingUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetMappingGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		case "unavailable":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewSetMappingUnavailableResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -1201,17 +1702,44 @@ func marshalSlackdirectoryconnectionsSlackDirectoryConnectionToSlackDirectoryCon
 // type *slackdirectoryconnections.SlackDirectoryMember.
 func marshalSlackdirectoryconnectionsSlackDirectoryMemberToSlackDirectoryMemberResponseBody(v *slackdirectoryconnections.SlackDirectoryMember) *SlackDirectoryMemberResponseBody {
 	res := &SlackDirectoryMemberResponseBody{
-		ID:                 v.ID,
-		ConnectionID:       v.ConnectionID,
-		WorkspaceID:        v.WorkspaceID,
-		WorkspaceName:      v.WorkspaceName,
-		SlackUserID:        v.SlackUserID,
-		DisplayName:        v.DisplayName,
-		Email:              v.Email,
-		Status:             v.Status,
-		MemberType:         v.MemberType,
-		LastSeenAt:         v.LastSeenAt,
-		ObservedInLastSync: v.ObservedInLastSync,
+		ID:                        v.ID,
+		ConnectionID:              v.ConnectionID,
+		WorkspaceID:               v.WorkspaceID,
+		WorkspaceName:             v.WorkspaceName,
+		SlackUserID:               v.SlackUserID,
+		DisplayName:               v.DisplayName,
+		Email:                     v.Email,
+		Status:                    v.Status,
+		MemberType:                v.MemberType,
+		LastSeenAt:                v.LastSeenAt,
+		ObservedInLastSync:        v.ObservedInLastSync,
+		MappingRevision:           v.MappingRevision,
+		ObservationToken:          v.ObservationToken,
+		MappingStatus:             v.MappingStatus,
+		MappingConflictReason:     v.MappingConflictReason,
+		MappingConflictDetectedAt: v.MappingConflictDetectedAt,
+	}
+	if v.Mapping != nil {
+		res.Mapping = marshalSlackdirectoryconnectionsSlackIdentityMappingToSlackIdentityMappingResponseBody(v.Mapping)
+	}
+
+	return res
+}
+
+// marshalSlackdirectoryconnectionsSlackIdentityMappingToSlackIdentityMappingResponseBody
+// builds a value of type *SlackIdentityMappingResponseBody from a value of
+// type *slackdirectoryconnections.SlackIdentityMapping.
+func marshalSlackdirectoryconnectionsSlackIdentityMappingToSlackIdentityMappingResponseBody(v *slackdirectoryconnections.SlackIdentityMapping) *SlackIdentityMappingResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &SlackIdentityMappingResponseBody{
+		ID:          v.ID,
+		UserID:      v.UserID,
+		DisplayName: v.DisplayName,
+		Email:       v.Email,
+		PhotoURL:    v.PhotoURL,
+		Active:      v.Active,
 	}
 
 	return res

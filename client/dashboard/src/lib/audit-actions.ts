@@ -11,6 +11,10 @@ export const AUDIT_ACTIONS = [
   "slack-directory-connection:authorize",
   "slack-directory-connection:disconnect",
   "slack-directory-connection:sync",
+  "slack-identity-mapping:confirm",
+  "slack-identity-mapping:reassign",
+  "slack-identity-mapping:reconfirm",
+  "slack-identity-mapping:unmap",
   "access_challenge:resolve",
   "access_member:update_role",
   "access_role:create",
@@ -297,12 +301,20 @@ export function isAuditAction(action: string): action is AuditAction {
  */
 export function staticActionPhrase(action: AuditAction): string {
   switch (action) {
+    case "slack-identity-mapping:confirm":
+      return "confirmed the Slack mapping for";
+    case "slack-identity-mapping:reassign":
+      return "reassigned the Slack mapping for";
+    case "slack-identity-mapping:reconfirm":
+      return "reviewed and confirmed the Slack mapping for";
+    case "slack-identity-mapping:unmap":
+      return "removed the Slack mapping for";
+    case "slack-directory-connection:sync":
+      return "synced Slack directory";
     case "slack-directory-connection:authorize":
       return "authorized Slack workspace";
     case "slack-directory-connection:disconnect":
       return "disconnected Slack workspace";
-    case "slack-directory-connection:sync":
-      return "synced Slack directory";
     case "access_challenge:resolve":
       return "resolved access challenge";
     case "access_member:update_role":

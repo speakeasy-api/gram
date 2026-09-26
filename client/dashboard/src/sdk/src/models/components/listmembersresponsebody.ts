@@ -15,9 +15,9 @@ import {
 export type ListMembersResponseBody = {
   members: Array<SlackDirectoryMember>;
   /**
-   * Cursor for the next page, when present.
+   * Time the mapping-state sort used. Pass it back to keep the order stable across pages and edits.
    */
-  nextCursor?: string | undefined;
+  sortAsOf: Date;
   /**
    * Matching retained membership rows.
    */
@@ -31,12 +31,15 @@ export const ListMembersResponseBody$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     members: z.array(SlackDirectoryMember$inboundSchema),
-    next_cursor: z.optional(z.string()),
+    sort_as_of: z.pipe(
+      z.iso.datetime({ offset: true }),
+      z.transform(v => new Date(v)),
+    ),
     total: z.int(),
   }),
   z.transform((v) => {
     return remap$(v, {
-      "next_cursor": "nextCursor",
+      "sort_as_of": "sortAsOf",
     });
   }),
 );

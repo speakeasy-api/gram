@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	slackdirectoryconnections "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -19,6 +21,19 @@ type SyncRequestBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Generation last read by the administrator.
 	Generation *string `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+}
+
+// SetMappingRequestBody is the type of the "slackDirectoryConnections" service
+// "setMapping" endpoint HTTP request body.
+type SetMappingRequestBody struct {
+	// Membership to change.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Mapping revision shown in the review dialog.
+	MappingRevision *int64 `form:"mapping_revision,omitempty" json:"mapping_revision,omitempty" xml:"mapping_revision,omitempty"`
+	// Directory evidence shown in the review dialog.
+	ObservationToken *string `form:"observation_token,omitempty" json:"observation_token,omitempty" xml:"observation_token,omitempty"`
+	// Active same-organization person to confirm. Omit to unmap.
+	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
 }
 
 // BeginRequestBody is the type of the "slackDirectoryConnections" service
@@ -59,8 +74,87 @@ type ListMembersResponseBody struct {
 	Members []*SlackDirectoryMemberResponseBody `form:"members" json:"members" xml:"members"`
 	// Matching retained membership rows.
 	Total int64 `form:"total" json:"total" xml:"total"`
-	// Cursor for the next page, when present.
-	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+	// Time the mapping-state sort used. Pass it back to keep the order stable
+	// across pages and edits.
+	SortAsOf string `form:"sort_as_of" json:"sort_as_of" xml:"sort_as_of"`
+}
+
+// GetMemberResponseBody is the type of the "slackDirectoryConnections" service
+// "getMember" endpoint HTTP response body.
+type GetMemberResponseBody struct {
+	// Durable membership ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Connection that observed this workspace member.
+	ConnectionID string `form:"connection_id" json:"connection_id" xml:"connection_id"`
+	// Verified member workspace.
+	WorkspaceID string `form:"workspace_id" json:"workspace_id" xml:"workspace_id"`
+	// Workspace display name.
+	WorkspaceName string `form:"workspace_name" json:"workspace_name" xml:"workspace_name"`
+	// Slack workspace user ID.
+	SlackUserID string `form:"slack_user_id" json:"slack_user_id" xml:"slack_user_id"`
+	// Optional observed display name.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Observed email; never evidence of a confirmed Gram identity.
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	// Observed account state.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Observed account type.
+	MemberType string `form:"member_type" json:"member_type" xml:"member_type"`
+	// Latest published observation.
+	LastSeenAt string `form:"last_seen_at" json:"last_seen_at" xml:"last_seen_at"`
+	// Whether this row was present in its workspace's last complete snapshot.
+	ObservedInLastSync bool `form:"observed_in_last_sync" json:"observed_in_last_sync" xml:"observed_in_last_sync"`
+	// Current admin-confirmed association; grants no permissions.
+	Mapping *SlackIdentityMappingResponseBody `form:"mapping,omitempty" json:"mapping,omitempty" xml:"mapping,omitempty"`
+	// Version of admin mapping decisions, independent of directory sync.
+	MappingRevision int64 `form:"mapping_revision" json:"mapping_revision" xml:"mapping_revision"`
+	// Opaque token for the directory evidence reviewed by the administrator.
+	ObservationToken string `form:"observation_token" json:"observation_token" xml:"observation_token"`
+	// Mapping state, separate from source state and freshness.
+	MappingStatus string `form:"mapping_status" json:"mapping_status" xml:"mapping_status"`
+	// Sticky directory review finding, cleared only by an admin decision.
+	MappingConflictReason *string `form:"mapping_conflict_reason,omitempty" json:"mapping_conflict_reason,omitempty" xml:"mapping_conflict_reason,omitempty"`
+	// When the finding was first recorded.
+	MappingConflictDetectedAt *string `form:"mapping_conflict_detected_at,omitempty" json:"mapping_conflict_detected_at,omitempty" xml:"mapping_conflict_detected_at,omitempty"`
+}
+
+// SetMappingResponseBody is the type of the "slackDirectoryConnections"
+// service "setMapping" endpoint HTTP response body.
+type SetMappingResponseBody struct {
+	// Durable membership ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Connection that observed this workspace member.
+	ConnectionID string `form:"connection_id" json:"connection_id" xml:"connection_id"`
+	// Verified member workspace.
+	WorkspaceID string `form:"workspace_id" json:"workspace_id" xml:"workspace_id"`
+	// Workspace display name.
+	WorkspaceName string `form:"workspace_name" json:"workspace_name" xml:"workspace_name"`
+	// Slack workspace user ID.
+	SlackUserID string `form:"slack_user_id" json:"slack_user_id" xml:"slack_user_id"`
+	// Optional observed display name.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Observed email; never evidence of a confirmed Gram identity.
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	// Observed account state.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Observed account type.
+	MemberType string `form:"member_type" json:"member_type" xml:"member_type"`
+	// Latest published observation.
+	LastSeenAt string `form:"last_seen_at" json:"last_seen_at" xml:"last_seen_at"`
+	// Whether this row was present in its workspace's last complete snapshot.
+	ObservedInLastSync bool `form:"observed_in_last_sync" json:"observed_in_last_sync" xml:"observed_in_last_sync"`
+	// Current admin-confirmed association; grants no permissions.
+	Mapping *SlackIdentityMappingResponseBody `form:"mapping,omitempty" json:"mapping,omitempty" xml:"mapping,omitempty"`
+	// Version of admin mapping decisions, independent of directory sync.
+	MappingRevision int64 `form:"mapping_revision" json:"mapping_revision" xml:"mapping_revision"`
+	// Opaque token for the directory evidence reviewed by the administrator.
+	ObservationToken string `form:"observation_token" json:"observation_token" xml:"observation_token"`
+	// Mapping state, separate from source state and freshness.
+	MappingStatus string `form:"mapping_status" json:"mapping_status" xml:"mapping_status"`
+	// Sticky directory review finding, cleared only by an admin decision.
+	MappingConflictReason *string `form:"mapping_conflict_reason,omitempty" json:"mapping_conflict_reason,omitempty" xml:"mapping_conflict_reason,omitempty"`
+	// When the finding was first recorded.
+	MappingConflictDetectedAt *string `form:"mapping_conflict_detected_at,omitempty" json:"mapping_conflict_detected_at,omitempty" xml:"mapping_conflict_detected_at,omitempty"`
 }
 
 // BeginResponseBody is the type of the "slackDirectoryConnections" service
@@ -720,6 +814,420 @@ type ListMembersUnavailableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetMemberUnauthorizedResponseBody is the type of the
+// "slackDirectoryConnections" service "getMember" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetMemberUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemberForbiddenResponseBody is the type of the
+// "slackDirectoryConnections" service "getMember" endpoint HTTP response body
+// for the "forbidden" error.
+type GetMemberForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemberBadRequestResponseBody is the type of the
+// "slackDirectoryConnections" service "getMember" endpoint HTTP response body
+// for the "bad_request" error.
+type GetMemberBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemberNotFoundResponseBody is the type of the "slackDirectoryConnections"
+// service "getMember" endpoint HTTP response body for the "not_found" error.
+type GetMemberNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemberConflictResponseBody is the type of the "slackDirectoryConnections"
+// service "getMember" endpoint HTTP response body for the "conflict" error.
+type GetMemberConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemberUnsupportedMediaResponseBody is the type of the
+// "slackDirectoryConnections" service "getMember" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetMemberUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemberInvalidResponseBody is the type of the "slackDirectoryConnections"
+// service "getMember" endpoint HTTP response body for the "invalid" error.
+type GetMemberInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemberInvariantViolationResponseBody is the type of the
+// "slackDirectoryConnections" service "getMember" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetMemberInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemberUnexpectedResponseBody is the type of the
+// "slackDirectoryConnections" service "getMember" endpoint HTTP response body
+// for the "unexpected" error.
+type GetMemberUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemberGatewayErrorResponseBody is the type of the
+// "slackDirectoryConnections" service "getMember" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetMemberGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemberUnavailableResponseBody is the type of the
+// "slackDirectoryConnections" service "getMember" endpoint HTTP response body
+// for the "unavailable" error.
+type GetMemberUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMappingUnauthorizedResponseBody is the type of the
+// "slackDirectoryConnections" service "setMapping" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetMappingUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMappingForbiddenResponseBody is the type of the
+// "slackDirectoryConnections" service "setMapping" endpoint HTTP response body
+// for the "forbidden" error.
+type SetMappingForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMappingBadRequestResponseBody is the type of the
+// "slackDirectoryConnections" service "setMapping" endpoint HTTP response body
+// for the "bad_request" error.
+type SetMappingBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMappingNotFoundResponseBody is the type of the
+// "slackDirectoryConnections" service "setMapping" endpoint HTTP response body
+// for the "not_found" error.
+type SetMappingNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMappingConflictResponseBody is the type of the
+// "slackDirectoryConnections" service "setMapping" endpoint HTTP response body
+// for the "conflict" error.
+type SetMappingConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMappingUnsupportedMediaResponseBody is the type of the
+// "slackDirectoryConnections" service "setMapping" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetMappingUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMappingInvalidResponseBody is the type of the "slackDirectoryConnections"
+// service "setMapping" endpoint HTTP response body for the "invalid" error.
+type SetMappingInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMappingInvariantViolationResponseBody is the type of the
+// "slackDirectoryConnections" service "setMapping" endpoint HTTP response body
+// for the "invariant_violation" error.
+type SetMappingInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMappingUnexpectedResponseBody is the type of the
+// "slackDirectoryConnections" service "setMapping" endpoint HTTP response body
+// for the "unexpected" error.
+type SetMappingUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMappingGatewayErrorResponseBody is the type of the
+// "slackDirectoryConnections" service "setMapping" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetMappingGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMappingUnavailableResponseBody is the type of the
+// "slackDirectoryConnections" service "setMapping" endpoint HTTP response body
+// for the "unavailable" error.
+type SetMappingUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // BeginUnauthorizedResponseBody is the type of the "slackDirectoryConnections"
 // service "begin" endpoint HTTP response body for the "unauthorized" error.
 type BeginUnauthorizedResponseBody struct {
@@ -1194,6 +1702,35 @@ type SlackDirectoryMemberResponseBody struct {
 	LastSeenAt string `form:"last_seen_at" json:"last_seen_at" xml:"last_seen_at"`
 	// Whether this row was present in its workspace's last complete snapshot.
 	ObservedInLastSync bool `form:"observed_in_last_sync" json:"observed_in_last_sync" xml:"observed_in_last_sync"`
+	// Current admin-confirmed association; grants no permissions.
+	Mapping *SlackIdentityMappingResponseBody `form:"mapping,omitempty" json:"mapping,omitempty" xml:"mapping,omitempty"`
+	// Version of admin mapping decisions, independent of directory sync.
+	MappingRevision int64 `form:"mapping_revision" json:"mapping_revision" xml:"mapping_revision"`
+	// Opaque token for the directory evidence reviewed by the administrator.
+	ObservationToken string `form:"observation_token" json:"observation_token" xml:"observation_token"`
+	// Mapping state, separate from source state and freshness.
+	MappingStatus string `form:"mapping_status" json:"mapping_status" xml:"mapping_status"`
+	// Sticky directory review finding, cleared only by an admin decision.
+	MappingConflictReason *string `form:"mapping_conflict_reason,omitempty" json:"mapping_conflict_reason,omitempty" xml:"mapping_conflict_reason,omitempty"`
+	// When the finding was first recorded.
+	MappingConflictDetectedAt *string `form:"mapping_conflict_detected_at,omitempty" json:"mapping_conflict_detected_at,omitempty" xml:"mapping_conflict_detected_at,omitempty"`
+}
+
+// SlackIdentityMappingResponseBody is used to define fields on response body
+// types.
+type SlackIdentityMappingResponseBody struct {
+	// Immutable confirmation ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Existing organization person ID.
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// Person's current display name.
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	// Person's current email.
+	Email string `form:"email" json:"email" xml:"email"`
+	// Person's avatar URL.
+	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
+	// Whether the person and organization membership are active.
+	Active bool `form:"active" json:"active" xml:"active"`
 }
 
 // NewListResponseBody builds the HTTP response body from the result of the
@@ -1230,8 +1767,8 @@ func NewSyncResponseBody(res *slackdirectoryconnections.SyncResult) *SyncRespons
 // the "listMembers" endpoint of the "slackDirectoryConnections" service.
 func NewListMembersResponseBody(res *slackdirectoryconnections.ListMembersResult) *ListMembersResponseBody {
 	body := &ListMembersResponseBody{
-		Total:      res.Total,
-		NextCursor: res.NextCursor,
+		Total:    res.Total,
+		SortAsOf: res.SortAsOf,
 	}
 	if res.Members != nil {
 		body.Members = make([]*SlackDirectoryMemberResponseBody, len(res.Members))
@@ -1244,6 +1781,60 @@ func NewListMembersResponseBody(res *slackdirectoryconnections.ListMembersResult
 		}
 	} else {
 		body.Members = []*SlackDirectoryMemberResponseBody{}
+	}
+	return body
+}
+
+// NewGetMemberResponseBody builds the HTTP response body from the result of
+// the "getMember" endpoint of the "slackDirectoryConnections" service.
+func NewGetMemberResponseBody(res *slackdirectoryconnections.SlackDirectoryMember) *GetMemberResponseBody {
+	body := &GetMemberResponseBody{
+		ID:                        res.ID,
+		ConnectionID:              res.ConnectionID,
+		WorkspaceID:               res.WorkspaceID,
+		WorkspaceName:             res.WorkspaceName,
+		SlackUserID:               res.SlackUserID,
+		DisplayName:               res.DisplayName,
+		Email:                     res.Email,
+		Status:                    res.Status,
+		MemberType:                res.MemberType,
+		LastSeenAt:                res.LastSeenAt,
+		ObservedInLastSync:        res.ObservedInLastSync,
+		MappingRevision:           res.MappingRevision,
+		ObservationToken:          res.ObservationToken,
+		MappingStatus:             res.MappingStatus,
+		MappingConflictReason:     res.MappingConflictReason,
+		MappingConflictDetectedAt: res.MappingConflictDetectedAt,
+	}
+	if res.Mapping != nil {
+		body.Mapping = marshalSlackdirectoryconnectionsSlackIdentityMappingToSlackIdentityMappingResponseBody(res.Mapping)
+	}
+	return body
+}
+
+// NewSetMappingResponseBody builds the HTTP response body from the result of
+// the "setMapping" endpoint of the "slackDirectoryConnections" service.
+func NewSetMappingResponseBody(res *slackdirectoryconnections.SlackDirectoryMember) *SetMappingResponseBody {
+	body := &SetMappingResponseBody{
+		ID:                        res.ID,
+		ConnectionID:              res.ConnectionID,
+		WorkspaceID:               res.WorkspaceID,
+		WorkspaceName:             res.WorkspaceName,
+		SlackUserID:               res.SlackUserID,
+		DisplayName:               res.DisplayName,
+		Email:                     res.Email,
+		Status:                    res.Status,
+		MemberType:                res.MemberType,
+		LastSeenAt:                res.LastSeenAt,
+		ObservedInLastSync:        res.ObservedInLastSync,
+		MappingRevision:           res.MappingRevision,
+		ObservationToken:          res.ObservationToken,
+		MappingStatus:             res.MappingStatus,
+		MappingConflictReason:     res.MappingConflictReason,
+		MappingConflictDetectedAt: res.MappingConflictDetectedAt,
+	}
+	if res.Mapping != nil {
+		body.Mapping = marshalSlackdirectoryconnectionsSlackIdentityMappingToSlackIdentityMappingResponseBody(res.Mapping)
 	}
 	return body
 }
@@ -1763,6 +2354,336 @@ func NewListMembersUnavailableResponseBody(res *goa.ServiceError) *ListMembersUn
 	return body
 }
 
+// NewGetMemberUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "getMember" endpoint of the "slackDirectoryConnections"
+// service.
+func NewGetMemberUnauthorizedResponseBody(res *goa.ServiceError) *GetMemberUnauthorizedResponseBody {
+	body := &GetMemberUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemberForbiddenResponseBody builds the HTTP response body from the
+// result of the "getMember" endpoint of the "slackDirectoryConnections"
+// service.
+func NewGetMemberForbiddenResponseBody(res *goa.ServiceError) *GetMemberForbiddenResponseBody {
+	body := &GetMemberForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemberBadRequestResponseBody builds the HTTP response body from the
+// result of the "getMember" endpoint of the "slackDirectoryConnections"
+// service.
+func NewGetMemberBadRequestResponseBody(res *goa.ServiceError) *GetMemberBadRequestResponseBody {
+	body := &GetMemberBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemberNotFoundResponseBody builds the HTTP response body from the
+// result of the "getMember" endpoint of the "slackDirectoryConnections"
+// service.
+func NewGetMemberNotFoundResponseBody(res *goa.ServiceError) *GetMemberNotFoundResponseBody {
+	body := &GetMemberNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemberConflictResponseBody builds the HTTP response body from the
+// result of the "getMember" endpoint of the "slackDirectoryConnections"
+// service.
+func NewGetMemberConflictResponseBody(res *goa.ServiceError) *GetMemberConflictResponseBody {
+	body := &GetMemberConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemberUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "getMember" endpoint of the "slackDirectoryConnections"
+// service.
+func NewGetMemberUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMemberUnsupportedMediaResponseBody {
+	body := &GetMemberUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemberInvalidResponseBody builds the HTTP response body from the
+// result of the "getMember" endpoint of the "slackDirectoryConnections"
+// service.
+func NewGetMemberInvalidResponseBody(res *goa.ServiceError) *GetMemberInvalidResponseBody {
+	body := &GetMemberInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemberInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getMember" endpoint of the
+// "slackDirectoryConnections" service.
+func NewGetMemberInvariantViolationResponseBody(res *goa.ServiceError) *GetMemberInvariantViolationResponseBody {
+	body := &GetMemberInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemberUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getMember" endpoint of the "slackDirectoryConnections"
+// service.
+func NewGetMemberUnexpectedResponseBody(res *goa.ServiceError) *GetMemberUnexpectedResponseBody {
+	body := &GetMemberUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemberGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "getMember" endpoint of the "slackDirectoryConnections"
+// service.
+func NewGetMemberGatewayErrorResponseBody(res *goa.ServiceError) *GetMemberGatewayErrorResponseBody {
+	body := &GetMemberGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemberUnavailableResponseBody builds the HTTP response body from the
+// result of the "getMember" endpoint of the "slackDirectoryConnections"
+// service.
+func NewGetMemberUnavailableResponseBody(res *goa.ServiceError) *GetMemberUnavailableResponseBody {
+	body := &GetMemberUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMappingUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "setMapping" endpoint of the "slackDirectoryConnections"
+// service.
+func NewSetMappingUnauthorizedResponseBody(res *goa.ServiceError) *SetMappingUnauthorizedResponseBody {
+	body := &SetMappingUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMappingForbiddenResponseBody builds the HTTP response body from the
+// result of the "setMapping" endpoint of the "slackDirectoryConnections"
+// service.
+func NewSetMappingForbiddenResponseBody(res *goa.ServiceError) *SetMappingForbiddenResponseBody {
+	body := &SetMappingForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMappingBadRequestResponseBody builds the HTTP response body from the
+// result of the "setMapping" endpoint of the "slackDirectoryConnections"
+// service.
+func NewSetMappingBadRequestResponseBody(res *goa.ServiceError) *SetMappingBadRequestResponseBody {
+	body := &SetMappingBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMappingNotFoundResponseBody builds the HTTP response body from the
+// result of the "setMapping" endpoint of the "slackDirectoryConnections"
+// service.
+func NewSetMappingNotFoundResponseBody(res *goa.ServiceError) *SetMappingNotFoundResponseBody {
+	body := &SetMappingNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMappingConflictResponseBody builds the HTTP response body from the
+// result of the "setMapping" endpoint of the "slackDirectoryConnections"
+// service.
+func NewSetMappingConflictResponseBody(res *goa.ServiceError) *SetMappingConflictResponseBody {
+	body := &SetMappingConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMappingUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "setMapping" endpoint of the "slackDirectoryConnections"
+// service.
+func NewSetMappingUnsupportedMediaResponseBody(res *goa.ServiceError) *SetMappingUnsupportedMediaResponseBody {
+	body := &SetMappingUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMappingInvalidResponseBody builds the HTTP response body from the
+// result of the "setMapping" endpoint of the "slackDirectoryConnections"
+// service.
+func NewSetMappingInvalidResponseBody(res *goa.ServiceError) *SetMappingInvalidResponseBody {
+	body := &SetMappingInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMappingInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "setMapping" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetMappingInvariantViolationResponseBody(res *goa.ServiceError) *SetMappingInvariantViolationResponseBody {
+	body := &SetMappingInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMappingUnexpectedResponseBody builds the HTTP response body from the
+// result of the "setMapping" endpoint of the "slackDirectoryConnections"
+// service.
+func NewSetMappingUnexpectedResponseBody(res *goa.ServiceError) *SetMappingUnexpectedResponseBody {
+	body := &SetMappingUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMappingGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "setMapping" endpoint of the "slackDirectoryConnections"
+// service.
+func NewSetMappingGatewayErrorResponseBody(res *goa.ServiceError) *SetMappingGatewayErrorResponseBody {
+	body := &SetMappingGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMappingUnavailableResponseBody builds the HTTP response body from the
+// result of the "setMapping" endpoint of the "slackDirectoryConnections"
+// service.
+func NewSetMappingUnavailableResponseBody(res *goa.ServiceError) *SetMappingUnavailableResponseBody {
+	body := &SetMappingUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewBeginUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "begin" endpoint of the "slackDirectoryConnections" service.
 func NewBeginUnauthorizedResponseBody(res *goa.ServiceError) *BeginUnauthorizedResponseBody {
@@ -2106,12 +3027,41 @@ func NewSyncPayload(body *SyncRequestBody, sessionToken *string) *slackdirectory
 
 // NewListMembersPayload builds a slackDirectoryConnections service listMembers
 // endpoint payload.
-func NewListMembersPayload(connectionID *string, search *string, cursor *string, limit int, sessionToken *string) *slackdirectoryconnections.ListMembersPayload {
+func NewListMembersPayload(connectionID *string, search *string, mappingStatus *string, includeDeactivated bool, includeBots bool, includeGuests bool, sortAsOf *string, page int, limit int, sessionToken *string) *slackdirectoryconnections.ListMembersPayload {
 	v := &slackdirectoryconnections.ListMembersPayload{}
 	v.ConnectionID = connectionID
 	v.Search = search
-	v.Cursor = cursor
+	v.MappingStatus = mappingStatus
+	v.IncludeDeactivated = includeDeactivated
+	v.IncludeBots = includeBots
+	v.IncludeGuests = includeGuests
+	v.SortAsOf = sortAsOf
+	v.Page = page
 	v.Limit = limit
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewGetMemberPayload builds a slackDirectoryConnections service getMember
+// endpoint payload.
+func NewGetMemberPayload(id string, sessionToken *string) *slackdirectoryconnections.GetMemberPayload {
+	v := &slackdirectoryconnections.GetMemberPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewSetMappingPayload builds a slackDirectoryConnections service setMapping
+// endpoint payload.
+func NewSetMappingPayload(body *SetMappingRequestBody, sessionToken *string) *slackdirectoryconnections.SetMappingPayload {
+	v := &slackdirectoryconnections.SetMappingPayload{
+		ID:               *body.ID,
+		MappingRevision:  *body.MappingRevision,
+		ObservationToken: *body.ObservationToken,
+		UserID:           body.UserID,
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -2153,6 +3103,39 @@ func ValidateSyncRequestBody(body *SyncRequestBody) (err error) {
 	}
 	if body.Generation != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.generation", *body.Generation, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateSetMappingRequestBody runs the validations defined on
+// SetMappingRequestBody
+func ValidateSetMappingRequestBody(body *SetMappingRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.MappingRevision == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mapping_revision", "body"))
+	}
+	if body.ObservationToken == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("observation_token", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.MappingRevision != nil {
+		if *body.MappingRevision < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.mapping_revision", *body.MappingRevision, 0, true))
+		}
+	}
+	if body.ObservationToken != nil {
+		if utf8.RuneCountInString(*body.ObservationToken) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.observation_token", *body.ObservationToken, utf8.RuneCountInString(*body.ObservationToken), 1, true))
+		}
+	}
+	if body.UserID != nil {
+		if utf8.RuneCountInString(*body.UserID) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.user_id", *body.UserID, utf8.RuneCountInString(*body.UserID), 1, true))
+		}
 	}
 	return
 }
