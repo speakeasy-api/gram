@@ -1,0 +1,27 @@
+server/internal/plugins/platform_mcp_skills/configure-private-mcp-access/SKILL.md
+  h_9630b74bdac540 14
+server/internal/mcp/serve_meta.go
+  h_9630b74bdac540 72
+  h_9630b74bdac540 68-71
+server/internal/mcp/network_traffic_test.go
+  h_9630b74bdac540 19,25-32
+server/internal/platformmcp/tool_network_traffic_test.go
+  h_9630b74bdac540 78-81,90-96
+.speakeasy/out.openapi.yaml
+  h_9630b74bdac540 80769,80773,80781
+client/dashboard/src/pages/mcp/x/tabs/settings/sections/NetworkTrafficChart.tsx
+  h_9630b74bdac540 31
+client/dashboard/src/sdk/src/models/components/getmcpnetworktrafficpayload.ts
+  h_9630b74bdac540 21-23,26,30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "87879f1e70a14508deb52267c82fe93b0cead04b",
+  "prompts": {},
+  "humans": {
+    "h_9630b74bdac540": {
+      "author": "Tristan Cartledge <tristan@speakeasyapi.dev>"
+    }
+  }
+}
