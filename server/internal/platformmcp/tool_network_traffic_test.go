@@ -75,6 +75,10 @@ func TestMCPNetworkTrafficRequiresTargetReadAndReturnsBoundedSummary(t *testing.
 	require.EqualValues(t, 3, output.Public.Requests)
 	require.EqualValues(t, 2, output.Private.Requests)
 	require.Equal(t, lastSeen.Format(time.RFC3339), output.Public.LastSeenAt)
+	require.Equal(t, lastSeen.Add(-time.Minute).Format(time.RFC3339), output.Private.LastSeenAt)
+	require.Equal(t, "24h", output.Window)
+	require.Equal(t, traffic.params.From.Format(time.RFC3339), output.From)
+	require.Equal(t, traffic.params.To.Format(time.RFC3339), output.To)
 	require.NotEmpty(t, output.Caveat)
 	encoded, err := json.Marshal(output)
 	require.NoError(t, err)
@@ -83,4 +87,11 @@ func TestMCPNetworkTrafficRequiresTargetReadAndReturnsBoundedSummary(t *testing.
 	input.TargetID = "not-an-id"
 	_, err = reader.GetMCPNetworkTraffic(ctx, principal, input)
 	require.Error(t, err)
+
+	input.TargetID = server.ID.String()
+	reader.WithMCPNetworkTraffic(traffic, alwaysDisabledFeature)
+	_, err = reader.GetMCPNetworkTraffic(ctx, principal, input)
+	var refusal *ToolRefusalError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "observability_disabled", refusal.Code)
 }

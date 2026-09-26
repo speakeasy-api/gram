@@ -28,7 +28,7 @@ ChartJS.register(
   Tooltip,
 );
 
-export type NetworkTrafficPoint = {
+type NetworkTrafficPoint = {
   bucketStart: string;
   publicRequests: number;
   privateRequests: number;

@@ -18,13 +18,16 @@ export const Window = {
  */
 export type Window = ClosedEnum<typeof Window>;
 
+/**
+ * Provide exactly one of mcp_server_id or meta_mcp_server_id, and a recent window.
+ */
 export type GetMcpNetworkTrafficPayload = {
   /**
-   * MCP server ID
+   * MCP server ID (mutually exclusive with meta_mcp_server_id)
    */
   mcpServerId?: string | undefined;
   /**
-   * Gateway ID
+   * Gateway ID (mutually exclusive with mcp_server_id)
    */
   metaMcpServerId?: string | undefined;
   /**

@@ -65,6 +65,11 @@ type metaGateContext struct {
 	protocolVersion mcpversions.Resolution
 }
 
+func shouldRecordMetaMCPNetworkRequest(agentID uuid.UUID) bool {
+	// Agent gateways are synthetic and have no network access panel to feed.
+	return agentID == uuid.Nil
+}
+
 // serveResolvedMetaMCPEndpoint terminates MCP for a meta-MCP-backed
 // endpoint: it runs the issuer gate when the meta server is issuer-gated,
 // then dispatches the JSON-RPC request. Only POST reaches here — GET/DELETE
@@ -72,11 +77,6 @@ type metaGateContext struct {
 // endpoints as having no proxied stream and no upstream session.
 // agentID is the agent whose grants define membership, or uuid.Nil for a
 // stored gateway whose members come from meta_mcp_server_members.
-func shouldRecordMetaMCPNetworkRequest(agentID uuid.UUID) bool {
-	// Agent gateways are synthetic and have no network access panel to feed.
-	return agentID == uuid.Nil
-}
-
 func (s *Service) serveResolvedMetaMCPEndpoint(
 	w http.ResponseWriter,
 	r *http.Request,
