@@ -114,16 +114,18 @@ Return only JSON with "directive_kind", "target", "operational", and "rationale"
 // with a strict JSON schema, low temperature, and a hard timeout. Errors and
 // rate-limited calls fail open (SAFE) so a judge outage drops PI findings.
 type Engine struct {
-	logger      *slog.Logger
-	tracer      trace.Tracer
-	metrics     *metrics
-	client      gramopenrouter.CompletionClient
-	limiter     *ratelimit.Limiter
-	model       string
-	reasoning   string
-	temperature float64
-	schema      or.ChatJSONSchemaConfig // built once; the verdict shape is constant
-	stokenCodec *stokens.Codec
+	systemPrompt string
+	timeout      time.Duration
+	logger       *slog.Logger
+	tracer       trace.Tracer
+	metrics      *metrics
+	client       gramopenrouter.CompletionClient
+	limiter      *ratelimit.Limiter
+	model        string
+	reasoning    string
+	temperature  float64
+	schema       or.ChatJSONSchemaConfig // built once; the verdict shape is constant
+	stokenCodec  *stokens.Codec
 }
 
 type trajectoryTelemetry struct {
@@ -155,15 +157,17 @@ func New(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider
 	logger = logger.With(attr.SlogComponent("pi-llm-judge"))
 	strict := true
 	return &Engine{
-		logger:      logger,
-		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"),
-		metrics:     newMetrics(meterProvider, logger),
-		client:      client,
-		limiter:     limiter,
-		model:       Model,
-		reasoning:   ReasoningEffort,
-		temperature: defaultTemperature,
-		stokenCodec: stokens.NewCodec(),
+		systemPrompt: SystemPrompt,
+		timeout:      JudgeTimeout,
+		logger:       logger,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"),
+		metrics:      newMetrics(meterProvider, logger),
+		client:       client,
+		limiter:      limiter,
+		model:        Model,
+		reasoning:    ReasoningEffort,
+		temperature:  defaultTemperature,
+		stokenCodec:  stokens.NewCodec(),
 		schema: or.ChatJSONSchemaConfig{
 			Name:        "prompt_injection_typed_verdict",
 			Schema:      VerdictSchema(),
@@ -246,7 +250,7 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 		go func(i int, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = c.classifyOne(ctx, req, msg, trajectory, userID, bucket)
+			results[i] = c.classifyOne(ctx, req, msg, trajectory, userID, bucket, nil)
 		}(i, msg, trajectory, userID)
 	}
 	wg.Wait()
@@ -255,7 +259,7 @@ func (c *Engine) Classify(ctx context.Context, req promptinjection.Request) (_ [
 
 // classifyOne returns UNAVAILABLE for every fail-open path and SAFE only for a
 // judgement that cleared the content.
-func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string, bucket string) promptinjection.Result {
+func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, msg judgemessage.Message, trajectory judgemessage.Trajectory, userID string, bucket string, window *judgemessage.Window) promptinjection.Result {
 	// Bail before spending a rate-limit token (or making the call) on a context
 	// that is already canceled — otherwise a cancellation burst can drain the
 	// org's budget and throttle real requests into fail-open verdicts. (cubic)
@@ -306,7 +310,20 @@ func (c *Engine) classifyOne(ctx context.Context, req promptinjection.Request, m
 	)
 
 	prepared, countContent := prepareJudgePayload(msg, trajectory)
-	decisionCtx, cancel := context.WithTimeout(ctx, JudgeTimeout)
+	if window != nil {
+		var err error
+		prepared, err = json.Marshal(struct {
+			Window judgemessage.Window `json:"window"`
+		}{Window: *window})
+		if err != nil {
+			return unavailableResult
+		}
+		countContent = nil
+		for _, evidence := range window.Messages {
+			countContent = append(countContent, judgemessage.STokenContent(evidence)...)
+		}
+	}
+	decisionCtx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
 	start := time.Now()
@@ -465,12 +482,14 @@ type judgePayload struct {
 // (~1024 tokens on the Gemini judge model); below that it's a no-op. The
 // offline evaluator reuses it so measured token costs match the production
 // request shape.
-func SystemMessage() or.ChatMessages {
+func SystemMessage() or.ChatMessages { return systemMessage(SystemPrompt) }
+
+func systemMessage(prompt string) or.ChatMessages {
 	return or.CreateChatMessagesSystem(or.ChatSystemMessage{
 		Role: or.ChatSystemMessageRoleSystem,
 		Content: or.CreateChatSystemMessageContentArrayOfChatContentText([]or.ChatContentText{{
 			Type:         or.ChatContentTextTypeText,
-			Text:         SystemPrompt,
+			Text:         prompt,
 			CacheControl: &or.ChatContentCacheControl{Type: or.ChatContentCacheControlTypeEphemeral, TTL: nil},
 		}}),
 		Name: nil,
@@ -505,7 +524,7 @@ func prepareJudgePayload(msg judgemessage.Message, trajectory judgemessage.Traje
 func (c *Engine) call(ctx context.Context, req promptinjection.Request, payload []byte, userID string) (Verdict, error) {
 
 	messages := []or.ChatMessages{
-		SystemMessage(),
+		systemMessage(c.systemPrompt),
 		or.CreateChatMessagesUser(or.ChatUserMessage{
 			Role:    or.ChatUserMessageRoleUser,
 			Content: or.CreateChatUserMessageContentStr(string(payload)),

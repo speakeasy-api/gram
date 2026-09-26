@@ -55,6 +55,9 @@ type toolCallCase struct {
 }
 
 type labeledCase struct {
+	// Window optionally supplies five-message evidence for contextual evaluation.
+	Window *judgemessage.Window `json:"window,omitempty"`
+
 	ID     string `json:"id"`
 	Label  string `json:"label"`
 	Text   string `json:"text"`
@@ -178,21 +181,23 @@ type modeSummary struct {
 }
 
 type evaluationStats struct {
-	PhysicalCalls        int     `json:"physical_calls"`
-	Errors               int     `json:"errors"`
-	Timeouts             int     `json:"timeouts"`
-	Malformed            int     `json:"malformed"`
-	FailOpenEvents       int     `json:"fail_open_events"`
-	PromptTokens         int     `json:"prompt_tokens"`
-	CompletionTokens     int     `json:"completion_tokens"`
-	CostUSD              float64 `json:"cost_usd"`
-	CallsOver10Seconds   int     `json:"calls_over_10_seconds"`
-	CallLatencyP50MS     float64 `json:"call_latency_p50_ms"`
-	CallLatencyP95MS     float64 `json:"call_latency_p95_ms"`
-	CallLatencyP99MS     float64 `json:"call_latency_p99_ms"`
-	DecisionLatencyP50MS float64 `json:"decision_latency_p50_ms"`
-	DecisionLatencyP95MS float64 `json:"decision_latency_p95_ms"`
-	DecisionLatencyP99MS float64 `json:"decision_latency_p99_ms"`
+	PrefilterMissedAttacks int     `json:"prefilter_missed_attacks,omitempty"`
+	ConfirmationCalls      int     `json:"confirmation_calls,omitempty"`
+	PhysicalCalls          int     `json:"physical_calls"`
+	Errors                 int     `json:"errors"`
+	Timeouts               int     `json:"timeouts"`
+	Malformed              int     `json:"malformed"`
+	FailOpenEvents         int     `json:"fail_open_events"`
+	PromptTokens           int     `json:"prompt_tokens"`
+	CompletionTokens       int     `json:"completion_tokens"`
+	CostUSD                float64 `json:"cost_usd"`
+	CallsOver10Seconds     int     `json:"calls_over_10_seconds"`
+	CallLatencyP50MS       float64 `json:"call_latency_p50_ms"`
+	CallLatencyP95MS       float64 `json:"call_latency_p95_ms"`
+	CallLatencyP99MS       float64 `json:"call_latency_p99_ms"`
+	DecisionLatencyP50MS   float64 `json:"decision_latency_p50_ms"`
+	DecisionLatencyP95MS   float64 `json:"decision_latency_p95_ms"`
+	DecisionLatencyP99MS   float64 `json:"decision_latency_p99_ms"`
 }
 
 type accuracySummary struct {
@@ -257,21 +262,25 @@ type knownGapSummary struct {
 }
 
 type envelope struct {
-	GitSHA          string          `json:"git_sha"`
-	Ref             string          `json:"ref"`
-	Timestamp       string          `json:"timestamp"`
-	Model           string          `json:"model"`
-	Reasoning       string          `json:"reasoning"`
-	ProviderRoute   string          `json:"provider_route"`
-	SamplesPerEvent int             `json:"samples_per_event"`
-	TimeoutMS       int64           `json:"timeout_ms"`
-	PromptSHA256    string          `json:"prompt_sha256"`
-	SchemaSHA256    string          `json:"schema_sha256"`
-	CorpusSHA256    string          `json:"corpus_sha256"`
-	Summary         accuracySummary `json:"summary"`
+	Cascade            bool            `json:"cascade"`
+	PrefilterModel     string          `json:"prefilter_model,omitempty"`
+	PrefilterThreshold float64         `json:"prefilter_threshold,omitempty"`
+	GitSHA             string          `json:"git_sha"`
+	Ref                string          `json:"ref"`
+	Timestamp          string          `json:"timestamp"`
+	Model              string          `json:"model"`
+	Reasoning          string          `json:"reasoning"`
+	ProviderRoute      string          `json:"provider_route"`
+	SamplesPerEvent    int             `json:"samples_per_event"`
+	TimeoutMS          int64           `json:"timeout_ms"`
+	PromptSHA256       string          `json:"prompt_sha256"`
+	SchemaSHA256       string          `json:"schema_sha256"`
+	CorpusSHA256       string          `json:"corpus_sha256"`
+	Summary            accuracySummary `json:"summary"`
 }
 
 type options struct {
+	cascade          bool
 	corpusDir        string
 	outFile          string
 	checkFloors      bool
@@ -307,6 +316,7 @@ func main() {
 
 func parseFlags() options {
 	opts := options{
+		cascade:          false,
 		corpusDir:        "",
 		outFile:          "",
 		checkFloors:      false,
@@ -328,6 +338,7 @@ func parseFlags() options {
 	flag.StringVar(&opts.extraCorpus, "extra-corpus", "", "absolute path to an additional local JSONL corpus; never loaded by default")
 	flag.IntVar(&opts.repeats, "repeats", 1, "number of complete repeated trials")
 	flag.IntVar(&opts.samples, "samples", piopenrouter.SamplesPerEvent, "physical judge calls per event; production defaults to one")
+	flag.BoolVar(&opts.cascade, "cascade", false, "evaluate the production Jev >= 0.90 to Opus cascade")
 	flag.Parse()
 	return opts
 }
@@ -359,6 +370,10 @@ func filterSources(corpus []labeledCase, spec string) []labeledCase {
 }
 
 func run(ctx context.Context, opts options) error {
+	if opts.cascade {
+		opts.judgeModel = piopenrouter.ConfirmationModel
+		opts.samples = 1
+	}
 	corpus, err := loadCorpus(opts.corpusDir, opts.extraCorpus)
 	if err != nil {
 		return err
@@ -726,6 +741,7 @@ var optionalCorpusFiles = []string{
 	"agent_fp_ais324.jsonl",
 	"adversarial_ais324.jsonl",
 	"trajectory_twins.jsonl",
+	"cascade_context.jsonl",
 }
 
 func loadCorpus(dir, extraCorpus string) ([]labeledCase, error) {
@@ -964,7 +980,14 @@ func scanJudgeMode(ctx context.Context, opts options, corpus []labeledCase) (mod
 	}
 
 	fmt.Fprintf(os.Stderr, "judging %d cases with %s (concurrency=%d)\n", len(corpus), opts.judgeModel, opts.judgeConcurrency)
-	findings, eval, err := scanJudge(ctx, opts, newOpenRouterClient(apiKey), corpus)
+	var findings [][]scanners.Finding
+	var eval evaluationStats
+	var err error
+	if opts.cascade {
+		findings, eval, err = scanCascade(ctx, opts, apiKey, corpus)
+	} else {
+		findings, eval, err = scanJudge(ctx, opts, newOpenRouterClient(apiKey), corpus)
+	}
 	if err != nil {
 		return modeSummary{}, nil, err
 	}
@@ -1402,6 +1425,7 @@ func writeMetrics(path string, opts options, corpus []labeledCase, summary accur
 	schemaHash := sha256.Sum256(schemaJSON)
 	corpusHash := sha256.Sum256(corpusJSON)
 	payload := envelope{
+		Cascade: opts.cascade, PrefilterModel: "", PrefilterThreshold: 0,
 		GitSHA:          envOr("GITHUB_SHA", "local"),
 		Ref:             envOr("GITHUB_REF_NAME", "local"),
 		Timestamp:       time.Now().UTC().Format(time.RFC3339),
@@ -1414,6 +1438,14 @@ func writeMetrics(path string, opts options, corpus []labeledCase, summary accur
 		SchemaSHA256:    fmt.Sprintf("%x", schemaHash),
 		CorpusSHA256:    fmt.Sprintf("%x", corpusHash),
 		Summary:         summary,
+	}
+	if opts.cascade {
+		payload.PrefilterModel = "typesafe/jev-1.13"
+		payload.PrefilterThreshold = piopenrouter.PrefilterThreshold
+		payload.TimeoutMS = (10*time.Second + piopenrouter.ConfirmationTimeout).Milliseconds()
+		questions, _ := json.Marshal(piopenrouter.PrefilterQuestions())
+		combined := sha256.Sum256(append([]byte(piopenrouter.SystemPrompt+"\n"+piopenrouter.WindowInstructions), questions...))
+		payload.PromptSHA256 = fmt.Sprintf("%x", combined)
 	}
 	body, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {

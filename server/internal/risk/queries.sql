@@ -2307,3 +2307,41 @@ WHERE id = @id;
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
 WHERE id = @id;
+
+-- name: GetJudgeMessageWindow :many
+-- Two bounded index probes around a tenant-validated anchor. Keep the target
+-- even when no neighbors exist; an absent target is never a valid window.
+WITH target AS (
+  SELECT cm.id, cm.chat_id, cm.project_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.seq FROM chat_messages cm
+  JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id AND c.deleted IS FALSE
+  JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+  WHERE cm.id = @anchor_id::uuid AND cm.project_id = @project_id::uuid
+    AND p.organization_id = @organization_id::text
+)
+SELECT evidence.id, evidence.role, LEFT(evidence.content, 4001)::text AS content,
+  LEFT(COALESCE(evidence.tool_calls::text, '[]'), 64001)::text AS tool_calls
+FROM (
+SELECT n.id, n.chat_id, n.project_id, n.role, n.content, n.tool_calls, n.created_at, n.seq FROM target t
+JOIN LATERAL (
+  (SELECT prev.id, prev.chat_id, prev.project_id, prev.role, prev.content, prev.tool_calls, prev.created_at, prev.seq FROM chat_messages prev
+   WHERE prev.chat_id = t.chat_id AND prev.project_id = t.project_id
+     AND (prev.created_at, prev.seq) < (t.created_at, t.seq)
+   ORDER BY prev.created_at DESC, prev.seq DESC LIMIT 2)
+  UNION ALL
+  SELECT t.id, t.chat_id, t.project_id, t.role, t.content, t.tool_calls, t.created_at, t.seq
+  UNION ALL
+  (SELECT next.id, next.chat_id, next.project_id, next.role, next.content, next.tool_calls, next.created_at, next.seq FROM chat_messages next
+   WHERE next.chat_id = t.chat_id AND next.project_id = t.project_id
+     AND (next.created_at, next.seq) > (t.created_at, t.seq)
+   ORDER BY next.created_at, next.seq LIMIT 2)
+) n ON TRUE
+UNION ALL
+(SELECT recent.id, recent.chat_id, recent.project_id, recent.role, recent.content, recent.tool_calls, recent.created_at, recent.seq FROM chat_messages recent
+ JOIN chats c ON c.id = recent.chat_id AND c.project_id = recent.project_id AND c.deleted IS FALSE
+ JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+ WHERE @anchor_id::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+   AND recent.chat_id = @chat_id::uuid AND recent.project_id = @project_id::uuid
+   AND p.organization_id = @organization_id::text
+ ORDER BY recent.created_at DESC, recent.seq DESC LIMIT 4)
+) evidence
+ORDER BY evidence.created_at, evidence.seq;

@@ -1177,7 +1177,10 @@ func (s *Scanner) scanPolicy(ctx context.Context, policy repo.RiskPolicy, basePr
 			}
 		case ra.SourcePromptInjection:
 			scanStarted := time.Now()
-			scanResult, verdict, err := s.piScanner.ScanWithVerdict(ctx, text, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, judgemessage.New(messageType, toolName, text))
+			judgeMessage := judgemessage.New(messageType, toolName, text)
+			judgeMessage.AnchorID = baseProvenance.ChatMessageID
+			judgeMessage.ChatID = baseProvenance.ChatID
+			scanResult, verdict, err := s.piScanner.ScanWithVerdict(ctx, text, policy.OrganizationID, policy.ProjectID.String(), baseProvenance.UserID, judgeMessage)
 			if !scanResult.Completed {
 				incomplete.Store(true)
 				legacyUnavailable = true

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,6 +37,7 @@ func req(texts ...string) promptinjection.Request {
 	msgs := make([]judgemessage.Message, len(texts))
 	for i, t := range texts {
 		msgs[i] = judgemessage.Message{
+			AnchorID: uuid.Nil, ChatID: uuid.Nil,
 			Type:        "",
 			Body:        t,
 			ToolName:    "",

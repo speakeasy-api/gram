@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/google/uuid"
 	"log/slog"
 	"slices"
 	"testing"
@@ -52,6 +53,7 @@ func newScanner(t *testing.T, fc *fakeEngine) *promptinjection.Scanner {
 
 func mkMsg(text string) judgemessage.Message {
 	return judgemessage.Message{
+		AnchorID: uuid.Nil, ChatID: uuid.Nil,
 		Type:        "",
 		Body:        text,
 		ToolName:    "",

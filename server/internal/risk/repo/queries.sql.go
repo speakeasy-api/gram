@@ -1861,6 +1861,89 @@ func (q *Queries) GetCustomDetectionRule(ctx context.Context, arg GetCustomDetec
 	return i, err
 }
 
+const getJudgeMessageWindow = `-- name: GetJudgeMessageWindow :many
+WITH target AS (
+  SELECT cm.id, cm.chat_id, cm.project_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.seq FROM chat_messages cm
+  JOIN chats c ON c.id = cm.chat_id AND c.project_id = cm.project_id AND c.deleted IS FALSE
+  JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+  WHERE cm.id = $1::uuid AND cm.project_id = $3::uuid
+    AND p.organization_id = $4::text
+)
+SELECT evidence.id, evidence.role, LEFT(evidence.content, 4001)::text AS content,
+  LEFT(COALESCE(evidence.tool_calls::text, '[]'), 64001)::text AS tool_calls
+FROM (
+SELECT n.id, n.chat_id, n.project_id, n.role, n.content, n.tool_calls, n.created_at, n.seq FROM target t
+JOIN LATERAL (
+  (SELECT prev.id, prev.chat_id, prev.project_id, prev.role, prev.content, prev.tool_calls, prev.created_at, prev.seq FROM chat_messages prev
+   WHERE prev.chat_id = t.chat_id AND prev.project_id = t.project_id
+     AND (prev.created_at, prev.seq) < (t.created_at, t.seq)
+   ORDER BY prev.created_at DESC, prev.seq DESC LIMIT 2)
+  UNION ALL
+  SELECT t.id, t.chat_id, t.project_id, t.role, t.content, t.tool_calls, t.created_at, t.seq
+  UNION ALL
+  (SELECT next.id, next.chat_id, next.project_id, next.role, next.content, next.tool_calls, next.created_at, next.seq FROM chat_messages next
+   WHERE next.chat_id = t.chat_id AND next.project_id = t.project_id
+     AND (next.created_at, next.seq) > (t.created_at, t.seq)
+   ORDER BY next.created_at, next.seq LIMIT 2)
+) n ON TRUE
+UNION ALL
+(SELECT recent.id, recent.chat_id, recent.project_id, recent.role, recent.content, recent.tool_calls, recent.created_at, recent.seq FROM chat_messages recent
+ JOIN chats c ON c.id = recent.chat_id AND c.project_id = recent.project_id AND c.deleted IS FALSE
+ JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
+ WHERE $1::uuid = '00000000-0000-0000-0000-000000000000'::uuid
+   AND recent.chat_id = $2::uuid AND recent.project_id = $3::uuid
+   AND p.organization_id = $4::text
+ ORDER BY recent.created_at DESC, recent.seq DESC LIMIT 4)
+) evidence
+ORDER BY evidence.created_at, evidence.seq
+`
+
+type GetJudgeMessageWindowParams struct {
+	AnchorID       uuid.UUID
+	ChatID         uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type GetJudgeMessageWindowRow struct {
+	ID        uuid.UUID
+	Role      string
+	Content   string
+	ToolCalls string
+}
+
+// Two bounded index probes around a tenant-validated anchor. Keep the target
+// even when no neighbors exist; an absent target is never a valid window.
+func (q *Queries) GetJudgeMessageWindow(ctx context.Context, arg GetJudgeMessageWindowParams) ([]GetJudgeMessageWindowRow, error) {
+	rows, err := q.db.Query(ctx, getJudgeMessageWindow,
+		arg.AnchorID,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetJudgeMessageWindowRow
+	for rows.Next() {
+		var i GetJudgeMessageWindowRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Role,
+			&i.Content,
+			&i.ToolCalls,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getMessageContentBatch = `-- name: GetMessageContentBatch :many
 SELECT cm.id, cm.chat_id, cm.role, cm.content, cm.tool_calls, cm.created_at, cm.source,
   COALESCE(NULLIF(cm.user_id, ''), CASE WHEN c.deleted IS FALSE THEN NULLIF(c.user_id, '') END, '')::TEXT AS chat_user_id,
