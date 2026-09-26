@@ -1,4 +1,4 @@
-h1:YuzpEOcaqaxjNwN6RKR9lpVwItiIwR1xpVIRoXMq4D0=
+h1:8L6q88r1I83erc315sxeQy4HKONdYgu5xmqh5ovkcbU=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -114,3 +114,4 @@ h1:YuzpEOcaqaxjNwN6RKR9lpVwItiIwR1xpVIRoXMq4D0=
 20260917132835_create-agent-events-and-agent-metrics.up.sql h1:DPR5pGqO59arsA3au0vvcgV6TGhPBgJW3cXTi51Xio8=
 20260918165856_mcp-risk-finding-attribution.up.sql h1:Ng85p9+P2pzfv3OFNs+4AZfGZZPzqF8ExT/CIMbOaeA=
 20260922181038_mark-shadow-risk-findings.up.sql h1:qgcilzk3IbgEj16WFYjGeUIZHW4oUPbjaZf1MYq4w/k=
+20260924165543_imported_session_observations.up.sql h1:T3Op4F8Lh3zMGYsBR5lqRoY0Q2bhH7MYOgQzKnhCz9M=
