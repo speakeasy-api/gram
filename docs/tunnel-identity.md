@@ -132,19 +132,25 @@ A response admitted while the token was valid may continue streaming after its e
 
 ## Key rotation
 
-The infrastructure uses a 180-day rotation timer. Keys rotate on the next
-Terraform apply after that timer expires. The application loads its signing key
-and the gateway loads its public keys from environment variables at startup.
+The JWKS publishes a sliding window of keys: at least the current signing key
+and the next one, plus the previous key while replicas may still use it. A new
+key is generated about every two months and becomes the signing key in the
+following period, so each key signs for about two months.
 
-During the rollout, signers and gateways can load different key versions. A
-verifier can briefly reject a valid assertion even after refreshing on an unknown
-`kid`. Keep enforcing signature verification during this window. The five-minute JWKS
-cache lifetime and 60-second assertion lifetime are unchanged.
+The application loads its signing key and the gateway loads its public keys
+from environment variables at startup, and replicas pick up new versions
+independently. The infrastructure checks the live secrets before each change: a
+key signs only after it has been in the published bundle for at least 24 hours,
+and a key leaves the bundle only after the signing key has been unchanged for at
+least 24 hours. Late or skipped infrastructure applies delay rotation rather than
+interrupt it.
 
-Uninterrupted rotation would require publishing the next public key on every
-replica, waiting the five-minute cache lifetime, then switching signers while
-retaining the old public key until its last assertions expire. The infrastructure
-does not automate that staged rollout.
+This keeps every mix of old and new replicas verifying provided each replica
+loads a new secret version within 24 hours of its write. Secret sync refreshes
+hourly and a changed secret restarts the deployments, so this normally takes
+about an hour. A stuck rollout or a failing secret sync can exceed it; treat
+either as an incident before the next rotation. Verifiers that cache the JWKS
+for five minutes and refresh once on an unknown `kid` then see no gap.
 
 ## Tool-call records
 
