@@ -231,13 +231,16 @@ export function useHeaderDrafts({
 
   return {
     drafts,
+    // The commit ends with a refetch that replaces every row, so editing has
+    // to stay shut until that lands or the new snapshot overwrites whatever
+    // was typed in the meantime.
     authorization: {
       mode: identityMode,
       managedHeaderId,
       passThroughHeaderId,
       unknown: identityError,
     },
-    readOnly,
+    readOnly: readOnly || saving,
     isLoading: headersQuery.isLoading,
     isDirty,
     validationError,

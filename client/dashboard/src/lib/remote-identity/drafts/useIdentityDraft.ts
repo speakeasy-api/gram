@@ -156,7 +156,12 @@ export function useUserIdentityDraft({
   const queryClient = useQueryClient();
 
   const [providerPick, setProviderPick] = useState<string | null>(null);
-  const [clientPick, setClientPick] = useState<string | null>(null);
+  // undefined: untouched, so the linked client shows. null: the operator
+  // explicitly asked for a new one, which must beat the linked client or the
+  // row can never leave it for Auto-Configure or manual registration.
+  const [clientPick, setClientPick] = useState<string | null | undefined>(
+    undefined,
+  );
   const [forceManual, setForceManual] = useState(false);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
@@ -276,7 +281,8 @@ export function useUserIdentityDraft({
     linkedClients.find(
       (candidate) => candidate.remoteSessionIssuerId === selectedProviderId,
     )?.id ?? null;
-  const selectedClientId = clientPick ?? linkedClientId;
+  const selectedClientId =
+    clientPick === undefined ? linkedClientId : clientPick;
   const existingClient =
     clientOptions.find((candidate) => candidate.id === selectedClientId) ??
     null;
@@ -346,7 +352,7 @@ export function useUserIdentityDraft({
   // the client choice and any outcome from the previous one.
   const selectProvider = (id: string | null): void => {
     setProviderPick(id);
-    setClientPick(null);
+    setClientPick(undefined);
     setForceManual(false);
     // Manual credentials are issued by one provider and meaningless to the
     // next, so they leave with it rather than being saved under its successor.
@@ -438,8 +444,15 @@ export function useUserIdentityDraft({
         invalidateAllRemoteSessionIssuers(queryClient),
       ]);
     },
-    onError: () => {
-      setLocalStatus({ kind: "idle" });
+    onError: (error: unknown) => {
+      // Dropping back to idle without a word makes Save look like it simply
+      // stopped. The reachable case is an operator with mcp:write but not
+      // project:write: the commit needs project:write to create or register a
+      // client, so the button is enabled and the request is refused.
+      setLocalStatus({
+        kind: "unreachable",
+        message: error instanceof Error ? error.message : null,
+      });
     },
   });
 
