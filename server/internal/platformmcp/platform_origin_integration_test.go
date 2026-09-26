@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"context"
 	"net/url"
 	"testing"
 	"time"
@@ -9,10 +10,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformoauth "github.com/speakeasy-api/gram/server/internal/platformmcp/oauth"
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -92,5 +97,72 @@ func TestJWTAuthenticatorBindsTokensToPlatformHost(t *testing.T) {
 		require.NoError(t, err, tc.name)
 		require.Equal(t, userID, principal.UserID, tc.name)
 		require.Equal(t, organizationID, principal.OrganizationID, tc.name)
+	}
+}
+
+// Member install and connection-status URLs point at the platform host the
+// request arrived on. Custom domains, private networks, and requests without
+// an origin keep the configured server URL.
+func TestMemberMCPURLsFollowPlatformHost(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_member_urls_platform_host")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	rows, err := platformrepo.New(conn).ListPlatformMCPInventoryAuthorizationCandidates(ctx, principal.OrganizationID)
+	require.NoError(t, err)
+	var mcpID uuid.UUID
+	for _, row := range rows {
+		if row.ProjectID == project.ID {
+			mcpID = row.ID
+			break
+		}
+	}
+	require.NotEqual(t, uuid.Nil, mcpID)
+	target, err := platformrepo.New(conn).GetPlatformMCPInstallTarget(ctx, platformrepo.GetPlatformMCPInstallTargetParams{OrganizationID: principal.OrganizationID, McpServerID: mcpID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.NotEmpty(t, target.EndpointSlug)
+
+	serverURL, err := url.Parse(testCanonicalBaseURL)
+	require.NoError(t, err)
+	service := NewPluginsService(conn, allowBudget(), "member-urls-platform-host-key").
+		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
+		withMemberMCPConnectionReader(testMemberMCPConnectionReader{}).
+		WithInstallLinks(serverURL, serverURL)
+	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, OrganizationSlug: "example-org"}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, mcpID.String())})
+
+	for _, tc := range []struct {
+		name     string
+		surface  requestorigin.Surface
+		baseURL  string
+		wantBase string
+	}{
+		{name: "canonical host", surface: requestorigin.SurfacePlatform, baseURL: testCanonicalBaseURL, wantBase: testCanonicalBaseURL},
+		{name: "extra platform host", surface: requestorigin.SurfacePlatform, baseURL: testExtraHostBaseURL, wantBase: testExtraHostBaseURL},
+		{name: "custom domain keeps configured base", surface: requestorigin.SurfaceCustomDomain, baseURL: "https://mcp.customer.example", wantBase: testCanonicalBaseURL},
+		{name: "private network keeps configured base", surface: requestorigin.SurfacePrivateNetwork, baseURL: "https://private.example", wantBase: testCanonicalBaseURL},
+		{name: "no origin keeps configured base", surface: "", baseURL: "", wantBase: testCanonicalBaseURL},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			requestCtx := ctx
+			if tc.surface != "" {
+				requestCtx = requestorigin.WithContext(ctx, requestorigin.Origin{Surface: tc.surface, BaseURL: tc.baseURL, OrganizationID: "", NetworkIngressID: uuid.Nil, NetworkIdentity: nil})
+			}
+			wantURL := tc.wantBase + "/mcp/" + target.EndpointSlug
+
+			install, err := service.GetMyInstallInstructions(requestCtx, principal, GetMyInstallInstructionsInput{ProjectID: project.ID.String(), Plugin: "", MCPID: mcpID.String(), ClientFamily: OnboardingClientClaudeCode})
+			require.NoError(t, err)
+			require.True(t, install.Supported)
+			require.NotEmpty(t, install.Instructions)
+			require.Equal(t, wantURL, install.Instructions[0].URL)
+
+			status, err := service.GetMyMCPConnectionStatus(requestCtx, principal, GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()})
+			require.NoError(t, err)
+			require.Equal(t, wantURL, status.ConnectionURL)
+		})
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
@@ -43,11 +45,14 @@ func TestPolarCheckoutsReturnToRequestPlatformHost(t *testing.T) {
 			svc := newTestService(t, billingMock, orgID, 0)
 			svc.serverURL = mustParseURL(t, serverURL)
 
+			sessionID := "session-polar-return"
 			ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{
 				ActiveOrganizationID: orgID,
 				OrganizationSlug:     "polar-org",
 				AccountType:          "free",
+				SessionID:            &sessionID,
 			})
+			ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, orgID))
 			if tc.origin != "" {
 				ctx = withPlatformOrigin(ctx, tc.origin)
 			}
