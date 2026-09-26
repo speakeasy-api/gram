@@ -2228,6 +2228,12 @@ type publishOutcome struct {
 	// The change applies automatically once the org becomes eligible. MCP and the
 	// shared marketplace manifests still publish; only the observability hooks lag.
 	HooksConfigDeferred bool
+	// HooksKeyPublished is true when a RotateHooksKey publish actually baked the
+	// caller's HooksKeyCandidate into the repo AND persisted it. It is false
+	// whenever the rotation was held back — by the rollout gate re-read here, or
+	// by a skip — and the caller then owns persisting that candidate, because the
+	// plaintext has already been handed out.
+	HooksKeyPublished bool
 }
 
 func (s *Service) publishProject(ctx context.Context, input publishProjectInput) (*publishOutcome, error) {
@@ -2370,7 +2376,7 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		publishedHooksConfigHash != targetHooksConfigHash
 
 	if input.SkipIfUnchanged && !mcpChanged && !hooksChanged {
-		return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
+		return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred, HooksKeyPublished: false}, nil
 	}
 
 	// When exactly one component changed, carry the other verbatim from the
@@ -2591,7 +2597,10 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		}
 	}
 
-	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred}, nil
+	// rotateHooks is the only path that seeds the caller's candidate into
+	// `candidates`, so it is exactly the condition under which persistPluginAPIKeys
+	// has just written it.
+	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred, HooksKeyPublished: rotateHooks}, nil
 }
 
 // carryHooksSubtree copies the published hooks (observability) subtree

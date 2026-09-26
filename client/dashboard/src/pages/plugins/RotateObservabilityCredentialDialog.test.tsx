@@ -1,5 +1,12 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import type { RotateObservabilityCredentialResult } from "@gram/client/models/components/rotateobservabilitycredentialresult.js";
+import type { ObservabilityDownloadPlatform } from "./observability-platforms";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type MutateVariables = {
@@ -72,13 +79,15 @@ const rotated: RotateObservabilityCredentialResult = {
 };
 
 /** Resolves the pending rotation with `result`, as the real mutation would. */
-function resolveRotation(result: RotateObservabilityCredentialResult) {
+function resolveRotation(result: RotateObservabilityCredentialResult): void {
   const [, options] = testState.mutate.mock.calls[0] as [
     MutateVariables,
-    { onSuccess: (data: RotateObservabilityCredentialResult) => Promise<void> },
+    { onSuccess: (data: RotateObservabilityCredentialResult) => void },
   ];
 
-  return options.onSuccess(result);
+  act(() => {
+    options.onSuccess(result);
+  });
 }
 
 function requestedFate(): string {
@@ -87,6 +96,12 @@ function requestedFate(): string {
   return variables.request.rotateObservabilityCredentialRequestBody
     .previousKeyFate;
 }
+
+// Typed no-ops: the props are void-returning, and a bare vi.fn() is not.
+const noopOpenChange: (open: boolean) => void = () => {};
+const noopDownload: (
+  platform: ObservabilityDownloadPlatform,
+) => void = () => {};
 
 beforeEach(() => {
   testState.isPending = false;
@@ -107,14 +122,14 @@ describe("RotateObservabilityCredentialDialog", () => {
         open
         onOpenChange={onOpenChange}
         isDownloading={false}
-        onDownload={vi.fn()}
+        onDownload={noopDownload}
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Rotate credential" }));
     expect(requestedFate()).toBe("grace");
 
-    await resolveRotation(rotated);
+    resolveRotation(rotated);
 
     expect(await screen.findByText(rotated.key)).toBeDefined();
     expect(
@@ -140,9 +155,9 @@ describe("RotateObservabilityCredentialDialog", () => {
     render(
       <RotateObservabilityCredentialDialog
         open
-        onOpenChange={vi.fn()}
+        onOpenChange={noopOpenChange}
         isDownloading={false}
-        onDownload={vi.fn()}
+        onDownload={noopDownload}
       />,
     );
 
@@ -154,7 +169,7 @@ describe("RotateObservabilityCredentialDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Rotate credential" }));
     expect(requestedFate()).toBe("revoke_immediately");
 
-    await resolveRotation({
+    resolveRotation({
       ...rotated,
       previousKeyFate: "revoke_immediately",
       previousKeysExpireAt: undefined,
@@ -171,14 +186,14 @@ describe("RotateObservabilityCredentialDialog", () => {
     render(
       <RotateObservabilityCredentialDialog
         open
-        onOpenChange={vi.fn()}
+        onOpenChange={noopOpenChange}
         isDownloading={false}
-        onDownload={vi.fn()}
+        onDownload={noopDownload}
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Rotate credential" }));
-    await resolveRotation({ ...rotated, marketplaceUpdateDeferred: true });
+    resolveRotation({ ...rotated, marketplaceUpdateDeferred: true });
 
     expect(await screen.findByText(/could not be updated yet/)).toBeDefined();
   });

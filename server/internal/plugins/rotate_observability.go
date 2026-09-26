@@ -121,10 +121,8 @@ func (s *Service) RotateObservabilityCredential(ctx context.Context, payload *ge
 				Slug:            nil,
 				CreatedByUserID: ac.UserID,
 			},
-			GitHubUsernames: nil,
-			CommitMessage:   "Rotate observability plugin credential",
-			// RotateHooksKey forces the hooks component to regenerate, so the
-			// publish can never be skipped as unchanged.
+			GitHubUsernames:   nil,
+			CommitMessage:     "Rotate observability plugin credential",
 			SkipIfUnchanged:   true,
 			RotateHooksKey:    true,
 			HooksKeyCandidate: &candidate,
@@ -132,8 +130,18 @@ func (s *Service) RotateObservabilityCredential(ctx context.Context, payload *ge
 		if err != nil {
 			return nil, err
 		}
-		marketplaceRepublished = !outcome.Skipped
-		marketplaceUpdateDeferred = outcome.HooksConfigDeferred || outcome.Skipped
+		// publishProject re-reads the rollout gate, so it can decline the rotation
+		// after this handler's own check passed. When it does, it has not written
+		// the candidate either — and the plaintext is already on its way back to
+		// the caller, with every previous key about to be retired. Persist it here
+		// so the project is never left without a credential that authenticates.
+		marketplaceRepublished = outcome.HooksKeyPublished
+		marketplaceUpdateDeferred = !outcome.HooksKeyPublished
+		if !outcome.HooksKeyPublished {
+			if err := s.persistRotatedHooksAPIKey(ctx, ac, candidate); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "persist hooks api key").LogError(ctx, s.logger)
+			}
+		}
 	default:
 		marketplaceUpdateDeferred = marketplacePublished
 		if err := s.persistRotatedHooksAPIKey(ctx, ac, candidate); err != nil {
