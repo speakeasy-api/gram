@@ -216,6 +216,19 @@ export async function configureCreatedRemoteMcpIdentity({
         "The authorization server metadata could not be discovered. Configure User Identity in Settings > Identity.",
       );
     }
+    // RFC 8414 requires the document to name the issuer it was fetched for.
+    // A mismatch means the resource pointed at one authorization server and
+    // got another's metadata, and the provider is created from `draft.issuer`
+    // — so accepting it would bind this server to whichever issuer the
+    // document claimed. Exact equality, deliberately: no trailing-slash
+    // normalization, which belongs to readers and not to a write like this.
+    if (draft.issuer !== authorizationServer) {
+      return setupRequired(
+        mcpServer,
+        identityMode,
+        "The authorization server metadata identified a different issuer. Configure User Identity in Settings > Identity.",
+      );
+    }
     if (!draft.authorizationEndpoint || !draft.tokenEndpoint) {
       return setupRequired(
         mcpServer,

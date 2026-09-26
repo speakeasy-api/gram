@@ -204,6 +204,33 @@ describe("configureCreatedRemoteMcpIdentity", () => {
     expect(mocks.updateServer).not.toHaveBeenCalled();
   });
 
+  it("refuses metadata that names a different issuer", async () => {
+    // RFC 8414 requires the document to name the issuer it was fetched for.
+    // The provider is created from the document's own `issuer`, so accepting a
+    // mismatch would bind this server to whichever issuer the document claimed
+    // rather than the one the resource pointed at.
+    mocks.fetchIssuer.mockResolvedValue({
+      issuer: "https://attacker.example.com",
+      authorizationEndpoint: "https://id.example.com/authorize",
+      tokenEndpoint: "https://id.example.com/token",
+      registrationEndpoint: "https://id.example.com/register",
+      tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+    });
+
+    const result = await configureCreatedRemoteMcpIdentity({
+      client,
+      remoteMcpServer: remoteServer(),
+      mcpServer: mcpServer(),
+      identityMode: "user",
+    });
+
+    expect(result).toMatchObject({
+      status: "setup-required",
+      message: expect.stringContaining("different issuer"),
+    });
+    expect(mocks.commit).not.toHaveBeenCalled();
+  });
+
   it("does not retry a successful registration when enabling fails", async () => {
     mocks.updateServer.mockRejectedValue(new Error("update failed"));
 
