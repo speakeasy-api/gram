@@ -813,7 +813,11 @@ function ConfigurePhaseContent({
           {missingRequiredHeaders > 0 && (
             <Button
               variant="secondary"
-              disabled={!releaseState.canInstall}
+              // Skipping header values is not a way around the identity
+              // permission check: the same install runs either way.
+              disabled={
+                !releaseState.canInstall || userIdentityPermissionBlocked
+              }
               onClick={() => {
                 void releaseState.startInstall();
               }}
