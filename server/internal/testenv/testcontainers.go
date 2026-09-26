@@ -35,9 +35,10 @@ func (t *testcontainersLogger) Printf(format string, v ...any) {
 func NewTestcontainersLogger() log.Logger {
 	return &testcontainersLogger{
 		logger: slog.New(o11y.NewLogHandler(&o11y.LogHandlerOptions{
-			RawLevel:    os.Getenv("LOG_LEVEL"),
-			Pretty:      true,
-			DataDogAttr: false,
+			RawLevel:        os.Getenv("LOG_LEVEL"),
+			Pretty:          true,
+			DataDogAttr:     false,
+			SamplingEnabled: false,
 		})),
 	}
 }

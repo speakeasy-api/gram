@@ -282,9 +282,10 @@ func validateOptions(opts options) error {
 
 func run(ctx context.Context, opts options) error {
 	logger := slog.New(o11y.NewLogHandler(&o11y.LogHandlerOptions{
-		RawLevel:    "info",
-		Pretty:      true,
-		DataDogAttr: false,
+		RawLevel:        "info",
+		Pretty:          true,
+		DataDogAttr:     false,
+		SamplingEnabled: false,
 	}))
 
 	if opts.environment == envProd {
