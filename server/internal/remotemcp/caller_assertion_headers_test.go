@@ -13,7 +13,7 @@ func TestCallerAssertionHeadersCannotBeConfigured(t *testing.T) {
 	ctx, ti := newTestService(t)
 	server := createTestServer(t, ctx, ti)
 	existing := createSecretHeader(t, ctx, ti, server.ID, "X-Upstream-Key", "test-secret")
-	for _, reserved := range []string{"SPEAKEASY_AUTHZ", "Speakeasy_authz", "speakeasy-authz"} {
+	for _, reserved := range []string{"X-Speakeasy-Identity", "X_speakeasy_identity", "x-speakeasy-identity", "X_Speakeasy-Identity"} {
 		_, err := ti.service.CreateServerHeader(ctx, newCreateServerHeaderPayload(server.ID, reserved, func(p *gen.CreateServerHeaderPayload) { p.Value = new("forged") }))
 		require.Error(t, err)
 		requireOopsCode(t, err, oops.CodeBadRequest)

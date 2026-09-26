@@ -39,12 +39,13 @@ const (
 // Authorization is end-to-end and is handled separately by
 // [Proxy.applyRequestHeaders] based on [Proxy.AuthorizationOverride].
 func isSkippedRequestHeader(name string) bool {
+	if mcpauthz.ReservedHeader(name) {
+		return true
+	}
 	switch strings.ToLower(name) {
 	case
 		"accept-encoding",
 		"authorization",
-		"speakeasy_authz",
-		"speakeasy-authz",
 		"connection",
 		"content-length",
 		"cookie",

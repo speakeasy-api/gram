@@ -81,7 +81,7 @@ func TestTunnelEndToEnd(t *testing.T) {
 	req.Header.Set(wire.HeaderTunnelID, tunnelID)
 	req.Header.Set(wire.HeaderTunnelForwardToken, forwardToken)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("SPEAKEASY_AUTHZ", "signed-assertion-opaque-to-tunnel")
+	req.Header.Set("X-Speakeasy-Identity", "signed-assertion-opaque-to-tunnel")
 	req.Header.Set("Authorization", "Bearer upstream-oauth")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestTunnelEndToEnd(t *testing.T) {
 	require.Contains(t, string(out), "POST /mcp/initialize")
 	require.Contains(t, string(out), `{"jsonrpc":"2.0"}`)
 	headers := <-receivedIdentity
-	require.Equal(t, "signed-assertion-opaque-to-tunnel", headers.Get("SPEAKEASY_AUTHZ"))
+	require.Equal(t, "signed-assertion-opaque-to-tunnel", headers.Get("X-Speakeasy-Identity"))
 	require.Equal(t, "Bearer upstream-oauth", headers.Get("Authorization"))
 	require.Empty(t, headers.Get(wire.HeaderTunnelForwardToken))
 	require.Empty(t, headers.Get(wire.HeaderTunnelID))

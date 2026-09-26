@@ -21,7 +21,7 @@ The gateway resolves presented tunnel keys against the key hashes stored in
 Postgres. Redis is the live routing table and connection snapshot store.
 
 With an RSA signing key and public-key bundle configured, Gram can send a
-signed `SPEAKEASY_AUTHZ` caller assertion through private tunnels. Your server
+signed `X-Speakeasy-Identity` caller assertion through private tunnels. Your server
 verifies it against the public JWKS and applies its own access policy. The
 [signed caller identity guide](../docs/tunnel-identity.md) covers the issuer,
 claims, verification and rotation.

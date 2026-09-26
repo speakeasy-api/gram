@@ -42,7 +42,7 @@ func issuerForTest(t *testing.T) (*Issuer, string) {
 }
 
 func targetForTest() Target {
-	return Target{OrganizationID: "org_test", ProjectID: uuid.New(), MCPServerID: uuid.NewString(), TunnelID: uuid.New(), ResourceIdentifier: ""}
+	return Target{OrganizationID: "org_test", ProjectID: uuid.New(), TunnelID: uuid.New(), ResourceIdentifier: ""}
 }
 
 func tenantContext(t *testing.T, target Target) context.Context {
@@ -87,12 +87,11 @@ func TestAssertionVerifiesWithPublicJWKSAndBindsDestination(t *testing.T) {
 	standard, claims := verifiedClaims(t, raw, servedKeys(t, publicPEM))
 	expected := josejwt.Expected{Issuer: "https://gram.example", Subject: "user:user_test", AnyAudience: josejwt.Audience{urn.NewTunneledMcpServer(target.TunnelID).String()}, Time: time.Now()}
 	require.NoError(t, standard.ValidateWithLeeway(expected, 0))
-	require.Equal(t, target.OrganizationID, claims["organization_id"])
-	require.Equal(t, target.ProjectID.String(), claims["project_id"])
-	require.Equal(t, target.MCPServerID, claims["mcp_server_id"])
-	require.Equal(t, target.TunnelID.String(), claims["tunneled_mcp_server_id"])
-	require.Equal(t, "user", claims["principal_type"])
-	require.Equal(t, "mcp_request", claims["purpose"])
+	keys := make([]string, 0, len(claims))
+	for key := range claims {
+		keys = append(keys, key)
+	}
+	require.ElementsMatch(t, []string{"iss", "sub", "aud", "iat", "exp", "jti", "version"}, keys)
 	require.IsType(t, "", claims["aud"])
 	require.Equal(t, time.Minute, standard.Expiry.Time().Sub(standard.IssuedAt.Time()))
 	require.NotContains(t, claims, "email")
@@ -124,9 +123,6 @@ func TestAssertionUsesExactConfiguredResourceAudience(t *testing.T) {
 	expected := josejwt.Expected{Issuer: "https://gram.example", Subject: "user:user_test", AnyAudience: josejwt.Audience{target.ResourceIdentifier}, Time: time.Now()}
 	require.NoError(t, standard.ValidateWithLeeway(expected, 0))
 	require.Equal(t, target.ResourceIdentifier, claims["aud"])
-	require.Equal(t, target.TunnelID.String(), claims["tunneled_mcp_server_id"])
-	require.Equal(t, target.OrganizationID, claims["organization_id"])
-	require.Equal(t, target.ProjectID.String(), claims["project_id"])
 	for _, wrongAudience := range []string{
 		urn.NewTunneledMcpServer(target.TunnelID).String(),
 		"https://mcp.internal.example.com/a%2Fb?tenant=example/",
@@ -147,7 +143,6 @@ func TestAPIKeyAssertionNeverPromotesCreator(t *testing.T) {
 	require.NoError(t, err)
 	_, claims := verifiedClaims(t, raw, servedKeys(t, publicPEM))
 	require.Equal(t, "api_key:"+keyID, claims["sub"])
-	require.Equal(t, "api_key", claims["principal_type"])
 	encoded, err := json.Marshal(claims)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "creator-must-not-appear")
@@ -225,7 +220,6 @@ func TestDiscoveryAssertionIsScopedAndExpiresWithChallenge(t *testing.T) {
 	raw, err := issuer.Mint(ctx, target)
 	require.NoError(t, err)
 	standard, claims := verifiedClaims(t, raw, servedKeys(t, publicPEM))
-	require.Equal(t, "mcp_discovery", claims["purpose"])
 	require.Equal(t, "user:user_test", claims["sub"])
 	require.Equal(t, deadline.Unix(), standard.Expiry.Time().Unix())
 	require.ElementsMatch(t, []any{"server/discover", "initialize", "notifications/initialized", "ping", "tools/list"}, claims["allowed_methods"])

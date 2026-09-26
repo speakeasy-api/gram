@@ -52,8 +52,7 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 	require.NoError(t, err)
 	claims, ok := token.Claims.(jwt.MapClaims)
 	require.True(t, ok)
-	require.Equal(t, wrapper.String(), claims["mcp_server_id"])
-	require.Equal(t, "agent", claims["principal_type"])
+	require.Regexp(t, "^agent:", claims["sub"])
 	require.NotContains(t, claims, "user_id")
 	require.NotEqual(t, meta, claims["aud"])
 	resource := "https://mcp.internal.example.com/a%2Fb/?tenant=example/"
@@ -66,7 +65,6 @@ func TestTunnelManagerCallerAssertionScopeAndMetaDestination(t *testing.T) {
 	claims, ok = token.Claims.(jwt.MapClaims)
 	require.True(t, ok)
 	require.Equal(t, resource, claims["aud"])
-	require.Equal(t, tunnel.String(), claims["tunneled_mcp_server_id"])
 	server.Visibility = mcpservers.VisibilityPublic
 	publicProxy, err := manager.buildProxy(ctx, "", logger, project, "org_test", server, "", "", "", nil)
 	require.NoError(t, err)
