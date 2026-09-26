@@ -108,12 +108,12 @@ export function RotateObservabilityCredentialDialog({
         },
       },
       {
-        onSuccess: async (data) => {
+        onSuccess: (data) => {
           setResult(data);
-          await Promise.all([
-            invalidateAllListAPIKeys(queryClient),
-            invalidateAllPublishStatus(queryClient),
-          ]);
+          // The reveal does not wait on the refetches; they only refresh the
+          // Keys list and publish status behind the dialog.
+          void invalidateAllListAPIKeys(queryClient);
+          void invalidateAllPublishStatus(queryClient);
         },
       },
     );

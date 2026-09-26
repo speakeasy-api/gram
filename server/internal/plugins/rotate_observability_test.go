@@ -3,8 +3,10 @@ package plugins_test
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -493,6 +495,93 @@ func TestRotateObservabilityCredential_KeepsPendingMCPChangePending(t *testing.T
 	require.NoError(t, err)
 	require.NotNil(t, status.UpToDate)
 	require.False(t, *status.UpToDate, "the MCP change made before the rotation must still be pending")
+}
+
+// flakyRolloutProvider clears the hooks rollout for the first N payload reads
+// and withholds it afterwards, which is what a flag flip between the handler's
+// eligibility check and publishProject's re-read looks like.
+type flakyRolloutProvider struct {
+	mu               sync.Mutex
+	clearedResponses int
+	payload          []byte
+}
+
+// clearNext clears the rollout for the next n payload reads and withholds it
+// after that, so a test can say exactly which read sees clearance.
+func (p *flakyRolloutProvider) clearNext(n int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.clearedResponses = n
+}
+
+func (p *flakyRolloutProvider) FlagPayload(_ context.Context, _ feature.Flag, _ string, _ map[string]string) ([]byte, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.clearedResponses <= 0 {
+		return nil, nil
+	}
+	p.clearedResponses--
+
+	return p.payload, nil
+}
+
+func (p *flakyRolloutProvider) IsFlagEnabled(_ context.Context, _ feature.Flag, _ string, _ map[string]string) (bool, error) {
+	return false, nil
+}
+
+func (p *flakyRolloutProvider) IsFlagEnabledLocal(_ context.Context, _ feature.Flag, _ string, _, _ map[string]string) (bool, error) {
+	return false, nil
+}
+
+// A rotation the publish path declines after this handler's own gate check must
+// still persist the credential it already handed back, or retiring the previous
+// keys would leave the project with nothing that authenticates.
+func TestRotateObservabilityCredential_PersistsKeyWhenPublishDeclines(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockGitHubPublisher{}
+	features := &flakyRolloutProvider{payload: []byte(`{"version": 9999}`), clearedResponses: 0, mu: sync.Mutex{}}
+	ctx, ti := newTestPluginsServiceWithGitHubAndFeatures(t, mock, features)
+
+	features.clearNext(math.MaxInt)
+	publishTestObservabilityProject(t, ctx, ti, "rotate-declined")
+
+	// Rewind the published hooks version so the org now has an upgrade pending:
+	// the gate holds an uncleared org at its published version, which is what
+	// makes publishProject decline a rotation.
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	rewindPublishedHooksVersion(t, ctx, ti.conn, *authCtx.ProjectID, "0")
+
+	// Exactly one more cleared read: the rotation handler's own eligibility
+	// check. publishProject's re-read then comes back uncleared, which is what a
+	// flag flip between the two reads looks like.
+	features.clearNext(1)
+
+	claudeObservability, _ := orgObservabilitySlugs(t, ctx, ti)
+	publishedBefore := publishedHooksAPIKey(t, mock, claudeObservability)
+
+	result, err := ti.service.RotateObservabilityCredential(ctx, rotateObservabilityPayload("revoke_immediately"))
+	require.NoError(t, err)
+	require.False(t, result.MarketplaceRepublished)
+	require.NotNil(t, result.MarketplaceUpdateDeferred)
+	require.True(t, *result.MarketplaceUpdateDeferred)
+
+	// The marketplace keeps the previous credential, as the gate demands.
+	require.Equal(t, publishedBefore, publishedHooksAPIKey(t, mock, claudeObservability))
+
+	// The key handed to the caller must authenticate even though it never
+	// reached the marketplace.
+	hash, err := auth.GetAPIKeyHash(result.Key)
+	require.NoError(t, err)
+	_, err = keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, hash)
+	require.NoError(t, err, "a declined publish must still persist the credential it returned")
+
+	live := listHooksKeys(t, ctx, ti.conn)
+	require.Len(t, live, 1)
+	require.Equal(t, result.KeyPrefix, live[0].KeyPrefix)
 }
 
 // publishTestObservabilityProject gives the project a plugin, a skill, and a
