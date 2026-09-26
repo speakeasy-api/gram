@@ -260,7 +260,7 @@ export function RemoteMcpIdentitySectionBody({
       if (selectedMode === "agent") {
         await agentDraft.save();
       } else if (selectedMode === "user") {
-        userDraft.save();
+        await userDraft.save();
       } else if (destructive) {
         toast.success("Identity removed");
       }
@@ -294,8 +294,12 @@ export function RemoteMcpIdentitySectionBody({
     identityCanSave = userDraft.canSave;
   } else if (selectedMode === "agent") {
     // Moving to Agent needs a credential; without one there is nothing for
-    // the mode to actually be.
-    identityCanSave = agentDraft.canSave;
+    // the mode to actually be. One already on the server counts: in the
+    // legacy state where a bound client outranks a static header, detaching
+    // the client is the whole change, and demanding a fresh secret would ask
+    // the operator to retype one they cannot read.
+    identityCanSave =
+      agentDraft.canSave || (leavingUser && !!authorizationHeader);
   } else {
     // No Identity commits only the removal it implies.
     identityCanSave = destructive;

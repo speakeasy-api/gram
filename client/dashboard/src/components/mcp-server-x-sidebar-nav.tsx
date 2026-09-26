@@ -446,14 +446,28 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     hasScope("org:read", organization.id) &&
     hasScope("mcp:read", mcpServer.id);
 
+  // A Remote MCP server's identity is derived, so the readiness item reads the
+  // same answer the pill does. Judging it on a bound client alone reported
+  // every working Agent Identity as incomplete while the pill said Agent.
+  const remoteIdentitySettled =
+    isRemoteBacked &&
+    !identityUnavailable &&
+    (remoteIdentityMode !== "none" || identityProbeStatus === "available");
+
   let authenticationDescription =
     "Attach a remote identity provider so users can access the upstream service.";
   if (isUnproxied) {
     authenticationDescription =
       "Not applicable — the customer connects directly using the vendor's own credentials.";
-  } else if (hasRemoteIdentityProvider) {
+  } else if (remoteIdentityMode === "user" && hasRemoteIdentityProvider) {
     authenticationDescription =
       "A remote identity provider is attached to this server.";
+  } else if (remoteIdentityMode === "agent" && isRemoteBacked) {
+    authenticationDescription =
+      "A shared credential is configured for the upstream service.";
+  } else if (remoteIdentitySettled) {
+    authenticationDescription =
+      "The upstream service accepts requests without credentials.";
   } else if (isTunneledBacked) {
     authenticationDescription =
       "Speakeasy authentication is configured; upstream identity providers are optional.";
@@ -502,6 +516,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           description: authenticationDescription,
           ready:
             isUnproxied ||
+            remoteIdentitySettled ||
             hasRemoteIdentityProvider ||
             (isTunneledBacked && !!userSessionIssuerId),
           href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
