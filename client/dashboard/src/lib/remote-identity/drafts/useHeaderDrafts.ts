@@ -122,12 +122,14 @@ export function useHeaderDrafts({
   const syncedRef = useRef(initialDrafts);
 
   useEffect(() => {
-    const previousSynced = syncedRef.current;
+    // Advance the baseline only when there is nothing to lose. Save measures
+    // its deletions against this snapshot, so moving it under a dirty form
+    // would make a row that appeared since — someone else's concurrent add —
+    // look like a row the operator deleted, and the diff would remove it.
+    if (!draftsEqual(drafts, syncedRef.current)) return;
     syncedRef.current = initialDrafts;
-    setDrafts((current) =>
-      draftsEqual(current, previousSynced) ? initialDrafts : current,
-    );
-  }, [initialDrafts]);
+    setDrafts(initialDrafts);
+  }, [drafts, initialDrafts]);
 
   // Seed suggested rows only into a form that has nothing in it, and only
   // once: re-seeding would resurrect rows the operator deleted on purpose.
@@ -208,6 +210,13 @@ export function useHeaderDrafts({
         request: { updateServerHeaderForm: { id: draft.id, ...fields } },
       });
     }
+
+    // react-query keeps a settled mutation's request variables, and for these
+    // that means the plaintext secret stays readable in client state long
+    // after the write. Nothing reads them again, so drop them.
+    createHeader.reset();
+    updateHeader.reset();
+    deleteHeader.reset();
 
     await invalidateAllRemoteMcpServerHeaders(queryClient, {
       refetchType: "all",

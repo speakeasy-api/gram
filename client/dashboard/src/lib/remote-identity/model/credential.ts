@@ -81,6 +81,11 @@ export function credentialFromHeader(
   const value = header?.value ?? "";
   const readable = value !== REDACTED_SECRET;
 
+  const basic =
+    readable && value.startsWith("Basic ")
+      ? decodeBasicCredential(value.slice("Basic ".length))
+      : null;
+
   return {
     ...EMPTY_AGENT_CREDENTIAL,
     format,
@@ -88,10 +93,46 @@ export function credentialFromHeader(
       readable && value.startsWith("Bearer ")
         ? { kind: "set", value: value.slice("Bearer ".length) }
         : UNCHANGED_SECRET,
+    // A readable Basic header has to come back as the two fields the form
+    // edits. Left empty, the credential reads as incomplete and the operator
+    // is asked to retype a password they can see but the form cannot use.
+    username: basic?.username ?? EMPTY_AGENT_CREDENTIAL.username,
+    password: basic
+      ? { kind: "set", value: basic.password }
+      : EMPTY_AGENT_CREDENTIAL.password,
     raw:
       format === "manual" && readable
         ? { kind: "set", value }
         : UNCHANGED_SECRET,
+  };
+}
+
+/**
+ * Split a base64 Basic payload back into its two parts.
+ *
+ * Only the first colon separates them — RFC 7617 allows a password to contain
+ * colons but never the user-id. Returns null for anything that does not decode
+ * or carries no separator, so a malformed header falls back to empty fields
+ * instead of inventing a credential.
+ */
+function decodeBasicCredential(
+  encoded: string,
+): { username: string; password: string } | null {
+  let decoded: string;
+  try {
+    const binary = atob(encoded.trim());
+    const bytes = Uint8Array.from(binary, (character) =>
+      character.charCodeAt(0),
+    );
+    decoded = new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+  const separator = decoded.indexOf(":");
+  if (separator === -1) return null;
+  return {
+    username: decoded.slice(0, separator),
+    password: decoded.slice(separator + 1),
   };
 }
 

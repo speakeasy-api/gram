@@ -125,7 +125,7 @@ export type UserIdentityDraft = {
   status: UserIdentityStatus;
   idleHint: string;
   canSave: boolean;
-  save: () => void;
+  save: () => Promise<void>;
   saving: boolean;
 };
 
@@ -399,6 +399,22 @@ export function useUserIdentityDraft({
             draft.codeChallengeMethodsSupported ?? undefined,
           clientIdMetadataDocumentSupported:
             draft.clientIdMetadataDocumentSupported,
+          // The rest of the document. Callback validation and enrichment read
+          // these later, and the create path in configureCreatedIdentity
+          // already forwards them — a provider should not come out different
+          // depending on which surface created it.
+          userinfoEndpoint: draft.userinfoEndpoint ?? undefined,
+          introspectionEndpoint: draft.introspectionEndpoint ?? undefined,
+          introspectionEndpointAuthMethodsSupported:
+            draft.introspectionEndpointAuthMethodsSupported ?? undefined,
+          idTokenSigningAlgValuesSupported:
+            draft.idTokenSigningAlgValuesSupported ?? undefined,
+          claimsSupported: draft.claimsSupported ?? undefined,
+          backchannelLogoutSupported: draft.backchannelLogoutSupported,
+          authorizationResponseIssParameterSupported:
+            draft.authorizationResponseIssParameterSupported,
+          oidc: draft.oidc,
+          passthrough: draft.passthrough,
         };
       }
 
@@ -456,7 +472,7 @@ export function useUserIdentityDraft({
     },
   });
 
-  const { mutate: runCommit, isPending } = commit;
+  const { mutateAsync: runCommit, isPending } = commit;
 
   // Dirty means the selection differs from what the server holds — not that
   // the operator opened a menu. Asking whether they interacted meant
@@ -556,7 +572,16 @@ export function useUserIdentityDraft({
     status,
     idleHint,
     canSave,
-    save: (): void => runCommit(),
+    save: async (): Promise<void> => {
+      // Awaitable so callers can sequence work after it. onError has already
+      // put the failure on screen, so the rejection is swallowed here rather
+      // than surfacing twice or escaping as an unhandled rejection.
+      try {
+        await runCommit();
+      } catch {
+        /* reported by onError */
+      }
+    },
     saving: isPending,
   };
 }

@@ -60,6 +60,15 @@ export function headerDraftFromServer(
   };
 }
 
+// Inbound headers a pass-through row may not read from; mirrors the proxy.
+// Authorization is deliberately absent: forwarding the caller's own upstream
+// credential is what pass-through identity is for.
+const DENIED_PASS_THROUGH_SOURCES = new Set([
+  "cookie",
+  "set-cookie",
+  "proxy-authorization",
+]);
+
 // A saved secret shows its redacted placeholder (`***`) in the value field. As
 // long as the user leaves that placeholder untouched, we keep the existing
 // secret rather than overwriting it with the literal redaction string.
@@ -146,12 +155,26 @@ export function headerDraftErrors(
       }
     }
 
-    if (draft.source === "request" && !draft.valueFromRequestHeader.trim()) {
-      errors.set(draft.key, {
-        field: "value",
-        message: `Header "${name}" needs an inbound request header name.`,
-      });
-      continue;
+    if (draft.source === "request") {
+      const source = draft.valueFromRequestHeader.trim();
+      if (!source) {
+        errors.set(draft.key, {
+          field: "value",
+          message: `Header "${name}" needs an inbound request header name.`,
+        });
+        continue;
+      }
+      // Mirrors the proxy, which is the control that actually holds: these
+      // carry the dashboard's own session rather than anything meant for the
+      // upstream. Checked here so the refusal arrives while editing instead of
+      // as a failed request later.
+      if (DENIED_PASS_THROUGH_SOURCES.has(source.toLowerCase())) {
+        errors.set(draft.key, {
+          field: "value",
+          message: `"${source}" cannot be forwarded upstream.`,
+        });
+        continue;
+      }
     }
 
     if (

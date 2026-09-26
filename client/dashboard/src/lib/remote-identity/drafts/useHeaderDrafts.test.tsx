@@ -11,6 +11,11 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   remove: vi.fn(),
   invalidate: vi.fn(),
+  // Real react-query mutations expose reset; save() calls it so a settled
+  // write stops holding the plaintext secret it submitted.
+  resetCreate: vi.fn(),
+  resetUpdate: vi.fn(),
+  resetRemove: vi.fn(),
 }));
 
 let queryClient: QueryClient;
@@ -22,6 +27,7 @@ vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
 vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
   useCreateRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.create,
+    reset: mocks.resetCreate,
     isPending: false,
     error: null,
   }),
@@ -29,6 +35,7 @@ vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
 vi.mock("@gram/client/react-query/updateRemoteMcpServerHeader.js", () => ({
   useUpdateRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.update,
+    reset: mocks.resetUpdate,
     isPending: false,
     error: null,
   }),
@@ -36,6 +43,7 @@ vi.mock("@gram/client/react-query/updateRemoteMcpServerHeader.js", () => ({
 vi.mock("@gram/client/react-query/deleteRemoteMcpServerHeader.js", () => ({
   useDeleteRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.remove,
+    reset: mocks.resetRemove,
     isPending: false,
     error: null,
   }),
@@ -133,6 +141,10 @@ describe("useHeaderDrafts", () => {
         },
       },
     });
+    // The submitted secret must not stay readable in mutation state once the
+    // write has settled.
+    expect(mocks.resetCreate).toHaveBeenCalled();
+    expect(mocks.resetUpdate).toHaveBeenCalled();
   });
 
   it("never deletes the Authorization row identity owns", async () => {
