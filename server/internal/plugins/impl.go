@@ -1999,7 +1999,9 @@ func (s *Service) PublishPlugins(ctx context.Context, payload *gen.PublishPlugin
 		// bumps and installed copies refresh. The hooks component is still gated
 		// by the rollout inside publishProject — clicking Publish cannot force a
 		// hooks upgrade onto an org the rollout hasn't cleared.
-		SkipIfUnchanged: false,
+		SkipIfUnchanged:   false,
+		RotateHooksKey:    false,
+		HooksKeyCandidate: nil,
 	})
 	if err != nil {
 		return nil, err
@@ -2110,9 +2112,11 @@ func (s *Service) PublishProject(ctx context.Context, input PublishProjectInput)
 			Slug:            nil,
 			CreatedByUserID: input.CreatedByUserID,
 		},
-		GitHubUsernames: nil,
-		CommitMessage:   conv.Default(input.CommitMessage, "Update plugin packages"),
-		SkipIfUnchanged: input.SkipIfUnchanged,
+		GitHubUsernames:   nil,
+		CommitMessage:     conv.Default(input.CommitMessage, "Update plugin packages"),
+		SkipIfUnchanged:   input.SkipIfUnchanged,
+		RotateHooksKey:    false,
+		HooksKeyCandidate: nil,
 	})
 	if err != nil {
 		return nil, err
@@ -2138,6 +2142,15 @@ type publishProjectInput struct {
 	GitHubUsernames  []string
 	CommitMessage    string
 	SkipIfUnchanged  bool
+	// RotateHooksKey makes this a hooks-only publish: the hooks subtree
+	// regenerates so HooksKeyCandidate is baked into the published observability
+	// plugin, and the MCP component is carried untouched so the consumer key
+	// customers already installed keeps working.
+	RotateHooksKey bool
+	// HooksKeyCandidate is the already-minted hooks key to embed when
+	// RotateHooksKey is set. persistPluginAPIKeys writes it after a successful
+	// GitHub push.
+	HooksKeyCandidate *pluginAPIKeyCandidate
 }
 
 // publishOutcome is the internal result of publishProject. Skipped is true when
@@ -2215,6 +2228,12 @@ type publishOutcome struct {
 	// The change applies automatically once the org becomes eligible. MCP and the
 	// shared marketplace manifests still publish; only the observability hooks lag.
 	HooksConfigDeferred bool
+	// HooksKeyPublished is true when a RotateHooksKey publish actually baked the
+	// caller's HooksKeyCandidate into the repo AND persisted it. It is false
+	// whenever the rotation was held back — by the rollout gate re-read here, or
+	// by a skip — and the caller then owns persisting that candidate, because the
+	// plaintext has already been handed out.
+	HooksKeyPublished bool
 }
 
 func (s *Service) publishProject(ctx context.Context, input publishProjectInput) (*publishOutcome, error) {
@@ -2269,14 +2288,10 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "compute mcp fingerprints").LogError(ctx, s.logger)
 	}
-	// Decide which components to (re)generate. A human publish refreshes customer
-	// MCP packages so installed copies pick up a new manifest version. A
-	// Platform-only transition deliberately carries those customer packages
-	// unchanged. Hooks change independently based on their version and
-	// output-affecting config.
-	mcpChanged := firstPublish ||
-		!input.SkipIfUnchanged ||
-		!maps.Equal(mcpFingerprints, publishedMCPFingerprints)
+	// rotateHooks is decided below, once the rollout gate has resolved the hooks
+	// version this org may receive; a rotation the gate holds back must not
+	// change what this publish does at all.
+	rotateHooks := false
 
 	// Snapshot the hook-output-affecting config (resolved marketplace name,
 	// browser login, server URL, etc.). A rename or browser-login toggle
@@ -2330,12 +2345,38 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		targetHooksConfigHash = ""
 		hooksConfigDeferred = false
 	}
+	// A credential rotation regenerates the hooks subtree, which always lands on
+	// the CURRENT generator version — so it has to clear the same gate as any
+	// other hooks change. The gate is re-read here rather than trusted from the
+	// caller: between the caller's check and this point a flag flip could
+	// otherwise push an uncleared version onto the org. A held-back rotation
+	// leaves the published credential in place and is reported as deferred.
+	if input.RotateHooksKey && observabilityEnabled {
+		if targetHooksVersion == hooksGeneratorVersion {
+			rotateHooks = true
+		} else {
+			hooksConfigDeferred = true
+		}
+	}
+
+	// Decide which components to (re)generate. A human publish refreshes customer
+	// MCP packages so installed copies pick up a new manifest version. A
+	// Platform-only transition deliberately carries those customer packages
+	// unchanged. Hooks change independently based on their version and
+	// output-affecting config. A credential rotation is hooks-only: it never
+	// treats MCP as changed, so the consumer packages customers installed -- and
+	// the consumer key baked into them -- are carried untouched.
+	mcpChanged := !rotateHooks && (firstPublish ||
+		!input.SkipIfUnchanged ||
+		!maps.Equal(mcpFingerprints, publishedMCPFingerprints))
+
 	hooksChanged := firstPublish ||
+		rotateHooks ||
 		conv.FromPGTextOrEmpty[string](existing.PublishedHooksVersion) != targetHooksVersion ||
 		publishedHooksConfigHash != targetHooksConfigHash
 
 	if input.SkipIfUnchanged && !mcpChanged && !hooksChanged {
-		return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred}, nil
+		return &publishOutcome{RepoURL: repoURL, Skipped: true, HooksConfigDeferred: hooksConfigDeferred, HooksKeyPublished: false}, nil
 	}
 
 	// When exactly one component changed, carry the other verbatim from the
@@ -2377,6 +2418,10 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 	files := make(map[string][]byte)
 	var candidates []pluginAPIKeyCandidate
 	var hooksCandidate *pluginAPIKeyCandidate
+	if rotateHooks && input.HooksKeyCandidate != nil {
+		hooksCandidate = input.HooksKeyCandidate
+		candidates = append(candidates, *input.HooksKeyCandidate)
+	}
 
 	// MCP component: carry when unchanged, otherwise regenerate with a fresh key.
 	carriedMCP := false
@@ -2386,6 +2431,14 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 			return nil, oops.E(oops.CodeUnexpected, err, "enumerate mcp files").LogError(ctx, s.logger)
 		}
 		carriedMCP = carry(files, paths)
+	}
+	if rotateHooks && !carriedMCP {
+		// Regenerating MCP here would mint a replacement consumer key and rewrite
+		// the packages customers already installed — the opposite of what a
+		// hooks-only rotation promises. Refuse instead, and let the caller
+		// republish the marketplace first.
+		return nil, oops.E(oops.CodeFailedPrecondition, nil,
+			"cannot rotate the observability credential while the published MCP packages are out of date or unreadable: publish the marketplace first").LogWarn(ctx, s.logger)
 	}
 	if !carriedMCP {
 		mcpCandidate, err := s.buildPluginAPIKeyCandidate(auth.APIKeyScopeConsumer, "mcp")
@@ -2511,7 +2564,15 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		pluginSlugs = append(pluginSlugs, p.Slug)
 	}
 
-	mcpFingerprintsJSON, err := json.Marshal(mcpFingerprints)
+	// Persist the fingerprints of what the repo now actually holds. When the MCP
+	// component was carried verbatim, that is still the previously published set
+	// -- recording the live one would mark a pending MCP change as published and
+	// let the next publish skip it.
+	persistedMCPFingerprints := mcpFingerprints
+	if carriedMCP {
+		persistedMCPFingerprints = publishedMCPFingerprints
+	}
+	mcpFingerprintsJSON, err := json.Marshal(persistedMCPFingerprints)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "marshal mcp fingerprints").LogError(ctx, s.logger)
 	}
@@ -2536,7 +2597,10 @@ func (s *Service) publishProject(ctx context.Context, input publishProjectInput)
 		}
 	}
 
-	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred}, nil
+	// rotateHooks is the only path that seeds the caller's candidate into
+	// `candidates`, so it is exactly the condition under which persistPluginAPIKeys
+	// has just written it.
+	return &publishOutcome{RepoURL: repoURL, Skipped: false, HooksConfigDeferred: hooksConfigDeferred, HooksKeyPublished: rotateHooks}, nil
 }
 
 // carryHooksSubtree copies the published hooks (observability) subtree
@@ -2738,7 +2802,9 @@ func (s *Service) UpdateMarketplaceSettings(ctx context.Context, payload *gen.Up
 				// which still republishes real drift (an org rename moves the
 				// default name without touching these settings) but spares the
 				// marketplace a commit for a no-op save.
-				SkipIfUnchanged: !settingsChanged,
+				SkipIfUnchanged:   !settingsChanged,
+				RotateHooksKey:    false,
+				HooksKeyCandidate: nil,
 			})
 			if err != nil {
 				return nil, err

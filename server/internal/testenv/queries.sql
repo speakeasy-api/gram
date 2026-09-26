@@ -1081,6 +1081,13 @@ WHERE organization_id = @organization_id AND principal_urn LIKE 'agent:%';
 -- name: CountDemoSeedAPIKeysFixture :one
 SELECT count(*) FROM api_keys WHERE organization_id = @organization_id;
 
+-- name: SetAPIKeyExpiresAtFixture :exec
+-- Fast-forwards or rewinds an API key's expiry so tests can observe the
+-- authentication boundary a credential rotation's grace window creates.
+UPDATE api_keys
+SET expires_at = @expires_at
+WHERE key_hash = @key_hash;
+
 -- name: CountAssistantAttachments :one
 -- Count stored attachments, including those whose targets are soft-deleted.
 SELECT
