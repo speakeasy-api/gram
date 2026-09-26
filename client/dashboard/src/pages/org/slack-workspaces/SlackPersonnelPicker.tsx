@@ -8,6 +8,7 @@ import type { OrganizationUser } from "@gram/client/models/components/organizati
 import type { SlackDirectoryMember } from "@gram/client/models/components/slackdirectorymember.js";
 import { invalidateAllSlackDirectoryMember } from "@gram/client/react-query/slackDirectoryMember.js";
 import { invalidateAllSlackDirectoryMembers } from "@gram/client/react-query/slackDirectoryMembers.js";
+import { invalidateAllSlackPersonAccounts } from "@gram/client/react-query/slackPersonAccounts.js";
 import { useSetSlackIdentityMappingMutation } from "@gram/client/react-query/setSlackIdentityMapping.js";
 import { SESSION_SECURITY } from "../identity-provider/identityProviderQueries";
 import { PersonnelAvatar } from "./MappingStatus";
@@ -39,6 +40,7 @@ export function SlackPersonnelPicker({
     Promise.all([
       invalidateAllSlackDirectoryMembers(queryClient),
       invalidateAllSlackDirectoryMember(queryClient),
+      invalidateAllSlackPersonAccounts(queryClient),
     ]);
   // Returning the refresh keeps the mutation pending until the row reloads,
   // so a second pick cannot resend the old revision.

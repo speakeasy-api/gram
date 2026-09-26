@@ -126,7 +126,8 @@ export function SlackDirectory({
       { replace: true },
     );
   };
-  const [search, setSearch] = useState("");
+  // Links from a person's identity page prefill the search with a Slack ID.
+  const [search, setSearch] = useState(() => params.get("slack_search") ?? "");
   const connectionId = values.slack_workspace ?? undefined;
   const mappingStatus = values.slack_mapping as
     | SlackDirectoryMember["mappingStatus"]

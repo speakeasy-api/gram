@@ -1,6 +1,29 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { useIdentityTint } from "@/components/gradient-colors";
+import { Badge } from "@/components/ui/Badge";
+import { Text } from "@/components/ui/Text";
+import type { SlackDirectoryMember } from "@gram/client/models/components/slackdirectorymember.js";
+import { mappingFinding } from "./mappingFindings";
 
+export function MappingStatus({
+  member,
+}: {
+  member: SlackDirectoryMember;
+}): JSX.Element {
+  const finding = mappingFinding(member);
+  let label = "Not mapped";
+  if (member.mapping) label = finding ? "Needs review" : "Mapped";
+  return (
+    <div className="space-y-1">
+      <Badge variant={finding ? "warning" : "neutral"}>{label}</Badge>
+      {finding && (
+        <Text muted small>
+          {finding}
+        </Text>
+      )}
+    </div>
+  );
+}
 export function PersonnelAvatar({
   name,
   email,

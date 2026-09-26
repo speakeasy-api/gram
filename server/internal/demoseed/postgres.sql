@@ -733,21 +733,23 @@ BEGIN
     (6, 'T0DEMO0002', 'Amara Okafor', 'amara@demo.getgram.ai', 'active', 'person'),
     (7, 'T0DEMO0002', 'Hana Sato', 'hana@demo.getgram.ai', 'deactivated', 'person'),
     (8, 'T0DEMO0002', 'Taylor Reed', NULL, 'invited', 'unknown'),
-    (9, 'T0DEMO0002', 'Lucas Meyer', NULL, 'active', 'single_channel_guest')
+    (9, 'T0DEMO0002', 'Lucas Meyer', NULL, 'active', 'single_channel_guest'),
+    (10, 'T0DEMO0001', 'Amara Okafor (guest)', NULL, 'deactivated', 'guest')
   ) AS v(n, team_id, display_name, email, status, member_type);
 
   -- Synthetic admin decisions remain visible in disconnected directory history.
   INSERT INTO slack_identity_mappings (id, organization_id, slack_team_id, slack_user_id, user_id)
   SELECT demo.det_uuid('gram-demo-slackmapping-' || v.n), demo_org, m.slack_team_id, m.slack_user_id, demo_user_ids[v.person]
-  FROM (VALUES (1, 1), (3, 3), (5, 4), (6, 1), (7, 5)) AS v(n, person)
+  FROM (VALUES (1, 1), (3, 3), (5, 4), (6, 1), (7, 5), (10, 1)) AS v(n, person)
   JOIN slack_directory_memberships m ON m.organization_id = demo_org AND m.id = demo.det_uuid('gram-demo-slackmember-' || v.n);
   UPDATE slack_directory_memberships SET mapping_revision = 1,
     mapping_conflict_reason = CASE slack_user_id
       WHEN 'U0DEMO00003' THEN 'member_deactivated'
       WHEN 'U0DEMO00005' THEN 'member_absent'
-      WHEN 'U0DEMO00007' THEN 'member_deactivated' END,
-    mapping_conflict_detected_at = CASE WHEN slack_user_id IN ('U0DEMO00003', 'U0DEMO00005', 'U0DEMO00007') THEN now() - interval '2 days' END
-  WHERE organization_id = demo_org AND slack_user_id IN ('U0DEMO00001', 'U0DEMO00003', 'U0DEMO00005', 'U0DEMO00006', 'U0DEMO00007');
+      WHEN 'U0DEMO00007' THEN 'member_deactivated'
+      WHEN 'U0DEMO00010' THEN 'member_deactivated' END,
+    mapping_conflict_detected_at = CASE WHEN slack_user_id IN ('U0DEMO00003', 'U0DEMO00005', 'U0DEMO00007', 'U0DEMO00010') THEN now() - interval '2 days' END
+  WHERE organization_id = demo_org AND slack_user_id IN ('U0DEMO00001', 'U0DEMO00003', 'U0DEMO00005', 'U0DEMO00006', 'U0DEMO00007', 'U0DEMO00010');
 
   -- Directory profiles: feed spend-rule audiences, enrollment attributes, and
   -- mirror the user.attributes.* identity on the ClickHouse telemetry.
@@ -3330,12 +3332,12 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   END IF;
 
   SELECT count(*) INTO stray FROM slack_identity_mappings WHERE organization_id = demo_org AND revoked_at IS NULL;
-  IF stray <> 5 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 5 Slack mapping examples, found %', stray;
+  IF stray <> 6 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 6 Slack mapping examples, found %', stray;
   END IF;
   SELECT count(*) INTO stray FROM slack_directory_memberships WHERE organization_id = demo_org;
-  IF stray <> 9 THEN
-    RAISE EXCEPTION 'demo seed postflight: expected 9 Slack workspace memberships, found %', stray;
+  IF stray <> 10 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 10 Slack workspace memberships, found %', stray;
   END IF;
   SELECT count(*) INTO stray FROM slack_directory_connections WHERE organization_id = demo_org;
   IF stray <> 2 THEN

@@ -25,6 +25,10 @@ type Service interface {
 	// Read observed Slack members across the organization or within one workspace.
 	// Does not create identity mappings.
 	ListMembers(context.Context, *ListMembersPayload) (res *ListMembersResult, err error)
+	// Read mapped Slack accounts for an active organization person by exact Gram
+	// user ID. Browser session only; caller must be that person or an organization
+	// administrator. Does not infer associations from email or grant permissions.
+	ListPersonAccounts(context.Context, *ListPersonAccountsPayload) (res *ListPersonAccountsResult, err error)
 	// Read current Slack profile and mapping before an administrator confirms a
 	// selection.
 	GetMember(context.Context, *GetMemberPayload) (res *SlackDirectoryMember, err error)
@@ -57,7 +61,7 @@ const ServiceName = "slackDirectoryConnections"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"list", "sync", "listMembers", "getMember", "setMapping", "begin", "disconnect"}
+var MethodNames = [8]string{"list", "sync", "listMembers", "listPersonAccounts", "getMember", "setMapping", "begin", "disconnect"}
 
 // BeginPayload is the payload type of the slackDirectoryConnections service
 // begin method.
@@ -133,6 +137,25 @@ type ListMembersResult struct {
 // list method.
 type ListPayload struct {
 	SessionToken *string
+}
+
+// ListPersonAccountsPayload is the payload type of the
+// slackDirectoryConnections service listPersonAccounts method.
+type ListPersonAccountsPayload struct {
+	SessionToken *string
+	// Exact Gram user ID of the active organization person.
+	UserID string
+	// Continue after the last membership ID.
+	Cursor *string
+}
+
+// ListPersonAccountsResult is the result type of the slackDirectoryConnections
+// service listPersonAccounts method.
+type ListPersonAccountsResult struct {
+	// Up to 50 current mappings, one entry per workspace membership.
+	Accounts []*SlackPersonAccount
+	// Cursor for the next page, when present.
+	NextCursor *string
 }
 
 // ListResult is the result type of the slackDirectoryConnections service list
@@ -251,6 +274,18 @@ type SlackIdentityMapping struct {
 	PhotoURL *string
 	// Whether the person and organization membership are active.
 	Active bool
+}
+
+// An existing admin-confirmed workspace membership for one active organization
+// person. Read-only and grants no permissions. The shared member view includes
+// revision and evidence fields; using them to change a mapping still requires
+// organization administration.
+type SlackPersonAccount struct {
+	Member *SlackDirectoryMember
+	// Freshness of the workspace snapshot, independent of mapping state.
+	DirectoryStatus string
+	// Last complete directory publication, possibly from an earlier authorization.
+	LastFullSyncSucceededAt *string
 }
 
 // SyncPayload is the payload type of the slackDirectoryConnections service

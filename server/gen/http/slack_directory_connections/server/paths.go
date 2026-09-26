@@ -22,6 +22,11 @@ func ListMembersSlackDirectoryConnectionsPath() string {
 	return "/rpc/slackDirectoryConnections.listMembers"
 }
 
+// ListPersonAccountsSlackDirectoryConnectionsPath returns the URL path to the slackDirectoryConnections service listPersonAccounts HTTP endpoint.
+func ListPersonAccountsSlackDirectoryConnectionsPath() string {
+	return "/rpc/slackDirectoryConnections.listPersonAccounts"
+}
+
 // GetMemberSlackDirectoryConnectionsPath returns the URL path to the slackDirectoryConnections service getMember HTTP endpoint.
 func GetMemberSlackDirectoryConnectionsPath() string {
 	return "/rpc/slackDirectoryConnections.getMember"

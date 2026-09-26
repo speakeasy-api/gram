@@ -58832,6 +58832,111 @@ paths:
       x-speakeasy-name-override: listMembers
       x-speakeasy-react-hook:
         name: SlackDirectoryMembers
+  /rpc/slackDirectoryConnections.listPersonAccounts:
+    get:
+      description: Read mapped Slack accounts for an active organization person by exact Gram user ID. Browser session only; caller must be that person or an organization administrator. Does not infer associations from email or grant permissions.
+      operationId: listSlackPersonAccounts
+      parameters:
+        - allowEmptyValue: true
+          description: Exact Gram user ID of the active organization person.
+          in: query
+          name: user_id
+          required: true
+          schema:
+            description: Exact Gram user ID of the active organization person.
+            minLength: 1
+            type: string
+        - allowEmptyValue: true
+          description: Continue after the last membership ID.
+          in: query
+          name: cursor
+          schema:
+            description: Continue after the last membership ID.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListPersonAccountsResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/vnd.goa.error:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listPersonAccounts slackDirectoryConnections
+      tags:
+        - slackDirectoryConnections
+      x-speakeasy-name-override: listPersonAccounts
+      x-speakeasy-react-hook:
+        name: SlackPersonAccounts
   /rpc/slackDirectoryConnections.setMapping:
     post:
       description: Explicitly confirm, reassign or remove a Slack association. This grants no permissions and does not establish runtime eligibility.
@@ -85681,6 +85786,19 @@ components:
           description: The list of packages
       required:
         - packages
+    ListPersonAccountsResponseBody:
+      type: object
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlackPersonAccount'
+          description: Up to 50 current mappings, one entry per workspace membership.
+        next_cursor:
+          type: string
+          description: Cursor for the next page, when present.
+      required:
+        - accounts
     ListPluginsResult:
       type: object
       properties:
@@ -97137,6 +97255,26 @@ components:
         - display_name
         - email
         - active
+    SlackPersonAccount:
+      type: object
+      properties:
+        directory_status:
+          type: string
+          description: Freshness of the workspace snapshot, independent of mapping state.
+          enum:
+            - never_synced
+            - current
+            - stale
+        last_full_sync_succeeded_at:
+          type: string
+          description: Last complete directory publication, possibly from an earlier authorization.
+          format: date-time
+        member:
+          $ref: '#/components/schemas/SlackDirectoryMember'
+      description: An existing admin-confirmed workspace membership for one active organization person. Read-only and grants no permissions. The shared member view includes revision and evidence fields; using them to change a mapping still requires organization administration.
+      required:
+        - member
+        - directory_status
     SourceEnvironmentLink:
       type: object
       properties:

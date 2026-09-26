@@ -20,7 +20,7 @@ import (
 )
 
 func readMember(ctx context.Context, q *repo.Queries, org string, id uuid.UUID) (*gen.SlackDirectoryMember, error) {
-	rows, err := q.ListSlackDirectoryMembers(ctx, repo.ListSlackDirectoryMembersParams{OrganizationID: org, MemberID: uuid.NullUUID{UUID: id, Valid: true}, ConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Search: "", MappingStatus: "", PageSize: 1})
+	rows, err := q.ListSlackDirectoryMembers(ctx, repo.ListSlackDirectoryMembersParams{MappedUserID: "", OrganizationID: org, MemberID: uuid.NullUUID{UUID: id, Valid: true}, ConnectionID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Cursor: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Search: "", MappingStatus: "", PageSize: 1})
 	if err != nil {
 		return nil, fmt.Errorf("read Slack member: %w", err)
 	}
