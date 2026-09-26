@@ -10,6 +10,8 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"unicode/utf8"
 
 	slackdirectoryconnections "github.com/speakeasy-api/gram/server/gen/slack_directory_connections"
 	goa "goa.design/goa/v3/pkg"
@@ -25,6 +27,109 @@ func BuildListPayload(slackDirectoryConnectionsListSessionToken string) (*slackd
 		}
 	}
 	v := &slackdirectoryconnections.ListPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSyncPayload builds the payload for the slackDirectoryConnections sync
+// endpoint from CLI flags.
+func BuildSyncPayload(slackDirectoryConnectionsSyncBody string, slackDirectoryConnectionsSyncSessionToken string) (*slackdirectoryconnections.SyncPayload, error) {
+	var err error
+	var body SyncRequestBody
+	{
+		err = json.Unmarshal([]byte(slackDirectoryConnectionsSyncBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"generation\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.generation", body.Generation, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if slackDirectoryConnectionsSyncSessionToken != "" {
+			sessionToken = &slackDirectoryConnectionsSyncSessionToken
+		}
+	}
+	v := &slackdirectoryconnections.SyncPayload{
+		ID:         body.ID,
+		Generation: body.Generation,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListMembersPayload builds the payload for the slackDirectoryConnections
+// listMembers endpoint from CLI flags.
+func BuildListMembersPayload(slackDirectoryConnectionsListMembersConnectionID string, slackDirectoryConnectionsListMembersSearch string, slackDirectoryConnectionsListMembersCursor string, slackDirectoryConnectionsListMembersLimit string, slackDirectoryConnectionsListMembersSessionToken string) (*slackdirectoryconnections.ListMembersPayload, error) {
+	var err error
+	var connectionID *string
+	{
+		if slackDirectoryConnectionsListMembersConnectionID != "" {
+			connectionID = &slackDirectoryConnectionsListMembersConnectionID
+			err = goa.MergeErrors(err, goa.ValidateFormat("connection_id", *connectionID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var search *string
+	{
+		if slackDirectoryConnectionsListMembersSearch != "" {
+			search = &slackDirectoryConnectionsListMembersSearch
+			if utf8.RuneCountInString(*search) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if slackDirectoryConnectionsListMembersCursor != "" {
+			cursor = &slackDirectoryConnectionsListMembersCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit int
+	{
+		if slackDirectoryConnectionsListMembersLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(slackDirectoryConnectionsListMembersLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if slackDirectoryConnectionsListMembersSessionToken != "" {
+			sessionToken = &slackDirectoryConnectionsListMembersSessionToken
+		}
+	}
+	v := &slackdirectoryconnections.ListMembersPayload{}
+	v.ConnectionID = connectionID
+	v.Search = search
+	v.Cursor = cursor
+	v.Limit = limit
 	v.SessionToken = sessionToken
 
 	return v, nil

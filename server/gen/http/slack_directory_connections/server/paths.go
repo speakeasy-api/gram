@@ -12,6 +12,16 @@ func ListSlackDirectoryConnectionsPath() string {
 	return "/rpc/slackDirectoryConnections.list"
 }
 
+// SyncSlackDirectoryConnectionsPath returns the URL path to the slackDirectoryConnections service sync HTTP endpoint.
+func SyncSlackDirectoryConnectionsPath() string {
+	return "/rpc/slackDirectoryConnections.sync"
+}
+
+// ListMembersSlackDirectoryConnectionsPath returns the URL path to the slackDirectoryConnections service listMembers HTTP endpoint.
+func ListMembersSlackDirectoryConnectionsPath() string {
+	return "/rpc/slackDirectoryConnections.listMembers"
+}
+
 // BeginSlackDirectoryConnectionsPath returns the URL path to the slackDirectoryConnections service begin HTTP endpoint.
 func BeginSlackDirectoryConnectionsPath() string {
 	return "/rpc/slackDirectoryConnections.begin"

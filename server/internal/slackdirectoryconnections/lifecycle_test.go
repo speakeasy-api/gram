@@ -264,10 +264,11 @@ func TestConcurrentCallbackConsumesStateOnce(t *testing.T) {
 	f.provider.AssertExpectations(t)
 }
 
-func TestExpiredCredentialsRequireReconnect(t *testing.T) {
+// A rotating token renews through its refresh token; without one, expiry needs a reconnect.
+func TestExpiredCredentialsWithoutRefreshRequireReconnect(t *testing.T) {
 	t.Parallel()
 	ctx, f := newService(t)
-	tokens, err := json.Marshal(slackdirectoryconnections.TokenBundle{Version: 1, AccessToken: "synthetic", RefreshToken: "synthetic-refresh", ExpiresAt: conv.PtrEmpty(time.Now().Add(-time.Minute)), TokenType: "bot"})
+	tokens, err := json.Marshal(slackdirectoryconnections.TokenBundle{Version: 1, AccessToken: "synthetic", RefreshToken: "", ExpiresAt: conv.PtrEmpty(time.Now().Add(-time.Minute)), TokenType: "bot"})
 	require.NoError(t, err)
 	ciphertext, err := f.enc.Encrypt(tokens)
 	require.NoError(t, err)

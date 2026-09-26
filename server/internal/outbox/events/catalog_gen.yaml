@@ -4008,7 +4008,7 @@ webhooks:
                 required: true
     audit_log.slack_directory_connection_event_v1:
         post:
-            description: An organization Slack workspace authorization changed.
+            description: An organization Slack workspace authorization changed or its directory was synced.
             operationId: audit_log.slack_directory_connection_event_v1
             requestBody:
                 content:

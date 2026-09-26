@@ -20,6 +20,13 @@ type Client struct {
 	// List Doer is the HTTP client used to make requests to the list endpoint.
 	ListDoer goahttp.Doer
 
+	// Sync Doer is the HTTP client used to make requests to the sync endpoint.
+	SyncDoer goahttp.Doer
+
+	// ListMembers Doer is the HTTP client used to make requests to the listMembers
+	// endpoint.
+	ListMembersDoer goahttp.Doer
+
 	// Begin Doer is the HTTP client used to make requests to the begin endpoint.
 	BeginDoer goahttp.Doer
 
@@ -49,6 +56,8 @@ func NewClient(
 ) *Client {
 	return &Client{
 		ListDoer:            doer,
+		SyncDoer:            doer,
+		ListMembersDoer:     doer,
 		BeginDoer:           doer,
 		DisconnectDoer:      doer,
 		RestoreResponseBody: restoreBody,
@@ -78,6 +87,54 @@ func (c *Client) List() goa.Endpoint {
 		resp, err := c.ListDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("slackDirectoryConnections", "list", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// Sync returns an endpoint that makes HTTP requests to the
+// slackDirectoryConnections service sync server.
+func (c *Client) Sync() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSyncRequest(c.encoder)
+		decodeResponse = DecodeSyncResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSyncRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SyncDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("slackDirectoryConnections", "sync", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListMembers returns an endpoint that makes HTTP requests to the
+// slackDirectoryConnections service listMembers server.
+func (c *Client) ListMembers() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListMembersRequest(c.encoder)
+		decodeResponse = DecodeListMembersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListMembersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListMembersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("slackDirectoryConnections", "listMembers", err)
 		}
 		return decodeResponse(resp)
 	}

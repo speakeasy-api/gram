@@ -711,6 +711,31 @@ BEGIN
     (demo.det_uuid('gram-demo-slackconn-2'), demo_org, 'T0DEMO0002', 'Acme Operations',
      gen_random_uuid(), 'pending', NULL);
 
+  -- Synthetic retained snapshots illustrate history, not a live Slack sync.
+  UPDATE slack_directory_connections
+  SET last_full_sync_generation = gen_random_uuid(),
+      last_full_sync_succeeded_at = now() - interval '3 days',
+      last_sync_started_at = now() - interval '3 days 1 minute'
+  WHERE organization_id = demo_org;
+  INSERT INTO slack_directory_memberships
+    (id, organization_id, slack_team_id, slack_user_id, display_name, email,
+     status, member_type, last_seen_at)
+  SELECT demo.det_uuid('gram-demo-slackmember-' || v.n), demo_org,
+    v.team_id, 'U0DEMO' || lpad(v.n::text, 5, '0'), v.display_name, v.email,
+    v.status, v.member_type,
+    now() - CASE WHEN v.n = 5 THEN interval '5 days' ELSE interval '3 days' END
+  FROM (VALUES
+    (1, 'T0DEMO0001', 'Avery Chen', 'avery.chen@demo.getgram.ai', 'active', 'person'),
+    (2, 'T0DEMO0001', 'Jordan Ellis', 'jordan.ellis@demo.getgram.ai', 'active', 'person'),
+    (3, 'T0DEMO0001', 'Morgan Blake', NULL, 'active', 'guest'),
+    (4, 'T0DEMO0001', 'Release Helper', NULL, 'active', 'bot'),
+    (5, 'T0DEMO0001', 'Riley Park', 'riley.park@demo.getgram.ai', 'unknown', 'person'),
+    (6, 'T0DEMO0002', 'Avery Chen', 'avery.chen@demo.getgram.ai', 'active', 'person'),
+    (7, 'T0DEMO0002', 'Sam Rivera', 'sam.rivera@demo.getgram.ai', 'deactivated', 'person'),
+    (8, 'T0DEMO0002', 'Taylor Reed', NULL, 'invited', 'unknown'),
+    (9, 'T0DEMO0002', 'Casey Wells', NULL, 'active', 'single_channel_guest')
+  ) AS v(n, team_id, display_name, email, status, member_type);
+
   -- Directory profiles: feed spend-rule audiences, enrollment attributes, and
   -- mirror the user.attributes.* identity on the ClickHouse telemetry.
   DELETE FROM directory_role_mappings WHERE organization_id = demo_org;
@@ -3291,6 +3316,10 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
     RAISE EXCEPTION 'demo seed postflight: expected 2 directory role mappings, found %', stray;
   END IF;
 
+  SELECT count(*) INTO stray FROM slack_directory_memberships WHERE organization_id = demo_org;
+  IF stray <> 9 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 9 Slack workspace memberships, found %', stray;
+  END IF;
   SELECT count(*) INTO stray FROM slack_directory_connections WHERE organization_id = demo_org;
   IF stray <> 2 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 2 Slack workspace connections, found %', stray;

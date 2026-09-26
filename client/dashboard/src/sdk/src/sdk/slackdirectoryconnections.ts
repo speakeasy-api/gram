@@ -5,10 +5,14 @@
 import { slackDirectoryConnectionsBegin } from "../funcs/slackDirectoryConnectionsBegin.js";
 import { slackDirectoryConnectionsDisconnect } from "../funcs/slackDirectoryConnectionsDisconnect.js";
 import { slackDirectoryConnectionsList } from "../funcs/slackDirectoryConnectionsList.js";
+import { slackDirectoryConnectionsListMembers } from "../funcs/slackDirectoryConnectionsListMembers.js";
+import { slackDirectoryConnectionsSync } from "../funcs/slackDirectoryConnectionsSync.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { BeginResponseBody } from "../models/components/beginresponsebody.js";
+import { ListMembersResponseBody } from "../models/components/listmembersresponsebody.js";
 import { ListResponseBody } from "../models/components/listresponsebody.js";
 import { SlackDirectoryConnection } from "../models/components/slackdirectoryconnection.js";
+import { SyncResponseBody } from "../models/components/syncresponsebody.js";
 import {
   BeginSlackDirectoryConnectionRequest,
   BeginSlackDirectoryConnectionSecurity,
@@ -21,6 +25,14 @@ import {
   ListSlackDirectoryConnectionsRequest,
   ListSlackDirectoryConnectionsSecurity,
 } from "../models/operations/listslackdirectoryconnections.js";
+import {
+  ListSlackDirectoryMembersRequest,
+  ListSlackDirectoryMembersSecurity,
+} from "../models/operations/listslackdirectorymembers.js";
+import {
+  SyncSlackDirectoryRequest,
+  SyncSlackDirectorySecurity,
+} from "../models/operations/syncslackdirectory.js";
 import { unwrapAsync } from "../types/fp.js";
 
 export class SlackDirectoryConnections extends ClientSDK {
@@ -65,6 +77,44 @@ export class SlackDirectoryConnections extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListResponseBody> {
     return unwrapAsync(slackDirectoryConnectionsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listMembers slackDirectoryConnections
+   *
+   * @remarks
+   * Read observed Slack members across the organization or within one workspace. Does not create identity mappings.
+   */
+  async listMembers(
+    request?: ListSlackDirectoryMembersRequest | undefined,
+    security?: ListSlackDirectoryMembersSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListMembersResponseBody> {
+    return unwrapAsync(slackDirectoryConnectionsListMembers(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * sync slackDirectoryConnections
+   *
+   * @remarks
+   * Request a complete Slack workspace directory sync. Concurrent requests join the running sync.
+   */
+  async sync(
+    request: SyncSlackDirectoryRequest,
+    security?: SyncSlackDirectorySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SyncResponseBody> {
+    return unwrapAsync(slackDirectoryConnectionsSync(
       this,
       request,
       security,

@@ -225,4 +225,6 @@ dashboard, provider acceptance, or usable human access is demonstrated.
 
 ### [~] Organization Identity: Slack workspaces
 
-With `org:admin`, the Slack workspaces tab shows Acme Engineering as disconnected and Acme Operations as requiring authorization. These are synthetic history rows with no credentials. Shared Explore Demo disables Connect Slack and Disconnect and refuses their server operations; the retargeted local organization remains writable. They do not demonstrate live Slack authorization, directory sync, mappings, or invocation protection.
+With `org:admin`, the Slack workspaces tab shows Acme Engineering as disconnected and Acme Operations as requiring authorization. These are synthetic history rows with no credentials. Each workspace links to a filtered member table, and All workspace members shows both. Nine synthetic historical profiles cover active, invited, deactivated, guest, bot, missing-email, and absent-from-snapshot states. Each workspace shows four members observed in its last full snapshot; the ninth retained member is unknown. Both snapshots are marked stale and sync is disabled until real authorization. These fixtures do not demonstrate live Slack authorization or sync, confirmed mappings, or invocation protection.
+
+Shared Explore Demo is read-only for Slack connections, syncing and mappings. The retargeted local organization remains writable.

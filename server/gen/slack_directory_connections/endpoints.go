@@ -16,9 +16,11 @@ import (
 
 // Endpoints wraps the "slackDirectoryConnections" service endpoints.
 type Endpoints struct {
-	List       goa.Endpoint
-	Begin      goa.Endpoint
-	Disconnect goa.Endpoint
+	List        goa.Endpoint
+	Sync        goa.Endpoint
+	ListMembers goa.Endpoint
+	Begin       goa.Endpoint
+	Disconnect  goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "slackDirectoryConnections" service
@@ -27,9 +29,11 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		List:       NewListEndpoint(s, a.APIKeyAuth),
-		Begin:      NewBeginEndpoint(s, a.APIKeyAuth),
-		Disconnect: NewDisconnectEndpoint(s, a.APIKeyAuth),
+		List:        NewListEndpoint(s, a.APIKeyAuth),
+		Sync:        NewSyncEndpoint(s, a.APIKeyAuth),
+		ListMembers: NewListMembersEndpoint(s, a.APIKeyAuth),
+		Begin:       NewBeginEndpoint(s, a.APIKeyAuth),
+		Disconnect:  NewDisconnectEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -37,6 +41,8 @@ func NewEndpoints(s Service) *Endpoints {
 // service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.List = m(e.List)
+	e.Sync = m(e.Sync)
+	e.ListMembers = m(e.ListMembers)
 	e.Begin = m(e.Begin)
 	e.Disconnect = m(e.Disconnect)
 }
@@ -61,6 +67,52 @@ func NewListEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoi
 			return nil, err
 		}
 		return s.List(ctx, p)
+	}
+}
+
+// NewSyncEndpoint returns an endpoint function that calls the method "sync" of
+// service "slackDirectoryConnections".
+func NewSyncEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SyncPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.Sync(ctx, p)
+	}
+}
+
+// NewListMembersEndpoint returns an endpoint function that calls the method
+// "listMembers" of service "slackDirectoryConnections".
+func NewListMembersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListMembersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListMembers(ctx, p)
 	}
 }
 
