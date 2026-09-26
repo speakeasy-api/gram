@@ -24,7 +24,6 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { dateTimeFormatters } from "@/lib/dates";
 import { getPreferredProject } from "@/lib/preferredProject";
 import { cn } from "@/lib/utils";
-import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -49,9 +48,7 @@ import {
   MoreHorizontal,
   Plus,
   Settings,
-  ShieldCheck,
   Star,
-  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -89,7 +86,6 @@ function OrgHomeInner() {
   const navigate = useNavigate();
   const { hasScope } = useRBAC();
   const canAdmin = hasScope("org:admin");
-  const orgRoutes = useOrgRoutes();
 
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState(false);
@@ -266,8 +262,9 @@ function OrgHomeInner() {
       <Page.Section>
         <Page.Section.Title>Projects</Page.Section.Title>
         <Page.Section.Description>
-          Projects group MCP servers, skills and plugins. Most organizations
-          need only one.
+          Create a project for each team or environment that needs its own MCP
+          servers, skills, plugins and access, such as separate staging and
+          production, or a team whose tools others should not see.
         </Page.Section.Description>
         <Page.Section.Body>
           <div className="flex min-w-0 flex-col gap-6">
@@ -280,11 +277,10 @@ function OrgHomeInner() {
               />
               <ViewModeToggle value={viewMode} onChange={setViewMode} />
               {canAdmin && (
-                <AddNewMenu
-                  onCreateProject={() => setCreateDialogOpen(true)}
-                  onInviteMember={() => orgRoutes.team.goTo()}
-                  onManageRoles={() => orgRoutes.access.roles.goTo()}
-                />
+                <Button onClick={() => setCreateDialogOpen(true)}>
+                  <Plus className="size-4" />
+                  New project
+                </Button>
               )}
             </div>
 
@@ -401,47 +397,6 @@ function OrgHomeInner() {
         />
       )}
     </>
-  );
-}
-
-function AddNewMenu({
-  onCreateProject,
-  onInviteMember,
-  onManageRoles,
-}: {
-  onCreateProject: () => void;
-  onInviteMember: () => void;
-  onManageRoles: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const handle = (cb: () => void) => () => {
-    setOpen(false);
-    cb();
-  };
-  return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button className="h-[42px] shrink-0 px-4">
-          <Plus className="size-4" />
-          Add New
-          <ChevronDown className="size-3.5 opacity-70" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem onClick={handle(onCreateProject)}>
-          <Plus className="size-4" />
-          Project
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={handle(onInviteMember)}>
-          <UserPlus className="size-4" />
-          Team member
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={handle(onManageRoles)}>
-          <ShieldCheck className="size-4" />
-          Role
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 
