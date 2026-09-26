@@ -72,6 +72,11 @@ type metaGateContext struct {
 // endpoints as having no proxied stream and no upstream session.
 // agentID is the agent whose grants define membership, or uuid.Nil for a
 // stored gateway whose members come from meta_mcp_server_members.
+func shouldRecordMetaMCPNetworkRequest(agentID uuid.UUID) bool {
+	// Agent gateways are synthetic and have no network access panel to feed.
+	return agentID == uuid.Nil
+}
+
 func (s *Service) serveResolvedMetaMCPEndpoint(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -82,8 +87,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 ) error {
 	ctx := r.Context()
 
-	// Agent gateways are synthetic and have no network access panel to feed.
-	if agentID == uuid.Nil {
+	if shouldRecordMetaMCPNetworkRequest(agentID) {
 		s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, uuid.Nil, metaServer.ID, metaServer.OrganizationID)
 	}
 	logger = logger.With(attr.SlogMetaMcpServerID(metaServer.ID.String()))

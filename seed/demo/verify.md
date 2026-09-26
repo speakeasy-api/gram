@@ -35,6 +35,13 @@ where a value is expected.
    mutation section. Confirm there is no ingress row, credential, or related
    console/network error.
 
+0a. **Inbound MCP network traffic seed**: after `mise run seed:demo`, confirm
+`mcp_network_traffic_hourly_summaries` has public and private rows for both
+`mcp` and `meta` server kinds in the demo project, with non-zero request
+counts and recent `last_seen` timestamps. This is a data check only: the
+demo org has no `network_ingress` entitlement, so the Network access panel
+remains hidden and the PAGES.md row stays `[~]`, not UI-verified.
+
 1. **Agent sessions list** — sessions list shows ~180 sessions with varied
    titles ("Incident triage… #10xx"), spread over the last ~2 weeks, owners
    `*@demo.getgram.ai`.

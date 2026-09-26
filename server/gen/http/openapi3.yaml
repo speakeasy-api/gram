@@ -86098,11 +86098,11 @@ components:
             properties:
                 mcp_server_id:
                     type: string
-                    description: MCP server ID
+                    description: MCP server ID (mutually exclusive with meta_mcp_server_id)
                     format: uuid
                 meta_mcp_server_id:
                     type: string
-                    description: Gateway ID
+                    description: Gateway ID (mutually exclusive with mcp_server_id)
                     format: uuid
                 window:
                     type: string
@@ -86110,6 +86110,7 @@ components:
                     enum:
                         - 24h
                         - 7d
+            description: Provide exactly one of mcp_server_id or meta_mcp_server_id, and a recent window.
             required:
                 - window
         GetMcpNetworkTrafficResult:

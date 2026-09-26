@@ -311,9 +311,9 @@ type GetMcpNetworkTrafficPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// MCP server ID
+	// MCP server ID (mutually exclusive with meta_mcp_server_id)
 	McpServerID *string
-	// Gateway ID
+	// Gateway ID (mutually exclusive with mcp_server_id)
 	MetaMcpServerID *string
 	// Recent traffic window
 	Window string

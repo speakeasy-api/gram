@@ -35,6 +35,13 @@ func (s *Service) recordMCPNetworkRequest(ctx context.Context, projectID, mcpSer
 		organizationID = ingressOrganizationID(ctx)
 	}
 
+	attrs := mcpNetworkRequestAttributes(ctx, mcpServerID, metaServerID)
+	observedAt := time.Now()
+
+	go s.writeMCPNetworkRequest(context.WithoutCancel(ctx), projectID, organizationID, observedAt, attrs)
+}
+
+func mcpNetworkRequestAttributes(ctx context.Context, mcpServerID, metaServerID uuid.UUID) map[attr.Key]any {
 	attrs := map[attr.Key]any{
 		attr.EventURNKey:       MCPNetworkRequestEventURN,
 		attr.NetworkSurfaceKey: string(mcpmetrics.NetworkSurfaceFromContext(ctx)),
@@ -44,9 +51,7 @@ func (s *Service) recordMCPNetworkRequest(ctx context.Context, projectID, mcpSer
 	} else {
 		attrs[attr.MetaMcpServerIDKey] = metaServerID.String()
 	}
-	observedAt := time.Now()
-
-	go s.writeMCPNetworkRequest(context.WithoutCancel(ctx), projectID, organizationID, observedAt, attrs)
+	return attrs
 }
 
 func (s *Service) writeMCPNetworkRequest(ctx context.Context, projectID uuid.UUID, organizationID string, observedAt time.Time, attrs map[attr.Key]any) {

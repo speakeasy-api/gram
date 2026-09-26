@@ -2976,10 +2976,11 @@ var GetMcpServerActivityResult = Type("GetMcpServerActivityResult", func() {
 })
 
 var GetMcpNetworkTrafficPayload = Type("GetMcpNetworkTrafficPayload", func() {
-	Attribute("mcp_server_id", String, "MCP server ID", func() {
+	Description("Provide exactly one of mcp_server_id or meta_mcp_server_id, and a recent window.")
+	Attribute("mcp_server_id", String, "MCP server ID (mutually exclusive with meta_mcp_server_id)", func() {
 		Format(FormatUUID)
 	})
-	Attribute("meta_mcp_server_id", String, "Gateway ID", func() {
+	Attribute("meta_mcp_server_id", String, "Gateway ID (mutually exclusive with mcp_server_id)", func() {
 		Format(FormatUUID)
 	})
 	Attribute("window", String, "Recent traffic window", func() {

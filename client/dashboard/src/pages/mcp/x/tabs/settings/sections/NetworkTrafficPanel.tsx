@@ -4,8 +4,10 @@ import { NetworkTrafficChart } from "./NetworkTrafficChart";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Text } from "@/components/ui/Text";
 import type { Window } from "@gram/client/models/components/getmcpnetworktrafficpayload.js";
-import { useGetMcpNetworkTraffic } from "@gram/client/react-query/getMcpNetworkTraffic.js";
+import { buildGetMcpNetworkTrafficQuery } from "@gram/client/react-query/getMcpNetworkTraffic.js";
+import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
+import { useQuery } from "@tanstack/react-query";
 
 const WINDOW_OPTIONS: { value: Window; label: string }[] = [
   { value: "24h", label: "24h" },
@@ -20,12 +22,18 @@ export function NetworkTrafficPanel({
   metaMcpServerId?: string;
 }): JSX.Element {
   const [window, setWindow] = useState<Window>("7d");
+  const client = useGramContext();
+  const request = {
+    getMcpNetworkTrafficPayload: { mcpServerId, metaMcpServerId, window },
+  };
+  const query = buildGetMcpNetworkTrafficQuery(client, request);
   const traffic = useLogsEnabledErrorCheck(
-    useGetMcpNetworkTraffic(
-      { getMcpNetworkTrafficPayload: { mcpServerId, metaMcpServerId, window } },
-      undefined,
-      { retry: false, throwOnError: false },
-    ),
+    useQuery({
+      ...query,
+      queryKey: [...query.queryKey, mcpServerId, metaMcpServerId, window],
+      retry: false,
+      throwOnError: false,
+    }),
   );
 
   const points = useMemo(

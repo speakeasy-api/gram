@@ -10,10 +10,9 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 )
-
-const mcpNetworkRequestEventURN = "urn:telemetry:gram_service:log:mcp_network_request"
 
 // logNetworkRequest writes one row the way the MCP serve path records an
 // inbound request: no tool URN, just the server id and network surface. The
@@ -34,7 +33,7 @@ func logNetworkRequest(t *testing.T, ctx context.Context, ti *testInstance, proj
 		},
 		UserInfo: telemetry.UserInfoByID(""),
 		Attributes: telemetry.HTTPLogAttributes{
-			attr.EventURNKey:       mcpNetworkRequestEventURN,
+			attr.EventURNKey:       mcp.MCPNetworkRequestEventURN,
 			attr.NetworkSurfaceKey: surface,
 			serverKey:              serverID,
 		},

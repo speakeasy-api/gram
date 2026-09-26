@@ -193,9 +193,9 @@ type GetObservabilityOverviewRequestBody struct {
 // GetMcpNetworkTrafficRequestBody is the type of the "telemetry" service
 // "getMcpNetworkTraffic" endpoint HTTP request body.
 type GetMcpNetworkTrafficRequestBody struct {
-	// MCP server ID
+	// MCP server ID (mutually exclusive with meta_mcp_server_id)
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// Gateway ID
+	// Gateway ID (mutually exclusive with mcp_server_id)
 	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
 	// Recent traffic window
 	Window *string `form:"window,omitempty" json:"window,omitempty" xml:"window,omitempty"`

@@ -1,10 +1,15 @@
 import { ChartCard } from "@/components/chart/ChartCard";
-import { AXIS, SERIES, TOOLTIP } from "@/components/chart/palette";
+import { AXIS, TOOLTIP } from "@/components/chart/palette";
+import {
+  useIsDarkTheme,
+  useSeriesColors,
+} from "@/components/chart/useSeriesColors";
 import { formatCompact } from "@/lib/format";
 import {
   CategoryScale,
   Chart as ChartJS,
   LineElement,
+  Legend,
   LinearScale,
   PointElement,
   Tooltip,
@@ -19,6 +24,7 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
+  Legend,
   Tooltip,
 );
 
@@ -70,6 +76,8 @@ export function NetworkTrafficChart({
   lastPublicAt,
   lastPrivateAt,
 }: NetworkTrafficChartProps): JSX.Element {
+  const isDark = useIsDarkTheme();
+  const colors = useSeriesColors();
   const publicTotal = points.reduce(
     (total, point) => total + point.publicRequests,
     0,
@@ -93,8 +101,8 @@ export function NetworkTrafficChart({
         {
           label: "Public route",
           data: points.map((point) => point.publicRequests),
-          borderColor: SERIES[0]!,
-          backgroundColor: SERIES[0]!,
+          borderColor: colors[0]!,
+          backgroundColor: colors[0]!,
           pointRadius: 2,
           pointHoverRadius: 4,
           borderWidth: 2,
@@ -103,8 +111,8 @@ export function NetworkTrafficChart({
         {
           label: "Private route",
           data: points.map((point) => point.privateRequests),
-          borderColor: SERIES[1]!,
-          backgroundColor: SERIES[1]!,
+          borderColor: colors[1]!,
+          backgroundColor: colors[1]!,
           pointRadius: 2,
           pointHoverRadius: 4,
           borderWidth: 2,
@@ -112,7 +120,7 @@ export function NetworkTrafficChart({
         },
       ],
     }),
-    [points],
+    [points, colors],
   );
 
   const options = useMemo<ChartOptions<"line">>(
@@ -123,7 +131,12 @@ export function NetworkTrafficChart({
       plugins: {
         legend: {
           position: "bottom",
-          labels: { usePointStyle: true, boxWidth: 8, padding: 16 },
+          labels: {
+            usePointStyle: true,
+            boxWidth: 8,
+            padding: 16,
+            color: isDark ? AXIS.faded : AXIS.label,
+          },
         },
         tooltip: {
           ...TOOLTIP,
@@ -135,17 +148,21 @@ export function NetworkTrafficChart({
       },
       scales: {
         x: {
-          grid: { color: AXIS.grid },
-          ticks: { color: AXIS.label, maxTicksLimit: 8, maxRotation: 0 },
+          grid: { color: isDark ? AXIS.gridDark : AXIS.grid },
+          ticks: {
+            color: isDark ? AXIS.faded : AXIS.label,
+            maxTicksLimit: 8,
+            maxRotation: 0,
+          },
         },
         y: {
           beginAtZero: true,
-          grid: { color: AXIS.grid },
-          ticks: { color: AXIS.label, precision: 0 },
+          grid: { color: isDark ? AXIS.gridDark : AXIS.grid },
+          ticks: { color: isDark ? AXIS.faded : AXIS.label, precision: 0 },
         },
       },
     }),
-    [],
+    [isDark],
   );
 
   const windowLabel =

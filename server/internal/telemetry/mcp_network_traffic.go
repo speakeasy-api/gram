@@ -47,8 +47,11 @@ func (s *Service) GetMcpNetworkTraffic(ctx context.Context, payload *telem_gen.G
 	if !ok {
 		return nil, oops.E(oops.CodeBadRequest, nil, "window must be one of 24h or 7d")
 	}
-	serverKind, serverID, err := s.resolveMCPNetworkTrafficServer(ctx, *authCtx.ProjectID, payload)
+	serverKind, serverID, resourceID, err := s.resolveMCPNetworkTrafficServer(ctx, *authCtx.ProjectID, payload)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, resourceID, authCtx.ProjectID.String())); err != nil {
 		return nil, err
 	}
 
@@ -79,40 +82,44 @@ func (s *Service) GetMcpNetworkTraffic(ctx context.Context, payload *telem_gen.G
 
 // resolveMCPNetworkTrafficServer validates that exactly one server ID was
 // supplied and that it belongs to the caller's project.
-func (s *Service) resolveMCPNetworkTrafficServer(ctx context.Context, projectID uuid.UUID, payload *telem_gen.GetMcpNetworkTrafficPayload) (string, uuid.UUID, error) {
+func (s *Service) resolveMCPNetworkTrafficServer(ctx context.Context, projectID uuid.UUID, payload *telem_gen.GetMcpNetworkTrafficPayload) (string, uuid.UUID, string, error) {
 	hasMCP := payload.McpServerID != nil && *payload.McpServerID != ""
 	hasMeta := payload.MetaMcpServerID != nil && *payload.MetaMcpServerID != ""
 	if hasMCP == hasMeta {
-		return "", uuid.Nil, oops.E(oops.CodeBadRequest, nil, "exactly one of mcp_server_id or meta_mcp_server_id is required")
+		return "", uuid.Nil, "", oops.E(oops.CodeBadRequest, nil, "exactly one of mcp_server_id or meta_mcp_server_id is required")
 	}
 
 	if hasMCP {
 		id, err := uuid.Parse(*payload.McpServerID)
 		if err != nil {
-			return "", uuid.Nil, oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id")
+			return "", uuid.Nil, "", oops.E(oops.CodeBadRequest, err, "invalid mcp_server_id")
 		}
-		_, err = mcpserversRepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: id, ProjectID: projectID})
+		server, err := mcpserversRepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: id, ProjectID: projectID})
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
-			return "", uuid.Nil, oops.E(oops.CodeNotFound, err, "mcp server not found")
+			return "", uuid.Nil, "", oops.E(oops.CodeNotFound, err, "mcp server not found")
 		case err != nil:
-			return "", uuid.Nil, oops.E(oops.CodeUnexpected, err, "error loading mcp server")
+			return "", uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "error loading mcp server")
 		}
-		return repo.MCPNetworkTrafficServerKindMCP, id, nil
+		resourceID := server.ID.String()
+		if server.ToolsetID.Valid {
+			resourceID = server.ToolsetID.UUID.String()
+		}
+		return repo.MCPNetworkTrafficServerKindMCP, id, resourceID, nil
 	}
 
 	id, err := uuid.Parse(*payload.MetaMcpServerID)
 	if err != nil {
-		return "", uuid.Nil, oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id")
+		return "", uuid.Nil, "", oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id")
 	}
 	_, err = metamcpRepo.New(s.db).GetMetaMCPServerByIDAndProjectID(ctx, metamcpRepo.GetMetaMCPServerByIDAndProjectIDParams{ID: id, ProjectID: projectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return "", uuid.Nil, oops.E(oops.CodeNotFound, err, "gateway not found")
+		return "", uuid.Nil, "", oops.E(oops.CodeNotFound, err, "gateway not found")
 	case err != nil:
-		return "", uuid.Nil, oops.E(oops.CodeUnexpected, err, "error loading gateway")
+		return "", uuid.Nil, "", oops.E(oops.CodeUnexpected, err, "error loading gateway")
 	}
-	return repo.MCPNetworkTrafficServerKindMeta, id, nil
+	return repo.MCPNetworkTrafficServerKindMeta, id, id.String(), nil
 }
 
 // buildMCPNetworkTrafficResult zero-fills every hour in [from, to) so the
