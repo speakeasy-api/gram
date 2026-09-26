@@ -1388,6 +1388,18 @@ BEGIN
     (demo.det_uuid('gram-demo-remote-identity-client-linear'),
      demo.det_uuid('gram-demo-issuer-linear'));
 
+  -- mcp_servers.remote_session_issuer_id is denormalized from the live client
+  -- bindings, and the app recomputes it after the commit that writes them
+  -- (ResyncMCPServerRemoteSessionIssuers). Seeding the binding in SQL never
+  -- goes through that path, so stamp what the resync would derive: exactly one
+  -- remote issuer is bound to this server's user session issuer. Left NULL,
+  -- upstream token routing fails closed and Linear reads as having no identity.
+  UPDATE mcp_servers
+  SET remote_session_issuer_id =
+        demo.det_uuid('gram-demo-remote-identity-provider-linear')
+  WHERE id = demo.det_uuid('gram-demo-mcpserver-linear')
+    AND project_id = proj_a;
+
   INSERT INTO remote_mcp_server_headers
     (id, remote_mcp_server_id, name, description, is_required, is_secret, value)
   VALUES
@@ -3218,6 +3230,14 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE usi.project_id = proj_a;
   IF stray <> 2 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 2 Remote MCP User Identity bindings, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM mcp_servers
+  WHERE project_id = proj_a
+    AND remote_session_issuer_id
+        = demo.det_uuid('gram-demo-remote-identity-provider-linear');
+  IF stray <> 1 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 1 MCP server stamped with the Remote MCP identity provider, found %', stray;
   END IF;
 
   SELECT count(*) INTO stray
