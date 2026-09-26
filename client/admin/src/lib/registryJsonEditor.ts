@@ -51,7 +51,7 @@ export function registryIssueOffsets(
         const key = segment.replace(/~1/g, "/").replace(/~0/g, "~");
         const child: Node | undefined =
           node?.type === "object"
-            ? node.children?.find(
+            ? node.children?.findLast(
                 (property) => property.children?.[0]?.value === key,
               )?.children?.[1]
             : node?.type === "array" && /^(0|[1-9]\d*)$/.test(key)

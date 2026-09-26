@@ -15,12 +15,21 @@ const mock = vi.hoisted(() => ({
   undoStop: vi.fn(),
   edits: vi.fn(),
   markers: vi.fn(),
+  language: "json",
+  setLanguage: vi.fn((_model: unknown, language: string) => {
+    mock.language = language;
+  }),
+  change: null as null | ((value: string) => void),
   options: {} as unknown,
   dom: null as HTMLElement | null,
 }));
 vi.mock("monaco-editor/internal/common/workers.js", () => ({}));
 vi.mock("monaco-editor/editor/editor.api", () => ({
-  editor: { EditorOption: { readOnly: 1 }, setModelMarkers: mock.markers },
+  editor: {
+    EditorOption: { readOnly: 1 },
+    setModelMarkers: mock.markers,
+    setModelLanguage: mock.setLanguage,
+  },
   MarkerSeverity: { Error: 8 },
 }));
 vi.mock("monaco-editor/languages/features/json/register.js", () => ({
@@ -39,6 +48,7 @@ vi.mock("@monaco-editor/react", () => ({
   loader: { config: vi.fn() },
   default: class MockMonaco extends Component<{
     onMount: (editor: unknown) => void;
+    onChange: (value: string) => void;
     options: unknown;
     height?: string;
     theme?: string;
@@ -46,9 +56,11 @@ vi.mock("@monaco-editor/react", () => ({
   }> {
     componentDidMount() {
       mock.options = this.props.options;
+      mock.change = this.props.onChange;
       this.props.onMount({
         getModel: () => ({
           getValue: () => mock.value,
+          getLanguageId: () => mock.language,
           getValueLength: () => mock.value.length,
           getFullModelRange: () => ({}),
           isDisposed: () => false,
@@ -94,12 +106,13 @@ const props = {
 afterEach(() => {
   cleanup();
   mock.dom = null;
+  mock.language = "json";
   vi.unstubAllGlobals();
   vi.clearAllMocks();
   mock.value = '{"n":9007199254740993}';
 });
 
-it("uses one undoable whitespace edit for format and paste; typing never formats", () => {
+it("uses one undoable whitespace edit for format and paste", () => {
   render(<RegistryJsonEditor {...props} />);
   expect(mock.edits).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Format JSON" }));
@@ -226,4 +239,45 @@ it("fills its bounded editor surface and separates the label and format toolbar"
   expect(
     toolbar?.contains(screen.getByRole("button", { name: "Format JSON" })),
   ).toBe(true);
+});
+
+it("passes actual Monaco typing through without formatting", () => {
+  render(<RegistryJsonEditor {...props} />);
+  act(() => mock.change!('{"typed":  1'));
+  expect(props.onChange).toHaveBeenLastCalledWith('{"typed":  1');
+  expect(mock.edits).not.toHaveBeenCalled();
+  expect(mock.undoStop).not.toHaveBeenCalled();
+});
+
+it("clears stale markers and suspends only this model's JSON language above the limit", () => {
+  const { rerender } = render(
+    <RegistryJsonEditor
+      {...props}
+      issues={[{ path: "", message: "old error" }]}
+    />,
+  );
+  expect(mock.markers).toHaveBeenLastCalledWith(
+    expect.anything(),
+    "registry-server",
+    expect.arrayContaining([expect.objectContaining({ message: "old error" })]),
+  );
+  const editor = screen.getByTestId("monaco");
+  rerender(
+    <RegistryJsonEditor {...props} value={" ".repeat(1024 * 1024 + 1)} />,
+  );
+  expect(mock.setLanguage).toHaveBeenLastCalledWith(
+    expect.anything(),
+    "plaintext",
+  );
+  expect(mock.markers).toHaveBeenCalledWith(
+    expect.anything(),
+    "registry-server",
+    [],
+  );
+  expect(mock.markers).toHaveBeenCalledWith(expect.anything(), "json", []);
+  rerender(<RegistryJsonEditor {...props} value="{}" />);
+  expect(mock.setLanguage).toHaveBeenLastCalledWith(expect.anything(), "json");
+  expect(screen.getByTestId("monaco")).toBe(editor);
+  expect(mock.edits).not.toHaveBeenCalled();
+  expect(mock.dispose).not.toHaveBeenCalled();
 });

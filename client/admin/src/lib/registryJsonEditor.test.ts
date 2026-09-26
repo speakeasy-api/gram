@@ -56,3 +56,14 @@ it("formats a near-8 MiB wide stored record without repeated document copies", (
   expect(formatted.startsWith('{\n  "k0": "')).toBe(true);
   expect(formatted.replace(/\s/g, "") === raw).toBe(true);
 });
+
+it("maps duplicate properties to the final server-validated value at every depth", () => {
+  const raw =
+    '{"server":{"name":"first"},"server":{"name":"second","name":"last"}}';
+  const [issue] = registryIssueOffsets(raw, [
+    { path: "/server/name", message: "invalid" },
+  ]);
+  expect(raw.slice(issue!.offset, issue!.offset + issue!.length)).toBe(
+    '"last"',
+  );
+});
