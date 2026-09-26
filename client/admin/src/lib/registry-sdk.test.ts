@@ -46,6 +46,9 @@ test("five generated operations exist and tokens/raw JSON round-trip losslessly"
 
 test("generated Create/Save preserve synthetic JSON and concurrency tokens", async () => {
   for (const raw of [
+    '{"extension":"😀"}',
+    '{"extension":"\\ud800"}',
+    '{"extension":"\\udc00"}',
     '{"server":{"name":"io.example/test","version":"1"},"extension":9007199254740993}',
     JSON.stringify({ extension: '"\\\n'.repeat(1024) }),
   ]) {
