@@ -16,6 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/auth"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
 )
 
@@ -50,6 +52,8 @@ type Page struct {
 const ListPageByteBudget = 8 << 20
 
 type Service struct {
+	auth      *auth.Auth
+	authz     *authz.Engine
 	db        *pgxpool.Pool
 	validator *Validator
 }
@@ -61,7 +65,7 @@ var ErrInvalidCursor = errors.New("invalid registry cursor")
 var ErrInvalidListOptions = errors.New("invalid registry list options")
 
 func New(db *pgxpool.Pool, v *Validator) *Service {
-	return &Service{db: db, validator: v}
+	return &Service{db: db, validator: v, auth: nil, authz: nil}
 }
 
 func (s *Service) Ready(ctx context.Context) error {

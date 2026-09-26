@@ -77,6 +77,7 @@ import (
 	platformmcpc "github.com/speakeasy-api/gram/server/gen/http/platform_mcp/client"
 	pluginsc "github.com/speakeasy-api/gram/server/gen/http/plugins/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
+	registrydiscoveryc "github.com/speakeasy-api/gram/server/gen/http/registry_discovery/client"
 	remotemcpc "github.com/speakeasy-api/gram/server/gen/http/remote_mcp/client"
 	remotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/remote_session_clients/client"
 	remotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/remote_session_issuers/client"
@@ -153,6 +154,7 @@ func UsageCommands() []string {
 		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|start-research|record-decision)",
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
+		"registry-discovery (discover-servers|discover-versions|discover-version)",
 		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
 		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
@@ -1741,6 +1743,36 @@ func ParseEndpoint(
 		mcpMetadataExportMcpMetadataApikeyTokenFlag      = mcpMetadataExportMcpMetadataFlags.String("apikey-token", "", "")
 		mcpMetadataExportMcpMetadataSessionTokenFlag     = mcpMetadataExportMcpMetadataFlags.String("session-token", "", "")
 		mcpMetadataExportMcpMetadataProjectSlugInputFlag = mcpMetadataExportMcpMetadataFlags.String("project-slug-input", "", "")
+
+		registryDiscoveryFlags = flag.NewFlagSet("registry-discovery", flag.ContinueOnError)
+
+		registryDiscoveryDiscoverServersFlags                = flag.NewFlagSet("discover-servers", flag.ExitOnError)
+		registryDiscoveryDiscoverServersIncludeDeletedFlag   = registryDiscoveryDiscoverServersFlags.String("include-deleted", "", "")
+		registryDiscoveryDiscoverServersUpdatedSinceFlag     = registryDiscoveryDiscoverServersFlags.String("updated-since", "", "")
+		registryDiscoveryDiscoverServersSearchFlag           = registryDiscoveryDiscoverServersFlags.String("search", "", "")
+		registryDiscoveryDiscoverServersVersionFlag          = registryDiscoveryDiscoverServersFlags.String("version", "", "")
+		registryDiscoveryDiscoverServersCursorFlag           = registryDiscoveryDiscoverServersFlags.String("cursor", "", "")
+		registryDiscoveryDiscoverServersLimitFlag            = registryDiscoveryDiscoverServersFlags.String("limit", "25", "")
+		registryDiscoveryDiscoverServersSessionTokenFlag     = registryDiscoveryDiscoverServersFlags.String("session-token", "", "")
+		registryDiscoveryDiscoverServersApikeyTokenFlag      = registryDiscoveryDiscoverServersFlags.String("apikey-token", "", "")
+		registryDiscoveryDiscoverServersProjectSlugInputFlag = registryDiscoveryDiscoverServersFlags.String("project-slug-input", "", "")
+
+		registryDiscoveryDiscoverVersionsFlags                = flag.NewFlagSet("discover-versions", flag.ExitOnError)
+		registryDiscoveryDiscoverVersionsServerNameFlag       = registryDiscoveryDiscoverVersionsFlags.String("server-name", "REQUIRED", "")
+		registryDiscoveryDiscoverVersionsIncludeDeletedFlag   = registryDiscoveryDiscoverVersionsFlags.String("include-deleted", "", "")
+		registryDiscoveryDiscoverVersionsUpdatedSinceFlag     = registryDiscoveryDiscoverVersionsFlags.String("updated-since", "", "")
+		registryDiscoveryDiscoverVersionsSessionTokenFlag     = registryDiscoveryDiscoverVersionsFlags.String("session-token", "", "")
+		registryDiscoveryDiscoverVersionsApikeyTokenFlag      = registryDiscoveryDiscoverVersionsFlags.String("apikey-token", "", "")
+		registryDiscoveryDiscoverVersionsProjectSlugInputFlag = registryDiscoveryDiscoverVersionsFlags.String("project-slug-input", "", "")
+
+		registryDiscoveryDiscoverVersionFlags                = flag.NewFlagSet("discover-version", flag.ExitOnError)
+		registryDiscoveryDiscoverVersionServerNameFlag       = registryDiscoveryDiscoverVersionFlags.String("server-name", "REQUIRED", "")
+		registryDiscoveryDiscoverVersionVersionFlag          = registryDiscoveryDiscoverVersionFlags.String("version", "REQUIRED", "")
+		registryDiscoveryDiscoverVersionIncludeDeletedFlag   = registryDiscoveryDiscoverVersionFlags.String("include-deleted", "", "")
+		registryDiscoveryDiscoverVersionUpdatedSinceFlag     = registryDiscoveryDiscoverVersionFlags.String("updated-since", "", "")
+		registryDiscoveryDiscoverVersionSessionTokenFlag     = registryDiscoveryDiscoverVersionFlags.String("session-token", "", "")
+		registryDiscoveryDiscoverVersionApikeyTokenFlag      = registryDiscoveryDiscoverVersionFlags.String("apikey-token", "", "")
+		registryDiscoveryDiscoverVersionProjectSlugInputFlag = registryDiscoveryDiscoverVersionFlags.String("project-slug-input", "", "")
 
 		mcpServersFlags = flag.NewFlagSet("mcp-servers", flag.ContinueOnError)
 
@@ -4928,6 +4960,11 @@ func ParseEndpoint(
 	mcpMetadataSetMcpMetadataFlags.Usage = mcpMetadataSetMcpMetadataUsage
 	mcpMetadataExportMcpMetadataFlags.Usage = mcpMetadataExportMcpMetadataUsage
 
+	registryDiscoveryFlags.Usage = registryDiscoveryUsage
+	registryDiscoveryDiscoverServersFlags.Usage = registryDiscoveryDiscoverServersUsage
+	registryDiscoveryDiscoverVersionsFlags.Usage = registryDiscoveryDiscoverVersionsUsage
+	registryDiscoveryDiscoverVersionFlags.Usage = registryDiscoveryDiscoverVersionUsage
+
 	mcpServersFlags.Usage = mcpServersUsage
 	mcpServersCreateMcpServerFlags.Usage = mcpServersCreateMcpServerUsage
 	mcpServersGetMcpServerFlags.Usage = mcpServersGetMcpServerUsage
@@ -5635,6 +5672,8 @@ func ParseEndpoint(
 			svcf = mcpEndpointsFlags
 		case "mcp-metadata":
 			svcf = mcpMetadataFlags
+		case "registry-discovery":
+			svcf = registryDiscoveryFlags
 		case "mcp-servers":
 			svcf = mcpServersFlags
 		case "meta-mcp":
@@ -6755,6 +6794,19 @@ func ParseEndpoint(
 
 			case "export-mcp-metadata":
 				epf = mcpMetadataExportMcpMetadataFlags
+
+			}
+
+		case "registry-discovery":
+			switch epn {
+			case "discover-servers":
+				epf = registryDiscoveryDiscoverServersFlags
+
+			case "discover-versions":
+				epf = registryDiscoveryDiscoverVersionsFlags
+
+			case "discover-version":
+				epf = registryDiscoveryDiscoverVersionFlags
 
 			}
 
@@ -9536,6 +9588,19 @@ func ParseEndpoint(
 			case "export-mcp-metadata":
 				endpoint = c.ExportMcpMetadata()
 				data, err = mcpmetadatac.BuildExportMcpMetadataPayload(*mcpMetadataExportMcpMetadataBodyFlag, *mcpMetadataExportMcpMetadataApikeyTokenFlag, *mcpMetadataExportMcpMetadataSessionTokenFlag, *mcpMetadataExportMcpMetadataProjectSlugInputFlag)
+			}
+		case "registry-discovery":
+			c := registrydiscoveryc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "discover-servers":
+				endpoint = c.DiscoverServers()
+				data, err = registrydiscoveryc.BuildDiscoverServersPayload(*registryDiscoveryDiscoverServersIncludeDeletedFlag, *registryDiscoveryDiscoverServersUpdatedSinceFlag, *registryDiscoveryDiscoverServersSearchFlag, *registryDiscoveryDiscoverServersVersionFlag, *registryDiscoveryDiscoverServersCursorFlag, *registryDiscoveryDiscoverServersLimitFlag, *registryDiscoveryDiscoverServersSessionTokenFlag, *registryDiscoveryDiscoverServersApikeyTokenFlag, *registryDiscoveryDiscoverServersProjectSlugInputFlag)
+			case "discover-versions":
+				endpoint = c.DiscoverVersions()
+				data, err = registrydiscoveryc.BuildDiscoverVersionsPayload(*registryDiscoveryDiscoverVersionsServerNameFlag, *registryDiscoveryDiscoverVersionsIncludeDeletedFlag, *registryDiscoveryDiscoverVersionsUpdatedSinceFlag, *registryDiscoveryDiscoverVersionsSessionTokenFlag, *registryDiscoveryDiscoverVersionsApikeyTokenFlag, *registryDiscoveryDiscoverVersionsProjectSlugInputFlag)
+			case "discover-version":
+				endpoint = c.DiscoverVersion()
+				data, err = registrydiscoveryc.BuildDiscoverVersionPayload(*registryDiscoveryDiscoverVersionServerNameFlag, *registryDiscoveryDiscoverVersionVersionFlag, *registryDiscoveryDiscoverVersionIncludeDeletedFlag, *registryDiscoveryDiscoverVersionUpdatedSinceFlag, *registryDiscoveryDiscoverVersionSessionTokenFlag, *registryDiscoveryDiscoverVersionApikeyTokenFlag, *registryDiscoveryDiscoverVersionProjectSlugInputFlag)
 			}
 		case "mcp-servers":
 			c := mcpserversc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -18220,6 +18285,111 @@ func mcpMetadataExportMcpMetadataUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-metadata export-mcp-metadata --body '{\n      \"mcp_slug\": \"aaa\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+// registryDiscoveryUsage displays the usage of the registry-discovery command
+// and its subcommands.
+func registryDiscoveryUsage() {
+	fmt.Fprintln(os.Stderr, `Authenticated discovery-only preview. Current records only: no version history, incremental synchronization or mirror guarantees. Uses Gram credentials, not generic-client OAuth. Discovery errors use the pinned standard error envelope; authorization uses Gram security.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] registry-discovery COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    discover-servers: DiscoverServers implements discoverServers.`)
+	fmt.Fprintln(os.Stderr, `    discover-versions: DiscoverVersions implements discoverVersions.`)
+	fmt.Fprintln(os.Stderr, `    discover-version: DiscoverVersion implements discoverVersion.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s registry-discovery COMMAND --help\n", os.Args[0])
+}
+func registryDiscoveryDiscoverServersUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] registry-discovery discover-servers", os.Args[0])
+	fmt.Fprint(os.Stderr, " -include-deleted BOOL")
+	fmt.Fprint(os.Stderr, " -updated-since STRING")
+	fmt.Fprint(os.Stderr, " -search STRING")
+	fmt.Fprint(os.Stderr, " -version STRING")
+	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -limit INT32")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `DiscoverServers implements discoverServers.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -include-deleted BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -updated-since STRING: `)
+	fmt.Fprintln(os.Stderr, `    -search STRING: `)
+	fmt.Fprintln(os.Stderr, `    -version STRING: `)
+	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT32: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "registry-discovery discover-servers --include-deleted false --updated-since \"abc123\" --search \"abc123\" --version \"abc123\" --cursor \"aaa\" --limit 2 --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func registryDiscoveryDiscoverVersionsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] registry-discovery discover-versions", os.Args[0])
+	fmt.Fprint(os.Stderr, " -server-name STRING")
+	fmt.Fprint(os.Stderr, " -include-deleted BOOL")
+	fmt.Fprint(os.Stderr, " -updated-since STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `DiscoverVersions implements discoverVersions.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -server-name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-deleted BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -updated-since STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "registry-discovery discover-versions --server-name \"abc123\" --include-deleted false --updated-since \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func registryDiscoveryDiscoverVersionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] registry-discovery discover-version", os.Args[0])
+	fmt.Fprint(os.Stderr, " -server-name STRING")
+	fmt.Fprint(os.Stderr, " -version STRING")
+	fmt.Fprint(os.Stderr, " -include-deleted BOOL")
+	fmt.Fprint(os.Stderr, " -updated-since STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `DiscoverVersion implements discoverVersion.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -server-name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -version STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-deleted BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -updated-since STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "registry-discovery discover-version --server-name \"abc123\" --version \"abc123\" --include-deleted false --updated-since \"abc123\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // mcpServersUsage displays the usage of the mcp-servers command and its

@@ -56,40 +56,41 @@ import (
 )
 
 type platformMCPConfig struct {
-	Logger                  *slog.Logger
-	MeterProvider           metric.MeterProvider
-	TracerProvider          trace.TracerProvider
-	Mux                     goahttp.Muxer
-	DB                      *pgxpool.Pool
-	Redis                   *redis.Client
-	ServerURL               *url.URL
-	DashboardURL            *url.URL
-	Environment             string
-	JWTSigningKey           string
-	ProductFeatures         *productfeatures.Client
-	FeatureFlags            feature.Provider
-	DistributionAdmission   *admission.Guard
-	Authz                   *authz.Engine
-	Encryption              *encryption.Client
-	Identity                *identity.Resolver
-	Sessions                *sessions.Manager
-	Registry                *externalmcp.RegistryClient
-	Catalog                 *externalmcp.CatalogService
-	GuardianPolicy          *guardian.Policy
-	RemoteChallengeManager  *remotesessions.ChallengeManager
-	IdentityCommitter       *remotesessions.IdentityCommitter
-	AuditLogger             *audit.Logger
-	AccessRoles             access.RoleProvider
-	PluginPublisher         *plugins.Service
-	PluginPublishSignaler   plugins.PluginPublishSignaler
-	NetworkAccessAdmission  networkaccess.EligibilityChecker
-	PublicationRequests     plugins.PublicationRequests
-	TemporalEnv             *tenv.Environment
-	Skills                  platformmcp.SkillsManagement
-	RiskPolicyApprovals     policycore.ApprovalCoordinator
-	RiskPolicySignaler      policycore.PolicySignaler
-	RiskPolicyCache         policycore.PolicyCacheInvalidator
-	RiskExclusionReconciler risk.RiskExclusionReconciler
+	Logger                   *slog.Logger
+	MeterProvider            metric.MeterProvider
+	TracerProvider           trace.TracerProvider
+	Mux                      goahttp.Muxer
+	DB                       *pgxpool.Pool
+	Redis                    *redis.Client
+	ServerURL                *url.URL
+	DashboardURL             *url.URL
+	Environment              string
+	JWTSigningKey            string
+	ProductFeatures          *productfeatures.Client
+	FeatureFlags             feature.Provider
+	DistributionAdmission    *admission.Guard
+	Authz                    *authz.Engine
+	Encryption               *encryption.Client
+	Identity                 *identity.Resolver
+	Sessions                 *sessions.Manager
+	Registry                 *externalmcp.RegistryClient
+	Catalog                  *externalmcp.CatalogService
+	GuardianPolicy           *guardian.Policy
+	RemoteChallengeManager   *remotesessions.ChallengeManager
+	IdentityCommitter        *remotesessions.IdentityCommitter
+	AuditLogger              *audit.Logger
+	AccessRoles              access.RoleProvider
+	PluginPublisher          *plugins.Service
+	PluginPublishSignaler    plugins.PluginPublishSignaler
+	NetworkAccessAdmission   networkaccess.EligibilityChecker
+	PublicationRequests      plugins.PublicationRequests
+	TemporalEnv              *tenv.Environment
+	Skills                   platformmcp.SkillsManagement
+	RiskPolicyApprovals      policycore.ApprovalCoordinator
+	RiskPolicySignaler       policycore.PolicySignaler
+	RiskPolicyCache          policycore.PolicyCacheInvalidator
+	RiskExclusionReconciler  risk.RiskExclusionReconciler
+	RegistryDiscoveryEnabled bool
 	// RiskAnalysisDescriber reports the run state of a project's Watchdog
 	// analysis. Nil keeps get_risk_analysis_status visible as a stub rather
 	// than reporting a state nothing observed.
@@ -163,6 +164,9 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	fixtureConfig := config.LocalFixture.Fixture
 	if config.Registry == nil || fixtureConfig == nil {
 		return AssistantSurface{}, errors.New("local Platform MCP fixture configuration is incomplete")
+	}
+	if config.RegistryDiscoveryEnabled {
+		fixtureConfig.SetRegistryPrefix("/platform-mcp/local-fixture/registry")
 	}
 	if err := config.Registry.ClearCache(ctx, fixtureConfig.Registry().URL); err != nil {
 		return AssistantSurface{}, fmt.Errorf("clear local Platform MCP fixture registry cache: %w", err)
@@ -375,8 +379,16 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	distributions := newPlatformMCPDistributionService(config, pluginInventory).
 		WithDistributionAdmission(config.DistributionAdmission, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))
 
+	// Keep the local fixture on its original paths unless discovery owns them.
+	registryPrefix := ""
+	if config.RegistryDiscoveryEnabled {
+		registryPrefix = "/platform-mcp/local-fixture/registry"
+	}
 	registryHandler := localfixture.NewRegistryHTTP(fixtureConfig).Handler()
-	config.Mux.Handle(http.MethodGet, "/v0.1/servers", registryHandler.ServeHTTP)
+	if registryPrefix != "" {
+		registryHandler = http.StripPrefix(registryPrefix, registryHandler)
+	}
+	config.Mux.Handle(http.MethodGet, registryPrefix+"/v0.1/servers", registryHandler.ServeHTTP)
 	config.Mux.Handle(http.MethodGet, fixtureConfig.RegistryDetailsPath(), registryHandler.ServeHTTP)
 	config.Mux.Handle(http.MethodGet, "/.well-known/oauth-authorization-server/platform-mcp/local-fixture", fixtureOAuth.Handler().ServeHTTP)
 	config.Mux.Handle(http.MethodGet, "/platform-mcp/local-fixture/authorize", fixtureOAuth.Handler().ServeHTTP)

@@ -50,6 +50,127 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (McpRe
 	return i, err
 }
 
+const discoverEntries = `-- name: DiscoverEntries :many
+WITH candidates AS MATERIALIZED (
+    SELECT
+        id,
+        COALESCE(data #>> '{server,name}', '')::text AS discovery_name
+    FROM mcp_registry_entries
+    WHERE published
+    -- Permanently schema-invalid names cannot be cursor keys.
+    AND jsonb_typeof(data #> '{server,name}') = 'string'
+    AND octet_length(data #>> '{server,name}') BETWEEN 3 AND 200
+    AND (data #>> '{server,name}') COLLATE "C" ~ '^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$'
+    AND ($2::boolean OR COALESCE(data #>> '{_meta,io.modelcontextprotocol.registry/official,status}', '') <> 'deleted')
+    AND strpos(lower(data #>> '{server,name}'), lower($3::text)) > 0
+    AND ($4::text IN ('', 'latest') OR data #>> '{server,version}' = $4::text)
+    AND (data #>> '{server,name}') COLLATE "C" > $5::text COLLATE "C"
+    ORDER BY (data #>> '{server,name}') COLLATE "C"
+    LIMIT $6
+), sized AS MATERIALIZED (
+    -- Measure only the bounded candidate set.
+    SELECT
+        c.id, c.discovery_name,
+        octet_length(e.data::text)::bigint AS data_bytes
+    FROM candidates c
+    JOIN mcp_registry_entries e ON e.id = c.id
+), budgeted AS (
+    -- Accumulate bytes in cursor order before fetching page bodies.
+    SELECT
+        id, discovery_name, data_bytes,
+        (sum(data_bytes) OVER (ORDER BY discovery_name COLLATE "C"))::bigint AS page_bytes
+    FROM sized
+)
+SELECT
+    b.discovery_name,
+    b.data_bytes,
+    b.page_bytes,
+    CASE
+        WHEN b.page_bytes <= $1::bigint
+        THEN (SELECT e.data FROM mcp_registry_entries e WHERE e.id = b.id)
+        ELSE NULL::jsonb
+    END AS data
+FROM budgeted b
+ORDER BY b.discovery_name COLLATE "C"
+`
+
+type DiscoverEntriesParams struct {
+	ByteBudget     int64
+	IncludeDeleted bool
+	Search         string
+	Version        string
+	AfterName      string
+	PageLimit      int32
+}
+
+type DiscoverEntriesRow struct {
+	DiscoveryName string
+	DataBytes     int64
+	PageBytes     int64
+	Data          []byte
+}
+
+// Limit candidate metadata before measuring stored bodies.
+// Fetch full bodies only when admitted by the byte budget.
+func (q *Queries) DiscoverEntries(ctx context.Context, arg DiscoverEntriesParams) ([]DiscoverEntriesRow, error) {
+	rows, err := q.db.Query(ctx, discoverEntries,
+		arg.ByteBudget,
+		arg.IncludeDeleted,
+		arg.Search,
+		arg.Version,
+		arg.AfterName,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DiscoverEntriesRow
+	for rows.Next() {
+		var i DiscoverEntriesRow
+		if err := rows.Scan(
+			&i.DiscoveryName,
+			&i.DataBytes,
+			&i.PageBytes,
+			&i.Data,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const discoverVersion = `-- name: DiscoverVersion :one
+SELECT id, data, published, created_at, updated_at FROM mcp_registry_entries
+WHERE published
+AND data #>> '{server,name}' = $1::text
+AND ($2::boolean OR COALESCE(data #>> '{_meta,io.modelcontextprotocol.registry/official,status}', '') <> 'deleted')
+AND ($3::text = 'latest' OR data #>> '{server,version}' = $3::text)
+`
+
+type DiscoverVersionParams struct {
+	Name           string
+	IncludeDeleted bool
+	Version        string
+}
+
+func (q *Queries) DiscoverVersion(ctx context.Context, arg DiscoverVersionParams) (McpRegistryEntry, error) {
+	row := q.db.QueryRow(ctx, discoverVersion, arg.Name, arg.IncludeDeleted, arg.Version)
+	var i McpRegistryEntry
+	err := row.Scan(
+		&i.ID,
+		&i.Data,
+		&i.Published,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getEntry = `-- name: GetEntry :one
 SELECT id, data, published, created_at, updated_at
 FROM mcp_registry_entries

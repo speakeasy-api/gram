@@ -78044,6 +78044,373 @@ paths:
             x-speakeasy-name-override: withdrawSubject
             x-speakeasy-react-hook:
                 name: WithdrawWorkloadSubject
+    /v0.1/servers:
+        get:
+            operationId: discoverServers
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: include_deleted
+                  schema:
+                    default: false
+                    type: boolean
+                - allowEmptyValue: true
+                  description: 'Unsupported: any supplied value returns 400'
+                  in: query
+                  name: updated_since
+                  schema:
+                    description: 'Unsupported: any supplied value returns 400'
+                    type: string
+                - allowEmptyValue: true
+                  description: Search query; at most 1024 UTF-8 bytes, enforced by the server (not a character count).
+                  in: query
+                  name: search
+                  schema:
+                    description: Search query; at most 1024 UTF-8 bytes, enforced by the server (not a character count).
+                    type: string
+                - allowEmptyValue: true
+                  description: Version filter; at most 1024 UTF-8 bytes, enforced by the server (not a character count).
+                  in: query
+                  name: version
+                  schema:
+                    description: Version filter; at most 1024 UTF-8 bytes, enforced by the server (not a character count).
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: cursor
+                  schema:
+                    maxLength: 8192
+                    type: string
+                - allowEmptyValue: true
+                  in: query
+                  name: limit
+                  schema:
+                    default: 25
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoveryPage'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: discoverServers registryDiscovery
+            tags:
+                - registryDiscovery
+            x-speakeasy-name-override: discoverServers
+    /v0.1/servers/{serverName}/versions:
+        get:
+            operationId: discoverVersions
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: include_deleted
+                  schema:
+                    default: false
+                    type: boolean
+                - allowEmptyValue: true
+                  description: 'Unsupported: any supplied value returns 400'
+                  in: query
+                  name: updated_since
+                  schema:
+                    description: 'Unsupported: any supplied value returns 400'
+                    type: string
+                - in: path
+                  name: serverName
+                  required: true
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoveryPage'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: discoverVersions registryDiscovery
+            tags:
+                - registryDiscovery
+            x-speakeasy-name-override: discoverVersions
+    /v0.1/servers/{serverName}/versions/{version}:
+        get:
+            operationId: discoverVersion
+            parameters:
+                - allowEmptyValue: true
+                  in: query
+                  name: include_deleted
+                  schema:
+                    default: false
+                    type: boolean
+                - allowEmptyValue: true
+                  description: 'Unsupported: any supplied value returns 400'
+                  in: query
+                  name: updated_since
+                  schema:
+                    description: 'Unsupported: any supplied value returns 400'
+                    type: string
+                - in: path
+                  name: serverName
+                  required: true
+                  schema:
+                    type: string
+                - in: path
+                  name: version
+                  required: true
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema: {}
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegistryDiscoverydiscoverServersResponseBody'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: discoverVersion registryDiscovery
+            tags:
+                - registryDiscovery
+            x-speakeasy-name-override: discoverVersion
 components:
     schemas:
         AIDetection:
@@ -97533,6 +97900,45 @@ components:
                 - name
                 - issuer
                 - jwks_uri
+        RegistryDiscoveryError:
+            type: object
+            properties:
+                error:
+                    type: string
+                name:
+                    type: string
+            required:
+                - name
+                - error
+        RegistryDiscoveryMetadata:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    format: int64
+                nextCursor:
+                    type: string
+            required:
+                - count
+        RegistryDiscoveryPage:
+            type: object
+            properties:
+                metadata:
+                    $ref: '#/components/schemas/RegistryDiscoveryMetadata'
+                servers:
+                    type: array
+                    items: {}
+                    description: Complete registry record envelopes, including server and _meta extensions
+            required:
+                - servers
+                - metadata
+        RegistryDiscoverydiscoverServersResponseBody:
+            type: object
+            properties:
+                error:
+                    type: string
+            required:
+                - error
         RemoteMcpServer:
             type: object
             properties:
@@ -110638,6 +111044,8 @@ tags:
       description: Managing MCP endpoints, the url-friendly slug identifiers that address MCP servers and meta MCP servers.
     - name: mcpMetadata
       description: Manages metadata for the MCP install page shown to users.
+    - name: registryDiscovery
+      description: 'Authenticated discovery-only preview. Current records only: no version history, incremental synchronization or mirror guarantees. Uses Gram credentials, not generic-client OAuth. Discovery errors use the pinned standard error envelope; authorization uses Gram security.'
     - name: mcpServers
       description: Managing MCP servers, which configure authentication, environment, and backend selection for an MCP server.
     - name: metaMcp

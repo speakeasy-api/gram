@@ -122,3 +122,54 @@ SELECT octet_length(sqlc.arg(data)::jsonb::text);
 
 -- name: CountRegistryEntries :one
 SELECT count(*) FROM mcp_registry_entries;
+-- name: DiscoverEntries :many
+-- Limit candidate metadata before measuring stored bodies.
+WITH candidates AS MATERIALIZED (
+    SELECT
+        id,
+        COALESCE(data #>> '{server,name}', '')::text AS discovery_name
+    FROM mcp_registry_entries
+    WHERE published
+    -- Permanently schema-invalid names cannot be cursor keys.
+    AND jsonb_typeof(data #> '{server,name}') = 'string'
+    AND octet_length(data #>> '{server,name}') BETWEEN 3 AND 200
+    AND (data #>> '{server,name}') COLLATE "C" ~ '^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$'
+    AND (sqlc.arg(include_deleted)::boolean OR COALESCE(data #>> '{_meta,io.modelcontextprotocol.registry/official,status}', '') <> 'deleted')
+    AND strpos(lower(data #>> '{server,name}'), lower(sqlc.arg(search)::text)) > 0
+    AND (sqlc.arg(version)::text IN ('', 'latest') OR data #>> '{server,version}' = sqlc.arg(version)::text)
+    AND (data #>> '{server,name}') COLLATE "C" > sqlc.arg(after_name)::text COLLATE "C"
+    ORDER BY (data #>> '{server,name}') COLLATE "C"
+    LIMIT sqlc.arg(page_limit)
+), sized AS MATERIALIZED (
+    -- Measure only the bounded candidate set.
+    SELECT
+        c.*,
+        octet_length(e.data::text)::bigint AS data_bytes
+    FROM candidates c
+    JOIN mcp_registry_entries e ON e.id = c.id
+), budgeted AS (
+    -- Accumulate bytes in cursor order before fetching page bodies.
+    SELECT
+        *,
+        (sum(data_bytes) OVER (ORDER BY discovery_name COLLATE "C"))::bigint AS page_bytes
+    FROM sized
+)
+-- Fetch full bodies only when admitted by the byte budget.
+SELECT
+    b.discovery_name,
+    b.data_bytes,
+    b.page_bytes,
+    CASE
+        WHEN b.page_bytes <= sqlc.arg(byte_budget)::bigint
+        THEN (SELECT e.data FROM mcp_registry_entries e WHERE e.id = b.id)
+        ELSE NULL::jsonb
+    END AS data
+FROM budgeted b
+ORDER BY b.discovery_name COLLATE "C";
+
+-- name: DiscoverVersion :one
+SELECT * FROM mcp_registry_entries
+WHERE published
+AND data #>> '{server,name}' = sqlc.arg(name)::text
+AND (sqlc.arg(include_deleted)::boolean OR COALESCE(data #>> '{_meta,io.modelcontextprotocol.registry/official,status}', '') <> 'deleted')
+AND (sqlc.arg(version)::text = 'latest' OR data #>> '{server,version}' = sqlc.arg(version)::text);
