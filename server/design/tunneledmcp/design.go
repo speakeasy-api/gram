@@ -209,7 +209,7 @@ var TunneledMcpCreateServerForm = Type("CreateTunneledMcpServerForm", func() {
 	Description("Form for creating a new tunneled MCP server source")
 
 	Attribute("name", String, "Human-readable display name for the tunneled MCP server")
-	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Omit unless the identifier is already known; it is usually recorded later, once the tunnel is up.")
+	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>. Omit unless the identifier is already known; it is usually recorded later, once the tunnel is up.")
 	Required("name")
 })
 
@@ -223,7 +223,7 @@ var TunneledMcpUpdateServerForm = Type("UpdateTunneledMcpServerForm", func() {
 	})
 	Attribute("name", String, "Human-readable display name for the tunneled MCP server. Omit to leave unchanged.")
 	Attribute("allow_public", Boolean, "Consent to serve this source through a public, anonymous MCP endpoint. Disabling revokes all live anonymous sessions. Omit to leave unchanged.")
-	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Pass an empty string to clear. Omit to leave unchanged.")
+	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>. Pass an empty string to clear. Omit to leave unchanged.")
 	Attribute("public_request_rate_per_second", Int, "Sustained anonymous MCP requests per second admitted when this source is served through a public MCP endpoint. Applies to every MCP interaction; one bucket is shared by every caller. Omit to leave unchanged, 0 to clear back to the deployment default.", func() {
 		Minimum(0)
 		Maximum(100000)
@@ -299,7 +299,7 @@ var TunneledMcpServer = Type("TunneledMcpServer", func() {
 	Attribute("connection_status", TunneledMcpConnectionStatus, "Derived connection status")
 	Attribute("allow_public", Boolean, "Whether the owner has consented to serving this source through a public, anonymous MCP endpoint")
 	Attribute("agent_version", String, "Most recent agent version reported by the tunnel")
-	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram")
+	Attribute("resource_identifier", String, "RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>")
 	Attribute("public_request_rate_per_second", Int, "Sustained anonymous MCP requests per second admitted for this tunnel when it is served through a public MCP endpoint. Applies to every MCP interaction. Unset means the deployment-wide default applies.")
 	Attribute("public_request_burst", Int, "Token-bucket capacity for public_request_rate_per_second: how many requests are admitted back-to-back from an idle tunnel before admission drops to the sustained rate. Unset means twice the sustained rate.")
 	Attribute("effective_public_request_rate_per_second", Int, "The sustained anonymous MCP request rate actually applied to this tunnel: the stored value, or the deployment default when no rate is stored.")

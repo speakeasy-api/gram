@@ -21,7 +21,7 @@ import (
 func TestPublicHandlerDoesNotForward(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret"})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
@@ -50,7 +50,7 @@ func newForwardTestGateway(t *testing.T, cfg Config) *Gateway {
 func TestNewRejectsMissingForwardToken(t *testing.T) {
 	t.Parallel()
 
-	_, err := New(Config{}, NewStaticKeyStore(map[string]string{}), route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	_, err := New(Config{AuthzPublicKeys: ""}, NewStaticKeyStore(map[string]string{}), route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 	require.ErrorIs(t, err, errMissingForwardToken)
 }
@@ -58,7 +58,7 @@ func TestNewRejectsMissingForwardToken(t *testing.T) {
 func TestForwardHandlerRejectsMissingOrWrongToken(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret"})
 
 	for _, token := range []string{"", "wrong"} {
 		rec := httptest.NewRecorder()
@@ -77,7 +77,7 @@ func TestForwardHandlerRejectsMissingOrWrongToken(t *testing.T) {
 func TestForwardHandlerAcceptsValidTokenAndStripsIt(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret"})
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/mcp/initialize", strings.NewReader(`{"jsonrpc":"2.0"}`))
@@ -103,7 +103,7 @@ func TestStripUpstreamTunnelError(t *testing.T) {
 func TestForwardHandlerRejectsMissingForwardTokenConfig(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{ForwardToken: "configured"})
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "configured"})
 	gw.cfg.ForwardToken = ""
 
 	rec := httptest.NewRecorder()
@@ -213,7 +213,7 @@ func TestRegistryBeginForwardDistinguishesBusyFromNoSession(t *testing.T) {
 func TestForwardHandlerReportsTunnelBusyAtCap(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret", MaxStreamsPerTunnel: 1})
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret", MaxStreamsPerTunnel: 1})
 	session := newYamuxSession(t)
 	remove := gw.reg.add("tunnel-1", "session-a", "", session, http.NotFoundHandler(), route.Connection{GatewaySessionID: "session-a", Metadata: map[string]string{}})
 	t.Cleanup(remove)
@@ -253,7 +253,7 @@ func TestConnectProbeDoesNotMarkConnected(t *testing.T) {
 	t.Parallel()
 
 	keys := &recordingKeyStore{StaticKeyStore: NewStaticKeyStore(map[string]string{"tunnel-1": "gram_tunnel_testkey"}), markConnectedCalls: 0}
-	gw, err := New(Config{ForwardToken: "s3cret"}, keys, route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	gw, err := New(Config{AuthzPublicKeys: "", ForwardToken: "s3cret"}, keys, route.NewRouteTable(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -336,7 +336,7 @@ func TestRegistryBeginForwardExactSessionAtCapIsBusy(t *testing.T) {
 func TestForwardHandlerReportsAgentSessionAndStripsExactHeader(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret"})
 	keys := NewStaticKeyStore(map[string]string{"tunnel-1": "gram_tunnel_active"})
 	gw.keys = keys
 	session := newYamuxSession(t)
@@ -368,7 +368,7 @@ func TestForwardHandlerReportsAgentSessionAndStripsExactHeader(t *testing.T) {
 func TestForwardHandlerRejectsSensitiveRequestAfterTunnelRevocation(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret"})
 	keys := NewStaticKeyStore(map[string]string{"tunnel-1": "gram_tunnel_revoked"})
 	gw.keys = keys
 	session := newYamuxSession(t)
@@ -397,7 +397,7 @@ func TestForwardHandlerRejectsSensitiveRequestAfterTunnelRevocation(t *testing.T
 func TestForwardHandlerSkipsRotatedKeySessionForSensitiveRequest(t *testing.T) {
 	t.Parallel()
 
-	gw := newForwardTestGateway(t, Config{ForwardToken: "s3cret"})
+	gw := newForwardTestGateway(t, Config{AuthzPublicKeys: "", ForwardToken: "s3cret"})
 	keys := NewStaticKeyStore(map[string]string{"tunnel-1": "gram_tunnel_current"})
 	gw.keys = keys
 	staleSession := newYamuxSession(t)

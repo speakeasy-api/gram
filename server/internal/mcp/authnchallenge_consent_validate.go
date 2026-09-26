@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -197,6 +198,14 @@ func (s *Service) resolveValidationTarget(
 		return ctx, none, fmt.Errorf("stamp consent subject context: %w", err)
 	}
 
+	// Discovery identity belongs to the user who authenticated this challenge.
+	ctx = mcpidentity.WithoutIdentity(ctx)
+	if subject.Kind == urn.SessionSubjectKindUser &&
+		challengeState.AuthorizerImpersonated != nil && !*challengeState.AuthorizerImpersonated &&
+		challengeState.AuthorizerUserID != "" && subject.ID == challengeState.AuthorizerUserID &&
+		challengeState.Federation == nil && !challengeState.CreatedAt.IsZero() && !challengeState.CreatedAt.After(time.Now().Add(time.Minute)) {
+		ctx = s.identityValidator.StampConsentDiscovery(ctx, subject.ID, challengeState.CreatedAt.Add(challengeState.TTL()))
+	}
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
 		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, sessionID, subject)
@@ -371,7 +380,7 @@ func (s *Service) standaloneValidationTarget(
 	// One state-derived affinity key pins the handshake and its close to a single gateway.
 	affinity := tunnelrouting.HashedClientAffinityKey("consent-validate", challengeState.ID)
 	return ctx, validationTarget{name: name, build: probeProxyBuilder(func(ctx context.Context) (*proxy.Proxy, error) {
-		p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, endpoint.ProjectID, endpoint.OrganizationID, &server, token, "", nil, remotemcp.WithoutToolsCallIdentityCoverage())
+		p, berr := s.tunnelManager.buildProxy(ctx, affinity, logger, endpoint.ProjectID, endpoint.OrganizationID, &server, endpoint.UpstreamResource, token, "", nil, remotemcp.WithoutToolsCallIdentityCoverage())
 		if berr != nil {
 			return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 		}

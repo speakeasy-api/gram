@@ -2,16 +2,14 @@ package jsonwebkeysets
 
 import (
 	"context"
-	"crypto"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
 
-	jose "github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/internal/jwk"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
@@ -186,30 +184,17 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 
 // BuildPublishedJWK returns the RFC 7638 thumbprint kid and the JWK document.
 func BuildPublishedJWK(public *gcpkms.PublicKey) (string, []byte, error) {
-	jwk := jose.JSONWebKey{
-		Key:                         public.Key,
-		KeyID:                       "",
-		Algorithm:                   string(public.Algorithm),
-		Use:                         "sig",
-		Certificates:                nil,
-		CertificatesURL:             nil,
-		CertificateThumbprintSHA1:   nil,
-		CertificateThumbprintSHA256: nil,
-	}
-
-	thumbprint, err := jwk.Thumbprint(crypto.SHA256)
+	key, err := jwk.NewPublicKey(public.Key, public.Algorithm)
 	if err != nil {
-		return "", nil, fmt.Errorf("derive key thumbprint: %w", err)
+		return "", nil, fmt.Errorf("build public jwk: %w", err)
 	}
 
-	jwk.KeyID = base64.RawURLEncoding.EncodeToString(thumbprint)
-
-	doc, err := jwk.MarshalJSON()
+	doc, err := key.MarshalJSON()
 	if err != nil {
 		return "", nil, fmt.Errorf("encode public jwk: %w", err)
 	}
 
-	return jwk.KeyID, doc, nil
+	return key.KeyID, doc, nil
 }
 
 // mintPublicKeyError maps a GetPublicKey failure onto an error code by the same

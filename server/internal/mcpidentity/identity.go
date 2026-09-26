@@ -12,6 +12,7 @@ package mcpidentity
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -27,6 +28,10 @@ const (
 	// is a concrete user. This is the only kind that identifies an
 	// authoritative acting user.
 	KindUserSession Kind = "user_session"
+
+	// KindConsentDiscovery identifies a human authenticated into a live consent
+	// challenge. It proves identity for discovery only, never runtime tool access.
+	KindConsentDiscovery Kind = "consent_discovery"
 
 	// KindAgent marks a validated agent-subject session. Its owner and immutable
 	// authorizer are attribution, not authoritative acting users.
@@ -60,20 +65,29 @@ const (
 // construct or mutate it; only a ValidatorBoundary can stamp one after its
 // owning authentication strategy accepts a credential.
 type Identity struct {
-	kind    Kind
-	userID  string
-	agentID string
+	kind      Kind
+	userID    string
+	agentID   string
+	apiKeyID  string
+	expiresAt time.Time
 }
 
 // Kind returns the validated credential class.
 func (i Identity) Kind() Kind { return i.kind }
 
-// UserID returns the concrete Gram user ID for KindUserSession and is empty
-// for every other credential class.
+// UserID returns the concrete Gram user ID for KindUserSession or
+// KindConsentDiscovery. Other classes return empty. Check Kind before using
+// a user ID for runtime enforcement: consent proves discovery identity only.
 func (i Identity) UserID() string { return i.userID }
 
 // AgentID returns the authenticated agent ID, never its owner or authorizer.
 func (i Identity) AgentID() string { return i.agentID }
+
+// APIKeyID returns the authenticated key ID, never its creator.
+func (i Identity) APIKeyID() string { return i.apiKeyID }
+
+// ExpiresAt returns the verified session deadline, or zero for a live key.
+func (i Identity) ExpiresAt() time.Time { return i.expiresAt }
 
 // ValidatorBoundary is the capability held by the MCP credential validators.
 // It deliberately exposes only bounded, strategy-specific stamps: there is no
@@ -94,34 +108,36 @@ func (b *ValidatorBoundary) withIdentity(ctx context.Context, kind Kind, userID 
 	if b == nil || !b.initialized {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: kind, userID: userID, agentID: ""})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: kind, userID: userID, agentID: "", apiKeyID: "", expiresAt: time.Time{}})
 }
 
 // StampValidatedSession records provenance from an opaque session proof returned
 // by sessiontokens.Signer.ValidateBearer. Zero or malformed proofs leave the
 // context unstamped.
 func (b *ValidatorBoundary) StampValidatedSession(ctx context.Context, session sessiontokens.ValidatedSession) context.Context {
-	if !session.Valid() {
+	if b == nil || !b.initialized || !session.Valid() {
 		return ctx
 	}
 	subject := session.Subject()
+	identity := Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: session.ExpiresAt()}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
 		if subject.ID == "" {
 			return ctx
 		}
-		return b.withIdentity(ctx, KindUserSession, subject.ID)
+		identity.kind, identity.userID = KindUserSession, subject.ID
 	case urn.SessionSubjectKindAPIKey:
-		return b.withIdentity(ctx, KindAPIKey, "")
+		identity.kind, identity.apiKeyID = KindAPIKey, subject.ID
 	case urn.SessionSubjectKindAgent:
-		return b.stampAgentID(ctx, subject.ID)
+		identity.kind, identity.agentID = KindAgent, subject.ID
 	case urn.SessionSubjectKindAnonymous:
-		return b.withIdentity(ctx, KindAnonymous, "")
+		identity.kind = KindAnonymous
 	case urn.SessionSubjectKindWorkload:
-		return b.withIdentity(ctx, KindWorkload, "")
+		identity.kind = KindWorkload
 	default:
 		return ctx
 	}
+	return context.WithValue(ctx, contextKey{}, identity)
 }
 
 // StampAssistant records an accepted assistant-runtime credential.
@@ -130,8 +146,11 @@ func (b *ValidatorBoundary) StampAssistant(ctx context.Context) context.Context 
 }
 
 // StampAPIKey records an accepted Gram API key.
-func (b *ValidatorBoundary) StampAPIKey(ctx context.Context) context.Context {
-	return b.withIdentity(ctx, KindAPIKey, "")
+func (b *ValidatorBoundary) StampAPIKey(ctx context.Context, keyID string) context.Context {
+	if b == nil || !b.initialized {
+		return ctx
+	}
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAPIKey, userID: "", agentID: "", apiKeyID: keyID, expiresAt: time.Time{}})
 }
 
 // StampChatSession records an accepted embedded-chat session token.
@@ -157,5 +176,21 @@ func (b *ValidatorBoundary) stampAgentID(ctx context.Context, agentID string) co
 	if b == nil || !b.initialized {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, agentID: agentID, userID: ""})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, agentID: agentID, userID: "", apiKeyID: "", expiresAt: time.Time{}})
+}
+
+// StampConsentDiscovery records a user after the consent owner validates a live,
+// endpoint-bound challenge resolved by the identity provider. It establishes
+// identity for discovery only and must never authorize tool execution.
+func (b *ValidatorBoundary) StampConsentDiscovery(ctx context.Context, userID string, expiresAt time.Time) context.Context {
+	if b == nil || !b.initialized || userID == "" || expiresAt.IsZero() || !expiresAt.After(time.Now()) {
+		return ctx
+	}
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindConsentDiscovery, userID: userID, agentID: "", apiKeyID: "", expiresAt: expiresAt})
+}
+
+// WithoutIdentity clears inherited provenance on entry to another authentication
+// surface. It leaves the context without an identity.
+func WithoutIdentity(ctx context.Context) context.Context {
+	return context.WithValue(ctx, contextKey{}, Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: time.Time{}})
 }

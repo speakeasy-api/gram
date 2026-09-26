@@ -11,6 +11,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -19,9 +21,10 @@ import (
 )
 
 type tunnelManager struct {
-	routes       route.Store
-	forwardToken string
-	proxyManager *remotemcp.ProxyManager
+	routes           route.Store
+	forwardToken     string
+	proxyManager     *remotemcp.ProxyManager
+	callerAssertions *mcpauthz.Issuer
 	// gatewayCIDRs are the CIDR blocks tunnel gateway advertise addresses live
 	// in (typically the cluster pod range). They are allowlisted past the
 	// guardian egress policy for tunnel forwards only — gateway addresses come
@@ -31,12 +34,13 @@ type tunnelManager struct {
 	gatewayCIDRs []string
 }
 
-func newTunnelManager(routes route.Store, forwardToken string, proxyManager *remotemcp.ProxyManager, gatewayCIDRs []string) *tunnelManager {
+func newTunnelManager(routes route.Store, forwardToken string, proxyManager *remotemcp.ProxyManager, gatewayCIDRs []string, callerAssertions *mcpauthz.Issuer) *tunnelManager {
 	return &tunnelManager{
-		routes:       routes,
-		forwardToken: forwardToken,
-		proxyManager: proxyManager,
-		gatewayCIDRs: gatewayCIDRs,
+		routes:           routes,
+		forwardToken:     forwardToken,
+		proxyManager:     proxyManager,
+		gatewayCIDRs:     gatewayCIDRs,
+		callerAssertions: callerAssertions,
 	}
 }
 
@@ -52,6 +56,7 @@ func (m *tunnelManager) buildProxy(
 	projectID uuid.UUID,
 	organizationID string,
 	mcpServer *mcpserversrepo.McpServer,
+	resourceIdentifier string,
 	upstreamAuth string,
 	wwwAuthenticate string,
 	selection *toolfilter.SessionSelection,
@@ -105,6 +110,17 @@ func (m *tunnelManager) buildProxy(
 		selection,
 		options...,
 	)
+	if m.issuesCallerAssertions(mcpServer.Visibility) {
+		target := mcpauthz.Target{
+			OrganizationID:     organizationID,
+			ProjectID:          projectID,
+			TunnelID:           mcpServer.TunneledMcpServerID.UUID,
+			ResourceIdentifier: resourceIdentifier,
+		}
+		p.CallerAssertion = func(ctx context.Context) (string, error) {
+			return m.callerAssertions.Mint(ctx, target)
+		}
+	}
 	p.UpstreamResponseRetryer = tunnelrouting.Retryer(m.routes, tunnelID, addr, clientAffinityKey, m.forwardToken)
 	p.UpstreamResponseInterceptor = func(_ context.Context, resp *http.Response) error {
 		if rejection := tunnelrouting.GatewayFailureRejection(resp); rejection != nil {
@@ -116,6 +132,10 @@ func (m *tunnelManager) buildProxy(
 	p.DisableRedirects = true
 	p.GuardianClientOptions = m.guardianClientOptions()
 	return p, nil
+}
+
+func (m *tunnelManager) issuesCallerAssertions(visibility string) bool {
+	return m != nil && m.callerAssertions != nil && visibility == mcpservers.VisibilityPrivate
 }
 
 // guardianClientOptions builds the shared client options for dialing tunnel

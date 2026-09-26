@@ -84083,7 +84083,7 @@ components:
                     description: Human-readable display name for the tunneled MCP server
                 resource_identifier:
                     type: string
-                    description: RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Omit unless the identifier is already known; it is usually recorded later, once the tunnel is up.
+                    description: RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>. Omit unless the identifier is already known; it is usually recorded later, once the tunnel is up.
             description: Form for creating a new tunneled MCP server source
             required:
                 - name
@@ -106573,7 +106573,7 @@ components:
                     format: int64
                 resource_identifier:
                     type: string
-                    description: RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram
+                    description: RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>
                 status:
                     type: string
                     description: Stored lifecycle status for a tunneled MCP server source
@@ -108547,7 +108547,7 @@ components:
                     maximum: 100000
                 resource_identifier:
                     type: string
-                    description: RFC 9728 protected resource identifier of the tunneled server, used only for exact-match credential routing and never dialed by Gram. Pass an empty string to clear. Omit to leave unchanged.
+                    description: RFC 9728 protected resource identifier of the tunneled server, used for credential routing and as the signed caller assertion audience; never dialed by Gram. The exact identifier is preserved, including trailing slashes. When unset, caller assertions use tunneled-mcp-server:<ID>. Pass an empty string to clear. Omit to leave unchanged.
             description: Form for updating a tunneled MCP server source
             required:
                 - id
