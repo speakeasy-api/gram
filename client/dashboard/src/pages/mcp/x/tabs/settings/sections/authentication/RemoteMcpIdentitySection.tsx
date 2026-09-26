@@ -78,7 +78,7 @@ export function RemoteMcpIdentitySectionBody({
   const headersQuery = useRemoteMcpServerHeaders(
     { remoteMcpServerId },
     undefined,
-    { enabled: remoteMcpServerId !== "" },
+    { enabled: remoteMcpServerId !== "", throwOnError: false },
   );
   const {
     items: clients,
@@ -213,7 +213,13 @@ export function RemoteMcpIdentitySectionBody({
   // leaving User means unbinding the client and leaving Agent means deleting
   // the credential; both are what Save has to do, not the card click.
   const leavingUser = actualMode === "user" && selectedMode !== "user";
-  const leavingAgent = actualMode === "agent" && selectedMode !== "agent";
+  // A server can carry a bound client and a leftover static credential at
+  // once, and the client wins the derived mode. No Identity has to clear both
+  // or the credential alone would make the server read as Agent again — and
+  // unlike under User, nothing overrides it on the way upstream.
+  const leavingAgent =
+    (actualMode === "agent" && selectedMode !== "agent") ||
+    (selectedMode === "none" && !!authorizationHeader);
   const destructive = leavingUser || leavingAgent;
 
   const detachUserIdentity = async (): Promise<boolean> => {

@@ -280,6 +280,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
               slug: "linear",
               projectId: "project-1",
               clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: "https://mcp.linear.app/token",
             },
           ],
         },
@@ -311,6 +313,35 @@ describe("RemoteMcpIdentitySectionBody", () => {
     );
   });
 
+  it("will not auto-configure a provider missing its OAuth endpoints", () => {
+    // Advertising CIMD is a claim about registration, not about being usable:
+    // without both endpoints the registration would persist an identity
+    // nobody can complete a login through.
+    mocks.issuers.mockReturnValue({
+      data: {
+        result: {
+          items: [
+            {
+              id: "provider-1",
+              name: "Linear",
+              issuer: "https://mcp.linear.app",
+              slug: "linear",
+              projectId: "project-1",
+              clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: undefined,
+            },
+          ],
+        },
+      },
+    });
+
+    renderIdentity();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+
+    expect(screen.queryByText("Auto-Configure")).toBeNull();
+  });
+
   it("opens the provider and registration menus on click", () => {
     mocks.issuers.mockReturnValue({
       data: {
@@ -323,6 +354,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
               slug: "linear",
               projectId: "project-1",
               clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: "https://mcp.linear.app/token",
             },
           ],
         },
@@ -475,6 +508,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
               issuer: "https://id.example",
               slug: "example",
               clientIdMetadataDocumentSupported: true,
+              authorizationEndpoint: "https://mcp.linear.app/authorize",
+              tokenEndpoint: "https://mcp.linear.app/token",
             },
           ],
         },

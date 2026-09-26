@@ -367,7 +367,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   const { data: remoteMcpServer } = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
-    { enabled: remoteMcpServerId !== "" },
+    { enabled: remoteMcpServerId !== "", throwOnError: false },
   );
   const unproxiedMcpServerId = mcpServer?.unproxiedMcpServerId ?? "";
   const { data: unproxiedMcpServer } = useGetUnproxiedMcpServer(
