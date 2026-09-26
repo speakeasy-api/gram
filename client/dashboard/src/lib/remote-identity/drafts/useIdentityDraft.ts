@@ -55,6 +55,14 @@ type UserIdentityStatus =
   | { kind: "refused"; message: string | null }
   | { kind: "unreachable"; message: string | null };
 
+// A provider counts as this upstream's own only on a DNS-label boundary. A
+// bare suffix test would read notgithub.com as github.com and hand that
+// unrelated upstream the provider's tokens.
+function sameSite(issuerHost: string, upstreamHost: string): boolean {
+  if (issuerHost === "" || upstreamHost === "") return false;
+  return issuerHost === upstreamHost || upstreamHost.endsWith(`.${issuerHost}`);
+}
+
 function hostOf(url: string | undefined | null): string {
   if (!url) return "";
   try {
@@ -161,12 +169,7 @@ export function useUserIdentityDraft({
   const upstreamHost = hostOf(upstreamUrl);
   const matchedIssuer = useMemo(
     () =>
-      issuers.find((issuer) => {
-        const host = hostOf(issuer.issuer);
-        return (
-          host !== "" && (host === upstreamHost || upstreamHost.endsWith(host))
-        );
-      }),
+      issuers.find((issuer) => sameSite(hostOf(issuer.issuer), upstreamHost)),
     [issuers, upstreamHost],
   );
   const linkedIssuerId = linkedClients[0]?.remoteSessionIssuerId;
@@ -294,6 +297,7 @@ export function useUserIdentityDraft({
       });
     },
     enabled: enabled && !!selectedDiscovered && !!discoveredIssuerUrl,
+    throwOnError: false,
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
@@ -309,9 +313,22 @@ export function useUserIdentityDraft({
   const supportsAutomatic = (candidate: {
     clientIdMetadataDocumentSupported?: boolean;
     registrationEndpoint?: string | null;
-  }): boolean =>
-    !!candidate.clientIdMetadataDocumentSupported ||
-    !!candidate.registrationEndpoint?.trim();
+    authorizationEndpoint?: string | null;
+    tokenEndpoint?: string | null;
+  }): boolean => {
+    // Without both endpoints the registration would persist an identity
+    // nobody can complete a login through, so it is not on offer.
+    if (
+      !candidate.authorizationEndpoint?.trim() ||
+      !candidate.tokenEndpoint?.trim()
+    ) {
+      return false;
+    }
+    return (
+      !!candidate.clientIdMetadataDocumentSupported ||
+      !!candidate.registrationEndpoint?.trim()
+    );
+  };
 
   let automaticAvailable = false;
   if (selectedDiscovered) {
@@ -331,6 +348,10 @@ export function useUserIdentityDraft({
     setProviderPick(id);
     setClientPick(null);
     setForceManual(false);
+    // Manual credentials are issued by one provider and meaningless to the
+    // next, so they leave with it rather than being saved under its successor.
+    setClientId("");
+    setClientSecret("");
     setLocalStatus({ kind: "idle" });
   };
 
@@ -442,6 +463,9 @@ export function useUserIdentityDraft({
   const canSave =
     !!selected &&
     !capabilitiesLoading &&
+    // Saving before the client list lands would miss an existing client and
+    // register a duplicate in its place.
+    !clientsLoading &&
     !isPending &&
     status.kind !== "done" &&
     (!manualNeeded || clientId.trim() !== "");

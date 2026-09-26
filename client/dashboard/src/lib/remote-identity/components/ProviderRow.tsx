@@ -15,6 +15,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/Popover";
 import { Text } from "@/components/ui/Text";
+import { safeExternalHttpUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
 import {
   ArrowUpRight,
@@ -207,6 +208,9 @@ export function UserIdentityRow({
   const [providerOpen, setProviderOpen] = useState(false);
   const [clientOpen, setClientOpen] = useState(false);
   const { selected, status } = draft;
+  // The guide URL comes from issuer metadata, so it is upstream input: only
+  // render the action once it is known to be an ordinary http(s) link.
+  const registrationGuideUrl = safeExternalHttpUrl(draft.registrationGuideUrl);
 
   return (
     <div className="space-y-3">
@@ -430,13 +434,9 @@ export function UserIdentityRow({
               />
             </div>
           </div>
-          {draft.registrationGuideUrl ? (
+          {registrationGuideUrl ? (
             <Button variant="secondary" size="sm" asChild>
-              <a
-                href={draft.registrationGuideUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
+              <a href={registrationGuideUrl} target="_blank" rel="noreferrer">
                 <Button.LeftIcon>
                   <BookOpen aria-hidden="true" className="size-3.5" />
                 </Button.LeftIcon>

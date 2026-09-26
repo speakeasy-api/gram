@@ -99,7 +99,7 @@ export function useHeaderDrafts({
   const headersQuery = useRemoteMcpServerHeaders(
     { remoteMcpServerId },
     undefined,
-    { enabled: remoteMcpServerId !== "" },
+    { enabled: remoteMcpServerId !== "", throwOnError: false },
   );
 
   const identityError =

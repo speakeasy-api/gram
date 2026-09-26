@@ -161,7 +161,7 @@ export function IdentityExplainerDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger ? <Dialog.Trigger asChild>{trigger}</Dialog.Trigger> : null}
-      <Dialog.Content className="max-w-2xl">
+      <Dialog.Content className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <Dialog.Header>
           <Dialog.Title>User Identity or Agent Identity?</Dialog.Title>
           <Dialog.Description>

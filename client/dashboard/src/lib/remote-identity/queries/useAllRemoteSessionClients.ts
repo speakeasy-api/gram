@@ -28,6 +28,7 @@ export function useAllRemoteSessionClients(
 } {
   const query = useRemoteSessionClientsInfinite(filters, undefined, {
     enabled: options?.enabled,
+    throwOnError: false,
   });
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;

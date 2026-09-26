@@ -124,9 +124,11 @@ export function useAgentCredentialFields(
   const { format, prefix, token, username, password, manualValue } = values;
 
   let authorizationValue = "";
-  if (format === "bearer" && token) {
+  // Blank out on a whitespace-only secret: the scheme prefix alone would make
+  // authorizationValue.trim() non-empty and pass an unusable header as valid.
+  if (format === "bearer" && token.trim()) {
     authorizationValue = prefix.trim() ? `${prefix.trim()} ${token}` : token;
-  } else if (format === "basic" && username && password) {
+  } else if (format === "basic" && username.trim() && password.trim()) {
     authorizationValue = `Basic ${encodeBasicCredential(username, password)}`;
   } else if (format === "manual") {
     authorizationValue = manualValue;
