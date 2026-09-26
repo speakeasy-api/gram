@@ -122,8 +122,18 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
       input.setAttribute("aria-invalid", String(invalid));
     });
     const model = editor?.getModel();
-    if (!model || model.isDisposed() || value.length > RICH_EDITOR_LIMIT)
+    if (!model || model.isDisposed()) return;
+    const oversized = value.length > RICH_EDITOR_LIMIT;
+    const language = oversized ? "plaintext" : "json";
+    // Changing only this model's language unregisters JSON diagnostics (including
+    // pending results), while preserving its undo stack, cursor and selection.
+    if (model.getLanguageId() !== language)
+      monaco.editor.setModelLanguage(model, language);
+    if (oversized) {
+      monaco.editor.setModelMarkers(model, "registry-server", []);
+      monaco.editor.setModelMarkers(model, "json", []);
       return;
+    }
     monaco.editor.setModelMarkers(
       model,
       "registry-server",
