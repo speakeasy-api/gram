@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   admin: true,
   enabled: true,
   ema: vi.fn(),
+  slack: vi.fn(),
   features: vi.fn(() => ({ data: {} as Record<string, boolean> })),
   onboarding: {
     domainVerified: false,
@@ -45,6 +46,12 @@ vi.mock("./identity-provider/EnterpriseManagedAuth", () => ({
   EnterpriseManagedAuth: () => {
     mocks.ema();
     return <div>EMA workspace</div>;
+  },
+}));
+vi.mock("./slack-workspaces/SlackWorkspaces", () => ({
+  SlackWorkspaces: () => {
+    mocks.slack();
+    return <div>Slack workspace connections</div>;
   },
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
@@ -155,11 +162,11 @@ function section(name: string) {
 }
 
 describe("identity top-level tabs", () => {
-  it("shows only employee SSO and preview EMA without mounting EMA on SSO", () => {
+  it("shows SSO and preview connection tabs without mounting them on SSO", () => {
     show();
     expect(screen.getByRole("heading", { name: "IDP and SSO" })).toBeTruthy();
     const nav = screen.getByRole("navigation");
-    expect(nav.querySelectorAll("a")).toHaveLength(2);
+    expect(nav.querySelectorAll("a")).toHaveLength(3);
     expect(
       screen.getByRole("link", { name: "Single sign-on" }).getAttribute("href"),
     ).toBe("?tab=sso");
@@ -416,5 +423,26 @@ describe("domain verification portal", () => {
       mocks.portal.mutate.mock.calls[0]?.[0].request
         .generateWorkOSAdminPortalLinkRequestBody.intent,
     ).toBe("dsync");
+  });
+});
+
+describe("Slack workspaces tab", () => {
+  it("opens for organization admins independently of rollout flags", () => {
+    mocks.enabled = false;
+    show("?tab=slack-workspaces");
+    expect(screen.getByText("Slack workspace connections")).toBeTruthy();
+    expect(mocks.slack).toHaveBeenCalled();
+  });
+
+  it("is hidden from non-admins", () => {
+    mocks.admin = false;
+    show("?tab=slack-workspaces");
+    expect(screen.queryByRole("link", { name: "Slack workspaces" })).toBeNull();
+    expect(mocks.slack).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getByRole("link", { name: "Single sign-on" })
+        .getAttribute("aria-current"),
+    ).toBe("page");
   });
 });

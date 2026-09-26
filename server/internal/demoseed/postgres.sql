@@ -699,6 +699,18 @@ BEGIN
       SELECT 'role:organization:' || id FROM organization_roles
       WHERE organization_id = demo_org AND workos_slug = 'read-only-tools');
 
+  -- Synthetic workspace history has no usable credentials or claimed authorization.
+  DELETE FROM slack_identity_mappings WHERE organization_id = demo_org;
+  DELETE FROM slack_directory_memberships WHERE organization_id = demo_org;
+  DELETE FROM slack_directory_connections WHERE organization_id = demo_org;
+  INSERT INTO slack_directory_connections
+    (id, organization_id, slack_team_id, slack_team_name, generation, health, disconnected_at)
+  VALUES
+    (demo.det_uuid('gram-demo-slackconn-1'), demo_org, 'T0DEMO0001', 'Acme Engineering',
+     gen_random_uuid(), 'disconnected', now() - interval '2 days'),
+    (demo.det_uuid('gram-demo-slackconn-2'), demo_org, 'T0DEMO0002', 'Acme Operations',
+     gen_random_uuid(), 'pending', NULL);
+
   -- Directory profiles: feed spend-rule audiences, enrollment attributes, and
   -- mirror the user.attributes.* identity on the ClickHouse telemetry.
   DELETE FROM directory_role_mappings WHERE organization_id = demo_org;
@@ -2477,6 +2489,7 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
       AND ((task_key IN ('anthropic-admin-controls', 'platform-mcp')) IS DISTINCT FROM (hidden_at IS NOT NULL))) THEN
     RAISE EXCEPTION 'demo seed postflight: expected customized Security onboarding selection';
   END IF;
+
   SELECT count(*) INTO stray FROM organization_features
   WHERE organization_id = demo_org AND feature_name = 'network_ingress';
   IF stray <> 0 THEN
@@ -3276,6 +3289,11 @@ E'--- a/SKILL.md\n+++ b/SKILL.md\n@@ -6,4 +6,5 @@\n # Refund handling\n \n 1. Ve
   WHERE organization_id = demo_org AND deleted IS FALSE;
   IF stray <> 2 THEN
     RAISE EXCEPTION 'demo seed postflight: expected 2 directory role mappings, found %', stray;
+  END IF;
+
+  SELECT count(*) INTO stray FROM slack_directory_connections WHERE organization_id = demo_org;
+  IF stray <> 2 THEN
+    RAISE EXCEPTION 'demo seed postflight: expected 2 Slack workspace connections, found %', stray;
   END IF;
 
   RAISE NOTICE 'demo seed ok: % chats, % findings, % members, % tools',

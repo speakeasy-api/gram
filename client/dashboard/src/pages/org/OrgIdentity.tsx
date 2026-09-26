@@ -1,3 +1,4 @@
+import { SlackWorkspaces } from "./slack-workspaces/SlackWorkspaces";
 import { parseAsStringLiteral, useQueryState } from "nuqs";
 
 import { TabbedPage, type PageTab } from "@/components/page-templates";
@@ -316,11 +317,24 @@ export default function OrgIdentity(): JSX.Element {
   const showEnterpriseManagedAuth =
     providerFlag.status === "enabled" && hasScope("org:admin");
 
-  const activeTab: IdentityPageTab =
-    requestedTab !== "sso" && !showEnterpriseManagedAuth ? "sso" : requestedTab;
+  const showSlack = hasScope("org:admin");
+  let activeTab: IdentityPageTab = requestedTab;
+  if (requestedTab === "enterprise-managed-auth" && !showEnterpriseManagedAuth)
+    activeTab = "sso";
+  if (requestedTab === "slack-workspaces" && !showSlack) activeTab = "sso";
 
   const tabs: PageTab[] = [
     { value: "sso", label: "Single sign-on", href: "?tab=sso" },
+    ...(showSlack
+      ? [
+          {
+            value: "slack-workspaces",
+            label: "Slack workspaces",
+            href: "?tab=slack-workspaces",
+            stage: "preview" as const,
+          },
+        ]
+      : []),
     ...(showEnterpriseManagedAuth
       ? [
           {
@@ -341,7 +355,9 @@ export default function OrgIdentity(): JSX.Element {
       activeTab={activeTab}
       tabs={tabs}
     >
-      {activeTab === "sso" ? <SingleSignOnTab /> : <EnterpriseManagedAuth />}
+      {activeTab === "sso" && <SingleSignOnTab />}
+      {activeTab === "enterprise-managed-auth" && <EnterpriseManagedAuth />}
+      {activeTab === "slack-workspaces" && <SlackWorkspaces />}
     </TabbedPage>
   );
 }

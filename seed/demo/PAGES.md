@@ -222,3 +222,7 @@ confirmed zero bindings/sessions and no client secret. No dedicated preparation
 dashboard, provider acceptance, or usable human access is demonstrated.
 
 [Browser evidence and supplementary checks](https://github.com/speakeasy-api/gram/pull/6438#issuecomment-5798502630).
+
+### [~] Organization Identity: Slack workspaces
+
+With `org:admin`, the Slack workspaces tab shows Acme Engineering as disconnected and Acme Operations as requiring authorization. These are synthetic history rows with no credentials. Shared Explore Demo disables Connect Slack and Disconnect and refuses their server operations; the retargeted local organization remains writable. They do not demonstrate live Slack authorization, directory sync, mappings, or invocation protection.

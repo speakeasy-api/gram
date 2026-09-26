@@ -77,6 +77,7 @@ var All = []outbox.EventRegistration{
 	ShadowMCPApprovalV1,
 	SkillEfficacySettingsV1,
 	SkillV1,
+	SlackDirectoryConnectionV1,
 	SpendRuleV1,
 	TemplateV1,
 	ToolsetV1,

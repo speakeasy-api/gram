@@ -137,3 +137,5 @@ type AuditLogCreatedPayloadV1 struct {
 	// Omitted when the call carried no OAuth client.
 	ActingClientID string `json:"acting_client_id,omitzero"`
 }
+
+var SlackDirectoryConnectionV1 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.slack_directory_connection_event_v1", "An organization Slack workspace authorization changed.")
