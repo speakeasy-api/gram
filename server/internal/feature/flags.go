@@ -254,3 +254,8 @@ func RiskLLMAnalyzerVariant(variant Variant, legacyEnabled bool) Variant {
 		return VariantRiskLLMOff
 	}
 }
+
+// FlagRiskPromptPolicyJev gates direct Jev evaluation of prompt policies.
+// Evaluated server-side using organization and project group keys; unavailable
+// local evaluations retain the baseline judge. Remove after rollout completes.
+const FlagRiskPromptPolicyJev Flag = "risk-prompt-policy-jev"
