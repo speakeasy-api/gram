@@ -103,7 +103,7 @@ func TestPrivateTunnelAssertionAudienceTracksSavedResource(t *testing.T) {
 		request.Header.Set("Accept", "application/json")
 		request.Header.Set("Authorization", "Bearer "+bearer)
 		request.Header.Set(mcpauthz.Header, "client-forged-assertion")
-		request.Header.Set("Speakeasy-Authz", "client-forged-alias")
+		request.Header.Set("X_Speakeasy_Identity", "client-forged-alias")
 		request.Header.Set("X-Forwarded-Host", "client.example")
 		route := chi.NewRouteContext()
 		route.URLParams.Add("mcpSlug", slug)
@@ -122,10 +122,7 @@ func TestPrivateTunnelAssertionAudienceTracksSavedResource(t *testing.T) {
 		require.Equal(t, expected, claims["aud"])
 		require.Equal(t, subject.String(), claims["sub"])
 		require.Equal(t, profile.Email, claims["email"])
-		require.Equal(t, tunnelID.String(), claims["tunneled_mcp_server_id"])
-		require.Equal(t, auth.ActiveOrganizationID, claims["organization_id"])
-		require.Equal(t, projectID.String(), claims["project_id"])
-		require.Empty(t, forwarded.Get("Speakeasy-Authz"))
+		require.Empty(t, forwarded.Get("X_Speakeasy_Identity"))
 		id, err := claims.GetSubject()
 		require.NoError(t, err)
 		require.Equal(t, "user:"+auth.UserID, id)
@@ -192,7 +189,7 @@ func testPrivateTunnelConsentAssertion(t *testing.T, resource string) {
 			http.Error(w, "invalid claims", http.StatusUnauthorized)
 			return
 		}
-		if claims["purpose"] != "mcp_discovery" || claims["sub"] != "user:"+state.Subject.ID || claims["organization_id"] != endpoint.OrganizationID || claims["project_id"] != projectID.String() {
+		if claims["allowed_methods"] == nil || claims["sub"] != "user:"+state.Subject.ID {
 			http.Error(w, "wrong binding", http.StatusForbidden)
 			return
 		}
@@ -310,8 +307,8 @@ func TestPublicTunnelPinnedSessionNeverReceivesCallerAssertion(t *testing.T) {
 	fixture := newPublicTunnelFixture(t, ctx, ti, gateway, true)
 	sid := initializeTunneledPublicSession(t, ti, fixture)
 	request := newTunneledPublicRequest(fixture.endpointSlug, http.MethodPost, []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`), sid)
-	request.Header.Set("SPEAKEASY_AUTHZ", "forged")
-	request.Header.Set("Speakeasy-Authz", "forged-alias")
+	request.Header.Set("X-Speakeasy-Identity", "forged")
+	request.Header.Set("X_Speakeasy_Identity", "forged-alias")
 	response := httptest.NewRecorder()
 	require.NoError(t, ti.service.ServePublic(response, request))
 	require.Equal(t, http.StatusOK, response.Code)
@@ -319,7 +316,7 @@ func TestPublicTunnelPinnedSessionNeverReceivesCallerAssertion(t *testing.T) {
 	require.GreaterOrEqual(t, len(headers), 2)
 	for _, header := range headers {
 		require.Empty(t, header.Get(mcpauthz.Header))
-		require.Empty(t, header.Get("Speakeasy-Authz"))
+		require.Empty(t, header.Get("X_Speakeasy_Identity"))
 	}
 }
 
@@ -358,9 +355,8 @@ func TestMetaDispatchAssertionBindsPrivateTunnelMember(t *testing.T) {
 		require.NoError(t, err)
 		claims, ok := token.Claims.(jwt.MapClaims)
 		require.True(t, ok)
-		require.Equal(t, memberID.String(), claims["mcp_server_id"])
 		require.Equal(t, subject.String(), claims["sub"])
-		require.Equal(t, "mcp_request", claims["purpose"])
+		require.NotContains(t, claims, "allowed_methods")
 		require.Equal(t, profile.Email, claims["email"])
 		require.NotContains(t, claims, "email_verified")
 	}

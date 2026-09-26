@@ -114,7 +114,6 @@ func (m *tunnelManager) buildProxy(
 		target := mcpauthz.Target{
 			OrganizationID:     organizationID,
 			ProjectID:          projectID,
-			MCPServerID:        mcpServer.ID.String(),
 			TunnelID:           mcpServer.TunneledMcpServerID.UUID,
 			ResourceIdentifier: resourceIdentifier,
 		}

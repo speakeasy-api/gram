@@ -36,21 +36,21 @@ func assertionProxy(t *testing.T, remoteURL string) (*Proxy, context.Context, *r
 	require.NoError(t, err)
 	issuer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pub})), "https://gram.example", false)
 	require.NoError(t, err)
-	target := mcpauthz.Target{OrganizationID: "org_test", ProjectID: uuid.New(), MCPServerID: uuid.NewString(), TunnelID: uuid.New()}
+	target := mcpauthz.Target{OrganizationID: "org_test", ProjectID: uuid.New(), TunnelID: uuid.New()}
 	ctx := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: target.OrganizationID, ProjectID: &target.ProjectID})
 	ctx = mcpidentity.NewValidatorBoundary().StampAPIKey(ctx, uuid.NewString())
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
-	return &Proxy{GuardianPolicy: policy, Logger: testenv.NewLogger(t), Tracer: testenv.NewTracerProvider(t).Tracer("test"), NonStreamingTimeout: time.Second, StreamingTimeout: time.Second, RemoteURL: remoteURL, MaxBufferedBodyBytes: DefaultMaxBufferedBodyBytes, Identity: ServerIdentity{TunneledMCPServerID: target.TunnelID.String(), McpServerID: target.MCPServerID}, CallerAssertion: func(ctx context.Context) (string, error) { return issuer.Mint(ctx, target) }}, ctx, &key.PublicKey
+	return &Proxy{GuardianPolicy: policy, Logger: testenv.NewLogger(t), Tracer: testenv.NewTracerProvider(t).Tracer("test"), NonStreamingTimeout: time.Second, StreamingTimeout: time.Second, RemoteURL: remoteURL, MaxBufferedBodyBytes: DefaultMaxBufferedBodyBytes, Identity: ServerIdentity{TunneledMCPServerID: target.TunnelID.String(), McpServerID: uuid.NewString()}, CallerAssertion: func(ctx context.Context) (string, error) { return issuer.Mint(ctx, target) }}, ctx, &key.PublicKey
 }
 
 func TestCallerAssertionStripsSpoofingWithAndWithoutSigning(t *testing.T) {
 	t.Parallel()
 	p, ctx, key := assertionProxy(t, "http://upstream.example")
 	p.AuthorizationOverride = "upstream-oauth"
-	p.Headers = []ConfiguredHeader{{Name: "SPEAKEASY_AUTHZ", StaticValue: "configured-forgery"}, {Name: "speakeasy-authz", StaticValue: "configured-forgery"}, {Name: "X-Leaked-Assertion", ValueFromRequestHeader: "Speakeasy_authz", IsRequired: true}}
+	p.Headers = []ConfiguredHeader{{Name: "X-Speakeasy-Identity", StaticValue: "configured-forgery"}, {Name: "x-speakeasy-identity", StaticValue: "configured-forgery"}, {Name: "X-Leaked-Assertion", ValueFromRequestHeader: "X_speakeasy_identity", IsRequired: true}}
 	inbound := httptest.NewRequest(http.MethodPost, "http://gram.example/mcp", nil)
-	inbound.Header = http.Header{"SPEAKEASY_AUTHZ": {"forged"}, "Speakeasy_authz": {"forged"}, "speakeasy-authz": {"forged"}, "Authorization": {"Bearer gram-secret"}}
+	inbound.Header = http.Header{"X-Speakeasy-Identity": {"forged"}, "X_speakeasy_identity": {"forged"}, "X-Speakeasy_Identity": {"forged"}, "x-speakeasy-identity": {"forged"}, "Authorization": {"Bearer gram-secret"}}
 	inboundHeaders := inbound.Header.Clone()
 	for _, enabled := range []bool{true, false} {
 		if !enabled {
@@ -60,7 +60,7 @@ func TestCallerAssertionStripsSpoofingWithAndWithoutSigning(t *testing.T) {
 		require.NoError(t, p.applyRequestHeaders(ctx, inbound, outbound))
 		require.Equal(t, inboundHeaders, inbound.Header)
 		require.Equal(t, "Bearer upstream-oauth", outbound.Header.Get("Authorization"))
-		require.Empty(t, outbound.Header.Get("Speakeasy-Authz"))
+		require.Empty(t, outbound.Header.Get("X_Speakeasy_Identity"))
 		require.Empty(t, outbound.Header.Get("X-Leaked-Assertion"))
 		if enabled {
 			token, err := jwt.Parse(outbound.Header.Get(mcpauthz.Header), func(*jwt.Token) (any, error) { return key, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer("https://gram.example"))
@@ -147,7 +147,7 @@ func TestCallerAssertionThroughPostStripsInboundAndResponseEcho(t *testing.T) {
 		received <- r.Header.Clone()
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set(mcpauthz.Header, r.Header.Get(mcpauthz.Header))
-		w.Header().Set("Speakeasy-Authz", "echo-forgery")
+		w.Header().Set("X_Speakeasy_Identity", "echo-forgery")
 		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`))
 	}))
 	t.Cleanup(upstream.Close)
@@ -158,14 +158,14 @@ func TestCallerAssertionThroughPostStripsInboundAndResponseEcho(t *testing.T) {
 			p.CallerAssertion = nil
 		}
 		request := httptest.NewRequest(http.MethodPost, "https://gram.example/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)).WithContext(ctx)
-		request.Header = http.Header{"SPEAKEASY_AUTHZ": {"forged"}, "Speakeasy_authz": {"forged"}, "speakeasy-authz": {"forged"}, "Content-Type": {"application/json"}}
+		request.Header = http.Header{"X-Speakeasy-Identity": {"forged"}, "X_speakeasy_identity": {"forged"}, "X_Speakeasy-Identity": {"forged"}, "x-speakeasy-identity": {"forged"}, "Content-Type": {"application/json"}}
 		response := httptest.NewRecorder()
 		require.NoError(t, p.Post(response, request))
 		require.Equal(t, http.StatusOK, response.Code)
 		require.Empty(t, response.Header().Get(mcpauthz.Header))
-		require.Empty(t, response.Header().Get("Speakeasy-Authz"))
+		require.Empty(t, response.Header().Get("X_Speakeasy_Identity"))
 		actual := <-received
-		require.Empty(t, actual.Get("Speakeasy-Authz"))
+		require.Empty(t, actual.Get("X_Speakeasy_Identity"))
 		if enabled {
 			_, err := jwt.Parse(actual.Get(mcpauthz.Header), func(*jwt.Token) (any, error) { return key, nil }, jwt.WithValidMethods([]string{"RS256"}))
 			require.NoError(t, err)

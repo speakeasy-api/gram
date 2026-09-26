@@ -22,35 +22,27 @@ custom domain. You do not need to configure a per-server assertion issuer in Gra
 
 ## Wire contract
 
-The HTTP header is `SPEAKEASY_AUTHZ: <JWT>`, without a `Bearer` prefix. Gram
-removes client-supplied variants of this header and the `Speakeasy-Authz` alias
-in the forwarding proxy, before adding its own assertion.
+The HTTP header is `X-Speakeasy-Identity: <JWT>`, without a `Bearer` prefix.
+Gram removes client-supplied variants of this header, including spellings with
+underscores such as `X_Speakeasy_Identity`, in the forwarding proxy before
+adding its own assertion.
 The tunnel gateway and agent forward the assertion to your server. Upstream
 OAuth uses its own `Authorization` header.
-
-Header names are case-insensitive. Underscores are significant: if the customer
-server is behind an HTTP proxy that drops headers containing underscores,
-configure that proxy to preserve `SPEAKEASY_AUTHZ`.
 
 Tokens use RS256 and the protected header `typ: speakeasy-authz+jwt`. The `kid`
 is the public key's RFC 7638 SHA-256 thumbprint. Their lifetime is at most 60
 seconds, capped by the source credential's expiry where available.
 
-| Claim                           | Meaning                                                                                                    |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `version`                       | Contract version, currently `1`.                                                                           |
-| `iss`                           | `https://tunnel.speakeasy.com` (AICP).                                                                     |
-| `aud`                           | The destination's saved resource identifier, or `tunneled-mcp-server:<TUNNELED_MCP_SERVER_ID>` when unset. |
-| `sub`                           | Typed principal identifier, for example `user:<USER_ID>`.                                                  |
-| `email`                         | Human user's email from their Gram profile; absent for agents and API keys.                                |
-| `principal_type`                | Authenticated principal class; a machine credential is never represented as its owner's human identity.    |
-| `organization_id`, `project_id` | Destination tenant and project.                                                                            |
-| `mcp_server_id`                 | MCP wrapper serving this request.                                                                          |
-| `tunneled_mcp_server_id`        | Underlying tunneled MCP source.                                                                            |
-| `purpose`                       | Context in which Gram issued the assertion.                                                                |
-| `allowed_methods`               | Methods Gram permits during consent discovery.                                                             |
-| `iat`, `exp`                    | Issuance and expiry, Unix seconds.                                                                         |
-| `jti`                           | Unique assertion identifier for correlation.                                                               |
+| Claim             | Meaning                                                                                                    |
+| ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| `version`         | Contract version, currently `1`.                                                                           |
+| `iss`             | `https://tunnel.speakeasy.com` (AICP).                                                                     |
+| `aud`             | The destination's saved resource identifier, or `tunneled-mcp-server:<TUNNELED_MCP_SERVER_ID>` when unset. |
+| `sub`             | Typed principal identifier, for example `user:<USER_ID>`. The prefix identifies the principal type.        |
+| `email`           | Human user's email from their Gram profile; absent for agents and API keys.                                |
+| `allowed_methods` | Present only during consent discovery; methods Gram permits in that context.                               |
+| `iat`, `exp`      | Issuance and expiry, Unix seconds.                                                                         |
+| `jti`             | Unique assertion identifier for correlation.                                                               |
 
 Set the resource identifier in the tunneled source settings to use your server's
 own audience, such as `https://mcp.internal.example.com/mcp`. Gram copies the
@@ -68,20 +60,19 @@ routing, for example `/mcp?tenant=example` to `/mcp/?tenant=example`. Reconnect
 upstream OAuth credentials for the new resource; credentials qualified to the
 old resource are not forwarded. Existing saved settings are unchanged by deployment.
 
-Runtime requests use `purpose=mcp_request`. Supported subjects are `user:<USER_ID>`,
-`api_key:<API_KEY_ID>` and `agent:<AGENT_ID>`, with matching `principal_type`
-values `user`, `api_key` and `agent`. These are Gram identifiers, not email
+Supported subjects are `user:<USER_ID>`, `api_key:<API_KEY_ID>` and
+`agent:<AGENT_ID>`. These are Gram identifiers, not email
 addresses or upstream account IDs. API keys and agents are never identified as
 their human creator or owner. Human assertions also carry `email`; use the
 stable `sub` as the identity key because an email can change. The assertion does
 not make an `email_verified` claim.
 
 During OAuth consent, Gram can include the authenticated human's identity with
-`purpose=mcp_discovery` and
 `allowed_methods=["server/discover", "initialize", "notifications/initialized", "ping", "tools/list"]`.
-These claims describe the discovery request. Gram enforces the method list and
-blocks tool calls before forwarding; upstreams can ignore these claims. An
-upstream's own access policy still determines the tools it exposes.
+Runtime assertions omit this claim, so treat a token that carries it as
+discovery-only. Gram enforces the method list and blocks tool calls before
+forwarding; upstreams can ignore this claim. An upstream's own access policy
+still determines the tools it exposes.
 
 Gram issues discovery assertions only within ten minutes of the challenge's
 creation, with each assertion valid for at most 60 seconds. Impersonated or
@@ -124,8 +115,11 @@ If your server uses the caller claims:
 Gram enforces its consent and tool-access rules before forwarding. Use the
 verified caller claims for your server's own access policy.
 
-For policies that restrict access to a specific Gram organization, project or
-server, also check the corresponding ID claims.
+The default `tunneled-mcp-server:<ID>` audience is unique to your tunneled
+server. A saved resource identifier is not: another organization can save the
+same identifier, and Gram then issues assertions with that audience to its own
+callers. When you use a custom audience, do not accept every valid assertion;
+allowlist the `sub` values your policy admits.
 
 If your access policy requires these claims, reject a missing or invalid
 assertion. A captured assertion can be reused until it expires, even with a

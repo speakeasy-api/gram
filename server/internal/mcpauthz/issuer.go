@@ -24,7 +24,7 @@ import (
 )
 
 // Header is reserved for Gram's signed caller assertion, without a Bearer prefix.
-const Header = "SPEAKEASY_AUTHZ"
+const Header = "X-Speakeasy-Identity"
 
 // Lifetime bounds the bearer assertion's replay window.
 const Lifetime = time.Minute
@@ -43,9 +43,6 @@ type Target struct {
 
 	// ProjectID is the destination owner's project.
 	ProjectID uuid.UUID
-
-	// MCPServerID is the wrapper through which the destination is served.
-	MCPServerID string
 
 	// TunnelID is the immutable tunneled server ID, including on meta dispatch.
 	TunnelID uuid.UUID
@@ -88,9 +85,10 @@ func New(privatePEM, publicPEM, issuerURL string, allowHTTP bool) (*Issuer, erro
 	return &Issuer{key: key, kid: active.KeyID, issuer: strings.TrimRight(issuerURL, "/")}, nil
 }
 
-// ReservedHeader matches both the wire spelling and the common dash alias.
+// ReservedHeader also matches spellings with underscores for any dash: some
+// servers fold underscores into dashes, which would let a forged alias through.
 func ReservedHeader(name string) bool {
-	return strings.EqualFold(name, Header) || strings.EqualFold(name, "Speakeasy-Authz")
+	return strings.EqualFold(strings.ReplaceAll(name, "_", "-"), Header)
 }
 
 // Strip removes all case variants, including noncanonical Header map entries.
@@ -126,7 +124,7 @@ func (s *Issuer) Mint(ctx context.Context, target Target) (string, error) {
 	}
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || auth == nil || auth.ActiveOrganizationID != target.OrganizationID || target.OrganizationID == "" ||
-		target.ProjectID == uuid.Nil || target.TunnelID == uuid.Nil || target.MCPServerID == "" ||
+		target.ProjectID == uuid.Nil || target.TunnelID == uuid.Nil ||
 		(auth.ProjectID != nil && *auth.ProjectID != target.ProjectID) {
 		return "", errors.New("caller assertion destination does not match authenticated tenant")
 	}
@@ -143,18 +141,13 @@ func (s *Issuer) Mint(ctx context.Context, target Target) (string, error) {
 		audience = urn.NewTunneledMcpServer(target.TunnelID).String()
 	}
 	claims := jwt.MapClaims{
-		"iss": s.issuer, "sub": principalType + ":" + subject, "principal_type": principalType,
-		"aud": audience,
-		"iat": now.Unix(), "exp": expires.Unix(), "jti": uuid.NewString(),
-		"organization_id": target.OrganizationID, "project_id": target.ProjectID.String(),
-		"mcp_server_id": target.MCPServerID, "tunneled_mcp_server_id": target.TunnelID.String(),
-		"version": 1, "purpose": "mcp_request",
+		"iss": s.issuer, "sub": principalType + ":" + subject, "aud": audience,
+		"iat": now.Unix(), "exp": expires.Unix(), "jti": uuid.NewString(), "version": 1,
 	}
 	if principalType == "user" && auth.UserID == subject && auth.Email != nil && *auth.Email != "" {
 		claims["email"] = *auth.Email
 	}
 	if identity.Kind() == mcpidentity.KindConsentDiscovery {
-		claims["purpose"] = "mcp_discovery"
 		claims["allowed_methods"] = []string{"server/discover", "initialize", "notifications/initialized", "ping", "tools/list"}
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
