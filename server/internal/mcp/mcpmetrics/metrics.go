@@ -142,7 +142,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 
 	mcpRequestDuration, err := meter.Float64Histogram(
 		"mcp.request.duration",
-		metric.WithDescription("Duration of mcp request in seconds"),
+		metric.WithDescription("Duration of MCP requests by server URL and public/private network surface"),
 		metric.WithUnit("s"),
 		metric.WithExplicitBucketBoundaries(0.1, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 240),
 	)
@@ -430,7 +430,9 @@ func (m *Metrics) RecordMCPRequestRejected(ctx context.Context, reason string, m
 // RecordMCPRequestDuration records one dispatched request's duration. The
 // method label is clamped to the known method set: it is client-supplied
 // JSON-RPC input, and unclamped it would let a client mint unbounded series
-// against a histogram that already carries a per-server URL dimension.
+// against a histogram that already carries a per-server URL dimension. The
+// histogram count by URL and network surface shows public/private traffic per
+// endpoint without another per-server counter.
 func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string, mcpURL string, duration time.Duration) {
 	if m == nil || m.mcpRequestDuration == nil {
 		return
@@ -439,6 +441,7 @@ func (m *Metrics) RecordMCPRequestDuration(ctx context.Context, mcpMethod string
 	kv := []attribute.KeyValue{
 		attr.McpMethod(mcprequests.ClampMethod(mcpMethod)),
 		attr.McpURL(mcpURL),
+		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
 	}
 
 	m.mcpRequestDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(kv...))

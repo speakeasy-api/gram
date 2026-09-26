@@ -25,6 +25,7 @@ type Endpoints struct {
 	GetUserMetricsSummary            goa.Endpoint
 	GetEmployeeDataFlowGraph         goa.Endpoint
 	GetObservabilityOverview         goa.Endpoint
+	GetMcpNetworkTraffic             goa.Endpoint
 	GetMetaMcpServerUsage            goa.Endpoint
 	GetProjectOverview               goa.Endpoint
 	GetUnproxiedMcpServerUsage       goa.Endpoint
@@ -67,6 +68,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetUserMetricsSummary:            NewGetUserMetricsSummaryEndpoint(s, a.APIKeyAuth),
 		GetEmployeeDataFlowGraph:         NewGetEmployeeDataFlowGraphEndpoint(s, a.APIKeyAuth),
 		GetObservabilityOverview:         NewGetObservabilityOverviewEndpoint(s, a.APIKeyAuth),
+		GetMcpNetworkTraffic:             NewGetMcpNetworkTrafficEndpoint(s, a.APIKeyAuth),
 		GetMetaMcpServerUsage:            NewGetMetaMcpServerUsageEndpoint(s, a.APIKeyAuth),
 		GetProjectOverview:               NewGetProjectOverviewEndpoint(s, a.APIKeyAuth),
 		GetUnproxiedMcpServerUsage:       NewGetUnproxiedMcpServerUsageEndpoint(s, a.APIKeyAuth),
@@ -107,6 +109,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetUserMetricsSummary = m(e.GetUserMetricsSummary)
 	e.GetEmployeeDataFlowGraph = m(e.GetEmployeeDataFlowGraph)
 	e.GetObservabilityOverview = m(e.GetObservabilityOverview)
+	e.GetMcpNetworkTraffic = m(e.GetMcpNetworkTraffic)
 	e.GetMetaMcpServerUsage = m(e.GetMetaMcpServerUsage)
 	e.GetProjectOverview = m(e.GetProjectOverview)
 	e.GetUnproxiedMcpServerUsage = m(e.GetUnproxiedMcpServerUsage)
@@ -675,6 +678,65 @@ func NewGetObservabilityOverviewEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.GetObservabilityOverview(ctx, p)
+	}
+}
+
+// NewGetMcpNetworkTrafficEndpoint returns an endpoint function that calls the
+// method "getMcpNetworkTraffic" of service "telemetry".
+func NewGetMcpNetworkTrafficEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetMcpNetworkTrafficPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetMcpNetworkTraffic(ctx, p)
 	}
 }
 

@@ -28,6 +28,7 @@ type Server struct {
 	GetUserMetricsSummary            http.Handler
 	GetEmployeeDataFlowGraph         http.Handler
 	GetObservabilityOverview         http.Handler
+	GetMcpNetworkTraffic             http.Handler
 	GetMetaMcpServerUsage            http.Handler
 	GetProjectOverview               http.Handler
 	GetUnproxiedMcpServerUsage       http.Handler
@@ -92,6 +93,7 @@ func New(
 			{"GetUserMetricsSummary", "POST", "/rpc/telemetry.getUserMetricsSummary"},
 			{"GetEmployeeDataFlowGraph", "POST", "/rpc/telemetry.getEmployeeDataFlowGraph"},
 			{"GetObservabilityOverview", "POST", "/rpc/telemetry.getObservabilityOverview"},
+			{"GetMcpNetworkTraffic", "POST", "/rpc/telemetry.getMcpNetworkTraffic"},
 			{"GetMetaMcpServerUsage", "POST", "/rpc/telemetry.getMetaMcpServerUsage"},
 			{"GetProjectOverview", "POST", "/rpc/telemetry.getProjectOverview"},
 			{"GetUnproxiedMcpServerUsage", "POST", "/rpc/telemetry.getUnproxiedMcpServerUsage"},
@@ -128,6 +130,7 @@ func New(
 		GetUserMetricsSummary:            NewGetUserMetricsSummaryHandler(e.GetUserMetricsSummary, mux, decoder, encoder, errhandler, formatter),
 		GetEmployeeDataFlowGraph:         NewGetEmployeeDataFlowGraphHandler(e.GetEmployeeDataFlowGraph, mux, decoder, encoder, errhandler, formatter),
 		GetObservabilityOverview:         NewGetObservabilityOverviewHandler(e.GetObservabilityOverview, mux, decoder, encoder, errhandler, formatter),
+		GetMcpNetworkTraffic:             NewGetMcpNetworkTrafficHandler(e.GetMcpNetworkTraffic, mux, decoder, encoder, errhandler, formatter),
 		GetMetaMcpServerUsage:            NewGetMetaMcpServerUsageHandler(e.GetMetaMcpServerUsage, mux, decoder, encoder, errhandler, formatter),
 		GetProjectOverview:               NewGetProjectOverviewHandler(e.GetProjectOverview, mux, decoder, encoder, errhandler, formatter),
 		GetUnproxiedMcpServerUsage:       NewGetUnproxiedMcpServerUsageHandler(e.GetUnproxiedMcpServerUsage, mux, decoder, encoder, errhandler, formatter),
@@ -171,6 +174,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetUserMetricsSummary = m(s.GetUserMetricsSummary)
 	s.GetEmployeeDataFlowGraph = m(s.GetEmployeeDataFlowGraph)
 	s.GetObservabilityOverview = m(s.GetObservabilityOverview)
+	s.GetMcpNetworkTraffic = m(s.GetMcpNetworkTraffic)
 	s.GetMetaMcpServerUsage = m(s.GetMetaMcpServerUsage)
 	s.GetProjectOverview = m(s.GetProjectOverview)
 	s.GetUnproxiedMcpServerUsage = m(s.GetUnproxiedMcpServerUsage)
@@ -213,6 +217,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetUserMetricsSummaryHandler(mux, h.GetUserMetricsSummary)
 	MountGetEmployeeDataFlowGraphHandler(mux, h.GetEmployeeDataFlowGraph)
 	MountGetObservabilityOverviewHandler(mux, h.GetObservabilityOverview)
+	MountGetMcpNetworkTrafficHandler(mux, h.GetMcpNetworkTraffic)
 	MountGetMetaMcpServerUsageHandler(mux, h.GetMetaMcpServerUsage)
 	MountGetProjectOverviewHandler(mux, h.GetProjectOverview)
 	MountGetUnproxiedMcpServerUsageHandler(mux, h.GetUnproxiedMcpServerUsage)
@@ -703,6 +708,59 @@ func NewGetObservabilityOverviewHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getObservabilityOverview")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetMcpNetworkTrafficHandler configures the mux to serve the "telemetry"
+// service "getMcpNetworkTraffic" endpoint.
+func MountGetMcpNetworkTrafficHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/telemetry.getMcpNetworkTraffic", f)
+}
+
+// NewGetMcpNetworkTrafficHandler creates a HTTP handler which loads the HTTP
+// request and calls the "telemetry" service "getMcpNetworkTraffic" endpoint.
+func NewGetMcpNetworkTrafficHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetMcpNetworkTrafficRequest(mux, decoder)
+		encodeResponse = EncodeGetMcpNetworkTrafficResponse(encoder)
+		encodeError    = EncodeGetMcpNetworkTrafficError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getMcpNetworkTraffic")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "telemetry")
 		payload, err := decodeRequest(r)
 		if err != nil {

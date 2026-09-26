@@ -36,6 +36,9 @@ type Service interface {
 	// Get observability overview metrics including time series, tool breakdowns,
 	// and summary stats
 	GetObservabilityOverview(context.Context, *GetObservabilityOverviewPayload) (res *GetObservabilityOverviewResult, err error)
+	// Observed inbound public and private MCP request counts for a server or
+	// gateway over a recent window
+	GetMcpNetworkTraffic(context.Context, *GetMcpNetworkTrafficPayload) (res *GetMcpNetworkTrafficResult, err error)
 	// Discovery funnel and per-member execution breakdown for one gateway (meta
 	// MCP server), from gateway-attributed telemetry.
 	GetMetaMcpServerUsage(context.Context, *GetMetaMcpServerUsagePayload) (res *GetMetaMcpServerUsageResult, err error)
@@ -137,7 +140,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [35]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMetaMcpServerUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
+var MethodNames = [36]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -300,6 +303,35 @@ type GetHooksSummaryResult struct {
 	SkillTimeSeries []*SkillTimeSeriesPoint
 	// Per-user skill breakdown
 	SkillBreakdown []*SkillBreakdownRow
+}
+
+// GetMcpNetworkTrafficPayload is the payload type of the telemetry service
+// getMcpNetworkTraffic method.
+type GetMcpNetworkTrafficPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// MCP server ID (mutually exclusive with meta_mcp_server_id)
+	McpServerID *string
+	// Gateway ID (mutually exclusive with mcp_server_id)
+	MetaMcpServerID *string
+	// Recent traffic window
+	Window string
+}
+
+// GetMcpNetworkTrafficResult is the result type of the telemetry service
+// getMcpNetworkTraffic method.
+type GetMcpNetworkTrafficResult struct {
+	// Start of the window
+	From string
+	// End of the window
+	To string
+	// Hourly request counts
+	Points []*McpNetworkTrafficPoint
+	// Most recent observed public request in the window
+	LastPublicAt *string
+	// Most recent observed private request in the window
+	LastPrivateAt *string
 }
 
 // GetMcpServerActivityPayload is the payload type of the telemetry service
@@ -1356,6 +1388,15 @@ type LogFilter struct {
 	// not_eq, contains) and multiple for 'in'. Ignored for 'exists' and
 	// 'not_exists'.
 	Values []string
+}
+
+type McpNetworkTrafficPoint struct {
+	// Start of the UTC hour
+	BucketStart string
+	// Observed public requests
+	PublicRequests int64
+	// Observed private requests
+	PrivateRequests int64
 }
 
 // Tool-call activity for one MCP server, keyed by the same target identifier

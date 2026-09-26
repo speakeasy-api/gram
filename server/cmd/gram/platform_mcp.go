@@ -122,6 +122,7 @@ type platformMCPConfig struct {
 	// RecentToolCalls reads only the bounded Tool Logs summary path.
 	// Nil keeps the tool visible as unavailable rather than returning an empty list.
 	RecentToolCalls platformmcp.RecentToolCallReader
+	NetworkTraffic  platformmcp.MCPNetworkTrafficReader
 	// EventFeed reads the org-scoped OpenTelemetry event feed. Nil keeps the
 	// tool visible as unavailable rather than returning an empty list.
 	EventFeed platformmcp.EventFeedReader
@@ -392,6 +393,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
+		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
 		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
 		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.JWTSigningKey), budgets.RiskFindings)
@@ -831,6 +833,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDataExports(config.Encryption, config.DashboardURL).
 		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
+		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
 		WithOrganizationEvents(config.EventFeed, config.LogsEnabled, config.DashboardURL).
 		WithRiskAnalysisStatus(platformmcp.NewRiskAnalysisStatusService(config.Logger, config.DB, config.RiskAnalysisDescriber, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))).
 		WithRiskFindings(platformmcp.NewRiskFindingsService(config.DB, config.RiskFindings, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), config.JWTSigningKey), budgets.RiskFindings)

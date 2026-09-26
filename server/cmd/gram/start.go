@@ -1795,6 +1795,7 @@ func newStartCommand() *cli.Command {
 				WorkflowRun:             posthogClient,
 				CanonicalIdentity:       telemSvc,
 				RecentToolCalls:         telemetryrepo.New(chDB),
+				NetworkTraffic:          telemetryrepo.New(chDB),
 				EventFeed:               otelchrepo.New(chDB),
 				LogsEnabled:             platformmcp.FeatureChecker(logsEnabled),
 				ShadowInventory:         accessService,

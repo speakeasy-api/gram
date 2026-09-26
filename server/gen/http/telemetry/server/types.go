@@ -190,6 +190,17 @@ type GetObservabilityOverviewRequestBody struct {
 	IncludeTimeSeries *bool `form:"include_time_series,omitempty" json:"include_time_series,omitempty" xml:"include_time_series,omitempty"`
 }
 
+// GetMcpNetworkTrafficRequestBody is the type of the "telemetry" service
+// "getMcpNetworkTraffic" endpoint HTTP request body.
+type GetMcpNetworkTrafficRequestBody struct {
+	// MCP server ID (mutually exclusive with meta_mcp_server_id)
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// Gateway ID (mutually exclusive with mcp_server_id)
+	MetaMcpServerID *string `form:"meta_mcp_server_id,omitempty" json:"meta_mcp_server_id,omitempty" xml:"meta_mcp_server_id,omitempty"`
+	// Recent traffic window
+	Window *string `form:"window,omitempty" json:"window,omitempty" xml:"window,omitempty"`
+}
+
 // GetMetaMcpServerUsageRequestBody is the type of the "telemetry" service
 // "getMetaMcpServerUsage" endpoint HTTP request body.
 type GetMetaMcpServerUsageRequestBody struct {
@@ -882,6 +893,21 @@ type GetObservabilityOverviewResponseBody struct {
 	TopToolsByFailureRate []*ToolMetricResponseBody `form:"top_tools_by_failure_rate" json:"top_tools_by_failure_rate" xml:"top_tools_by_failure_rate"`
 	// The time bucket interval in seconds used for the time series data
 	IntervalSeconds int64 `form:"interval_seconds" json:"interval_seconds" xml:"interval_seconds"`
+}
+
+// GetMcpNetworkTrafficResponseBody is the type of the "telemetry" service
+// "getMcpNetworkTraffic" endpoint HTTP response body.
+type GetMcpNetworkTrafficResponseBody struct {
+	// Start of the window
+	From string `form:"from" json:"from" xml:"from"`
+	// End of the window
+	To string `form:"to" json:"to" xml:"to"`
+	// Hourly request counts
+	Points []*McpNetworkTrafficPointResponseBody `form:"points" json:"points" xml:"points"`
+	// Most recent observed public request in the window
+	LastPublicAt *string `form:"last_public_at,omitempty" json:"last_public_at,omitempty" xml:"last_public_at,omitempty"`
+	// Most recent observed private request in the window
+	LastPrivateAt *string `form:"last_private_at,omitempty" json:"last_private_at,omitempty" xml:"last_private_at,omitempty"`
 }
 
 // GetMetaMcpServerUsageResponseBody is the type of the "telemetry" service
@@ -2794,6 +2820,196 @@ type GetObservabilityOverviewUnexpectedResponseBody struct {
 // "telemetry" service "getObservabilityOverview" endpoint HTTP response body
 // for the "gateway_error" error.
 type GetObservabilityOverviewGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficUnauthorizedResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetMcpNetworkTrafficUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficForbiddenResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "forbidden" error.
+type GetMcpNetworkTrafficForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficBadRequestResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "bad_request" error.
+type GetMcpNetworkTrafficBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficNotFoundResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "not_found" error.
+type GetMcpNetworkTrafficNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficConflictResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "conflict" error.
+type GetMcpNetworkTrafficConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficUnsupportedMediaResponseBody is the type of the
+// "telemetry" service "getMcpNetworkTraffic" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetMcpNetworkTrafficUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficInvalidResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the "invalid"
+// error.
+type GetMcpNetworkTrafficInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficInvariantViolationResponseBody is the type of the
+// "telemetry" service "getMcpNetworkTraffic" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetMcpNetworkTrafficInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficUnexpectedResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "unexpected" error.
+type GetMcpNetworkTrafficUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpNetworkTrafficGatewayErrorResponseBody is the type of the "telemetry"
+// service "getMcpNetworkTraffic" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetMcpNetworkTrafficGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -8078,6 +8294,17 @@ type ToolMetricResponseBody struct {
 	FailureRate float64 `form:"failure_rate" json:"failure_rate" xml:"failure_rate"`
 }
 
+// McpNetworkTrafficPointResponseBody is used to define fields on response body
+// types.
+type McpNetworkTrafficPointResponseBody struct {
+	// Start of the UTC hour
+	BucketStart string `form:"bucket_start" json:"bucket_start" xml:"bucket_start"`
+	// Observed public requests
+	PublicRequests int64 `form:"public_requests" json:"public_requests" xml:"public_requests"`
+	// Observed private requests
+	PrivateRequests int64 `form:"private_requests" json:"private_requests" xml:"private_requests"`
+}
+
 // MetaMcpDiscoveryFunnelResponseBody is used to define fields on response body
 // types.
 type MetaMcpDiscoveryFunnelResponseBody struct {
@@ -9145,6 +9372,30 @@ func NewGetObservabilityOverviewResponseBody(res *telemetry.GetObservabilityOver
 		}
 	} else {
 		body.TopToolsByFailureRate = []*ToolMetricResponseBody{}
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficResponseBody builds the HTTP response body from the
+// result of the "getMcpNetworkTraffic" endpoint of the "telemetry" service.
+func NewGetMcpNetworkTrafficResponseBody(res *telemetry.GetMcpNetworkTrafficResult) *GetMcpNetworkTrafficResponseBody {
+	body := &GetMcpNetworkTrafficResponseBody{
+		From:          res.From,
+		To:            res.To,
+		LastPublicAt:  res.LastPublicAt,
+		LastPrivateAt: res.LastPrivateAt,
+	}
+	if res.Points != nil {
+		body.Points = make([]*McpNetworkTrafficPointResponseBody, len(res.Points))
+		for i, val := range res.Points {
+			if val == nil {
+				body.Points[i] = nil
+				continue
+			}
+			body.Points[i] = marshalTelemetryMcpNetworkTrafficPointToMcpNetworkTrafficPointResponseBody(val)
+		}
+	} else {
+		body.Points = []*McpNetworkTrafficPointResponseBody{}
 	}
 	return body
 }
@@ -11187,6 +11438,156 @@ func NewGetObservabilityOverviewUnexpectedResponseBody(res *goa.ServiceError) *G
 // "telemetry" service.
 func NewGetObservabilityOverviewGatewayErrorResponseBody(res *goa.ServiceError) *GetObservabilityOverviewGatewayErrorResponseBody {
 	body := &GetObservabilityOverviewGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getMcpNetworkTraffic" endpoint of the
+// "telemetry" service.
+func NewGetMcpNetworkTrafficUnauthorizedResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficUnauthorizedResponseBody {
+	body := &GetMcpNetworkTrafficUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficForbiddenResponseBody builds the HTTP response body
+// from the result of the "getMcpNetworkTraffic" endpoint of the "telemetry"
+// service.
+func NewGetMcpNetworkTrafficForbiddenResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficForbiddenResponseBody {
+	body := &GetMcpNetworkTrafficForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficBadRequestResponseBody builds the HTTP response body
+// from the result of the "getMcpNetworkTraffic" endpoint of the "telemetry"
+// service.
+func NewGetMcpNetworkTrafficBadRequestResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficBadRequestResponseBody {
+	body := &GetMcpNetworkTrafficBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficNotFoundResponseBody builds the HTTP response body
+// from the result of the "getMcpNetworkTraffic" endpoint of the "telemetry"
+// service.
+func NewGetMcpNetworkTrafficNotFoundResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficNotFoundResponseBody {
+	body := &GetMcpNetworkTrafficNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficConflictResponseBody builds the HTTP response body
+// from the result of the "getMcpNetworkTraffic" endpoint of the "telemetry"
+// service.
+func NewGetMcpNetworkTrafficConflictResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficConflictResponseBody {
+	body := &GetMcpNetworkTrafficConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getMcpNetworkTraffic" endpoint of the
+// "telemetry" service.
+func NewGetMcpNetworkTrafficUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficUnsupportedMediaResponseBody {
+	body := &GetMcpNetworkTrafficUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficInvalidResponseBody builds the HTTP response body
+// from the result of the "getMcpNetworkTraffic" endpoint of the "telemetry"
+// service.
+func NewGetMcpNetworkTrafficInvalidResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficInvalidResponseBody {
+	body := &GetMcpNetworkTrafficInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getMcpNetworkTraffic" endpoint of the
+// "telemetry" service.
+func NewGetMcpNetworkTrafficInvariantViolationResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficInvariantViolationResponseBody {
+	body := &GetMcpNetworkTrafficInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getMcpNetworkTraffic" endpoint of the "telemetry"
+// service.
+func NewGetMcpNetworkTrafficUnexpectedResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficUnexpectedResponseBody {
+	body := &GetMcpNetworkTrafficUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpNetworkTrafficGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getMcpNetworkTraffic" endpoint of the
+// "telemetry" service.
+func NewGetMcpNetworkTrafficGatewayErrorResponseBody(res *goa.ServiceError) *GetMcpNetworkTrafficGatewayErrorResponseBody {
+	body := &GetMcpNetworkTrafficGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -15274,6 +15675,21 @@ func NewGetObservabilityOverviewPayload(body *GetObservabilityOverviewRequestBod
 	return v
 }
 
+// NewGetMcpNetworkTrafficPayload builds a telemetry service
+// getMcpNetworkTraffic endpoint payload.
+func NewGetMcpNetworkTrafficPayload(body *GetMcpNetworkTrafficRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetMcpNetworkTrafficPayload {
+	v := &telemetry.GetMcpNetworkTrafficPayload{
+		McpServerID:     body.McpServerID,
+		MetaMcpServerID: body.MetaMcpServerID,
+		Window:          *body.Window,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewGetMetaMcpServerUsagePayload builds a telemetry service
 // getMetaMcpServerUsage endpoint payload.
 func NewGetMetaMcpServerUsagePayload(body *GetMetaMcpServerUsageRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *telemetry.GetMetaMcpServerUsagePayload {
@@ -16723,6 +17139,26 @@ func ValidateGetObservabilityOverviewRequestBody(body *GetObservabilityOverviewR
 	}
 	if body.MetaMcpServerID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateGetMcpNetworkTrafficRequestBody runs the validations defined on
+// GetMcpNetworkTrafficRequestBody
+func ValidateGetMcpNetworkTrafficRequestBody(body *GetMcpNetworkTrafficRequestBody) (err error) {
+	if body.Window == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.MetaMcpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.meta_mcp_server_id", *body.MetaMcpServerID, goa.FormatUUID))
+	}
+	if body.Window != nil {
+		if !(*body.Window == "24h" || *body.Window == "7d") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.window", *body.Window, []any{"24h", "7d"}))
+		}
 	}
 	return
 }
