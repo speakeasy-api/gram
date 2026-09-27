@@ -291,6 +291,11 @@ describe("member assignment under directory sync", () => {
     fireEvent.click(screen.getByText("Assign Members"));
     expect(screen.getByText("Enrolled Person")).toBeTruthy();
     expect(screen.queryByText("Other Person")).toBeNull();
+    expect(
+      screen
+        .getByRole("checkbox", { name: /Enrolled Person/ })
+        .hasAttribute("disabled"),
+    ).toBe(true);
   });
 
   it("links to directory sync setup when nobody is enrolled", () => {

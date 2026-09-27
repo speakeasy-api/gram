@@ -187,8 +187,12 @@ export function CreateRoleDialog({
   const orgRoutes = useOrgRoutes();
   // A directory owns assignment under SCIM, so the list shows only who it
   // enrolled; with nobody enrolled there is nothing to show but the way there.
+  // Gated on initialization so a role still loading its members does not
+  // flash the empty state.
   const scimWithNoMembers =
-    !!organization.scimEnabled && selectedMembers.size === 0;
+    !!organization.scimEnabled &&
+    (!isEditing || initialized) &&
+    selectedMembers.size === 0;
   const { data: membersData } = useMembers();
   const members = [...(membersData?.members ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
