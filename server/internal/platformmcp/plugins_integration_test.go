@@ -949,3 +949,15 @@ func seedPlugin(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizat
 	require.NoError(t, err)
 	return plugin
 }
+
+// The live registration must keep the same audience split as the unavailable
+// one: reads reach the assistant, mutations do not.
+func TestComposedPluginToolsKeepReadsForBothAudiencesAndMutationsExternal(t *testing.T) {
+	t.Parallel()
+
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_plugin_tool_audiences")
+	require.NoError(t, err)
+
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, testPluginTargets(conn), nil, CatalogDescriptor{})
+	requirePluginToolAudiences(t, registrar)
+}

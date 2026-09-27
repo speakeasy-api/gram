@@ -8,6 +8,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func projectPolicy() TargetPolicy {
@@ -241,4 +242,36 @@ func TestComposedAssistantToolsetIncludesListAccessMembers(t *testing.T) {
 	require.Contains(t, schema.Properties, "role_reference")
 	require.NotContains(t, schema.Properties, "project_id")
 	require.NotContains(t, schema.Properties, "project_slug")
+}
+
+// The assistant's composed toolset follows the catalogue's audience
+// declarations: plugin reads are listed, with the project supplied by policy
+// rather than asked of the model, while plugin mutations stay external-only.
+func TestAssistantToolsetListsPluginReadsAndWithholdsPluginMutations(t *testing.T) {
+	t.Parallel()
+
+	runtime := platformmcp.NewRuntime(testenv.NewLogger(t), nil, nil, nil, "", "", nil, nil, nil, nil, nil)
+	composed := ExternalTools(runtime.AssistantTools(), nil)
+
+	listed := map[string]platformtools.ToolDescriptor{}
+	for _, tool := range composed {
+		descriptor := tool.Executor.Descriptor()
+		listed[descriptor.Name] = descriptor
+	}
+
+	for _, name := range []string{"list_plugins", "get_plugin", "list_plugin_assignments"} {
+		descriptor, ok := listed[name]
+		require.True(t, ok, "assistant toolset lists %q", name)
+
+		var schema struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+			Required   []string                   `json:"required"`
+		}
+		require.NoError(t, json.Unmarshal(descriptor.InputSchema, &schema))
+		require.NotContains(t, schema.Properties, "project_id", "%q takes its project from the assistant's policy", name)
+		require.NotContains(t, schema.Required, "project_id", name)
+	}
+	for _, name := range []string{"set_plugin_assignments", "distribute_mcp_to_plugin", "remove_mcp_from_plugin"} {
+		require.NotContains(t, listed, name, "assistant toolset must not list %q", name)
+	}
 }
