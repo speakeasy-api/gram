@@ -51,10 +51,11 @@ func TestDelegatedDiagnosticsToolsRequireProjectReadDiscovery(t *testing.T) {
 	registerDiagnosticsTools(live, nil)
 	registerToolUsageSummaryTool(live, nil)
 	registerRecentToolCallTools(live, nil)
+	registerToolCallSearchTools(live, nil)
 	registrars = append(registrars, live)
 
 	for _, registrar := range registrars {
-		for _, name := range []string{"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_recent_tool_calls"} {
+		for _, name := range []string{"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_recent_tool_calls", "list_attribute_keys"} {
 			descriptor := descriptorByName(t, registrar, name)
 			require.Equal(t, ExternalAuthorizationMember, descriptor.Meta.Authorization)
 			require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
