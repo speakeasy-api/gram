@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	skillsservice "github.com/speakeasy-api/gram/server/internal/skills"
 	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/skills/skilldiff"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -483,6 +485,40 @@ type skillsVerticalFixture struct {
 	project           ResolvedProject
 	session           *mcp.ClientSession
 	marketingPluginID uuid.UUID
+
+	// insights stands in for ClickHouse behind get_skill_insights, and
+	// insightsLane is the diagnostics budget it is metered on, so a test can
+	// prove what a refused call did and did not reach.
+	insights     *stubSkillInsightsReader
+	insightsLane *countingLimiter
+}
+
+// countingLimiter always allows and counts what it was charged. It is safe to
+// read from the test while the fixture's server charges it on its own
+// goroutine.
+type countingLimiter struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (l *countingLimiter) Allow(context.Context, string) (ratelimit.Result, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls++
+	return ratelimit.Result{Allowed: true}, nil
+}
+
+func (l *countingLimiter) AllowN(context.Context, string, int) (ratelimit.Result, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.calls++
+	return ratelimit.Result{Allowed: true}, nil
+}
+
+func (l *countingLimiter) count() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.calls
 }
 
 // newSkillsVerticalFixture composes the production wiring against a real
@@ -604,6 +640,8 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 	store, err := NewRegistrationStore(conn, RegistrationStoreConfig{ActiveRegistrationCap: 5})
 	require.NoError(t, err)
 	allow := func() Limiter { return &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}} }
+	insights := &stubSkillInsightsReader{}
+	insightsLane := &countingLimiter{}
 	skillsSurface := NewSkillsService(
 		skills,
 		NewPostgresSkillTargets(conn),
@@ -611,7 +649,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 		authzEngine,
 		NewCatalogRegistrationGate(testGate{enabled: options.capabilityEnabled}),
 		OperationBudget{Connection: allow(), Organization: allow()},
-	)
+	).WithInsights(insights, OperationBudget{Connection: insightsLane, Organization: insightsLane})
 
 	runtimeAuthorizer := Authorizer(&testAuthorizer{})
 	if options.grantAdmin || options.grantSkillRead || options.grantSkillWrite {
@@ -644,7 +682,118 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 		project:           project,
 		session:           session,
 		marketingPluginID: marketing.ID,
+		insights:          insights,
+		insightsLane:      insightsLane,
 	}
+}
+
+// createInsightsSkillVersion records one immutable version so the registry has
+// something real for get_skill_insights to resolve.
+func createInsightsSkillVersion(t *testing.T, ctx context.Context, conn *pgxpool.Pool, fixture *skillsVerticalFixture, skillID uuid.UUID, body string) skillsrepo.SkillVersion {
+	t.Helper()
+
+	version, err := skillsrepo.New(conn).CreateSkillVersion(ctx, skillsrepo.CreateSkillVersionParams{
+		Content:          skillsFixtureManifest("measured", "Measured by the judge.", body),
+		CanonicalSha256:  uuid.NewString(),
+		RawSha256:        uuid.NewString(),
+		Description:      pgtype.Text{String: "Measured by the judge.", Valid: true},
+		Metadata:         []byte(`{}`),
+		SpecValid:        true,
+		ValidationErrors: []byte(`[]`),
+		CreatedByUserID:  fixture.principal.UserID,
+		ProjectID:        fixture.project.ID,
+		SkillID:          skillID,
+	})
+	require.NoError(t, err)
+	return version
+}
+
+// get_skill_insights resolves which skills to report through the registry under
+// the caller's real grants and then reads ClickHouse for exactly those IDs.
+// This drives both modes through the endpoint as an organization admin against
+// a real skill and checks the ClickHouse read was scoped to what the registry
+// returned.
+func TestPlatformMCPSkillInsightsRankAndCompareUnderRealGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	fixture := newSkillsVerticalFixture(t, ctx, "platform_mcp_skill_insights_admin", skillsVerticalOptions{capabilityEnabled: true, grantAdmin: true})
+	skill, err := skillsrepo.New(fixture.conn).CreateSkill(ctx, skillsrepo.CreateSkillParams{
+		ProjectID:   fixture.project.ID,
+		Name:        "measured",
+		DisplayName: "Measured",
+		Summary:     pgtype.Text{String: "Measured by the judge.", Valid: true},
+	})
+	require.NoError(t, err)
+	older := createInsightsSkillVersion(t, ctx, fixture.conn, fixture, skill.ID, "First body.")
+	newer := createInsightsSkillVersion(t, ctx, fixture.conn, fixture, skill.ID, "Second body.")
+	fixture.insights.SetRows([]telemetryrepo.SkillInsightBucket{{
+		SkillID: skill.ID.String(), SkillVersionID: newer.ID.String(),
+		ActivationCount: 3, ActivatedSessions: 2, TotalSessionCost: 1.5,
+		ScoredSessions: 1, ScoreSum: 0.8, EstimatedMinutesSavedSum: 12, EstimatedMinutesSamples: 1,
+	}})
+
+	ranked := callSkillsTool[GetSkillInsightsOutput](t, ctx, fixture.session, "get_skill_insights", map[string]any{
+		"project_slug": fixture.project.Slug,
+	})
+	require.Equal(t, SkillInsightsModeRankSkills, ranked.Mode)
+	require.Len(t, ranked.Skills, 1)
+	require.Equal(t, skill.ID.String(), ranked.Skills[0].ID)
+	require.EqualValues(t, 3, ranked.Skills[0].Metrics.Activations)
+	require.NotNil(t, ranked.Skills[0].Metrics.Efficacy)
+	require.EqualValues(t, 1, ranked.Skills[0].Metrics.Efficacy.EstimatedMinutesSavedSamples)
+	require.Len(t, ranked.Skills[0].Versions, 1, "ranking lists the versions that were active")
+	require.Equal(t, newer.ID.String(), ranked.Skills[0].Versions[0].ID)
+	require.NotEmpty(t, ranked.Skills[0].Versions[0].CreatedAt, "creation time comes from the registry")
+	params := fixture.insights.LastParams()
+	require.NotNil(t, params)
+	require.Equal(t, fixture.principal.OrganizationID, params.OrganizationID)
+	require.Equal(t, fixture.project.ID.String(), params.ProjectID)
+	require.Equal(t, []string{skill.ID.String()}, params.SkillIDs)
+
+	compared := callSkillsTool[GetSkillInsightsOutput](t, ctx, fixture.session, "get_skill_insights", map[string]any{
+		"project_slug": fixture.project.Slug,
+		"skill_id":     skill.ID.String(),
+	})
+	require.Equal(t, SkillInsightsModeCompareVersions, compared.Mode)
+	require.Len(t, compared.Skills, 1)
+	require.Len(t, compared.Skills[0].Versions, 2, "comparison lists every registry version, active or not")
+	byID := map[string]SkillVersionInsight{}
+	for _, version := range compared.Skills[0].Versions {
+		byID[version.ID] = version
+	}
+	require.EqualValues(t, 3, byID[newer.ID.String()].Metrics.Activations)
+	require.Zero(t, byID[older.ID.String()].Metrics.Activations)
+	require.NotEmpty(t, byID[older.ID.String()].CreatedAt)
+	require.Equal(t, 2, fixture.insightsLane.count(), "each read is metered once on the diagnostics lane")
+}
+
+// A caller's grants decide what get_skill_insights may read. A member holding
+// no role reaches the handler and is refused by the skills service's own RBAC,
+// so ClickHouse is never read; a member holding only skill:read is turned back
+// at the organization-admin gate before the handler spends anything at all.
+func TestPlatformMCPSkillInsightsRefuseCallersWithoutTheRightGrants(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	ungranted := newSkillsVerticalFixture(t, ctx, "platform_mcp_skill_insights_ungranted", skillsVerticalOptions{capabilityEnabled: true})
+	refusal := callSkillsRefusal(t, ctx, ungranted.session, "get_skill_insights", map[string]any{
+		"project_slug": ungranted.project.Slug,
+	})
+	require.Equal(t, "forbidden", refusal.Code)
+	require.Nil(t, ungranted.insights.LastParams(), "ClickHouse is never read for a caller the registry refuses")
+	// The lane is charged before the registry refuses, as every skills call
+	// charges its allowance before RBAC: an unauthorized caller cannot probe
+	// for free, and the refusal reveals nothing about what it would have read.
+	require.Equal(t, 1, ungranted.insightsLane.count())
+
+	readerOnly := newSkillsVerticalFixture(t, ctx, "platform_mcp_skill_insights_reader", skillsVerticalOptions{capabilityEnabled: true, grantSkillRead: true})
+	refusal = callSkillsRefusal(t, ctx, readerOnly.session, "get_skill_insights", map[string]any{
+		"project_slug": readerOnly.project.Slug,
+	})
+	require.Equal(t, "permission_denied", refusal.Code)
+	require.Nil(t, readerOnly.insights.LastParams())
+	require.Zero(t, readerOnly.insightsLane.count(), "the admin gate refuses before the handler charges anything")
 }
 
 // callSkillsTool calls one tool and decodes its structured result, failing the

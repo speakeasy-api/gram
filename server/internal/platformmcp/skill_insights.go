@@ -54,7 +54,7 @@ const (
 	// stating both beside the numbers is what keeps a caller from summing or
 	// averaging them into a claim the data does not support.
 	skillInsightsCostAttribution = "full_session: the whole session's model cost is attributed to every skill version activated in that session, so totals across skills or versions are not additive."
-	skillInsightsScoreCoverage   = "sampled: efficacy and estimated savings summarize scored sessions only; a skill without scores has unknown efficacy, not zero."
+	skillInsightsScoreCoverage   = "sampled: efficacy and estimated savings summarize scored sessions only; a skill without scores has unknown efficacy, not zero. The saved-turns and saved-minutes averages are over the scored sessions that carried an estimate, counted in estimated_turns_saved_samples and estimated_minutes_saved_samples, which can be fewer than scored_sessions."
 )
 
 // skillInsightsWindowSpec looks back a month by default and at most. Efficacy
@@ -149,16 +149,37 @@ type SkillInsightMetrics struct {
 }
 
 // SkillEfficacyMetrics summarizes sampled judge scores. Every figure covers
-// scored sessions only.
+// scored sessions only, and a judge may score a session without estimating
+// what it saved, so each savings average names the sample count it divides by.
 type SkillEfficacyMetrics struct {
-	ScoredSessions               uint64            `json:"scored_sessions"`
-	AverageScore                 float64           `json:"average_score"`
-	EstimatedTurnsSavedTotal     float64           `json:"estimated_turns_saved_total"`
-	EstimatedTurnsSavedAverage   *float64          `json:"estimated_turns_saved_average,omitempty"`
-	EstimatedMinutesSavedTotal   float64           `json:"estimated_minutes_saved_total"`
-	EstimatedMinutesSavedAverage *float64          `json:"estimated_minutes_saved_average,omitempty"`
-	ROIConfidenceCounts          map[string]uint64 `json:"roi_confidence_counts"`
-	FlagCounts                   map[string]uint64 `json:"flag_counts"`
+	ScoredSessions uint64  `json:"scored_sessions"`
+	AverageScore   float64 `json:"average_score"`
+
+	// EstimatedTurnsSavedTotal sums the turns-saved estimates that were made.
+	EstimatedTurnsSavedTotal float64 `json:"estimated_turns_saved_total"`
+
+	// EstimatedTurnsSavedAverage is the total over EstimatedTurnsSavedSamples,
+	// absent when no scored session carried an estimate.
+	EstimatedTurnsSavedAverage *float64 `json:"estimated_turns_saved_average,omitempty"`
+
+	// EstimatedTurnsSavedSamples is how many scored sessions carried a
+	// turns-saved estimate. It is at most ScoredSessions.
+	EstimatedTurnsSavedSamples uint64 `json:"estimated_turns_saved_samples"`
+
+	// EstimatedMinutesSavedTotal sums the minutes-saved estimates that were made.
+	EstimatedMinutesSavedTotal float64 `json:"estimated_minutes_saved_total"`
+
+	// EstimatedMinutesSavedAverage is the total over
+	// EstimatedMinutesSavedSamples, absent when no scored session carried an
+	// estimate.
+	EstimatedMinutesSavedAverage *float64 `json:"estimated_minutes_saved_average,omitempty"`
+
+	// EstimatedMinutesSavedSamples is how many scored sessions carried a
+	// minutes-saved estimate. It is at most ScoredSessions.
+	EstimatedMinutesSavedSamples uint64 `json:"estimated_minutes_saved_samples"`
+
+	ROIConfidenceCounts map[string]uint64 `json:"roi_confidence_counts"`
+	FlagCounts          map[string]uint64 `json:"flag_counts"`
 }
 
 // WithInsights attaches the ClickHouse insights read and the budget it is
@@ -427,8 +448,10 @@ func skillInsightMetrics(total telemetryrepo.SkillInsightBucket) SkillInsightMet
 		AverageScore:                 total.ScoreSum / float64(total.ScoredSessions),
 		EstimatedTurnsSavedTotal:     total.EstimatedTurnsSavedSum,
 		EstimatedTurnsSavedAverage:   skillInsightRatio(total.EstimatedTurnsSavedSum, total.EstimatedTurnsSamples),
+		EstimatedTurnsSavedSamples:   total.EstimatedTurnsSamples,
 		EstimatedMinutesSavedTotal:   total.EstimatedMinutesSavedSum,
 		EstimatedMinutesSavedAverage: skillInsightRatio(total.EstimatedMinutesSavedSum, total.EstimatedMinutesSamples),
+		EstimatedMinutesSavedSamples: total.EstimatedMinutesSamples,
 		ROIConfidenceCounts:          map[string]uint64{"low": total.ROIConfidenceLow, "med": total.ROIConfidenceMed, "high": total.ROIConfidenceHigh},
 		FlagCounts:                   map[string]uint64{"ignored": total.IgnoredCount, "misapplied": total.MisappliedCount, "partially_followed": total.PartiallyFollowedCount, "harmful": total.HarmfulCount},
 	}

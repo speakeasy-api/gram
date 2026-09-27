@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -34,8 +35,10 @@ const (
 var testInsightNow = time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 
 // stubSkillInsightsReader records what the service asked ClickHouse for and
-// answers with canned buckets.
+// answers with canned buckets. The mutex is for the vertical tests, where the
+// server reads it on another goroutine than the one seeding it.
 type stubSkillInsightsReader struct {
+	mu        sync.Mutex
 	params    *telemetryrepo.QuerySkillInsightsParams
 	rows      []telemetryrepo.SkillInsightBucket
 	watermark int64
@@ -43,6 +46,8 @@ type stubSkillInsightsReader struct {
 }
 
 func (s *stubSkillInsightsReader) QuerySkillInsights(_ context.Context, params telemetryrepo.QuerySkillInsightsParams) ([]telemetryrepo.SkillInsightBucket, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.params = &params
 	if s.err != nil {
 		return nil, s.err
@@ -51,7 +56,23 @@ func (s *stubSkillInsightsReader) QuerySkillInsights(_ context.Context, params t
 }
 
 func (s *stubSkillInsightsReader) GetTelemetryWatermark(context.Context, telemetryrepo.GetTelemetryWatermarkParams) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.watermark, nil
+}
+
+// SetRows replaces the canned buckets once the test knows the real IDs.
+func (s *stubSkillInsightsReader) SetRows(rows []telemetryrepo.SkillInsightBucket) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rows = rows
+}
+
+// LastParams is the most recent ClickHouse read, or nil when none happened.
+func (s *stubSkillInsightsReader) LastParams() *telemetryrepo.QuerySkillInsightsParams {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.params
 }
 
 // registrySkillsManagement is a skills registry with several skills, each with
@@ -189,6 +210,12 @@ func TestGetSkillInsightsRanksProjectSkillsByEstimatedMinutesSaved(t *testing.T)
 	require.InDelta(t, 0.7, verification.Metrics.Efficacy.AverageScore, 1e-9)
 	require.InDelta(t, 40, verification.Metrics.Efficacy.EstimatedMinutesSavedTotal, 0)
 	require.InDelta(t, 40.0/3, *verification.Metrics.Efficacy.EstimatedMinutesSavedAverage, 1e-9)
+	// The averages divide by the sessions that carried an estimate, and that
+	// count travels with them so a caller can tell a three-sample average from
+	// a thirty-sample one.
+	require.EqualValues(t, 3, verification.Metrics.Efficacy.EstimatedMinutesSavedSamples)
+	require.EqualValues(t, 3, verification.Metrics.Efficacy.EstimatedTurnsSavedSamples)
+	require.InDelta(t, 8.0/3, *verification.Metrics.Efficacy.EstimatedTurnsSavedAverage, 1e-9)
 	require.Equal(t, map[string]uint64{"low": 1, "med": 1, "high": 1}, verification.Metrics.Efficacy.ROIConfidenceCounts)
 	require.Equal(t, map[string]uint64{"ignored": 0, "misapplied": 0, "partially_followed": 1, "harmful": 0}, verification.Metrics.Efficacy.FlagCounts)
 
@@ -485,8 +512,8 @@ func TestGetSkillInsightsOutputProjectsOnlyAllowlistedFields(t *testing.T) {
 		"skills", "id", "name", "display_name", "metrics", "versions", "created_at",
 		"activations", "activated_sessions", "full_session_cost_usd", "average_full_session_cost_usd",
 		"efficacy", "scored_sessions", "average_score",
-		"estimated_turns_saved_total", "estimated_turns_saved_average",
-		"estimated_minutes_saved_total", "estimated_minutes_saved_average",
+		"estimated_turns_saved_total", "estimated_turns_saved_average", "estimated_turns_saved_samples",
+		"estimated_minutes_saved_total", "estimated_minutes_saved_average", "estimated_minutes_saved_samples",
 		"roi_confidence_counts", "low", "med", "high",
 		"flag_counts", "ignored", "misapplied", "partially_followed", "harmful",
 	}, slices.Compact(keys))

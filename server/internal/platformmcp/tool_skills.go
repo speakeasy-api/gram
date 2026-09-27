@@ -130,7 +130,7 @@ func registerSkillInsightsTool(reg *Registrar, skills *SkillsService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_skill_insights",
 		Title:       "Skill Insights",
-		Description: "Rank a project's skills, or compare one skill's versions with skill_id, by activations, sampled efficacy, full-session cost, and estimated time saved over the last 30 days by default. Costs are full-session: the whole session's model cost is attributed to every skill activated in it, so figures are not additive across skills. Efficacy and savings cover sampled scored sessions only; a skill without scores has unknown efficacy, not zero. Skills are named by registry ID; no person or session is identified.",
+		Description: "Rank a project's skills, or compare one skill's versions with skill_id, by activations, sampled efficacy, full-session cost, and estimated time saved over the last 30 days by default. Costs are full-session: the whole session's model cost is attributed to every skill activated in it, so figures are not additive across skills. Efficacy and savings cover sampled scored sessions only; a skill without scores has unknown efficacy, not zero, and each saved-turns or saved-minutes average is over the scored sessions that carried an estimate, whose count is returned beside it. Skills are named by registry ID; no person or session is identified.",
 		Annotations: readOnlyAnnotations(),
 	}, skillInsightsToolMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSkillInsightsToolInput) (*mcp.CallToolResult, GetSkillInsightsOutput, error) {
 		return skillsToolCall(ctx, func(principal Principal) (GetSkillInsightsOutput, error) {
