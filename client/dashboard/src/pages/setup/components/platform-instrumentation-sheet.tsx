@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import {
   Sheet,
@@ -35,7 +35,7 @@ export function PlatformInstrumentationSheet({
   const [eligibility, setEligibility] = useState<Record<string, boolean>>({});
   const apiKeys = usePlatformApiKeys();
 
-  const agentPlatforms = getAgentPlatforms();
+  const agentPlatforms = useMemo(() => getAgentPlatforms(), []);
   const activePlatform =
     agentPlatforms.find((p) => p.id === pickedPlatformId) ?? null;
   const availablePlatforms = agentPlatforms.filter(

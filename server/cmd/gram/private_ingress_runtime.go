@@ -20,10 +20,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/analysis"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -217,9 +217,13 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	slackClient := slackclient.NewSlackClient(guardianPolicy)
-	platformHosts, err := customdomains.ParsePlatformHosts(c.StringSlice("platform-hosts"))
+	authenticationHost, err := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, c.String("environment"))
 	if err != nil {
-		return nil, fmt.Errorf("invalid platform hosts: %w", err)
+		return nil, fmt.Errorf("invalid authentication host url: %w", err)
+	}
+	platformHosts, err := parsePlatformHosts(c, authenticationHost)
+	if err != nil {
+		return nil, err
 	}
 	triggerApp := newTriggersApp(logger, db, enc, r.Temporal, telemLogger, auditLogger, serverURL, siteURL, platformHosts, slackClient, cacheImpl)
 	assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine)

@@ -39,6 +39,8 @@ const (
 	// stripeCheckoutReturnBasePrefix marks the intent key segment that records
 	// a Checkout return base URL other than the site URL.
 	stripeCheckoutReturnBasePrefix = "return-"
+	// maxStripeIdempotencyKeyLength is the longest idempotency key Stripe accepts.
+	maxStripeIdempotencyKeyLength = 255
 )
 
 type stripeCheckoutIntent struct {
@@ -578,11 +580,17 @@ func checkoutIntentTrialFingerprint(idempotencyKey string) string {
 // last segment. Stripe replays a key only with byte-identical input, so every
 // replay of the intent derives its return URLs from the key rather than from
 // the host of the request that happens to replay it. The base URL is base64url
-// encoded because the key's segments are colon-separated.
+// encoded because the key's segments are colon-separated. A base URL too long
+// to fit in Stripe's idempotency key limit is left out, so Checkout returns to
+// the site URL.
 func withStripeCheckoutReturnBase(intent stripeCheckoutIntent, returnBaseURL string) stripeCheckoutIntent {
 	separator := strings.LastIndexByte(intent.idempotencyKey, ':')
-	intent.idempotencyKey = intent.idempotencyKey[:separator] + ":" + stripeCheckoutReturnBasePrefix +
+	key := intent.idempotencyKey[:separator] + ":" + stripeCheckoutReturnBasePrefix +
 		base64.RawURLEncoding.EncodeToString([]byte(returnBaseURL)) + intent.idempotencyKey[separator:]
+	if len(key) > maxStripeIdempotencyKeyLength {
+		return intent
+	}
+	intent.idempotencyKey = key
 	return intent
 }
 
