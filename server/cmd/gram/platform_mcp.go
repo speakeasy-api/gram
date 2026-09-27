@@ -56,36 +56,40 @@ import (
 )
 
 type platformMCPConfig struct {
-	Logger                   *slog.Logger
-	MeterProvider            metric.MeterProvider
-	TracerProvider           trace.TracerProvider
-	Mux                      goahttp.Muxer
-	DB                       *pgxpool.Pool
-	Redis                    *redis.Client
-	ServerURL                *url.URL
-	DashboardURL             *url.URL
-	Environment              string
-	JWTSigningKey            string
-	ProductFeatures          *productfeatures.Client
-	FeatureFlags             feature.Provider
-	DistributionAdmission    *admission.Guard
-	Authz                    *authz.Engine
-	Encryption               *encryption.Client
-	Identity                 *identity.Resolver
-	Sessions                 *sessions.Manager
-	Registry                 *externalmcp.RegistryClient
-	Catalog                  *externalmcp.CatalogService
-	GuardianPolicy           *guardian.Policy
-	RemoteChallengeManager   *remotesessions.ChallengeManager
-	IdentityCommitter        *remotesessions.IdentityCommitter
-	AuditLogger              *audit.Logger
-	AccessRoles              access.RoleProvider
-	PluginPublisher          *plugins.Service
-	PluginPublishSignaler    plugins.PluginPublishSignaler
-	NetworkAccessAdmission   networkaccess.EligibilityChecker
-	PublicationRequests      plugins.PublicationRequests
-	TemporalEnv              *tenv.Environment
-	Skills                   platformmcp.SkillsManagement
+	Logger                 *slog.Logger
+	MeterProvider          metric.MeterProvider
+	TracerProvider         trace.TracerProvider
+	Mux                    goahttp.Muxer
+	DB                     *pgxpool.Pool
+	Redis                  *redis.Client
+	ServerURL              *url.URL
+	DashboardURL           *url.URL
+	Environment            string
+	JWTSigningKey          string
+	ProductFeatures        *productfeatures.Client
+	FeatureFlags           feature.Provider
+	DistributionAdmission  *admission.Guard
+	Authz                  *authz.Engine
+	Encryption             *encryption.Client
+	Identity               *identity.Resolver
+	Sessions               *sessions.Manager
+	Registry               *externalmcp.RegistryClient
+	Catalog                *externalmcp.CatalogService
+	GuardianPolicy         *guardian.Policy
+	RemoteChallengeManager *remotesessions.ChallengeManager
+	IdentityCommitter      *remotesessions.IdentityCommitter
+	AuditLogger            *audit.Logger
+	AccessRoles            access.RoleProvider
+	PluginPublisher        *plugins.Service
+	PluginPublishSignaler  plugins.PluginPublishSignaler
+	NetworkAccessAdmission networkaccess.EligibilityChecker
+	PublicationRequests    plugins.PublicationRequests
+	TemporalEnv            *tenv.Environment
+	Skills                 platformmcp.SkillsManagement
+	// SkillInsights is the ClickHouse read behind get_skill_insights. Nil, which
+	// is what a deployment without ClickHouse passes, keeps the tool registered
+	// as a stub rather than answering with empty insights.
+	SkillInsights            platformmcp.SkillInsightsReader
 	RiskPolicyApprovals      policycore.ApprovalCoordinator
 	RiskPolicySignaler       policycore.PolicySignaler
 	RiskPolicyCache          policycore.PolicyCacheInvalidator
@@ -406,7 +410,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	config.Mux.Handle(http.MethodPost, "/platform-mcp/local-fixture/revoke", fixtureOAuth.Handler().ServeHTTP)
 	config.Mux.Handle(http.MethodPost, "/platform-mcp/local-fixture/mcp", fixtureMCP.Handler().ServeHTTP)
 
-	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
+	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
+		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithAuthorization(config.Authz).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
@@ -850,7 +855,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	}
 	distributions := newPlatformMCPDistributionService(config, pluginInventory).
 		WithDistributionAdmission(config.DistributionAdmission, platformmcp.NewPostgresOrganizationSlugResolver(config.DB))
-	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills)
+	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
+		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithAuthorization(config.Authz).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).

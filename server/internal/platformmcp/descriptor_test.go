@@ -246,6 +246,7 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	}
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["distribute_skill"])
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["undistribute_skill"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["get_skill_insights"], "session cost is organization spend")
 	for _, resource := range registrar.resources {
 		if resource.Meta.servesAudience(AudienceExternal) {
 			require.Equal(t, ExternalAuthorizationMember, resource.Meta.Authorization, resource.URI)

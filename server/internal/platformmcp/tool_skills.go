@@ -98,9 +98,45 @@ type UndistributeSkillToolInput struct {
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key, at most 128 characters; reuse only to retry this exact revocation"`
 }
 
+type GetSkillInsightsToolInput struct {
+	ProjectSlug string `json:"project_slug" jsonschema:"explicit project slug whose skills to rank"`
+	SkillID     string `json:"skill_id,omitempty" jsonschema:"optional skill ID returned by list_skills; set it to compare that one skill's versions instead of ranking the project's skills"`
+	Window      string `json:"window,omitempty" jsonschema:"observation window: 1h, 24h, 7d, or 30d (default); this tool looks back at most 30d"`
+	SortBy      string `json:"sort_by,omitempty" jsonschema:"rank skills by estimated_minutes_saved (default), efficacy, activations, or session_cost"`
+	Limit       int    `json:"limit,omitempty" jsonschema:"maximum skills to return; defaults to 10 and is capped at 20"`
+}
+
 type skillsRefusalResult struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// skillInsightsToolMeta is shared by the live tool and its stub, so the tool
+// keeps one audience and authority whichever one a deployment serves. Session
+// cost is organization spend, so like query_skill_usage it is an administrator
+// read even though the skills it names are member-readable.
+var skillInsightsToolMeta = ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}
+
+func registerSkillInsightsTool(reg *Registrar, skills *SkillsService) {
+	if !skills.insightsValid() {
+		addTool(reg, &mcp.Tool{
+			Name:        "get_skill_insights",
+			Title:       "Skill Insights",
+			Description: "Rank a project's skills, or compare one skill's versions, by activations, sampled efficacy, full-session cost, and estimated time saved. This is not switched on for your organization yet.",
+			Annotations: readOnlyAnnotations(),
+		}, skillInsightsToolMeta, unavailableTool("skill_insights"))
+		return
+	}
+	addTool(reg, &mcp.Tool{
+		Name:        "get_skill_insights",
+		Title:       "Skill Insights",
+		Description: "Rank a project's skills, or compare one skill's versions with skill_id, by activations, sampled efficacy, full-session cost, and estimated time saved over the last 30 days by default. Costs are full-session: the whole session's model cost is attributed to every skill activated in it, so figures are not additive across skills. Efficacy and savings cover sampled scored sessions only; a skill without scores has unknown efficacy, not zero. Skills are named by registry ID; no person or session is identified.",
+		Annotations: readOnlyAnnotations(),
+	}, skillInsightsToolMeta, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSkillInsightsToolInput) (*mcp.CallToolResult, GetSkillInsightsOutput, error) {
+		return skillsToolCall(ctx, func(principal Principal) (GetSkillInsightsOutput, error) {
+			return skills.GetSkillInsights(ctx, principal, GetSkillInsightsInput(input))
+		})
+	})
 }
 
 func registerSkillsTools(reg *Registrar, skills *SkillsService) {
@@ -239,6 +275,8 @@ func registerSkillsTools(reg *Registrar, skills *SkillsService) {
 			})
 		})
 	})
+
+	registerSkillInsightsTool(reg, skills)
 }
 
 // registerUnavailableSkillsTools declares the same tools the live registration
@@ -282,6 +320,7 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 		}
 		addTool(reg, manifest, ToolMeta{Authorization: tool.authority, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryScopes}, unavailableTool("skills"))
 	}
+	registerSkillInsightsTool(reg, nil)
 }
 
 // skillsToolCall runs one skill call and turns a refusal into a structured
