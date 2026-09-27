@@ -121,13 +121,14 @@ type MCPDistribution struct {
 	PluginSlug string `json:"plugin_slug"`
 
 	// State is the lifecycle state of a membership this flow created. It is
-	// empty for a membership created elsewhere, which has no lifecycle record;
-	// empty means unknown, never "not attached".
-	State string `json:"state,omitempty"`
+	// always present and empty for a membership created elsewhere, which has
+	// no lifecycle record; empty means unknown, never "not attached".
+	State string `json:"state"`
 
 	// PublicationState reports whether that membership has been published. It
-	// is empty on the same terms as State, and empty never means "unpublished".
-	PublicationState string `json:"publication_state,omitempty"`
+	// is always present and empty on the same terms as State, and empty never
+	// means "unpublished".
+	PublicationState string `json:"publication_state"`
 }
 
 type MCP struct {
