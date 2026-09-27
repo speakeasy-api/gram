@@ -13,6 +13,7 @@ import (
 
 	genskills "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -87,13 +88,19 @@ type SkillTargetInventory interface {
 	SkillTargets(ctx context.Context, organizationID string, projectID uuid.UUID, limitPerKind int) ([]SkillTarget, error)
 }
 
-// GrantPreparer loads the acting user's RBAC grants onto the context.
+// SkillAuthorizer loads the acting user's RBAC grants onto the context and
+// evaluates skill checks against them.
 //
 // Platform MCP does not travel the session middleware that prepares grants for
 // dashboard requests, so it prepares them itself. Without this the skills
-// service's scope checks would find no grants and refuse every call.
-type GrantPreparer interface {
+// service's scope checks would find no grants and refuse every call. The check
+// is here for the one read that names a plugin before it reaches the skills
+// service: authorization has to come before target resolution, or an ungranted
+// caller could tell an existing plugin from a missing one by which refusal it
+// got back.
+type SkillAuthorizer interface {
 	PrepareContext(ctx context.Context) (context.Context, error)
+	RequireAnyUnblocked(ctx context.Context, checks ...authz.Check) error
 }
 
 // SkillProjectResolver turns the project slug a caller names into the project
@@ -172,12 +179,12 @@ type SkillsService struct {
 	skills   SkillsManagement
 	targets  SkillTargetInventory
 	projects SkillProjectResolver
-	grants   GrantPreparer
+	grants   SkillAuthorizer
 	gate     CatalogRegistrationGateChecker
 	budget   OperationBudget
 }
 
-func NewSkillsService(skills SkillsManagement, targets SkillTargetInventory, projects SkillProjectResolver, grants GrantPreparer, gate CatalogRegistrationGateChecker, budget OperationBudget) *SkillsService {
+func NewSkillsService(skills SkillsManagement, targets SkillTargetInventory, projects SkillProjectResolver, grants SkillAuthorizer, gate CatalogRegistrationGateChecker, budget OperationBudget) *SkillsService {
 	return &SkillsService{
 		skills:   skills,
 		targets:  targets,
@@ -820,6 +827,13 @@ func (s *SkillsService) ListSkillDistributions(ctx context.Context, principal Pr
 	}
 	var pluginID *string
 	if strings.TrimSpace(input.Plugin) != "" {
+		// The skills service checks skill read when the listing reaches it,
+		// which is after the plugin name has been resolved. The same check runs
+		// here first, so a caller without skill read is refused the same way
+		// whether or not the plugin it named exists.
+		if err := s.requireSkillRead(ctx, project, skillID); err != nil {
+			return ListSkillDistributionsOutput{}, err
+		}
 		target, err := s.resolveTarget(ctx, principal, project, input.Plugin, "")
 		if err != nil {
 			return ListSkillDistributionsOutput{}, err
@@ -869,6 +883,16 @@ func (s *SkillsService) ListSkillDistributions(ctx context.Context, principal Pr
 	}, nil
 }
 
+// requireSkillRead is the skills service's own read policy: a skill grant
+// selects either the whole project or the one skill named.
+func (s *SkillsService) requireSkillRead(ctx context.Context, project ResolvedProject, skillID string) error {
+	checks := []authz.Check{{Scope: authz.ScopeSkillRead, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}}
+	if skillID != "" {
+		checks = append(checks, authz.Check{Scope: authz.ScopeSkillRead, ResourceKind: authz.ResourceKindSkill, ResourceID: skillID, Dimensions: nil})
+	}
+	return s.grants.RequireAnyUnblocked(ctx, checks...)
+}
+
 // UndistributeSkillInput names exactly one target on the same terms as
 // DistributeSkillInput. The idempotency key is required so a retry loop is
 // shaped like the other Platform MCP mutations; revocation itself converges,
@@ -913,19 +937,22 @@ func (s *SkillsService) UndistributeSkill(ctx context.Context, principal Princip
 		return UndistributeSkillOutput{}, ErrRegistrationInvalid
 	}
 
-	target, err := s.resolveTarget(ctx, principal, project, input.Plugin, input.Assistant)
-	if err != nil {
-		return UndistributeSkillOutput{}, err
-	}
 	// The revocation returns no body, so the skill is read first: that names
-	// it in the receipt and refuses a skill this project does not have as
-	// not_found before anything is revoked.
+	// it in the receipt, refuses a skill this project does not have as
+	// not_found before anything is revoked, and — because the read is
+	// authorized by the skills service — refuses a caller without skill access
+	// before any target is resolved, so the refusal does not reveal whether
+	// the named plugin or assistant exists.
 	current, err := s.skills.Get(ctx, &genskills.GetPayload{
 		ID:               input.SkillID,
 		SessionToken:     nil,
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 	})
+	if err != nil {
+		return UndistributeSkillOutput{}, err
+	}
+	target, err := s.resolveTarget(ctx, principal, project, input.Plugin, input.Assistant)
 	if err != nil {
 		return UndistributeSkillOutput{}, err
 	}

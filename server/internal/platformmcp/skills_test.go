@@ -14,6 +14,7 @@ import (
 
 	genskills "github.com/speakeasy-api/gram/server/gen/skills"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -34,6 +35,8 @@ type recordingSkillsManagement struct {
 	updated                   *genskills.UpdatePayload
 	distributed               *genskills.DistributePayload
 	undistributed             []*genskills.UndistributePayload
+	revokedNow                []bool
+	revokedTargets            map[string]bool
 	listedDistributions       *genskills.ListDistributionsPayload
 	skill                     *types.Skill
 	latestVersion             *types.SkillVersion
@@ -138,9 +141,21 @@ func (s *recordingSkillsManagement) Distribute(_ context.Context, payload *gensk
 	return s.distribution, nil
 }
 
+// Undistribute models the skills service's convergence: the first revocation
+// of a target finds an active distribution and ends it; a repeat finds it
+// already gone and returns success without doing anything.
 func (s *recordingSkillsManagement) Undistribute(_ context.Context, payload *genskills.UndistributePayload) error {
 	s.undistributed = append(s.undistributed, payload)
-	return s.err
+	if s.err != nil {
+		return s.err
+	}
+	key := payload.ID + "/" + stringOrEmpty(payload.PluginID) + "/" + stringOrEmpty(payload.AssistantID)
+	if s.revokedTargets == nil {
+		s.revokedTargets = map[string]bool{}
+	}
+	s.revokedNow = append(s.revokedNow, !s.revokedTargets[key])
+	s.revokedTargets[key] = true
+	return nil
 }
 
 type stubSkillTargets struct{ targets []SkillTarget }
@@ -168,6 +183,32 @@ type passthroughGrants struct{}
 
 func (passthroughGrants) PrepareContext(ctx context.Context) (context.Context, error) {
 	return ctx, nil
+}
+
+func (passthroughGrants) RequireAnyUnblocked(context.Context, ...authz.Check) error {
+	return nil
+}
+
+// denyingGrants is an RBAC engine that finds no skill grant for the caller.
+type denyingGrants struct{}
+
+func (denyingGrants) PrepareContext(ctx context.Context) (context.Context, error) {
+	return ctx, nil
+}
+
+func (denyingGrants) RequireAnyUnblocked(context.Context, ...authz.Check) error {
+	return oops.C(oops.CodeForbidden)
+}
+
+// countingSkillTargets records whether target resolution was ever consulted.
+type countingSkillTargets struct {
+	targets []SkillTarget
+	calls   int
+}
+
+func (s *countingSkillTargets) SkillTargets(_ context.Context, _ string, _ uuid.UUID, _ int) ([]SkillTarget, error) {
+	s.calls++
+	return s.targets, nil
 }
 
 type stubSkillsGate struct {
@@ -1039,8 +1080,9 @@ func TestUndistributeSkillRefusesAMissingSkillBeforeRevoking(t *testing.T) {
 	require.Empty(t, skills.undistributed)
 }
 
-// Revocation converges: the second call finds nothing to revoke and reports
-// the same end state as the first, so a retry with the same key is harmless.
+// Revocation converges: the first call ends the distribution, the second finds
+// it already gone and revokes nothing, and both report the same end state, so
+// a retry with the same key is harmless.
 func TestUndistributeSkillIsANoOpOnRepeat(t *testing.T) {
 	t.Parallel()
 
@@ -1056,6 +1098,54 @@ func TestUndistributeSkillIsANoOpOnRepeat(t *testing.T) {
 	require.Equal(t, first, second)
 	require.Len(t, skills.undistributed, 2)
 	require.Equal(t, skills.undistributed[0], skills.undistributed[1])
+	require.Equal(t, []bool{true, false}, skills.revokedNow, "only the first call finds a distribution to end; the repeat is the already-gone path")
+}
+
+// A caller without skill access must get the same refusal whether or not the
+// plugin it named exists: authorization runs before any target is resolved,
+// so the refusal cannot be used to probe plugin names.
+func TestUngrantedCallerCannotProbePluginNamesThroughSkillDistributionTools(t *testing.T) {
+	t.Parallel()
+
+	for _, plugin := range []string{"marketing", "sales"} {
+		listTargets := &countingSkillTargets{targets: testTargets()}
+		listing := NewSkillsService(
+			&recordingSkillsManagement{skill: testSkill()},
+			listTargets,
+			stubSkillProjects{},
+			denyingGrants{},
+			stubSkillsGate{enabled: true},
+			OperationBudget{
+				Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+				Organization: &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+			},
+		)
+		_, err := listing.ListSkillDistributions(t.Context(), testPrincipal(), ListSkillDistributionsInput{ProjectSlug: testSkillProjectSlug, Plugin: plugin})
+		code, _, ok := skillsRefusalCode(err)
+		require.True(t, ok, plugin)
+		require.Equal(t, "forbidden", code, plugin)
+		require.Zero(t, listTargets.calls, "no plugin is looked up for a caller the read policy refuses")
+
+		revokeTargets := &countingSkillTargets{targets: testTargets()}
+		denied := &recordingSkillsManagement{skill: testSkill(), err: oops.C(oops.CodeForbidden)}
+		revoking := NewSkillsService(
+			denied,
+			revokeTargets,
+			stubSkillProjects{},
+			passthroughGrants{},
+			stubSkillsGate{enabled: true},
+			OperationBudget{
+				Connection:   &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+				Organization: &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}},
+			},
+		)
+		_, err = revoking.UndistributeSkill(t.Context(), testPrincipal(), UndistributeSkillInput{ProjectSlug: testSkillProjectSlug, SkillID: testSkillID, Plugin: plugin, IdempotencyKey: "k"})
+		code, _, ok = skillsRefusalCode(err)
+		require.True(t, ok, plugin)
+		require.Equal(t, "forbidden", code, plugin)
+		require.Zero(t, revokeTargets.calls, "the skill read refuses before any target is looked up")
+		require.Empty(t, denied.undistributed)
+	}
 }
 
 // The revocation is gated on explicit confirmation at the tool boundary, before

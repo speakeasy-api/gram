@@ -169,6 +169,7 @@ func TestPlatformMCPSkillsToolsAuthorAndDistributeEndToEnd(t *testing.T) {
 		"project_slug":    fixture.project.Slug,
 		"skill_id":        created.Skill.ID,
 		"plugin":          "marketing",
+		"confirmed":       false,
 		"idempotency_key": "revoke-marketing",
 	})
 	require.Equal(t, "confirmation_required", unconfirmed.Code)
@@ -461,6 +462,11 @@ func TestPlatformMCPSkillsToolsRefuseAUserWithoutGrants(t *testing.T) {
 		{name: "list_skill_feedback", arguments: map[string]any{"project_slug": fixture.project.Slug, "skill_id": uuid.NewString()}},
 		{name: "list_skill_suggestions", arguments: map[string]any{"project_slug": fixture.project.Slug}},
 		{name: "list_skill_suggestion_feedback", arguments: map[string]any{"project_slug": fixture.project.Slug, "change_id": uuid.NewString()}},
+		{name: "list_skill_distributions", arguments: map[string]any{"project_slug": fixture.project.Slug}},
+		// An existing plugin and a missing one refuse identically, so the
+		// refusal cannot be used to learn which plugins the project has.
+		{name: "list_skill_distributions", arguments: map[string]any{"project_slug": fixture.project.Slug, "plugin": "marketing"}},
+		{name: "list_skill_distributions", arguments: map[string]any{"project_slug": fixture.project.Slug, "plugin": "nowhere"}},
 	} {
 		refusal = callSkillsRefusal(t, ctx, fixture.session, call.name, call.arguments)
 		require.Equal(t, "forbidden", refusal.Code, call.name)
