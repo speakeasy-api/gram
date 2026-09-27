@@ -17,6 +17,15 @@ const maxBodyContentBytes = 64 * 1024 // 64KB
 // HTTPLogAttributes is a utility to set attributes in a map.
 type HTTPLogAttributes map[attr.Key]any
 
+// ToolCallErrorReason names how a tool signalled failure in-band. The set is
+// closed so the value stays a low-cardinality dimension and can never carry
+// upstream text.
+type ToolCallErrorReason string
+
+// ToolCallErrorUpstreamResult is an upstream MCP server reporting failure
+// through isError on a result it returned successfully.
+const ToolCallErrorUpstreamResult ToolCallErrorReason = "upstream_result_error"
+
 func (h HTTPLogAttributes) RecordMethod(method string) {
 	h[attr.HTTPRequestMethodKey] = method
 }
@@ -35,6 +44,19 @@ func (h HTTPLogAttributes) RecordRoute(route string) {
 
 func (h HTTPLogAttributes) RecordStatusCode(code int) {
 	h[attr.HTTPResponseStatusCodeKey] = int64(code)
+}
+
+// RecordToolCallError marks a tool that ran and reported failure in its own
+// result rather than through a status code. An upstream MCP server answering
+// with isError on an otherwise successful HTTP 200 is the motivating case: the
+// status code says success, so without this the call is indistinguishable
+// from one that worked.
+//
+// The reason is a fixed Gram-authored string, never upstream content. What the
+// tool actually said is its output, and belongs in gen_ai.tool.call.result
+// where the tool IO scrub can reach it.
+func (h HTTPLogAttributes) RecordToolCallError(reason ToolCallErrorReason) {
+	h[attr.ToolCallErrorKey] = string(reason)
 }
 
 func (h HTTPLogAttributes) RecordUserAgent(agent string) {

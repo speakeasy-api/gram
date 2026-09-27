@@ -213,6 +213,12 @@ CREATE TABLE IF NOT EXISTS trace_summaries (
     -- setting gen_ai.tool.call.result.
     has_result SimpleAggregateFunction(max, UInt8),
     has_error SimpleAggregateFunction(max, UInt8),
+    -- Set when a tool Gram executed reported failure in its own result rather
+    -- than through a status code, which an upstream MCP server does by
+    -- answering isError on a successful HTTP 200. Without it such a trace
+    -- aggregates a 2xx http_status_code and reads as a success. Once we see a
+    -- 1 it stays 1 across merges, as with the hook signals above.
+    has_tool_error SimpleAggregateFunction(max, UInt8),
     -- Set when the Gram hook denied the tool call (e.g. shadow-MCP guard).
     -- Once we see a 1, it stays 1 across merges. Status is derived at query
     -- time as: has_block → blocked, has_error → failure, has_result → success,
@@ -291,6 +297,7 @@ SELECT
     ) AS http_status_code,
     max(if(toString(attributes.gen_ai.tool.call.result) != '', 1, 0)) AS has_result,
     max(if(toString(attributes.gram.hook.error) != '', 1, 0)) AS has_error,
+    max(if(toString(attributes.gram.tool_call.error) != '', 1, 0)) AS has_tool_error,
     max(if(toString(attributes.gram.hook.block_reason) != '', 1, 0)) AS has_block,
     anyIf(toString(attributes.gram.hook.block_reason), toString(attributes.gram.hook.block_reason) != '') AS block_reason,
     anyIf(account_type, account_type != '') AS account_type,

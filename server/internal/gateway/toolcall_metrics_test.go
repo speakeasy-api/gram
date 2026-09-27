@@ -148,6 +148,23 @@ func externalMCPPlan(remoteURL string) *ExternalMCPToolCallPlan {
 func callToolProxy(t *testing.T, ctx context.Context, proxy *ToolProxy, plan *ToolCallPlan, body string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 
+	recorder, _, err := callToolProxyWithAttributes(t, ctx, proxy, plan, body)
+	return recorder, err
+}
+
+// callToolProxyWithAttributes also returns the log attributes the call
+// populated, which is how the telemetry row is assembled by the callers of
+// ToolProxy.Do.
+func callToolProxyWithAttributes(
+	t *testing.T,
+	ctx context.Context,
+	proxy *ToolProxy,
+	plan *ToolCallPlan,
+	body string,
+) (*httptest.ResponseRecorder, tm.HTTPLogAttributes, error) {
+	t.Helper()
+
+	attrs := tm.HTTPLogAttributes{}
 	recorder := httptest.NewRecorder()
 	err := proxy.Do(ctx, recorder, strings.NewReader(body), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
@@ -156,9 +173,9 @@ func callToolProxy(t *testing.T, ctx context.Context, proxy *ToolProxy, plan *To
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
-	}, plan, tm.HTTPLogAttributes{})
+	}, plan, attrs)
 
-	return recorder, err
+	return recorder, attrs, err
 }
 
 // A status of zero means no response was produced at all, which is a different
@@ -271,6 +288,36 @@ func TestToolProxy_Do_ExternalMCP_RecordsUpstreamErrorResultAsToolError(t *testi
 	set := onlyToolCallAttributes(t, reader)
 	require.Equal(t, string(toolCallOutcomeToolError), attributeValue(t, set, attr.OutcomeKey))
 	require.Equal(t, "200", attributeValue(t, set, attribute.Key("http.response.status_code")))
+}
+
+// The metric above is not enough on its own: without the same signal on the
+// log attributes the ClickHouse row keeps only the 200 and Tool Logs shows the
+// call as a success.
+func TestToolProxy_Do_ExternalMCP_RecordsUpstreamErrorResultOnLogAttributes(t *testing.T) {
+	t.Parallel()
+
+	proxy := newMetricToolProxy(t, sdkmetric.NewManualReader())
+	server := newExternalMCPTestServer(t, true)
+
+	recorder, attrs, err := callToolProxyWithAttributes(t, t.Context(), proxy, NewExternalMCPToolCallPlan(newExternalMCPToolDescriptor(), externalMCPPlan(server.URL)), `{}`)
+	require.NoError(t, err)
+
+	require.Equal(t, string(tm.ToolCallErrorUpstreamResult), attrs[attr.ToolCallErrorKey])
+	// Recorded alongside, not instead of, the success the caller is handed and
+	// that its deferred logging records as the status code.
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestToolProxy_Do_ExternalMCP_LeavesLogAttributesCleanOnSuccess(t *testing.T) {
+	t.Parallel()
+
+	proxy := newMetricToolProxy(t, sdkmetric.NewManualReader())
+	server := newExternalMCPTestServer(t, false)
+
+	_, attrs, err := callToolProxyWithAttributes(t, t.Context(), proxy, NewExternalMCPToolCallPlan(newExternalMCPToolDescriptor(), externalMCPPlan(server.URL)), `{}`)
+	require.NoError(t, err)
+
+	require.NotContains(t, attrs, attr.ToolCallErrorKey)
 }
 
 // A call that never reaches a working upstream writes no response at all, and
