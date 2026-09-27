@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -78,9 +79,10 @@ type findingListClickHouse struct {
 	list      []chrepo.ListRiskFindingsParams
 	groupBy   []chrepo.GroupRiskFindingsByChatParams
 	ruleCalls []struct {
-		params   chrepo.RiskOverviewWindowParams
-		category string
-		limit    uint64
+		params    chrepo.RiskOverviewWindowParams
+		category  string
+		policyIDs []string
+		limit     uint64
 	}
 }
 
@@ -94,12 +96,13 @@ func (s *findingListClickHouse) GroupRiskFindingsByChat(_ context.Context, p chr
 	return s.groups, s.err
 }
 
-func (s *findingListClickHouse) ListRiskRuleCountsByCategory(_ context.Context, p chrepo.RiskOverviewWindowParams, category string, limit uint64) ([]chrepo.RiskOverviewRuleCount, error) {
+func (s *findingListClickHouse) ListRiskRuleCountsByCategory(_ context.Context, p chrepo.RiskOverviewWindowParams, category string, policyIDs []string, limit uint64) ([]chrepo.RiskOverviewRuleCount, error) {
 	s.ruleCalls = append(s.ruleCalls, struct {
-		params   chrepo.RiskOverviewWindowParams
-		category string
-		limit    uint64
-	}{p, category, limit})
+		params    chrepo.RiskOverviewWindowParams
+		category  string
+		policyIDs []string
+		limit     uint64
+	}{p, category, policyIDs, limit})
 	return s.rules, s.err
 }
 
@@ -524,11 +527,22 @@ func TestRiskRuleBreakdown(t *testing.T) {
 	require.EqualValues(t, 10, out.Total)
 	require.False(t, out.Truncated)
 	require.Equal(t, []RiskRuleCount{{RuleID: "secret.stripe", Source: "gitleaks", Findings: 7}, {RuleID: "secret.aws", Source: "gitleaks", Findings: 3}}, out.Rules)
-	require.Zero(t, f.postgres.policyCalls)
+	require.Zero(t, f.postgres.policyCalls, "the Postgres query joins risk_policies itself")
 	require.Len(t, f.postgres.ruleParams, 1)
 	require.Equal(t, "secrets", f.postgres.ruleParams[0].Category)
 	require.Equal(t, f.project.ID, f.postgres.ruleParams[0].ProjectID)
 	require.Equal(t, riskAnalysisTestNow, f.postgres.ruleParams[0].ToTime.Time)
+	require.Equal(t, pgtype.Int4{Int32: riskRuleBreakdownLimit + 1, Valid: true}, f.postgres.ruleParams[0].PageLimit, "one row past the bound detects truncation without an unbounded fetch")
+
+	f.postgres.ruleRows = nil
+	for i := range riskRuleBreakdownLimit + 1 {
+		f.postgres.ruleRows = append(f.postgres.ruleRows, riskrepo.ListRiskRulesByCategoryRow{RuleID: "rule-" + strconv.Itoa(i), Source: "gitleaks", Findings: 1})
+	}
+	out, err = f.service.RuleBreakdown(t.Context(), principal, GetRiskRuleBreakdownInput{Category: "secrets"})
+	require.NoError(t, err)
+	require.True(t, out.Truncated)
+	require.Len(t, out.Rules, riskRuleBreakdownLimit)
+	require.EqualValues(t, riskRuleBreakdownLimit, out.Total)
 
 	explicit, err := f.service.RuleBreakdown(t.Context(), principal, GetRiskRuleBreakdownInput{Category: "pii", From: riskAnalysisTestNow.Add(-31 * 24 * time.Hour).Format(time.RFC3339), To: riskAnalysisTestNow.Format(time.RFC3339)})
 	require.NoError(t, err)
@@ -541,13 +555,24 @@ func TestRiskRuleBreakdown(t *testing.T) {
 	out, err = f.service.RuleBreakdown(t.Context(), principal, GetRiskRuleBreakdownInput{Category: "secrets"})
 	require.NoError(t, err)
 	require.Zero(t, f.postgres.calls())
+	require.Equal(t, 1, f.postgres.policyCalls)
 	require.Len(t, f.clickhouse.ruleCalls, 1)
 	require.Equal(t, "secrets", f.clickhouse.ruleCalls[0].category)
 	require.EqualValues(t, riskRuleBreakdownLimit+1, f.clickhouse.ruleCalls[0].limit)
 	require.Equal(t, f.project.ID.String(), f.clickhouse.ruleCalls[0].params.ProjectID)
+	expectedPolicies := []string{f.policies[0].ID.String(), f.policies[1].ID.String()}
+	slices.Sort(expectedPolicies)
+	require.Equal(t, expectedPolicies, f.clickhouse.ruleCalls[0].policyIDs, "every non-deleted policy, disabled included, is pushed down; the foreign one is not")
 	require.True(t, out.Truncated)
 	require.Len(t, out.Rules, riskRuleBreakdownLimit)
 	require.EqualValues(t, 2*riskRuleBreakdownLimit, out.Total)
+
+	f.postgres.policies = nil
+	empty, err := f.service.RuleBreakdown(t.Context(), principal, GetRiskRuleBreakdownInput{Category: "secrets"})
+	require.NoError(t, err)
+	require.Empty(t, empty.Rules)
+	require.Len(t, f.clickhouse.ruleCalls, 1, "no visible policy means nothing to count")
+	f.postgres.policies = f.policies
 
 	f.clickhouse.err = errors.New("private database detail")
 	_, err = f.service.RuleBreakdown(t.Context(), principal, GetRiskRuleBreakdownInput{Category: "secrets"})

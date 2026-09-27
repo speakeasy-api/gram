@@ -44,16 +44,20 @@ func TestRuleCountsByCategoryQuery(t *testing.T) {
 
 	from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	p := RiskOverviewWindowParams{OrganizationID: "org-test", ProjectID: "project-test", From: from, To: from.Add(7 * 24 * time.Hour)}
-	query, args, err := ruleCountsByCategoryQuery(p, "secrets", 1001).ToSql()
+	sb, err := ruleCountsByCategoryQuery(p, "secrets", []string{"policy-a", "policy-b"}, 1001)
 	require.NoError(t, err)
-	require.Equal(t, []any{"org-test", "project-test", p.From, p.To, "secrets"}, args)
+	query, args, err := sb.ToSql()
+	require.NoError(t, err)
+	require.Equal(t, []any{"org-test", "project-test", p.From, p.To, "secrets", "policy-a", "policy-b"}, args)
 	for _, clause := range []string{
 		"created_at >= ?", "created_at < ?",
 		"ROW_NUMBER() OVER (PARTITION BY id ORDER BY " + latestCopyOrderSQL + ") AS rn",
-		"rn = 1 AND dead_letter_reason = '' AND excluded_at IS NULL AND false_positive_at IS NULL AND category = ?",
+		"rn = 1 AND dead_letter_reason = '' AND excluded_at IS NULL AND false_positive_at IS NULL AND category = ? AND risk_policy_id IN (?,?)",
 		"uniqExact(id) AS findings", "GROUP BY rule_id, source ORDER BY findings DESC, rule_id ASC LIMIT 1001",
 	} {
 		require.Contains(t, query, clause)
 	}
-	require.NotContains(t, query, "risk_policy_id IN")
+
+	_, err = ruleCountsByCategoryQuery(p, "secrets", nil, 1001)
+	require.ErrorIs(t, err, errEmptyPolicyIDs)
 }

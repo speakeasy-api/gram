@@ -48,7 +48,7 @@ const (
 type RiskFindingListReader interface {
 	ListRiskFindings(context.Context, chrepo.ListRiskFindingsParams) ([]chrepo.RiskFindingListRow, error)
 	GroupRiskFindingsByChat(context.Context, chrepo.GroupRiskFindingsByChatParams) ([]chrepo.RiskFindingChatGroup, error)
-	ListRiskRuleCountsByCategory(context.Context, chrepo.RiskOverviewWindowParams, string, uint64) ([]chrepo.RiskOverviewRuleCount, error)
+	ListRiskRuleCountsByCategory(context.Context, chrepo.RiskOverviewWindowParams, string, []string, uint64) ([]chrepo.RiskOverviewRuleCount, error)
 }
 
 // riskFindingPostgresReader is the Postgres read path, served when the
@@ -684,17 +684,33 @@ func (s *RiskFindingListService) RuleBreakdown(ctx context.Context, principal Pr
 		return zero, err
 	}
 
+	// Both stores read one row past the bound so truncation is detected
+	// without an unbounded fetch.
 	rules := make([]RiskRuleCount, 0, riskRuleBreakdownLimit+1)
 	if clickhouse {
-		rows, err := s.clickhouse.ListRiskRuleCountsByCategory(ctx, chrepo.RiskOverviewWindowParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), From: from, To: to}, input.Category, riskRuleBreakdownLimit+1)
+		// Deleted policies' rows linger in ClickHouse until TTL, so the
+		// non-deleted set is pushed down where Postgres joins risk_policies.
+		policies, err := s.visiblePolicies(ctx, principal, project)
 		if err != nil {
-			return zero, fmt.Errorf("%w: count findings by rule", ErrUnavailable)
+			return zero, err
+		}
+		policyIDs := make([]string, 0, len(policies))
+		for id := range policies {
+			policyIDs = append(policyIDs, id)
+		}
+		slices.Sort(policyIDs)
+		var rows []chrepo.RiskOverviewRuleCount
+		if len(policyIDs) > 0 {
+			rows, err = s.clickhouse.ListRiskRuleCountsByCategory(ctx, chrepo.RiskOverviewWindowParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID.String(), From: from, To: to}, input.Category, policyIDs, riskRuleBreakdownLimit+1)
+			if err != nil {
+				return zero, fmt.Errorf("%w: count findings by rule", ErrUnavailable)
+			}
 		}
 		for _, row := range rows {
 			rules = append(rules, RiskRuleCount{RuleID: findingLabel(row.RuleID), Source: findingLabel(row.Source), Findings: safeFindingCount(row.Findings)})
 		}
 	} else {
-		rows, err := s.postgres.ListRiskRulesByCategory(ctx, riskrepo.ListRiskRulesByCategoryParams{Category: input.Category, ProjectID: project.ID, FromTime: pgOptionalTime(&from), ToTime: pgOptionalTime(&to)})
+		rows, err := s.postgres.ListRiskRulesByCategory(ctx, riskrepo.ListRiskRulesByCategoryParams{Category: input.Category, ProjectID: project.ID, FromTime: pgOptionalTime(&from), ToTime: pgOptionalTime(&to), PageLimit: pgtype.Int4{Int32: riskRuleBreakdownLimit + 1, Valid: true}})
 		if err != nil {
 			return zero, fmt.Errorf("%w: count findings by rule", ErrUnavailable)
 		}

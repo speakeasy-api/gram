@@ -4089,7 +4089,7 @@ func (q *Queries) ListRiskPolicyMCPScopeServerIDs(ctx context.Context, arg ListR
 }
 
 const listRiskResultsByChatFound = `-- name: ListRiskResultsByChatFound :many
-SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.skill_version_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
+SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.skill_version_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, COALESCE(NULLIF(cm.external_user_id, ''), c.external_user_id) AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
 LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
 LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
@@ -4153,6 +4153,9 @@ type ListRiskResultsByChatFoundRow struct {
 	BlockID             uuid.UUID
 }
 
+// chat_user_id resolves the message's own external identity first and falls
+// back to the chat's, matching the ClickHouse listing's ingest-time
+// attribution so a pager sees the same identity on either store.
 func (q *Queries) ListRiskResultsByChatFound(ctx context.Context, arg ListRiskResultsByChatFoundParams) ([]ListRiskResultsByChatFoundRow, error) {
 	rows, err := q.db.Query(ctx, listRiskResultsByChatFound,
 		arg.ChatID,
@@ -4354,7 +4357,11 @@ FROM (
       rr.confidence, rr.tags, rr.spans, rr.dead_letter_reason, rr.created_at,
       COALESCE(cm.chat_id, ccp.chat_id) AS chat_id,
       COALESCE(cm.created_at, ccp.created_at) AS message_created_at,
-      c.title AS chat_title, c.external_user_id AS chat_user_id,
+      c.title AS chat_title,
+      -- The message's own external identity first, then the chat's, matching
+      -- the ClickHouse listing's ingest-time attribution. @user_id below
+      -- filters on the same expression.
+      COALESCE(NULLIF(cm.external_user_id, ''), c.external_user_id) AS chat_user_id,
       COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id,
       CASE
         WHEN $1::boolean THEN ROW_NUMBER() OVER (
@@ -4385,7 +4392,7 @@ FROM (
     AND ($4::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) >= $4::timestamptz)
     AND ($5::timestamptz IS NULL OR COALESCE(cm.created_at, ccp.created_at) < $5::timestamptz)
     AND ($6::text = '' OR rr.rule_id ILIKE '%' || $6::text || '%')
-    AND ($7::text = '' OR c.external_user_id ILIKE '%' || $7::text || '%')
+    AND ($7::text = '' OR COALESCE(NULLIF(cm.external_user_id, ''), c.external_user_id) ILIKE '%' || $7::text || '%')
     -- Whole-id matching, unlike @user_id above: one subject's findings, not
     -- everyone whose id happens to contain theirs as a substring.
     AND (
@@ -4590,20 +4597,22 @@ func (q *Queries) ListRiskResultsByProjectFound(ctx context.Context, arg ListRis
 
 const listRiskResultsGroupedByChat = `-- name: ListRiskResultsGroupedByChat :many
 SELECT
-    cm.chat_id
+    COALESCE(cm.chat_id, ccp.chat_id)::uuid AS chat_id
   , c.title AS chat_title
   , c.external_user_id AS chat_user_id
   , COUNT(*)::BIGINT AS findings_count
   , MAX(rr.created_at)::TIMESTAMPTZ AS latest_detected
 FROM risk_results rr
-JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chats c ON c.id = cm.chat_id AND c.deleted IS FALSE
+LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
+LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
+LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
 JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE AND rp.enabled IS TRUE
 WHERE rr.project_id = $1
   AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND ($2::uuid IS NULL OR cm.chat_id <= $2::uuid)
-GROUP BY cm.chat_id, c.title, c.external_user_id
-ORDER BY cm.chat_id DESC
+  AND COALESCE(cm.chat_id, ccp.chat_id) IS NOT NULL
+  AND ($2::uuid IS NULL OR COALESCE(cm.chat_id, ccp.chat_id) <= $2::uuid)
+GROUP BY COALESCE(cm.chat_id, ccp.chat_id), c.title, c.external_user_id
+ORDER BY COALESCE(cm.chat_id, ccp.chat_id) DESC
 LIMIT $3
 `
 
@@ -4621,6 +4630,9 @@ type ListRiskResultsGroupedByChatRow struct {
 	LatestDetected pgtype.Timestamptz
 }
 
+// A finding is anchored to either a chat message or a chat content part
+// (attachment), so both anchors resolve the chat; skill-anchored findings
+// have neither and are excluded by the non-null chat check.
 func (q *Queries) ListRiskResultsGroupedByChat(ctx context.Context, arg ListRiskResultsGroupedByChatParams) ([]ListRiskResultsGroupedByChatRow, error) {
 	rows, err := q.db.Query(ctx, listRiskResultsGroupedByChat, arg.ProjectID, arg.Cursor, arg.PageLimit)
 	if err != nil {
@@ -4701,21 +4713,26 @@ WITH categorized AS (
       ELSE 'custom'
     END AS category
   FROM risk_results rr
-  WHERE rr.project_id = $2
+  -- Soft-deleted policies keep their findings until the cleanup catches up;
+  -- the breakdown must not count them, matching the listing's visibility.
+  JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
+  WHERE rr.project_id = $3
     AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
     AND rr.skill_version_id IS NULL
-    AND rr.created_at >= $3
-    AND rr.created_at < $4
+    AND rr.created_at >= $4
+    AND rr.created_at < $5
 )
 SELECT rule_id, source, COUNT(*)::BIGINT AS findings
 FROM categorized
 WHERE category = $1::text
 GROUP BY rule_id, source
 ORDER BY findings DESC, rule_id ASC
+LIMIT $2::int
 `
 
 type ListRiskRulesByCategoryParams struct {
 	Category  string
+	PageLimit pgtype.Int4
 	ProjectID uuid.UUID
 	FromTime  pgtype.Timestamptz
 	ToTime    pgtype.Timestamptz
@@ -4730,9 +4747,12 @@ type ListRiskRulesByCategoryRow struct {
 // Returns per-rule_id finding counts for a category within a window.
 // The CASE expression must stay in sync with ListRiskOverviewTimeSeriesFindings
 // and ListRiskResultsByProjectFound; all three classify rr.rule_id the same way.
+// A NULL page_limit is LIMIT ALL: the dashboard reads every rule, while
+// bounded callers pass one extra row to detect truncation.
 func (q *Queries) ListRiskRulesByCategory(ctx context.Context, arg ListRiskRulesByCategoryParams) ([]ListRiskRulesByCategoryRow, error) {
 	rows, err := q.db.Query(ctx, listRiskRulesByCategory,
 		arg.Category,
+		arg.PageLimit,
 		arg.ProjectID,
 		arg.FromTime,
 		arg.ToTime,
@@ -5578,6 +5598,22 @@ func (q *Queries) RiskEvalChatBelongsToProject(ctx context.Context, arg RiskEval
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const setChatMessageExternalUserIDForTest = `-- name: SetChatMessageExternalUserIDForTest :exec
+UPDATE chat_messages
+SET external_user_id = $1
+WHERE id = $2
+`
+
+type SetChatMessageExternalUserIDForTestParams struct {
+	ExternalUserID pgtype.Text
+	ID             uuid.UUID
+}
+
+func (q *Queries) SetChatMessageExternalUserIDForTest(ctx context.Context, arg SetChatMessageExternalUserIDForTestParams) error {
+	_, err := q.db.Exec(ctx, setChatMessageExternalUserIDForTest, arg.ExternalUserID, arg.ID)
+	return err
 }
 
 const setRiskResultExcludedForTest = `-- name: SetRiskResultExcludedForTest :exec

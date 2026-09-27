@@ -364,6 +364,46 @@ func TestListRiskResults_ByUserID(t *testing.T) {
 	require.Equal(t, "alice@example.com", *result.Results[0].UserID)
 }
 
+func TestListRiskResults_UserIDPrefersMessageIdentity(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
+	)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Message Identity Test")})
+	require.NoError(t, err)
+	policyID, _ := uuid.Parse(policy.ID)
+
+	// A shared chat carries no identity of its own; the message does. The
+	// listing must resolve the message's identity, the way the ClickHouse
+	// store does at ingest, both for the user_id filter and the returned row.
+	chatID, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
+	require.NoError(t, riskrepo.New(ti.conn).SetChatMessageExternalUserIDForTest(ctx, riskrepo.SetChatMessageExternalUserIDForTestParams{
+		ExternalUserID: pgtype.Text{String: "carol@example.com", Valid: true},
+		ID:             msgID,
+	}))
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
+	_, otherMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "dave@example.com")
+	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, otherMsg, true)
+
+	userID := "CAROL"
+	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{UserID: &userID})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+	require.Equal(t, chatID.String(), *result.Results[0].ChatID)
+	require.Equal(t, "carol@example.com", *result.Results[0].UserID)
+
+	// The chat-scoped listing resolves the same identity.
+	chatIDStr := chatID.String()
+	byChat, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{ChatID: &chatIDStr})
+	require.NoError(t, err)
+	require.Len(t, byChat.Results, 1)
+	require.Equal(t, "carol@example.com", *byChat.Results[0].UserID)
+}
+
 // linkAssistantThread attaches a chat to a freshly created assistant so the
 // chat counts as "assistant-driven" for the non_assistant filter.
 func linkAssistantThread(t *testing.T, ti *testInstance, projectID uuid.UUID, orgID string, chatID uuid.UUID) uuid.UUID {

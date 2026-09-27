@@ -121,25 +121,35 @@ func (q *Queries) GroupRiskFindingsByChat(ctx context.Context, p GroupRiskFindin
 	return out, nil
 }
 
-func ruleCountsByCategoryQuery(p RiskOverviewWindowParams, category string, limit uint64) squirrel.SelectBuilder {
+func ruleCountsByCategoryQuery(p RiskOverviewWindowParams, category string, policyIDs []string, limit uint64) (squirrel.SelectBuilder, error) {
+	if len(policyIDs) == 0 {
+		return squirrel.SelectBuilder{}, errEmptyPolicyIDs
+	}
 	return overviewFindings(p,
 		"rule_id",
 		"source",
 		"uniqExact(id) AS findings",
 	).
 		Where("category = ?", category).
+		Where(squirrel.Eq{"risk_policy_id": policyIDs}).
 		GroupBy("rule_id", "source").
 		OrderBy("findings DESC", "rule_id ASC").
-		Limit(limit)
+		Limit(limit), nil
 }
 
 // ListRiskRuleCountsByCategory returns per-(rule_id, source) live finding
 // counts for one category over a detection-time window, most findings first.
 // It is the ClickHouse counterpart of the Postgres ListRiskRulesByCategory
-// query: both key the window on created_at (scan time) and neither applies the
-// enabled-policy pushdown, so the two stores answer the same question.
-func (q *Queries) ListRiskRuleCountsByCategory(ctx context.Context, p RiskOverviewWindowParams, category string, limit uint64) ([]RiskOverviewRuleCount, error) {
-	query, args, err := ruleCountsByCategoryQuery(p, category, limit).ToSql()
+// query: both key the window on created_at (scan time). PolicyIDs is the
+// non-deleted policy pushdown the Postgres query expresses as a risk_policies
+// join, because deleted policies' rows linger in this store until TTL; an
+// empty list is a caller error rather than an unbounded read.
+func (q *Queries) ListRiskRuleCountsByCategory(ctx context.Context, p RiskOverviewWindowParams, category string, policyIDs []string, limit uint64) ([]RiskOverviewRuleCount, error) {
+	sb, err := ruleCountsByCategoryQuery(p, category, policyIDs, limit)
+	if err != nil {
+		return nil, err
+	}
+	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("build risk rule counts by category query: %w", err)
 	}
