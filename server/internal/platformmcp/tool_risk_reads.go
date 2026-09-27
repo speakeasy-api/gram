@@ -298,6 +298,13 @@ func riskReadToolCall[Out any](ctx context.Context, telemetry RiskTelemetry, too
 		event.Outcome = "succeeded"
 		return nil, output, nil
 	}
+	if errors.Is(err, ErrOperationRateLimited) || errors.Is(err, ErrOperationBudgetUnavailable) {
+		if errors.Is(err, ErrOperationRateLimited) {
+			event.Outcome = "rate_limited"
+		}
+		result, _ := operationBudgetToolResult(err)
+		return result, zero, nil
+	}
 	var refusal featureUnavailableResult
 	switch {
 	case errors.Is(err, ErrRiskReadInvalid), errors.Is(err, ErrRiskCursorInvalid):
@@ -305,7 +312,11 @@ func riskReadToolCall[Out any](ctx context.Context, telemetry RiskTelemetry, too
 	case errors.Is(err, ErrRiskReadNotFound):
 		refusal = featureUnavailableResult{Code: "not_found", Feature: "risk_reads", Message: "The requested project or risk resource is not available to this organization."}
 	case errors.Is(err, ErrRiskFeatureNotEnabled):
-		refusal = featureUnavailableResult{Code: unavailableCode, Feature: "risk_analysis_status", Message: "This is not switched on for your organization yet."}
+		capability := "risk_reads"
+		if tool == riskAnalysisStatusToolName {
+			capability = "risk_analysis_status"
+		}
+		refusal = featureUnavailableResult{Code: unavailableCode, Feature: capability, Message: "This is not switched on for your organization yet."}
 	case errors.Is(err, ErrUnavailable):
 		refusal = featureUnavailableResult{Code: unavailableCode, Feature: "risk_reads", Message: "Risk reads are temporarily unavailable."}
 	default:

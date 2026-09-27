@@ -18,6 +18,14 @@ import (
 const (
 	weeklyUsageSummaryScheduleID = "v1:weekly-usage-summary-schedule"
 	weeklyUsageSummaryWorkflowID = "v1:weekly-usage-summary-schedule/scheduled"
+
+	// Send weekly on Monday at 16:00 UTC.
+	weeklyUsageSummaryDayOfWeek = int(time.Monday)
+	weeklyUsageSummaryHourUTC   = 16
+
+	// Allow 24h of lateness for brief outages; skip stale weekly email ticks.
+	weeklyUsageSummaryCatchupWindow = 24 * time.Hour
+
 	weeklyUsageSummaryRunTimeout = 30 * time.Minute
 	// End-to-end budget for one activity: queue delay plus every retry
 	// attempt (3 × 2m StartToClose with 10s+20s backoff and Temporal
@@ -144,11 +152,11 @@ func AddWeeklyUsageSummarySchedule(ctx context.Context, temporalEnv *tenv.Enviro
 			{
 				Second:     nil,
 				Minute:     nil,
-				Hour:       []client.ScheduleRange{{Start: 16, End: 0, Step: 0}},
+				Hour:       []client.ScheduleRange{{Start: weeklyUsageSummaryHourUTC, End: 0, Step: 0}},
 				DayOfMonth: nil,
 				Month:      nil,
 				Year:       nil,
-				DayOfWeek:  []client.ScheduleRange{{Start: 1, End: 0, Step: 0}}, // Monday
+				DayOfWeek:  []client.ScheduleRange{{Start: weeklyUsageSummaryDayOfWeek, End: 0, Step: 0}},
 				Comment:    "weekly usage summary emails, Mondays 16:00 UTC",
 			},
 		},
@@ -165,10 +173,11 @@ func AddWeeklyUsageSummarySchedule(ctx context.Context, temporalEnv *tenv.Enviro
 	}
 
 	_, err := scheduleClient.Create(ctx, client.ScheduleOptions{
-		ID:      weeklyUsageSummaryScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec:    spec,
-		Action:  action,
+		CatchupWindow: weeklyUsageSummaryCatchupWindow,
+		ID:            weeklyUsageSummaryScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Spec:          spec,
+		Action:        action,
 	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
@@ -176,6 +185,7 @@ func AddWeeklyUsageSummarySchedule(ctx context.Context, temporalEnv *tenv.Enviro
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, weeklyUsageSummaryCatchupWindow)
 				return &client.ScheduleUpdate{Schedule: &input.Description.Schedule, TypedSearchAttributes: nil}, nil
 			},
 		}); err != nil {

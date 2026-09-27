@@ -1,6 +1,6 @@
 import type { AIDetection } from "@gram/client/models/components/aidetection.js";
-import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AIToolsTable } from "./AIToolsTable";
@@ -17,6 +17,17 @@ vi.mock("@gram/client/react-query/aiDetections.js", () => ({
 vi.mock("./AIToolDecisionSheet", () => ({
   AIToolDecisionSheet: () => null,
 }));
+
+// Opening a row navigates through the route helpers, which resolve the
+// tenant slugs the same way the app does.
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
+
+function LocationPath(): JSX.Element {
+  const location = useLocation();
+  return <output data-testid="location">{location.pathname}</output>;
+}
 
 function detection(overrides: Partial<AIDetection> = {}): AIDetection {
   return {
@@ -77,6 +88,74 @@ describe("AIToolsTable", () => {
 
     expect(screen.getByText("Users")).toBeTruthy();
     expect(screen.getByText("Devices")).toBeTruthy();
+  });
+
+  // Opening a row answers "who runs this?" on the tool's own page, nested
+  // under the tab. That holds on the Local Models tab too, where nothing can
+  // be decided; on the other tabs the row sits inside the context-menu
+  // wrapper, and the click has to reach through it.
+  it.each([
+    {
+      category: "harness",
+      canDecide: true,
+      tab: "harnesses",
+    },
+    {
+      category: "assistant",
+      canDecide: true,
+      tab: "assistants",
+    },
+    {
+      category: "local_model",
+      canDecide: false,
+      tab: "models",
+    },
+  ] as const)(
+    "opens a row onto the tool's users on the $tab tab",
+    ({ category, canDecide, tab }) => {
+      renderTable(
+        <>
+          <AIToolsTable category={category} canDecide={canDecide} />
+          <LocationPath />
+        </>,
+        `/org/projects/project/shadow-ai/${tab}`,
+      );
+
+      fireEvent.click(screen.getByText("Cursor"));
+
+      expect(screen.getByTestId("location").textContent).toBe(
+        `/org/projects/project/shadow-ai/${tab}/cursor`,
+      );
+    },
+  );
+
+  // Ids are stored as agents report them, so one may carry a URL delimiter.
+  // Encoded, it stays a single path segment instead of nesting the page one
+  // level deeper than the route knows.
+  it("keeps an id with a slash in it to one path segment", () => {
+    mocks.useAiDetections.mockReturnValue({
+      data: {
+        detections: [
+          detection({ targetId: "acme/agent", displayName: "Acme" }),
+        ],
+      },
+      isLoading: false,
+      error: null,
+    });
+
+    renderTable(
+      <>
+        <AIToolsTable category="harness" canDecide />
+        <LocationPath />
+      </>,
+      "/org/projects/project/shadow-ai/harnesses",
+    );
+
+    fireEvent.click(screen.getByText("Acme"));
+
+    expect(screen.getByTestId("location").textContent).toBe(
+      "/org/projects/project/shadow-ai/harnesses/acme%2Fagent",
+    );
   });
 
   // The filter lives in the URL. With nothing under the chosen status the

@@ -38,6 +38,10 @@ export type AdminOrganization = {
    */
   createdAt: Date;
   /**
+   * The flow that created the organization (e.g. signup, assistants, platform_admin). Absent when nothing recorded one. Informational only.
+   */
+  creationSource?: string | undefined;
+  /**
    * The time at which the organization was disabled, if any.
    */
   disabledAt?: Date | undefined;
@@ -114,6 +118,7 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    creation_source: z.optional(z.string()),
     disabled_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -145,6 +150,7 @@ export const AdminOrganization$inboundSchema: z.ZodMiniType<
     return remap$(v, {
       "account_type": "accountType",
       "created_at": "createdAt",
+      "creation_source": "creationSource",
       "disabled_at": "disabledAt",
       "member_count": "memberCount",
       "stripe_customer_id": "stripeCustomerId",

@@ -37,7 +37,7 @@ export type UpdateMcpServerFormVisibility = ClosedEnum<
 >;
 
 /**
- * Form for updating an MCP server. This is a full-record replace: fields omitted from the request become null on the stored record. The user session issuer cannot be changed after create. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name to leave the existing display name unchanged; the slug is recomputed server-side from the resulting name.
+ * Form for updating an MCP server. This is a full-record replace for backend references: fields omitted from the request become null on the stored record. Exactly one of remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id must be provided. Omit name or user_session_issuer_id to preserve the existing value; the slug is recomputed server-side from the resulting name.
  */
 export type UpdateMcpServerForm = {
   /**
@@ -77,6 +77,10 @@ export type UpdateMcpServerForm = {
    */
   unproxiedMcpServerId?: string | undefined;
   /**
+   * The ID of an existing project- or organization-owned user session issuer to attach. Omit to preserve the current issuer.
+   */
+  userSessionIssuerId?: string | undefined;
+  /**
    * The visibility of an MCP server
    */
   visibility: UpdateMcpServerFormVisibility;
@@ -103,6 +107,7 @@ export type UpdateMcpServerForm$Outbound = {
   toolset_id?: string | undefined;
   tunneled_mcp_server_id?: string | undefined;
   unproxied_mcp_server_id?: string | undefined;
+  user_session_issuer_id?: string | undefined;
   visibility: string;
 };
 
@@ -123,6 +128,7 @@ export const UpdateMcpServerForm$outboundSchema: z.ZodMiniType<
     toolsetId: z.optional(z.string()),
     tunneledMcpServerId: z.optional(z.string()),
     unproxiedMcpServerId: z.optional(z.string()),
+    userSessionIssuerId: z.optional(z.string()),
     visibility: UpdateMcpServerFormVisibility$outboundSchema,
   }),
   z.transform((v) => {
@@ -134,6 +140,7 @@ export const UpdateMcpServerForm$outboundSchema: z.ZodMiniType<
       toolsetId: "toolset_id",
       tunneledMcpServerId: "tunneled_mcp_server_id",
       unproxiedMcpServerId: "unproxied_mcp_server_id",
+      userSessionIssuerId: "user_session_issuer_id",
     });
   }),
 );

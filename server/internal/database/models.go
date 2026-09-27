@@ -14,10 +14,79 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type AdminMcpAuthorizationGrant struct {
+	ID                    uuid.UUID
+	AuthorizationCodeHash string
+	OauthClientID         uuid.UUID
+	ConnectionID          uuid.UUID
+	ConnectionGeneration  uuid.UUID
+	RedirectUri           string
+	CodeChallenge         string
+	Scopes                []string
+	ResourceUri           string
+	ExpiresAt             pgtype.Timestamptz
+	ConsumedAt            pgtype.Timestamptz
+	RevokedAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
+type AdminMcpConnection struct {
+	ID                        uuid.UUID
+	SubjectUrn                string
+	OauthClientID             uuid.UUID
+	AdminSessionIDEnc         string
+	Scopes                    []string
+	ResourceUri               string
+	ActiveGeneration          uuid.UUID
+	AuthorizedAt              pgtype.Timestamptz
+	ReauthorizedAt            pgtype.Timestamptz
+	AuthorizationExpiresAt    pgtype.Timestamptz
+	ReauthorizationRequiredAt pgtype.Timestamptz
+	ReauthorizationReason     pgtype.Text
+	RevokedAt                 pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+type AdminMcpOauthClient struct {
+	ID                             uuid.UUID
+	ClientID                       string
+	ClientSecretHash               pgtype.Text
+	ClientName                     string
+	RedirectUris                   []string
+	ClientIDIssuedAt               pgtype.Timestamptz
+	ClientSecretExpiresAt          pgtype.Timestamptz
+	RevokedAt                      pgtype.Timestamptz
+	ClientIDMetadataUri            pgtype.Text
+	ClientIDMetadataFetchedAt      pgtype.Timestamptz
+	ClientIDMetadataCacheExpiresAt pgtype.Timestamptz
+	ClientIDMetadataEtag           pgtype.Text
+	CreatedAt                      pgtype.Timestamptz
+	UpdatedAt                      pgtype.Timestamptz
+}
+
+type AdminMcpSession struct {
+	ID                   uuid.UUID
+	ConnectionID         uuid.UUID
+	OauthClientID        uuid.UUID
+	ConnectionGeneration uuid.UUID
+	Jti                  string
+	RefreshTokenHash     string
+	ExpiresAt            pgtype.Timestamptz
+	RefreshExpiresAt     pgtype.Timestamptz
+	RotatedAt            pgtype.Timestamptz
+	RevokedAt            pgtype.Timestamptz
+	ReplacedBySessionID  uuid.NullUUID
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+}
+
 type Agent struct {
 	ID                          uuid.UUID
 	OrganizationID              string
 	OwnerUserID                 string
+	ProjectID                   uuid.NullUUID
 	Name                        string
 	SuspendedAt                 pgtype.Timestamptz
 	RevokedAt                   pgtype.Timestamptz
@@ -789,6 +858,20 @@ type DirectoryGroup struct {
 	WorkosLastEventID      pgtype.Text
 }
 
+type DirectoryRoleMapping struct {
+	ID               uuid.UUID
+	OrganizationID   string
+	SourceKind       string
+	DirectoryGroupID uuid.NullUUID
+	AttributeKey     pgtype.Text
+	AttributeValue   pgtype.Text
+	RoleUrn          string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
+}
+
 type DirectoryUser struct {
 	ID                    uuid.UUID
 	OrganizationID        string
@@ -1363,6 +1446,14 @@ type McpRegistry struct {
 	Deleted              bool
 }
 
+type McpRegistryEntry struct {
+	ID        uuid.UUID
+	Data      []byte
+	Published bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 // Research-agent output for an approval request. Findings are gathered and cited, never adjudicated — the admin decides.
 type McpResearchReport struct {
 	ID                   uuid.UUID
@@ -1748,6 +1839,8 @@ type OrganizationMetadatum struct {
 	FreeTrialEndsAt    pgtype.Timestamptz
 	ScimEnabled        pgtype.Bool
 	SsoEnabled         pgtype.Bool
+	VerifiedDomains    []string
+	CreationSource     pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	DisabledAt         pgtype.Timestamptz
@@ -2186,17 +2279,19 @@ type PluginGithubConnection struct {
 }
 
 type PluginServer struct {
-	ID          uuid.UUID
-	PluginID    uuid.UUID
-	ToolsetID   uuid.NullUUID
-	McpServerID uuid.NullUUID
-	DisplayName string
-	Policy      string
-	SortOrder   int32
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	DeletedAt   pgtype.Timestamptz
-	Deleted     bool
+	ID              uuid.UUID
+	PluginID        uuid.UUID
+	ProjectID       uuid.NullUUID
+	ToolsetID       uuid.NullUUID
+	McpServerID     uuid.NullUUID
+	MetaMcpServerID uuid.NullUUID
+	DisplayName     string
+	Policy          string
+	SortOrder       int32
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 // RBAC grants. Normalized: one row per (org, principal, scope). Selectors can further constrain applicability.
@@ -2339,6 +2434,20 @@ type PublishOutboxDeadLetter struct {
 	// created_at of the originating publish_outbox row, preserved so the delay before giving up stays visible after the row moves.
 	EnqueuedAt pgtype.Timestamptz
 	CreatedAt  pgtype.Timestamptz
+}
+
+type Query struct {
+	ID              uuid.UUID
+	ProjectID       uuid.UUID
+	OrganizationID  string
+	CreatedByUserID pgtype.Text
+	Name            string
+	Dataset         string
+	Spec            []byte
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	Deleted         bool
 }
 
 type RemoteMcpServer struct {
@@ -2551,6 +2660,7 @@ type RiskPolicy struct {
 	Sources              []string
 	PresidioEntities     []string
 	AnalyzerConfig       []byte
+	McpScope             []byte
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
@@ -2909,6 +3019,54 @@ type SlackAppToolset struct {
 	SlackAppID uuid.UUID
 	ToolsetID  uuid.UUID
 	CreatedAt  pgtype.Timestamptz
+}
+
+type SlackDirectoryConnection struct {
+	ID                      uuid.UUID
+	OrganizationID          string
+	SlackTeamID             string
+	SlackTeamName           pgtype.Text
+	CredentialsEncrypted    pgtype.Text
+	GrantedScopes           []string
+	Generation              uuid.UUID
+	Health                  string
+	DisconnectedAt          pgtype.Timestamptz
+	LastSyncStartedAt       pgtype.Timestamptz
+	LastFullSyncGeneration  uuid.NullUUID
+	LastFullSyncSucceededAt pgtype.Timestamptz
+	LastSyncFailedAt        pgtype.Timestamptz
+	LastErrorCode           pgtype.Text
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+}
+
+type SlackDirectoryMembership struct {
+	ID                        uuid.UUID
+	OrganizationID            string
+	SlackTeamID               string
+	SlackUserID               string
+	DisplayName               pgtype.Text
+	Email                     pgtype.Text
+	Status                    string
+	MemberType                string
+	ProviderUpdatedAt         pgtype.Timestamptz
+	LastSeenAt                pgtype.Timestamptz
+	MappingRevision           int64
+	MappingConflictReason     pgtype.Text
+	MappingConflictDetectedAt pgtype.Timestamptz
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+type SlackIdentityMapping struct {
+	ID             uuid.UUID
+	OrganizationID string
+	SlackTeamID    string
+	SlackUserID    string
+	UserID         string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	RevokedAt      pgtype.Timestamptz
 }
 
 type SlackRegistration struct {
@@ -3314,6 +3472,16 @@ type TrustedIssuerSession struct {
 	LastRefreshAttemptAt           pgtype.Timestamptz
 	OfflineAccessRefusedAt         pgtype.Timestamptz
 	OfflineAccessRequestConfigHash pgtype.Text
+	CredentialGeneration           pgtype.Int8
+	RefreshClaimID                 uuid.NullUUID
+	UpstreamSubjectEncrypted       pgtype.Text
+	NonceEncrypted                 pgtype.Text
+	CredentialConfigHash           pgtype.Text
+	ObservationStatus              pgtype.Text
+	ObservedAt                     pgtype.Timestamptz
+	CredentialObtainedAt           pgtype.Timestamptz
+	LastRefreshSucceededAt         pgtype.Timestamptz
+	RetryAfter                     pgtype.Timestamptz
 	CreatedAt                      pgtype.Timestamptz
 	UpdatedAt                      pgtype.Timestamptz
 	DeletedAt                      pgtype.Timestamptz
@@ -3450,7 +3618,7 @@ type UserSession struct {
 	DelegatedGrants        []byte
 	DelegatedGrantsVersion pgtype.Int4
 	Jti                    string
-	RefreshTokenHash       string
+	RefreshTokenHash       pgtype.Text
 	RefreshExpiresAt       pgtype.Timestamptz
 	ExpiresAt              pgtype.Timestamptz
 	ToolSelection          []byte
@@ -3511,6 +3679,7 @@ type UserSessionIssuer struct {
 	ClientIDMetadataAdmissionMode pgtype.Text
 	TrustedRemoteSessionIssuerID  uuid.NullUUID
 	TrustedRemoteSessionClientID  uuid.NullUUID
+	UseAuthenticationHost         bool
 	CreatedAt                     pgtype.Timestamptz
 	UpdatedAt                     pgtype.Timestamptz
 	DeletedAt                     pgtype.Timestamptz
@@ -3534,6 +3703,7 @@ type WorkloadAgentAssignment struct {
 	OrganizationID   string
 	WorkloadIssuerID uuid.UUID
 	Subject          string
+	MatchKind        string
 	AgentID          uuid.UUID
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
@@ -3547,6 +3717,7 @@ type WorkloadIdentityAdmission struct {
 	ProjectID        uuid.NullUUID
 	WorkloadIssuerID uuid.UUID
 	Subject          string
+	MatchKind        string
 	Name             pgtype.Text
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
@@ -3555,18 +3726,19 @@ type WorkloadIdentityAdmission struct {
 }
 
 type WorkloadIssuer struct {
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	Name           string
-	Tags           []string
-	Issuer         string
-	JwksUri        string
-	Metadata       []byte
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.NullUUID
+	Name                   string
+	Tags                   []string
+	Issuer                 string
+	JwksUri                string
+	AllowWildcardAdmission bool
+	Metadata               []byte
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 type WorkosOrganizationSync struct {

@@ -17,6 +17,22 @@ import (
 
 // Client lists the remoteSessions service endpoint HTTP clients.
 type Client struct {
+	// ListBindings Doer is the HTTP client used to make requests to the
+	// listBindings endpoint.
+	ListBindingsDoer goahttp.Doer
+
+	// AttachBinding Doer is the HTTP client used to make requests to the
+	// attachBinding endpoint.
+	AttachBindingDoer goahttp.Doer
+
+	// DetachBinding Doer is the HTTP client used to make requests to the
+	// detachBinding endpoint.
+	DetachBindingDoer goahttp.Doer
+
+	// CommitServerIdentityConfiguration Doer is the HTTP client used to make
+	// requests to the commitServerIdentityConfiguration endpoint.
+	CommitServerIdentityConfigurationDoer goahttp.Doer
+
 	// ListRemoteSessions Doer is the HTTP client used to make requests to the
 	// listRemoteSessions endpoint.
 	ListRemoteSessionsDoer goahttp.Doer
@@ -46,13 +62,114 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		ListRemoteSessionsDoer:  doer,
-		RevokeRemoteSessionDoer: doer,
-		RestoreResponseBody:     restoreBody,
-		scheme:                  scheme,
-		host:                    host,
-		decoder:                 dec,
-		encoder:                 enc,
+		ListBindingsDoer:                      doer,
+		AttachBindingDoer:                     doer,
+		DetachBindingDoer:                     doer,
+		CommitServerIdentityConfigurationDoer: doer,
+		ListRemoteSessionsDoer:                doer,
+		RevokeRemoteSessionDoer:               doer,
+		RestoreResponseBody:                   restoreBody,
+		scheme:                                scheme,
+		host:                                  host,
+		decoder:                               dec,
+		encoder:                               enc,
+	}
+}
+
+// ListBindings returns an endpoint that makes HTTP requests to the
+// remoteSessions service listBindings server.
+func (c *Client) ListBindings() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListBindingsRequest(c.encoder)
+		decodeResponse = DecodeListBindingsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListBindingsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListBindingsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessions", "listBindings", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AttachBinding returns an endpoint that makes HTTP requests to the
+// remoteSessions service attachBinding server.
+func (c *Client) AttachBinding() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAttachBindingRequest(c.encoder)
+		decodeResponse = DecodeAttachBindingResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAttachBindingRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.AttachBindingDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessions", "attachBinding", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DetachBinding returns an endpoint that makes HTTP requests to the
+// remoteSessions service detachBinding server.
+func (c *Client) DetachBinding() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDetachBindingRequest(c.encoder)
+		decodeResponse = DecodeDetachBindingResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDetachBindingRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DetachBindingDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessions", "detachBinding", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CommitServerIdentityConfiguration returns an endpoint that makes HTTP
+// requests to the remoteSessions service commitServerIdentityConfiguration
+// server.
+func (c *Client) CommitServerIdentityConfiguration() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCommitServerIdentityConfigurationRequest(c.encoder)
+		decodeResponse = DecodeCommitServerIdentityConfigurationResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCommitServerIdentityConfigurationRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CommitServerIdentityConfigurationDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessions", "commitServerIdentityConfiguration", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

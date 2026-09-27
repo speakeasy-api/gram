@@ -50,7 +50,7 @@ type CreateDataExportInput struct {
 	ProjectSlug   string `json:"project_slug,omitempty" jsonschema:"project slug that will export telemetry; supply exactly one project selector"`
 	Name          string `json:"name" jsonschema:"display name for the OTEL destination"`
 	EndpointURL   string `json:"endpoint_url" jsonschema:"HTTP or HTTPS OTEL collector endpoint without credentials, query parameters, or fragments"`
-	DataSource    string `json:"data_source" jsonschema:"data to export: product_telemetry or risk_findings"`
+	DataSource    string `json:"data_source" jsonschema:"data to export: product_telemetry, risk_findings, or tool_call_logs"`
 	SensitiveData string `json:"sensitive_data,omitempty" jsonschema:"whether sensitive fields are included: exclude (default) or include"`
 	Enabled       *bool  `json:"enabled,omitempty" jsonschema:"whether delivery starts immediately; defaults to true"`
 	Confirmed     bool   `json:"confirmed" jsonschema:"true only after the user explicitly confirms the project, endpoint, data source, enabled state, and sensitive-data policy"`

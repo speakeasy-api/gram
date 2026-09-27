@@ -69,7 +69,11 @@ const (
 	skillEfficacySweepWorkflowID = skillEfficacySweepScheduleID + "/scheduled"
 	// skillEfficacySweepInterval is how often the estate is swept for work no
 	// signal ever arrived for and for reservations whose owner died.
-	skillEfficacySweepInterval   = 15 * time.Minute
+	skillEfficacySweepInterval = 15 * time.Minute
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	skillEfficacySweepCatchupWindow = skillEfficacySweepInterval - time.Second
+
 	skillEfficacySweepRunTimeout = 60 * time.Minute
 )
 
@@ -352,7 +356,8 @@ func AddSkillEfficacySweepSchedule(ctx context.Context, temporalEnv *tenv.Enviro
 	}
 
 	_, err := scheduleClient.Create(ctx, client.ScheduleOptions{
-		ID: skillEfficacySweepScheduleID,
+		CatchupWindow: skillEfficacySweepCatchupWindow,
+		ID:            skillEfficacySweepScheduleID,
 		// A tick that overlaps the previous one would re-signal projects the
 		// running sweep is still working through, so a slow sweep skips rather
 		// than doubles.
@@ -366,6 +371,7 @@ func AddSkillEfficacySweepSchedule(ctx context.Context, temporalEnv *tenv.Enviro
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, skillEfficacySweepCatchupWindow)
 				return &client.ScheduleUpdate{Schedule: &input.Description.Schedule, TypedSearchAttributes: nil}, nil
 			},
 		}); err != nil {

@@ -19,10 +19,11 @@ import (
 type UpdateConfigurationRequestBody struct {
 	// Shareable device-agent settings. Supported keys include platforms,
 	// update_channel, auto_update, pinned_target, blocked_versions,
-	// sync_interval_seconds, and ai_scan_interval_seconds. update_channel and
-	// blocked_versions can only be set by Speakeasy platform administrators;
-	// per-device identity and secret keys are forbidden, as is ai_scan, which Gram
-	// injects from the organization's scan target list when serving agents.
+	// sync_interval_seconds, ai_scan_interval_seconds, and disable_ai_scan.
+	// update_channel and blocked_versions can only be set by Speakeasy platform
+	// administrators; per-device identity and secret keys are forbidden, as is
+	// ai_scan, which Gram injects from the organization's scan target list when
+	// serving agents.
 	Config map[string]any `form:"config" json:"config" xml:"config"`
 }
 
@@ -125,6 +126,9 @@ type GetPluginsResponseBody struct {
 	// a configuration, allowing an agent with no cached remote layer to keep using
 	// its local configuration.
 	Configuration *DeviceAgentConfigurationResponseBody `form:"configuration,omitempty" json:"configuration,omitempty" xml:"configuration,omitempty"`
+	// The non-human principal the plugin set was resolved for. Present only when
+	// the caller authenticated with an agent API key.
+	Principal *AgentPollingPrincipalResponseBody `form:"principal,omitempty" json:"principal,omitempty" xml:"principal,omitempty"`
 }
 
 // ListSyncedUsersResponseBody is the type of the "agent" service
@@ -2270,6 +2274,15 @@ type DeviceAgentConfigurationResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// AgentPollingPrincipalResponseBody is used to define fields on response body
+// types.
+type AgentPollingPrincipalResponseBody struct {
+	// Principal URN of the agent identity, for example `agent:<uuid>`.
+	Urn *string `form:"urn,omitempty" json:"urn,omitempty" xml:"urn,omitempty"`
+	// Human-readable name of the agent identity.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+}
+
 // SyncedAgentUserResponseBody is used to define fields on response body types.
 type SyncedAgentUserResponseBody struct {
 	// Email the device agent reported on sync. Resolve against org members for
@@ -2522,6 +2535,9 @@ func NewGetPluginsResultOK(body *GetPluginsResponseBody) *agent.GetPluginsResult
 	}
 	if body.Configuration != nil {
 		v.Configuration = unmarshalDeviceAgentConfigurationResponseBodyToAgentDeviceAgentConfiguration(body.Configuration)
+	}
+	if body.Principal != nil {
+		v.Principal = unmarshalAgentPollingPrincipalResponseBodyToAgentAgentPollingPrincipal(body.Principal)
 	}
 
 	return v
@@ -4326,6 +4342,11 @@ func ValidateGetPluginsResponseBody(body *GetPluginsResponseBody) (err error) {
 	}
 	if body.Configuration != nil {
 		if err2 := ValidateDeviceAgentConfigurationResponseBody(body.Configuration); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Principal != nil {
+		if err2 := ValidateAgentPollingPrincipalResponseBody(body.Principal); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -7165,6 +7186,18 @@ func ValidateDeviceAgentConfigurationResponseBody(body *DeviceAgentConfiguration
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateAgentPollingPrincipalResponseBody runs the validations defined on
+// AgentPollingPrincipalResponseBody
+func ValidateAgentPollingPrincipalResponseBody(body *AgentPollingPrincipalResponseBody) (err error) {
+	if body.Urn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("urn", "body"))
+	}
+	if body.DisplayName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("display_name", "body"))
 	}
 	return
 }

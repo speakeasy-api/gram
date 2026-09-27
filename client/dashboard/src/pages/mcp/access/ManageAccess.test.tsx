@@ -328,3 +328,32 @@ describe("what a row change writes", () => {
     ).toEqual(["blocked", "blocked_manage", "blocked_view"]);
   });
 });
+
+it("confirms removing an agent that remains covered by a broader role allow", () => {
+  renderList([
+    entry({ principalUrn: "agent:a1", kind: "agent", displayName: "Releaser" }),
+    entry({
+      principalUrn: "role:global:1",
+      kind: "role",
+      displayName: "Engineering",
+      appliesTo: "all_resources",
+      level: "manage",
+      agentIds: ["a1"],
+    }),
+  ]);
+  fireEvent.click(screen.getByLabelText("Remove Releaser from this server"));
+  expect(mutate).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+  expect(
+    savedEntries()
+      .entries.map((e: { principalUrn: string; level: string }) => [
+        e.principalUrn,
+        e.level,
+      ])
+      .sort(),
+  ).toEqual([
+    ["agent:a1", "blocked"],
+    ["agent:a1", "blocked_manage"],
+    ["agent:a1", "blocked_view"],
+  ]);
+});

@@ -68,7 +68,7 @@ type ProxyManager struct {
 	authz          *authz.Engine
 	posthog        *posthog.Posthog
 	telemLogger    *tm.Logger
-	scanEvaluator  mcpriskscan.Evaluator
+	scanEvaluator  *mcpriskscan.Evaluator
 
 	proxyMetrics         *proxy.Metrics
 	mcpMetrics           *ProxyMetrics
@@ -114,6 +114,7 @@ func NewProxyManager(
 	platformMCPSelectedUseRecorder toolcallobserver.SuccessRecorder,
 	witnessStore *toolfilter.SessionToolWitnessStore,
 	killswitchCheckpoint *mcptoolexecution.Checkpoint,
+	scanEvaluator *mcpriskscan.Evaluator,
 ) *ProxyManager {
 	logger = logger.With(attr.SlogComponent("remotemcp"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/remotemcp")
@@ -126,7 +127,7 @@ func NewProxyManager(
 		authz:                                 authzEngine,
 		posthog:                               posthogClient,
 		telemLogger:                           telemLogger,
-		scanEvaluator:                         mcpriskscan.NewNoop(tracerProvider, meterProvider, logger),
+		scanEvaluator:                         scanEvaluator,
 		proxyMetrics:                          proxy.NewMetrics(meter, logger),
 		mcpMetrics:                            mcpMetrics,
 		identityCoverage:                      mcptoolexecution.NewIdentityCoverageCheckpoint(db, mcpMetrics),
@@ -294,11 +295,12 @@ func (f *ProxyManager) BuildTarget(
 			OrganizationID: organizationID,
 			ProjectID:      projectID,
 			ServerID:       identity.McpServerID,
+			MetaServerID:   identity.MetaMCPServerID,
 			ToolsetID:      "",
 			ToolName:       "",
 			ResourceURI:    "",
 			PromptName:     "",
-			Phase:          mcpriskscan.PhaseBeforeExecution,
+			ChatID:         "",
 		},
 	))
 

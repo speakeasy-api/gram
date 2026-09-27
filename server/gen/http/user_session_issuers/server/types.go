@@ -2007,10 +2007,11 @@ func NewUpdateUserSessionIssuerPayload(body *UpdateUserSessionIssuerRequestBody,
 
 // NewListUserSessionIssuersPayload builds a userSessionIssuers service
 // listUserSessionIssuers endpoint payload.
-func NewListUserSessionIssuersPayload(cursor *string, limit *int, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionissuers.ListUserSessionIssuersPayload {
+func NewListUserSessionIssuersPayload(cursor *string, limit *int, mcpResourceID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *usersessionissuers.ListUserSessionIssuersPayload {
 	v := &usersessionissuers.ListUserSessionIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.McpResourceID = mcpResourceID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

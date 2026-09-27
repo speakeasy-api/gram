@@ -88,6 +88,10 @@ func (rw *responseWriter) Unwrap() http.ResponseWriter {
 var redactedQueryParams = map[string]bool{
 	// Live capability token on public share and signed-asset URLs.
 	"token":           true,
+	"code":            true,
+	"state":           true,
+	"code_verifier":   true,
+	"return_to":       true,
 	"support_handoff": true,
 
 	// Email address on auth.login, and on agent.getPlugins polls from legacy
@@ -309,6 +313,7 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			if requestContext.RefererHost != "" {
 				attrs = append(attrs, attr.SlogHTTPReferrerHost(requestContext.RefererHost))
 			}
+			attrs = append(attrs, agentDeviceIdentityAttrs(r)...)
 			wide.Push(ctx, attrs...)
 
 			next.ServeHTTP(rw, r)

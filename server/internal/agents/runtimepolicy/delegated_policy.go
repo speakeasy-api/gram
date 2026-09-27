@@ -18,8 +18,9 @@ type DelegatedPolicyVersion int32
 
 const (
 	DelegatedPolicyVersion1 DelegatedPolicyVersion = 1
+	DelegatedPolicyVersion2 DelegatedPolicyVersion = 2
 
-	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion1
+	CurrentDelegatedPolicyVersion = DelegatedPolicyVersion2
 )
 
 // ErrInvalidDelegatedPolicy marks a policy that must fail closed.
@@ -413,7 +414,7 @@ func ensureJSONEOF(decoder *json.Decoder) error {
 }
 
 func validateDelegatedPolicyVersion(version DelegatedPolicyVersion) error {
-	if version != DelegatedPolicyVersion1 {
+	if version < DelegatedPolicyVersion1 || version > CurrentDelegatedPolicyVersion {
 		return invalidDelegatedPolicy("unsupported version %d", version)
 	}
 	return nil

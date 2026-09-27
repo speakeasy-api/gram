@@ -34,6 +34,18 @@ describe("toolSectionRiskMatches", () => {
     expect(toolSectionRiskMatches([result], "", "tool.args")).toEqual([]);
   });
 
+  it("matches a value as it is escaped inside JSON arguments", () => {
+    const result = riskResult("risk-1", 'hun"ter\\2');
+
+    expect(
+      toolSectionRiskMatches(
+        [result],
+        JSON.stringify({ password: 'hun"ter\\2' }),
+        "tool.args",
+      ),
+    ).toEqual([{ value: 'hun\\"ter\\\\2', result }]);
+  });
+
   it("keeps unattributed legacy findings only when their value is visible", () => {
     const visible = riskResult("visible", "DROP TABLE");
     const absent = riskResult("absent", "delete_file");

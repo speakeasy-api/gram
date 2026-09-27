@@ -13,6 +13,7 @@ import { usageGetInferenceSpendCaps } from "../funcs/usageGetInferenceSpendCaps.
 import { usageGetMeterUsage } from "../funcs/usageGetMeterUsage.js";
 import { usageGetPaygBillingSummary } from "../funcs/usageGetPaygBillingSummary.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
+import { usageGetSpendBreakdown } from "../funcs/usageGetSpendBreakdown.js";
 import { usageGetStripeSubscription } from "../funcs/usageGetStripeSubscription.js";
 import { usageGetTokensUnderManagement } from "../funcs/usageGetTokensUnderManagement.js";
 import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
@@ -26,6 +27,7 @@ import { InferenceSpendCap } from "../models/components/inferencespendcap.js";
 import { MeterUsageResponse } from "../models/components/meterusageresponse.js";
 import { PaygBillingSummary } from "../models/components/paygbillingsummary.js";
 import { PeriodUsage } from "../models/components/periodusage.js";
+import { SpendBreakdownResponse } from "../models/components/spendbreakdownresponse.js";
 import { SpendCap } from "../models/components/spendcap.js";
 import { StripeSubscription } from "../models/components/stripesubscription.js";
 import { TokensUnderManagement } from "../models/components/tokensundermanagement.js";
@@ -74,6 +76,10 @@ import {
   GetPeriodUsageRequest,
   GetPeriodUsageSecurity,
 } from "../models/operations/getperiodusage.js";
+import {
+  GetSpendBreakdownRequest,
+  GetSpendBreakdownSecurity,
+} from "../models/operations/getspendbreakdown.js";
 import {
   GetStripeSubscriptionRequest,
   GetStripeSubscriptionSecurity,
@@ -303,6 +309,25 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PeriodUsage> {
     return unwrapAsync(usageGetPeriodUsage(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getSpendBreakdown usage
+   *
+   * @remarks
+   * Report spend availability and estimate PAYG organizations' three metered products at current list prices over a maximum of three calendar months. Other plans return unsupported_plan, empty products, and a zero total without calculating estimates. This is not an actual bill: ordinary summaries count duplicate deliveries unless prevented by the producer and exclude adjustment readings.
+   */
+  async getSpendBreakdown(
+    request?: GetSpendBreakdownRequest | undefined,
+    security?: GetSpendBreakdownSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SpendBreakdownResponse> {
+    return unwrapAsync(usageGetSpendBreakdown(
       this,
       request,
       security,

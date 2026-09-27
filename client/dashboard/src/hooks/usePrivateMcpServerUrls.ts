@@ -1,6 +1,7 @@
 import { useNetworkIngressRollout } from "@/hooks/useNetworkIngressRollout";
 import { getServerURL } from "@/lib/utils";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
 import type { NetworkIngress } from "@gram/client/models/components/networkingress.js";
 import {
   McpServerNetworkAccessMode,
@@ -114,7 +115,7 @@ export function mcpServerInstallPageLinks(
 }
 
 export function usePrivateMcpServerUrls(
-  mcpServer: Pick<McpServer, "networkAccessMode"> | undefined,
+  mcpServer: Pick<McpServer | MetaMcpServer, "networkAccessMode"> | undefined,
   endpoints: McpEndpoint[],
 ): {
   privateMcpUrls: string[];

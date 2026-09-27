@@ -428,7 +428,27 @@ async execute(ctx, input) {
 }
 ```
 
-Errors automatically include a stack trace in the response.
+The response body is exactly the data you pass — no stack trace is added, since
+a deployed function is a minified bundle whose frames mean nothing to the tool's
+caller and cost an MCP client context on every turn that follows.
+
+A tool call that fails input validation is reported the same way: `error` names
+each offending input and what was wrong with it on one line, alongside the
+structured `issues` from Zod.
+
+```json
+{
+  "error": "org_id: Invalid input: expected string, received undefined",
+  "issues": [
+    {
+      "expected": "string",
+      "code": "invalid_type",
+      "path": ["org_id"],
+      "message": "Invalid input: expected string, received undefined"
+    }
+  ]
+}
+```
 
 ### Using `assert()`
 
@@ -454,7 +474,7 @@ Key points about `assert`:
 - First parameter is the condition to check
 - Second parameter is the error data (must include an `error` field)
 - Third parameter is optional and can specify the status code (defaults to 500)
-- Automatically includes a stack trace in the response
+- Serializes only the data you pass; no stack trace is added
 - Uses TypeScript's assertion type to narrow types when the assertion passes
 
 ## Manifest Generation

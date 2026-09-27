@@ -35,6 +35,72 @@ const pinnedTool = policyGrant("grant_tool", "mcp:write", {
 });
 
 describe("delegated grant narrowing", () => {
+  it("expands tools into scalar grants without losing fixed policy constraints", () => {
+    const grant = {
+      ...anyServer,
+      selector: {
+        ...anyServer.selector,
+        resourceId: "server_one",
+        projectId: "project_one",
+        disposition: "read_only" as const,
+      },
+    };
+    const result = buildRequestedGrants([
+      {
+        grant,
+        narrowing: {
+          tools: ["search", "lookup"],
+          disposition: "destructive",
+          projectId: "other",
+        },
+      },
+    ]);
+    expect(result.map((form) => form.selector)).toEqual(
+      ["search", "lookup"].map((tool) => ({ ...grant.selector, tool })),
+    );
+    result.forEach((form) =>
+      expect(requestNarrowsPolicy(grant.selector, form.selector)).toBe(true),
+    );
+  });
+  it("does not broaden an empty or wildcard tool selection", () => {
+    for (const tools of [[], ["*"], [""], ["search", "*"]]) {
+      expect(() =>
+        buildRequestedGrants([{ grant: anyServer, narrowing: { tools } }]),
+      ).toThrow("Select at least one tool");
+    }
+    expect(
+      buildRequestedGrants([{ grant: anyServer, narrowing: {} }])[0]?.selector
+        .tool,
+    ).toBeUndefined();
+  });
+  it("ignores multi-tool state when policy pins the tool", () => {
+    for (const tools of [["lookup", "other"], []]) {
+      expect(
+        buildRequestedGrants([{ grant: pinnedTool, narrowing: { tools } }]),
+      ).toEqual([
+        {
+          effect: "allow",
+          scope: pinnedTool.scope,
+          selector: pinnedTool.selector,
+        },
+      ]);
+    }
+  });
+  it("retains legacy scalar selections and emits each chosen tool only once", () => {
+    expect(
+      buildRequestedGrants([
+        { grant: anyServer, narrowing: { tool: "search" } },
+      ])[0]?.selector.tool,
+    ).toBe("search");
+    expect(
+      buildRequestedGrants([
+        {
+          grant: anyServer,
+          narrowing: { tool: "old", tools: ["search", "search"] },
+        },
+      ]).map((form) => form.selector.tool),
+    ).toEqual(["search"]);
+  });
   it("offers only the dimensions the server accepts for the resource kind", () => {
     expect(openDimensions(anyServer)).toEqual(["disposition", "tool"]);
     expect(

@@ -94,3 +94,50 @@ func scheduleIDs(ctx context.Context, c client.Client) ([]string, error) {
 
 	return ids, nil
 }
+
+func TestWorkers_RegisterSchedulesPreservesManualPauses(t *testing.T) {
+	t.Parallel()
+	env, _ := infra.NewTemporalEnv(t)
+	workers := newSchedulingWorkers(t, env)
+	ctx := t.Context()
+	workers.registerSchedules(ctx)
+	var ids []string
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		var err error
+		ids, err = scheduleIDs(ctx, env.Client())
+		assert.NoError(c, err)
+		assert.Len(c, ids, 25, "all unconditional schedules should be registered")
+		assert.Contains(c, ids, fmt.Sprintf("v1:trusted-delegation-cleanup:%s", env.Queue()), "delegation cleanup is an unconditional schedule")
+	}, 30*time.Second, 250*time.Millisecond)
+	sc := env.Client().ScheduleClient()
+	windows := make(map[string]time.Duration, len(ids))
+	for _, id := range ids {
+		handle := sc.GetHandle(ctx, id)
+		description, err := handle.Describe(ctx)
+		require.NoError(t, err)
+		window := description.Schedule.Policy.CatchupWindow
+		require.GreaterOrEqual(t, window, 10*time.Second, id)
+		for _, interval := range description.Schedule.Spec.Intervals {
+			require.Less(t, window, interval.Every, id)
+		}
+		windows[id] = window
+		// Simulate an existing schedule with the server-default catchup window and
+		// an operator pause. Both create-only and reconciled registrations must
+		// migrate the policy without dropping the pause or its note.
+		require.NoError(t, handle.Pause(ctx, client.SchedulePauseOptions{Note: "operator maintenance"}))
+		require.NoError(t, handle.Update(ctx, client.ScheduleUpdateOptions{
+			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
+				input.Description.Schedule.Policy.CatchupWindow = 365 * 24 * time.Hour
+				return &client.ScheduleUpdate{Schedule: &input.Description.Schedule, TypedSearchAttributes: nil}, nil
+			},
+		}))
+	}
+	workers.registerSchedules(ctx)
+	for _, id := range ids {
+		description, err := sc.GetHandle(ctx, id).Describe(ctx)
+		require.NoError(t, err)
+		require.Equal(t, windows[id], description.Schedule.Policy.CatchupWindow, id)
+		require.True(t, description.Schedule.State.Paused, id)
+		require.Equal(t, "operator maintenance", description.Schedule.State.Note, id)
+	}
+}

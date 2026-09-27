@@ -62,6 +62,7 @@ type Service struct {
 	authz           *authz.Engine
 	audit           *audit.Logger
 	gcpIdentity     *gcpauth.Identity
+	sessions        auth.PlatformAdminEntitlementReader
 	productFeatures *productfeatures.Client
 	verifyLimiter   *ratelimit.Limiter
 }
@@ -92,6 +93,7 @@ func NewService(
 		logger:          logger,
 		db:              db,
 		auth:            auth.New(logger, db, sessions, authzEngine),
+		sessions:        sessions,
 		authz:           authzEngine,
 		audit:           auditLogger,
 		gcpIdentity:     gcpIdentity,

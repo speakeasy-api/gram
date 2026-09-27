@@ -3,20 +3,27 @@ package access
 import (
 	"context"
 	"testing"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // The version a save must carry: the fingerprint of the rules as they stand.
@@ -916,4 +923,97 @@ func TestService_SetResourceAudience_RefusesNewAccessForSuspendedAgent(t *testin
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeInvalid, oopsErr.Code)
+}
+
+func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	serverID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: authCtx.ActiveOrganizationID, OwnerUserID: authCtx.UserID, Name: "Restricted agent",
+	})
+	require.NoError(t, err)
+	principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+	selectors, err := authz.NewSelector(authz.ScopeMCPWrite, "*").MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: authCtx.ActiveOrganizationID, PrincipalUrn: principal, Scope: string(authz.ScopeMCPWrite), Selectors: selectors,
+	})
+	require.NoError(t, err)
+	// The two servers share one upstream session. A policy-only removal must
+	// not invoke credential revocation or erase the other server's connection.
+	otherServerID := seedMCPServer(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
+	issuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                         "shared-" + uuid.NewString(),
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TrustedRemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	remoteIssuer, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID:                         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:                    conv.ToPGText(authCtx.ActiveOrganizationID),
+		Slug:                              "remote-" + uuid.NewString(),
+		Issuer:                            "https://idp.example.test",
+		ScopesSupported:                   []string{},
+		GrantTypesSupported:               []string{},
+		ResponseTypesSupported:            []string{},
+		TokenEndpointAuthMethodsSupported: []string{},
+	})
+	require.NoError(t, err)
+	client, err := remotesessionsrepo.New(ti.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		OrganizationID:        conv.ToPGText(authCtx.ActiveOrganizationID),
+		RemoteSessionIssuerID: remoteIssuer.ID,
+		ClientID:              "fixture",
+	})
+	require.NoError(t, err)
+	// The ciphertext is never decrypted.
+	session, err := remotesessionsrepo.New(ti.conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+		SubjectUrn:            urn.NewAgentSubject(agent.ID),
+		UserSessionIssuerID:   issuer.ID,
+		RemoteSessionClientID: client.ID,
+		AccessTokenEncrypted:  "fixture-not-a-token",
+		RefreshTokenEncrypted: conv.ToPGText("fixture-refresh"),
+		Scopes:                []string{},
+	})
+	require.NoError(t, err)
+	sessionID := session.ID
+	// The two servers deliberately share one issuer.
+	for _, toolsetID := range []string{serverID, otherServerID} {
+		toolset, err := toolsetsrepo.New(ti.conn).GetToolsetByIDAndOrganization(ctx, toolsetsrepo.GetToolsetByIDAndOrganizationParams{
+			ID: uuid.MustParse(toolsetID), OrganizationID: authCtx.ActiveOrganizationID,
+		})
+		require.NoError(t, err)
+		_, err = toolsetsrepo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
+			UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true}, Slug: toolset.Slug, ProjectID: toolset.ProjectID,
+		})
+		require.NoError(t, err)
+	}
+	var beforeSession, afterSession string
+	//nolint:glint // notestingrawsql: capture the shared credential without logging it
+	err = ti.conn.QueryRow(ctx, `SELECT row_to_json(s)::text FROM remote_sessions s WHERE id = $1`, sessionID).Scan(&beforeSession)
+	require.NoError(t, err)
+	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
+		ResourceKind: "mcp", ResourceID: serverID,
+		Entries:         []*gen.SetResourceAudienceEntry{{PrincipalUrn: principal.String(), Level: "blocked"}},
+		ExpectedVersion: currentAudienceVersion(t, ctx, ti, serverID),
+	})
+	require.NoError(t, err)
+	grants, err := runtimepolicy.LoadAgentPolicy(ctx, ti.conn, authCtx.ActiveOrganizationID, principal)
+	require.NoError(t, err)
+	allowed, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: serverID})
+	require.NoError(t, err)
+	require.False(t, allowed)
+	allowed, err = authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: otherServerID})
+	require.NoError(t, err)
+	require.True(t, allowed)
+	//nolint:glint // notestingrawsql: prove server-local policy removal leaves shared upstream authority intact
+	err = ti.conn.QueryRow(ctx, `SELECT row_to_json(s)::text FROM remote_sessions s WHERE id = $1`, sessionID).Scan(&afterSession)
+	require.NoError(t, err)
+	require.Equal(t, beforeSession, afterSession, "shared upstream session must be unchanged")
 }

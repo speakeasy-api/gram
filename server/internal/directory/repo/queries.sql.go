@@ -12,6 +12,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearOrganizationDirectoryUserLinksFixture = `-- name: ClearOrganizationDirectoryUserLinksFixture :exec
+UPDATE directory_users SET user_id = NULL WHERE organization_id = $1
+`
+
+// Test fixture: exercise email fallback without a direct Gram user link.
+func (q *Queries) ClearOrganizationDirectoryUserLinksFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, clearOrganizationDirectoryUserLinksFixture, organizationID)
+	return err
+}
+
 const closeDirectoryUserGroupMembership = `-- name: CloseDirectoryUserGroupMembership :execrows
 UPDATE directory_user_group_memberships
 SET deleted_at = COALESCE(deleted_at, clock_timestamp()),
@@ -140,6 +150,15 @@ func (q *Queries) DeleteDirectoryUserByWorkOSID(ctx context.Context, arg DeleteD
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteOrganizationDirectoryUsersFixture = `-- name: DeleteOrganizationDirectoryUsersFixture :exec
+DELETE FROM directory_users WHERE organization_id = $1
+`
+
+func (q *Queries) DeleteOrganizationDirectoryUsersFixture(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, deleteOrganizationDirectoryUsersFixture, organizationID)
+	return err
 }
 
 const directoryAttributeValueExists = `-- name: DirectoryAttributeValueExists :one
@@ -697,6 +716,65 @@ func (q *Queries) ListActiveDirectoryUserAttributesByEmails(ctx context.Context,
 	return items, nil
 }
 
+const listMappableDirectoryAttributeValues = `-- name: ListMappableDirectoryAttributeValues :many
+SELECT attribute_key, attribute_value, member_count
+FROM (
+  SELECT
+    attribute.key::text AS attribute_key,
+    attribute.value::text AS attribute_value,
+    COUNT(DISTINCT NULLIF(LOWER(TRIM(du.email)), ''))::bigint AS member_count,
+    COUNT(*) OVER (PARTITION BY attribute.key) AS values_per_key
+  FROM directory_users AS du
+  CROSS JOIN LATERAL jsonb_each_text(
+    CASE jsonb_typeof(du.attributes)
+      WHEN 'object' THEN du.attributes
+      ELSE '{}'::jsonb
+    END
+  ) AS attribute(key, value)
+  WHERE du.organization_id = $1
+    AND du.deleted IS FALSE
+    AND du.workos_deleted IS FALSE
+    AND attribute.value IS NOT NULL
+  GROUP BY attribute.key, attribute.value
+) AS attribute_values
+WHERE values_per_key <= $2::bigint
+ORDER BY attribute_key, attribute_value
+`
+
+type ListMappableDirectoryAttributeValuesParams struct {
+	OrganizationID  string
+	MaxValuesPerKey int64
+}
+
+type ListMappableDirectoryAttributeValuesRow struct {
+	AttributeKey   string
+	AttributeValue string
+	MemberCount    int64
+}
+
+// Attribute values an admin can map to a role. Keys with more than
+// @max_values_per_key distinct values are left out: those hold per-person
+// data (emails, employee ids) that is no use as a mapping source.
+func (q *Queries) ListMappableDirectoryAttributeValues(ctx context.Context, arg ListMappableDirectoryAttributeValuesParams) ([]ListMappableDirectoryAttributeValuesRow, error) {
+	rows, err := q.db.Query(ctx, listMappableDirectoryAttributeValues, arg.OrganizationID, arg.MaxValuesPerKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMappableDirectoryAttributeValuesRow
+	for rows.Next() {
+		var i ListMappableDirectoryAttributeValuesRow
+		if err := rows.Scan(&i.AttributeKey, &i.AttributeValue, &i.MemberCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const openDirectoryUserGroupMembership = `-- name: OpenDirectoryUserGroupMembership :one
 INSERT INTO directory_user_group_memberships (
   directory_user_id,
@@ -789,6 +867,25 @@ func (q *Queries) ResolveIDJAGUsersByEmail(ctx context.Context, arg ResolveIDJAG
 		return nil, err
 	}
 	return items, nil
+}
+
+const setOrganizationDirectoryUserDeletionFixture = `-- name: SetOrganizationDirectoryUserDeletionFixture :exec
+UPDATE directory_users
+SET deleted_at = CASE WHEN $1::boolean THEN clock_timestamp() ELSE deleted_at END,
+    workos_deleted_at = CASE WHEN $2::boolean THEN clock_timestamp() ELSE workos_deleted_at END
+WHERE organization_id = $3
+`
+
+type SetOrganizationDirectoryUserDeletionFixtureParams struct {
+	LocalDeleted   bool
+	WorkosDeleted  bool
+	OrganizationID string
+}
+
+// Test fixture: independently exercise local and upstream deletion markers.
+func (q *Queries) SetOrganizationDirectoryUserDeletionFixture(ctx context.Context, arg SetOrganizationDirectoryUserDeletionFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationDirectoryUserDeletionFixture, arg.LocalDeleted, arg.WorkosDeleted, arg.OrganizationID)
+	return err
 }
 
 const upsertDirectoryGroup = `-- name: UpsertDirectoryGroup :one
@@ -921,4 +1018,59 @@ func (q *Queries) UpsertDirectoryUser(ctx context.Context, arg UpsertDirectoryUs
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const upsertListedDirectoryGroup = `-- name: UpsertListedDirectoryGroup :execrows
+INSERT INTO directory_groups (
+  organization_id,
+  workos_directory_group_id,
+  name,
+  attributes,
+  workos_created_at,
+  workos_updated_at
+)
+VALUES (
+  $1,
+  $2,
+  $3,
+  $4,
+  $5,
+  $6
+)
+ON CONFLICT (workos_directory_group_id) DO UPDATE SET
+  name = EXCLUDED.name,
+  attributes = EXCLUDED.attributes,
+  workos_updated_at = EXCLUDED.workos_updated_at,
+  updated_at = clock_timestamp()
+WHERE directory_groups.organization_id = EXCLUDED.organization_id
+  AND directory_groups.deleted IS FALSE
+  AND directory_groups.workos_deleted IS FALSE
+  AND directory_groups.workos_updated_at < EXCLUDED.workos_updated_at
+`
+
+type UpsertListedDirectoryGroupParams struct {
+	OrganizationID         string
+	WorkosDirectoryGroupID string
+	Name                   string
+	Attributes             []byte
+	WorkosCreatedAt        pgtype.Timestamptz
+	WorkosUpdatedAt        pgtype.Timestamptz
+}
+
+// Saves a group read from a live WorkOS listing. Events stay the source of
+// truth: this never restores a group an event deleted, never overwrites a row
+// with an older snapshot, and leaves the event cursor untouched.
+func (q *Queries) UpsertListedDirectoryGroup(ctx context.Context, arg UpsertListedDirectoryGroupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, upsertListedDirectoryGroup,
+		arg.OrganizationID,
+		arg.WorkosDirectoryGroupID,
+		arg.Name,
+		arg.Attributes,
+		arg.WorkosCreatedAt,
+		arg.WorkosUpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

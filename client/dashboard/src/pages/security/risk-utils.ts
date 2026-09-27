@@ -1,5 +1,5 @@
 import { DETECTION_RULES, type RuleCategory } from "./policy-data";
-import { humanizeRuleId } from "./rule-ids";
+import { humanizeRuleId, LLM_ANALYZER_DEAD_LETTER_RULE_ID } from "./rule-ids";
 
 const SOURCE_TO_CATEGORY: ReadonlyMap<string, RuleCategory> = new Map<
   string,
@@ -33,6 +33,43 @@ export function isJudgeSource(source: string | undefined): boolean {
   return source !== undefined && JUDGE_SOURCE_SET.has(source);
 }
 
+// The fine-tuned LLM risk analyzer. One model call evaluates every risk the
+// scanner-backed detectors cover, and each finding it writes carries a
+// `<category>.llm` rule id, the model's reasoning as `description`, and no
+// `match` (it reports no spans). It is deliberately NOT a judge source: its
+// rule ids classify to the same categories the scanners feed, and a rule
+// exclusion on one silences a single category rather than the whole engine,
+// so the rule label and the exclusion affordances stay on.
+export const LLM_ANALYZER_SOURCE = "llm_analyzer";
+
+export function isLlmAnalyzerSource(source: string | undefined): boolean {
+  return source === LLM_ANALYZER_SOURCE;
+}
+
+// Findings whose evidence is a per-finding rationale in `description` rather
+// than a span of the message: the judge detectors and the LLM analyzer. The
+// evidence surfaces render these through the rationale path (EventMatchDialog)
+// instead of the masked-match chip, which would show a placeholder over a
+// match that does not exist.
+export function isRationaleSource(source: string | undefined): boolean {
+  return isJudgeSource(source) || isLlmAnalyzerSource(source);
+}
+
+// LLM analyzer rule id → category. Keep in sync with the RuleIDs the Go
+// classifier lists in server/internal/risk/categories: the dead-letter
+// sentinel has no category of its own there and falls through to `custom`.
+const LLM_ANALYZER_RULE_CATEGORY: ReadonlyMap<string, RuleCategory> = new Map<
+  string,
+  RuleCategory
+>([
+  ["secret.llm", "secrets"],
+  ["pii.llm", "pii"],
+  ["prompt_injection.llm", "prompt_injection"],
+  ["destructive_tool.llm", "destructive_tool"],
+  ["cli_destructive.llm", "cli_destructive"],
+  [LLM_ANALYZER_DEAD_LETTER_RULE_ID, "custom"],
+]);
+
 // Shadow MCP is the documented carve-out to redaction: its "match" is a server
 // URL or command identifier, not captured user content, so the server passes
 // match_redacted through verbatim. Surfaces that would otherwise describe the
@@ -49,6 +86,29 @@ export function isShadowMcpSource(source: string | undefined): boolean {
 // affordances hide behind this check and false-positive dismissal takes over.
 export function hasJudgeSource(sources: readonly string[]): boolean {
   return sources.some(isJudgeSource);
+}
+
+// A signal whose every detection source reports a rationale rather than a
+// match renders all its evidence through the rationale path, so the
+// panel-wide reveal-all toggle (which only drives MaskedMatch rows) would
+// have nothing to act on. Empty sources are not "only rationale": the
+// evidence surface then keeps its default redacted rendering.
+export function hasOnlyRationaleSources(sources: readonly string[]): boolean {
+  return sources.length > 0 && sources.every(isRationaleSource);
+}
+
+// Whether an evidence row names the rule beside its category code. Judge and
+// LLM analyzer category rules restate the category ("secret.llm" under
+// SECRETS), so only the code shows for them — except the analyzer's
+// dead-letter sentinel, which classifies to `custom` and would otherwise
+// leave no hint that the analysis never ran. Scanner rules always show.
+export function evidenceShowsRuleTitle(
+  source: string | undefined,
+  ruleId: string | undefined,
+): boolean {
+  return (
+    !isRationaleSource(source) || ruleId === LLM_ANALYZER_DEAD_LETTER_RULE_ID
+  );
 }
 
 const ruleIdToCategory = new Map<string, RuleCategory>();
@@ -103,7 +163,8 @@ export function getCategoryForFinding(
   ruleId?: string,
 ): RuleCategory | null {
   if (ruleId) {
-    const byRule = RULE_ID_TO_CATEGORY.get(ruleId);
+    const byRule =
+      RULE_ID_TO_CATEGORY.get(ruleId) ?? LLM_ANALYZER_RULE_CATEGORY.get(ruleId);
     if (byRule) return byRule;
   }
   if (source) {

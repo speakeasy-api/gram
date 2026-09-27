@@ -16,32 +16,38 @@ import (
 
 // Client is the "organizationUserSessionIssuers" service client.
 type Client struct {
-	CreateIssuerEndpoint             goa.Endpoint
-	ListIssuersEndpoint              goa.Endpoint
-	GetIssuerEndpoint                goa.Endpoint
-	UpdateIssuerEndpoint             goa.Endpoint
-	GetIssuerDeletePreflightEndpoint goa.Endpoint
-	DeleteIssuerEndpoint             goa.Endpoint
-	CreateCimdClientEndpoint         goa.Endpoint
-	ListCimdClientsEndpoint          goa.Endpoint
-	GetCimdClientEndpoint            goa.Endpoint
-	DeleteCimdClientEndpoint         goa.Endpoint
+	CreateIssuerEndpoint              goa.Endpoint
+	ListIssuersEndpoint               goa.Endpoint
+	GetIssuerEndpoint                 goa.Endpoint
+	UpdateIssuerEndpoint              goa.Endpoint
+	GetIssuerDeletePreflightEndpoint  goa.Endpoint
+	DeleteIssuerEndpoint              goa.Endpoint
+	MoveIssuerEndpoint                goa.Endpoint
+	GetIssuerMigratePreflightEndpoint goa.Endpoint
+	MigrateIssuerEndpoint             goa.Endpoint
+	CreateCimdClientEndpoint          goa.Endpoint
+	ListCimdClientsEndpoint           goa.Endpoint
+	GetCimdClientEndpoint             goa.Endpoint
+	DeleteCimdClientEndpoint          goa.Endpoint
 }
 
 // NewClient initializes a "organizationUserSessionIssuers" service client
 // given the endpoints.
-func NewClient(createIssuer, listIssuers, getIssuer, updateIssuer, getIssuerDeletePreflight, deleteIssuer, createCimdClient, listCimdClients, getCimdClient, deleteCimdClient goa.Endpoint) *Client {
+func NewClient(createIssuer, listIssuers, getIssuer, updateIssuer, getIssuerDeletePreflight, deleteIssuer, moveIssuer, getIssuerMigratePreflight, migrateIssuer, createCimdClient, listCimdClients, getCimdClient, deleteCimdClient goa.Endpoint) *Client {
 	return &Client{
-		CreateIssuerEndpoint:             createIssuer,
-		ListIssuersEndpoint:              listIssuers,
-		GetIssuerEndpoint:                getIssuer,
-		UpdateIssuerEndpoint:             updateIssuer,
-		GetIssuerDeletePreflightEndpoint: getIssuerDeletePreflight,
-		DeleteIssuerEndpoint:             deleteIssuer,
-		CreateCimdClientEndpoint:         createCimdClient,
-		ListCimdClientsEndpoint:          listCimdClients,
-		GetCimdClientEndpoint:            getCimdClient,
-		DeleteCimdClientEndpoint:         deleteCimdClient,
+		CreateIssuerEndpoint:              createIssuer,
+		ListIssuersEndpoint:               listIssuers,
+		GetIssuerEndpoint:                 getIssuer,
+		UpdateIssuerEndpoint:              updateIssuer,
+		GetIssuerDeletePreflightEndpoint:  getIssuerDeletePreflight,
+		DeleteIssuerEndpoint:              deleteIssuer,
+		MoveIssuerEndpoint:                moveIssuer,
+		GetIssuerMigratePreflightEndpoint: getIssuerMigratePreflight,
+		MigrateIssuerEndpoint:             migrateIssuer,
+		CreateCimdClientEndpoint:          createCimdClient,
+		ListCimdClientsEndpoint:           listCimdClients,
+		GetCimdClientEndpoint:             getCimdClient,
+		DeleteCimdClientEndpoint:          deleteCimdClient,
 	}
 }
 
@@ -177,6 +183,75 @@ func (c *Client) GetIssuerDeletePreflight(ctx context.Context, p *GetIssuerDelet
 func (c *Client) DeleteIssuer(ctx context.Context, p *DeleteIssuerPayload) (err error) {
 	_, err = c.DeleteIssuerEndpoint(ctx, p)
 	return
+}
+
+// MoveIssuer calls the "moveIssuer" endpoint of the
+// "organizationUserSessionIssuers" service.
+// MoveIssuer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) MoveIssuer(ctx context.Context, p *MoveIssuerPayload) (res *types.UserSessionIssuer, err error) {
+	var ires any
+	ires, err = c.MoveIssuerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.UserSessionIssuer), nil
+}
+
+// GetIssuerMigratePreflight calls the "getIssuerMigratePreflight" endpoint of
+// the "organizationUserSessionIssuers" service.
+// GetIssuerMigratePreflight may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetIssuerMigratePreflight(ctx context.Context, p *GetIssuerMigratePreflightPayload) (res *OrganizationUserSessionIssuerMigratePreflight, err error) {
+	var ires any
+	ires, err = c.GetIssuerMigratePreflightEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*OrganizationUserSessionIssuerMigratePreflight), nil
+}
+
+// MigrateIssuer calls the "migrateIssuer" endpoint of the
+// "organizationUserSessionIssuers" service.
+// MigrateIssuer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) MigrateIssuer(ctx context.Context, p *MigrateIssuerPayload) (res *MigrateOrganizationUserSessionIssuerResult, err error) {
+	var ires any
+	ires, err = c.MigrateIssuerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*MigrateOrganizationUserSessionIssuerResult), nil
 }
 
 // CreateCimdClient calls the "createCimdClient" endpoint of the

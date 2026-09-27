@@ -175,15 +175,18 @@ func (s *Service) Query(ctx context.Context, payload *telem_gen.QueryPayload) (*
 	if foldIdentities {
 		canonicalOrg = authCtx.ActiveOrganizationID
 	}
+	// IncludeDimensionValues defaults to true only via HTTP decoding; in-process
+	// callers get the zero value (false) unless they set it.
 	params := repo.AttributeMetricsQueryParams{
-		ProjectIDs:           scope.projectIDs,
-		TimeStart:            timeStart,
-		TimeEnd:              timeEnd,
-		GroupBy:              groupBy,
-		SortBy:               sortBy,
-		Filters:              filters,
-		IntervalSeconds:      interval,
-		CanonicalIdentityOrg: canonicalOrg,
+		ProjectIDs:             scope.projectIDs,
+		TimeStart:              timeStart,
+		TimeEnd:                timeEnd,
+		GroupBy:                groupBy,
+		SortBy:                 sortBy,
+		Filters:                filters,
+		IntervalSeconds:        interval,
+		CanonicalIdentityOrg:   canonicalOrg,
+		IncludeDimensionValues: payload.IncludeDimensionValues,
 	}
 	useSkillVersions := groupBy == "skill_version"
 	for _, filter := range filters {

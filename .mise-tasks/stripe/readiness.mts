@@ -88,6 +88,8 @@ export async function getSetupReadiness(
   );
   const catalog =
     /^price_/.test(local.STRIPE_PRICE_ID_TUM ?? "") &&
+    /^price_/.test(local.STRIPE_PRICE_ID_MCP_EGRESS ?? "") &&
+    /^price_/.test(local.STRIPE_PRICE_ID_RISK_SCANS ?? "") &&
     /^mtr_/.test(local.STRIPE_METER_ID_TUM ?? "") &&
     /^bpc_/.test(local.STRIPE_PORTAL_CONFIGURATION_ID ?? "") &&
     local.STRIPE_METER_EVENT_NAME === "tum";

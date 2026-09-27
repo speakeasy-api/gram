@@ -18,8 +18,32 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/net/publicsuffix"
+
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgid "github.com/speakeasy-api/gram/server/internal/organizations/id"
+)
+
+// Creation sources name the flow that created an organization. They are stored
+// verbatim in organization_metadata.creation_source and are informational: no
+// trial, entitlement or onboarding decision reads them.
+//
+// A row with no source is not a fourth value. It means nothing recorded one —
+// every organization created before the column existed, and every row first
+// written by WorkOS organization sync, which learns about an organization
+// without knowing what asked for it.
+const (
+	// SourceSignup is a self-serve signup: someone named a company and Gram
+	// created the organization around them.
+	SourceSignup = "signup"
+
+	// SourceAssistants is the organization auto-provisioned for a user who
+	// arrived through Assistants and never asked for one.
+	SourceAssistants = "assistants"
+
+	// SourcePlatformAdmin is an organization a platform admin created from the
+	// admin app, which is how the prospect flow starts.
+	SourcePlatformAdmin = "platform_admin"
 )
 
 // WorkOSOrganizationCreator is the WorkOS surface CreateInWorkOS needs. It
@@ -34,6 +58,15 @@ type WorkOSOrganizationCreator interface {
 	// UpdateOrganizationExternalID sets external_id on an existing WorkOS
 	// organization.
 	UpdateOrganizationExternalID(ctx context.Context, workosOrgID, externalID string) error
+}
+
+// WorkOSVerifiedDomainCreator is the platform-admin provisioning capability.
+type WorkOSVerifiedDomainCreator interface {
+	// CreateOrganizationWithVerifiedDomain returns an ID only after verifying the response domain state.
+	CreateOrganizationWithVerifiedDomain(ctx context.Context, name, hostname string) (string, error)
+
+	// UpdateOrganizationExternalIDWithoutRetry sets the derived ID without retrying.
+	UpdateOrganizationExternalIDWithoutRetry(ctx context.Context, workosOrgID, externalID string) error
 }
 
 // CreatedOrganization is an organization that exists in WorkOS and has no Gram
@@ -77,9 +110,24 @@ func CreateInWorkOS(ctx context.Context, client WorkOSOrganizationCreator, name 
 		return empty, fmt.Errorf("create WorkOS organization: %w", err)
 	}
 
+	return finishWorkOSCreation(ctx, client.UpdateOrganizationExternalID, workosOrgID)
+}
+
+// CreateInWorkOSWithVerifiedDomain creates an administrator-verified organization.
+// Callers must validate name and hostname and establish ownership before calling this.
+func CreateInWorkOSWithVerifiedDomain(ctx context.Context, client WorkOSVerifiedDomainCreator, name, hostname string) (CreatedOrganization, error) {
+	workosOrgID, err := client.CreateOrganizationWithVerifiedDomain(ctx, name, hostname)
+	if err != nil {
+		return CreatedOrganization{}, fmt.Errorf("create WorkOS organization with verified domain: %w", err)
+	}
+	return finishWorkOSCreation(ctx, client.UpdateOrganizationExternalIDWithoutRetry, workosOrgID)
+}
+
+func finishWorkOSCreation(ctx context.Context, update func(context.Context, string, string) error, workosOrgID string) (CreatedOrganization, error) {
+	var empty CreatedOrganization
 	gramOrgID := orgid.FromWorkOSID(workosOrgID)
 
-	if err := client.UpdateOrganizationExternalID(ctx, workosOrgID, gramOrgID); err != nil {
+	if err := update(ctx, workosOrgID, gramOrgID); err != nil {
 		return empty, fmt.Errorf("set external_id on WorkOS organization: %w", err)
 	}
 
@@ -98,6 +146,16 @@ var ErrUnavailable = errors.New("WorkOS is not configured on this server")
 // the identity provider does not know about cannot be logged into. Failing is
 // more honest than creating a Gram-only row that looks like a success.
 type Unavailable struct{}
+
+// CreateOrganizationWithVerifiedDomain always fails with ErrUnavailable.
+func (Unavailable) CreateOrganizationWithVerifiedDomain(context.Context, string, string) (string, error) {
+	return "", ErrUnavailable
+}
+
+// UpdateOrganizationExternalIDWithoutRetry always fails with ErrUnavailable.
+func (Unavailable) UpdateOrganizationExternalIDWithoutRetry(context.Context, string, string) error {
+	return ErrUnavailable
+}
 
 // CreateOrganization always fails with ErrUnavailable.
 func (Unavailable) CreateOrganization(context.Context, string, string) (string, error) {
@@ -200,4 +258,17 @@ func normalizeSpaces(name string) string {
 	}
 
 	return b.String()
+}
+
+// NameFromHostname derives a display name from a normalized company hostname.
+// Keep punycode as ASCII, and honor private suffixes (tenant.github.io -> tenant).
+// If no registrable domain exists, retain the input rather than invent a name.
+// This is not validation and must never be used to select a verified domain.
+func NameFromHostname(hostname string) string {
+	registrable, err := publicsuffix.EffectiveTLDPlusOne(hostname)
+	if err != nil {
+		return hostname
+	}
+	name, _, _ := strings.Cut(registrable, ".")
+	return name
 }

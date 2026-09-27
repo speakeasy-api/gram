@@ -63,12 +63,58 @@ func newTestInstance(t *testing.T) (context.Context, *testInstance) {
 	}
 }
 
+func TestParsePlatformHosts(t *testing.T) {
+	t.Parallel()
+
+	valid := []struct {
+		name     string
+		raw      []string
+		expected map[string]string
+	}{
+		{name: "unset", raw: nil, expected: map[string]string{}},
+		{name: "empty env value", raw: []string{""}, expected: map[string]string{}},
+		{
+			name:     "canonical host and base URL",
+			raw:      []string{"app.getgram.ai", " AI.Speakeasy.com:443 "},
+			expected: map[string]string{"app.getgram.ai": "https://app.getgram.ai", "ai.speakeasy.com": "https://ai.speakeasy.com"},
+		},
+	}
+	for _, tt := range valid {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			hosts, err := customdomains.ParsePlatformHosts(tt.raw)
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, hosts)
+		})
+	}
+
+	invalid := []struct {
+		name string
+		raw  []string
+	}{
+		{name: "empty entry in a list", raw: []string{"ai.speakeasy.com", ""}},
+		{name: "scheme", raw: []string{"https://ai.speakeasy.com"}},
+		{name: "path", raw: []string{"ai.speakeasy.com/app"}},
+		{name: "trailing dot", raw: []string{"ai.speakeasy.com."}},
+		{name: "malformed port", raw: []string{"ai.speakeasy.com:not-a-port"}},
+	}
+	for _, tt := range invalid {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := customdomains.ParsePlatformHosts(tt.raw)
+			require.Error(t, err)
+		})
+	}
+}
+
 func TestCustomDomainsMiddleware(t *testing.T) {
 	t.Parallel()
 	ctx, instance := newTestInstance(t)
 	logger := testenv.NewLogger(t)
 
 	serverURL, err := url.Parse("https://api.speakeasyapi.dev")
+	require.NoError(t, err)
+	platformHosts, err := customdomains.ParsePlatformHosts([]string{"ai.speakeasy.com"})
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -196,6 +242,24 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 			setupDomain:     nil,
 		},
 		{
+			name:            "additional_platform_host_allowed",
+			env:             "prod",
+			host:            "AI.speakeasy.com:443",
+			expectedStatus:  http.StatusOK,
+			expectedCtx:     false,
+			expectedSurface: requestorigin.SurfacePlatform,
+			expectedBaseURL: "https://ai.speakeasy.com",
+			description:     "Should treat a configured platform host as first-party and render URLs on it",
+			setupDomain:     nil,
+		},
+		{
+			name:           "subdomain_of_platform_host_is_not_platform",
+			env:            "prod",
+			host:           "dev.ai.speakeasy.com",
+			expectedStatus: http.StatusForbidden,
+			description:    "Should match platform hosts exactly, not by suffix",
+		},
+		{
 			name:           "trailing_dot_is_rejected",
 			env:            "prod",
 			host:           "api.speakeasyapi.dev.",
@@ -252,7 +316,7 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 			}
 
 			// Create the middleware
-			middlewareFunc := customdomains.Middleware(logger, instance.conn, tt.env, serverURL)
+			middlewareFunc := customdomains.Middleware(logger, instance.conn, tt.env, serverURL, platformHosts)
 
 			// Create a test handler that captures context and responds
 			var capturedCtx context.Context
@@ -301,6 +365,47 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 	}
 }
 
+// The server URL's host is first-party whether or not GRAM_PLATFORM_HOSTS lists
+// it, and always keeps the server URL as its base URL. A port on the server URL
+// tells the configured base URL apart from the one ParsePlatformHosts derives.
+func TestCustomDomainsMiddleware_ServerHost(t *testing.T) {
+	t.Parallel()
+	_, instance := newTestInstance(t)
+	logger := testenv.NewLogger(t)
+
+	serverURL, err := url.Parse("https://api.speakeasyapi.dev:8443")
+	require.NoError(t, err)
+	listed, err := customdomains.ParsePlatformHosts([]string{"api.speakeasyapi.dev", "ai.speakeasy.com"})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name          string
+		platformHosts map[string]string
+	}{
+		{name: "flag unset", platformHosts: nil},
+		{name: "server host listed", platformHosts: listed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var origin requestorigin.Origin
+			handler := customdomains.Middleware(logger, instance.conn, "prod", serverURL, tt.platformHosts)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				origin, _ = requestorigin.FromContext(r.Context())
+				w.WriteHeader(http.StatusOK)
+			}))
+			req := httptest.NewRequest(http.MethodGet, "https://example.com/test", nil)
+			req.Host = "api.speakeasyapi.dev:8443"
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Equal(t, requestorigin.SurfacePlatform, origin.Surface)
+			require.Equal(t, "https://api.speakeasyapi.dev:8443", origin.BaseURL)
+		})
+	}
+}
+
 func TestCustomDomainsMiddleware_DeletedDomain(t *testing.T) {
 	t.Parallel()
 	ctx, instance := newTestInstance(t)
@@ -322,7 +427,7 @@ func TestCustomDomainsMiddleware_DeletedDomain(t *testing.T) {
 	err = instance.domainsRepo.DeleteCustomDomain(ctx, "org-deleted")
 	require.NoError(t, err)
 
-	middlewareFunc := customdomains.Middleware(logger, instance.conn, "prod", serverURL)
+	middlewareFunc := customdomains.Middleware(logger, instance.conn, "prod", serverURL, nil)
 
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("Handler should not be called for deleted domain")
@@ -354,7 +459,7 @@ func TestCustomDomainsMiddleware_DatabaseErrors(t *testing.T) {
 	require.NoError(t, err)
 	closedConn.Close()
 
-	middlewareFunc := customdomains.Middleware(logger, closedConn, "prod", serverURL)
+	middlewareFunc := customdomains.Middleware(logger, closedConn, "prod", serverURL, nil)
 
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("Handler should not be called when database error occurs")
@@ -383,7 +488,7 @@ func TestCustomDomainsMiddleware_MissingHost(t *testing.T) {
 	serverURL, err := url.Parse("https://api.speakeasyapi.dev")
 	require.NoError(t, err)
 
-	middlewareFunc := customdomains.Middleware(logger, instance.conn, "prod", serverURL)
+	middlewareFunc := customdomains.Middleware(logger, instance.conn, "prod", serverURL, nil)
 
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("Handler should not be called with empty host")

@@ -37,6 +37,7 @@ import {
   formatTokenCount,
 } from "./billingState";
 import { MeterUsage } from "./MeterUsage";
+import { SpendBreakdown } from "./SpendBreakdown";
 
 function Group({
   title,
@@ -497,6 +498,7 @@ export function BillingRoute(): JSX.Element | null {
   if (!data) return null;
   return (
     <div className="flex min-w-0 flex-col gap-6">
+      <SpendBreakdown key={`spend-${data.id}`} organizationID={data.id} />
       <MeterUsage key={`usage-${data.id}`} organizationID={data.id} />
       <Billing key={data.id} org={data} />
     </div>

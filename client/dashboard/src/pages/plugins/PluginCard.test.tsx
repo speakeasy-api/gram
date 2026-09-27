@@ -12,9 +12,15 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PluginCard } from "./PluginCard";
 
-const { client, downloadPluginPackage, navigate } = vi.hoisted(() => ({
-  client: {},
-  downloadPluginPackage: vi.fn(),
+const { client, navigate } = vi.hoisted(() => ({
+  client: {
+    plugins: {
+      downloadPluginPackage: vi.fn().mockResolvedValue({
+        headers: {},
+        result: new Uint8Array([0x50, 0x4b]),
+      }),
+    },
+  },
   navigate: vi.fn(),
 }));
 
@@ -54,24 +60,15 @@ vi.mock("@/routes", () => ({
     plugins: { detail: { href: (id: string) => `/plugins/${id}` } },
   }),
 }));
-vi.mock("./downloadPluginPackage", () => ({
-  usePluginPackageDownload: (
-    sdkClient: unknown,
-    pluginId: string,
-  ): {
-    isDownloading: boolean;
-    download: (platform: string) => Promise<void>;
-  } => ({
-    isDownloading: false,
-    download: async (platform) => {
-      await downloadPluginPackage(sdkClient, pluginId, platform);
-    },
-  }),
+vi.mock("@/contexts/Auth", () => ({
+  useProject: () => ({ id: "project-uuid", slug: "selected-project" }),
+  useSession: () => ({ session: "selected-session" }),
 }));
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 function plugin(agentPluginsV1Compatible: boolean): Plugin {
@@ -100,6 +97,8 @@ function renderCard(agentPluginsV1Compatible: boolean): void {
 
 describe("PluginCard Agent Plugins actions", () => {
   it("offers the portable ZIP once and requests agent-plugin", async () => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:card");
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     renderCard(true);
 
     const action = screen.getByRole("button", {
@@ -108,11 +107,12 @@ describe("PluginCard Agent Plugins actions", () => {
     fireEvent.click(action);
 
     await waitFor(() => {
-      expect(downloadPluginPackage).toHaveBeenCalledWith(
-        client,
-        "plugin-id",
-        "agent-plugin",
-      );
+      expect(client.plugins.downloadPluginPackage).toHaveBeenCalledWith({
+        pluginId: "plugin-id",
+        platform: "agent-plugin",
+        gramProject: "selected-project",
+        gramSession: "selected-session",
+      });
     });
     expect(screen.getAllByText("Download Agent Plugins ZIP")).toHaveLength(1);
     const status = screen.getByRole("img", {

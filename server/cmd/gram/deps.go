@@ -576,6 +576,7 @@ func newBillingProvider(
 	redisClient *redis.Client,
 	posthogClient *posthog.Posthog,
 	stripeClient stripeclient.Client,
+	db *pgxpool.Pool,
 	c *cli.Context,
 ) (billing.Repository, billing.Tracker, error) {
 	switch {
@@ -615,6 +616,9 @@ func newBillingProvider(
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")
 		stub := billing.NewStubClient(logger, tracerProvider)
+		if db != nil {
+			stub = billing.NewStubClientWithLocalProfiles(logger, tracerProvider, db)
+		}
 		return stub, stub, nil
 	case stripeClient != nil:
 		logger.InfoContext(ctx, "using Stripe billing provider with legacy billing operations disabled")
@@ -644,6 +648,8 @@ func newStripeClient(
 
 	catalog := stripeclient.Catalog{
 		PriceIDTUM:            c.String("stripe-price-id-tum"),
+		PriceIDMCPEgress:      c.String("stripe-price-id-mcp-egress"),
+		PriceIDRiskScans:      c.String("stripe-price-id-risk-scans"),
 		PortalConfigurationID: c.String("stripe-portal-configuration-id"),
 	}
 	if err := catalog.Validate(); err != nil {
@@ -814,7 +820,7 @@ func newAccessRoleProvider(ctx context.Context, logger *slog.Logger, guardianPol
 // server down over it would take login, the organizations list, the detail page
 // and every update endpoint with it. The condition is logged at Error on
 // startup, which is what makes it visible before an operator goes looking.
-func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSOrganizationCreator {
+func newAdminWorkOSOrganizationCreator(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, c *cli.Context) orgprovision.WorkOSVerifiedDomainCreator {
 	apiKey := c.String("workos-api-key")
 	haveRealKey := apiKey != "" && apiKey != "unset"
 	opts := workosClientOpts(c)
@@ -1635,9 +1641,10 @@ func newIdentityProviderConnectionsProvisioner(ctx context.Context, logger *slog
 	}
 
 	provisioner, err := identityproviderconnections.NewProvisioner(logger, db, gcpIdentity, kmsClients, auditLogger, identityproviderconnections.Config{
-		KeyRing:             keyRing,
-		SigningCredentialID: credentialID,
-		ServerURL:           serverURL,
+		KeyRing:               keyRing,
+		SigningCredentialID:   credentialID,
+		SigningServiceAccount: strings.TrimSpace(c.String(identityProviderSigningServiceAccount)),
+		ServerURL:             serverURL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build identity provider connections provisioner: %w", err)

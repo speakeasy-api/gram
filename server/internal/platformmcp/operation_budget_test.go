@@ -15,13 +15,20 @@ func TestOperationBudgetsValidRequiresAccessReads(t *testing.T) {
 
 	budget := allowBudget()
 	budgets := OperationBudgets{
-		Catalog: budget, Registration: budget, Handoff: budget, SetupStart: budget,
+		Catalog: budget, Registration: budget, ReviewRequests: budget, Handoff: budget, SetupStart: budget,
 		Repair: budget, Docs: budget, Skills: budget, LifecycleMetadata: budget,
 		Plugins: budget, AccessReads: budget, AccessRoleMutations: budget, Diagnostics: budget,
-		SensitiveDiagnostics: budget, SensitiveSessionRecall: budget, RiskMutations: budget,
+		SensitiveDiagnostics: budget, SensitiveSessionRecall: budget, RiskMutations: budget, RiskFindings: budget,
 		DrilldownVolume: DrilldownVolumeBudget{Rows: allowOperationLimiter{}, MetricQueries: allowOperationLimiter{}},
 	}
 	require.True(t, budgets.Valid())
+
+	budgets.RiskFindings.Connection = nil
+	require.False(t, budgets.Valid())
+	budgets.RiskFindings.Connection = allowOperationLimiter{}
+	budgets.RiskFindings.Organization = nil
+	require.False(t, budgets.Valid())
+	budgets.RiskFindings = budget
 
 	budgets.AccessReads.Connection = nil
 	require.False(t, budgets.Valid())

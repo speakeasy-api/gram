@@ -16,6 +16,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 var infra *testenv.Environment
@@ -94,10 +95,12 @@ func seedIssuer(t *testing.T, conn *pgxpool.Pool, organizationID string, project
 	return id
 }
 
-func softDelete(t *testing.T, conn *pgxpool.Pool, id uuid.UUID) {
+func softDelete(t *testing.T, conn *pgxpool.Pool, organizationID string, id uuid.UUID) {
 	t.Helper()
 
-	_, err := conn.Exec( //nolint:glint // notestingrawsql: see seedIssuer
-		t.Context(), `UPDATE workload_issuers SET deleted_at = clock_timestamp() WHERE id = $1`, id)
+	deleted, err := testrepo.New(conn).SoftDeleteWorkloadIssuerFixture(t.Context(), testrepo.SoftDeleteWorkloadIssuerFixtureParams{
+		ID: id, OrganizationID: organizationID,
+	})
 	require.NoError(t, err)
+	require.Equal(t, int64(1), deleted)
 }

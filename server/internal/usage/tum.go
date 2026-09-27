@@ -201,12 +201,10 @@ func (s *Service) buildTokensUnderManagement(ctx context.Context, authCtx *conte
 
 		// The finalized snapshot wins over the live recompute; the daily
 		// points remain advisory (they can drift or expire — the sealed total
-		// is the billed number). Matched on BOTH boundaries: if the contract's
-		// anchor day changed since a cycle was sealed, a stale-boundary
-		// snapshot no longer describes this period, so the cycle recomputes
-		// live (the aggregate's retention covers the full window) and the
-		// hourly snapshot job re-finalizes it on the new boundaries. The
-		// old-boundary rows stay untouched as the invoiced record.
+		// is the billed number). Match on BOTH boundaries: if the contract's
+		// anchor day changed since a cycle was sealed, the stale snapshot no
+		// longer describes this period, so this response falls back to the
+		// live aggregate. The old-boundary row remains the invoiced record.
 		if snap, ok := finalized[cycle.Start.UTC().Unix()]; ok && snap.CycleEnd.Time.UTC().Equal(cycle.End.UTC()) {
 			cycleTokens = snap.TumTokens
 		}

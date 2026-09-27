@@ -321,3 +321,36 @@ func TestEvolve_CurrentSchemaIsStable(t *testing.T) {
 		require.NoError(t, db.Close())
 	}
 }
+
+func TestEvolve_OrganizationDomainsDefault(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "devidp.db")
+	writeLegacyDB(t, path, `
+		CREATE TABLE organizations (
+		  id TEXT NOT NULL PRIMARY KEY,
+		  name TEXT NOT NULL,
+		  slug TEXT NOT NULL,
+		  account_type TEXT NOT NULL DEFAULT 'enterprise',
+		  workos_id TEXT,
+		  external_id TEXT,
+		  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		INSERT INTO organizations (id, name, slug, workos_id, external_id)
+		VALUES ('existing', 'Example', 'example', 'org_example', 'gram-example');
+	`)
+	cfg := config.DB{Mode: config.DBModeFile, Path: path}
+	for range 2 {
+		require.NoError(t, bootstrap.Evolve(t.Context(), cfg, testLogger()))
+		db, err := bootstrap.Open(t.Context(), cfg)
+		require.NoError(t, err)
+		var name, workosID, externalID, domains string
+		err = db.QueryRowContext(t.Context(), `SELECT name, workos_id, external_id, domains FROM organizations WHERE id = 'existing'`).Scan(&name, &workosID, &externalID, &domains)
+		require.NoError(t, err)
+		require.Equal(t, "Example", name)
+		require.Equal(t, "org_example", workosID)
+		require.Equal(t, "gram-example", externalID)
+		require.Equal(t, "[]", domains)
+		require.NoError(t, db.Close())
+	}
+}

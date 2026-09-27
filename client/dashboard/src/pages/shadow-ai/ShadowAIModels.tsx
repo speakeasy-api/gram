@@ -10,7 +10,7 @@ export default function ShadowAIModels(): JSX.Element {
         <Page.Section.Description>
           Open models that enrolled devices run locally. These never speak MCP
           to Gram, so there is nothing for the gateway to allow or block — this
-          tab is inventory.
+          tab is inventory. Open a row to see who runs it.
         </Page.Section.Description>
         <Page.Section.Body>
           {/* canDecide is false regardless of scope: a decision on a

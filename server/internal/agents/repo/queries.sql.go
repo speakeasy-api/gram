@@ -16,28 +16,40 @@ const createAgent = `-- name: CreateAgent :one
 INSERT INTO agents (
   organization_id,
   owner_user_id,
+  project_id,
   name
 ) VALUES (
   $1,
   $2,
-  $3
+  $3,
+  $4
 )
-RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateAgentParams struct {
 	OrganizationID string
 	OwnerUserID    string
+	ProjectID      uuid.NullUUID
 	Name           string
 }
 
+// project_id is nullable while agents created before project scoping carry
+// none. The composite foreign key pins it to the agent's own organization, so
+// a project from another tenant is rejected by the database rather than here.
 func (q *Queries) CreateAgent(ctx context.Context, arg CreateAgentParams) (Agent, error) {
-	row := q.db.QueryRow(ctx, createAgent, arg.OrganizationID, arg.OwnerUserID, arg.Name)
+	row := q.db.QueryRow(ctx, createAgent,
+		arg.OrganizationID,
+		arg.OwnerUserID,
+		arg.ProjectID,
+		arg.Name,
+	)
 	var i Agent
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
 		&i.OwnerUserID,
+		&i.ProjectID,
 		&i.Name,
 		&i.SuspendedAt,
 		&i.RevokedAt,
@@ -95,20 +107,23 @@ INSERT INTO agents (
   id,
   organization_id,
   owner_user_id,
+  project_id,
   name
 ) VALUES (
   $1,
   $2,
   $3,
-  $4
+  $4,
+  $5
 )
-RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateAgentWithIDParams struct {
 	ID             uuid.UUID
 	OrganizationID string
 	OwnerUserID    string
+	ProjectID      uuid.NullUUID
 	Name           string
 }
 
@@ -117,6 +132,7 @@ func (q *Queries) CreateAgentWithID(ctx context.Context, arg CreateAgentWithIDPa
 		arg.ID,
 		arg.OrganizationID,
 		arg.OwnerUserID,
+		arg.ProjectID,
 		arg.Name,
 	)
 	var i Agent
@@ -124,6 +140,7 @@ func (q *Queries) CreateAgentWithID(ctx context.Context, arg CreateAgentWithIDPa
 		&i.ID,
 		&i.OrganizationID,
 		&i.OwnerUserID,
+		&i.ProjectID,
 		&i.Name,
 		&i.SuspendedAt,
 		&i.RevokedAt,
@@ -144,7 +161,7 @@ SET deleted_at = clock_timestamp(),
 WHERE organization_id = $1
   AND id = $2
   AND deleted IS FALSE
-RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteAgentParams struct {
@@ -159,6 +176,7 @@ func (q *Queries) DeleteAgent(ctx context.Context, arg DeleteAgentParams) (Agent
 		&i.ID,
 		&i.OrganizationID,
 		&i.OwnerUserID,
+		&i.ProjectID,
 		&i.Name,
 		&i.SuspendedAt,
 		&i.RevokedAt,
@@ -209,7 +227,7 @@ func (q *Queries) DeleteAgentPolicyGrant(ctx context.Context, arg DeleteAgentPol
 }
 
 const getAgentByID = `-- name: GetAgentByID :one
-SELECT id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 FROM agents
 WHERE organization_id = $1
   AND id = $2
@@ -229,6 +247,7 @@ func (q *Queries) GetAgentByID(ctx context.Context, arg GetAgentByIDParams) (Age
 		&i.ID,
 		&i.OrganizationID,
 		&i.OwnerUserID,
+		&i.ProjectID,
 		&i.Name,
 		&i.SuspendedAt,
 		&i.RevokedAt,
@@ -243,7 +262,7 @@ func (q *Queries) GetAgentByID(ctx context.Context, arg GetAgentByIDParams) (Age
 }
 
 const getAgentByIDForUpdate = `-- name: GetAgentByIDForUpdate :one
-SELECT id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 FROM agents
 WHERE organization_id = $1
   AND id = $2
@@ -264,6 +283,7 @@ func (q *Queries) GetAgentByIDForUpdate(ctx context.Context, arg GetAgentByIDFor
 		&i.ID,
 		&i.OrganizationID,
 		&i.OwnerUserID,
+		&i.ProjectID,
 		&i.Name,
 		&i.SuspendedAt,
 		&i.RevokedAt,
@@ -350,7 +370,7 @@ SET owner_reassignment_required_at = clock_timestamp(),
 WHERE organization_id = $2
   AND owner_user_id = $3
   AND owner_reassignment_required_at IS NULL
-RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type LatchAgentsForOwnerLossByMembershipParams struct {
@@ -372,6 +392,7 @@ func (q *Queries) LatchAgentsForOwnerLossByMembership(ctx context.Context, arg L
 			&i.ID,
 			&i.OrganizationID,
 			&i.OwnerUserID,
+			&i.ProjectID,
 			&i.Name,
 			&i.SuspendedAt,
 			&i.RevokedAt,
@@ -399,7 +420,7 @@ SET owner_reassignment_required_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE owner_user_id = $2
   AND owner_reassignment_required_at IS NULL
-RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type LatchAgentsForOwnerLossByUserParams struct {
@@ -420,6 +441,7 @@ func (q *Queries) LatchAgentsForOwnerLossByUser(ctx context.Context, arg LatchAg
 			&i.ID,
 			&i.OrganizationID,
 			&i.OwnerUserID,
+			&i.ProjectID,
 			&i.Name,
 			&i.SuspendedAt,
 			&i.RevokedAt,
@@ -441,7 +463,7 @@ func (q *Queries) LatchAgentsForOwnerLossByUser(ctx context.Context, arg LatchAg
 }
 
 const listActiveAgentsForAuthorization = `-- name: ListActiveAgentsForAuthorization :many
-SELECT a.id, a.organization_id, a.owner_user_id, a.name, a.suspended_at, a.revoked_at, a.owner_reassignment_required_at, a.owner_reassignment_reason, a.created_at, a.updated_at, a.deleted_at, a.deleted
+SELECT a.id, a.organization_id, a.owner_user_id, a.project_id, a.name, a.suspended_at, a.revoked_at, a.owner_reassignment_required_at, a.owner_reassignment_reason, a.created_at, a.updated_at, a.deleted_at, a.deleted
 FROM agents AS a
 JOIN users AS u ON u.id = a.owner_user_id
 JOIN organization_user_relationships AS our
@@ -473,6 +495,7 @@ func (q *Queries) ListActiveAgentsForAuthorization(ctx context.Context, organiza
 			&i.ID,
 			&i.OrganizationID,
 			&i.OwnerUserID,
+			&i.ProjectID,
 			&i.Name,
 			&i.SuspendedAt,
 			&i.RevokedAt,
@@ -664,7 +687,7 @@ func (q *Queries) ListManagedAgentSessions(ctx context.Context, arg ListManagedA
 }
 
 const listManagedAgents = `-- name: ListManagedAgents :many
-SELECT id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted FROM agents
+SELECT id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted FROM agents
 WHERE organization_id = $1 AND deleted IS FALSE
 ORDER BY LOWER(name), id
 `
@@ -682,6 +705,7 @@ func (q *Queries) ListManagedAgents(ctx context.Context, organizationID string) 
 			&i.ID,
 			&i.OrganizationID,
 			&i.OwnerUserID,
+			&i.ProjectID,
 			&i.Name,
 			&i.SuspendedAt,
 			&i.RevokedAt,
@@ -712,7 +736,7 @@ WHERE organization_id = $2
   AND id = $3
   AND deleted IS FALSE
   AND owner_reassignment_required_at IS NOT NULL
-RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type ReassignAgentParams struct {
@@ -728,6 +752,7 @@ func (q *Queries) ReassignAgent(ctx context.Context, arg ReassignAgentParams) (A
 		&i.ID,
 		&i.OrganizationID,
 		&i.OwnerUserID,
+		&i.ProjectID,
 		&i.Name,
 		&i.SuspendedAt,
 		&i.RevokedAt,
@@ -748,7 +773,7 @@ SET name = $1,
 WHERE organization_id = $2
   AND id = $3
   AND deleted IS FALSE
-RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type RenameAgentParams struct {
@@ -764,6 +789,7 @@ func (q *Queries) RenameAgent(ctx context.Context, arg RenameAgentParams) (Agent
 		&i.ID,
 		&i.OrganizationID,
 		&i.OwnerUserID,
+		&i.ProjectID,
 		&i.Name,
 		&i.SuspendedAt,
 		&i.RevokedAt,
@@ -786,7 +812,7 @@ WHERE organization_id = $1
   AND deleted IS FALSE
   AND suspended_at IS NOT NULL
   AND revoked_at IS NULL
-RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type ResumeAgentParams struct {
@@ -801,6 +827,7 @@ func (q *Queries) ResumeAgent(ctx context.Context, arg ResumeAgentParams) (Agent
 		&i.ID,
 		&i.OrganizationID,
 		&i.OwnerUserID,
+		&i.ProjectID,
 		&i.Name,
 		&i.SuspendedAt,
 		&i.RevokedAt,
@@ -823,7 +850,7 @@ WHERE organization_id = $1
   AND id = $2
   AND deleted IS FALSE
   AND revoked_at IS NULL
-RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type RevokeAgentParams struct {
@@ -838,6 +865,7 @@ func (q *Queries) RevokeAgent(ctx context.Context, arg RevokeAgentParams) (Agent
 		&i.ID,
 		&i.OrganizationID,
 		&i.OwnerUserID,
+		&i.ProjectID,
 		&i.Name,
 		&i.SuspendedAt,
 		&i.RevokedAt,
@@ -916,7 +944,7 @@ WHERE organization_id = $1
   AND deleted IS FALSE
   AND suspended_at IS NULL
   AND revoked_at IS NULL
-RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type SuspendAgentParams struct {
@@ -931,6 +959,7 @@ func (q *Queries) SuspendAgent(ctx context.Context, arg SuspendAgentParams) (Age
 		&i.ID,
 		&i.OrganizationID,
 		&i.OwnerUserID,
+		&i.ProjectID,
 		&i.Name,
 		&i.SuspendedAt,
 		&i.RevokedAt,
@@ -953,7 +982,7 @@ WHERE organization_id = $2
   AND deleted IS FALSE
   AND owner_reassignment_required_at IS NULL
   AND owner_user_id <> $1
-RETURNING id, organization_id, owner_user_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, owner_user_id, project_id, name, suspended_at, revoked_at, owner_reassignment_required_at, owner_reassignment_reason, created_at, updated_at, deleted_at, deleted
 `
 
 type TransferAgentParams struct {
@@ -969,6 +998,7 @@ func (q *Queries) TransferAgent(ctx context.Context, arg TransferAgentParams) (A
 		&i.ID,
 		&i.OrganizationID,
 		&i.OwnerUserID,
+		&i.ProjectID,
 		&i.Name,
 		&i.SuspendedAt,
 		&i.RevokedAt,

@@ -6,31 +6,46 @@ import { Icon } from "@/components/ui/Icon";
 import { type IconName } from "@/components/ui/Icon/names";
 import {
   DETECTION_RULES,
-  RULE_CATEGORY_META,
+  ruleCategoryMeta,
+  type DetectionRule,
+  type DetectorMode,
   type RuleCategory,
 } from "./policy-data";
-import { AVAILABLE_CATEGORIES } from "./policy-form";
+import { availableCategories, categoryLevelDetectors } from "./policy-form";
 
 export type DetectorCardProps = {
   category: RuleCategory;
   selected: boolean;
   disabledRules: Set<string>;
   disabledReason?: string;
+  /** Defaults to the legacy Presidio engine; see `DetectorMode`. */
+  mode?: DetectorMode;
   onToggle: (checked: boolean) => void;
   onCustomize: () => void;
 };
+
+/** The rules the card can offer for customization. A category-level detector
+ *  (under the LLM analyzer that includes `pii`) has no per-rule list. */
+function customizableRules(
+  category: RuleCategory,
+  mode: DetectorMode,
+): DetectionRule[] {
+  if (categoryLevelDetectors(mode).has(category)) return [];
+  return DETECTION_RULES[category].filter((rule) => !rule.hidden);
+}
 
 export function DetectorCard({
   category,
   selected,
   disabledRules,
   disabledReason,
+  mode = "presidio",
   onToggle,
   onCustomize,
 }: DetectorCardProps): JSX.Element {
-  const meta = RULE_CATEGORY_META[category];
-  const available = AVAILABLE_CATEGORIES.has(category);
-  const rules = DETECTION_RULES[category].filter((rule) => !rule.hidden);
+  const meta = ruleCategoryMeta(category, mode);
+  const available = availableCategories(mode).has(category);
+  const rules = customizableRules(category, mode);
   const customizable = available && rules.length > 1;
   const enabledCount = rules.filter(
     (rule) => !disabledRules.has(rule.id),

@@ -1,12 +1,18 @@
 package platformmcp
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestValidDynamicClientRegistrationEndpoint(t *testing.T) {
@@ -30,26 +36,60 @@ func TestDiscoverSupportedIssuerMetadataRejectsEmptyCandidates(t *testing.T) {
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
 }
 
-func TestIdentityProviderDynamicRegistrationErrorTreatsTimeoutAndRateLimitAsRetryable(t *testing.T) {
+func TestIdentityProviderRegistrationErrorTreatsTimeoutAndRateLimitAsRetryable(t *testing.T) {
 	t.Parallel()
 
 	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError} {
-		err := identityProviderDynamicRegistrationError(&remotesessions.DynamicClientRegistrationError{StatusCode: status})
+		err := identityProviderRegistrationError(failedRegistration(&registration.HTTPError{StatusCode: status, ProviderMessage: ""}))
 		require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnavailable, status)
 	}
 
-	err := identityProviderDynamicRegistrationError(&remotesessions.DynamicClientRegistrationError{StatusCode: http.StatusBadRequest})
+	err := identityProviderRegistrationError(failedRegistration(&registration.HTTPError{StatusCode: http.StatusBadRequest, ProviderMessage: "provider-controlled detail"}))
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
+	require.NotContains(t, err.Error(), "provider-controlled detail")
 }
 
-func TestValidBrowserCatalogDynamicClientRequiresConfidentialClient(t *testing.T) {
+// A provider without dynamic registration cannot serve this flow unchanged.
+func TestIdentityProviderRegistrationErrorTreatsManualSetupAsUnsupported(t *testing.T) {
 	t.Parallel()
 
-	require.True(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client", ClientSecret: "secret", TokenEndpointAuthMethod: string(remotesessions.TokenEndpointAuthMethodBasic)}))
-	require.True(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client", ClientSecret: "secret"}), "RFC 7591 defaults an omitted method to client_secret_basic")
-	require.False(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client", ClientSecret: "secret", TokenEndpointAuthMethod: string(remotesessions.TokenEndpointAuthMethodPost)}))
-	require.False(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientSecret: "secret"}))
-	require.False(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client"}))
-	require.False(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client", ClientSecret: "secret", TokenEndpointAuthMethod: string(remotesessions.TokenEndpointAuthMethodNone)}))
-	require.False(t, validBrowserCatalogDynamicClient(remotesessions.ProxyRegisterResponse{ClientID: "client", ClientSecret: "secret", TokenEndpointAuthMethod: "private_key_jwt"}))
+	var reg remotesessions.Registration
+	reg.ManualSetupRequired = true
+	require.ErrorIs(t, identityProviderRegistrationError(reg), ErrIdentityProviderAttachmentUnsupported)
+}
+
+func failedRegistration(err error) remotesessions.Registration {
+	failure := registration.ClassifyDCR(err)
+	var reg remotesessions.Registration
+	reg.Method = remotesessions.RegistrationDCR
+	reg.Failure = &failure
+	return reg
+}
+
+func TestCatalogIssuerIdentityIsExact(t *testing.T) {
+	t.Parallel()
+	require.True(t, sameIssuerURL("https://issuer.example/tenant/", "https://issuer.example/tenant/"))
+	require.False(t, sameIssuerURL("https://issuer.example/tenant/", "https://issuer.example/tenant"))
+	require.False(t, sameIssuerURL("https://issuer.example/tenant", "https://issuer.example/tenant/"))
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{
+			"issuer":                 server.URL + "/tenant/",
+			"authorization_endpoint": server.URL + "/authorize",
+			"token_endpoint":         server.URL + "/token",
+			"registration_endpoint":  "https://issuer.example/register",
+		}))
+	}))
+	defer server.Close()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	service := &CatalogIdentityProviderAttachmentService{policy: policy}
+	metadata, err := service.discoverSupportedIssuerMetadata(t.Context(), []string{server.URL + "/tenant/"})
+	require.NoError(t, err)
+	require.Equal(t, server.URL+"/tenant/", metadata.Issuer)
+	for _, issuer := range []string{server.URL + "/tenant", " " + server.URL + "/tenant/ "} {
+		_, err := service.discoverSupportedIssuerMetadata(t.Context(), []string{issuer})
+		require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
+	}
 }

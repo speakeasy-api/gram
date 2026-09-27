@@ -1302,14 +1302,31 @@ func DecodeListDelegableGrantsRequest(mux goahttp.Muxer, decoder func(*http.Requ
 		var payload *agents.ListDelegableGrantsPayload
 		var (
 			agentID      string
+			toolsetID    *string
+			toolsetIds   []string
 			sessionToken *string
 			err          error
 		)
-		agentID = r.URL.Query().Get("agent_id")
+		qp := r.URL.Query()
+		agentID = qp.Get("agent_id")
 		if agentID == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "query string"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("agent_id", agentID, goa.FormatUUID))
+		toolsetIDRaw := qp.Get("toolset_id")
+		if toolsetIDRaw != "" {
+			toolsetID = &toolsetIDRaw
+		}
+		if toolsetID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", *toolsetID, goa.FormatUUID))
+		}
+		toolsetIds = qp["toolset_ids"]
+		if len(toolsetIds) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("toolset_ids", toolsetIds, len(toolsetIds), 100, false))
+		}
+		for _, e := range toolsetIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_ids[*]", e, goa.FormatUUID))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1317,7 +1334,7 @@ func DecodeListDelegableGrantsRequest(mux goahttp.Muxer, decoder func(*http.Requ
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListDelegableGrantsPayload(agentID, sessionToken)
+		payload = NewListDelegableGrantsPayload(agentID, toolsetID, toolsetIds, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -3628,6 +3645,7 @@ func marshalAgentsManagedAgentToManagedAgentResponse(v *agents.ManagedAgent) *Ma
 		OwnerReassignmentRequiredAt: v.OwnerReassignmentRequiredAt,
 		OwnerReassignmentReason:     v.OwnerReassignmentReason,
 		Name:                        v.Name,
+		ProjectID:                   v.ProjectID,
 		Lifecycle:                   string(v.Lifecycle),
 		CreatedAt:                   v.CreatedAt,
 		UpdatedAt:                   v.UpdatedAt,

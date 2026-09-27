@@ -1,10 +1,4 @@
-import { useFetcher } from "@/contexts/Fetcher";
-import { useIsPlatformAdmin } from "@/contexts/Auth";
-import {
-  useProjectSlugForRequests,
-  useSdkClient,
-  useSlugs,
-} from "@/contexts/Sdk";
+import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import {
   createDefaultMcpEndpoint,
   DEFAULT_ENDPOINT_FAILED_MESSAGE,
@@ -18,7 +12,11 @@ import {
   isFigmaCatalogServer,
   normalizeRemoteUrl,
 } from "@/pages/catalog/remotes";
-import { autoConfigureRemoteMcpAuth } from "@/pages/sources/remote-mcp/autoConfigureAuth";
+import {
+  configureCreatedRemoteMcpIdentity,
+  type ConfigureCreatedIdentityResult,
+  type RemoteMcpCreationIdentity,
+} from "@/pages/sources/remote-mcp/configureCreatedIdentity";
 import type { Gram } from "@gram/client";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
@@ -42,6 +40,10 @@ import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSe
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
+
+export const ISSUER_LOOKUP_FAILED_MESSAGE =
+  "Couldn't load your organization's user session issuers. Try again.";
 
 type InstallPhaseName =
   | "selectRemotes"
@@ -56,6 +58,8 @@ export interface ServerConfig {
   remotes: ExternalMCPRemote[];
   /** User-entered header values, keyed by [headerValueKey]. */
   headerValues: Record<string, string>;
+  identityMode: RemoteMcpCreationIdentity;
+  agentAuthorization: string;
 }
 
 /** Configuration for a server with multiple remotes during the selectRemotes phase */
@@ -112,7 +116,9 @@ export interface ConfigurePhase extends WorkflowBase {
   serverConfigs: ServerConfig[];
   updateServerConfig: (
     index: number,
-    updates: Partial<Pick<ServerConfig, "name">>,
+    updates: Partial<
+      Pick<ServerConfig, "name" | "identityMode" | "agentAuthorization">
+    >,
   ) => void;
   setHeaderValue: (
     index: number,
@@ -121,6 +127,14 @@ export interface ConfigurePhase extends WorkflowBase {
     value: string,
   ) => void;
   canInstall: boolean;
+  /**
+   * Why the install cannot start regardless of user input. Set when the
+   * user session issuer lookup failed: installing anyway would silently mint
+   * a project-specific issuer instead of honouring the organization's. The
+   * interactive dialog shows it; headless callers report it as a failure
+   * instead of waiting on canInstall forever.
+   */
+  installBlockedReason?: string;
   startInstall: () => Promise<void>;
   /** Go back to selectRemotes phase (only available if there were multi-remote servers) */
   goBack?: () => void;
@@ -168,6 +182,8 @@ function buildServerConfig(
     name: `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
     remotes: server.remotes ?? [],
     headerValues: {},
+    identityMode: server.supportsDcr ? "user" : "none",
+    agentAuthorization: "",
   };
 }
 
@@ -181,6 +197,8 @@ interface InstallTarget {
   remote: ExternalMCPRemote;
   name: string;
   headers: Array<{ header: ExternalMCPRemoteHeader; value: string }>;
+  identityMode: RemoteMcpCreationIdentity;
+  agentAuthorization: string;
 }
 
 function buildInstallTargets(config: ServerConfig): InstallTarget[] {
@@ -196,6 +214,8 @@ function buildInstallTargets(config: ServerConfig): InstallTarget[] {
         config.headerValues[headerValueKey(remote.url, header.name)]?.trim();
       return value ? [{ header, value }] : [];
     }),
+    identityMode: config.identityMode,
+    agentAuthorization: config.agentAuthorization,
   }));
 }
 
@@ -256,6 +276,7 @@ async function installUnproxiedTarget(
   mcpServer: McpServer;
   mcpEndpointUrl?: string;
   authConfigured: boolean;
+  identityConfiguration?: ConfigureCreatedIdentityResult;
   iconPersistence: Promise<boolean>;
 }> {
   const unproxiedMcpServer = await client.unproxiedMcp.createServer(
@@ -338,12 +359,10 @@ export function useRemoteMcpInstallWorkflow({
   serverNameSuffix = "",
 }: UseRemoteMcpInstallWorkflowOptions): RemoteMcpInstallWorkflow {
   const client = useSdkClient();
-  const { fetch: authedFetch } = useFetcher();
   const queryClient = useQueryClient();
   const { orgSlug } = useSlugs();
-  const currentProjectSlug = useProjectSlugForRequests();
-  const isPlatformAdmin = useIsPlatformAdmin();
-  const targetProjectSlug = projectSlug ?? currentProjectSlug;
+  const issuerQuery = useEffectiveUserSessionIssuers({});
+  const defaultOrganizationIssuerId = issuerQuery.organizationIssuers[0]?.id;
 
   // Informational "already installed" signal: a remote MCP server with a
   // matching URL already exists in the target project. Unproxied servers
@@ -434,7 +453,12 @@ export function useRemoteMcpInstallWorkflow({
   }, [partitionServers]);
 
   const updateServerConfig = useCallback(
-    (index: number, updates: Partial<Pick<ServerConfig, "name">>) => {
+    (
+      index: number,
+      updates: Partial<
+        Pick<ServerConfig, "name" | "identityMode" | "agentAuthorization">
+      >,
+    ) => {
       setServerConfigs((prev) =>
         prev.map((config, i) => {
           if (i !== index) return config;
@@ -511,6 +535,8 @@ export function useRemoteMcpInstallWorkflow({
             currentConfig.selectedRemoteUrls.has(r.url),
           ),
           headerValues: {},
+          identityMode: currentConfig.server.supportsDcr ? "user" : "none",
+          agentAuthorization: "",
         },
       ]);
     }
@@ -523,16 +549,29 @@ export function useRemoteMcpInstallWorkflow({
     }
   }, [canProceed, currentServerIndex, multiRemoteConfigs]);
 
+  // The issuer lookup decides whether the install can honour an organization
+  // issuer at all. A failed or truncated listing is not "no organization
+  // issuers": falling through to the project-specific default would silently
+  // diverge from the organization's policy, so block instead.
+  const installBlockedReason = issuerQuery.isError
+    ? ISSUER_LOOKUP_FAILED_MESSAGE
+    : undefined;
+
   // A config with no HTTP remote cannot be installed as a remote MCP server —
   // startInstall reports it as failed. At least one config must be
   // installable for the install to be worth starting at all.
   const canInstall = useMemo(() => {
     return (
       serverConfigs.length > 0 &&
+      !issuerQuery.isLoading &&
+      installBlockedReason === undefined &&
       serverConfigs.every((c) => c.name.trim() !== "") &&
+      serverConfigs.every(
+        (c) => c.identityMode !== "agent" || c.agentAuthorization.trim() !== "",
+      ) &&
       serverConfigs.some((c) => c.remotes.length > 0)
     );
-  }, [serverConfigs]);
+  }, [installBlockedReason, issuerQuery.isLoading, serverConfigs]);
 
   // goBack returns to selectRemotes phase - only available if there were multi-remote servers
   const goBack = useCallback(() => {
@@ -557,12 +596,28 @@ export function useRemoteMcpInstallWorkflow({
       mcpServer: McpServer;
       mcpEndpointUrl?: string;
       authConfigured: boolean;
+      identityConfiguration?: ConfigureCreatedIdentityResult;
       iconPersistence: Promise<boolean>;
     }> => {
       if (isFigmaCatalogServer(target.server)) {
         return installUnproxiedTarget(client, target, reqOpts);
       }
 
+      const probe = await client.remoteMcp.probeURL(
+        { probeURLForm: { url: target.remote.url } },
+        undefined,
+        reqOpts,
+      );
+      if (
+        probe.outcome === "unreachable" ||
+        probe.outcome === "invalid_mcp_response"
+      ) {
+        throw new Error(
+          probe.outcome === "unreachable"
+            ? "The Remote MCP server is unreachable."
+            : "The URL did not return a valid MCP response.",
+        );
+      }
       const remoteMcpServer = await client.remoteMcp.createServer(
         {
           createServerForm: {
@@ -582,11 +637,12 @@ export function useRemoteMcpInstallWorkflow({
             createMcpServerForm: {
               name: target.name,
               remoteMcpServerId: remoteMcpServer.id,
-              // Private (user-session gated) rather than the sources flow's
-              // "disabled": catalog installs promise a usable server, and the
-              // pre-staged endpoint must actually serve. Public would expose
-              // any stored upstream API-key headers to anyone with the URL.
-              visibility: "private",
+              userSessionIssuerId: defaultOrganizationIssuerId,
+              // Catalog installs are noninteractive, so prefer the first
+              // organization issuer and retain the project-specific fallback
+              // when the organization has none.
+              // Identity setup is completed before this is made available.
+              visibility: "disabled",
             },
           },
           undefined,
@@ -655,18 +711,26 @@ export function useRemoteMcpInstallWorkflow({
         reqOpts,
       );
 
-      const authAutoConfig = await autoConfigureRemoteMcpAuth({
+      const identityConfiguration = await configureCreatedRemoteMcpIdentity({
         client,
-        authedFetch,
         remoteMcpServer,
         mcpServer,
-        isPlatformAdmin,
-        projectSlug: targetProjectSlug,
+        identityMode: target.identityMode,
+        // Already the whole header value: the credential form assembles the
+        // Bearer/Basic prefix so the operator can see exactly what is sent.
+        agentAuthorization:
+          target.identityMode === "agent"
+            ? target.agentAuthorization.trim()
+            : undefined,
+        // Organization issuers are administered at the organization level;
+        // setup must not attach this project's upstream client to one.
+        organizationOwnedUserSessionIssuer:
+          defaultOrganizationIssuerId !== undefined,
         options: reqOpts,
       });
       const configuredMcpServer =
-        authAutoConfig.status === "configured"
-          ? authAutoConfig.mcpServer
+        identityConfiguration.status === "configured"
+          ? identityConfiguration.mcpServer
           : mcpServer;
 
       // Pre-stage a default endpoint so the user doesn't have to create one
@@ -688,11 +752,12 @@ export function useRemoteMcpInstallWorkflow({
         mcpEndpointUrl: endpoint
           ? `${getServerURL()}/mcp/${endpoint.slug}`
           : undefined,
-        authConfigured: authAutoConfig.status === "configured",
+        authConfigured: !!identityConfiguration.userIdentity?.status,
+        identityConfiguration,
         iconPersistence,
       };
     },
-    [authedFetch, client, isPlatformAdmin, orgSlug, targetProjectSlug],
+    [client, defaultOrganizationIssuerId, orgSlug],
   );
 
   const startInstall = useCallback(async () => {
@@ -749,11 +814,17 @@ export function useRemoteMcpInstallWorkflow({
         iconPersistences.push(result.iconPersistence);
         anyAuthConfigured ||= result.authConfigured;
         anyUnproxiedInstalled ||= isFigmaCatalogServer(target.server);
+        const identitySetupRequired =
+          result.identityConfiguration?.status === "setup-required";
         setStatusAt(index, {
-          status: "completed",
+          status: identitySetupRequired ? "failed" : "completed",
           mcpServerId: result.mcpServer.id,
           mcpServerParam: mcpServerRouteParam(result.mcpServer),
           mcpEndpointUrl: result.mcpEndpointUrl,
+          error:
+            result.identityConfiguration?.status === "setup-required"
+              ? `Server retained disabled. ${result.identityConfiguration.message}`
+              : undefined,
         });
       } catch (err) {
         setStatusAt(index, {
@@ -838,6 +909,7 @@ export function useRemoteMcpInstallWorkflow({
         updateServerConfig,
         setHeaderValue,
         canInstall,
+        installBlockedReason,
         startInstall,
         goBack: hasMultiRemoteServers ? goBack : undefined,
         ...base,

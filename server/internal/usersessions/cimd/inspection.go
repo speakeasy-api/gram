@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
 
 // Inspection is the management surface's rich view of one resolution attempt.

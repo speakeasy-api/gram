@@ -2,6 +2,7 @@ package chat_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -28,6 +29,43 @@ func TestQueries_GetChat_IsProjectScoped(t *testing.T) {
 	got, err := r.GetChat(t.Context(), repo.GetChatParams{ID: chatID, ProjectID: otherProject})
 	require.NoError(t, err)
 	require.Equal(t, chatID, got.ID)
+}
+
+func TestQueries_GetOldestChatCreatedAt_IsProjectScoped(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	r := repo.New(ti.conn)
+	ctx := initSessionCtx(t, ti)
+
+	otherProject := createProjectInSameOrg(t, ti)
+	older := time.Now().UTC().Add(-48 * time.Hour).Truncate(time.Second)
+	newer := time.Now().UTC().Add(-1 * time.Hour).Truncate(time.Second)
+
+	foreignID, err := r.SeedChatAtTime(ctx, repo.SeedChatAtTimeParams{
+		ID:             uuid.New(),
+		ProjectID:      otherProject,
+		OrganizationID: ti.orgID,
+		UserID:         pgtype.Text{},
+		ExternalUserID: pgtype.Text{},
+		Title:          pgtype.Text{},
+		CreatedAt:      pgtype.Timestamptz{Time: older, InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+	ownID := seedChatAtTime(t, ctx, ti, "own-user", newer)
+
+	deletedAt := time.Now().UTC().Add(-72 * time.Hour).Truncate(time.Second)
+	deletedID := seedChatAtTime(t, ctx, ti, "deleted-user", deletedAt)
+	deleted, err := r.SoftDeleteChat(ctx, repo.SoftDeleteChatParams{ID: deletedID, ProjectID: ti.projectID})
+	require.NoError(t, err)
+	require.True(t, deleted.Deleted)
+
+	got, err := r.GetOldestChatCreatedAt(ctx, repo.GetOldestChatCreatedAtParams{
+		ProjectID: ti.projectID,
+		Ids:       []uuid.UUID{foreignID, ownID, deletedID},
+	})
+	require.NoError(t, err)
+	require.True(t, got.Valid)
+	require.WithinDuration(t, deletedAt, got.Time, time.Second)
 }
 
 // UpsertChat conflicts on the bare primary key, so without the project fence a
@@ -123,4 +161,58 @@ func TestQueries_GetMaxGenerationForChat_IsProjectScoped(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int32(0), genElsewhere,
 		"another project sees none of this chat's messages; dropping the project_id predicate would report 3")
+}
+
+func TestQueries_RestampMismatchedChatMessageProjects(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	r := repo.New(ti.conn)
+	ctx := initSessionCtx(t, ti)
+
+	chatID := seedChat(t, ctx, ti, "", "ext-user", "restamp session")
+	_, err := r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: ti.projectID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+
+	otherProject := createProjectInSameOrg(t, ti)
+	_, err = r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{UUID: otherProject, Valid: true},
+		CreatedAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+	_, err = r.SeedChatMessage(ctx, repo.SeedChatMessageParams{
+		ChatID:    chatID,
+		ProjectID: uuid.NullUUID{},
+		CreatedAt: pgtype.Timestamptz{},
+	})
+	require.NoError(t, err)
+
+	mismatched, err := r.CountChatMessagesWithMismatchedProject(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), mismatched)
+	nulls, err := r.CountChatMessagesWithNullProject(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), nulls)
+
+	n, err := r.RestampMismatchedChatMessageProjects(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), n)
+
+	mismatched, err = r.CountChatMessagesWithMismatchedProject(ctx)
+	require.NoError(t, err)
+	require.Zero(t, mismatched)
+	nulls, err = r.CountChatMessagesWithNullProject(ctx)
+	require.NoError(t, err)
+	require.Zero(t, nulls)
+
+	msgs, err := r.ListChatMessages(ctx, repo.ListChatMessagesParams{
+		ChatID:    chatID,
+		ProjectID: ti.projectID,
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 3)
 }

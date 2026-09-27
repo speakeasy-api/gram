@@ -86,7 +86,9 @@ func TestPrincipalAPIKeySupportsOnlyPrincipalSafeTransportRoutes(t *testing.T) {
 	require.True(t, principalAPIKeySupportsTransportScopes([]string{"producer"}))
 	require.True(t, principalAPIKeySupportsTransportScopes([]string{"producer", "consumer"}))
 	require.False(t, principalAPIKeySupportsTransportScopes([]string{"producer", "agent"}))
-	for _, scope := range []string{"agent", "agent_user", "chat", "hooks", "unknown"} {
+	require.True(t, principalAPIKeySupportsTransportScopes([]string{"agent_user"}), "agent_user handlers enforce an explicit agent grant")
+	require.True(t, principalAPIKeySupportsTransportScopes([]string{"hooks"}), "hooks services enforce an explicit agent grant")
+	for _, scope := range []string{"agent", "chat", "unknown"} {
 		require.False(t, principalAPIKeySupportsTransportScopes([]string{scope}), scope)
 	}
 }

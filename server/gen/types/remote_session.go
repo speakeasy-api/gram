@@ -21,6 +21,17 @@ type RemoteSession struct {
 	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
 	// subjects or unresolved users.
 	SubjectEmail *string
+	// Stored email of the account at the upstream provider. Absent when no
+	// upstream identity interface supplied it; never inferred from the Gram
+	// subject.
+	UpstreamEmail *string
+	// Stored display name of the account at the upstream provider. Absent when no
+	// upstream identity interface supplied it.
+	UpstreamDisplayName *string
+	// The upstream identity interface that supplied the stored account identity,
+	// such as an ID token or userinfo response. Absent when upstream identity is
+	// unknown.
+	IdentitySource *string
 	// The user_session_issuer this session is bound to.
 	UserSessionIssuerID string
 	// The remote_session_client this session was minted against.

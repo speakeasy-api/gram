@@ -1,4 +1,10 @@
-import { IdentityLink } from "@/components/identity-link";
+import {
+  auditActorPrincipal,
+  auditPrincipalLabel,
+  auditSubjectPrincipal,
+  useAuditPrincipals,
+} from "@/components/auditlogs/audit-principals";
+import { AuditPrincipalLink } from "@/components/auditlogs/principals";
 import { useQueryState } from "nuqs";
 import type { MCPServerEntry } from "@/elements";
 import { recommended } from "@/elements/plugins";
@@ -127,7 +133,25 @@ function subjectLinkText(log: AuditLog): string {
   }
 }
 
-function renderSubject(log: AuditLog, orgSlug: string) {
+function renderSubject(
+  log: AuditLog,
+  orgSlug: string,
+  identities: ReturnType<typeof useAuditPrincipals>,
+  projectSlug?: string,
+) {
+  const principal = auditSubjectPrincipal(log);
+  if (principal) {
+    return (
+      <span title={principal.urn}>
+        <AuditPrincipalLink
+          principal={principal}
+          projectSlug={projectSlug}
+          identities={identities}
+          fallback={log.subjectDisplayName || principal.urn}
+        />
+      </span>
+    );
+  }
   const monoClass = SUBJECT_MONO_CLASS;
 
   const href = subjectHref(log, orgSlug);
@@ -190,16 +214,20 @@ function hasDiff(log: AuditLog): boolean {
 const HIGHLIGHTED_ROW_CLASS = "ring-foreground/40 ring-1 ring-inset";
 
 function AuditLogRow({
+  identities,
   log,
   orgSlug,
   timestampMode,
+  projectSlug,
   isHighlighted,
   rowRef,
   highlightMatch,
 }: {
   log: AuditLog;
+  identities: ReturnType<typeof useAuditPrincipals>;
   orgSlug: string;
   timestampMode: "utc" | "local";
+  projectSlug?: string;
   isHighlighted?: boolean;
   rowRef?: (el: HTMLDivElement | null) => void;
   highlightMatch?: (text: string) => React.ReactNode;
@@ -216,20 +244,18 @@ function AuditLogRow({
       <div className="min-w-0 flex-1 text-sm leading-5">
         <span>
           <StrongName>
-            {/* Only user actors reach an identity page; API keys and system
-                actors resolve to no person. */}
-            <IdentityLink
-              identifier={
-                log.actorType === "user" ? { userId: log.actorId } : null
-              }
-            >
-              {highlightMatch ? highlightMatch(actorLabel) : actorLabel}
-            </IdentityLink>
+            <AuditPrincipalLink
+              projectSlug={projectSlug}
+              principal={auditActorPrincipal(log)}
+              identities={identities}
+              fallback={actorLabel}
+              renderLabel={highlightMatch}
+            />
           </StrongName>{" "}
           <span className="text-muted-foreground">
             {highlightMatch ? highlightMatch(verbText) : verbText}
           </span>{" "}
-          {renderSubject(log, orgSlug)}
+          {renderSubject(log, orgSlug, identities, projectSlug)}
           {isNotableActingSurface(log.actingSurface) && (
             <span
               className="border-border text-muted-foreground ml-2 border px-1.5 py-0.5 align-middle text-xs whitespace-nowrap"
@@ -478,6 +504,7 @@ function OrgAuditLogsInner() {
     [data],
   );
 
+  const identities = useAuditPrincipals(logs);
   const dateGroups = useMemo(
     () => groupLogsByDate(logs, tsMode),
     [logs, tsMode],
@@ -555,16 +582,23 @@ function OrgAuditLogsInner() {
     setCurrentLogIndex(null);
   }, [logs]);
 
-  const getSearchableText = useCallback((log: AuditLog): string => {
-    const actor = getActorLabel(log);
-    const action = formatAuditAction(log.action);
-    const verb = renderVerb(log);
-    const subject =
-      log.subjectType === "organization_invitation"
-        ? inviteSubjectText(log)
-        : getSubjectLabel(log);
-    return `${actor} ${action} ${verb} ${subject}`;
-  }, []);
+  const getSearchableText = useCallback(
+    (log: AuditLog): string => {
+      const actor = auditPrincipalLabel(
+        auditActorPrincipal(log),
+        identities,
+        getActorLabel(log),
+      );
+      const action = formatAuditAction(log.action);
+      const verb = renderVerb(log);
+      const subject =
+        log.subjectType === "organization_invitation"
+          ? inviteSubjectText(log)
+          : getSubjectLabel(log);
+      return `${actor} ${action} ${verb} ${subject}`;
+    },
+    [identities],
+  );
 
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
@@ -1034,6 +1068,13 @@ function OrgAuditLogsInner() {
                         <AuditLogRow
                           key={log.id}
                           log={log}
+                          identities={identities}
+                          projectSlug={
+                            log.projectSlug ||
+                            (selectedProjectSlug === "all"
+                              ? undefined
+                              : selectedProjectSlug)
+                          }
                           orgSlug={orgSlug ?? ""}
                           timestampMode={tsMode}
                           isHighlighted={idx === currentLogIndex}

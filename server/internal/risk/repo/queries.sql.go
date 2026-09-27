@@ -257,7 +257,7 @@ SET version = version + 1
 WHERE id = $1
   AND project_id = $2
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 `
 
 type BumpRiskPolicyVersionParams struct {
@@ -278,6 +278,7 @@ func (q *Queries) BumpRiskPolicyVersion(ctx context.Context, arg BumpRiskPolicyV
 		&i.Sources,
 		&i.PresidioEntities,
 		&i.AnalyzerConfig,
+		&i.McpScope,
 		&i.PromptInjectionRules,
 		&i.DisabledRules,
 		&i.CustomRuleIds,
@@ -759,6 +760,7 @@ INSERT INTO risk_policies (
   , prompt_injection_rules
   , disabled_rules
   , custom_rule_ids
+  , mcp_scope
   , enabled
   , action
   , audience_type
@@ -782,18 +784,19 @@ VALUES (
   , $9
   , $10
   , COALESCE($11::text[], '{}'::text[])
-  , $12
+  , $12::jsonb
   , $13
   , $14
-  , $15::text
-  , $16
+  , $15
+  , $16::text
   , $17
-  , $18::text
-  , $19::jsonb
-  , COALESCE($20::double precision, 5.0)
+  , $18
+  , $19::text
+  , $20::jsonb
+  , COALESCE($21::double precision, 5.0)
   , 1
 )
-RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateRiskPolicyParams struct {
@@ -808,6 +811,7 @@ type CreateRiskPolicyParams struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
+	McpScope             []byte
 	Enabled              bool
 	Action               string
 	AudienceType         string
@@ -832,6 +836,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		arg.PromptInjectionRules,
 		arg.DisabledRules,
 		arg.CustomRuleIds,
+		arg.McpScope,
 		arg.Enabled,
 		arg.Action,
 		arg.AudienceType,
@@ -853,6 +858,7 @@ func (q *Queries) CreateRiskPolicy(ctx context.Context, arg CreateRiskPolicyPara
 		&i.Sources,
 		&i.PresidioEntities,
 		&i.AnalyzerConfig,
+		&i.McpScope,
 		&i.PromptInjectionRules,
 		&i.DisabledRules,
 		&i.CustomRuleIds,
@@ -2165,7 +2171,7 @@ func (q *Queries) GetRiskOverviewScanCounts(ctx context.Context, arg GetRiskOver
 }
 
 const getRiskPolicy = `-- name: GetRiskPolicy :one
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE id = $1
   AND project_id = $2
@@ -2190,6 +2196,7 @@ func (q *Queries) GetRiskPolicy(ctx context.Context, arg GetRiskPolicyParams) (R
 		&i.Sources,
 		&i.PresidioEntities,
 		&i.AnalyzerConfig,
+		&i.McpScope,
 		&i.PromptInjectionRules,
 		&i.DisabledRules,
 		&i.CustomRuleIds,
@@ -2251,7 +2258,7 @@ func (q *Queries) GetRiskPolicyBypassRequest(ctx context.Context, arg GetRiskPol
 }
 
 const getRiskPolicyForUpdate = `-- name: GetRiskPolicyForUpdate :one
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE id = $1
   AND project_id = $2
@@ -2277,6 +2284,7 @@ func (q *Queries) GetRiskPolicyForUpdate(ctx context.Context, arg GetRiskPolicyF
 		&i.Sources,
 		&i.PresidioEntities,
 		&i.AnalyzerConfig,
+		&i.McpScope,
 		&i.PromptInjectionRules,
 		&i.DisabledRules,
 		&i.CustomRuleIds,
@@ -2665,6 +2673,47 @@ func (q *Queries) ListActiveSessionQuarantinesPage(ctx context.Context, arg List
 	return items, nil
 }
 
+const listChatProjectsByIDs = `-- name: ListChatProjectsByIDs :many
+SELECT id, project_id
+FROM chats
+WHERE id = ANY($1::uuid[])
+  AND project_id = ANY($2::uuid[])
+`
+
+type ListChatProjectsByIDsParams struct {
+	Ids        []uuid.UUID
+	ProjectIds []uuid.UUID
+}
+
+type ListChatProjectsByIDsRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Verifies carried finding attribution: a producer-asserted chat id is only
+// trusted when the chat belongs to the finding's own project, the same rule
+// the anchor lookups above apply. Scoped to the batch's project ids; the
+// caller re-checks each finding's project against the returned row.
+func (q *Queries) ListChatProjectsByIDs(ctx context.Context, arg ListChatProjectsByIDsParams) ([]ListChatProjectsByIDsRow, error) {
+	rows, err := q.db.Query(ctx, listChatProjectsByIDs, arg.Ids, arg.ProjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatProjectsByIDsRow
+	for rows.Next() {
+		var i ListChatProjectsByIDsRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChatTitlesByIDs = `-- name: ListChatTitlesByIDs :many
 SELECT c.id, c.title
 FROM chats c
@@ -2751,17 +2800,18 @@ func (q *Queries) ListCustomDetectionRules(ctx context.Context, projectID uuid.U
 }
 
 const listEnabledEnforcingPoliciesByProject = `-- name: ListEnabledEnforcingPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
   AND action IN ('block', 'warn', 'quarantine')
+  AND mcp_scope IS NULL
   AND deleted IS FALSE
 `
 
 // Enforcing actions are block (hard deny), warn (challenge: deny + ack link,
 // allowed after acknowledgement), and quarantine (hard deny + session circuit).
-// flag is non-enforcing and excluded.
+// flag is non-enforcing and excluded. MCP-scoped policies run only at the MCP seams.
 func (q *Queries) ListEnabledEnforcingPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
 	rows, err := q.db.Query(ctx, listEnabledEnforcingPoliciesByProject, projectID)
 	if err != nil {
@@ -2781,6 +2831,7 @@ func (q *Queries) ListEnabledEnforcingPoliciesByProject(ctx context.Context, pro
 			&i.Sources,
 			&i.PresidioEntities,
 			&i.AnalyzerConfig,
+			&i.McpScope,
 			&i.PromptInjectionRules,
 			&i.DisabledRules,
 			&i.CustomRuleIds,
@@ -2860,7 +2911,7 @@ func (q *Queries) ListEnabledExclusionsForPolicy(ctx context.Context, arg ListEn
 }
 
 const listEnabledRiskPoliciesByProject = `-- name: ListEnabledRiskPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -2886,6 +2937,7 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 			&i.Sources,
 			&i.PresidioEntities,
 			&i.AnalyzerConfig,
+			&i.McpScope,
 			&i.PromptInjectionRules,
 			&i.DisabledRules,
 			&i.CustomRuleIds,
@@ -2914,11 +2966,12 @@ func (q *Queries) ListEnabledRiskPoliciesByProject(ctx context.Context, projectI
 }
 
 const listEnabledShadowMCPPoliciesByProject = `-- name: ListEnabledShadowMCPPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
   AND deleted IS FALSE
+  AND mcp_scope IS NULL
   AND 'shadow_mcp' = ANY(sources)
 ORDER BY id
 `
@@ -2942,6 +2995,7 @@ func (q *Queries) ListEnabledShadowMCPPoliciesByProject(ctx context.Context, pro
 			&i.Sources,
 			&i.PresidioEntities,
 			&i.AnalyzerConfig,
+			&i.McpScope,
 			&i.PromptInjectionRules,
 			&i.DisabledRules,
 			&i.CustomRuleIds,
@@ -2970,7 +3024,7 @@ func (q *Queries) ListEnabledShadowMCPPoliciesByProject(ctx context.Context, pro
 }
 
 const listEnabledToolIdentityPoliciesByProject = `-- name: ListEnabledToolIdentityPoliciesByProject :many
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND enabled IS TRUE
@@ -3001,6 +3055,64 @@ func (q *Queries) ListEnabledToolIdentityPoliciesByProject(ctx context.Context, 
 			&i.Sources,
 			&i.PresidioEntities,
 			&i.AnalyzerConfig,
+			&i.McpScope,
+			&i.PromptInjectionRules,
+			&i.DisabledRules,
+			&i.CustomRuleIds,
+			&i.Action,
+			&i.AudienceType,
+			&i.ShadowMcpDisposition,
+			&i.AutoName,
+			&i.UserMessage,
+			&i.Prompt,
+			&i.ModelConfig,
+			&i.Score,
+			&i.Version,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEnabledUnscopedRiskPoliciesByProject = `-- name: ListEnabledUnscopedRiskPoliciesByProject :many
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+FROM risk_policies
+WHERE project_id = $1
+  AND enabled IS TRUE
+  AND mcp_scope IS NULL
+  AND deleted IS FALSE
+`
+
+// MCP-scoped policies are evaluated only at the MCP seams.
+func (q *Queries) ListEnabledUnscopedRiskPoliciesByProject(ctx context.Context, projectID uuid.UUID) ([]RiskPolicy, error) {
+	rows, err := q.db.Query(ctx, listEnabledUnscopedRiskPoliciesByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RiskPolicy
+	for rows.Next() {
+		var i RiskPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.OrganizationID,
+			&i.Enabled,
+			&i.Name,
+			&i.PolicyType,
+			&i.Sources,
+			&i.PresidioEntities,
+			&i.AnalyzerConfig,
+			&i.McpScope,
 			&i.PromptInjectionRules,
 			&i.DisabledRules,
 			&i.CustomRuleIds,
@@ -3177,6 +3289,48 @@ func (q *Queries) ListLatestToolCallBlocksByMessageIDs(ctx context.Context, arg 
 	return items, nil
 }
 
+const listMetaMCPServerIDsContainingMCPServer = `-- name: ListMetaMCPServerIDsContainingMCPServer :many
+SELECT gateway.id
+FROM meta_mcp_server_members AS member
+JOIN meta_mcp_servers AS gateway
+  ON gateway.project_id = member.project_id
+ AND gateway.id = member.meta_mcp_server_id
+ AND gateway.deleted IS FALSE
+JOIN mcp_servers AS concrete
+  ON concrete.project_id = member.project_id
+ AND concrete.id = member.mcp_server_id
+ AND concrete.deleted IS FALSE
+WHERE member.project_id = $1
+  AND member.mcp_server_id = $2
+  AND member.deleted IS FALSE
+ORDER BY gateway.id
+`
+
+type ListMetaMCPServerIDsContainingMCPServerParams struct {
+	ProjectID   uuid.UUID
+	McpServerID uuid.UUID
+}
+
+func (q *Queries) ListMetaMCPServerIDsContainingMCPServer(ctx context.Context, arg ListMetaMCPServerIDsContainingMCPServerParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPServerIDsContainingMCPServer, arg.ProjectID, arg.McpServerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskExclusionsByProject = `-- name: ListRiskExclusionsByProject :many
 SELECT id, project_id, organization_id, risk_policy_id, match_type, match_value, rule_id_filter, source_filter, enabled, created_at, updated_at, deleted_at, deleted
 FROM risk_exclusions
@@ -3283,6 +3437,60 @@ func (q *Queries) ListRiskExclusionsByProjectPage(ctx context.Context, arg ListR
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskFindingPolicies = `-- name: ListRiskFindingPolicies :many
+SELECT id, organization_id, project_id, enabled, deleted, score
+FROM risk_policies
+WHERE project_id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+ORDER BY created_at DESC, id DESC
+LIMIT $3
+`
+
+type ListRiskFindingPoliciesParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	PageLimit      int32
+}
+
+type ListRiskFindingPoliciesRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Enabled        bool
+	Deleted        bool
+	Score          float64
+}
+
+// Findings need only eligibility and severity metadata, never policy definitions.
+// The caller requests one extra row to detect overflow and fail closed.
+func (q *Queries) ListRiskFindingPolicies(ctx context.Context, arg ListRiskFindingPoliciesParams) ([]ListRiskFindingPoliciesRow, error) {
+	rows, err := q.db.Query(ctx, listRiskFindingPolicies, arg.ProjectID, arg.OrganizationID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiskFindingPoliciesRow
+	for rows.Next() {
+		var i ListRiskFindingPoliciesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Enabled,
+			&i.Deleted,
+			&i.Score,
 		); err != nil {
 			return nil, err
 		}
@@ -3534,7 +3742,7 @@ func (q *Queries) ListRiskOverviewTopUsers(ctx context.Context, arg ListRiskOver
 }
 
 const listRiskPolicies = `-- name: ListRiskPolicies :many
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -3560,6 +3768,7 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 			&i.Sources,
 			&i.PresidioEntities,
 			&i.AnalyzerConfig,
+			&i.McpScope,
 			&i.PromptInjectionRules,
 			&i.DisabledRules,
 			&i.CustomRuleIds,
@@ -3588,7 +3797,7 @@ func (q *Queries) ListRiskPolicies(ctx context.Context, projectID uuid.UUID) ([]
 }
 
 const listRiskPoliciesPage = `-- name: ListRiskPoliciesPage :many
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -3636,6 +3845,7 @@ func (q *Queries) ListRiskPoliciesPage(ctx context.Context, arg ListRiskPolicies
 			&i.Sources,
 			&i.PresidioEntities,
 			&i.AnalyzerConfig,
+			&i.McpScope,
 			&i.PromptInjectionRules,
 			&i.DisabledRules,
 			&i.CustomRuleIds,
@@ -3726,7 +3936,7 @@ func (q *Queries) ListRiskPolicyBypassRequests(ctx context.Context, arg ListRisk
 }
 
 const listRiskPolicyCreateCandidates = `-- name: ListRiskPolicyCreateCandidates :many
-SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies
 WHERE project_id = $1
   AND name = $2
@@ -3762,6 +3972,7 @@ func (q *Queries) ListRiskPolicyCreateCandidates(ctx context.Context, arg ListRi
 			&i.Sources,
 			&i.PresidioEntities,
 			&i.AnalyzerConfig,
+			&i.McpScope,
 			&i.PromptInjectionRules,
 			&i.DisabledRules,
 			&i.CustomRuleIds,
@@ -3831,6 +4042,45 @@ func (q *Queries) ListRiskPolicyEvalReviews(ctx context.Context, arg ListRiskPol
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRiskPolicyMCPScopeServerIDs = `-- name: ListRiskPolicyMCPScopeServerIDs :many
+SELECT server.id
+FROM mcp_servers AS server
+WHERE server.project_id = $1
+  AND server.id = ANY($2::uuid[])
+  AND server.deleted IS FALSE
+UNION
+SELECT gateway.id
+FROM meta_mcp_servers AS gateway
+WHERE gateway.project_id = $1
+  AND gateway.id = ANY($2::uuid[])
+  AND gateway.deleted IS FALSE
+`
+
+type ListRiskPolicyMCPScopeServerIDsParams struct {
+	ProjectID    uuid.UUID
+	McpServerIds []uuid.UUID
+}
+
+func (q *Queries) ListRiskPolicyMCPScopeServerIDs(ctx context.Context, arg ListRiskPolicyMCPScopeServerIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listRiskPolicyMCPScopeServerIDs, arg.ProjectID, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -5617,15 +5867,16 @@ SET name = $1
   , prompt_injection_rules = $5
   , disabled_rules = $6
   , custom_rule_ids = COALESCE($7::text[], '{}'::text[])
-  , enabled = $8
-  , action = $9
-  , audience_type = $10
-  , auto_name = $11
-  , user_message = $12
-  , prompt = $13::text
-  , model_config = $14::jsonb
+  , mcp_scope = $8::jsonb
+  , enabled = $9
+  , action = $10
+  , audience_type = $11
+  , auto_name = $12
+  , user_message = $13
+  , prompt = $14::text
+  , model_config = $15::jsonb
   -- Descriptive severity: preserve on omit, never contributes to the version bump.
-  , score = COALESCE($15::double precision, score)
+  , score = COALESCE($16::double precision, score)
   , version = CASE
       WHEN sources IS DISTINCT FROM $2
         OR presidio_entities IS DISTINCT FROM $3
@@ -5633,19 +5884,20 @@ SET name = $1
         OR prompt_injection_rules IS DISTINCT FROM $5
         OR disabled_rules IS DISTINCT FROM $6
         OR custom_rule_ids IS DISTINCT FROM COALESCE($7::text[], '{}'::text[])
-        OR enabled IS DISTINCT FROM $8
-        OR action IS DISTINCT FROM $9
-        OR prompt IS DISTINCT FROM $13::text
-        OR model_config IS DISTINCT FROM $14::jsonb
-        OR audience_type IS DISTINCT FROM $10
+        OR mcp_scope IS DISTINCT FROM $8::jsonb
+        OR enabled IS DISTINCT FROM $9
+        OR action IS DISTINCT FROM $10
+        OR prompt IS DISTINCT FROM $14::text
+        OR model_config IS DISTINCT FROM $15::jsonb
+        OR audience_type IS DISTINCT FROM $11
       THEN version + 1
       ELSE version
     END
   , updated_at = clock_timestamp()
-WHERE id = $16
-  AND project_id = $17
+WHERE id = $17
+  AND project_id = $18
   AND deleted IS FALSE
-RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, score, version, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateRiskPolicyParams struct {
@@ -5656,6 +5908,7 @@ type UpdateRiskPolicyParams struct {
 	PromptInjectionRules []string
 	DisabledRules        []string
 	CustomRuleIds        []string
+	McpScope             []byte
 	Enabled              bool
 	Action               string
 	AudienceType         string
@@ -5677,6 +5930,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		arg.PromptInjectionRules,
 		arg.DisabledRules,
 		arg.CustomRuleIds,
+		arg.McpScope,
 		arg.Enabled,
 		arg.Action,
 		arg.AudienceType,
@@ -5699,6 +5953,7 @@ func (q *Queries) UpdateRiskPolicy(ctx context.Context, arg UpdateRiskPolicyPara
 		&i.Sources,
 		&i.PresidioEntities,
 		&i.AnalyzerConfig,
+		&i.McpScope,
 		&i.PromptInjectionRules,
 		&i.DisabledRules,
 		&i.CustomRuleIds,

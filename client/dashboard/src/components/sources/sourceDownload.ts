@@ -1,3 +1,4 @@
+import { downloadBlob } from "@/lib/download";
 import { getServerURL } from "@/lib/utils";
 import type { SourceKind } from "./sourceVersions";
 
@@ -43,17 +44,7 @@ export async function downloadSourceFile({
   }
 
   const blob = await response.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = await filename(blob);
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  // Revoked a task later: browsers that start the download asynchronously
-  // read the URL after click() returns, and pulling it out from under them
-  // saves an empty file.
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  downloadBlob(blob, await filename(blob));
 }
 
 /**

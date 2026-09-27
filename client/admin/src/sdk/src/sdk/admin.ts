@@ -21,12 +21,15 @@ import { adminGetMeterUsage } from "../funcs/adminGetMeterUsage.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
 import { adminGetOrganizationChatAnalysisSettings } from "../funcs/adminGetOrganizationChatAnalysisSettings.js";
 import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
+import { adminGetOrganizationOnboarding } from "../funcs/adminGetOrganizationOnboarding.js";
 import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js";
 import { adminGetPaygBillingSummary } from "../funcs/adminGetPaygBillingSummary.js";
 import { adminGetProject } from "../funcs/adminGetProject.js";
 import { adminGetSession } from "../funcs/adminGetSession.js";
+import { adminGetSpendBreakdown } from "../funcs/adminGetSpendBreakdown.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
 import { adminGetStripeSubscription } from "../funcs/adminGetStripeSubscription.js";
+import { adminGetSupportCoverage } from "../funcs/adminGetSupportCoverage.js";
 import { adminGetSupportMatrix } from "../funcs/adminGetSupportMatrix.js";
 import { adminListGlobalIssuerConvergenceCandidates } from "../funcs/adminListGlobalIssuerConvergenceCandidates.js";
 import { adminListGlobalIssuers } from "../funcs/adminListGlobalIssuers.js";
@@ -34,6 +37,7 @@ import { adminListOrganizationActivity } from "../funcs/adminListOrganizationAct
 import { adminListOrganizationMembers } from "../funcs/adminListOrganizationMembers.js";
 import { adminListOrganizationProjects } from "../funcs/adminListOrganizationProjects.js";
 import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
+import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
 import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
@@ -44,6 +48,7 @@ import { adminServeImage } from "../funcs/adminServeImage.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
+import { adminSetOrganizationOnboarding } from "../funcs/adminSetOrganizationOnboarding.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
@@ -60,12 +65,15 @@ import { AdminInferenceKeyLimit } from "../models/components/admininferencekeyli
 import { AdminInferenceSpendMonth } from "../models/components/admininferencespendmonth.js";
 import { AdminListOrganizationMembersResult } from "../models/components/adminlistorganizationmembersresult.js";
 import { AdminListOrganizationProjectsResult } from "../models/components/adminlistorganizationprojectsresult.js";
+import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
+import { AdminOnboardingConfiguration } from "../models/components/adminonboardingconfiguration.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
 import { AdminOrganizationStats } from "../models/components/adminorganizationstats.js";
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
 import { AdminProjectDetail } from "../models/components/adminprojectdetail.js";
 import { AdminSession } from "../models/components/adminsession.js";
+import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
 import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
 import { BulkUpdateAccountTypeRequestBody } from "../models/components/bulkupdateaccounttyperequestbody.js";
@@ -94,8 +102,10 @@ import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
+import { SetOrganizationOnboardingRequestBody } from "../models/components/setorganizationonboardingrequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
 import { StartTrialRequestBody } from "../models/components/starttrialrequestbody.js";
+import { SupportCoverageResult } from "../models/components/supportcoverageresult.js";
 import { SupportMatrix } from "../models/components/supportmatrix.js";
 import { TriggerOrganizationChatAnalysisRequestBody } from "../models/components/triggerorganizationchatanalysisrequestbody.js";
 import { UpdateOrganizationRequestBody } from "../models/components/updateorganizationrequestbody.js";
@@ -112,10 +122,13 @@ import { AdminGetMeterUsageRequest } from "../models/operations/admingetmeterusa
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminGetOrganizationOnboardingRequest } from "../models/operations/admingetorganizationonboarding.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
 import { AdminGetProjectRequest } from "../models/operations/admingetproject.js";
+import { AdminGetSpendBreakdownRequest } from "../models/operations/admingetspendbreakdown.js";
 import { AdminGetStripeCustomerRequest } from "../models/operations/admingetstripecustomer.js";
 import { AdminGetStripeSubscriptionRequest } from "../models/operations/admingetstripesubscription.js";
+import { AdminGetSupportCoverageRequest } from "../models/operations/admingetsupportcoverage.js";
 import {
   AdminListGlobalIssuerConvergenceCandidatesRequest,
   AdminListGlobalIssuerConvergenceCandidatesResponse,
@@ -134,6 +147,7 @@ import {
   AdminListOrganizationsRequest,
   AdminListOrganizationsResponse,
 } from "../models/operations/adminlistorganizations.js";
+import { AdminListProjectMcpServersRequest } from "../models/operations/adminlistprojectmcpservers.js";
 import {
   AdminServeImageRequest,
   AdminServeImageResponse,
@@ -414,6 +428,34 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * getOrganizationOnboarding admin
+   */
+  async getOrganizationOnboarding(
+    request: AdminGetOrganizationOnboardingRequest,
+    options?: RequestOptions,
+  ): Promise<AdminOnboardingConfiguration> {
+    return unwrapAsync(adminGetOrganizationOnboarding(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setOrganizationOnboarding admin
+   */
+  async setOrganizationOnboarding(
+    request: SetOrganizationOnboardingRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOnboardingConfiguration> {
+    return unwrapAsync(adminSetOrganizationOnboarding(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * getPaygBillingSummary admin
    *
    * @remarks
@@ -492,6 +534,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminOrganization> {
     return unwrapAsync(adminSetStripeCustomer(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getSpendBreakdown admin
+   *
+   * @remarks
+   * Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.
+   */
+  async getSpendBreakdown(
+    request: AdminGetSpendBreakdownRequest,
+    options?: RequestOptions,
+  ): Promise<AdminSpendBreakdownResponse> {
+    return unwrapAsync(adminGetSpendBreakdown(
       this,
       request,
       options,
@@ -626,6 +685,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminProjectDetail> {
     return unwrapAsync(adminGetProject(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * listProjectMcpServers admin
+   *
+   * @remarks
+   * Lists the MCP servers in a project (admin view, no auth scoping).
+   */
+  async listProjectMcpServers(
+    request: AdminListProjectMcpServersRequest,
+    options?: RequestOptions,
+  ): Promise<AdminListProjectMcpServersResult> {
+    return unwrapAsync(adminListProjectMcpServers(
       this,
       request,
       options,
@@ -836,6 +912,23 @@ export class Admin extends ClientSDK {
   ): Promise<AdminSession> {
     return unwrapAsync(adminGetSession(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * getSupportCoverage admin
+   *
+   * @remarks
+   * Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.
+   */
+  async getSupportCoverage(
+    request: AdminGetSupportCoverageRequest,
+    options?: RequestOptions,
+  ): Promise<SupportCoverageResult> {
+    return unwrapAsync(adminGetSupportCoverage(
+      this,
+      request,
       options,
     ));
   }

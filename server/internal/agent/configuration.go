@@ -50,6 +50,7 @@ var knownDeviceAgentConfigurationKeys = map[string]struct{}{
 	"blocked_versions":         {},
 	"sync_interval_seconds":    {},
 	"ai_scan_interval_seconds": {},
+	"disable_ai_scan":          {},
 }
 
 // platformAdminOnlyDeviceAgentConfigurationKeys are Speakeasy-internal
@@ -154,6 +155,12 @@ func validateDeviceAgentConfiguration(config map[string]any) ([]byte, error) {
 					maxSyncIntervalSeconds,
 				)
 			}
+		}
+	}
+
+	if value, ok := config["disable_ai_scan"]; ok {
+		if _, ok := value.(bool); !ok {
+			return nil, oops.E(oops.CodeInvalid, nil, "disable_ai_scan must be a boolean")
 		}
 	}
 

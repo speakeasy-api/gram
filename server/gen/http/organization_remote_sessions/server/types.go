@@ -36,6 +36,17 @@ type RefreshSessionResponseBody struct {
 	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
 	// subjects or unresolved users.
 	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
+	// Stored email of the account at the upstream provider. Absent when no
+	// upstream identity interface supplied it; never inferred from the Gram
+	// subject.
+	UpstreamEmail *string `form:"upstream_email,omitempty" json:"upstream_email,omitempty" xml:"upstream_email,omitempty"`
+	// Stored display name of the account at the upstream provider. Absent when no
+	// upstream identity interface supplied it.
+	UpstreamDisplayName *string `form:"upstream_display_name,omitempty" json:"upstream_display_name,omitempty" xml:"upstream_display_name,omitempty"`
+	// The upstream identity interface that supplied the stored account identity,
+	// such as an ID token or userinfo response. Absent when upstream identity is
+	// unknown.
+	IdentitySource *string `form:"identity_source,omitempty" json:"identity_source,omitempty" xml:"identity_source,omitempty"`
 	// The user_session_issuer this session is bound to.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
 	// The remote_session_client this session was minted against.
@@ -835,6 +846,17 @@ type RemoteSessionResponseBody struct {
 	// Resolved email when the subject is a Gram user. Absent for apikey/anonymous
 	// subjects or unresolved users.
 	SubjectEmail *string `form:"subject_email,omitempty" json:"subject_email,omitempty" xml:"subject_email,omitempty"`
+	// Stored email of the account at the upstream provider. Absent when no
+	// upstream identity interface supplied it; never inferred from the Gram
+	// subject.
+	UpstreamEmail *string `form:"upstream_email,omitempty" json:"upstream_email,omitempty" xml:"upstream_email,omitempty"`
+	// Stored display name of the account at the upstream provider. Absent when no
+	// upstream identity interface supplied it.
+	UpstreamDisplayName *string `form:"upstream_display_name,omitempty" json:"upstream_display_name,omitempty" xml:"upstream_display_name,omitempty"`
+	// The upstream identity interface that supplied the stored account identity,
+	// such as an ID token or userinfo response. Absent when upstream identity is
+	// unknown.
+	IdentitySource *string `form:"identity_source,omitempty" json:"identity_source,omitempty" xml:"identity_source,omitempty"`
 	// The user_session_issuer this session is bound to.
 	UserSessionIssuerID string `form:"user_session_issuer_id" json:"user_session_issuer_id" xml:"user_session_issuer_id"`
 	// The remote_session_client this session was minted against.
@@ -883,6 +905,9 @@ func NewRefreshSessionResponseBody(res *types.RemoteSession) *RefreshSessionResp
 		SubjectUrn:            res.SubjectUrn,
 		SubjectDisplayName:    res.SubjectDisplayName,
 		SubjectEmail:          res.SubjectEmail,
+		UpstreamEmail:         res.UpstreamEmail,
+		UpstreamDisplayName:   res.UpstreamDisplayName,
+		IdentitySource:        res.IdentitySource,
 		UserSessionIssuerID:   res.UserSessionIssuerID,
 		RemoteSessionClientID: res.RemoteSessionClientID,
 		AccessExpiresAt:       res.AccessExpiresAt,

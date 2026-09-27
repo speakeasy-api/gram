@@ -17,6 +17,11 @@ func GetClientOrganizationRemoteSessionClientsPath() string {
 	return "/rpc/organizationRemoteSessionClients.get"
 }
 
+// GetClientDelegationStatusOrganizationRemoteSessionClientsPath returns the URL path to the organizationRemoteSessionClients service getClientDelegationStatus HTTP endpoint.
+func GetClientDelegationStatusOrganizationRemoteSessionClientsPath() string {
+	return "/rpc/organizationRemoteSessionClients.getDelegationStatus"
+}
+
 // GetClientDeletePreflightOrganizationRemoteSessionClientsPath returns the URL path to the organizationRemoteSessionClients service getClientDeletePreflight HTTP endpoint.
 func GetClientDeletePreflightOrganizationRemoteSessionClientsPath() string {
 	return "/rpc/organizationRemoteSessionClients.getDeletePreflight"

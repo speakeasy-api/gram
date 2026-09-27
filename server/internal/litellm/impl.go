@@ -113,6 +113,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, scheme *security.A
 		s.health.Record(ctx, healthSignalNone, "", err)
 		return ctx, err
 	}
+	// Agent-principal keys ingest through the hooks service, which enforces their grant.
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		err := oops.C(oops.CodeForbidden)
+		s.health.Record(ctx, healthSignalNone, "", err)
+		return ctx, err
+	}
 	return ctx, nil
 }
 

@@ -43,13 +43,25 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 		s.metrics.RecordHookEventDuration(ctx, "cursor", logHookEventName, outcome, cursorHookDecision(res), orgSlug, *riskScanned, time.Since(start))
 	}()
 
+	// APIKeyAuth already put the actor on ctx: scope the session ids first.
+	conversationID, conversationChanged := scopedSessionPtr(ctx, payload.ConversationID)
+	sessionID, sessionChanged := scopedSessionPtr(ctx, payload.SessionID)
+	if conversationChanged || sessionChanged {
+		scoped := *payload
+		scoped.ConversationID = conversationID
+		scoped.SessionID = sessionID
+		payload = &scoped
+	}
+
 	logger := s.logger.With(
 		attr.SlogHookSource("cursor"),
 		attr.SlogHookEvent(logHookEventName),
 		attr.SlogToolName(conv.PtrValOr(payload.ToolName, "")),
 		attr.SlogGenAIConversationID(conv.PtrValOr(payload.ConversationID, "")),
-		attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")),
 	)
+	if !isAgentActor(ctx) {
+		logger = logger.With(attr.SlogAuthUserEmail(conv.PtrValOr(payload.UserEmail, "")))
+	}
 
 	authCtx, authOK := contextvalues.GetAuthContext(ctx)
 	if !authOK || authCtx == nil || authCtx.ProjectID == nil {
@@ -69,10 +81,15 @@ func (s *Service) Cursor(ctx context.Context, payload *gen.CursorPayload) (res *
 	orgSlug = authCtx.OrganizationSlug
 	projectID := authCtx.ProjectID.String()
 	userEmail := strings.TrimSpace(conv.PtrValOr(payload.UserEmail, ""))
-	if userEmail == "" {
+	actorUserID := ""
+	switch {
+	case isAgentActor(ctx):
+		userEmail = ""
+	case userEmail == "":
 		return nil, oops.E(oops.CodeInvalid, nil, "cursor hook payload missing user_email")
+	default:
+		actorUserID = s.resolveUserByEmail(ctx, userEmail, orgID)
 	}
-	actorUserID := s.resolveUserByEmail(ctx, userEmail, orgID)
 	logger = logger.With(
 		attr.SlogOrganizationID(orgID),
 		attr.SlogProjectID(projectID),
@@ -338,6 +355,9 @@ func (s *Service) recordCursorHook(ctx context.Context, payload *gen.CursorPaylo
 	ctx = context.WithoutCancel(ctx)
 
 	userEmail := conv.PtrValOr(payload.UserEmail, "")
+	if isAgentActor(ctx) {
+		userEmail = ""
+	}
 
 	metadata := &SessionMetadata{
 		SessionID:           *payload.ConversationID,
@@ -387,12 +407,12 @@ func (s *Service) persistCursorHook(ctx context.Context, payload *gen.CursorPayl
 			return
 		}
 		if err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist Cursor conversation event", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Cursor conversation event", err)
 		}
 	} else {
 		// Tool call events: ClickHouse + PG
 		if err := s.persistCursorToolCallEvent(ctx, payload, metadata, blockReason, hookEvent); err != nil {
-			s.logger.ErrorContext(ctx, "Failed to persist Cursor tool call event", attr.SlogError(err))
+			s.logHookPersistFailure(ctx, "Cursor tool call event", err)
 		}
 	}
 }
@@ -454,7 +474,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 			Timestamp:  s.now(),
 			ToolInfo:   toolInfo,
 			UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
-			Attributes: attrs,
+			Attributes: withAgentActor(ctx, attrs),
 		})
 
 		s.logger.DebugContext(ctx, "Wrote Cursor hook to ClickHouse",
@@ -537,7 +557,7 @@ func (s *Service) writeCursorMetricsToClickHouse(ctx context.Context, payload *g
 		Timestamp:  s.now(),
 		ToolInfo:   toolInfo,
 		UserInfo:   telemetry.UserInfoByID(userID),
-		Attributes: attrs,
+		Attributes: withAgentActor(ctx, attrs),
 	})
 
 	s.logger.DebugContext(ctx, "Wrote Cursor metrics to ClickHouse",

@@ -57,6 +57,22 @@ describe("resourceKindForScope", () => {
     expect(resourceKindForScope("risk_policy:bypass")).toBe("risk_policy");
   });
 
+  // Regression: a scope family missing from this function falls through to "*",
+  // and a grant written with a concrete resource_kind then never matches the
+  // check — selectorMatches requires the GRANT value to be "*", not the check's.
+  // The page gate therefore denies a holder whose grant rows are correct, which
+  // reads as a broken feature rather than a missing branch here.
+  it("returns 'workload' for workload scopes", () => {
+    expect(resourceKindForScope("workload:read")).toBe("workload");
+    expect(resourceKindForScope("workload:write")).toBe("workload");
+  });
+
+  it("matches a wildcard workload grant against an unscoped check", () => {
+    const grant = { resourceKind: "workload", resourceId: "*" };
+    const check = { resourceKind: resourceKindForScope("workload:read") };
+    expect(selectorMatches(grant, check)).toBe(true);
+  });
+
   // Regression: chat scopes must map to "chat" so a restricted chat:read grant
   // (selector {resource_kind:"chat", resource_id:"*"}) matches the hasScope
   // check. When this returned "*" the check selector ({resource_kind:"*"}) never
@@ -370,5 +386,17 @@ describe("hasScopeInGrants", () => {
     ];
 
     expect(hasScopeInGrants(grants, "mcp:connect", "server_a")).toBe(true);
+  });
+});
+
+describe("plugin scope isolation", () => {
+  it("uses project selectors for plugin scopes", () => {
+    expect(resourceKindForScope("plugin:write")).toBe("project");
+    expect(resourceKindForScope("plugin:blocked_write")).toBe("project");
+  });
+  it("does not grant skill or MCP editing through plugin write", () => {
+    const grants = [{ scope: "plugin:write" }];
+    expect(hasScopeInGrants(grants, "skill:write", "project-a")).toBe(false);
+    expect(hasScopeInGrants(grants, "mcp:write", "project-a")).toBe(false);
   });
 });

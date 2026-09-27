@@ -7,6 +7,26 @@
 
 package server
 
+// ListBindingsRemoteSessionsPath returns the URL path to the remoteSessions service listBindings HTTP endpoint.
+func ListBindingsRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.listBindings"
+}
+
+// AttachBindingRemoteSessionsPath returns the URL path to the remoteSessions service attachBinding HTTP endpoint.
+func AttachBindingRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.attachBinding"
+}
+
+// DetachBindingRemoteSessionsPath returns the URL path to the remoteSessions service detachBinding HTTP endpoint.
+func DetachBindingRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.detachBinding"
+}
+
+// CommitServerIdentityConfigurationRemoteSessionsPath returns the URL path to the remoteSessions service commitServerIdentityConfiguration HTTP endpoint.
+func CommitServerIdentityConfigurationRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.commitServerIdentityConfiguration"
+}
+
 // ListRemoteSessionsRemoteSessionsPath returns the URL path to the remoteSessions service listRemoteSessions HTTP endpoint.
 func ListRemoteSessionsRemoteSessionsPath() string {
 	return "/rpc/remoteSessions.list"

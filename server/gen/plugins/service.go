@@ -17,6 +17,12 @@ import (
 
 // Manage distributable plugin bundles of MCP servers and hooks.
 type Service interface {
+	// List minimal distribution targets for a skill the caller can read. Requires
+	// skill:read, not org:read.
+	ListDistributionPlugins(context.Context, *ListDistributionPluginsPayload) (res *ListDistributionPluginsResult, err error)
+	// Get minimal distribution target metadata for a skill the caller can read.
+	// Requires skill:read, not org:read.
+	GetDistributionPlugin(context.Context, *GetDistributionPluginPayload) (res *DistributionPlugin, err error)
 	// List all plugins for the current project.
 	ListPlugins(context.Context, *ListPluginsPayload) (res *ListPluginsResult, err error)
 	// Get a plugin with its servers and assignments.
@@ -92,7 +98,7 @@ const ServiceName = "plugins"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "listAudiences", "downloadPluginPackage", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
+var MethodNames = [19]string{"listDistributionPlugins", "getDistributionPlugin", "listPlugins", "getPlugin", "createPlugin", "updatePlugin", "deletePlugin", "addPluginServer", "updatePluginServer", "removePluginServer", "setPluginAssignments", "listAudiences", "downloadPluginPackage", "downloadObservabilityPlugin", "downloadCodexInstallScript", "getPublishStatus", "publishPlugins", "getMarketplaceSettings", "updateMarketplaceSettings"}
 
 // AddPluginServerPayload is the payload type of the plugins service
 // addPluginServer method.
@@ -100,14 +106,15 @@ type AddPluginServerPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 	PluginID         string
-	// Gram toolset ID for a toolset-backed MCP server. Provide exactly one of
-	// toolset_id or mcp_server_id.
+	// Gram toolset ID. Provide exactly one of toolset_id, mcp_server_id, or
+	// meta_mcp_server_id.
 	ToolsetID *string
-	// Gram MCP server ID for a Remote MCP-backed server. Provide exactly one of
-	// toolset_id or mcp_server_id.
+	// Gram MCP server ID. Provide exactly one backend ID.
 	McpServerID *string
-	// Display name for the server. Defaults to the backing toolset or mcp_server
-	// name when omitted.
+	// MCP gateway ID. Provide exactly one backend ID.
+	MetaMcpServerID *string
+	// Display name for the server. Defaults to the backing server name when
+	// omitted.
 	DisplayName *string
 	Policy      string
 	SortOrder   int32
@@ -132,6 +139,15 @@ type DeletePluginPayload struct {
 	ID               string
 	SessionToken     *string
 	ProjectSlugInput *string
+}
+
+// DistributionPlugin is the result type of the plugins service
+// getDistributionPlugin method.
+type DistributionPlugin struct {
+	ID          string
+	Name        string
+	Description *string
+	IsDefault   bool
 }
 
 // DownloadCodexInstallScriptPayload is the payload type of the plugins service
@@ -182,6 +198,15 @@ type DownloadPluginPackageResult struct {
 	ContentDisposition string
 }
 
+// GetDistributionPluginPayload is the payload type of the plugins service
+// getDistributionPlugin method.
+type GetDistributionPluginPayload struct {
+	SkillID          string
+	ID               string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
 // GetMarketplaceSettingsPayload is the payload type of the plugins service
 // getMarketplaceSettings method.
 type GetMarketplaceSettingsPayload struct {
@@ -215,6 +240,20 @@ type ListAudiencesPayload struct {
 type ListAudiencesResult struct {
 	// Audiences that can be assigned to plugins.
 	Audiences []*PluginAudience
+}
+
+// ListDistributionPluginsPayload is the payload type of the plugins service
+// listDistributionPlugins method.
+type ListDistributionPluginsPayload struct {
+	SkillID          string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// ListDistributionPluginsResult is the result type of the plugins service
+// listDistributionPlugins method.
+type ListDistributionPluginsResult struct {
+	Plugins []*DistributionPlugin
 }
 
 // ListPluginsPayload is the payload type of the plugins service listPlugins
@@ -300,12 +339,12 @@ type PluginAudience struct {
 type PluginServer struct {
 	// Unique plugin server identifier.
 	ID string
-	// Gram toolset ID. Set when this server is toolset-backed (exactly one of
-	// toolset_id / mcp_server_id is set).
+	// Gram toolset ID. Exactly one backend ID is set.
 	ToolsetID *string
-	// Gram MCP server ID. Set when this server is Remote MCP-backed (exactly one
-	// of toolset_id / mcp_server_id is set).
+	// Gram MCP server ID. Exactly one backend ID is set.
 	McpServerID *string
+	// MCP gateway ID. Exactly one backend ID is set.
+	MetaMcpServerID *string
 	// Display name shown in generated plugin config.
 	DisplayName string
 	// Whether this server is required or optional.

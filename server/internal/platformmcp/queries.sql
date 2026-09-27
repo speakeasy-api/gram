@@ -1008,26 +1008,31 @@ FROM (
       AND m.deleted IS FALSE
 ) AS inventory;
 
--- name: ListPlatformMCPInventoryDistributions :many
+-- plugin_servers is the attachment authority, so plugin membership is read from
+-- it and keyed by MCP server. platform_mcp_distributions only records the
+-- lifecycle of memberships this flow created, so it joins in for state and
+-- leaves a dashboard-created membership with no lifecycle of its own.
+-- name: ListPlatformMCPInventoryPluginMemberships :many
 SELECT
-    distribution.registration_id,
-    COALESCE(distribution.plugin_id, distribution.default_plugin_id) AS plugin_id,
+    plugin_server.mcp_server_id,
+    plugin.id AS plugin_id,
+    plugin.name AS plugin_name,
+    plugin.slug AS plugin_slug,
     distribution.state,
     distribution.publication_state
-FROM platform_mcp_distributions AS distribution
-JOIN projects AS project
-  ON project.id = distribution.project_id
- AND project.organization_id = distribution.organization_id
- AND project.deleted IS FALSE
-JOIN platform_mcp_catalog_registrations AS registration
-  ON registration.id = distribution.registration_id
- AND registration.organization_id = distribution.organization_id
- AND registration.project_id = distribution.project_id
- AND registration.deleted IS FALSE
-WHERE distribution.organization_id = @organization_id
-  AND (sqlc.narg(project_id)::uuid IS NULL OR distribution.project_id = sqlc.narg(project_id)::uuid)
-  AND distribution.registration_id = ANY(@registration_ids::uuid[])
-ORDER BY distribution.registration_id, distribution.id ASC;
+FROM plugin_servers AS plugin_server
+JOIN plugins AS plugin
+  ON plugin.id = plugin_server.plugin_id
+ AND plugin.deleted IS FALSE
+LEFT JOIN platform_mcp_distributions AS distribution
+  ON distribution.plugin_server_id = plugin_server.id
+ AND distribution.organization_id = plugin.organization_id
+ AND distribution.project_id = plugin.project_id
+WHERE plugin_server.deleted IS FALSE
+  AND plugin_server.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND plugin.organization_id = @organization_id
+  AND (sqlc.narg(project_id)::uuid IS NULL OR plugin.project_id = sqlc.narg(project_id)::uuid)
+ORDER BY plugin_server.mcp_server_id, plugin_server.id ASC;
 
 -- name: GetPlatformMCPCatalogRegistrationForLifecycle :one
 -- Registrations are project desired state, not permanently owned by the OAuth
@@ -1933,9 +1938,18 @@ SELECT DISTINCT
 FROM plugins AS plugin
 JOIN plugin_servers AS attachment
   ON attachment.plugin_id = plugin.id
- AND attachment.deleted IS FALSE
+  AND attachment.deleted IS FALSE
+LEFT JOIN meta_mcp_servers AS gateway
+  ON gateway.id = attachment.meta_mcp_server_id
+ AND gateway.project_id = plugin.project_id
+ AND gateway.organization_id = plugin.organization_id
+ AND gateway.deleted IS FALSE
+LEFT JOIN meta_mcp_server_members AS member
+  ON member.meta_mcp_server_id = gateway.id
+ AND member.project_id = plugin.project_id
+ AND member.deleted IS FALSE
 JOIN mcp_servers AS server
-  ON server.id = attachment.mcp_server_id
+  ON server.id = COALESCE(attachment.mcp_server_id, member.mcp_server_id)
  AND server.project_id = plugin.project_id
  AND server.deleted IS FALSE
 JOIN platform_mcp_catalog_registrations AS registration
@@ -1953,6 +1967,55 @@ WHERE plugin.id = @plugin_id
   AND plugin.deleted IS FALSE
 ORDER BY server.id;
 
+-- name: ListDirectRemoteAdmissionTargetsForGateway :many
+-- Return every distinct direct-remote member target reached by one exact live
+-- gateway. The gateway and its members are bound to the caller's organization
+-- and project, and traversal stops at the gateway's immediate members.
+SELECT DISTINCT
+    member_server.id AS mcp_server_id,
+    remote.url AS remote_url
+FROM plugins AS plugin
+JOIN meta_mcp_servers AS gateway
+  ON gateway.id = @gateway_id
+ AND gateway.project_id = plugin.project_id
+ AND gateway.organization_id = plugin.organization_id
+ AND gateway.deleted IS FALSE
+JOIN meta_mcp_server_members AS member
+  ON member.meta_mcp_server_id = gateway.id
+ AND member.project_id = gateway.project_id
+ AND member.deleted IS FALSE
+JOIN mcp_servers AS member_server
+  ON member_server.id = member.mcp_server_id
+ AND member_server.project_id = gateway.project_id
+ AND member_server.deleted IS FALSE
+JOIN platform_mcp_catalog_registrations AS registration
+  ON registration.mcp_server_id = member_server.id
+ AND registration.organization_id = plugin.organization_id
+ AND registration.project_id = gateway.project_id
+ AND registration.catalog_provider = 'direct-remote-url-v1'
+LEFT JOIN remote_mcp_servers AS remote
+  ON remote.id = member_server.remote_mcp_server_id
+ AND remote.project_id = member_server.project_id
+ AND remote.deleted IS FALSE
+WHERE plugin.id = @plugin_id
+  AND plugin.organization_id = @organization_id
+  AND plugin.project_id = @project_id
+  AND plugin.deleted IS FALSE
+ORDER BY member_server.id;
+
+-- name: ListDirectRemoteAdmissionAudiencesForGateway :many
+SELECT DISTINCT plugin.id AS plugin_id, assignment.principal_urn
+FROM meta_mcp_servers gateway
+JOIN plugin_servers attachment ON attachment.meta_mcp_server_id = gateway.id
+  AND attachment.project_id = gateway.project_id AND attachment.deleted IS FALSE
+JOIN plugins plugin ON plugin.id = attachment.plugin_id AND plugin.project_id = gateway.project_id
+  AND plugin.organization_id = gateway.organization_id AND plugin.deleted IS FALSE
+LEFT JOIN plugin_assignments assignment ON assignment.plugin_id = plugin.id
+  AND assignment.organization_id = plugin.organization_id
+WHERE gateway.id = @gateway_id AND gateway.project_id = @project_id
+  AND gateway.organization_id = @organization_id AND gateway.deleted IS FALSE
+ORDER BY plugin.id, assignment.principal_urn NULLS FIRST;
+
 -- name: ListDirectRemoteAdmissionAudiencesForMCPServer :many
 -- Return one row per live attachment/principal for a provenance-bound MCP. LEFT
 -- joins preserve attached plugins with an empty audience and provenance-bound
@@ -1965,8 +2028,17 @@ JOIN mcp_servers AS server
   ON server.id = registration.mcp_server_id
  AND server.project_id = registration.project_id
  AND server.deleted IS FALSE
+LEFT JOIN meta_mcp_server_members AS member
+  ON member.mcp_server_id = server.id
+ AND member.project_id = registration.project_id
+ AND member.deleted IS FALSE
+LEFT JOIN meta_mcp_servers AS gateway
+  ON gateway.id = member.meta_mcp_server_id
+ AND gateway.project_id = member.project_id
+ AND gateway.organization_id = registration.organization_id
+ AND gateway.deleted IS FALSE
 LEFT JOIN plugin_servers AS attachment
-  ON attachment.mcp_server_id = server.id
+  ON (attachment.mcp_server_id = server.id OR attachment.meta_mcp_server_id = gateway.id)
  AND attachment.deleted IS FALSE
 LEFT JOIN plugins AS plugin
   ON plugin.id = attachment.plugin_id
@@ -2001,8 +2073,17 @@ JOIN remote_mcp_servers AS remote
   ON remote.id = server.remote_mcp_server_id
  AND remote.project_id = server.project_id
  AND remote.deleted IS FALSE
+LEFT JOIN meta_mcp_server_members AS member
+  ON member.mcp_server_id = server.id
+ AND member.project_id = registration.project_id
+ AND member.deleted IS FALSE
+LEFT JOIN meta_mcp_servers AS gateway
+  ON gateway.id = member.meta_mcp_server_id
+ AND gateway.project_id = member.project_id
+ AND gateway.organization_id = registration.organization_id
+ AND gateway.deleted IS FALSE
 JOIN plugin_servers AS attachment
-  ON attachment.mcp_server_id = server.id
+  ON (attachment.mcp_server_id = server.id OR attachment.meta_mcp_server_id = gateway.id)
  AND attachment.deleted IS FALSE
 JOIN plugins AS plugin
   ON plugin.id = attachment.plugin_id
@@ -2947,6 +3028,89 @@ WHERE m.id = @mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE;
 
+-- name: GetPlatformMCPConnectionSettings :one
+-- One exact organization/project-scoped target and its connection dependencies.
+-- Deliberately returns no upstream URL, credentials, or provider resource data.
+SELECT
+    CASE WHEN @target_kind::text = 'gateway' THEN gateway.name ELSE COALESCE(server.name, server.slug, '') END::text AS name,
+    CASE WHEN @target_kind::text = 'gateway' THEN gateway.visibility ELSE server.visibility END::text AS visibility,
+    COALESCE(
+      CASE WHEN @target_kind::text = 'gateway' THEN gateway.network_access_mode ELSE server.network_access_mode END,
+      'public_only'
+    )::text AS network_mode,
+    COALESCE(endpoints.items, '[]'::jsonb) AS endpoints,
+    ingress.state AS ingress,
+    COALESCE(memberships.items, '[]'::jsonb) AS plugin_memberships
+FROM projects project
+LEFT JOIN mcp_servers server
+  ON @target_kind::text = 'mcp_server'
+ AND server.id = @target_id
+ AND server.project_id = project.id
+ AND server.deleted IS FALSE
+LEFT JOIN meta_mcp_servers gateway
+  ON @target_kind::text = 'gateway'
+ AND gateway.id = @target_id
+ AND gateway.project_id = project.id
+ AND gateway.organization_id = project.organization_id
+ AND gateway.deleted IS FALSE
+LEFT JOIN LATERAL (
+    SELECT jsonb_agg(jsonb_build_object(
+        'id', endpoint.id,
+        'slug', endpoint.slug,
+        'custom_domain_id', endpoint.custom_domain_id,
+        'domain', domain.domain,
+        'is_domain_root', COALESCE(endpoint.is_domain_root, FALSE)
+    ) ORDER BY endpoint.id) AS items
+    FROM mcp_endpoints endpoint
+    LEFT JOIN custom_domains domain
+      ON domain.id = endpoint.custom_domain_id
+     AND domain.organization_id = @organization_id
+     AND domain.deleted IS FALSE
+    WHERE endpoint.project_id = project.id
+      AND endpoint.deleted IS FALSE
+      AND ((@target_kind::text = 'mcp_server' AND endpoint.mcp_server_id = server.id)
+        OR (@target_kind::text = 'gateway' AND endpoint.meta_mcp_server_id = gateway.id))
+) endpoints ON TRUE
+LEFT JOIN LATERAL (
+    SELECT jsonb_build_object(
+        'enabled', ingress.enabled,
+        'namespace_kind', ingress.endpoint_namespace_kind,
+        'hostname', ingress.hostname,
+        'custom_domain_id', ingress.custom_domain_id,
+        'status', ingress.status,
+        'dns_name', ingress.dns_name
+    ) AS state
+    FROM network_ingresses ingress
+    WHERE ingress.organization_id = @organization_id
+      AND ingress.deleted IS FALSE
+    ORDER BY ingress.id
+    LIMIT 1
+) ingress ON TRUE
+LEFT JOIN LATERAL (
+    SELECT jsonb_agg(jsonb_build_object(
+        'id', membership.id,
+        'plugin_id', plugin.id,
+        'plugin_slug', plugin.slug,
+        'display_name', membership.display_name,
+        'policy', membership.policy,
+        'sort_order', membership.sort_order
+    ) ORDER BY plugin.id, membership.id) AS items
+    FROM plugin_servers membership
+    JOIN plugins plugin
+      ON plugin.id = membership.plugin_id
+     AND plugin.project_id = project.id
+     AND plugin.organization_id = @organization_id
+     AND plugin.deleted IS FALSE
+    WHERE membership.deleted IS FALSE
+      AND ((@target_kind::text = 'mcp_server' AND membership.mcp_server_id = server.id)
+        OR (@target_kind::text = 'gateway' AND membership.meta_mcp_server_id = gateway.id))
+) memberships ON TRUE
+WHERE project.id = @project_id
+  AND project.organization_id = @organization_id
+  AND project.deleted IS FALSE
+  AND ((@target_kind::text = 'mcp_server' AND server.id IS NOT NULL)
+    OR (@target_kind::text = 'gateway' AND gateway.id IS NOT NULL));
+
 -- name: GetPlatformMCPPluginInventoryItem :one
 SELECT
     p.id,
@@ -3004,19 +3168,17 @@ WHERE p.id = @plugin_id
   AND p.deleted IS FALSE;
 
 -- name: ListPlatformMCPPluginServers :many
--- One plugin's MCP server membership. A plugin server is backed by exactly one
--- of a toolset or an mcp_server (plugin_servers_backend_exclusivity_check), so
--- the slug and enabled state are resolved from whichever backend is set. No URL
--- is constructed here: this surface names servers, it does not hand out
--- endpoints.
+-- Member-facing compatibility projection. It deliberately omits membership and
+-- backend IDs, which are administrative identity and must not cross this path.
 SELECT
     ps.id,
     ps.display_name,
     ps.policy,
     ps.sort_order,
     (ps.toolset_id IS NOT NULL)::boolean AS toolset_backed,
-    COALESCE(t.mcp_slug, ep.slug, '')::text AS mcp_slug,
-    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', FALSE)::boolean AS enabled
+    (ps.meta_mcp_server_id IS NOT NULL)::boolean AS gateway_backed,
+    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled
 FROM plugin_servers ps
 JOIN plugins p
   ON p.id = ps.plugin_id
@@ -3029,6 +3191,10 @@ LEFT JOIN mcp_servers s
   ON s.id = ps.mcp_server_id
   AND s.project_id = p.project_id
   AND s.deleted IS FALSE
+LEFT JOIN meta_mcp_servers gateway
+  ON gateway.id = ps.meta_mcp_server_id
+  AND gateway.project_id = p.project_id
+  AND gateway.deleted IS FALSE
 LEFT JOIN LATERAL (
   SELECT e.slug
   FROM mcp_endpoints e
@@ -3038,11 +3204,100 @@ LEFT JOIN LATERAL (
   ORDER BY e.created_at ASC
   LIMIT 1
 ) ep ON TRUE
+LEFT JOIN LATERAL (
+  SELECT e.slug FROM mcp_endpoints e
+  WHERE e.meta_mcp_server_id = gateway.id AND e.project_id = p.project_id AND e.deleted IS FALSE
+  ORDER BY e.created_at, e.id LIMIT 1
+) gateway_ep ON TRUE
 WHERE ps.plugin_id = @plugin_id
   AND p.project_id = @project_id
   AND p.organization_id = @organization_id
   AND ps.deleted IS FALSE
 ORDER BY ps.sort_order ASC, ps.display_name ASC
+LIMIT @result_limit;
+
+-- name: GetPlatformMCPPluginMembershipVersion :one
+SELECT md5(COALESCE(jsonb_agg(
+  jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+  ORDER BY ps.sort_order, ps.display_name, ps.id
+)::text, '[]'))::text AS membership_version
+FROM plugin_servers ps
+JOIN plugins p ON p.id = ps.plugin_id
+WHERE ps.plugin_id = @plugin_id
+  AND p.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND ps.deleted IS FALSE;
+
+-- name: ListPlatformMCPPluginMemberships :many
+-- Administrative membership read. The opaque version is computed over the
+-- complete live membership set, while the page itself uses a total keyset order.
+-- Target IDs are typed; target_resolved guards against dangling or foreign
+-- backend references before exposing them as actionable targets.
+WITH membership_version AS (
+  SELECT md5(COALESCE(jsonb_agg(
+    jsonb_build_array(ps.id, ps.sort_order, ps.display_name, ps.policy, ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id)
+    ORDER BY ps.sort_order, ps.display_name, ps.id
+  )::text, '[]'))::text AS value
+  FROM plugin_servers ps
+  WHERE ps.plugin_id = @plugin_id
+    AND ps.deleted IS FALSE
+)
+SELECT
+    ps.id AS membership_id,
+    ps.display_name,
+    ps.policy,
+    ps.sort_order,
+    CASE
+      WHEN ps.toolset_id IS NOT NULL THEN 'toolset'
+      WHEN ps.mcp_server_id IS NOT NULL THEN 'mcp_server'
+      WHEN ps.meta_mcp_server_id IS NOT NULL THEN 'gateway'
+    END::text AS target_kind,
+    COALESCE(ps.toolset_id, ps.mcp_server_id, ps.meta_mcp_server_id) AS target_id,
+    (COALESCE(t.id, s.id, gateway.id) IS NOT NULL)::boolean AS target_resolved,
+    COALESCE(t.mcp_slug, ep.slug, gateway_ep.slug, '')::text AS mcp_slug,
+    COALESCE(t.mcp_enabled, s.visibility <> 'disabled', gateway.visibility <> 'disabled', FALSE)::boolean AS enabled,
+    membership_version.value AS membership_version
+FROM plugin_servers ps
+CROSS JOIN membership_version
+JOIN plugins p
+  ON p.id = ps.plugin_id
+  AND p.deleted IS FALSE
+LEFT JOIN toolsets t
+  ON t.id = ps.toolset_id
+  AND t.project_id = p.project_id
+  AND t.deleted IS FALSE
+LEFT JOIN mcp_servers s
+  ON s.id = ps.mcp_server_id
+  AND s.project_id = p.project_id
+  AND s.deleted IS FALSE
+LEFT JOIN meta_mcp_servers gateway
+  ON gateway.id = ps.meta_mcp_server_id
+  AND gateway.project_id = p.project_id
+  AND gateway.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT e.slug
+  FROM mcp_endpoints e
+  WHERE e.mcp_server_id = s.id
+    AND e.project_id = p.project_id
+    AND e.deleted IS FALSE
+  ORDER BY e.created_at, e.id
+  LIMIT 1
+) ep ON TRUE
+LEFT JOIN LATERAL (
+  SELECT e.slug
+  FROM mcp_endpoints e
+  WHERE e.meta_mcp_server_id = gateway.id
+    AND e.project_id = p.project_id
+    AND e.deleted IS FALSE
+  ORDER BY e.created_at, e.id
+  LIMIT 1
+) gateway_ep ON TRUE
+WHERE ps.plugin_id = @plugin_id
+  AND p.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND ps.deleted IS FALSE
+  AND (NOT @use_after::boolean OR (ps.sort_order, ps.display_name, ps.id) > (@after_sort_order::integer, @after_display_name::text, @after_id::uuid))
+ORDER BY ps.sort_order, ps.display_name, ps.id
 LIMIT @result_limit;
 
 -- name: ListPlatformMCPPluginSkills :many

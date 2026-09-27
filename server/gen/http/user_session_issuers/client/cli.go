@@ -138,7 +138,7 @@ func BuildUpdateUserSessionIssuerPayload(userSessionIssuersUpdateUserSessionIssu
 
 // BuildListUserSessionIssuersPayload builds the payload for the
 // userSessionIssuers listUserSessionIssuers endpoint from CLI flags.
-func BuildListUserSessionIssuersPayload(userSessionIssuersListUserSessionIssuersCursor string, userSessionIssuersListUserSessionIssuersLimit string, userSessionIssuersListUserSessionIssuersSessionToken string, userSessionIssuersListUserSessionIssuersApikeyToken string, userSessionIssuersListUserSessionIssuersProjectSlugInput string) (*usersessionissuers.ListUserSessionIssuersPayload, error) {
+func BuildListUserSessionIssuersPayload(userSessionIssuersListUserSessionIssuersCursor string, userSessionIssuersListUserSessionIssuersLimit string, userSessionIssuersListUserSessionIssuersMcpResourceID string, userSessionIssuersListUserSessionIssuersSessionToken string, userSessionIssuersListUserSessionIssuersApikeyToken string, userSessionIssuersListUserSessionIssuersProjectSlugInput string) (*usersessionissuers.ListUserSessionIssuersPayload, error) {
 	var err error
 	var cursor *string
 	{
@@ -159,6 +159,16 @@ func BuildListUserSessionIssuersPayload(userSessionIssuersListUserSessionIssuers
 			limit = &val
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+		}
+	}
+	var mcpResourceID *string
+	{
+		if userSessionIssuersListUserSessionIssuersMcpResourceID != "" {
+			mcpResourceID = &userSessionIssuersListUserSessionIssuersMcpResourceID
+			err = goa.MergeErrors(err, goa.ValidateFormat("mcp_resource_id", *mcpResourceID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -183,6 +193,7 @@ func BuildListUserSessionIssuersPayload(userSessionIssuersListUserSessionIssuers
 	v := &usersessionissuers.ListUserSessionIssuersPayload{}
 	v.Cursor = cursor
 	v.Limit = limit
+	v.McpResourceID = mcpResourceID
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

@@ -86,7 +86,7 @@ func TestMintUserSessionAllowsMCPConnect(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.False(t, row.UserSessionClientID.Valid)
-	require.True(t, strings.HasPrefix(row.RefreshTokenHash, "dashboard-mint:"))
+	require.True(t, strings.HasPrefix(row.RefreshTokenHash.String, "dashboard-mint:"))
 
 	// No registered OAuth client backs this mint, so the claim names our own
 	// surface rather than going out empty — empty would be indistinguishable

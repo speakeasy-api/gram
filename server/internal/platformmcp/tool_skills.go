@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 type ListSkillsToolInput struct {
@@ -223,9 +224,12 @@ func registerUnavailableSkillsTools(reg *Registrar) {
 		if tool.readOnly {
 			manifest.Annotations = readOnlyAnnotations()
 		}
-		discoveryScopes := discoverySkillRead
-		if tool.name == "create_skill" || tool.name == "add_skill_version" || tool.name == "update_skill_metadata" {
-			discoveryScopes = discoverySkillWrite
+		var discoveryScopes []authz.Scope
+		if tool.authority == ExternalAuthorizationMember {
+			discoveryScopes = discoverySkillRead
+			if tool.name == "create_skill" || tool.name == "add_skill_version" || tool.name == "update_skill_metadata" {
+				discoveryScopes = discoverySkillWrite
+			}
 		}
 		addTool(reg, manifest, ToolMeta{Authorization: tool.authority, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryScopes}, unavailableTool("skills"))
 	}

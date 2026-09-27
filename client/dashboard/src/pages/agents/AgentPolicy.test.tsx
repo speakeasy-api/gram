@@ -143,7 +143,13 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
     id: mocks.organizationId,
     slug: "example",
+    name: "Example Org",
     projects: [{ id: "project_one", name: "Project one", slug: "project-one" }],
+  }),
+  useProject: () => ({
+    id: "project_one",
+    name: "Project one",
+    slug: "project-one",
   }),
   useSession: () => ({
     user: {
@@ -312,6 +318,7 @@ describe("Creating an agent with permissions", () => {
     await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
     expect(createdAgentForm()).toEqual({
       name: "Release assistant",
+      projectId: "project_one",
       policyGrants: [
         {
           effect: "allow",
@@ -382,7 +389,10 @@ describe("Creating an agent with permissions", () => {
       screen.queryByRole("checkbox", { name: /Create without permissions/ }),
     ).toBeNull();
     await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
-    expect(createdAgentForm()).toEqual({ name: "Bare" });
+    expect(createdAgentForm()).toEqual({
+      name: "Bare",
+      projectId: "project_one",
+    });
   });
 
   it("keeps the whole draft when the atomic create is rejected", async () => {
@@ -415,6 +425,7 @@ describe("Creating an agent with permissions", () => {
       mocks.createAgent.mock.calls[1]?.[0].request.createAgentForm,
     ).toEqual({
       name: "Retryable",
+      projectId: "project_one",
       policyGrants: [
         {
           effect: "allow",

@@ -43,7 +43,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, auth
 }
 
 func (s *Auth) Authorize(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
-	return s.authorize(ctx, key, scheme, nil)
+	return s.authorize(ctx, key, scheme, nil, true)
 }
 
 func (s *Auth) AuthorizeWithPostAuthenticationCheck(
@@ -52,7 +52,13 @@ func (s *Auth) AuthorizeWithPostAuthenticationCheck(
 	scheme *security.APIKeyScheme,
 	check func(context.Context) error,
 ) (context.Context, error) {
-	return s.authorize(ctx, key, scheme, check)
+	return s.authorize(ctx, key, scheme, check, true)
+}
+
+// AuthorizeWithHandlerProjectAccess retains tenant scoping and authentication,
+// but delegates project permission checks to a handler with conditional policy.
+func (s *Auth) AuthorizeWithHandlerProjectAccess(ctx context.Context, key string, scheme *security.APIKeyScheme) (context.Context, error) {
+	return s.authorize(ctx, key, scheme, nil, false)
 }
 
 func (s *Auth) authorize(
@@ -60,6 +66,7 @@ func (s *Auth) authorize(
 	key string,
 	scheme *security.APIKeyScheme,
 	postAuthenticationCheck func(context.Context) error,
+	requireProjectRead bool,
 ) (context.Context, error) {
 	if scheme == nil {
 		panic("Goa has not passed a schema") // TODO: figure something out here
@@ -106,7 +113,7 @@ func (s *Auth) authorize(
 	// After resolving Gram-Project, require the caller holds project:read on
 	// that project. When RBAC is off (or the caller is an API key), Require is
 	// a no-op and org/project-bound key scoping above remains authoritative.
-	if scheme.Name == constants.ProjectSlugSecuritySchema {
+	if requireProjectRead && scheme.Name == constants.ProjectSlugSecuritySchema {
 		err = s.requireResolvedProjectAccess(ctx)
 		if err != nil {
 			return ctx, err

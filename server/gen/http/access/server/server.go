@@ -24,6 +24,10 @@ type Server struct {
 	CreateRole                           http.Handler
 	UpdateRole                           http.Handler
 	DeleteRole                           http.Handler
+	ListDirectoryRoleMappings            http.Handler
+	SyncDirectoryGroups                  http.Handler
+	SetDirectoryRoleMapping              http.Handler
+	DeleteDirectoryRoleMapping           http.Handler
 	ListScopes                           http.Handler
 	ListMembers                          http.Handler
 	ListGrants                           http.Handler
@@ -36,6 +40,7 @@ type Server struct {
 	ResolveShadowMCPInventoryRequest     http.Handler
 	ListAIDetections                     http.Handler
 	ListEmployeeAIDetections             http.Handler
+	ListAIDetectionUsers                 http.Handler
 	SetAIToolDecision                    http.Handler
 	ListResourceAudience                 http.Handler
 	SetResourceAudience                  http.Handler
@@ -79,6 +84,10 @@ func New(
 			{"CreateRole", "POST", "/rpc/access.createRole"},
 			{"UpdateRole", "PUT", "/rpc/access.updateRole"},
 			{"DeleteRole", "DELETE", "/rpc/access.deleteRole"},
+			{"ListDirectoryRoleMappings", "GET", "/rpc/access.listDirectoryRoleMappings"},
+			{"SyncDirectoryGroups", "POST", "/rpc/access.syncDirectoryGroups"},
+			{"SetDirectoryRoleMapping", "POST", "/rpc/access.setDirectoryRoleMapping"},
+			{"DeleteDirectoryRoleMapping", "DELETE", "/rpc/access.deleteDirectoryRoleMapping"},
 			{"ListScopes", "GET", "/rpc/access.listScopes"},
 			{"ListMembers", "GET", "/rpc/access.listMembers"},
 			{"ListGrants", "GET", "/rpc/access.listGrants"},
@@ -91,6 +100,7 @@ func New(
 			{"ResolveShadowMCPInventoryRequest", "POST", "/rpc/access.resolveShadowMCPInventoryRequest"},
 			{"ListAIDetections", "GET", "/rpc/access.listAIDetections"},
 			{"ListEmployeeAIDetections", "GET", "/rpc/access.listEmployeeAIDetections"},
+			{"ListAIDetectionUsers", "GET", "/rpc/access.listAIDetectionUsers"},
 			{"SetAIToolDecision", "POST", "/rpc/access.setAIToolDecision"},
 			{"ListResourceAudience", "GET", "/rpc/access.listResourceAudience"},
 			{"SetResourceAudience", "POST", "/rpc/access.setResourceAudience"},
@@ -106,6 +116,10 @@ func New(
 		CreateRole:                           NewCreateRoleHandler(e.CreateRole, mux, decoder, encoder, errhandler, formatter),
 		UpdateRole:                           NewUpdateRoleHandler(e.UpdateRole, mux, decoder, encoder, errhandler, formatter),
 		DeleteRole:                           NewDeleteRoleHandler(e.DeleteRole, mux, decoder, encoder, errhandler, formatter),
+		ListDirectoryRoleMappings:            NewListDirectoryRoleMappingsHandler(e.ListDirectoryRoleMappings, mux, decoder, encoder, errhandler, formatter),
+		SyncDirectoryGroups:                  NewSyncDirectoryGroupsHandler(e.SyncDirectoryGroups, mux, decoder, encoder, errhandler, formatter),
+		SetDirectoryRoleMapping:              NewSetDirectoryRoleMappingHandler(e.SetDirectoryRoleMapping, mux, decoder, encoder, errhandler, formatter),
+		DeleteDirectoryRoleMapping:           NewDeleteDirectoryRoleMappingHandler(e.DeleteDirectoryRoleMapping, mux, decoder, encoder, errhandler, formatter),
 		ListScopes:                           NewListScopesHandler(e.ListScopes, mux, decoder, encoder, errhandler, formatter),
 		ListMembers:                          NewListMembersHandler(e.ListMembers, mux, decoder, encoder, errhandler, formatter),
 		ListGrants:                           NewListGrantsHandler(e.ListGrants, mux, decoder, encoder, errhandler, formatter),
@@ -118,6 +132,7 @@ func New(
 		ResolveShadowMCPInventoryRequest:     NewResolveShadowMCPInventoryRequestHandler(e.ResolveShadowMCPInventoryRequest, mux, decoder, encoder, errhandler, formatter),
 		ListAIDetections:                     NewListAIDetectionsHandler(e.ListAIDetections, mux, decoder, encoder, errhandler, formatter),
 		ListEmployeeAIDetections:             NewListEmployeeAIDetectionsHandler(e.ListEmployeeAIDetections, mux, decoder, encoder, errhandler, formatter),
+		ListAIDetectionUsers:                 NewListAIDetectionUsersHandler(e.ListAIDetectionUsers, mux, decoder, encoder, errhandler, formatter),
 		SetAIToolDecision:                    NewSetAIToolDecisionHandler(e.SetAIToolDecision, mux, decoder, encoder, errhandler, formatter),
 		ListResourceAudience:                 NewListResourceAudienceHandler(e.ListResourceAudience, mux, decoder, encoder, errhandler, formatter),
 		SetResourceAudience:                  NewSetResourceAudienceHandler(e.SetResourceAudience, mux, decoder, encoder, errhandler, formatter),
@@ -140,6 +155,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateRole = m(s.CreateRole)
 	s.UpdateRole = m(s.UpdateRole)
 	s.DeleteRole = m(s.DeleteRole)
+	s.ListDirectoryRoleMappings = m(s.ListDirectoryRoleMappings)
+	s.SyncDirectoryGroups = m(s.SyncDirectoryGroups)
+	s.SetDirectoryRoleMapping = m(s.SetDirectoryRoleMapping)
+	s.DeleteDirectoryRoleMapping = m(s.DeleteDirectoryRoleMapping)
 	s.ListScopes = m(s.ListScopes)
 	s.ListMembers = m(s.ListMembers)
 	s.ListGrants = m(s.ListGrants)
@@ -152,6 +171,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ResolveShadowMCPInventoryRequest = m(s.ResolveShadowMCPInventoryRequest)
 	s.ListAIDetections = m(s.ListAIDetections)
 	s.ListEmployeeAIDetections = m(s.ListEmployeeAIDetections)
+	s.ListAIDetectionUsers = m(s.ListAIDetectionUsers)
 	s.SetAIToolDecision = m(s.SetAIToolDecision)
 	s.ListResourceAudience = m(s.ListResourceAudience)
 	s.SetResourceAudience = m(s.SetResourceAudience)
@@ -173,6 +193,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateRoleHandler(mux, h.CreateRole)
 	MountUpdateRoleHandler(mux, h.UpdateRole)
 	MountDeleteRoleHandler(mux, h.DeleteRole)
+	MountListDirectoryRoleMappingsHandler(mux, h.ListDirectoryRoleMappings)
+	MountSyncDirectoryGroupsHandler(mux, h.SyncDirectoryGroups)
+	MountSetDirectoryRoleMappingHandler(mux, h.SetDirectoryRoleMapping)
+	MountDeleteDirectoryRoleMappingHandler(mux, h.DeleteDirectoryRoleMapping)
 	MountListScopesHandler(mux, h.ListScopes)
 	MountListMembersHandler(mux, h.ListMembers)
 	MountListGrantsHandler(mux, h.ListGrants)
@@ -185,6 +209,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountResolveShadowMCPInventoryRequestHandler(mux, h.ResolveShadowMCPInventoryRequest)
 	MountListAIDetectionsHandler(mux, h.ListAIDetections)
 	MountListEmployeeAIDetectionsHandler(mux, h.ListEmployeeAIDetections)
+	MountListAIDetectionUsersHandler(mux, h.ListAIDetectionUsers)
 	MountSetAIToolDecisionHandler(mux, h.SetAIToolDecision)
 	MountListResourceAudienceHandler(mux, h.ListResourceAudience)
 	MountSetResourceAudienceHandler(mux, h.SetResourceAudience)
@@ -443,6 +468,221 @@ func NewDeleteRoleHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "deleteRole")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListDirectoryRoleMappingsHandler configures the mux to serve the
+// "access" service "listDirectoryRoleMappings" endpoint.
+func MountListDirectoryRoleMappingsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listDirectoryRoleMappings", f)
+}
+
+// NewListDirectoryRoleMappingsHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "listDirectoryRoleMappings"
+// endpoint.
+func NewListDirectoryRoleMappingsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListDirectoryRoleMappingsRequest(mux, decoder)
+		encodeResponse = EncodeListDirectoryRoleMappingsResponse(encoder)
+		encodeError    = EncodeListDirectoryRoleMappingsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listDirectoryRoleMappings")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSyncDirectoryGroupsHandler configures the mux to serve the "access"
+// service "syncDirectoryGroups" endpoint.
+func MountSyncDirectoryGroupsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.syncDirectoryGroups", f)
+}
+
+// NewSyncDirectoryGroupsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "syncDirectoryGroups" endpoint.
+func NewSyncDirectoryGroupsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSyncDirectoryGroupsRequest(mux, decoder)
+		encodeResponse = EncodeSyncDirectoryGroupsResponse(encoder)
+		encodeError    = EncodeSyncDirectoryGroupsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "syncDirectoryGroups")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetDirectoryRoleMappingHandler configures the mux to serve the "access"
+// service "setDirectoryRoleMapping" endpoint.
+func MountSetDirectoryRoleMappingHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/access.setDirectoryRoleMapping", f)
+}
+
+// NewSetDirectoryRoleMappingHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "setDirectoryRoleMapping"
+// endpoint.
+func NewSetDirectoryRoleMappingHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetDirectoryRoleMappingRequest(mux, decoder)
+		encodeResponse = EncodeSetDirectoryRoleMappingResponse(encoder)
+		encodeError    = EncodeSetDirectoryRoleMappingError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setDirectoryRoleMapping")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteDirectoryRoleMappingHandler configures the mux to serve the
+// "access" service "deleteDirectoryRoleMapping" endpoint.
+func MountDeleteDirectoryRoleMappingHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("DELETE", "/rpc/access.deleteDirectoryRoleMapping", f)
+}
+
+// NewDeleteDirectoryRoleMappingHandler creates a HTTP handler which loads the
+// HTTP request and calls the "access" service "deleteDirectoryRoleMapping"
+// endpoint.
+func NewDeleteDirectoryRoleMappingHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteDirectoryRoleMappingRequest(mux, decoder)
+		encodeResponse = EncodeDeleteDirectoryRoleMappingResponse(encoder)
+		encodeError    = EncodeDeleteDirectoryRoleMappingError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteDirectoryRoleMapping")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -1085,6 +1325,59 @@ func NewListEmployeeAIDetectionsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listEmployeeAIDetections")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListAIDetectionUsersHandler configures the mux to serve the "access"
+// service "listAIDetectionUsers" endpoint.
+func MountListAIDetectionUsersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/access.listAIDetectionUsers", f)
+}
+
+// NewListAIDetectionUsersHandler creates a HTTP handler which loads the HTTP
+// request and calls the "access" service "listAIDetectionUsers" endpoint.
+func NewListAIDetectionUsersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListAIDetectionUsersRequest(mux, decoder)
+		encodeResponse = EncodeListAIDetectionUsersResponse(encoder)
+		encodeError    = EncodeListAIDetectionUsersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listAIDetectionUsers")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "access")
 		payload, err := decodeRequest(r)
 		if err != nil {

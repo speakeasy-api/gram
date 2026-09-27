@@ -508,6 +508,36 @@ func BuildListOrganizationProjectsPayload(adminListOrganizationProjectsOrganizat
 	return v, nil
 }
 
+// BuildListProjectMcpServersPayload builds the payload for the admin
+// listProjectMcpServers endpoint from CLI flags.
+func BuildListProjectMcpServersPayload(adminListProjectMcpServersOrganizationID string, adminListProjectMcpServersProjectID string, adminListProjectMcpServersAdminSessionToken string) (*admin.ListProjectMcpServersPayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminListProjectMcpServersOrganizationID
+	}
+	var projectID string
+	{
+		projectID = adminListProjectMcpServersProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListProjectMcpServersAdminSessionToken != "" {
+			adminSessionToken = &adminListProjectMcpServersAdminSessionToken
+		}
+	}
+	v := &admin.ListProjectMcpServersPayload{}
+	v.OrganizationID = organizationID
+	v.ProjectID = projectID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListOrganizationActivityPayload builds the payload for the admin
 // listOrganizationActivity endpoint from CLI flags.
 func BuildListOrganizationActivityPayload(adminListOrganizationActivityOrganizationID string, adminListOrganizationActivityCursor string, adminListOrganizationActivityAdminSessionToken string) (*admin.ListOrganizationActivityPayload, error) {
@@ -739,10 +769,10 @@ func BuildCreateOrganizationPayload(adminCreateOrganizationBody string, adminCre
 	{
 		err = json.Unmarshal([]byte(adminCreateOrganizationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ownership_confirmed\": false,\n      \"url\": \"aa\"\n   }'")
 		}
-		if utf8.RuneCountInString(body.Name) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 1, true))
+		if utf8.RuneCountInString(body.URL) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.url", body.URL, utf8.RuneCountInString(body.URL), 1, true))
 		}
 		if err != nil {
 			return nil, err
@@ -755,7 +785,8 @@ func BuildCreateOrganizationPayload(adminCreateOrganizationBody string, adminCre
 		}
 	}
 	v := &admin.CreateOrganizationPayload{
-		Name: body.Name,
+		URL:                body.URL,
+		OwnershipConfirmed: body.OwnershipConfirmed,
 	}
 	v.AdminSessionToken = adminSessionToken
 
@@ -1081,6 +1112,66 @@ func BuildMarkEnterpriseTrialConvertedPayload(adminMarkEnterpriseTrialConvertedB
 	return v, nil
 }
 
+// BuildGetOrganizationOnboardingPayload builds the payload for the admin
+// getOrganizationOnboarding endpoint from CLI flags.
+func BuildGetOrganizationOnboardingPayload(adminGetOrganizationOnboardingOrganizationID string, adminGetOrganizationOnboardingAdminSessionToken string) (*admin.GetOrganizationOnboardingPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetOrganizationOnboardingOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetOrganizationOnboardingAdminSessionToken != "" {
+			adminSessionToken = &adminGetOrganizationOnboardingAdminSessionToken
+		}
+	}
+	v := &admin.GetOrganizationOnboardingPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetOrganizationOnboardingPayload builds the payload for the admin
+// setOrganizationOnboarding endpoint from CLI flags.
+func BuildSetOrganizationOnboardingPayload(adminSetOrganizationOnboardingBody string, adminSetOrganizationOnboardingAdminSessionToken string) (*admin.SetOrganizationOnboardingPayload, error) {
+	var err error
+	var body SetOrganizationOnboardingRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetOrganizationOnboardingBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\",\n      \"preset\": \"abc123\",\n      \"visible_task_keys\": [\n         \"abc123\"\n      ]\n   }'")
+		}
+		if body.VisibleTaskKeys == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("visible_task_keys", "body"))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetOrganizationOnboardingAdminSessionToken != "" {
+			adminSessionToken = &adminSetOrganizationOnboardingAdminSessionToken
+		}
+	}
+	v := &admin.SetOrganizationOnboardingPayload{
+		OrganizationID: body.OrganizationID,
+		Preset:         body.Preset,
+	}
+	if body.VisibleTaskKeys != nil {
+		v.VisibleTaskKeys = make([]string, len(body.VisibleTaskKeys))
+		for i, val := range body.VisibleTaskKeys {
+			v.VisibleTaskKeys[i] = val
+		}
+	} else {
+		v.VisibleTaskKeys = []string{}
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildCreateGlobalIssuerPayload builds the payload for the admin
 // createGlobalIssuer endpoint from CLI flags.
 func BuildCreateGlobalIssuerPayload(adminCreateGlobalIssuerBody string, adminCreateGlobalIssuerAdminSessionToken string) (*admin.CreateGlobalIssuerPayload, error) {
@@ -1089,7 +1180,7 @@ func BuildCreateGlobalIssuerPayload(adminCreateGlobalIssuerBody string, adminCre
 	{
 		err = json.Unmarshal([]byte(adminCreateGlobalIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"userinfo_endpoint\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_grant_profiles_supported\": [\n         \"abc123\"\n      ],\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"userinfo_endpoint\": \"abc123\"\n   }'")
 		}
 		if body.LogoAssetID != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.logo_asset_id", *body.LogoAssetID, goa.FormatUUID))
@@ -1141,6 +1232,12 @@ func BuildCreateGlobalIssuerPayload(adminCreateGlobalIssuerBody string, adminCre
 		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
 		for i, val := range body.GrantTypesSupported {
 			v.GrantTypesSupported[i] = val
+		}
+	}
+	if body.AuthorizationGrantProfilesSupported != nil {
+		v.AuthorizationGrantProfilesSupported = make([]string, len(body.AuthorizationGrantProfilesSupported))
+		for i, val := range body.AuthorizationGrantProfilesSupported {
+			v.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if body.ResponseTypesSupported != nil {
@@ -1281,7 +1378,7 @@ func BuildUpdateGlobalIssuerPayload(adminUpdateGlobalIssuerBody string, adminUpd
 	{
 		err = json.Unmarshal([]byte(adminUpdateGlobalIssuerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"abc123\",\n      \"userinfo_endpoint\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"authorization_endpoint\": \"abc123\",\n      \"authorization_grant_profiles_supported\": [\n         \"abc123\"\n      ],\n      \"authorization_response_iss_parameter_supported\": false,\n      \"backchannel_logout_supported\": false,\n      \"claims_supported\": [\n         \"abc123\"\n      ],\n      \"client_id_metadata_document_supported\": false,\n      \"client_setup_documentation_url\": \"abc123\",\n      \"code_challenge_methods_supported\": [\n         \"abc123\"\n      ],\n      \"grant_types_supported\": [\n         \"abc123\"\n      ],\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"id_token_signing_alg_values_supported\": [\n         \"abc123\"\n      ],\n      \"introspection_endpoint\": \"abc123\",\n      \"introspection_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"issuer\": \"abc123\",\n      \"jwks_uri\": \"abc123\",\n      \"logo_asset_id\": \"abc123\",\n      \"name\": \"abc123\",\n      \"oidc\": false,\n      \"op_policy_uri\": \"abc123\",\n      \"op_tos_uri\": \"abc123\",\n      \"passthrough\": false,\n      \"registration_endpoint\": \"abc123\",\n      \"resource_indicator_supported\": false,\n      \"response_types_supported\": [\n         \"abc123\"\n      ],\n      \"revocation_endpoint\": \"abc123\",\n      \"scope_override\": [\n         \"abc123\"\n      ],\n      \"scopes_supported\": [\n         \"abc123\"\n      ],\n      \"service_documentation\": \"abc123\",\n      \"slug\": \"abc123\",\n      \"token_endpoint\": \"abc123\",\n      \"token_endpoint_auth_methods_supported\": [\n         \"abc123\"\n      ],\n      \"tunneled_mcp_server_id\": \"abc123\",\n      \"userinfo_endpoint\": \"abc123\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
 		if err != nil {
@@ -1329,6 +1426,12 @@ func BuildUpdateGlobalIssuerPayload(adminUpdateGlobalIssuerBody string, adminUpd
 		v.GrantTypesSupported = make([]string, len(body.GrantTypesSupported))
 		for i, val := range body.GrantTypesSupported {
 			v.GrantTypesSupported[i] = val
+		}
+	}
+	if body.AuthorizationGrantProfilesSupported != nil {
+		v.AuthorizationGrantProfilesSupported = make([]string, len(body.AuthorizationGrantProfilesSupported))
+		for i, val := range body.AuthorizationGrantProfilesSupported {
+			v.AuthorizationGrantProfilesSupported[i] = val
 		}
 	}
 	if body.ResponseTypesSupported != nil {
@@ -1725,6 +1828,49 @@ func BuildGetMeterUsagePayload(adminGetMeterUsageOrganizationID string, adminGet
 	return v, nil
 }
 
+// BuildGetSpendBreakdownPayload builds the payload for the admin
+// getSpendBreakdown endpoint from CLI flags.
+func BuildGetSpendBreakdownPayload(adminGetSpendBreakdownOrganizationID string, adminGetSpendBreakdownFrom string, adminGetSpendBreakdownTo string, adminGetSpendBreakdownAdminSessionToken string) (*admin.GetSpendBreakdownPayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetSpendBreakdownOrganizationID
+	}
+	var from *string
+	{
+		if adminGetSpendBreakdownFrom != "" {
+			from = &adminGetSpendBreakdownFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if adminGetSpendBreakdownTo != "" {
+			to = &adminGetSpendBreakdownTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetSpendBreakdownAdminSessionToken != "" {
+			adminSessionToken = &adminGetSpendBreakdownAdminSessionToken
+		}
+	}
+	v := &admin.GetSpendBreakdownPayload{}
+	v.OrganizationID = organizationID
+	v.From = from
+	v.To = to
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetSupportMatrixPayload builds the payload for the admin
 // getSupportMatrix endpoint from CLI flags.
 func BuildGetSupportMatrixPayload(adminGetSupportMatrixAdminSessionToken string) (*admin.GetSupportMatrixPayload, error) {
@@ -1780,6 +1926,48 @@ func BuildUpdateSupportMatrixPayload(adminUpdateSupportMatrixBody string, adminU
 	if body.Draft != nil {
 		v.Draft = marshalSupportDraftRequestBodyToAdminSupportDraft(body.Draft)
 	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetSupportCoveragePayload builds the payload for the admin
+// getSupportCoverage endpoint from CLI flags.
+func BuildGetSupportCoveragePayload(adminGetSupportCoverageOrganizationID string, adminGetSupportCoverageWindowDays string, adminGetSupportCoverageAdminSessionToken string) (*admin.GetSupportCoveragePayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetSupportCoverageOrganizationID
+	}
+	var windowDays int
+	{
+		if adminGetSupportCoverageWindowDays != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminGetSupportCoverageWindowDays, 10, strconv.IntSize)
+			windowDays = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
+			}
+			if windowDays < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
+			}
+			if windowDays > 90 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 90, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetSupportCoverageAdminSessionToken != "" {
+			adminSessionToken = &adminGetSupportCoverageAdminSessionToken
+		}
+	}
+	v := &admin.GetSupportCoveragePayload{}
+	v.OrganizationID = organizationID
+	v.WindowDays = windowDays
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

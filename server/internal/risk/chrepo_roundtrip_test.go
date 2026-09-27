@@ -81,13 +81,19 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 	excluded.ExcludedReason = chrepo.ExcludedReasonRule
 	excluded.ExcludedDetail = "looks like a placeholder"
 
-	require.NoError(t, q.InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{plain, excluded}))
+	// A shadow engine-comparison row: the bool marker binds into the UInt8
+	// shadow column.
+	shadow := plain
+	shadow.ID = uuid.Must(uuid.NewV7())
+	shadow.Shadow = true
+
+	require.NoError(t, q.InsertRiskFindings(t.Context(), []chrepo.RiskFindingRow{plain, excluded, shadow}))
 
 	// async_insert=1, wait_for_async_insert=0: the rows land after the buffer
-	// flushes, so poll until both are visible.
+	// flushes, so poll until all are visible.
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		rows, err := conn.Query(t.Context(), `
-			SELECT id, tags, match_redacted, chat_id, user_id, external_user_id, category, excluded_at, exclusion_id, excluded_reason, excluded_detail, message_created_at, assistant_id, surface, field, path, tool_call_id
+			SELECT id, tags, match_redacted, chat_id, user_id, external_user_id, category, excluded_at, exclusion_id, excluded_reason, excluded_detail, message_created_at, assistant_id, surface, field, path, tool_call_id, shadow
 			FROM risk_findings
 			WHERE organization_id = ?
 			ORDER BY created_at
@@ -114,6 +120,7 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 			field            string
 			path             string
 			toolCallID       string
+			shadow           uint8
 		}
 		got := map[uuid.UUID]foundRow{}
 		for rows.Next() {
@@ -121,13 +128,13 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 				id  uuid.UUID
 				row foundRow
 			)
-			if !assert.NoError(c, rows.Scan(&id, &row.tags, &row.redacted, &row.chatID, &row.userID, &row.externalUserID, &row.category, &row.excludedAt, &row.exclusionID, &row.excludedReason, &row.excludedDetail, &row.messageCreatedAt, &row.assistantID, &row.surface, &row.field, &row.path, &row.toolCallID)) {
+			if !assert.NoError(c, rows.Scan(&id, &row.tags, &row.redacted, &row.chatID, &row.userID, &row.externalUserID, &row.category, &row.excludedAt, &row.exclusionID, &row.excludedReason, &row.excludedDetail, &row.messageCreatedAt, &row.assistantID, &row.surface, &row.field, &row.path, &row.toolCallID, &row.shadow)) {
 				return
 			}
 			got[id] = row
 		}
 
-		if !assert.Contains(c, got, plain.ID) || !assert.Contains(c, got, excluded.ID) {
+		if !assert.Contains(c, got, plain.ID) || !assert.Contains(c, got, excluded.ID) || !assert.Contains(c, got, shadow.ID) {
 			return
 		}
 
@@ -148,6 +155,9 @@ func TestInsertRiskFindings_RoundTrip(t *testing.T) {
 		assert.Equal(c, plain.Field, p.field, "field round-trips")
 		assert.Equal(c, plain.Path, p.path, "path round-trips")
 		assert.Equal(c, plain.ToolCallID, p.toolCallID, "tool_call_id round-trips")
+		assert.Equal(c, uint8(0), p.shadow, "enforcing row stores shadow = 0")
+
+		assert.Equal(c, uint8(1), got[shadow.ID].shadow, "shadow row stores shadow = 1")
 
 		e := got[excluded.ID]
 		if assert.NotNil(c, e.excludedAt, "excluded row stores excluded_at") {

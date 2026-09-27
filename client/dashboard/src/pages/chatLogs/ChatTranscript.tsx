@@ -81,6 +81,7 @@ import {
   getMatchStrings,
   distinctRiskCount,
   resultsAreSensitive,
+  sectionRiskLabel,
   useRowReveal,
 } from "./chatHelpers";
 import { QueryHighlight } from "./QueryHighlight";
@@ -793,10 +794,7 @@ function toSectionRisk(
     matchingResults.set(result.id, result);
     return {
       value,
-      label:
-        result.ruleId && result.ruleId !== "llm_judge"
-          ? result.ruleId
-          : result.source,
+      label: sectionRiskLabel(result),
       onExclude:
         openExclusion && result.ruleId !== "llm_judge"
           ? () => openExclusion(result)

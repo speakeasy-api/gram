@@ -262,6 +262,10 @@ export type AdminOrganization = {
   trial_tier?: string;
   trial_converted_at?: string;
   trial_demoted_at?: string;
+  // The flow that created the organization. Absent when nothing recorded one,
+  // and absent on every row the list endpoint returns: only the record read
+  // selects it.
+  creation_source?: string;
   member_count: number;
   created_at: string;
   updated_at: string;
@@ -507,7 +511,8 @@ export const MIN_TRIAL_START_DAYS = 1;
 export const MAX_TRIAL_START_DAYS = 365;
 
 export type CreateOrganizationRequest = {
-  name: string;
+  url: string;
+  ownership_confirmed: boolean;
 };
 
 export function createOrganization(
@@ -542,6 +547,42 @@ export function listOrganizationProjects(
   const qs = toSearchParams({ organization_id: organizationID });
   return gramAdminFetch<ListOrganizationProjectsResult>(
     `/admin/organization.projects?${qs}`,
+  );
+}
+
+export type AdminMcpServerSource =
+  | "toolset"
+  | "remote"
+  | "tunneled"
+  | "unproxied"
+  | "toolset_only";
+
+export type AdminMcpServer = {
+  // The mcp_servers row id, or the toolset id for a toolset-only server.
+  id: string;
+  name: string;
+  // Omitted when the server has no routable address, such as an mcp_servers
+  // row with no endpoint.
+  url?: string;
+  visibility: "disabled" | "private" | "public";
+  source: AdminMcpServerSource;
+  created_at: string;
+};
+
+export type ListProjectMcpServersResult = {
+  mcp_servers: AdminMcpServer[];
+};
+
+export function listProjectMcpServers(
+  organizationID: string,
+  projectID: string,
+): Promise<ListProjectMcpServersResult> {
+  const qs = toSearchParams({
+    organization_id: organizationID,
+    project_id: projectID,
+  });
+  return gramAdminFetch<ListProjectMcpServersResult>(
+    `/admin/project.mcpServers?${qs}`,
   );
 }
 

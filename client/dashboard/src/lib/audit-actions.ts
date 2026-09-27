@@ -8,6 +8,13 @@ import { assertNever } from "@/lib/utils";
  * the moment the string lands in this list.
  */
 export const AUDIT_ACTIONS = [
+  "slack-directory-connection:authorize",
+  "slack-directory-connection:disconnect",
+  "slack-directory-connection:sync",
+  "slack-identity-mapping:confirm",
+  "slack-identity-mapping:reassign",
+  "slack-identity-mapping:reconfirm",
+  "slack-identity-mapping:unmap",
   "access_challenge:resolve",
   "access_member:update_role",
   "access_role:create",
@@ -15,10 +22,10 @@ export const AUDIT_ACTIONS = [
   "access_role:update",
   "agent:create",
   "agent:delete",
+  "agent:owner_loss",
   "agent:policy_grant_create",
   "agent:policy_grant_delete",
   "agent:policy_grant_update",
-  "agent:owner_loss",
   "agent:reassign",
   "agent:rename",
   "agent:resume",
@@ -66,6 +73,8 @@ export const AUDIT_ACTIONS = [
   "device_integration:retry_schedule",
   "device_integration:update_schedule",
   "device_integration:upsert",
+  "directory_role_mapping:delete",
+  "directory_role_mapping:set",
   "environment:create",
   "environment:delete",
   "environment:update",
@@ -119,9 +128,9 @@ export const AUDIT_ACTIONS = [
   "model_provider_key:delete",
   "model_provider_key:upsert",
   "network_ingress:create",
-  "network_ingress:update",
-  "network_ingress:rotate_credentials",
   "network_ingress:delete",
+  "network_ingress:rotate_credentials",
+  "network_ingress:update",
   "openrouter-key:disable",
   "openrouter-key:enable",
   "openrouter-key:set_spend_cap",
@@ -129,12 +138,13 @@ export const AUDIT_ACTIONS = [
   "organization:enterprise_trial_armed",
   "organization:enterprise_trial_converted",
   "organization:enterprise_trial_demoted",
-  "organization:enterprise_trial_extended",
   "organization:enterprise_trial_end_changed",
+  "organization:enterprise_trial_extended",
   "organization:enterprise_trial_rearmed",
   "organization:enterprise_trial_started",
   "organization:hooks_fail_open_disabled",
   "organization:hooks_fail_open_enabled",
+  "organization:onboarding_updated",
   "organization:payg_activated",
   "organization:payg_deactivated",
   "organization:product_feature_disabled",
@@ -147,6 +157,8 @@ export const AUDIT_ACTIONS = [
   "organization_invitation:update_role",
   "otel_destination:create",
   "otel_destination:delete",
+  "okta-resource-connection:confirm",
+  "okta-resource-connection:reset",
   "otel_destination:update",
   "platform-mcp-diagnostics:attribution_read",
   "platform-mcp-diagnostics:user_status_read",
@@ -165,6 +177,9 @@ export const AUDIT_ACTIONS = [
   "project:create",
   "project:delete",
   "project:update",
+  "query:create",
+  "query:delete",
+  "query:update",
   "remote-mcp-server-header:create",
   "remote-mcp-server-header:delete",
   "remote-mcp-server-header:update",
@@ -184,7 +199,9 @@ export const AUDIT_ACTIONS = [
   "remote-session-issuer:delete",
   "remote-session-issuer:migrate",
   "remote-session-issuer:update",
+  "remote-session:attach",
   "remote-session:delete",
+  "remote-session:detach",
   "remote-session:refresh",
   "risk_exclusion:create",
   "risk_exclusion:delete",
@@ -251,6 +268,7 @@ export const AUDIT_ACTIONS = [
   "user-session-issuer-cimd-client:remove",
   "user-session-issuer:create",
   "user-session-issuer:delete",
+  "user-session-issuer:migrate",
   "user-session-issuer:update",
   "user-session:revoke",
   "variation:delete_global",
@@ -258,6 +276,10 @@ export const AUDIT_ACTIONS = [
   "wake:cancelled",
   "wake:fired",
   "wake:scheduled",
+  "workload-admission:admit",
+  "workload-admission:withdraw",
+  "workload-issuer:create",
+  "workload-issuer:delete",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -279,6 +301,20 @@ export function isAuditAction(action: string): action is AuditAction {
  */
 export function staticActionPhrase(action: AuditAction): string {
   switch (action) {
+    case "slack-identity-mapping:confirm":
+      return "confirmed the Slack mapping for";
+    case "slack-identity-mapping:reassign":
+      return "reassigned the Slack mapping for";
+    case "slack-identity-mapping:reconfirm":
+      return "reviewed and confirmed the Slack mapping for";
+    case "slack-identity-mapping:unmap":
+      return "removed the Slack mapping for";
+    case "slack-directory-connection:sync":
+      return "synced Slack directory";
+    case "slack-directory-connection:authorize":
+      return "authorized Slack workspace";
+    case "slack-directory-connection:disconnect":
+      return "disconnected Slack workspace";
     case "access_challenge:resolve":
       return "resolved access challenge";
     case "access_member:update_role":
@@ -373,6 +409,10 @@ export function staticActionPhrase(action: AuditAction): string {
       return "revoked identity provider connection to";
     case "identity-provider-connection:sync-applications":
       return "requested an applications sync for identity provider";
+    case "okta-resource-connection:confirm":
+      return "confirmed the Cross App Access connection for";
+    case "okta-resource-connection:reset":
+      return "reset the Cross App Access connection for";
     case "json_web_key_set:create":
       return "created JSON Web Key Set";
     case "json_web_key_set:update":
@@ -455,6 +495,11 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated device integration schedule";
     case "device_integration:retry_schedule":
       return "retried device integration sync";
+
+    case "directory_role_mapping:set":
+      return "set directory role mapping";
+    case "directory_role_mapping:delete":
+      return "removed directory role mapping";
 
     case "environment:create":
       return "created environment";
@@ -570,6 +615,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "disabled a product feature for";
     case "organization:setup_task_updated":
       return "updated setup task for";
+    case "organization:onboarding_updated":
+      return "updated onboarding for";
 
     case "organization_invitation:create":
       return "invited";
@@ -623,6 +670,13 @@ export function staticActionPhrase(action: AuditAction): string {
     case "project:delete":
       return "deleted project";
 
+    case "query:create":
+      return "created saved query";
+    case "query:update":
+      return "updated saved query";
+    case "query:delete":
+      return "deleted saved query";
+
     case "remote-mcp:create":
       return "added remote MCP server";
     case "remote-mcp:update":
@@ -636,6 +690,10 @@ export function staticActionPhrase(action: AuditAction): string {
     case "remote-mcp-server-header:delete":
       return "removed a header from remote MCP server";
 
+    case "remote-session:attach":
+      return "attached a binding to";
+    case "remote-session:detach":
+      return "detached a binding from";
     case "remote-session:refresh":
       return "refreshed remote session";
     case "remote-session:delete":
@@ -813,6 +871,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated user session issuer";
     case "user-session-issuer:delete":
       return "deleted user session issuer";
+    case "user-session-issuer:migrate":
+      return "migrated user session issuer";
     case "user-session-issuer-cimd-client:add":
       return "added a CIMD client to";
     case "user-session-issuer-cimd-client:remove":
@@ -822,6 +882,17 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated a global variation for";
     case "variation:delete_global":
       return "deleted a global variation for";
+
+    case "workload-issuer:create":
+      return "started trusting workload issuer";
+    case "workload-issuer:delete":
+      return "stopped trusting workload issuer";
+    // Named for what they do, because the row is the grant of machine access
+    // rather than a record about one.
+    case "workload-admission:admit":
+      return "admitted workload";
+    case "workload-admission:withdraw":
+      return "withdrew workload";
 
     default:
       return assertNever(action);

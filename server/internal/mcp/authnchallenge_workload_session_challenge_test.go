@@ -248,7 +248,7 @@ func TestServePublic_WorkloadSessionHiddenByRolloutGetsBareChallenge(t *testing.
 
 	requireAdmitted(t, serveMCPResponse(t, ti, slug, makeInitializeBody(), fx.token))
 
-	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, fx.orgID, false)
 
 	requireBareChallenge(t, ti, slug, serveMCPResponse(t, ti, slug, makeInitializeBody(), fx.token))
 }

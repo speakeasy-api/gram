@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
-  Boxes,
   Check,
   Loader2,
   Server as ServerIcon,
@@ -327,6 +326,10 @@ export function DistributeServersStep({
     if (!drawerOpen || drawerError) return;
 
     if (workflow.phase === "configure") {
+      if (workflow.installBlockedReason) {
+        setDrawerError(workflow.installBlockedReason);
+        return;
+      }
       if (!startedRef.current && workflow.canInstall) {
         startedRef.current = true;
         void workflow.startInstall();
@@ -400,11 +403,6 @@ export function DistributeServersStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <Boxes className="text-foreground h-6 w-6" />
-        </div>
-      }
       title="Distribute MCP servers"
       description="Choose some MCP Servers to distribute to your organization. Selected servers are deployed to your project, bundled into your Default plugin, and published to your marketplace so your team can install them."
       onContinue={handleDistribute}

@@ -24,16 +24,14 @@ local_config=(
 # Worktree scaffolding, copied from main only when a worktree is created.
 # mise.local.toml belongs here rather than above because it is worktree-specific
 # — ports, Compose project, Temporal namespace — so it must never be refreshed
-# from main, nor promoted back to it. .mise-tasks is last because copying it
-# overwrites this very script; keeping it at the end leaves nothing but the
-# summary still to run.
+# from main, nor promoted back to it. Task scripts stay on the checked-out
+# branch so lifecycle commands match its Compose configuration.
 scaffolding_from_main=(
   ./local
   ./.vscode
   ./.cursor
   ./.claude
   ./mise.local.toml
-  ./.mise-tasks
 )
 
 if [ -n "${usage_source:-}" ]; then

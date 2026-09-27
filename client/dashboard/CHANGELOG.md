@@ -1,5 +1,113 @@
 # dashboard
 
+## 0.125.0
+
+### Minor Changes
+
+- 0dd4657: Platform admins get a Support Coverage page under Platform Admin that compares integration-method capability coverage across Claude Chat, Claude Code, Cowork, Cursor, Codex, and other recognized agents. It shows 30-day aggregate telemetry and current device-agent health for the organization, and reports evidence that is loading, unavailable, or unknown as such rather than as zero coverage. The `telemetry.query` endpoint gains an optional `include_dimension_values` flag, defaulting to true, so callers that only need aggregates can omit per-row dimension values.
+- 3884bcb: Shadow AI tools open onto the people who run them. A new `access.listAIDetectionUsers` read expands one detected tool into the enrolled users it was found for, each with their devices, signals, versions and first and last sightings, with linked alias emails folded to one person. On the Harnesses, Assistants and Local Models tabs, opening a row now shows that list, the identity page's Shadow AI table turned around; each user links to their identity page. Access decisions move to the row's context menu and a button on the tool page.
+
+### Patch Changes
+
+- ee613dc: Preserve onboarding task visibility and verified completion across guided setup, and support focused identity, marketplace, logging, and traffic tasks without changing existing task selections.
+
+## 0.124.0
+
+### Minor Changes
+
+- 1c9ceab: Jump into a project from Cmd+K. The palette now carries a Projects group that matches on a project's name, slug, or id — offered from the moment the palette opens at the organization level, where picking a project is its main job, and once you start typing inside a project, where it doubles as the fastest way to switch.
+
+### Patch Changes
+
+- 85734c6: Load delegable API key permissions for all of an agent's MCP servers in one request instead of one per server, so the create API key dialog no longer fails with lock timeouts on agents with many servers.
+- fce61bb: Serialize project-bound agent creation with project deletion. Show the agent creation empty state when a project has no visible agents, and align settings headings with their visible controls.
+
+## 0.123.0
+
+### Minor Changes
+
+- 36cee24: Create agent keys with a server-scoped permission wizard and manage agent access to MCP servers.
+- 5757d84: Show agent identities and their attached upstream accounts in session management.
+- 6efa45c: Adds the Okta page to organization settings: the connection card with the console checklist, client ID and verification steps, the applications snapshot with on-demand sync, and the Cross App Access readiness checklist with bulk confirmation.
+- 1768893: Offer permission-aware Platform MCP setup and task prompts to non-admin members from MCP troubleshooting, skill workflows, Plugins and organisation home.
+- 40279e9: Organizations now verify a domain before setting up single sign-on. WorkOS refuses to start an SSO connection until a domain is verified, so the IdP and SSO page gains a Domain verification card that opens the WorkOS Admin Portal. Once verified, the card lists every verified domain, because SSO only applies to users on those domains. Until a domain is verified, the Single Sign-On and Directory Sync cards are dimmed, their Configure buttons are disabled, and an amber warning explains why. The setup board adds a "Verify your domain" task that the identity provider task now depends on. Organizations that already have an active SSO connection are treated as verified and are not blocked.
+  
+  The verified domains are kept in sync from WorkOS events: `organization_domain.verified` adds a domain, `organization_domain.deleted` removes one, and `organization.created` / `organization.updated` replace the list from the organization's full domain set. Onboarding status reports `domain_verified` and `verified_domains`.
+- 11c951b: Scope agent MCP credentials to live delegable access, support agent-owned upstream account bindings, and preserve agent identity in sessions and usage views.
+- 8794f71: MCP servers can select an existing organization- or project-owned user session issuer during creation or from authentication settings. Interactive creation prefers a sole organization issuer, requires a choice when several exist, and keeps project-specific issuer creation as an explicit fallback. Organization-owned issuer settings remain read-only from project pages.
+- 391d796: Open your own profile from the sidebar account menu. The avatar and name in the sidebar footer are now the menu's only trigger — the separate dots button is gone — and the menu carries a "View user profile" item that opens your identity page. The item appears only for readers who can open that page.
+
+### Patch Changes
+
+- 8df3dad: Agent API keys can now poll `agent.getPlugins` when the agent holds the new `org:device_agent_sync` grant. The response includes the agent's principal, and plugins resolve for the agent, its roles, and the org wildcard. Adds the agent-runtime-safe `org:device_agent_sync` and `org:hooks_ingest` scopes in registry and delegated-policy version 2.
+- e23ba04: Adds audit feed phrases for Cross App Access readiness confirmations and resets.
+- 5db7eef: Dashboard pages scroll with the browser's own scrollbar. The page header, mode switcher, and assistant composer stay pinned with `position: sticky` / `fixed` instead of living inside an inner `overflow-y: auto` container.
+- de55aca: Allow MCP gateways to use private network ingress from their dashboard settings.
+- 6efa45c: Make the applications list footer an explicit, centered expand/collapse button and keep empty snapshots within their container. Correct Okta admin-console links and verification guidance without presenting unrelated edits as verification times. Describe an existing Okta connection without prompting the admin to connect again. Group Cross App Access configuration into compact labelled rows with consistent spacing, aligned copy controls, and quieter confirmation metadata. Long values remain available in full on hover and copy without breaking the table layout. Correct small copy-button padding and accessible labels. Highlight the entire copied value line when its copy button is hovered or keyboard-focused.
+  
+  Distinguish saved Cross App Access confirmations from actual Okta connections. Guide admins to review and reuse existing connections before creating new ones, edit saved settings without clearing them first, and recover cleared confirmations with Undo while staying on the page. Preserve recorded application references when editing without a replacement. Vertically center Cross App Access row content alongside the multi-line Okta configuration.
+  
+  Link issuer-URL guidance directly to Okta Applications and include the Resource Server → Cross App Access navigation path, distinguishing Issuer URL from Okta’s separate Audience/tenant ID.
+  
+  Clarify that saved confirmations do not verify Okta configuration or access, without implying that Okta has no connection API.
+  
+  Complete the Connect checklist from existing authentication and API-read verification results. Distinguish unchecked steps from those needing attention, and show fully verified setup as six of six complete without claiming specific Okta role assignments were inspected.
+  
+  Simplify setup, application updates, and Cross App Access wording for organization administrators. Explain permissions and token protection, retain exact Okta field names, and distinguish unverified settings from successful access checks.
+  
+  Organize Enterprise Managed Auth under Team → IDP and SSO, separate from employee single sign-on. Add a provider overview and an Okta workspace for Setup, Applications, and Cross App Access and independent provider-specific setup flows.
+  
+  Clarify that the AI Agent setup registers Speakeasy in Okta rather than creating a Speakeasy assistant. Restrict Okta console links to HTTPS on supported tenant domains, keep Undo independent across upstream issuer identities, and use consistent application-update labels. Strengthen checklist evidence, provider delegation, and tab navigation regression coverage.
+  
+  Keep initial Okta onboarding focused on adding the organization URL. Hide workspace tabs, setup progress, and Cross App Access instructions until a connection exists, and offer only the custom-app creation path until catalog availability is verified.
+  
+  Move the AI agent ID fields and Save action into the agent-creation checklist step, preserving draft edits when collapsed and opening the step for existing agent setup links.
+  
+  Replace obsolete agent Delegations instructions with the current registration, permanent user-access app binding, Client registration, User access, and Resource connections sequence. Explicitly distinguish the API Services management credential from agent authentication, require separate runtime configuration before activation, and clarify that recorded IDs do not provision or verify delegated access.
+  
+  Replace the non-actionable agent registration checklist with optional existing-agent ID recording. State that this setup does not connect agent authentication, and remove prompts to configure unsupported client registration or user access settings.
+- 6efa45c: Show seven applications initially with expand and collapse controls. Clarify Okta setup next steps and verification recovery, validate client IDs before submission, and preserve unfinished Cross App Access confirmations for retry after partial failures.
+- 6efa45c: Splits the Okta AI agent setup into separate checklist steps, ending with setting up a first Cross App Access connection. Speakeasy now ticks the linked app steps from the applications sync, flags a linked app that is inactive or has nobody assigned, and collapses the checklist once setup is complete. The checklist moves above the connection details.
+  
+  The checklist item `key` is now an enumerated value in the API. The Okta settings code is reorganized by tab with no change in behavior, and links to settings URLs that were never released are removed.
+- 6efa45c: Okta readiness dashboard: gate the applications snapshot on a clean verification and explain a degraded connection inline, scroll to the connection card after verifying, show when a degraded check ran, confirm before resetting a Cross App Access confirmation, surface confirmed rows under the Needs action filter, fit the readiness table at 1440px, disambiguate duplicate app instances, say Speakeasy consistently in the console checklist, move Sync now feedback to a toast, and fold the Okta page into the Identity page as concern tabs (`identity?tab=sso|provider|applications|cross-app-access`; `/okta` and `identity?tab=okta` redirect there) with a vendor-neutral provider picker. The console checklist is now two groups, Connect and Cross App Access setup, with the steps a verification can observe ticked automatically, the per-app steps left to the Cross App Access tab, and the agent credential step deferred until the token exchange consumes it.
+- 7ce576e: Open your identity overview by clicking your name inside the sidebar account menu.
+- 9a08893: Risk Events can be filtered by MCP server, and findings from MCP tool calls now show up there with their server, tool and enforcement outcome even when no chat is attached.
+- 1d2bc0f: Watchdog evidence cards can now show the message behind a finding. In the signal drawer, a chevron after each card's session title shows the full message the finding was flagged in, clicking the title opens the session transcript scrolled to that finding, and a link opens the session in Agent Sessions. Flagged secrets and PII stay masked in the expanded message. These controls only appear for users with the `chat:read` scope.
+
+## 0.122.0
+
+### Minor Changes
+
+- ddc0c6c: Explore filters pick their values from what the dimension holds inside the window, with a count beside each, instead of being typed blind. A value that is not listed can still be typed.
+- db02c08: Explore runs a query when you press Run: a run scans the dataset across its whole window, so nothing runs as a side effect of editing. The window opens on the last 24 hours, filters sit above the measures in the builder, and the results panel names the query it answers. Timeseries charts draw with a summary table beneath them; tables and number tiles draw the whole-window figures.
+- a5c64f9: Add the Explore page (preview) to the Observability navigation, behind the `gram-explore` rollout flag: a query builder generated from the analytics catalog, so each dataset reconfigures the measures, filters, and breakdowns it offers.
+- 85ad1d0: Add a metered-product spend breakdown endpoint and stacked billing chart for agent session storage, per-scanner risk scanning, and MCP egress. Show exact server-calculated estimates at current PAYG list prices with daily, weekly, monthly, cumulative, product, and date-range controls. Inference, credits, discounts, taxes, and billing adjustments are excluded; these ordinary-usage estimates are not invoices.
+  
+  Restrict spend estimates to PAYG organizations using server-owned availability. Other plans return `unsupported_plan`, empty products, and a `"0"` total without querying usage; the dashboard hides the entire spend section while retaining the ordinary usage explorer.
+- 728a2bb: Label workload sessions on the MCP Sessions page. `userSessions.list` now returns a `workload` object for `workload:` subjects, with the workload issuer's name and URL, the external subject, the assigned agent and its state, and every admission (project or organization tier) currently letting the workload in. The dashboard marks these rows as workloads rather than people. The revoke dialog lists the controls that can stop a workload, from narrowest to widest, and shows which ones stop it from reconnecting. Revoking a workload session ends only that session: the workload can exchange a new token and reconnect.
+
+### Patch Changes
+
+- 7ea4e5b: Adds audit feed phrases for identity provider connection actions.
+- df903af: Adds the audit feed phrase for identity provider applications sync requests.
+- ac147cd: Link the cost breakdown chart to the table beneath it: rows carry their bar segment's swatch, hovering either one spotlights the other, and clicking a bar segment drills into that group without throwing away your scroll position. Retune the shared chart palette so the Costs and MCP & Tools boards read as one system, and give trend colours their own dark-mode steps.
+- f8e5896: Open project links in their owning organization instead of combining the active organization with a project from another workspace.
+- e9df905: Add an optional second step in Platform MCP setup for bringing existing remote MCP servers from Claude Code into Speakeasy management. The reviewed workflow verifies the agent's connection, requests informed discovery consent or a sanitized manual inventory, and prefers catalogue entries matched by endpoint or confirmed provider/name before using custom URLs. It confirms the destination and selected servers and reports each registration separately. Authentication stays in Speakeasy without migrating local credentials.
+- 72128df: Include all PAYG metered prices in Checkout, preserve resumable billing setup, and apply trial conversion only after confirmed completion. Handle delayed completion and subscription deletion without losing inference-key conversion or post-checkout cleanup, preserve existing Checkout sessions, and show setup actions only to eligible users.
+  
+  Remove the obsolete platform-admin TUM contract controls and contract price estimator from the billing page.
+  
+  Show the PAYG risk scanning rate of $0.99 per million tokens scanned and MCP gateway egress rate of $20 per GiB alongside token management pricing.
+  
+  Place Payment beside PAYG pricing on wider screens and stack them on smaller screens. Prioritize payment setup and recovery above usage, keep healthy subscriptions usage-first, and retain the Organization eyebrow at the top of the billing page.
+  
+  Use Agent session storage as the billing product name and Stored sessions for usage labels and charts. Rename the Meter usage section to Usage without changing token-based metering or rates.
+- 5ad2b81: AI integration syncs now stop retrying when the provider rejects the request outright (HTTP 400/401/403/404/422), show the provider's reason on the integration, and pause the schedule after repeated rejections instead of retrying forever. Chat analysis and skill efficacy judging retry transient model failures without failing the background task, and expected API responses such as permission denied or not found are no longer reported as frontend errors.
+- d52b737: Add a structured Remote MCP `probeURL` endpoint with availability, authentication, invalid-response, and unreachable outcomes while retaining the deprecated `verifyURL` endpoint for compatibility.
+- b5e9295: Restore the source management surfaces lost when Sources moved under MCP: source deletion, uploading a new OpenAPI version, the usage, format and deployment-error filters, failed-deployment signalling and row actions on the sources list; the activity panel, editable tools list, versions log and danger zone on the source page; public access, tunnel key rotation, live connections, resource identifier and setup snippets for tunneled servers; upstream URL and source name editing for remote servers; a cascading delete for source-backed servers; and legacy source URLs that resolve to the right page.
+- 9059ae1: Allow staff to enable Tailscale private access for an organization from the admin feature controls without requiring a separate PostHog rollout flag.
+
 ## 0.121.1
 
 ### Patch Changes

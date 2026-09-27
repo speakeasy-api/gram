@@ -36,6 +36,7 @@ Use only the following Datadog MCP tools unless the user explicitly asks for oth
 
 - `mcp__datadog-mcp__get_datadog_trace` — Get a specific trace by ID
 - `mcp__datadog-mcp__search_datadog_spans` — Search spans (useful for latency investigation)
+- `mcp__datadog-mcp__aggregate_spans` — Aggregate spans (counts, percentiles) grouped by tags such as `resource_name` or `@http.status_code`
 
 ### Incidents & Monitors
 

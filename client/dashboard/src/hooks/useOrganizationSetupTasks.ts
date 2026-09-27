@@ -1,12 +1,11 @@
 import type { GramCore } from "@gram/client/core.js";
-import { useGramContext } from "@gram/client/react-query/_context.js";
+import type { QueryClient } from "@tanstack/react-query";
 import type { QueryHookOptions } from "@gram/client/react-query/_types.js";
 import {
   buildListSetupTasksQuery,
   type ListSetupTasksQueryData,
   type ListSetupTasksQueryError,
 } from "@gram/client/react-query/listSetupTasks.js";
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
 export function buildOrganizationSetupTasksQuery(
   client: GramCore,
@@ -33,20 +32,19 @@ export function buildOrganizationSetupTasksQuery(
   };
 }
 
-export function useOrganizationSetupTasks(
+export function invalidateOrganizationSetupTasks(
+  client: QueryClient,
   organizationId: string,
-  includeHidden: boolean,
-  options?: QueryHookOptions<ListSetupTasksQueryData, ListSetupTasksQueryError>,
-): UseQueryResult<ListSetupTasksQueryData, ListSetupTasksQueryError> {
-  const client = useGramContext();
-  return useQuery({
-    ...buildOrganizationSetupTasksQuery(
-      client,
-      organizationId,
-      includeHidden,
-      options,
-    ),
-    throwOnError: false,
-    ...options,
+): Promise<void> {
+  return client.invalidateQueries({
+    queryKey: ["@gram/client", "organizations", "listSetupTasks"],
+    predicate: (query) =>
+      query.queryKey.some(
+        (part) =>
+          typeof part === "object" &&
+          part !== null &&
+          "organizationId" in part &&
+          part.organizationId === organizationId,
+      ),
   });
 }

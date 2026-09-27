@@ -250,7 +250,12 @@ func externalToolDiscoverable(grants []authz.Grant, grantsLoaded bool, principal
 			return true
 		}
 	case ExternalAuthorizationOrgAdmin:
-		scopes = []authz.Scope{authz.ScopeOrgAdmin}
+		if !grantsAuthorizeAnyScope(grants, principal.OrganizationID, []authz.Scope{authz.ScopeOrgAdmin}) {
+			return false
+		}
+		if len(scopes) == 0 {
+			return true
+		}
 	default:
 		return false
 	}

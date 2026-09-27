@@ -6,6 +6,7 @@ import { PrivateNetworkSection } from "./PrivateNetworkSection";
 const state = vi.hoisted(() => ({
   isAdmin: true,
   entitled: true,
+  productTier: "enterprise" as "enterprise" | "payg" | "base",
   featuresError: false,
   featuresAvailable: true,
   featuresLoading: false,
@@ -13,6 +14,7 @@ const state = vi.hoisted(() => ({
   ingressPending: false,
   ingressOptions: undefined as
     | {
+        enabled?: boolean;
         refetchInterval?: (query: {
           state: { data?: { ingress?: { status?: string } } };
         }) => number | false;
@@ -34,6 +36,10 @@ const state = vi.hoisted(() => ({
         updatedAt: Date;
       }
     | undefined,
+}));
+
+vi.mock("@/hooks/useProductTier", () => ({
+  useProductTier: () => state.productTier,
 }));
 
 vi.mock("@/contexts/Auth", () => ({
@@ -123,6 +129,7 @@ vi.mock("sonner", () => ({
 beforeEach(() => {
   state.isAdmin = true;
   state.entitled = true;
+  state.productTier = "enterprise";
   state.featuresError = false;
   state.featuresAvailable = true;
   state.featuresLoading = false;
@@ -136,17 +143,42 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("PrivateNetworkSection", () => {
-  it("renders no private controls without the staff entitlement", () => {
+  it.each(["base", "payg"] as const)(
+    "shows a Tailscale Enterprise upsell for %s without exposing setup",
+    (tier) => {
+      state.productTier = tier;
+      render(<PrivateNetworkSection />);
+      expect(screen.getByText("Tailscale private access")).toBeTruthy();
+      expect(
+        screen.getByRole("link", { name: "Talk to our team" }),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: "Connect Tailscale" }),
+      ).toBeNull();
+    },
+  );
+
+  it("shows the enablement message for Enterprise without staff entitlement", () => {
     state.entitled = false;
-    const { container } = render(<PrivateNetworkSection />);
-    expect(container.textContent).toBe("");
+    render(<PrivateNetworkSection />);
+    expect(screen.getByText(/Contact our team to enable it/)).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Connect Tailscale" }),
+    ).toBeNull();
   });
 
-  it("renders no private controls for an organization reader", () => {
-    state.isAdmin = false;
-    const { container } = render(<PrivateNetworkSection />);
-    expect(container.textContent).toBe("");
-  });
+  it.each(["enabled", "disabled", "loading", "error"] as const)(
+    "keeps private controls and queries disabled for an organization reader (%s)",
+    (status) => {
+      state.isAdmin = false;
+      state.entitled = status === "enabled";
+      state.featuresLoading = status === "loading";
+      state.featuresError = status === "error";
+      const { container } = render(<PrivateNetworkSection />);
+      expect(container.textContent).toBe("");
+      expect(state.ingressOptions?.enabled).toBe(false);
+    },
+  );
 
   it.each(["features", "ingress"] as const)(
     "renders the loading panel while %s are loading",
@@ -271,26 +303,54 @@ describe("PrivateNetworkSection", () => {
     ).toBeNull();
   });
 
-  it("keeps existing private state visible after entitlement removal", () => {
-    state.entitled = false;
-    state.ingress = {
-      id: "ingress-1",
-      organizationId: "org-1",
-      provider: "tailscale",
-      hostname: "private-mcp",
-      endpointNamespaceKind: "platform",
-      enabled: true,
-      identityRequired: false,
-      credentialsConfigured: true,
-      status: "online",
-      createdAt: new Date(0),
-      updatedAt: new Date(0),
-    };
+  it.each([
+    ["plan downgrade", "payg", true, /requires an Enterprise plan/],
+    [
+      "staff entitlement removal",
+      "enterprise",
+      false,
+      /is no longer enabled for this organization/,
+    ],
+  ] as const)(
+    "keeps existing private state visible after %s",
+    (_reason, productTier, entitled, warning) => {
+      state.productTier = productTier;
+      state.entitled = entitled;
+      state.ingress = {
+        id: "ingress-1",
+        organizationId: "org-1",
+        provider: "tailscale",
+        hostname: "private-mcp",
+        endpointNamespaceKind: "platform",
+        enabled: true,
+        identityRequired: false,
+        credentialsConfigured: true,
+        status: "online",
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      };
 
-    render(<PrivateNetworkSection />);
-    expect(
-      screen.getByText(/Existing restrictions remain enforced/),
-    ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Remove" })).toBeTruthy();
-  });
+      render(<PrivateNetworkSection />);
+      expect(screen.getByText(warning)).toBeTruthy();
+      expect(
+        screen.getByText(/Existing restrictions remain enforced/),
+      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Remove" })).toBeTruthy();
+      expect(
+        screen
+          .getByRole("switch", { name: "Require user identity" })
+          .hasAttribute("disabled"),
+      ).toBe(true);
+      expect(
+        screen
+          .getByRole("button", { name: "Rotate credentials" })
+          .hasAttribute("disabled"),
+      ).toBe(true);
+      expect(
+        screen
+          .getByRole("switch", { name: "Private network ingress enabled" })
+          .hasAttribute("disabled"),
+      ).toBe(false);
+    },
+  );
 });

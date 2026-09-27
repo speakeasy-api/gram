@@ -10,7 +10,7 @@ import type {
   InvalidateQueryFilters,
   QueryClient,
 } from "@tanstack/react-query";
-import { resetAllProtectedResourceMetadata } from "./authentication/useProtectedResourceMetadata";
+import { resetAllProtectedResourceMetadata } from "@/lib/remote-identity";
 
 // A source edit has two consumers: the per-id query the settings sections and
 // sidebar read from, and the project-wide list the sources shelf reads from.

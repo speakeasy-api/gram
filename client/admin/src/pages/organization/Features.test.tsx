@@ -11,6 +11,10 @@ import { Features } from "@/pages/organization/Features";
 import { anOrganization } from "@/test/fixtures";
 import { renderWithApp } from "@/test/harness";
 
+vi.mock("@/pages/organization/Onboarding", () => ({
+  Onboarding: () => <section aria-label="Onboarding" />,
+}));
+
 const mocks = vi.hoisted(() => ({
   featureFetch: vi.fn(),
   getOrganizationChatAnalysisSettings: vi.fn(),

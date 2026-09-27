@@ -82,11 +82,13 @@ export function useServerAssistantTransport(
   // query only differentiates by query key — pass projectSlug into the request
   // so a project switch invalidates instead of replaying the old project's
   // cached managed-assistant id.
+  const authorized =
+    enabled && !!targetProjectId && hasScope("project:read", targetProjectId);
   const getQuery = useAssistantsGetManaged(
     { gramProject: projectSlug },
     undefined,
     {
-      enabled: enabled && !!projectSlug,
+      enabled: authorized,
       retry: false,
       throwOnError: false,
       refetchOnWindowFocus: false,
@@ -107,21 +109,23 @@ export function useServerAssistantTransport(
   // session, so re-renders after the read settles don't replay it. Reset when
   // the project switches.
   const provisionedForSlugRef = useRef<string | null>(null);
+  const provisionGenerationRef = useRef(0);
   useEffect(() => {
-    if (provisionedForSlugRef.current === null) return;
-    if (provisionedForSlugRef.current === projectSlug) return;
+    if (authorized && provisionedForSlugRef.current === projectSlug) return;
     provisionedForSlugRef.current = null;
+    provisionGenerationRef.current += 1;
     setProvisionedId("");
     setProvisionError(null);
-  }, [projectSlug]);
+  }, [projectSlug, authorized]);
 
   useEffect(() => {
-    if (!enabled || !projectSlug) return;
+    if (!authorized || !projectSlug) return;
     if (!is404) return;
     if (rbacLoading || !canCreate) return;
     if (provisionedForSlugRef.current === projectSlug) return;
     provisionedForSlugRef.current = projectSlug;
     const slugAtRequest = projectSlug;
+    const generationAtRequest = ++provisionGenerationRef.current;
     // gramProject is explicit so the ensure targets the slug the hook was
     // called with, not whatever the SDK client's default header resolves to
     // — the active project may not be the same one (org-scoped routes).
@@ -129,11 +133,19 @@ export function useServerAssistantTransport(
       { request: { gramProject: projectSlug } },
       {
         onSuccess: (assistant) => {
-          if (slugAtRequest !== provisionedForSlugRef.current) return;
+          if (
+            slugAtRequest !== provisionedForSlugRef.current ||
+            generationAtRequest !== provisionGenerationRef.current
+          )
+            return;
           setProvisionedId(assistant.id);
         },
         onError: () => {
-          if (slugAtRequest !== provisionedForSlugRef.current) return;
+          if (
+            slugAtRequest !== provisionedForSlugRef.current ||
+            generationAtRequest !== provisionGenerationRef.current
+          )
+            return;
           // Clear the latch so the next dep change (project switch, or a
           // future caller wiring `enabled` to the sidebar toggle again) can
           // re-fire ensure. Without this, a transient 500 or a 409 from the
@@ -145,11 +157,14 @@ export function useServerAssistantTransport(
         },
       },
     );
-  }, [enabled, projectSlug, is404, canCreate, rbacLoading, ensureMutate]);
+  }, [authorized, projectSlug, is404, canCreate, rbacLoading, ensureMutate]);
 
-  const assistantId = fetchedId || provisionedId;
+  const assistantId = authorized
+    ? fetchedId ||
+      (provisionedForSlugRef.current === projectSlug ? provisionedId : "")
+    : "";
   const ready = assistantId !== "";
-  const needsAdmin = is404 && !rbacLoading && !canCreate;
+  const needsAdmin = authorized && is404 && !rbacLoading && !canCreate;
   const error = isOtherError
     ? "Couldn't connect to the Project Assistant. Try reopening the sidebar."
     : provisionError;

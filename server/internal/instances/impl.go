@@ -70,7 +70,7 @@ type Service struct {
 	environmentsRepo  *environments_repo.Queries
 	env               *environments.EnvironmentEntries
 	toolProxy         *gateway.ToolProxy
-	scanEvaluator     mcpriskscan.Evaluator
+	scanEvaluator     *mcpriskscan.Evaluator
 	tracking          billing.Tracker
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	featuresClient    *productfeatures.Client
@@ -100,6 +100,7 @@ func NewService(
 	featClient *productfeatures.Client,
 	serverURL *url.URL,
 	authzEngine *authz.Engine,
+	scanEvaluator *mcpriskscan.Evaluator,
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
@@ -126,7 +127,7 @@ func NewService(
 			funcCaller,
 			platformTools,
 		),
-		scanEvaluator:     mcpriskscan.NewNoop(traceProvider, meterProvider, logger),
+		scanEvaluator:     scanEvaluator,
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		telemLogger:       telemLogger,
 		featuresClient:    featClient,
@@ -380,18 +381,22 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	if plan.Kind == gateway.ToolKindExternalMCP {
 		scanToolName = descriptor.URN.Name
 	}
-	s.scanEvaluator.Scan(ctx, bytes.NewReader(requestBodyBytes), mcpriskscan.Event{
+	decision := s.scanEvaluator.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:        mcpriskscan.SurfaceInstances,
 		Method:         mcpriskscan.MethodToolsCall,
 		OrganizationID: descriptor.OrganizationID,
 		ProjectID:      descriptor.ProjectID,
 		ServerID:       "",
+		MetaServerID:   "",
 		ToolsetID:      scanToolsetID,
 		ToolName:       scanToolName,
 		ResourceURI:    "",
 		PromptName:     "",
-		Phase:          mcpriskscan.PhaseBeforeExecution,
-	})
+		ChatID:         chatID,
+	}, mcpriskscan.BorrowPayload(requestBodyBytes)))
+	if decision.Denied() {
+		return oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+	}
 	err = s.toolProxy.Do(ctx, interceptor, bytes.NewReader(requestBodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,

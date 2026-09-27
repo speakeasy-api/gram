@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/judgemessage"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/tooldisposition"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -242,7 +243,7 @@ func NewService(
 		logger: logger,
 		db:     db,
 		repo:   repo.New(db),
-		policies: policycore.New(db, policycore.MutationDependencies{
+		policies: policycore.NewWithToolAnnotations(db, tooldisposition.New(logger, db, cacheImpl), policycore.MutationDependencies{
 			Transactor:       db,
 			Auditor:          policyMutationAuditor{logger: auditLogger},
 			Approvals:        approvalIntake,
@@ -294,7 +295,15 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
+	ctx, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		return ctx, err
+	}
+	// Bypass requests bind to a human requester; agent-principal keys never qualify.
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); ok && mode == contextvalues.APIKeyAuthorizationModePrincipal {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+	return ctx, nil
 }
 
 // OnMessagesStored implements chat.MessageObserver. The caller
@@ -484,6 +493,14 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 		}
 	}
 
+	mcpScope, mcpScopeJSON, err := s.normalizeMCPScope(ctx, *authCtx.ProjectID, payload.McpScope)
+	if err != nil {
+		return nil, err
+	}
+	if err := policycore.ValidateMCPScopeSources(mcpScope, sources); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+
 	result, err := s.policies.CreatePolicy(ctx, policycore.CreateMutation{
 		Params: repo.CreateRiskPolicyParams{
 			ID:                   id,
@@ -497,6 +514,7 @@ func (s *Service) CreateRiskPolicy(ctx context.Context, payload *gen.CreateRiskP
 			PromptInjectionRules: createPolicyDetectionField(policyType, payload.PromptInjectionRules),
 			DisabledRules:        createPolicyDetectionField(policyType, payload.DisabledRules),
 			CustomRuleIds:        createPolicyDetectionField(policyType, payload.CustomRuleIds),
+			McpScope:             mcpScopeJSON,
 			Enabled:              enabled,
 			Action:               action,
 			AudienceType:         audienceType,
@@ -537,6 +555,37 @@ func (s *Service) ListRiskPolicies(ctx context.Context, payload *gen.ListRiskPol
 	policies, err := s.policies.List(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list risk policies").LogError(ctx, s.logger)
+	}
+
+	result := make([]*types.RiskPolicy, 0, len(policies))
+	for _, policy := range policies {
+		result = append(result, policyToGoa(policy))
+	}
+	return &gen.ListRiskPoliciesResult{Policies: result}, nil
+}
+
+func (s *Service) ListRiskPoliciesForMcpServer(ctx context.Context, payload *gen.ListRiskPoliciesForMcpServerPayload) (*gen.ListRiskPoliciesResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return nil, err
+	}
+
+	serverID, err := uuid.Parse(payload.McpServerID)
+	if err != nil {
+		return nil, oops.C(oops.CodeInvalid)
+	}
+	policies, err := s.policies.ListEnabledForMCPServer(
+		ctx,
+		authCtx.ActiveOrganizationID,
+		*authCtx.ProjectID,
+		serverID,
+		conv.PtrValOr(payload.ToolName, ""),
+	)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list risk policies for MCP server").LogError(ctx, s.logger)
 	}
 
 	result := make([]*types.RiskPolicy, 0, len(policies))
@@ -752,6 +801,15 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 		return nil, oops.E(oops.CodeNotFound, err, "risk policy not found").LogError(ctx, s.logger)
 	}
 
+	mcpScope := policycore.Project(current, nil, nil).MCPScope
+	mcpScopeJSON := current.McpScope
+	if payload.McpScope != nil {
+		mcpScope, mcpScopeJSON, err = s.normalizeMCPScope(ctx, *authCtx.ProjectID, payload.McpScope)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// policy_type is immutable; gate edits to prompt_based policies behind the flag.
 	if current.PolicyType == ra.PolicyTypePromptBased && !s.promptPoliciesEnabled(ctx, authCtx) {
 		return nil, oops.E(oops.CodeForbidden, nil, "prompt-based policies are not enabled for this organization")
@@ -825,6 +883,9 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			return nil, err
 		}
 		customRuleIds = payload.CustomRuleIds
+	}
+	if err := policycore.ValidateMCPScopeSources(mcpScope, sources); err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 
 	enabled := current.Enabled
@@ -978,6 +1039,7 @@ func (s *Service) UpdateRiskPolicy(ctx context.Context, payload *gen.UpdateRiskP
 			PromptInjectionRules: promptInjectionRules,
 			DisabledRules:        disabledRules,
 			CustomRuleIds:        customRuleIds,
+			McpScope:             mcpScopeJSON,
 			Enabled:              enabled,
 			Action:               action,
 			AudienceType:         audienceType,
@@ -1242,13 +1304,29 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 	}
 
 	pageSize := resolvePageSize(payload.Limit)
+	mcpServerID := ""
+	if payload.McpServerID != nil && strings.TrimSpace(*payload.McpServerID) != "" {
+		id, err := uuid.Parse(*payload.McpServerID)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid MCP server ID")
+		}
+		mcpServerID = id.String()
+	}
+	chatID := ""
+	if payload.ChatID != nil && strings.TrimSpace(*payload.ChatID) != "" {
+		id, err := uuid.Parse(*payload.ChatID)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "invalid chat ID")
+		}
+		chatID = id.String()
+	}
 
-	if payload.ChatID != nil && *payload.ChatID != "" {
+	if chatID != "" && mcpServerID == "" {
 		totalCount, err := s.repo.CountAllFindings(ctx, *authCtx.ProjectID)
 		if err != nil {
 			totalCount = 0
 		}
-		return s.listResultsByChat(ctx, *authCtx.ProjectID, *payload.ChatID, cursor, pageSize, totalCount)
+		return s.listResultsByChat(ctx, *authCtx.ProjectID, chatID, cursor, pageSize, totalCount)
 	}
 	// A policy filter is applied alongside the other filters rather than
 	// short-circuiting to a separate listing, so combinations like
@@ -1301,7 +1379,16 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		return nil, oops.E(oops.CodeInvalid, err, "invalid to").LogError(ctx, s.logger)
 	}
 
-	if s.listFromClickHouse(ctx, authCtx) {
+	useClickHouse := s.listFromClickHouse(ctx, authCtx)
+	if mcpServerID != "" {
+		// MCP-attributed findings have no Postgres mirror. Never silently
+		// ignore the filter by falling back to the chat-only store.
+		if s.findingsCH == nil {
+			return nil, oops.E(oops.CodeUnexpected, nil, "MCP server filtering requires ClickHouse")
+		}
+		useClickHouse = true
+	}
+	if useClickHouse {
 		var from, to *time.Time
 		if fromTime.Valid {
 			from = &fromTime.Time
@@ -1309,7 +1396,7 @@ func (s *Service) listRiskResultsRaw(ctx context.Context, payload *gen.ListRiskR
 		if toTime.Valid {
 			to = &toTime.Time
 		}
-		return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
+		return s.listResultsByProjectFromClickHouse(ctx, authCtx, cursor, pageSize, policyID, mcpServerID, chatID, category, ruleID, userID, payload.ExternalUserIds, uniqueMatch, nonAssistant, assistantID, from, to)
 	}
 
 	var totalCount int64
@@ -1358,6 +1445,7 @@ func (s *Service) ListRiskResultsForAgent(ctx context.Context, payload *gen.List
 		ProjectSlugInput: payload.ProjectSlugInput,
 		PolicyID:         payload.PolicyID,
 		ChatID:           payload.ChatID,
+		McpServerID:      payload.McpServerID,
 		Category:         payload.Category,
 		RuleID:           payload.RuleID,
 		// The agent surface lists its own project's findings; it has no
@@ -1483,23 +1571,34 @@ func redactRiskResult(r *types.RiskResult, orgID string) *types.RiskResultRedact
 	}
 
 	return &types.RiskResultRedacted{
-		ID:                r.ID,
-		PolicyID:          r.PolicyID,
-		PolicyVersion:     r.PolicyVersion,
-		ChatMessageID:     r.ChatMessageID,
-		ChatContentPartID: r.ChatContentPartID,
-		ChatID:            r.ChatID,
-		ChatTitle:         r.ChatTitle,
-		UserID:            r.UserID,
-		Source:            r.Source,
-		RuleID:            r.RuleID,
-		Description:       r.Description,
-		MatchRedacted:     matchRedacted,
-		PositionKnown:     r.StartPos != nil && r.EndPos != nil,
-		Confidence:        r.Confidence,
-		Tags:              r.Tags,
-		SpansRedacted:     spansRedacted,
-		CreatedAt:         r.CreatedAt,
+		ID:                 r.ID,
+		PolicyID:           r.PolicyID,
+		PolicyVersion:      r.PolicyVersion,
+		ExecutionID:        r.ExecutionID,
+		McpServerID:        r.McpServerID,
+		MetaMcpServerID:    r.MetaMcpServerID,
+		ToolsetID:          r.ToolsetID,
+		ToolName:           r.ToolName,
+		Phase:              r.Phase,
+		MediationSurface:   r.MediationSurface,
+		McpMethod:          r.McpMethod,
+		PrincipalKind:      r.PrincipalKind,
+		IdentityStamped:    r.IdentityStamped,
+		EnforcementOutcome: r.EnforcementOutcome,
+		ChatMessageID:      r.ChatMessageID,
+		ChatContentPartID:  r.ChatContentPartID,
+		ChatID:             r.ChatID,
+		ChatTitle:          r.ChatTitle,
+		UserID:             r.UserID,
+		Source:             r.Source,
+		RuleID:             r.RuleID,
+		Description:        r.Description,
+		MatchRedacted:      matchRedacted,
+		PositionKnown:      r.StartPos != nil && r.EndPos != nil,
+		Confidence:         r.Confidence,
+		Tags:               r.Tags,
+		SpansRedacted:      spansRedacted,
+		CreatedAt:          r.CreatedAt,
 	}
 }
 
@@ -2587,6 +2686,59 @@ func validateDetectionScopes(eng *celenv.Engine, specs []*types.RiskDetectionSco
 		return nil, oops.E(oops.CodeInvalid, err, "%s", err)
 	}
 	return out, nil
+}
+
+func (s *Service) normalizeMCPScope(
+	ctx context.Context,
+	projectID uuid.UUID,
+	input *types.RiskMCPScope,
+) (*policycore.MCPScope, []byte, error) {
+	var coreInput *policycore.MCPScopeInput
+	if input != nil {
+		coreInput = &policycore.MCPScopeInput{
+			AllServers:      input.AllServers,
+			ToolAnnotations: input.ToolAnnotations,
+			Servers:         make([]*policycore.MCPServerScopeInput, 0, len(input.Servers)),
+		}
+		for _, server := range input.Servers {
+			if server == nil {
+				coreInput.Servers = append(coreInput.Servers, nil)
+				continue
+			}
+			coreInput.Servers = append(coreInput.Servers, &policycore.MCPServerScopeInput{
+				MCPServerID: server.McpServerID,
+				Tools:       server.Tools,
+			})
+		}
+	}
+
+	scope, err := policycore.NormalizeMCPScope(coreInput)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+	if scope == nil {
+		return nil, nil, nil
+	}
+
+	serverIDs := make([]uuid.UUID, 0, len(scope.Servers))
+	for _, server := range scope.Servers {
+		serverIDs = append(serverIDs, server.MCPServerID)
+	}
+	projectServerIDs, err := s.repo.ListRiskPolicyMCPScopeServerIDs(ctx, repo.ListRiskPolicyMCPScopeServerIDsParams{
+		ProjectID:    projectID,
+		McpServerIds: serverIDs,
+	})
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "validate MCP policy scope").LogError(ctx, s.logger)
+	}
+	if err := policycore.ValidateMCPScopeOwnership(scope, projectServerIDs); err != nil {
+		return nil, nil, oops.E(oops.CodeInvalid, err, "%s", err)
+	}
+	raw, err := json.Marshal(scope)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "encode MCP policy scope").LogError(ctx, s.logger)
+	}
+	return scope, raw, nil
 }
 
 func validateCustomDetectionRule(eng *celenv.Engine, ruleID, title, detectionExpr, severity string) error {
@@ -4013,24 +4165,35 @@ func foundRowToResult(
 	confidence pgtype.Float8, tags []string, spans []byte, createdAt pgtype.Timestamptz,
 ) *types.RiskResult {
 	return &types.RiskResult{
-		ID:                id.String(),
-		PolicyID:          policyID.String(),
-		PolicyVersion:     policyVersion,
-		BlockID:           blockIDPtr(blockID),
-		ChatMessageID:     nullUUIDStringPtr(chatMessageID),
-		ChatContentPartID: nullUUIDStringPtr(chatContentPartID),
-		ChatID:            chatID,
-		ChatTitle:         conv.FromPGText[string](chatTitle),
-		UserID:            conv.FromPGText[string](chatUserID),
-		Source:            source,
-		RuleID:            conv.FromPGText[string](ruleID),
-		Description:       conv.FromPGText[string](description),
-		Match:             conv.FromPGText[string](match),
-		StartPos:          conv.PtrInt32ToInt(conv.FromPGInt4(startPos)),
-		EndPos:            conv.PtrInt32ToInt(conv.FromPGInt4(endPos)),
-		Confidence:        conv.FromPGFloat8(confidence),
-		Tags:              tags,
-		Spans:             parseRiskSpans(spans),
+		ID:                 id.String(),
+		PolicyID:           policyID.String(),
+		PolicyVersion:      policyVersion,
+		ExecutionID:        nil,
+		McpServerID:        nil,
+		MetaMcpServerID:    nil,
+		ToolsetID:          nil,
+		ToolName:           nil,
+		Phase:              nil,
+		MediationSurface:   nil,
+		McpMethod:          nil,
+		PrincipalKind:      nil,
+		IdentityStamped:    nil,
+		EnforcementOutcome: nil,
+		BlockID:            blockIDPtr(blockID),
+		ChatMessageID:      nullUUIDStringPtr(chatMessageID),
+		ChatContentPartID:  nullUUIDStringPtr(chatContentPartID),
+		ChatID:             chatID,
+		ChatTitle:          conv.FromPGText[string](chatTitle),
+		UserID:             conv.FromPGText[string](chatUserID),
+		Source:             source,
+		RuleID:             conv.FromPGText[string](ruleID),
+		Description:        conv.FromPGText[string](description),
+		Match:              conv.FromPGText[string](match),
+		StartPos:           conv.PtrInt32ToInt(conv.FromPGInt4(startPos)),
+		EndPos:             conv.PtrInt32ToInt(conv.FromPGInt4(endPos)),
+		Confidence:         conv.FromPGFloat8(confidence),
+		Tags:               tags,
+		Spans:              parseRiskSpans(spans),
 		// MatchRedacted is populated later by redactResultMatchInPlace, only
 		// for callers ListRiskResults decides shouldn't see raw match/spans.
 		MatchRedacted: nil,

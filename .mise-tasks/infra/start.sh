@@ -81,7 +81,7 @@ if [ -n "$host_arch" ]; then
 fi
 
 # This worktree's own stack, first — with --remove-orphans. Pre-existing
-# worktrees can still run Temporal, Pub/Sub, or Presidio containers that
+# worktrees can still run Pub/Sub or Presidio containers that
 # compose.yml no longer declares. Removing this worktree's copies before
 # asserting the shared services frees fixed ports in the main tree and removes
 # obsolete remapped copies elsewhere. Profile-gated services (litellm,
@@ -111,35 +111,11 @@ docker ps -a --filter "label=com.docker.compose.service=pubsub-emulator" --filte
   | awk '$1 != "gram-shared" { print $2 }' \
   | xargs -r docker rm -f > /dev/null 2>&1 || true
 
-# One-time migration: Temporal now runs under the shared project too. Remove
-# only a non-shared Temporal container publishing the fixed gRPC port. Sibling
-# worktrees on remapped ports keep running until their next
-# git:worksync/infra:start migration.
-docker ps -a --filter "label=com.docker.compose.service=gram-temporal" --filter "publish=7233" \
-  --format '{{.Label "com.docker.compose.project"}} {{.ID}}' 2>/dev/null \
-  | awk '$1 != "gram-shared" { print $2 }' \
-  | xargs -r docker rm -f > /dev/null 2>&1 || true
-
-# Pub/Sub is required by the local streams processes, and Temporal is required
-# by seeding and every background worker. Wait for both healthchecks so a
-# container that starts and immediately exits cannot let infrastructure startup
-# report success.
+# Temporal belongs to this worktree; leave legacy shared Temporal available
+# for branches that have not migrated yet (no shared --remove-orphans).
+docker compose up -d --wait --wait-timeout 30 gram-temporal || exit 1
 docker compose -f compose.shared.yml -p gram-shared up -d --wait --wait-timeout 30 \
-  pubsub-emulator gram-temporal || exit 1
-
-# The shared Temporal server starts with the main tree's `default` namespace.
-# Every worktree gets a distinct TEMPORAL_NAMESPACE from git:workinit; create it
-# idempotently before any seed or daemon can submit workflows. The second
-# describe handles two concurrent starts racing to create the same namespace.
-if ! docker compose -f compose.shared.yml -p gram-shared exec -T gram-temporal \
-     temporal operator namespace describe --namespace "$TEMPORAL_NAMESPACE" > /dev/null 2>&1; then
-  echo "Creating Temporal namespace ${TEMPORAL_NAMESPACE}..."
-  docker compose -f compose.shared.yml -p gram-shared exec -T gram-temporal \
-    temporal operator namespace create --namespace "$TEMPORAL_NAMESPACE" > /dev/null 2>&1 \
-    || docker compose -f compose.shared.yml -p gram-shared exec -T gram-temporal \
-      temporal operator namespace describe --namespace "$TEMPORAL_NAMESPACE" > /dev/null \
-    || exit 1
-fi
+  pubsub-emulator || exit 1
 
 # Presidio and LGTM are shared too, but neither is a synchronous startup
 # dependency. A transient image pull or cold model must not take down this

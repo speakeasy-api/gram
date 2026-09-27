@@ -141,6 +141,11 @@ beforeEach(() => {
   mocks.status = "ready";
   mocks.enabled = false;
 });
+it("labels the permissions section as a section rather than an action", () => {
+  renderEditor();
+  expect(screen.getByText("Permissions", { exact: true })).toBeTruthy();
+});
+
 describe("role assignment confirmation", () => {
   function confirmAssignment() {
     const confirmation = screen.getByRole("checkbox", {
@@ -210,6 +215,7 @@ describe("agent management rollout", () => {
       renderEditor();
       expect(mocks.agents).toHaveBeenLastCalledWith(undefined, undefined, {
         enabled: false,
+        throwOnError: false,
       });
       expect(screen.queryByText("Assign Agents")).toBeNull();
     },
@@ -219,6 +225,7 @@ describe("agent management rollout", () => {
     renderEditor();
     expect(mocks.agents).toHaveBeenLastCalledWith(undefined, undefined, {
       enabled: true,
+      throwOnError: false,
     });
     fireEvent.click(screen.getByText("Assign Agents"));
     expect(

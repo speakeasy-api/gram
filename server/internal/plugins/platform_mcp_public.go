@@ -171,7 +171,7 @@ func generatePublicMarketplaceManifests(files map[string][]byte, cfg GenerateCon
 
 	codexManifest, err := marshalJSON(codexMarketplaceManifest{
 		Name:      PublicMarketplaceName,
-		Interface: codexInterface{DisplayName: platformMCPDisplayName, ShortDescription: platformMCPDescription},
+		Interface: codexInterface{DisplayName: platformMCPDisplayName, ShortDescription: platformMCPDescription, LongDescription: ""},
 		Plugins: []codexMarketplaceEntry{{
 			Name: platformMCPCodexPluginName,
 			Source: codexMarketplaceSource{

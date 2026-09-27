@@ -18,6 +18,8 @@ export type TimeSeriesStack = {
   key?: string;
   label: string;
   series: number[];
+  /** Stable index into the shared chart palette, independent of filtering. */
+  paletteIndex?: number;
   /**
    * Exact decimal integers aligned to series. Meter callers use these for
    * rollups, cumulative values, and tooltips; Number values remain chart

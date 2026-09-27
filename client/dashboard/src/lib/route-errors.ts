@@ -1,7 +1,7 @@
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { queryKeySessionInfo } from "@gram/client/react-query/sessionInfo.core.js";
 
-function getHttpStatusCode(error: unknown): number | undefined {
+export function getHttpStatusCode(error: unknown): number | undefined {
   if (error instanceof GramError) {
     return error.statusCode;
   }

@@ -122,7 +122,7 @@ describe("ConsentToolsApp", () => {
     );
   });
 
-  it("does not disable approval while an agent is selected", async () => {
+  it("does not override connection readiness while an agent is selected", async () => {
     listTools.mockReturnValue(new Promise(() => {}));
 
     const { button } = renderApp({}, true);
@@ -130,7 +130,7 @@ describe("ConsentToolsApp", () => {
     await waitFor(() =>
       expect(button.dataset["consentSelfReady"]).toBe("false"),
     );
-    expect(button.disabled).toBe(false);
+    expect(button.disabled).toBe(true);
   });
 
   it("exhausts pagination before becoming ready", async () => {

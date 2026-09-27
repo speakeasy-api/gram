@@ -1207,6 +1207,8 @@ func TestProcessWorkOSOrganizationEvents_MembershipFilterIncludesMembershipTypes
 		"organization.created",
 		"organization.updated",
 		"organization.deleted",
+		"organization_domain.verified",
+		"organization_domain.deleted",
 		"organization_role.created",
 		"organization_role.deleted",
 		"organization_role.updated",

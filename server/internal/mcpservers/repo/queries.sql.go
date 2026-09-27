@@ -494,6 +494,212 @@ func (q *Queries) HasLiveMCPServerInOrganization(ctx context.Context, arg HasLiv
 	return exists, err
 }
 
+const listEffectiveMCPServerToolAnnotations = `-- name: ListEffectiveMCPServerToolAnnotations :many
+WITH target_server AS (
+  SELECT s.toolset_id, s.tool_variations_group_id
+  FROM mcp_servers s
+  WHERE s.id = $1
+    AND s.project_id = $2
+    AND s.deleted IS FALSE
+),
+effective_variation_group AS (
+  SELECT COALESCE(
+    s.tool_variations_group_id,
+    t.tool_variations_group_id,
+    (
+      SELECT ptv.group_id
+      FROM project_tool_variations ptv
+      JOIN tool_variations_groups ptvg
+        ON ptvg.id = ptv.group_id
+       AND ptvg.project_id = $2
+       AND ptvg.deleted IS FALSE
+      WHERE ptv.project_id = $2
+      ORDER BY ptv.id DESC
+      LIMIT 1
+    )
+  ) AS group_id
+  FROM target_server s
+  LEFT JOIN toolsets t
+    ON t.id = s.toolset_id
+   AND t.project_id = $2
+   AND t.deleted IS FALSE
+),
+latest_toolset_version AS (
+  SELECT tv.tool_urns
+  FROM target_server s
+  JOIN toolsets t
+    ON t.id = s.toolset_id
+   AND t.project_id = $2
+   AND t.deleted IS FALSE
+  JOIN LATERAL (
+    SELECT version.tool_urns
+    FROM toolset_versions version
+    WHERE version.toolset_id = t.id
+      AND version.deleted IS FALSE
+    ORDER BY version.version DESC
+    LIMIT 1
+  ) tv ON TRUE
+),
+active_deployment AS (
+  SELECT d.id
+  FROM deployments d
+  JOIN deployment_statuses ds ON ds.deployment_id = d.id
+  WHERE d.project_id = $2
+    AND ds.status = 'completed'
+  ORDER BY d.seq DESC
+  LIMIT 1
+),
+http_source_deployments AS (
+  SELECT ad.id
+  FROM active_deployment ad
+  UNION ALL
+  SELECT pv.deployment_id
+  FROM active_deployment ad
+  JOIN deployments_packages dp ON dp.deployment_id = ad.id
+  JOIN package_versions pv
+    ON pv.id = dp.version_id
+   AND pv.package_id = dp.package_id
+   AND pv.deleted IS FALSE
+  JOIN packages p
+    ON p.id = pv.package_id
+   AND p.project_id = $2
+   AND p.deleted IS FALSE
+  JOIN deployments package_deployment
+    ON package_deployment.id = pv.deployment_id
+   AND package_deployment.project_id = $2
+),
+source_annotations AS (
+  SELECT
+    h.tool_urn,
+    h.name AS tool_name,
+    h.read_only_hint,
+    h.destructive_hint,
+    h.idempotent_hint,
+    h.open_world_hint
+  FROM latest_toolset_version tv
+  JOIN http_tool_definitions h ON h.tool_urn = ANY(tv.tool_urns)
+  JOIN http_source_deployments sd ON sd.id = h.deployment_id
+  WHERE h.project_id = $2
+    AND h.deleted IS FALSE
+  UNION ALL
+  SELECT
+    f.tool_urn,
+    f.name AS tool_name,
+    f.read_only_hint,
+    f.destructive_hint,
+    f.idempotent_hint,
+    f.open_world_hint
+  FROM latest_toolset_version tv
+  JOIN function_tool_definitions f ON f.tool_urn = ANY(tv.tool_urns)
+  JOIN active_deployment ad ON ad.id = f.deployment_id
+  WHERE f.project_id = $2
+    AND f.deleted IS FALSE
+  UNION ALL
+  SELECT
+    e.tool_urn,
+    e.name AS tool_name,
+    e.read_only_hint,
+    e.destructive_hint,
+    e.idempotent_hint,
+    e.open_world_hint
+  FROM latest_toolset_version tv
+  JOIN external_mcp_tool_definitions e ON e.tool_urn = ANY(tv.tool_urns)
+  JOIN external_mcp_attachments a ON a.id = e.external_mcp_attachment_id
+  JOIN active_deployment ad ON ad.id = a.deployment_id
+  WHERE e.deleted IS FALSE
+    AND a.deleted IS FALSE
+    AND e.type <> 'proxy'
+    AND e.name IS NOT NULL
+),
+varied_annotations AS (
+  SELECT
+    COALESCE(v.name, source.tool_name) AS tool_name,
+    COALESCE(v.read_only_hint, source.read_only_hint) AS read_only_hint,
+    COALESCE(v.destructive_hint, source.destructive_hint) AS destructive_hint,
+    COALESCE(v.idempotent_hint, source.idempotent_hint) AS idempotent_hint,
+    COALESCE(v.open_world_hint, source.open_world_hint) AS open_world_hint
+  FROM source_annotations source
+  LEFT JOIN effective_variation_group variation_group ON TRUE
+  LEFT JOIN tool_variations_groups owned_variation_group
+    ON owned_variation_group.id = variation_group.group_id
+   AND owned_variation_group.project_id = $2
+   AND owned_variation_group.deleted IS FALSE
+  LEFT JOIN tool_variations v
+    ON v.group_id = owned_variation_group.id
+   AND v.src_tool_urn = source.tool_urn
+   AND v.deleted IS FALSE
+),
+effective_annotations AS (
+  SELECT
+    m.tool_name,
+    m.read_only_hint,
+    m.destructive_hint,
+    m.idempotent_hint,
+    m.open_world_hint,
+    0 AS source_priority
+  FROM mcp_server_tool_metadata m
+  WHERE m.mcp_server_id = $1
+    AND m.project_id = $2
+    AND m.deleted IS FALSE
+  UNION ALL
+  SELECT
+    tool_name,
+    read_only_hint,
+    destructive_hint,
+    idempotent_hint,
+    open_world_hint,
+    1 AS source_priority
+  FROM varied_annotations
+)
+SELECT DISTINCT ON (tool_name)
+  tool_name,
+  read_only_hint,
+  destructive_hint,
+  idempotent_hint,
+  open_world_hint
+FROM effective_annotations
+ORDER BY tool_name, source_priority
+`
+
+type ListEffectiveMCPServerToolAnnotationsParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+type ListEffectiveMCPServerToolAnnotationsRow struct {
+	ToolName        string
+	ReadOnlyHint    pgtype.Bool
+	DestructiveHint pgtype.Bool
+	IdempotentHint  pgtype.Bool
+	OpenWorldHint   pgtype.Bool
+}
+
+func (q *Queries) ListEffectiveMCPServerToolAnnotations(ctx context.Context, arg ListEffectiveMCPServerToolAnnotationsParams) ([]ListEffectiveMCPServerToolAnnotationsRow, error) {
+	rows, err := q.db.Query(ctx, listEffectiveMCPServerToolAnnotations, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEffectiveMCPServerToolAnnotationsRow
+	for rows.Next() {
+		var i ListEffectiveMCPServerToolAnnotationsRow
+		if err := rows.Scan(
+			&i.ToolName,
+			&i.ReadOnlyHint,
+			&i.DestructiveHint,
+			&i.IdempotentHint,
+			&i.OpenWorldHint,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLiveMCPServerIDsInOrganization = `-- name: ListLiveMCPServerIDsInOrganization :many
 SELECT m.id
 FROM mcp_servers AS m
@@ -512,6 +718,43 @@ type ListLiveMCPServerIDsInOrganizationParams struct {
 
 func (q *Queries) ListLiveMCPServerIDsInOrganization(ctx context.Context, arg ListLiveMCPServerIDsInOrganizationParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, listLiveMCPServerIDsInOrganization, arg.Ids, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPServerIDsByUserSessionIssuerID = `-- name: ListMCPServerIDsByUserSessionIssuerID :many
+SELECT id
+FROM mcp_servers
+WHERE project_id = $1
+  AND user_session_issuer_id = $2
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+type ListMCPServerIDsByUserSessionIssuerIDParams struct {
+	ProjectID           uuid.UUID
+	UserSessionIssuerID uuid.NullUUID
+}
+
+// Every live MCP server in the project bound to one user session issuer.
+// A user session issuer is not unique per MCP server, so an operation that
+// mutates the issuer's client binding reaches every server listed here.
+func (q *Queries) ListMCPServerIDsByUserSessionIssuerID(ctx context.Context, arg ListMCPServerIDsByUserSessionIssuerIDParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMCPServerIDsByUserSessionIssuerID, arg.ProjectID, arg.UserSessionIssuerID)
 	if err != nil {
 		return nil, err
 	}
@@ -863,6 +1106,111 @@ func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, pro
 			&i.Slug,
 			&i.RemoteMcpServerID,
 			&i.TunneledMcpServerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServableMCPServersByOrganizationID = `-- name: ListServableMCPServersByOrganizationID :many
+SELECT
+    s.id AS mcp_server_id,
+    s.project_id AS mcp_server_project_id,
+    p.slug AS mcp_server_project_slug,
+    s.name AS mcp_server_name,
+    s.slug AS mcp_server_slug,
+    s.visibility AS mcp_server_visibility,
+    s.network_access_mode AS mcp_server_network_access_mode,
+    s.toolset_id AS mcp_server_toolset_id,
+    s.remote_mcp_server_id AS mcp_server_remote_mcp_server_id,
+    s.tunneled_mcp_server_id AS mcp_server_tunneled_mcp_server_id,
+    s.unproxied_mcp_server_id AS mcp_server_unproxied_mcp_server_id,
+    s.environment_id AS mcp_server_environment_id,
+    s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
+    s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
+FROM mcp_servers s
+JOIN projects p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+LEFT JOIN tunneled_mcp_servers t
+  ON t.id = s.tunneled_mcp_server_id
+ AND t.project_id = s.project_id
+ AND t.deleted IS FALSE
+WHERE p.organization_id = $1
+  AND s.deleted IS FALSE
+  AND s.visibility <> 'disabled'
+  AND s.slug IS NOT NULL
+ORDER BY s.project_id, s.slug
+`
+
+type ListServableMCPServersByOrganizationIDRow struct {
+	McpServerID                    uuid.UUID
+	McpServerProjectID             uuid.UUID
+	McpServerProjectSlug           string
+	McpServerName                  pgtype.Text
+	McpServerSlug                  pgtype.Text
+	McpServerVisibility            string
+	McpServerNetworkAccessMode     pgtype.Text
+	McpServerToolsetID             uuid.NullUUID
+	McpServerRemoteMcpServerID     uuid.NullUUID
+	McpServerTunneledMcpServerID   uuid.NullUUID
+	McpServerUnproxiedMcpServerID  uuid.NullUUID
+	McpServerEnvironmentID         uuid.NullUUID
+	McpServerToolVariationsGroupID uuid.NullUUID
+	McpServerRemoteSessionIssuerID uuid.NullUUID
+	TunneledResourceIdentifier     string
+}
+
+// Candidate members for a gateway whose membership is derived rather than
+// stored: an agent gateway has no meta_mcp_server_members rows, so it
+// enumerates here and lets the caller's own grants do the narrowing.
+//
+// Organization-wide on purpose. Agent grants are organization-scoped and a
+// selector's project is optional, so an agent may legitimately reach servers
+// in several projects; scoping this to one project would serve less than the
+// agent was granted. The caller's mcp:connect check is what narrows the
+// result, so enumerating widely here exposes nothing extra.
+//
+// Filtered exactly as ListServableMetaMCPMembers — disabled servers and
+// slugless legacy rows are excluded — so a server invisible to the stored
+// serving path is invisible to a derived one too. Carries the same backend
+// and dispatch columns that path needs, plus each member's project, since
+// members no longer share one, and each member's network access mode, which
+// the caller matches against the request's ingress surface so a private_only
+// server stays invisible on the public one. Ordered by project then slug: a derived
+// gateway has no operator-authored order, and slugs are unique only within a
+// project, so the pair is what makes the listing stable.
+func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, organizationID string) ([]ListServableMCPServersByOrganizationIDRow, error) {
+	rows, err := q.db.Query(ctx, listServableMCPServersByOrganizationID, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServableMCPServersByOrganizationIDRow
+	for rows.Next() {
+		var i ListServableMCPServersByOrganizationIDRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.McpServerProjectID,
+			&i.McpServerProjectSlug,
+			&i.McpServerName,
+			&i.McpServerSlug,
+			&i.McpServerVisibility,
+			&i.McpServerNetworkAccessMode,
+			&i.McpServerToolsetID,
+			&i.McpServerRemoteMcpServerID,
+			&i.McpServerTunneledMcpServerID,
+			&i.McpServerUnproxiedMcpServerID,
+			&i.McpServerEnvironmentID,
+			&i.McpServerToolVariationsGroupID,
+			&i.McpServerRemoteSessionIssuerID,
+			&i.TunneledResourceIdentifier,
 		); err != nil {
 			return nil, err
 		}

@@ -111,7 +111,7 @@ func seedRecheckSession(t *testing.T, ctx context.Context, ti *testInstance, slu
 	})
 	require.NoError(t, err)
 
-	tracking := repo.SetRemoteSessionValidationTrackingFixtureParams{
+	tracking := testrepo.SetRemoteSessionValidationTrackingFixtureParams{
 		LastValidatedAt:      pgtype.Timestamptz{},
 		LastRefreshAttemptAt: pgtype.Timestamptz{},
 		CreatedAt:            pgtype.Timestamptz{},
@@ -127,7 +127,7 @@ func seedRecheckSession(t *testing.T, ctx context.Context, ti *testInstance, slu
 	if seed.lastAttemptAgo > 0 {
 		tracking.LastRefreshAttemptAt = conv.ToPGTimestamptz(time.Now().Add(-seed.lastAttemptAgo))
 	}
-	require.NoError(t, q.SetRemoteSessionValidationTrackingFixture(ctx, tracking))
+	require.NoError(t, testrepo.New(ti.conn).SetRemoteSessionValidationTrackingFixture(ctx, tracking))
 
 	if seed.withGramSession {
 		seedGramSession(t, ctx, ti, subject, userIssuerID, slug, 24*time.Hour)

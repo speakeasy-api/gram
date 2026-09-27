@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -71,7 +72,7 @@ func (s *Service) ReportAIScan(ctx context.Context, payload *gen.ReportAIScanPay
 	if payload.TargetListVersion < 0 || payload.TargetListVersion > math.MaxInt32 {
 		return oops.E(oops.CodeBadRequest, nil, "target_list_version must be between 0 and 2147483647")
 	}
-	serial := normalizeSerial(payload.SerialNumber)
+	serial := deviceidentity.NormalizeSerial(payload.SerialNumber)
 	receivedAt := time.Now().UTC()
 
 	// Trouble reading the organization's scan targets must not reject a scan

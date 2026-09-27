@@ -16,15 +16,20 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	clientsgen "github.com/speakeasy-api/gram/server/gen/remote_session_clients"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -213,7 +218,7 @@ func TestHandleClientMetadataDocument_ServesDocument(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
-	require.Equal(t, "public, max-age=3600", rec.Header().Get("Cache-Control"))
+	require.Equal(t, "public, no-cache", rec.Header().Get("Cache-Control"))
 	require.NotEmpty(t, rec.Header().Get("ETag"))
 
 	var got map[string]any
@@ -226,6 +231,59 @@ func TestHandleClientMetadataDocument_ServesDocument(t *testing.T) {
 	require.Equal(t, "read:tools", got["scope"])
 	_, present := got["jwks_uri"]
 	require.False(t, present)
+}
+
+func TestHandleClientMetadataDocument_RevalidatesChangedGrantEvidence(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, auth.ProjectID)
+	issuerID := createCIMDIssuer(t, ctx, ti, "cimd-revalidate", "https://idp.example.com/authorize", "https://idp.example.com/token")
+	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cimd-revalidate-usi")
+	created := createCimdClient(t, ctx, ti, issuerID.String(), userIssuer.String(), nil)
+	mgr := newCIMDChallengeManager(t, ti, cimdServerURL)
+	setGrants := func(grants []string) {
+		t.Helper()
+		_, err := repo.New(ti.conn).SetEMAClientGrants(ctx, repo.SetEMAClientGrantsParams{
+			ID: uuid.MustParse(created.ID), ProjectID: conv.ToNullUUID(*auth.ProjectID),
+			OrganizationID: conv.ToPGText(auth.ActiveOrganizationID), GrantTypes: grants,
+		})
+		require.NoError(t, err)
+	}
+	fetch := func(etag string, status int) *httptest.ResponseRecorder {
+		t.Helper()
+		req := cimdDocumentRequest(t, created.ID, false)
+		req.Header.Set("If-None-Match", etag)
+		rec := httptest.NewRecorder()
+		require.NoError(t, mgr.HandleClientMetadataDocument(rec, req))
+		require.Equal(t, status, rec.Code)
+		require.Equal(t, "public, no-cache", rec.Result().Header.Get("Cache-Control"))
+		require.NotEmpty(t, rec.Header().Get("ETag"))
+		return rec
+	}
+	setGrants([]string{"authorization_code", "refresh_token"})
+	initial := fetch("", http.StatusOK)
+	etag := initial.Header().Get("ETag")
+	for _, validator := range []string{etag, "W/" + etag, `"other", ` + etag, "*"} {
+		unchanged := fetch(validator, http.StatusNotModified)
+		require.Equal(t, etag, unchanged.Header().Get("ETag"))
+		require.Empty(t, unchanged.Body.String())
+		require.Empty(t, unchanged.Header().Get("Content-Type"))
+	}
+	// Revoke recorded grant evidence explicitly. Unlinking a binding is not
+	// assumed to revoke the client's grants.
+	setGrants([]string{})
+	changed := fetch(etag, http.StatusOK)
+	require.NotEqual(t, etag, changed.Header().Get("ETag"))
+	require.Equal(t, "application/json; charset=utf-8", changed.Header().Get("Content-Type"))
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(changed.Body.Bytes(), &doc))
+	require.Equal(t, []any{}, doc["grant_types"])
+	require.Equal(t, []any{}, doc["response_types"])
+	unchanged := fetch(changed.Header().Get("ETag"), http.StatusNotModified)
+	require.Equal(t, changed.Header().Get("ETag"), unchanged.Header().Get("ETag"))
+	require.Empty(t, unchanged.Body.String())
 }
 
 func TestHandleClientMetadataDocument_PublishesAttachedKeySetAndStoredAuthMethod(t *testing.T) {
@@ -381,6 +439,116 @@ func TestCIMD_BuildAuthorizationUrlUsesMetadataURLAsClientID(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, created.ClientIDMetadataURI)
 	require.Equal(t, *created.ClientIDMetadataURI, parsed.Query().Get("client_id"), "authorize leg must send the CIMD document URL as client_id")
+}
+
+func TestCIMD_CallbackAuthorizationFailureRecordsRegistrationOutcome(t *testing.T) {
+	t.Parallel()
+
+	mgr, reader, state := newCIMDCallbackFailureFixture(t)
+	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=unauthorized_client&error_description="+url.QueryEscape(" rejected\nclient ")+"&state="+url.QueryEscape(state), nil)
+	untrustedCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=unauthorized_client&state=unknown", nil)
+
+	require.Error(t, mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), untrustedCallback))
+	require.Empty(t, registrationFailurePoints(t, reader), "an error without trusted state must not emit registration telemetry")
+	err := mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callback)
+	require.Error(t, err)
+
+	points := registrationFailurePoints(t, reader)
+	require.Len(t, points, 1)
+	require.EqualValues(t, 1, points[0].Value, "one denied callback records one failure, not a point that aggregated several")
+	require.Equal(t, attribute.NewSet(
+		attr.OAuthRegistrationMethod(registration.MethodCIMD),
+		attr.OAuthRegistrationOutcome(registration.OutcomeRefused),
+		attr.OAuthRegistrationReason(registration.ReasonAuthorizationRejected),
+		attr.OAuthRegistrationRetryable(false),
+	), points[0].Attributes)
+}
+
+func TestCIMD_CallbackAccessDeniedDoesNotRecordRegistrationFailure(t *testing.T) {
+	t.Parallel()
+
+	mgr, reader, state := newCIMDCallbackFailureFixture(t)
+	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=access_denied&state="+url.QueryEscape(state), nil)
+
+	err := mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callback)
+	require.Error(t, err)
+	require.Empty(t, registrationFailurePoints(t, reader))
+}
+
+// A provider that answers temporarily_unavailable has not refused; it is the
+// retryable half of the completed CIMD outcomes, and it reaches the counter
+// through the same callback path as a refusal.
+func TestCIMD_CallbackUpstreamUnavailableRecordsRetryableFailure(t *testing.T) {
+	t.Parallel()
+
+	mgr, reader, state := newCIMDCallbackFailureFixture(t)
+	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=temporarily_unavailable&state="+url.QueryEscape(state), nil)
+
+	err := mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callback)
+	require.Error(t, err)
+
+	points := registrationFailurePoints(t, reader)
+	require.Len(t, points, 1)
+	require.EqualValues(t, 1, points[0].Value)
+	require.Equal(t, attribute.NewSet(
+		attr.OAuthRegistrationMethod(registration.MethodCIMD),
+		attr.OAuthRegistrationOutcome(registration.OutcomeUnreachable),
+		attr.OAuthRegistrationReason(registration.ReasonUpstreamUnavailable),
+		attr.OAuthRegistrationRetryable(true),
+	), points[0].Attributes)
+}
+
+func newCIMDCallbackFailureFixture(t *testing.T) (*remotesessions.ChallengeManager, *sdkmetric.ManualReader, string) {
+	t.Helper()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	issuerID := createCIMDIssuer(t, ctx, ti, "cimd-callback-failure-"+uuid.NewString(), "https://idp.example.com/authorize", "https://idp.example.com/token")
+	userIssuer := createUserSessionIssuer(t, ctx, ti.conn, "cimd-callback-failure-usi-"+uuid.NewString())
+	createCimdClient(t, ctx, ti, issuerID.String(), userIssuer.String(), nil)
+
+	reader := sdkmetric.NewManualReader()
+	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	mgr := remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), meterProvider, ti.conn, testenv.NewEncryptionClient(t), policy, nil, ti.redisCache, mustURL(t, cimdServerURL))
+	clients, err := mgr.ListClients(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, userIssuer)
+	require.NoError(t, err)
+	require.Len(t, clients, 1)
+	subject := urn.NewUserSubject("cimd-callback-failure-subject")
+	authorizationURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		ID:                  uuid.NewString(),
+		ProjectID:           *authCtx.ProjectID,
+		OrganizationID:      authCtx.ActiveOrganizationID,
+		UserSessionIssuerID: userIssuer,
+		Subject:             &subject,
+		McpSlug:             "cimd-callback-failure",
+	}, clients[0])
+	require.NoError(t, err)
+	parsed, err := url.Parse(authorizationURL)
+	require.NoError(t, err)
+	require.NotEmpty(t, parsed.Query().Get("state"))
+	return mgr, reader, parsed.Query().Get("state")
+}
+
+func registrationFailurePoints(t *testing.T, reader *sdkmetric.ManualReader) []metricdata.DataPoint[int64] {
+	t.Helper()
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &rm))
+	for _, scope := range rm.ScopeMetrics {
+		for _, metric := range scope.Metrics {
+			if metric.Name != "gram.oauth.client_registration.failures" {
+				continue
+			}
+			sum, ok := metric.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			return sum.DataPoints
+		}
+	}
+	return nil
 }
 
 func TestCIMD_RefreshUsesMetadataURLAsClientIDWithoutBasicAuth(t *testing.T) {

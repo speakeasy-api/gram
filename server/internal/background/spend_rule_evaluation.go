@@ -20,6 +20,11 @@ const (
 	spendRuleEvaluationWorkflowID = "v1:spend-rule-evaluation"
 	spendRuleEvaluationScheduleID = "v1:spend-rule-evaluation-schedule"
 
+	spendRuleEvaluationInterval = spendrules.EvaluationInterval
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	spendRuleEvaluationCatchupWindow = spendRuleEvaluationInterval - time.Second
+
 	// spendRuleEvaluationRunTimeout budgets one bounded page of the scheduled
 	// sweep. Larger sweeps ContinueAsNew with the remaining orgs.
 	spendRuleEvaluationRunTimeout = 15 * time.Minute
@@ -266,13 +271,7 @@ func AddSpendRuleEvaluationSchedule(ctx context.Context, temporalEnv *tenv.Envir
 			schedule := input.Description.Schedule
 			schedule.Spec = &options.Spec
 			schedule.Action = options.Action
-			if schedule.Policy == nil {
-				schedule.Policy = &client.SchedulePolicies{
-					Overlap:        enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-					CatchupWindow:  0,
-					PauseOnFailure: false,
-				}
-			}
+			setScheduleCatchup(&schedule, spendRuleEvaluationCatchupWindow)
 			return &client.ScheduleUpdate{Schedule: &schedule, TypedSearchAttributes: nil}, nil
 		},
 	}); err != nil {
@@ -283,8 +282,9 @@ func AddSpendRuleEvaluationSchedule(ctx context.Context, temporalEnv *tenv.Envir
 
 func buildSpendRuleEvaluationScheduleOptions(temporalEnv *tenv.Environment) client.ScheduleOptions {
 	return client.ScheduleOptions{
-		ID:      spendRuleEvaluationScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		CatchupWindow: spendRuleEvaluationCatchupWindow,
+		ID:            spendRuleEvaluationScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{{Every: spendrules.EvaluationInterval}},
 		},

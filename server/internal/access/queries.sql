@@ -1224,3 +1224,274 @@ ORDER BY LOWER(name), id;
 -- ends. The role row lock is not enough on its own: a system role lives in
 -- global_roles and has no per-organization row to lock.
 SELECT pg_advisory_xact_lock(hashtextextended(@organization_id::text || ':' || sqlc.arg(role_urn)::text, 0));
+
+-- name: LockDirectoryRoleMappingSource :exec
+-- Serializes mapping writes for one group or attribute value, so the prior
+-- role read before an upsert is still current when the upsert lands. Row
+-- locks cannot do this for a first-time mapping, which has no row yet. Held
+-- until the transaction ends.
+SELECT pg_advisory_xact_lock(hashtextextended('access.directory_role_mapping:' || sqlc.arg(source_key)::text, 0));
+
+-- name: ListUserRolePrincipals :many
+-- Every role principal a member holds, in one read: direct role assignments
+-- first (the same rows as ListMemberRolePrincipalsByUser), then roles granted
+-- through directory role mappings. A mapping applies when its group contains
+-- the member's directory profile, or its attribute value matches it. The
+-- profile is the directory user linked to the member, falling back to an
+-- unlinked directory user with the same email. A profile linked to another
+-- user never matches. Mappings that point at a deleted role are skipped. Callers
+-- dedupe roles that come from both sources.
+WITH direct AS (
+  SELECT
+    COALESCE(organization_roles.workos_slug, global_roles.workos_slug)::text AS role_slug,
+    ora.role_urn::text AS principal_urn
+  FROM organization_role_assignments AS ora
+  LEFT JOIN organization_roles
+    ON ora.role_urn = 'role:organization:' || organization_roles.id::text
+    AND organization_roles.organization_id = ora.organization_id
+    AND organization_roles.deleted IS FALSE
+    AND organization_roles.workos_deleted IS FALSE
+  LEFT JOIN global_roles
+    ON ora.role_urn = 'role:global:' || global_roles.id::text
+    AND global_roles.deleted IS FALSE
+    AND global_roles.workos_deleted IS FALSE
+  WHERE ora.organization_id = @organization_id
+    AND ora.user_id = sqlc.arg(user_id)::text
+    AND COALESCE(organization_roles.workos_slug, global_roles.workos_slug) IS NOT NULL
+    AND ora.deleted_at IS NULL
+),
+member AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  WHERE u.id = sqlc.arg(user_id)::text
+),
+profile AS (
+  SELECT d.id, d.attributes
+  FROM directory_users AS d
+  CROSS JOIN member
+  WHERE d.organization_id = @organization_id
+    AND d.deleted IS FALSE
+    AND d.workos_deleted IS FALSE
+    AND (d.user_id = member.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(member.email)))
+  ORDER BY (d.user_id = member.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+  LIMIT 1
+),
+mapped AS (
+  SELECT DISTINCT drm.role_urn::text AS principal_urn
+  FROM directory_role_mappings AS drm
+  CROSS JOIN profile
+  WHERE drm.organization_id = @organization_id
+    AND drm.deleted IS FALSE
+    AND (
+      (
+        drm.source_kind = 'group'
+        AND EXISTS (
+          SELECT 1
+          FROM directory_user_group_memberships AS m
+          JOIN directory_groups AS dg
+            ON dg.id = m.directory_group_id
+            AND dg.organization_id = drm.organization_id
+            AND dg.deleted IS FALSE
+            AND dg.workos_deleted IS FALSE
+          WHERE m.directory_user_id = profile.id
+            AND m.directory_group_id = drm.directory_group_id
+            AND m.deleted IS FALSE
+        )
+      )
+      OR (
+        drm.source_kind = 'attribute'
+        AND profile.attributes ->> drm.attribute_key = drm.attribute_value
+      )
+    )
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM organization_roles AS r
+        WHERE drm.role_urn = 'role:organization:' || r.id::text
+          AND r.organization_id = drm.organization_id
+          AND r.deleted IS FALSE
+          AND r.workos_deleted IS FALSE
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM global_roles AS g
+        WHERE drm.role_urn = 'role:global:' || g.id::text
+          AND g.deleted IS FALSE
+          AND g.workos_deleted IS FALSE
+      )
+    )
+)
+SELECT principal_urn::text AS principal_urn
+FROM (
+  SELECT 0 AS source_rank, role_slug AS sort_key, principal_urn FROM direct
+  UNION ALL
+  SELECT 1 AS source_rank, principal_urn AS sort_key, principal_urn FROM mapped
+) AS roles
+ORDER BY source_rank, sort_key;
+
+-- name: ListDirectoryMappedRoleMemberCounts :many
+-- Per role, the active members who hold it only through a directory role
+-- mapping. Members with a live direct assignment of the same role are left
+-- out, so callers add this to the direct member count. Each member's
+-- directory profile is chosen the same way as in ListUserRolePrincipals.
+-- A NULL role_urns counts every role; otherwise only the listed ones.
+WITH members AS (
+  SELECT u.id, u.email
+  FROM users AS u
+  JOIN organization_user_relationships AS our
+    ON our.user_id = u.id
+    AND our.organization_id = @organization_id
+    AND our.deleted_at IS NULL
+  WHERE u.deleted_at IS NULL
+),
+profiles AS (
+  SELECT members.id AS user_id, p.id AS directory_user_id, p.attributes
+  FROM members
+  CROSS JOIN LATERAL (
+    SELECT d.id, d.attributes
+    FROM directory_users AS d
+    WHERE d.organization_id = @organization_id
+      AND d.deleted IS FALSE
+      AND d.workos_deleted IS FALSE
+      AND (d.user_id = members.id OR (d.user_id IS NULL AND LOWER(d.email) = LOWER(members.email)))
+    ORDER BY (d.user_id = members.id) DESC NULLS LAST, d.workos_updated_at DESC, d.id
+    LIMIT 1
+  ) AS p
+)
+SELECT
+  drm.role_urn::text AS role_urn,
+  COUNT(DISTINCT profiles.user_id)::bigint AS member_count
+FROM directory_role_mappings AS drm
+JOIN profiles
+  ON (
+    drm.source_kind = 'group'
+    AND EXISTS (
+      SELECT 1
+      FROM directory_user_group_memberships AS m
+      JOIN directory_groups AS dg
+        ON dg.id = m.directory_group_id
+        AND dg.organization_id = drm.organization_id
+        AND dg.deleted IS FALSE
+        AND dg.workos_deleted IS FALSE
+      WHERE m.directory_user_id = profiles.directory_user_id
+        AND m.directory_group_id = drm.directory_group_id
+        AND m.deleted IS FALSE
+    )
+  )
+  OR (
+    drm.source_kind = 'attribute'
+    AND profiles.attributes ->> drm.attribute_key = drm.attribute_value
+  )
+WHERE drm.organization_id = @organization_id
+  AND drm.deleted IS FALSE
+  AND (sqlc.narg(role_urns)::text[] IS NULL OR drm.role_urn = ANY(sqlc.narg(role_urns)::text[]))
+  AND NOT EXISTS (
+    SELECT 1
+    FROM organization_role_assignments AS ora
+    WHERE ora.organization_id = drm.organization_id
+      AND ora.role_urn = drm.role_urn
+      AND ora.user_id = profiles.user_id
+      AND ora.deleted_at IS NULL
+  )
+GROUP BY drm.role_urn;
+
+-- name: ListDirectoryRoleMappings :many
+SELECT
+  drm.id,
+  drm.source_kind,
+  drm.directory_group_id,
+  dg.name AS directory_group_name,
+  drm.attribute_key,
+  drm.attribute_value,
+  drm.role_urn,
+  drm.created_at,
+  drm.updated_at
+FROM directory_role_mappings AS drm
+LEFT JOIN directory_groups AS dg
+  ON dg.id = drm.directory_group_id
+  AND dg.organization_id = drm.organization_id
+WHERE drm.organization_id = @organization_id
+  AND drm.deleted IS FALSE
+ORDER BY drm.source_kind, dg.name, drm.attribute_key, drm.attribute_value, drm.id;
+
+-- name: UpsertDirectoryGroupRoleMapping :one
+INSERT INTO directory_role_mappings (
+  organization_id,
+  source_kind,
+  directory_group_id,
+  role_urn
+)
+VALUES (
+  @organization_id,
+  'group',
+  @directory_group_id,
+  @role_urn
+)
+ON CONFLICT (organization_id, directory_group_id)
+  WHERE deleted IS FALSE AND directory_group_id IS NOT NULL
+DO UPDATE SET
+  role_urn = EXCLUDED.role_urn,
+  updated_at = clock_timestamp()
+RETURNING id, role_urn, created_at, updated_at;
+
+-- name: UpsertDirectoryAttributeRoleMapping :one
+INSERT INTO directory_role_mappings (
+  organization_id,
+  source_kind,
+  attribute_key,
+  attribute_value,
+  role_urn
+)
+VALUES (
+  @organization_id,
+  'attribute',
+  @attribute_key,
+  @attribute_value,
+  @role_urn
+)
+ON CONFLICT (organization_id, attribute_key, attribute_value)
+  WHERE deleted IS FALSE AND attribute_key IS NOT NULL
+DO UPDATE SET
+  role_urn = EXCLUDED.role_urn,
+  updated_at = clock_timestamp()
+RETURNING id, role_urn, created_at, updated_at;
+
+-- name: GetLiveDirectoryRoleMappingRoleForSource :one
+-- The role a group or attribute value is mapped to now, locked so a
+-- concurrent set cannot slip between this read and the upsert.
+SELECT role_urn
+FROM directory_role_mappings
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND (
+    (sqlc.narg('directory_group_id')::uuid IS NOT NULL AND directory_group_id = sqlc.narg('directory_group_id')::uuid)
+    OR (
+      sqlc.narg('attribute_key')::text IS NOT NULL
+      AND attribute_key = sqlc.narg('attribute_key')::text
+      AND attribute_value = sqlc.narg('attribute_value')::text
+    )
+  )
+FOR UPDATE;
+
+-- name: GetActiveDirectoryGroupName :one
+SELECT name
+FROM directory_groups
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+  AND workos_deleted IS FALSE;
+
+-- name: GetDirectoryRoleMapping :one
+SELECT id, source_kind, directory_group_id, attribute_key, attribute_value, role_urn
+FROM directory_role_mappings
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
+-- name: DeleteDirectoryRoleMapping :execrows
+UPDATE directory_role_mappings
+SET deleted_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;

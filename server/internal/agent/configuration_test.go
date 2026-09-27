@@ -185,6 +185,44 @@ func TestUpdateConfigurationRejectsInvalidAIScanInterval(t *testing.T) {
 	}
 }
 
+func TestUpdateConfigurationAcceptsDisableAIScan(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	_, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+		Config: map[string]any{"disable_ai_scan": true},
+	})
+	require.NoError(t, err)
+
+	poll, err := ti.service.GetPlugins(ctx, &gen.GetPluginsPayload{Email: new("developer@example.com")})
+	require.NoError(t, err)
+	require.NotNil(t, poll.Configuration)
+	require.Equal(t, true, poll.Configuration.Config["disable_ai_scan"])
+
+	// It is a known key, so an update that omits it turns the scan back on.
+	updated, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+		Config: map[string]any{"sync_interval_seconds": 300},
+	})
+	require.NoError(t, err)
+	require.NotContains(t, updated.Config, "disable_ai_scan")
+}
+
+func TestUpdateConfigurationRejectsInvalidDisableAIScan(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgAdmin, ti.orgID))
+
+	for _, invalid := range []any{"true", 1, nil} {
+		_, err := ti.service.UpdateConfiguration(ctx, &gen.UpdateConfigurationPayload{
+			Config: map[string]any{"disable_ai_scan": invalid},
+		})
+		var shareableErr *oops.ShareableError
+		require.ErrorAs(t, err, &shareableErr, "value %v must be rejected", invalid)
+		require.Equal(t, oops.CodeInvalid, shareableErr.Code)
+	}
+}
+
 func TestUpdateConfigurationPreservesStoredUnknownKeys(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)

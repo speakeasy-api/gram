@@ -58,6 +58,7 @@ import GatewayDetailPage from "./pages/mcp/gateway/GatewayDetails";
 import MCPServerDetails from "./pages/mcp/x/MCPServerDetails";
 import { InsightsHooksPage, InsightsRoot } from "./pages/insights/Insights";
 import Costs from "./pages/costs/Costs";
+import Explore from "./pages/explore/Explore";
 import IdentitiesIndex, {
   IdentityDetailIndexRedirect,
   IdentitiesRoot,
@@ -106,6 +107,10 @@ import {
   RemoteIdentityProvidersPage,
   RemoteIdentityProvidersRoot,
 } from "./pages/remote-identity-providers/RemoteIdentityProviders";
+import {
+  WorkloadIdentitiesPage,
+  WorkloadIdentitiesRoot,
+} from "./pages/workload-identities/WorkloadIdentities";
 import RemoteIdentityProviderDetail from "./pages/remote-identity-providers/RemoteIdentityProviderDetail";
 import RemoteSessionClientDetail from "./pages/remote-identity-providers/RemoteSessionClientDetail";
 import PlatformAdminOverview from "./pages/platform-admin/Overview";
@@ -136,6 +141,7 @@ import {
 import ShadowAIHarnesses from "./pages/shadow-ai/ShadowAIHarnesses";
 import ShadowAIAssistants from "./pages/shadow-ai/ShadowAIAssistants";
 import ShadowAIModels from "./pages/shadow-ai/ShadowAIModels";
+import ShadowAIToolDetail from "./pages/shadow-ai/ShadowAIToolDetail";
 import ShadowMCP, { ShadowMCPRoot } from "./pages/shadow-mcp/ShadowMCP";
 import ShadowMCPServerDetail from "./pages/shadow-mcp/ShadowMCPServerDetail";
 import RiskOverviewCategoriesIndex from "./pages/security/RiskOverviewCategoriesIndex";
@@ -158,9 +164,10 @@ import {
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
 
-const SetupBoard = React.lazy(() => import("./pages/setup/SetupBoard"));
-const SetupTaskPage = React.lazy(() => import("./pages/setup/SetupTaskPage"));
 const SetupWizard = React.lazy(() => import("./pages/setup/SetupWizard"));
+const SetupTaskRedirect = React.lazy(
+  () => import("./pages/setup/SetupTaskRedirect"),
+);
 
 type AppRouteBasic = {
   title: string;
@@ -694,6 +701,15 @@ const ROUTE_STRUCTURE = {
     },
   },
 
+  workloadIdentities: {
+    title: "Workload Identities",
+    url: "workload-identities",
+    icon: "cpu",
+    stage: "preview",
+    component: WorkloadIdentitiesRoot,
+    indexComponent: WorkloadIdentitiesPage,
+  },
+
   agents: {
     title: "Agent Identity",
     url: "agent-management",
@@ -782,6 +798,13 @@ const ROUTE_STRUCTURE = {
         component: Costs,
       },
     },
+  },
+  explore: {
+    title: "Explore",
+    url: "explore",
+    icon: "telescope",
+    component: Explore,
+    stage: "preview",
   },
   logs: {
     title: "Tool Logs",
@@ -893,20 +916,47 @@ const ROUTE_STRUCTURE = {
     component: ShadowAIRoot,
     indexComponent: ShadowAIIndexRedirect,
     subPages: {
+      // Each tool tab opens a row onto the people running that tool. The
+      // detail is nested under its tab, as the server detail is under MCPs,
+      // so the breadcrumb says which tab a pasted link came from.
       harnesses: {
         title: "Harnesses",
         url: "harnesses",
-        component: ShadowAIHarnesses,
+        component: ShadowAIRoot,
+        indexComponent: ShadowAIHarnesses,
+        subPages: {
+          detail: {
+            title: "Shadow AI Tool",
+            url: ":targetId",
+            component: ShadowAIToolDetail,
+          },
+        },
       },
       assistants: {
         title: "Assistants",
         url: "assistants",
-        component: ShadowAIAssistants,
+        component: ShadowAIRoot,
+        indexComponent: ShadowAIAssistants,
+        subPages: {
+          detail: {
+            title: "Shadow AI Tool",
+            url: ":targetId",
+            component: ShadowAIToolDetail,
+          },
+        },
       },
       models: {
         title: "Models",
         url: "models",
-        component: ShadowAIModels,
+        component: ShadowAIRoot,
+        indexComponent: ShadowAIModels,
+        subPages: {
+          detail: {
+            title: "Shadow AI Tool",
+            url: ":targetId",
+            component: ShadowAIToolDetail,
+          },
+        },
       },
       mcps: {
         title: "MCPs",
@@ -1530,26 +1580,16 @@ const ORG_ROUTE_STRUCTURE = {
     title: "Setup",
     url: "setup",
     icon: "settings",
-    component: SetupBoard,
-    outsideMainLayout: true,
-  },
-  // The linear wizard walks every board card in order, one owner in one
-  // sitting; the board at /setup stays the default. The header's view button
-  // swaps between the two. Static, so it wins over setup/:taskSlug below.
-  setupWizard: {
-    title: "Setup wizard",
-    url: "setup/wizard",
-    icon: "list-checks",
     component: SetupWizard,
     outsideMainLayout: true,
   },
-  // Each board card opens as its own page at a short slug (setup/idp,
-  // setup/anthropic-observability, ...), with a rail of that card's own steps.
+  // Legacy per-card pages (setup/idp, setup/wizard, ...) open the wizard on
+  // that card.
   setupTask: {
     title: "Setup task",
     url: "setup/:taskSlug",
     icon: "list-checks",
-    component: SetupTaskPage,
+    component: SetupTaskRedirect,
     outsideMainLayout: true,
   },
   // Headless mode renders its own chrome (mode tabs only, no sidebar or

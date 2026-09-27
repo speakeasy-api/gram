@@ -89,7 +89,7 @@ const clearOrganizationWorkosID = `-- name: ClearOrganizationWorkosID :one
 UPDATE organizations
 SET workos_id = NULL, updated_at = ?1
 WHERE id = ?2
-RETURNING id, name, slug, account_type, workos_id, external_id, created_at, updated_at
+RETURNING id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at
 `
 
 type ClearOrganizationWorkosIDParams struct {
@@ -109,6 +109,7 @@ func (q *Queries) ClearOrganizationWorkosID(ctx context.Context, arg ClearOrgani
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -178,6 +179,21 @@ func (q *Queries) ConsumeAuthCodeForClient(ctx context.Context, arg ConsumeAuthC
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const countDirectoryGroups = `-- name: CountDirectoryGroups :one
+
+SELECT COUNT(*) FROM directory_groups WHERE organization_id = ?1
+`
+
+// =============================================================================
+// WorkOS emulation: directory sync
+// =============================================================================
+func (q *Queries) CountDirectoryGroups(ctx context.Context, organizationID uuid.UUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countDirectoryGroups, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const createAuthCode = `-- name: CreateAuthCode :one
@@ -642,17 +658,18 @@ func (q *Queries) CreateOAuthClient(ctx context.Context, arg CreateOAuthClientPa
 
 const createOrganization = `-- name: CreateOrganization :one
 
-INSERT INTO organizations (id, name, slug, account_type, workos_id, external_id)
+INSERT INTO organizations (id, name, slug, account_type, workos_id, external_id, domains)
 VALUES (
   ?1,
   ?2,
   ?3,
   COALESCE(?4, 'enterprise'),
   ?5,
-  ?6
+  ?6,
+  COALESCE(?7, '[]')
 )
 ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
-RETURNING id, name, slug, account_type, workos_id, external_id, created_at, updated_at
+RETURNING id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at
 `
 
 type CreateOrganizationParams struct {
@@ -662,6 +679,7 @@ type CreateOrganizationParams struct {
 	AccountType interface{}
 	WorkosID    sql.NullString
 	ExternalID  sql.NullString
+	Domains     interface{}
 }
 
 // =============================================================================
@@ -679,6 +697,7 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 		arg.AccountType,
 		arg.WorkosID,
 		arg.ExternalID,
+		arg.Domains,
 	)
 	var i Organization
 	err := row.Scan(
@@ -688,6 +707,7 @@ func (q *Queries) CreateOrganization(ctx context.Context, arg CreateOrganization
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1043,6 +1063,45 @@ func (q *Queries) GetCurrentUser(ctx context.Context, mode string) (CurrentUser,
 	return i, err
 }
 
+const getDirectoryGroup = `-- name: GetDirectoryGroup :one
+SELECT id, organization_id, name, created_at, updated_at FROM directory_groups WHERE id = ?1
+`
+
+func (q *Queries) GetDirectoryGroup(ctx context.Context, id uuid.UUID) (DirectoryGroup, error) {
+	row := q.db.QueryRowContext(ctx, getDirectoryGroup, id)
+	var i DirectoryGroup
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getDirectoryUser = `-- name: GetDirectoryUser :one
+SELECT id, organization_id, email, first_name, last_name, job_title, state, custom_attributes, created_at, updated_at FROM directory_users WHERE id = ?1
+`
+
+func (q *Queries) GetDirectoryUser(ctx context.Context, id uuid.UUID) (DirectoryUser, error) {
+	row := q.db.QueryRowContext(ctx, getDirectoryUser, id)
+	var i DirectoryUser
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.FirstName,
+		&i.LastName,
+		&i.JobTitle,
+		&i.State,
+		&i.CustomAttributes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getEmaApp = `-- name: GetEmaApp :one
 SELECT id, client_id, client_secret, jwks, name, enabled, created_at, updated_at FROM ema_apps WHERE id = ?1
 `
@@ -1345,7 +1404,7 @@ func (q *Queries) GetOAuthClient(ctx context.Context, clientID string) (OauthCli
 }
 
 const getOrganization = `-- name: GetOrganization :one
-SELECT id, name, slug, account_type, workos_id, external_id, created_at, updated_at FROM organizations WHERE id = ?1
+SELECT id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at FROM organizations WHERE id = ?1
 `
 
 func (q *Queries) GetOrganization(ctx context.Context, id uuid.UUID) (Organization, error) {
@@ -1358,6 +1417,7 @@ func (q *Queries) GetOrganization(ctx context.Context, id uuid.UUID) (Organizati
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1365,7 +1425,7 @@ func (q *Queries) GetOrganization(ctx context.Context, id uuid.UUID) (Organizati
 }
 
 const getOrganizationByWorkosID = `-- name: GetOrganizationByWorkosID :one
-SELECT id, name, slug, account_type, workos_id, external_id, created_at, updated_at FROM organizations WHERE workos_id = ?1
+SELECT id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at FROM organizations WHERE workos_id = ?1
 `
 
 // GetOrganizationByWorkosID looks up an organization by its workos_id
@@ -1381,6 +1441,7 @@ func (q *Queries) GetOrganizationByWorkosID(ctx context.Context, workosID sql.Nu
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1431,6 +1492,197 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const insertDirectoryGroup = `-- name: InsertDirectoryGroup :exec
+INSERT OR IGNORE INTO directory_groups (id, organization_id, name)
+VALUES (?1, ?2, ?3)
+`
+
+type InsertDirectoryGroupParams struct {
+	ID             uuid.UUID
+	OrganizationID uuid.UUID
+	Name           string
+}
+
+func (q *Queries) InsertDirectoryGroup(ctx context.Context, arg InsertDirectoryGroupParams) error {
+	_, err := q.db.ExecContext(ctx, insertDirectoryGroup, arg.ID, arg.OrganizationID, arg.Name)
+	return err
+}
+
+const insertDirectoryGroupMember = `-- name: InsertDirectoryGroupMember :exec
+INSERT OR IGNORE INTO directory_group_members (group_id, user_id)
+SELECT g.id, u.id
+FROM directory_groups g
+JOIN directory_users u ON u.organization_id = g.organization_id
+WHERE g.id = ?1
+  AND u.id = ?2
+  AND g.organization_id = ?3
+`
+
+type InsertDirectoryGroupMemberParams struct {
+	GroupID        uuid.UUID
+	UserID         uuid.UUID
+	OrganizationID uuid.UUID
+}
+
+// InsertDirectoryGroupMember only links a group and a user that both belong
+// to the given org, so a membership can never span two orgs.
+func (q *Queries) InsertDirectoryGroupMember(ctx context.Context, arg InsertDirectoryGroupMemberParams) error {
+	_, err := q.db.ExecContext(ctx, insertDirectoryGroupMember, arg.GroupID, arg.UserID, arg.OrganizationID)
+	return err
+}
+
+const insertDirectoryUser = `-- name: InsertDirectoryUser :exec
+INSERT OR IGNORE INTO directory_users (
+  id, organization_id, email, first_name, last_name, job_title, custom_attributes
+) VALUES (
+  ?1, ?2, ?3, ?4, ?5, ?6, ?7
+)
+`
+
+type InsertDirectoryUserParams struct {
+	ID               uuid.UUID
+	OrganizationID   uuid.UUID
+	Email            string
+	FirstName        string
+	LastName         string
+	JobTitle         string
+	CustomAttributes string
+}
+
+func (q *Queries) InsertDirectoryUser(ctx context.Context, arg InsertDirectoryUserParams) error {
+	_, err := q.db.ExecContext(ctx, insertDirectoryUser,
+		arg.ID,
+		arg.OrganizationID,
+		arg.Email,
+		arg.FirstName,
+		arg.LastName,
+		arg.JobTitle,
+		arg.CustomAttributes,
+	)
+	return err
+}
+
+const listDirectoryGroups = `-- name: ListDirectoryGroups :many
+SELECT g.id, g.organization_id, g.name, g.created_at, g.updated_at FROM directory_groups g
+WHERE g.organization_id = ?1
+  AND g.id > ?2
+  AND (
+    ?3 IS NULL
+    OR EXISTS (
+      SELECT 1 FROM directory_group_members m
+      WHERE m.group_id = g.id AND m.user_id = ?3
+    )
+  )
+ORDER BY g.id ASC
+LIMIT ?4
+`
+
+type ListDirectoryGroupsParams struct {
+	OrganizationID uuid.UUID
+	After          uuid.UUID
+	UserID         interface{}
+	MaxRows        int64
+}
+
+// ListDirectoryGroups keyset-paginates an org's groups, optionally narrowed
+// to the groups a directory user belongs to.
+func (q *Queries) ListDirectoryGroups(ctx context.Context, arg ListDirectoryGroupsParams) ([]DirectoryGroup, error) {
+	rows, err := q.db.QueryContext(ctx, listDirectoryGroups,
+		arg.OrganizationID,
+		arg.After,
+		arg.UserID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DirectoryGroup
+	for rows.Next() {
+		var i DirectoryGroup
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDirectoryUsers = `-- name: ListDirectoryUsers :many
+SELECT u.id, u.organization_id, u.email, u.first_name, u.last_name, u.job_title, u.state, u.custom_attributes, u.created_at, u.updated_at FROM directory_users u
+WHERE u.organization_id = ?1
+  AND u.id > ?2
+  AND (
+    ?3 IS NULL
+    OR EXISTS (
+      SELECT 1 FROM directory_group_members m
+      WHERE m.user_id = u.id AND m.group_id = ?3
+    )
+  )
+ORDER BY u.id ASC
+LIMIT ?4
+`
+
+type ListDirectoryUsersParams struct {
+	OrganizationID uuid.UUID
+	After          uuid.UUID
+	GroupID        interface{}
+	MaxRows        int64
+}
+
+// ListDirectoryUsers keyset-paginates an org's directory users, optionally
+// narrowed to the members of one group.
+func (q *Queries) ListDirectoryUsers(ctx context.Context, arg ListDirectoryUsersParams) ([]DirectoryUser, error) {
+	rows, err := q.db.QueryContext(ctx, listDirectoryUsers,
+		arg.OrganizationID,
+		arg.After,
+		arg.GroupID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DirectoryUser
+	for rows.Next() {
+		var i DirectoryUser
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Email,
+			&i.FirstName,
+			&i.LastName,
+			&i.JobTitle,
+			&i.State,
+			&i.CustomAttributes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listEmaAppAssignments = `-- name: ListEmaAppAssignments :many
@@ -1894,7 +2146,7 @@ func (q *Queries) ListOrganizationRoles(ctx context.Context, organizationID uuid
 }
 
 const listOrganizations = `-- name: ListOrganizations :many
-SELECT id, name, slug, account_type, workos_id, external_id, created_at, updated_at FROM organizations
+SELECT id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at FROM organizations
 WHERE id > ?1
 ORDER BY id ASC
 LIMIT ?2
@@ -1925,6 +2177,7 @@ func (q *Queries) ListOrganizations(ctx context.Context, arg ListOrganizationsPa
 			&i.AccountType,
 			&i.WorkosID,
 			&i.ExternalID,
+			&i.Domains,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1942,7 +2195,7 @@ func (q *Queries) ListOrganizations(ctx context.Context, arg ListOrganizationsPa
 }
 
 const listOrganizationsForUser = `-- name: ListOrganizationsForUser :many
-SELECT o.id, o.name, o.slug, o.account_type, o.workos_id, o.external_id, o.created_at, o.updated_at FROM organizations o
+SELECT o.id, o.name, o.slug, o.account_type, o.workos_id, o.external_id, o.domains, o.created_at, o.updated_at FROM organizations o
 JOIN memberships m ON m.organization_id = o.id
 WHERE m.user_id = ?1
 ORDER BY o.name ASC
@@ -1964,6 +2217,7 @@ func (q *Queries) ListOrganizationsForUser(ctx context.Context, userID uuid.UUID
 			&i.AccountType,
 			&i.WorkosID,
 			&i.ExternalID,
+			&i.Domains,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -2148,7 +2402,7 @@ SET workos_id = ?1, updated_at = ?2
 WHERE id = (
   SELECT id FROM organizations WHERE workos_id IS NULL ORDER BY created_at ASC LIMIT 1
 )
-RETURNING id, name, slug, account_type, workos_id, external_id, created_at, updated_at
+RETURNING id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at
 `
 
 type SetOrganizationWorkosIDParams struct {
@@ -2169,6 +2423,7 @@ func (q *Queries) SetOrganizationWorkosID(ctx context.Context, arg SetOrganizati
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2417,7 +2672,7 @@ SET
   external_id = COALESCE(?5, external_id),
   updated_at = ?6
 WHERE id = ?7
-RETURNING id, name, slug, account_type, workos_id, external_id, created_at, updated_at
+RETURNING id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at
 `
 
 type UpdateOrganizationParams struct {
@@ -2448,6 +2703,7 @@ func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganization
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -2576,7 +2832,7 @@ const upsertOrganizationBySlug = `-- name: UpsertOrganizationBySlug :one
 INSERT INTO organizations (id, name, slug)
 VALUES (?1, ?2, ?3)
 ON CONFLICT (slug) DO UPDATE SET slug = excluded.slug
-RETURNING id, name, slug, account_type, workos_id, external_id, created_at, updated_at
+RETURNING id, name, slug, account_type, workos_id, external_id, domains, created_at, updated_at
 `
 
 type UpsertOrganizationBySlugParams struct {
@@ -2597,6 +2853,7 @@ func (q *Queries) UpsertOrganizationBySlug(ctx context.Context, arg UpsertOrgani
 		&i.AccountType,
 		&i.WorkosID,
 		&i.ExternalID,
+		&i.Domains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -65,8 +65,8 @@ func testConcurrentCheckpoints(t *testing.T, singleConnection bool) {
 			return nil, nil
 		})
 	}
-	first := &Service{store: store, scanner: scan(firstEntered, firstRelease, &firstCalls)}
-	second := NewService(db, store.writer, scan(secondEntered, secondRelease, &secondCalls))
+	first := &Service{logger: testenv.NewLogger(t), store: store, scanner: scan(firstEntered, firstRelease, &firstCalls)}
+	second := NewService(testenv.NewLogger(t), db, store.writer, scan(secondEntered, secondRelease, &secondCalls))
 	firstResult, secondResult := make(chan error, 1), make(chan error, 1)
 	firstVerdict, secondVerdict := make(chan Verdict, 1), make(chan Verdict, 1)
 	go func() {
@@ -137,15 +137,27 @@ func TestPostgresCheckpointRequiresSuccessfulEvaluation(t *testing.T) {
 	frame.Messages = []Message{textMessage("user", "prompt"), textMessage("assistant", "blocked reply"), textMessage("user", "benign result")}
 	// Rollout: archived messages carry no implicit acceptance.
 	saveFrame(t, store, config, frame, "")
-	calls := 0
-	service := NewService(db, store.writer, scannerFunc(func(_ context.Context, r risk.RealtimeScanRequest) (*risk.ScanResult, error) {
-		calls++
+	var calls atomic.Int32
+	var promptScanned chan struct{}
+	service := NewService(testenv.NewLogger(t), db, store.writer, scannerFunc(func(ctx context.Context, r risk.RealtimeScanRequest) (*risk.ScanResult, error) {
+		calls.Add(1)
+		if r.Text == "prompt" {
+			close(promptScanned)
+		}
 		if r.Text == "blocked reply" {
+			// Evaluate the benign prefix before denying this delivery. Concurrent
+			// scans otherwise allow the denial to cancel even the first input.
+			select {
+			case <-promptScanned:
+			case <-ctx.Done():
+				return nil, fmt.Errorf("wait for prompt scan: %w", ctx.Err())
+			}
 			return &risk.ScanResult{Action: "block"}, nil
 		}
 		return nil, nil
 	}))
 	for range 2 {
+		promptScanned = make(chan struct{})
 		verdict, err := service.Process(t.Context(), config, frame)
 		require.NoError(t, err)
 		require.Equal(t, "deny", verdict.Action)
@@ -155,8 +167,13 @@ func TestPostgresCheckpointRequiresSuccessfulEvaluation(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, raw)
 	}
-	require.Equal(t, 4, calls)
+	// Denied deliveries leave the checkpoint empty, so each pass scans the
+	// transcript again. The barrier guarantees the prompt and denied reply
+	// both scan; the concurrent result scan may be canceled by the denial.
+	require.GreaterOrEqual(t, int(calls.Load()), 2*2)
+	require.LessOrEqual(t, int(calls.Load()), 2*len(frame.Messages))
 	frame.Messages[1] = textMessage("assistant", "safe reply")
+	promptScanned = make(chan struct{})
 	verdict, err := service.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	require.Equal(t, "allow", verdict.Action)
@@ -194,11 +211,11 @@ func TestPostgresCheckpointInvalidation(t *testing.T) {
 	}
 }
 
-func TestStoreRepeatedFrameBeyondAlignmentWindow(t *testing.T) {
+func TestStoreRepeatedFrameBeyondAnchorLimit(t *testing.T) {
 	t.Parallel()
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
-	frame.Messages = make([]Message, alignmentWindow+1)
+	frame.Messages = make([]Message, alignmentAnchors+1)
 	for i := range frame.Messages {
 		frame.Messages[i] = textMessage("user", "continue")
 	}
@@ -206,13 +223,13 @@ func TestStoreRepeatedFrameBeyondAlignmentWindow(t *testing.T) {
 	saveFrame(t, store, config, frame, "")
 	rows, err := chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
-	require.Len(t, rows, alignmentWindow+1)
+	require.Len(t, rows, alignmentAnchors+1)
 	frame.Messages = append(frame.Messages, textMessage("user", "continue"))
 	saveFrame(t, store, config, frame, "")
 	saveFrame(t, store, config, frame, "")
 	rows, err = chatrepo.New(db).ListChatMessages(t.Context(), chatrepo.ListChatMessagesParams{ChatID: conversationID(config, frame), ProjectID: config.ProjectID})
 	require.NoError(t, err)
-	require.Len(t, rows, alignmentWindow+2)
+	require.Len(t, rows, alignmentAnchors+1)
 }
 
 func TestPostgresCanceledEvaluationPreservesPreviousCheckpoint(t *testing.T) {
@@ -220,17 +237,16 @@ func TestPostgresCanceledEvaluationPreservesPreviousCheckpoint(t *testing.T) {
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
 	frame.Messages = []Message{textMessage("user", "first prompt"), textMessage("assistant", "first reply")}
-	service := NewService(db, store.writer, &recordingScanner{})
+	service := NewService(testenv.NewLogger(t), db, store.writer, &recordingScanner{})
 	_, err := service.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	previous := transcriptHashes(frame.Messages)
 	frame.Messages = append(frame.Messages, textMessage("user", "second prompt"), textMessage("assistant", "second reply"), textMessage("user", "result"))
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	calls := 0
+	var calls atomic.Int32
 	service.scanner = scannerFunc(func(_ context.Context, _ risk.RealtimeScanRequest) (*risk.ScanResult, error) {
-		calls++
-		if calls == 2 {
+		if calls.Add(1) == 2 {
 			cancel()
 		}
 		return nil, nil
@@ -283,7 +299,7 @@ func TestPostgresLastKnownGoodPreservesDeniedAttempts(t *testing.T) {
 	store, db, config := newTestStore(t)
 	frame := exampleFrame()
 	scanned := &recordingScanner{}
-	service := NewService(db, store.writer, scanned)
+	service := NewService(testenv.NewLogger(t), db, store.writer, scanned)
 	verdict, err := service.Process(t.Context(), config, frame)
 	require.NoError(t, err)
 	require.Equal(t, "allow", verdict.Action)

@@ -11,6 +11,11 @@ import {
   RiskDetectionScope$outboundSchema,
 } from "./riskdetectionscope.js";
 import {
+  RiskMCPScope,
+  RiskMCPScope$Outbound,
+  RiskMCPScope$outboundSchema,
+} from "./riskmcpscope.js";
+import {
   RiskPolicyModelConfig,
   RiskPolicyModelConfig$Outbound,
   RiskPolicyModelConfig$outboundSchema,
@@ -105,6 +110,7 @@ export type CreateRiskPolicyRequestBody = {
    * Whether the policy is active.
    */
   enabled?: boolean | undefined;
+  mcpScope?: RiskMCPScope | undefined;
   modelConfig?: RiskPolicyModelConfig | undefined;
   /**
    * The policy name. If omitted, a name will be auto-generated.
@@ -185,6 +191,7 @@ export type CreateRiskPolicyRequestBody$Outbound = {
   detection_scopes?: Array<RiskDetectionScope$Outbound> | undefined;
   disabled_rules?: Array<string> | undefined;
   enabled?: boolean | undefined;
+  mcp_scope?: RiskMCPScope$Outbound | undefined;
   model_config?: RiskPolicyModelConfig$Outbound | undefined;
   name?: string | undefined;
   policy_type: string;
@@ -218,6 +225,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
     detectionScopes: z.optional(z.array(RiskDetectionScope$outboundSchema)),
     disabledRules: z.optional(z.array(z.string())),
     enabled: z.optional(z.boolean()),
+    mcpScope: z.optional(RiskMCPScope$outboundSchema),
     modelConfig: z.optional(RiskPolicyModelConfig$outboundSchema),
     name: z.optional(z.string()),
     policyType: z._default(PolicyType$outboundSchema, "standard"),
@@ -241,6 +249,7 @@ export const CreateRiskPolicyRequestBody$outboundSchema: z.ZodMiniType<
       customRuleIds: "custom_rule_ids",
       detectionScopes: "detection_scopes",
       disabledRules: "disabled_rules",
+      mcpScope: "mcp_scope",
       modelConfig: "model_config",
       policyType: "policy_type",
       presidioEntities: "presidio_entities",

@@ -13,6 +13,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 });
 
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
+import type { SetOrganizationOnboardingRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingrequestbody";
 import { queryKeyAdminListOrganizationActivityInfinite } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 
 import {
@@ -42,6 +43,14 @@ describe("generated admin boundary", () => {
     expectTypeOf(boundary.adminSessionQuery).parameters.toEqualTypeOf<[]>();
     expectTypeOf(boundary.setAdminOrganizationFeature).parameters.toEqualTypeOf<
       [request: SetOrganizationFeatureRequestBody]
+    >();
+    expectTypeOf(boundary.organizationOnboardingQuery).parameters.toEqualTypeOf<
+      [organizationId: string]
+    >();
+    expectTypeOf(
+      boundary.setAdminOrganizationOnboarding,
+    ).parameters.toEqualTypeOf<
+      [request: SetOrganizationOnboardingRequestBody]
     >();
   });
 
@@ -136,6 +145,87 @@ describe("generated admin boundary", () => {
     } as never);
     url = new URL((fetch.mock.calls[1]![0] as Request).url);
     expect(url.searchParams.get("cursor")).toBe("opaque+/=");
+  });
+
+  it("keeps onboarding reads and writes same-origin and maps the generated contract", async () => {
+    const body = {
+      organization_id: "org_explicit",
+      preset: "gateway",
+      tasks: [
+        {
+          key: "create-marketplace",
+          title: "Create marketplace",
+          description: "Publish marketplace",
+          hidden: false,
+        },
+      ],
+      presets: [
+        {
+          key: "gateway",
+          title: "Gateway",
+          visible_task_keys: ["create-marketplace", "distribute-servers"],
+        },
+      ],
+    };
+    const fetch = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const controller = new AbortController();
+    const query = boundary.organizationOnboardingQuery("org_explicit");
+    const config = await query.queryFn?.({
+      signal: controller.signal,
+    } as never);
+    expect(config).toMatchObject({
+      organizationId: "org_explicit",
+      preset: "gateway",
+      presets: [
+        {
+          key: "gateway",
+          title: "Gateway",
+          visibleTaskKeys: ["create-marketplace", "distribute-servers"],
+        },
+      ],
+    });
+    const read = fetch.mock.calls[0]![0] as Request;
+    expect(new URL(read.url).searchParams.get("organization_id")).toBe(
+      "org_explicit",
+    );
+    controller.abort();
+    expect(read.signal.aborted).toBe(true);
+
+    const request = {
+      organizationId: "org_explicit",
+      visibleTaskKeys: ["create-marketplace"],
+      preset: "gateway",
+      serverURL: "http://untrusted.example.test",
+      options: {
+        serverURL: "http://untrusted.example.test",
+        credentials: "include",
+      },
+    } as const;
+    await expect(
+      boundary.setAdminOrganizationOnboarding(request as never),
+    ).resolves.toEqual(config);
+    const write = fetch.mock.calls[1]![0] as Request;
+    expect(write.method).toBe("POST");
+    expect(await write.json()).toEqual({
+      organization_id: "org_explicit",
+      visible_task_keys: ["create-marketplace"],
+      preset: "gateway",
+    });
+    for (const sent of [read, write]) {
+      expect(new URL(sent.url).origin).toBe(window.location.origin);
+      expect(new URL(sent.url).pathname).toBe("/admin/organization.onboarding");
+      expect(sent.credentials).toBe("same-origin");
+      expect(sent.headers.has("Authorization")).toBe(false);
+      expect(sent.headers.has("Cookie")).toBe(false);
+    }
   });
 
   it("redirects a generated read before parsing a malformed 401 body", async () => {
@@ -488,6 +578,7 @@ describe("organizationFromSdk", () => {
         trialTier: "enterprise",
         trialConvertedAt: new Date("2026-04-01T00:00:00Z"),
         trialDemotedAt: new Date("2026-04-02T00:00:00Z"),
+        creationSource: "platform_admin",
         memberCount: 3,
         createdAt: new Date("2026-01-02T00:00:00Z"),
         updatedAt: new Date("2026-01-07T00:00:00Z"),
@@ -507,6 +598,10 @@ describe("organizationFromSdk", () => {
       trial_tier: "enterprise",
       trial_converted_at: "2026-04-01T00:00:00.000Z",
       trial_demoted_at: "2026-04-02T00:00:00.000Z",
+      // A field this mapper forgets is not a type error, because every field
+      // it names is optional on the way out. Only naming it here catches a
+      // lifecycle write that answers with the record and drops it.
+      creation_source: "platform_admin",
       member_count: 3,
       created_at: "2026-01-02T00:00:00.000Z",
       updated_at: "2026-01-07T00:00:00.000Z",
@@ -532,6 +627,7 @@ describe("organizationFromSdk", () => {
     expect(record.trial_demoted_at).toBeUndefined();
     expect(record.workos_id).toBeUndefined();
     expect(record.stripe_customer_id).toBeUndefined();
+    expect(record.creation_source).toBeUndefined();
   });
 });
 

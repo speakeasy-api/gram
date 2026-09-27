@@ -244,3 +244,12 @@ export function getCustomDomainCNAME(): string {
     return "cname.getgram.ai.";
   }
 }
+
+export function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  const step = Math.max(1, Math.floor(size));
+  for (let i = 0; i < items.length; i += step) {
+    out.push(items.slice(i, i + step));
+  }
+  return out;
+}

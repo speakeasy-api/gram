@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -150,7 +151,7 @@ func TestProvisionClient_IsIdempotentPerConnection(t *testing.T) {
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
 	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
 	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "")
 
 	params := oktaParams(ti.orgID, connectionID, issuerID)
 
@@ -174,7 +175,7 @@ func TestProvisionClient_RefusesUnknownConnection(t *testing.T) {
 
 	issuerID := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")
 
 	_, err := provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, uuid.New(), issuerID))
 	require.ErrorIs(t, err, identityproviderconnections.ErrConnectionNotFound)
@@ -199,7 +200,7 @@ func TestProvisionClient_RefusesProviderMismatch(t *testing.T) {
 
 	issuerID := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")
 
 	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
 	params := oktaParams(ti.orgID, connectionID, issuerID)
@@ -223,7 +224,7 @@ func TestProvisionClient_RefusesIneligibleIssuers(t *testing.T) {
 
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
 	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")
 
 	otherOrg := createOrganization(t, ctx, ti.conn)
 	foreignIssuer := createIssuer(t, ctx, ti.conn, otherOrg, noProject, tokenEndpoint)
@@ -277,7 +278,7 @@ func TestProvisionClient_RereadsIssuerUnderLockAndDisablesOrphanKey(t *testing.T
 		_, err := remotesessionsrepo.New(ti.conn).DeleteOrganizationRemoteSessionIssuer(ctx, remotesessionsrepo.DeleteOrganizationRemoteSessionIssuerParams{ID: issuerID, OrganizationID: conv.ToPGText(ti.orgID)})
 		require.NoError(t, err)
 	}
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "")
 
 	_, err := provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
 	require.ErrorIs(t, err, identityproviderconnections.ErrIssuerNotFound)
@@ -304,7 +305,7 @@ func TestProvisionClient_DisablesKeyWhenRowsFail(t *testing.T) {
 	kms.afterCreate = func(*gcpkms.CreatedSigningKey) {
 		provisiontest.SoftDeleteConnection(t, ctx, ti.conn, ti.orgID, connectionID)
 	}
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "")
 
 	_, err := provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
 	require.ErrorIs(t, err, identityproviderconnections.ErrConnectionNotFound)
@@ -321,7 +322,7 @@ func TestProvisionClient_ConcurrentRunAdoptsAndDisablesItsKey(t *testing.T) {
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
 	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
 
-	winner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
+	winner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")
 	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
 	var first *identityproviderconnections.ManagedClient
 	kms.afterCreate = func(*gcpkms.CreatedSigningKey) {
@@ -329,7 +330,7 @@ func TestProvisionClient_ConcurrentRunAdoptsAndDisablesItsKey(t *testing.T) {
 		first, err = winner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
 		require.NoError(t, err)
 	}
-	loser := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+	loser := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "")
 
 	second, err := loser.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
 	require.NoError(t, err)
@@ -360,7 +361,7 @@ func TestProvisionClient_RefusesOrganizationTierCredential(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, orgCredential.ID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, orgCredential.ID, "")
 	_, err = provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
 	require.ErrorIs(t, err, identityproviderconnections.ErrSigningCredentialUnusable)
 }
@@ -410,12 +411,12 @@ func TestRotateClient_OverlapsThenRevokes(t *testing.T) {
 
 	// Distinct in-process keys per factory call, so the rotated key has a new kid.
 	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "")
 	before, err := provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
 	require.NoError(t, err)
 
 	rotatingKMS := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
-	rotator := provisiontest.NewProvisioner(t, ti.conn, rotatingKMS.Factory, testServerURL, credentialID)
+	rotator := provisiontest.NewProvisioner(t, ti.conn, rotatingKMS.Factory, testServerURL, credentialID, "")
 	params := identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta, ActiveKid: before.ActiveKid}
 	_, err = rotator.RotateClient(ctx, params)
 	var pending *identityproviderconnections.RotationPendingError
@@ -517,7 +518,7 @@ func TestRotateClient_RefusesRepublishedMaterial(t *testing.T) {
 	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
 
 	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "")
 	before, err := provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
 	require.NoError(t, err)
 
@@ -535,7 +536,7 @@ func TestRotateClient_RequiresProvisionedConnection(t *testing.T) {
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
 	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
 	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "")
 
 	_, err := provisioner.RotateClient(ctx, identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta})
 	require.ErrorIs(t, err, identityproviderconnections.ErrNotProvisioned)
@@ -611,7 +612,7 @@ func TestRevokeClient_RequiresProvisionedConnection(t *testing.T) {
 
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
 	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")
 
 	_, err := provisioner.RevokeClient(ctx, ti.orgID, connectionID)
 	require.ErrorIs(t, err, identityproviderconnections.ErrNotProvisioned)
@@ -633,7 +634,7 @@ func TestRevokeClient_RetiresKeyMaterial(t *testing.T) {
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
 	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
 	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "")
 
 	_, err := provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
 	require.NoError(t, err)
@@ -704,7 +705,7 @@ func TestProvisionClient_RefusesCredentialMutatedUnderLock(t *testing.T) {
 
 			kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
 			kms.afterCreate = func(*gcpkms.CreatedSigningKey) { tc.mutate(t, ctx, ti.conn, credentialID) }
-			provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+			provisioner := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "")
 
 			_, err := provisioner.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
 			require.ErrorIs(t, err, identityproviderconnections.ErrSigningCredentialUnusable)
@@ -725,7 +726,7 @@ func TestRotateClient_RefusesCredentialMutatedUnderLock(t *testing.T) {
 	issuerID := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
 	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
-	initial := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
+	initial := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")
 	before, err := initial.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
 	require.NoError(t, err)
 
@@ -738,7 +739,7 @@ func TestRotateClient_RefusesCredentialMutatedUnderLock(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
-	rotator := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+	rotator := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "")
 
 	_, err = rotator.RotateClient(ctx, identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta, ActiveKid: before.ActiveKid})
 	require.ErrorIs(t, err, identityproviderconnections.ErrSigningCredentialUnusable)
@@ -780,11 +781,11 @@ func TestRotateClient_ConcurrentRetriesAndRevocation(t *testing.T) {
 	issuerID := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
 	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
-	initial := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
+	initial := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")
 	before, err := initial.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
 	require.NoError(t, err)
 	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
-	rotator := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+	rotator := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "")
 	params := identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta, ActiveKid: before.ActiveKid}
 	results := make(chan error, 4)
 	for range 4 {
@@ -839,12 +840,12 @@ func TestRotateClient_ConcurrentRetriesAfterActivationAreIdempotent(t *testing.T
 	issuerID := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
 	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
-	initial := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
+	initial := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")
 	before, err := initial.ProvisionClient(ctx, oktaParams(ti.orgID, connectionID, issuerID))
 	require.NoError(t, err)
 
 	kms := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
-	rotator := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID)
+	rotator := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "")
 	params := identityproviderconnections.RotateClientParams{OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta, ActiveKid: before.ActiveKid}
 	_, err = rotator.RotateClient(ctx, params)
 	var pending *identityproviderconnections.RotationPendingError
@@ -908,7 +909,7 @@ func TestRotateClient_ConcurrentRetriesAfterActivationAreIdempotent(t *testing.T
 	nextKMS := &hookedKMSClients{inner: provisiontest.NewKMSClients(t)}
 	next := params
 	next.ActiveKid = activeKid
-	_, err = provisiontest.NewProvisioner(t, ti.conn, nextKMS.Factory, testServerURL, credentialID).RotateClient(ctx, next)
+	_, err = provisiontest.NewProvisioner(t, ti.conn, nextKMS.Factory, testServerURL, credentialID, "").RotateClient(ctx, next)
 	require.ErrorAs(t, err, &pending)
 	require.Len(t, nextKMS.Created(), 1)
 	require.Len(t, kms.Created(), 1)
@@ -928,9 +929,10 @@ func TestNewProvisioner_RejectsPlaintextServerURL(t *testing.T) {
 			provisiontest.NewKMSClients(t).Factory,
 			audit.NewLogger(),
 			identityproviderconnections.Config{
-				KeyRing:             provisiontest.KeyRing,
-				SigningCredentialID: uuid.New(),
-				ServerURL:           mustURL(t, serverURL),
+				KeyRing:               provisiontest.KeyRing,
+				SigningCredentialID:   uuid.New(),
+				SigningServiceAccount: "",
+				ServerURL:             mustURL(t, serverURL),
 			},
 		)
 		if err != nil {
@@ -942,4 +944,44 @@ func TestNewProvisioner_RejectsPlaintextServerURL(t *testing.T) {
 	require.Error(t, build("http://app.getgram.ai"))
 	require.NoError(t, build("https://app.getgram.ai"))
 	require.NoError(t, build("http://localhost:8080"))
+}
+
+func TestProbeSigningCredential_RefusesUnpinnedServiceAccount(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestDB(t)
+	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
+	kms := provisiontest.NewKMSClients(t)
+
+	pinned := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, provisiontest.SigningServiceAccount())
+	require.NoError(t, pinned.ProbeSigningCredential(ctx))
+
+	other := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "someone-else@example.iam.gserviceaccount.com")
+	require.ErrorIs(t, other.ProbeSigningCredential(ctx), identityproviderconnections.ErrSigningCredentialUnusable)
+}
+
+func TestSignClientAssertion_RefusesManagedKeyWithUnpinnedSigner(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestDB(t)
+	issuerID := createIssuer(t, ctx, ti.conn, ti.orgID, noProject, tokenEndpoint)
+	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
+	connectionID := provisiontest.CreateConnection(t, ctx, ti.conn, ti.orgID, identityproviderconnections.ProviderOkta)
+	kms := provisiontest.NewKMSClients(t)
+	client, err := provisiontest.NewProvisioner(t, ti.conn, kms.Factory, testServerURL, credentialID, "").ProvisionClient(ctx, identityproviderconnections.ProvisionClientParams{
+		OrganizationID: ti.orgID, ConnectionID: connectionID, Provider: identityproviderconnections.ProviderOkta, IssuerID: issuerID,
+	})
+	require.NoError(t, err)
+	factory := func(ctx context.Context, ts oauth2.TokenSource) (gcpkms.SigningClient, error) {
+		return kms.Factory(ctx, ts)
+	}
+	request := remotesessions.ClientAssertionRequest{RemoteSessionClientID: client.ClientRowID, OrganizationID: ti.orgID, JSONWebKeySetID: client.JSONWebKeySetID, ClientID: "0oaclient", Audience: tokenEndpoint}
+
+	signer := remotesessions.NewKMSClientAssertionSigner(testenv.NewLogger(t), ti.conn, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory)
+	signer.PinManagedSigner(provisiontest.SigningServiceAccount())
+	_, err = signer.SignClientAssertion(ctx, request)
+	require.NoError(t, err)
+
+	other := remotesessions.NewKMSClientAssertionSigner(testenv.NewLogger(t), ti.conn, gcpauth.NewIdentity(gcpauth.NewStubResolver()), factory)
+	other.PinManagedSigner("someone-else@example.iam.gserviceaccount.com")
+	_, err = other.SignClientAssertion(ctx, request)
+	require.ErrorContains(t, err, "configured signer")
 }

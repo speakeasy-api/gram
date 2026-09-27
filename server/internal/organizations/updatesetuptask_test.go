@@ -189,6 +189,39 @@ func TestService_UpdateSetupTaskAuditFailureRollsBackTaskAndAudit(t *testing.T) 
 	require.Equal(t, beforeCount, afterCount)
 }
 
+func TestService_UpdateSetupTaskFirstStatusWritePreservesHidden(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestOrganizationsService(t)
+	result, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: "configure-policies", Status: conv.PtrEmpty("done")})
+	require.NoError(t, err)
+	require.True(t, result.Hidden)
+	require.Equal(t, "done", result.Status)
+	listed, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
+	require.NoError(t, err)
+	require.Nil(t, setupTask(listed.Tasks, "configure-policies"))
+}
+
+func TestService_UpdateSetupTaskFirstAssignmentPreservesHidden(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestOrganizationsService(t)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	result, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{
+		TaskKey: "platform-mcp", Assignee: &gen.SetupTaskAssigneeInput{UserID: &ac.UserID, Email: nil},
+	})
+	require.NoError(t, err)
+	require.True(t, result.Hidden)
+	require.Equal(t, "in_progress", result.Status)
+	staff := *ac
+	staff.IsAdmin = true
+	visible := false
+	result, err = ti.service.UpdateSetupTask(contextvalues.SetAuthContext(ctx, &staff), &gen.UpdateSetupTaskPayload{TaskKey: "platform-mcp", Hidden: &visible})
+	require.NoError(t, err)
+	require.False(t, result.Hidden)
+	require.Equal(t, "in_progress", result.Status)
+	require.Equal(t, ac.UserID, *result.Assignee.UserID)
+}
+
 func requireOopsCode(t *testing.T, err error, code oops.Code) {
 	t.Helper()
 	var oopsErr *oops.ShareableError

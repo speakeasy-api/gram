@@ -480,7 +480,8 @@ func TestServePlatformToolset_PlatformMCPReadListProjectsCall(t *testing.T) {
 		require.Empty(t, event[attr.McpServerIDKey])
 		require.Empty(t, event[attr.ToolsetIDKey])
 		require.Equal(t, mcpriskscan.MethodToolsCall, event["gram.mcp.risk.scan.method"])
-		require.Equal(t, mcpriskscan.PhaseBeforeExecution, event["gram.mcp.risk.scan.phase"])
+		require.Equal(t, mcpriskscan.PhaseRequest, event["gram.mcp.risk.scan.phase"])
+		require.Equal(t, "false", event["gram.mcp.risk.scan.identity_stamped"], "platform auth does not fabricate MCP principal provenance from AuthContext.UserID")
 	}
 }
 

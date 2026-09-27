@@ -282,6 +282,9 @@ type QueryRequestBody struct {
 	// from the time range and is floored to 3600 (the source data is bucketed
 	// hourly).
 	GranularitySeconds *int64 `form:"granularity_seconds,omitempty" json:"granularity_seconds,omitempty" xml:"granularity_seconds,omitempty"`
+	// Whether to include distinct values for other dimensions in each table row.
+	// When omitted, defaults to true.
+	IncludeDimensionValues *bool `form:"include_dimension_values,omitempty" json:"include_dimension_values,omitempty" xml:"include_dimension_values,omitempty"`
 	// When group_by is set, keep at most this many groups (ranked by sort_by); the
 	// remainder are rolled into an 'Other' group. Defaults to 10.
 	TopN *int `form:"top_n,omitempty" json:"top_n,omitempty" xml:"top_n,omitempty"`
@@ -15393,6 +15396,9 @@ func NewQueryPayload(body *QueryRequestBody, sessionToken *string) *telemetry.Qu
 		GroupBy:            body.GroupBy,
 		GranularitySeconds: body.GranularitySeconds,
 	}
+	if body.IncludeDimensionValues != nil {
+		v.IncludeDimensionValues = *body.IncludeDimensionValues
+	}
 	if body.TopN != nil {
 		v.TopN = *body.TopN
 	}
@@ -15408,6 +15414,9 @@ func NewQueryPayload(body *QueryRequestBody, sessionToken *string) *telemetry.Qu
 			}
 			v.Filters[i] = unmarshalQueryFilterRequestBodyToTelemetryQueryFilter(val)
 		}
+	}
+	if body.IncludeDimensionValues == nil {
+		v.IncludeDimensionValues = true
 	}
 	if body.TopN == nil {
 		v.TopN = 10
@@ -17770,8 +17779,8 @@ func ValidateToolUsageUserFilterRequestBody(body *ToolUsageUserFilterRequestBody
 		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
 	}
 	if body.Kind != nil {
-		if !(*body.Kind == "email" || *body.Kind == "external_user_id" || *body.Kind == "user_id" || *body.Kind == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"email", "external_user_id", "user_id", "unknown"}))
+		if !(*body.Kind == "email" || *body.Kind == "external_user_id" || *body.Kind == "user_id" || *body.Kind == "agent_id" || *body.Kind == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"email", "external_user_id", "user_id", "agent_id", "unknown"}))
 		}
 	}
 	return

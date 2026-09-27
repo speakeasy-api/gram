@@ -483,14 +483,17 @@ func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T)
 }
 
 type hostedToolEventParams struct {
-	projectID     string
-	timestamp     time.Time
-	toolsetSlug   string
-	toolName      string
-	userEmail     string
-	statusCode    int
-	clientName    string
-	clientVersion string
+	projectID      string
+	timestamp      time.Time
+	toolsetSlug    string
+	toolName       string
+	userEmail      string
+	statusCode     int
+	clientName     string
+	clientVersion  string
+	agentID        string
+	externalUserID string
+	userID         string
 	// toolError models an upstream that answered successfully but flagged
 	// isError, which Gram records alongside an unchanged 2xx status code.
 	toolError bool
@@ -522,6 +525,13 @@ func insertHostedToolEvent(t *testing.T, ctx context.Context, ti *testInstance, 
 	if p.toolError {
 		attrs["gram.tool_call.error"] = "upstream_result_error"
 	}
+	if p.agentID != "" {
+		attrs["gram.event.source"] = "tool_call"
+		attrs["gram.authorization.actor.type"] = "agent"
+		attrs["gram.authorization.actor.id"] = p.agentID
+	}
+	attrs["gram.external_user.id"] = p.externalUserID
+	attrs["user.id"] = p.userID
 	attrsJSON, err := json.Marshal(attrs)
 	require.NoError(t, err)
 
@@ -1068,4 +1078,41 @@ func TestGetToolUsageTotals_NarrowsByQueryOnTheRawPath(t *testing.T) {
 	})
 	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
 	require.Equal(t, int64(1), res.Totals.EventCount)
+}
+
+func TestGetToolUsageUsers_ManagedAgentAttribution(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	now := time.Now().UTC()
+	agentIDs := []string{uuid.NewString(), uuid.NewString()}
+	for _, agentID := range agentIDs {
+		for _, email := range []string{"", "approver@example.com"} {
+			insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+				projectID: authCtx.ProjectID.String(), timestamp: now.Add(-time.Minute),
+				toolsetSlug: "payments", toolName: "charge", statusCode: 200,
+				agentID: agentID, userEmail: email, externalUserID: "approver-external", userID: "approver-id",
+			})
+		}
+	}
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: authCtx.ProjectID.String(), timestamp: now.Add(-time.Minute),
+		toolsetSlug: "payments", toolName: "charge", statusCode: 200, userEmail: "human@example.com",
+	})
+	params := telemetryRepo.GetToolUsageSummaryParams{
+		GramProjectID: authCtx.ProjectID.String(), TimeStart: now.Add(-time.Hour).UnixNano(), TimeEnd: now.UnixNano(),
+	}
+	rows, err := ti.chClient.GetToolUsageUsers(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, rows, 3)
+	for _, row := range rows {
+		if row.UserKind == "agent_id" {
+			require.Contains(t, agentIDs, row.UserKey)
+			require.Equal(t, "agent:"+row.UserKey, row.UserLabel)
+			require.EqualValues(t, 2, row.EventCount)
+		} else {
+			require.Equal(t, "email", row.UserKind)
+			require.Equal(t, "human@example.com", row.UserKey)
+		}
+	}
 }

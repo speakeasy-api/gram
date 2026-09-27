@@ -34,6 +34,9 @@ import (
 // are non-fatal: a missed tuple only means the affected staged rows promote
 // verbatim (still "custom") after the timeout — today's behavior.
 func (s *Service) captureMCPAttribution(ctx context.Context, payload *gen.IngestPayload, authCtx *contextvalues.AuthContext) {
+	ctx, span := s.tracer.Start(ctx, "hooks.captureMCPAttribution")
+	defer span.End()
+
 	if payload.Data == nil || len(payload.Data.McpAttribution) == 0 {
 		return
 	}

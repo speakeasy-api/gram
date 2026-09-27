@@ -63,7 +63,7 @@ func seedGramSession(
 		UserSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		SubjectUrn:          subject,
 		Jti:                 "jti-" + slug,
-		RefreshTokenHash:    "hash-" + slug,
+		RefreshTokenHash:    conv.ToPGText("hash-" + slug),
 		RefreshExpiresAt:    conv.ToPGTimestamptz(time.Now().Add(refreshExpiresIn)),
 		ExpiresAt:           conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
 	})

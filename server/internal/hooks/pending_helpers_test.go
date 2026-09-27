@@ -36,7 +36,7 @@ func TestBuildTelemetryAttributesWithMetadata_SetsMCPMatchFromCachedList(t *test
 	require.True(t, ok)
 
 	sessionID := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp", Transport: "STDIO"}},
 		sessionMCPListTTL,
 	))
@@ -70,7 +70,7 @@ func TestBuildTelemetryAttributesWithMetadata_HookSourceFromCoworkVariant(t *tes
 	require.True(t, ok)
 
 	sessionID := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(testProjectID(t, ctx), sessionID),
 		agentVariantCowork, sessionMCPListTTL))
 
 	// ServiceName is "claude-code" (what cowork reports) — the variant must
@@ -205,7 +205,7 @@ func TestBuildTelemetryAttributesWithMetadata_HookSourceDefaultsWithoutCoworkVar
 	require.True(t, ok)
 
 	sessionID := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionAgentVariantCacheKey(testProjectID(t, ctx), sessionID),
 		agentVariantClaudeCode, sessionMCPListTTL))
 
 	metadata := &SessionMetadata{
@@ -266,7 +266,7 @@ func TestBuildTelemetryAttributesWithMetadata_CoworkOverridesSourceWithName(t *t
 
 	sessionID := uuid.NewString()
 	connectorUUID := "a1b2c3d4-e5f6-7890-abcd-ef0123456789"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{
 			Source: "claude.ai", Name: "Slack",
 			URL: "https://mcp.example.com/slack", Transport: "HTTP",
@@ -306,7 +306,7 @@ func TestBuildTelemetryAttributesWithMetadata_CoworkFallsBackToUUIDWhenNoName(t 
 
 	sessionID := uuid.NewString()
 	connectorUUID := "a1b2c3d4-e5f6-7890-abcd-ef0123456789"
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{
 			Source: "claude.ai", URL: "https://mcp.example.com/slack",
 			Transport: "HTTP", ConnectorUUID: connectorUUID,
@@ -344,7 +344,7 @@ func TestBuildTelemetryAttributesWithMetadata_ClaudeCodeReplacesSanitizedSourceW
 	require.True(t, ok)
 
 	sessionID := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{
 			Source: "claude.ai", Name: "Linear (Speakeasy)",
 			URL: "https://chat.speakeasy.com/mcp/linear", Transport: "HTTP",
@@ -382,7 +382,7 @@ func TestBuildTelemetryAttributesWithMetadata_FallsBackToServerPrefix(t *testing
 	require.True(t, ok)
 
 	sessionID := uuid.NewString()
-	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(sessionID),
+	require.NoError(t, ti.service.cache.Set(ctx, sessionMCPListCacheKey(testProjectID(t, ctx), sessionID),
 		[]MCPServerEntry{{Source: "local", Name: "other", URL: "https://other.example.com/mcp", Transport: "HTTP"}},
 		sessionMCPListTTL,
 	))
@@ -635,12 +635,62 @@ func TestFlushPendingHooks_DirectCall(t *testing.T) {
 	}
 
 	// Call flushPendingHooks directly
-	ti.service.flushPendingHooks(ctx, sessionID, &metadata)
+	ti.service.flushPendingHooks(ctx, sessionID, &metadata, true)
 
 	// Verify hooks were flushed (Redis list should be deleted)
 	exists, err := ti.redisClient.Exists(ctx, redisKey).Result()
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), exists, "Buffered hooks should be flushed and deleted from Redis")
+}
+
+// Hooks from an authenticated request buffer under that request's project and
+// flush only for that project. A flush that has not confirmed ownership of the
+// session id leaves the unauthenticated buffer alone.
+func TestFlushPendingHooks_ProjectScopedBuffer(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestHooksService(t)
+
+	sessionID := uuid.NewString()
+	projectID := testProjectID(t, ctx)
+	scopedKey := hookPendingCacheKey(projectID, sessionID)
+	unscopedKey := hookPendingCacheKey("", sessionID)
+	for _, key := range []string{scopedKey, unscopedKey} {
+		require.NoError(t, ti.service.cache.ListAppend(ctx, key, hooks.ClaudePayload{
+			HookEventName: "PreToolUse",
+			SessionID:     &sessionID,
+			ToolName:      &toolName,
+			ToolUseID:     &toolUseID,
+		}, time.Hour))
+	}
+	metadataFor := func(projectID string) SessionMetadata {
+		return SessionMetadata{
+			SessionID:     sessionID,
+			ServiceName:   "test-service",
+			UserEmail:     "test@example.com",
+			UserID:        "",
+			ExternalOrgID: "claude-org-123",
+			GramOrgID:     uuid.NewString(),
+			ProjectID:     projectID,
+		}
+	}
+
+	listLen := func(key string) int64 {
+		n, err := ti.redisClient.LLen(ctx, key).Result()
+		require.NoError(t, err)
+		return n
+	}
+
+	other := metadataFor(uuid.NewString())
+	ti.service.flushPendingHooks(ctx, sessionID, &other, false)
+	require.Equal(t, int64(1), listLen(scopedKey), "another project never flushes this project's buffer")
+	require.Equal(t, int64(1), listLen(unscopedKey), "an unconfirmed owner leaves unauthenticated hooks alone")
+
+	own := metadataFor(projectID)
+	ti.service.flushPendingHooks(ctx, sessionID, &own, false)
+	exists, err := ti.redisClient.Exists(ctx, scopedKey).Result()
+	require.NoError(t, err)
+	require.Equal(t, int64(0), exists, "the owning project flushes its buffer")
+	require.Equal(t, int64(1), listLen(unscopedKey))
 }
 
 // TestFlushPendingHooks_EmptyList tests flushing when there are no pending hooks
@@ -662,7 +712,7 @@ func TestFlushPendingHooks_EmptyList(t *testing.T) {
 	}
 
 	// Call flushPendingHooks with no buffered hooks (should not error)
-	ti.service.flushPendingHooks(ctx, sessionID, &metadata)
+	ti.service.flushPendingHooks(ctx, sessionID, &metadata, true)
 
 	// Verify no Redis key was created
 	redisKey := "hook:pending:" + sessionID

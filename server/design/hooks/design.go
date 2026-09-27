@@ -517,7 +517,7 @@ var _ = Service("hooks", func() {
 
 		HTTP(func() {
 			// OTLP ingestion path must match OpenTelemetry's /v1/logs convention.
-			POST("/rpc/hooks.otel/v1/logs") //nolint:glint // OTLP ingestion path must match OpenTelemetry conventions
+			POST("/rpc/hooks.otel/v1/logs") //nolint:glint // rpcendpointformat: OTLP ingestion path must match OpenTelemetry conventions
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusAccepted)
@@ -541,7 +541,7 @@ var _ = Service("hooks", func() {
 
 		HTTP(func() {
 			// OTLP ingestion path must match OpenTelemetry's /v1/metrics convention.
-			POST("/rpc/hooks.otel/v1/metrics") //nolint:glint // OTLP ingestion path must match OpenTelemetry conventions
+			POST("/rpc/hooks.otel/v1/metrics") //nolint:glint // rpcendpointformat: OTLP ingestion path must match OpenTelemetry conventions
 			security.ByKeyHeader()
 			security.ProjectHeader()
 			Response(StatusAccepted)

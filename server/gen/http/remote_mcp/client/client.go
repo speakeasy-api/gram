@@ -41,6 +41,10 @@ type Client struct {
 	// requests to the discoverProtectedResourceMetadata endpoint.
 	DiscoverProtectedResourceMetadataDoer goahttp.Doer
 
+	// ProbeURL Doer is the HTTP client used to make requests to the probeURL
+	// endpoint.
+	ProbeURLDoer goahttp.Doer
+
 	// VerifyURL Doer is the HTTP client used to make requests to the verifyURL
 	// endpoint.
 	VerifyURLDoer goahttp.Doer
@@ -95,6 +99,7 @@ func NewClient(
 		GetServerDoer:                         doer,
 		UpdateServerDoer:                      doer,
 		DiscoverProtectedResourceMetadataDoer: doer,
+		ProbeURLDoer:                          doer,
 		VerifyURLDoer:                         doer,
 		DeleteServerDoer:                      doer,
 		ListServerHeadersDoer:                 doer,
@@ -249,6 +254,30 @@ func (c *Client) DiscoverProtectedResourceMetadata() goa.Endpoint {
 		resp, err := c.DiscoverProtectedResourceMetadataDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteMcp", "discoverProtectedResourceMetadata", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ProbeURL returns an endpoint that makes HTTP requests to the remoteMcp
+// service probeURL server.
+func (c *Client) ProbeURL() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeProbeURLRequest(c.encoder)
+		decodeResponse = DecodeProbeURLResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildProbeURLRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ProbeURLDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteMcp", "probeURL", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -696,7 +696,7 @@ function PlatformMCPOnboardingContentInner({
               {setupComplete
                 ? "Start a separate resumable checklist for another agent in this organization."
                 : canAdminister
-                  ? "Connect an agent, choose a reviewed MCP server, complete any required setup, and add it to the selected project's existing Default plugin."
+                  ? "Connect an agent, then optionally choose a reviewed MCP server, complete any required setup, and add it to the selected project's existing Default plugin. Skip steps your organization has already handled."
                   : "Connect and authorize your agent. Your existing role will decide which projects, MCP servers, plugins, skills and operational data it can use."}
             </Text>
           </div>
@@ -1293,7 +1293,7 @@ type PlatformMCPStep = {
   complete: boolean;
 };
 
-function PlatformMCPSetupSheet({
+export function PlatformMCPSetupSheet({
   open,
   onOpenChange,
   state,
@@ -1358,6 +1358,9 @@ function PlatformMCPSetupSheet({
   const completedStepCount = steps.filter((step) => step.complete).length;
   const [storedCurrentStepIndex, setCurrentStepIndex] =
     useState(evidenceStepIndex);
+  const [skippedSteps, setSkippedSteps] = useState<Set<number>>(
+    () => new Set(),
+  );
   const currentStepIndex = Math.min(
     storedCurrentStepIndex,
     Math.max(steps.length - 1, 0),
@@ -1369,6 +1372,10 @@ function PlatformMCPSetupSheet({
   const wasOpenRef = useRef(false);
   const completedStepCountRef = useRef(completedStepCount);
   const currentStep = steps[currentStepIndex]!;
+  const currentStepSkipped = skippedSteps.has(currentStepIndex);
+  const hasUnfinishedSkips = steps.some(
+    (step, index) => skippedSteps.has(index) && !step.complete,
+  );
   const isAcknowledgingCompletion = completionAcknowledgementStep !== null;
 
   useEffect(() => {
@@ -1383,6 +1390,7 @@ function PlatformMCPSetupSheet({
     }
 
     if (!wasOpen) {
+      setSkippedSteps(new Set());
       // Every newly selected agent and install method starts with the actual
       // installation instructions, even when this organization completed an
       // earlier Platform MCP workflow. Existing evidence still marks later
@@ -1395,6 +1403,7 @@ function PlatformMCPSetupSheet({
     if (
       completionAcknowledgementStep === null &&
       completedStepCount > previousCompletedStepCount &&
+      !currentStepSkipped &&
       currentStepIndex === previousCompletedStepCount
     ) {
       setCompletionAcknowledgementStep(currentStepIndex);
@@ -1403,6 +1412,7 @@ function PlatformMCPSetupSheet({
     completedStepCount,
     completionAcknowledgementStep,
     currentStepIndex,
+    currentStepSkipped,
     open,
   ]);
 
@@ -1616,7 +1626,8 @@ function PlatformMCPSetupSheet({
         <SheetHeader className="sr-only">
           <SheetTitle>Set up Platform MCP</SheetTitle>
           <SheetDescription>
-            Complete Platform MCP setup one lifecycle step at a time.
+            Complete Platform MCP setup one lifecycle step at a time, or skip
+            steps you do not need.
           </SheetDescription>
         </SheetHeader>
         <div className="flex items-center gap-1.5 px-6 pt-6 pr-14">
@@ -1645,7 +1656,7 @@ function PlatformMCPSetupSheet({
                         : "bg-foreground/40 w-4 cursor-not-allowed"
                       : "bg-border w-4 cursor-not-allowed",
                 )}
-                aria-label={`Step ${index + 1}${lifecycleIndex >= 0 ? `: ${steps[lifecycleIndex]?.title}` : ""}${isComplete ? ", complete" : ""}`}
+                aria-label={`Step ${index + 1}${lifecycleIndex >= 0 ? `: ${steps[lifecycleIndex]?.title}` : ""}${isComplete ? ", complete" : skippedSteps.has(lifecycleIndex) ? ", skipped" : ""}`}
               />
             );
           })}
@@ -1660,13 +1671,26 @@ function PlatformMCPSetupSheet({
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <h2 className="text-display-xs font-thin">{currentStep.title}</h2>
-              {currentStep.complete && (
+              {currentStep.complete ? (
                 <Badge variant="success" size="sm">
                   Complete
                 </Badge>
-              )}
+              ) : currentStepSkipped ? (
+                <Badge variant="neutral" size="sm">
+                  Skipped
+                </Badge>
+              ) : null}
             </div>
-            <div className="mt-5 space-y-5">{showStep()}</div>
+            <div className="mt-5 space-y-5">
+              {currentStepSkipped && !currentStep.complete && (
+                <Text muted small>
+                  Skipped for this guide. This does not record a connection, MCP
+                  registration, or distribution. You can still complete this
+                  step later.
+                </Text>
+              )}
+              {showStep()}
+            </div>
           </div>
         </div>
         <SheetFooter className="border-border flex-row items-center justify-between border-t px-6 py-4">
@@ -1694,19 +1718,44 @@ function PlatformMCPSetupSheet({
             >
               <Button.Text>Dismiss</Button.Text>
             </Button>
-            {currentStep.complete && currentStepIndex === steps.length - 1 ? (
+            {!currentStep.complete && !currentStepSkipped && (
+              <Button
+                variant="tertiary"
+                disabled={isMutating || isAcknowledgingCompletion}
+                onClick={() => {
+                  setSkippedSteps((previous) =>
+                    new Set(previous).add(currentStepIndex),
+                  );
+                  if (currentStepIndex === steps.length - 1) {
+                    onDone();
+                  } else {
+                    setCurrentStepIndex((index) => index + 1);
+                  }
+                }}
+              >
+                <Button.Text>
+                  {currentStepIndex === steps.length - 1
+                    ? "Skip and finish guide"
+                    : "Skip this step"}
+                </Button.Text>
+              </Button>
+            )}
+            {currentStepIndex === steps.length - 1 &&
+            (currentStep.complete || currentStepSkipped) ? (
               <Button
                 disabled={isMutating || isAcknowledgingCompletion}
                 onClick={onDone}
               >
-                <Button.Text>Done</Button.Text>
+                <Button.Text>
+                  {hasUnfinishedSkips ? "Finish guide" : "Done"}
+                </Button.Text>
               </Button>
             ) : (
               <Button
                 disabled={
                   isMutating ||
                   isAcknowledgingCompletion ||
-                  !currentStep.complete ||
+                  (!currentStep.complete && !currentStepSkipped) ||
                   currentStepIndex === steps.length - 1
                 }
                 onClick={() => setCurrentStepIndex((index) => index + 1)}

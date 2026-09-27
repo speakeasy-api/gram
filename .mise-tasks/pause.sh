@@ -72,18 +72,19 @@ if [ "$locked" != true ]; then
     exit 1
 fi
 
-# Stopping a Gram worker does not stop Temporal schedules: the shared server
-# would keep firing them, accumulating executions and CPU work while the stack
-# is asleep. Pause them before stopping the worker, and remember only the ones
-# changed here so wake does not override a developer's manual pause.
-if ! mise run temporal:schedules --state pause --lock-owner "$$"; then
-    echo "⚠️  Some Temporal schedules could not be paused; the stack will still be stopped." >&2
+# Stop registration and shutdown-triggered work before taking the schedule
+# inventory. pitchfork waits for exit (and escalates to SIGKILL if necessary).
+# Missing/stopped daemons are successful no-ops in Pitchfork. Real stop errors
+# must surface rather than marking a still-running application stack paused.
+if pitchfork supervisor status &> /dev/null; then
+    pitchfork stop --group application
+    pitchfork stop idle-pause
 fi
 
-# Best-effort, as in infra:stop: a supervisor that is not running is not an
-# error here, and neither is a daemon that has already exited.
-if pitchfork supervisor status &> /dev/null; then
-    pitchfork stop --all-local || true
+# Pause before stopping Temporal to avoid catchup after deliberate sleep.
+# Preserve bookkeeping so wake does not undo a developer's manual pause.
+if ! mise run temporal:schedules --state pause --lock-owner "$$"; then
+    echo "⚠️  Some Temporal schedules could not be paused; the stack will still be stopped." >&2
 fi
 
 docker compose --profile "*" stop
@@ -100,52 +101,10 @@ docker compose --profile "*" stop
 # paused again on the sweep's first quiet sample.
 rm -f "$gitdir/gram-stack-lastseen"
 
-# Park on the site port in the dashboard's place, so the worktree's URL answers
-# with a page that says the stack is paused and offers a Resume button, instead
-# of a connection error. The parker has to outlive this script: `pause` is
-# often run from a shell that goes away, and from `git:workboot`, whose whole
-# process GROUP wt signals when the hook finishes.
-if [ -z "${GRAM_NO_PARK:-}" ]; then
-    # Pausing an already-paused worktree finds a parker still holding the port.
-    # Dropping its pid file would orphan it: the replacement dies on
-    # EADDRINUSE, and the next wake has no pid left to kill, so vite cannot
-    # bind either. The parker that is up is as good as a new one.
-    parked="$gitdir/gram-stack-parked.pid"
-    park_pid="$(cat "$parked" 2> /dev/null || true)"
-    if [ -n "$park_pid" ] && ps -o command= -p "$park_pid" 2> /dev/null | grep -q "park"; then
-        echo "Stack paused. Resume with \`mise run wake\`, or from ${GRAM_SITE_URL:-the dashboard URL}."
-        exit 0
-    fi
-    rm -f "$parked"
-
-    # A new session is what actually detaches it -- `nohup` only ignores
-    # SIGHUP and leaves the process in this group, so wt's reap would still
-    # take it down. setsid where it exists (Linux), perl's POSIX::setsid
-    # otherwise (macOS ships perl but not setsid), nohup as the last resort.
-    if command -v setsid > /dev/null 2>&1; then
-        GRAM_PARK_GIT_DIR="$gitdir" setsid mise run park \
-            > "$gitdir/gram-stack-park.log" 2>&1 &
-    elif command -v perl > /dev/null 2>&1; then
-        GRAM_PARK_GIT_DIR="$gitdir" perl -MPOSIX -e 'setsid; exec @ARGV' \
-            mise run park > "$gitdir/gram-stack-park.log" 2>&1 &
-    else
-        GRAM_PARK_GIT_DIR="$gitdir" nohup mise run park \
-            > "$gitdir/gram-stack-park.log" 2>&1 &
-    fi
-    disown 2> /dev/null || true
-
-    # The parker writes its pid file once it is actually listening, so this
-    # also catches the failure that matters: another process already holds the
-    # site port. Reported rather than fatal -- the stack IS paused either way,
-    # and the only thing lost is the resume page.
-    for _ in $(seq 1 20); do
-        [ -f "$gitdir/gram-stack-parked.pid" ] && break
-        sleep 0.5
-    done
-    if [ ! -f "$gitdir/gram-stack-parked.pid" ]; then
-        echo "⚠️  The resume page did not come up; wake with \`mise run wake\`." >&2
-        echo "    Log: $gitdir/gram-stack-park.log" >&2
-    fi
+# Pitchfork owns the listener, so normal worktree teardown stops it too.
+if pitchfork supervisor start && pitchfork start park; then
+    echo "Stack paused. Resume with \`mise run wake\`, or from ${GRAM_SITE_URL:-the dashboard URL}."
+else
+    echo "Stack paused, but the resume page could not start. Use \`mise run wake\` to resume." >&2
+    echo "Inspect \`pitchfork logs park\` for the startup failure." >&2
 fi
-
-echo "Stack paused. Resume with \`mise run wake\`, or from ${GRAM_SITE_URL:-the dashboard URL}."

@@ -4,6 +4,7 @@ package mcp_test
 
 import (
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http/httptest"
 	"sync"
 	"testing"
@@ -44,7 +45,7 @@ func shapeGrantForKeepalive(t *testing.T, ctx context.Context, ti *testInstance,
 		ID:              sess.ID,
 		ProjectID:       conv.ToNullUUID(projectID),
 	}))
-	require.NoError(t, q.SetRemoteSessionValidationTrackingFixture(ctx, remotesessions_repo.SetRemoteSessionValidationTrackingFixtureParams{
+	require.NoError(t, testrepo.New(ti.conn).SetRemoteSessionValidationTrackingFixture(ctx, testrepo.SetRemoteSessionValidationTrackingFixtureParams{
 		LastValidatedAt:      pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 		LastRefreshAttemptAt: pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},
 		CreatedAt:            conv.ToPGTimestamptz(time.Now().Add(-age)),
@@ -66,7 +67,7 @@ func ageIntoRecheckWindow(t *testing.T, ctx context.Context, fx validationFixtur
 	t.Helper()
 	sess := storedSession(t, ctx, fx)
 	ago := conv.ToPGTimestamptz(time.Now().Add(-(recheckTestInterval + time.Hour)))
-	require.NoError(t, remotesessions_repo.New(fx.ti.conn).SetRemoteSessionValidationTrackingFixture(ctx, remotesessions_repo.SetRemoteSessionValidationTrackingFixtureParams{
+	require.NoError(t, testrepo.New(fx.ti.conn).SetRemoteSessionValidationTrackingFixture(ctx, testrepo.SetRemoteSessionValidationTrackingFixtureParams{
 		LastValidatedAt:      ago,
 		LastRefreshAttemptAt: ago,
 		CreatedAt:            pgtype.Timestamptz{Time: time.Time{}, Valid: false, InfinityModifier: pgtype.Finite},

@@ -97,6 +97,11 @@ func ListOrganizationProjectsAdminPath() string {
 	return "/admin/organization.projects"
 }
 
+// ListProjectMcpServersAdminPath returns the URL path to the admin service listProjectMcpServers HTTP endpoint.
+func ListProjectMcpServersAdminPath() string {
+	return "/admin/project.mcpServers"
+}
+
 // ListOrganizationActivityAdminPath returns the URL path to the admin service listOrganizationActivity HTTP endpoint.
 func ListOrganizationActivityAdminPath() string {
 	return "/admin/organization.activity"
@@ -175,6 +180,16 @@ func ResumeStripeSubscriptionAdminPath() string {
 // MarkEnterpriseTrialConvertedAdminPath returns the URL path to the admin service markEnterpriseTrialConverted HTTP endpoint.
 func MarkEnterpriseTrialConvertedAdminPath() string {
 	return "/admin/trial.convert"
+}
+
+// GetOrganizationOnboardingAdminPath returns the URL path to the admin service getOrganizationOnboarding HTTP endpoint.
+func GetOrganizationOnboardingAdminPath() string {
+	return "/admin/organization.onboarding"
+}
+
+// SetOrganizationOnboardingAdminPath returns the URL path to the admin service setOrganizationOnboarding HTTP endpoint.
+func SetOrganizationOnboardingAdminPath() string {
+	return "/admin/organization.onboarding"
 }
 
 // CreateGlobalIssuerAdminPath returns the URL path to the admin service createGlobalIssuer HTTP endpoint.
@@ -257,6 +272,11 @@ func GetMeterUsageAdminPath() string {
 	return "/admin/organizations.getMeterUsage"
 }
 
+// GetSpendBreakdownAdminPath returns the URL path to the admin service getSpendBreakdown HTTP endpoint.
+func GetSpendBreakdownAdminPath() string {
+	return "/admin/organization.spendBreakdown"
+}
+
 // GetSupportMatrixAdminPath returns the URL path to the admin service getSupportMatrix HTTP endpoint.
 func GetSupportMatrixAdminPath() string {
 	return "/admin/supportMatrix.get"
@@ -265,4 +285,9 @@ func GetSupportMatrixAdminPath() string {
 // UpdateSupportMatrixAdminPath returns the URL path to the admin service updateSupportMatrix HTTP endpoint.
 func UpdateSupportMatrixAdminPath() string {
 	return "/admin/supportMatrix.update"
+}
+
+// GetSupportCoverageAdminPath returns the URL path to the admin service getSupportCoverage HTTP endpoint.
+func GetSupportCoverageAdminPath() string {
+	return "/admin/supportCoverage.get"
 }

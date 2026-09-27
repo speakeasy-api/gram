@@ -24,7 +24,10 @@ export const ExclusionScope = {
   EnvironmentBlockedWrite: "environment:blocked_write",
   SkillBlockedRead: "skill:blocked_read",
   SkillBlockedWrite: "skill:blocked_write",
+  PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyBypass: "risk_policy:bypass",
+  WorkloadBlockedRead: "workload:blocked_read",
+  WorkloadBlockedWrite: "workload:blocked_write",
 } as const;
 /**
  * The scope used to store exception rules for this scope.
@@ -43,6 +46,7 @@ export const ResourceType = {
   RiskPolicy: "risk_policy",
   Chat: "chat",
   Agent: "agent",
+  Workload: "workload",
 } as const;
 /**
  * The type of resource this scope applies to.
@@ -75,6 +79,8 @@ export const Slug = {
   SkillBlockedRead: "skill:blocked_read",
   SkillWrite: "skill:write",
   SkillBlockedWrite: "skill:blocked_write",
+  PluginWrite: "plugin:write",
+  PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   RiskPolicyBlock: "risk_policy:block",
@@ -84,6 +90,12 @@ export const Slug = {
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",
   AgentTransfer: "agent:transfer",
+  WorkloadRead: "workload:read",
+  WorkloadBlockedRead: "workload:blocked_read",
+  WorkloadWrite: "workload:write",
+  WorkloadBlockedWrite: "workload:blocked_write",
+  OrgDeviceAgentSync: "org:device_agent_sync",
+  OrgHooksIngest: "org:hooks_ingest",
 } as const;
 /**
  * Unique scope identifier.

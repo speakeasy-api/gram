@@ -369,6 +369,37 @@ describe("useMcpGuideOperations", () => {
     });
   });
 
+  it("reports a blocked install instead of waiting on canInstall", async () => {
+    workflowHook.mockReturnValue({
+      phase: "configure",
+      canInstall: false,
+      installBlockedReason: "Could not load the organization's issuers.",
+      serverConfigs: [],
+      startInstall,
+      reset: resetInstall,
+      isServerAlreadyInstalled: () => false,
+    });
+    const { result } = renderHook(() => useMcpGuideOperations());
+    const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
+
+    act(() => result.current.selectServer(SERVER));
+    act(() =>
+      result.current.handleSignal(
+        { type: "start", scope: SERVER_SCOPE },
+        report,
+      ),
+    );
+
+    await waitFor(() =>
+      expect(report).toHaveBeenCalledWith({
+        type: "error",
+        scope: SERVER_SCOPE,
+        message: "Could not load the organization's issuers.",
+      }),
+    );
+    expect(startInstall).not.toHaveBeenCalled();
+  });
+
   it("starts the existing project-scoped install workflow only after start", async () => {
     const report = vi.fn<(report: ProjectGuideOperationReport) => void>();
     const { result } = renderHook(() => useMcpGuideOperations());

@@ -17,7 +17,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -45,6 +47,54 @@ type LifecycleUpdateInput struct {
 }
 
 const maxLifecycleMCPServerNameBytes = 256
+
+// UpdateMCPServerNetworkAccessModeInTransaction changes only the network mode of
+// an existing MCP server. The caller owns the transaction and must perform its
+// RBAC check before calling. Admission is finalized before the project lock to
+// keep ingress/project lock order consistent across MCP and gateway writes.
+func UpdateMCPServerNetworkAccessModeInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, input LifecycleUpdateInput, mode networkaccess.Mode, finalize networkaccess.AdmissionFinalizer) (repo.McpServer, error) {
+	if tx == nil || auditLogger == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || input.ActorUserID == "" || input.ServerID == uuid.Nil {
+		return repo.McpServer{}, fmt.Errorf("invalid MCP server network access update input")
+	}
+	if _, err := networkaccess.Parse(string(mode)); err != nil {
+		return repo.McpServer{}, fmt.Errorf("validate MCP server network access mode: %w", err)
+	}
+	if err := finalize.Finalize(ctx, tx); err != nil {
+		return repo.McpServer{}, fmt.Errorf("finalize network access admission: %w", err)
+	}
+	if err := admission.LockProject(ctx, tx, input.ProjectID); err != nil {
+		return repo.McpServer{}, fmt.Errorf("lock distribution admission: %w", err)
+	}
+	queries := repo.New(tx)
+	existing, err := queries.LockMCPServerByIDAndProjectID(ctx, repo.LockMCPServerByIDAndProjectIDParams{ID: input.ServerID, ProjectID: input.ProjectID})
+	if err != nil {
+		return repo.McpServer{}, fmt.Errorf("lock MCP server: %w", err)
+	}
+	if existing.UnproxiedMcpServerID.Valid && !mode.IsPublicOnly() {
+		return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
+	}
+	updated, err := tx.Exec(ctx, `UPDATE mcp_servers SET network_access_mode = $1, updated_at = clock_timestamp() WHERE id = $2 AND project_id = $3 AND deleted IS FALSE AND EXISTS (SELECT 1 FROM projects p WHERE p.id = mcp_servers.project_id AND p.deleted IS FALSE)`, networkaccess.Storage(mode), input.ServerID, input.ProjectID)
+	if err != nil {
+		return repo.McpServer{}, fmt.Errorf("update MCP server network access mode: %w", err)
+	}
+	if updated.RowsAffected() != 1 {
+		return repo.McpServer{}, pgx.ErrNoRows
+	}
+	after, err := queries.GetMCPServerByIDAndProjectID(ctx, repo.GetMCPServerByIDAndProjectIDParams{ID: input.ServerID, ProjectID: input.ProjectID})
+	if err != nil {
+		return repo.McpServer{}, fmt.Errorf("reload MCP server: %w", err)
+	}
+	if err := auditLogger.LogMcpServerUpdate(ctx, tx, audit.LogMcpServerUpdateEvent{
+		OrganizationID: input.OrganizationID, ProjectID: input.ProjectID,
+		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, input.ActorUserID), ActorDisplayName: input.ActorEmail,
+		ActorSlug: nil, McpServerURN: urn.NewMcpServer(after.ID), McpServerName: conv.FromPGTextOrEmpty[string](after.Name),
+		McpServerSlug: conv.FromPGTextOrEmpty[string](after.Slug), McpServerSnapshotBefore: mv.BuildMcpServerView(existing),
+		McpServerSnapshotAfter: mv.BuildMcpServerView(after),
+	}); err != nil {
+		return repo.McpServer{}, fmt.Errorf("audit MCP server network access update: %w", err)
+	}
+	return after, nil
+}
 
 // MCPServerVisibilityResult reports only the post-update server and root domains
 // that need reconciliation after the caller commits its transaction.
@@ -158,10 +208,14 @@ func UpdateMCPServerLifecycleInTransaction(ctx context.Context, tx pgx.Tx, audit
 
 	storedMode := pgtype.Text{String: "", Valid: false}
 	if input.NetworkAccessMode != nil {
-		if _, err := networkaccess.Parse(string(*input.NetworkAccessMode)); err != nil {
+		mode, err := networkaccess.Parse(string(*input.NetworkAccessMode))
+		if err != nil {
 			return repo.McpServer{}, fmt.Errorf("validate MCP server network access mode: %w", err)
 		}
-		storedMode = networkaccess.Storage(*input.NetworkAccessMode)
+		if existing.UnproxiedMcpServerID.Valid && !mode.IsPublicOnly() {
+			return repo.McpServer{}, oops.E(oops.CodeInvalid, nil, "unproxied MCP servers support only public_only network access")
+		}
+		storedMode = networkaccess.Storage(mode)
 	}
 
 	updated, err := repo.New(tx).UpdateMCPServer(ctx, repo.UpdateMCPServerParams{

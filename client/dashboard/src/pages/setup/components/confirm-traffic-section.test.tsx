@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfirmTrafficSection } from "./confirm-traffic-section";
+import { ConfirmTrafficStep } from "./steps/confirm-traffic-step";
 import {
   isAnthropicOrCursorSource,
   isOtherPlatformSource,
@@ -36,6 +37,9 @@ vi.mock("@gram/client/react-query/verifyOnboardingHooksSetup.js", () => ({
 }));
 vi.mock("@gram/client/react-query/aiDetections.js", () => ({
   useAiDetections: () => mocks.detections,
+}));
+vi.mock("./enable-logging-section", () => ({
+  EnableLoggingSection: () => <p>Enable logging</p>,
 }));
 vi.mock("./session-audit-access", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./session-audit-access")>()),
@@ -293,6 +297,30 @@ describe("ConfirmTrafficSection detected clients", () => {
 });
 
 describe("ConfirmTrafficSection session audit hand-back", () => {
+  it("shares confirmation and access hand-back with the standalone board task", () => {
+    mocks.access.holdsRole = true;
+    const onComplete = vi.fn<() => void>();
+    const view = render(<ConfirmTrafficStep onComplete={onComplete} />);
+    expect(
+      (screen.getByRole("button", { name: "Mark done" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.queryByRole("button", { name: "Remove my access" }),
+    ).toBeNull();
+
+    poll("codex");
+    view.rerender(<ConfirmTrafficStep onComplete={onComplete} />);
+    expect(
+      (screen.getByRole("button", { name: "Mark done" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Remove my access" }));
+    expect(mocks.access.revoke).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Mark done" }));
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
   const card = () => (
     <ConfirmTrafficSection
       index={3}

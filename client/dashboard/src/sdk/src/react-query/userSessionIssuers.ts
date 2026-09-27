@@ -220,6 +220,7 @@ export function setUserSessionIssuersData(
     parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      mcpResourceId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -238,6 +239,7 @@ export function invalidateUserSessionIssuers(
     [parameters: {
       cursor?: string | undefined;
       limit?: number | undefined;
+      mcpResourceId?: string | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

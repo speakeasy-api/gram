@@ -17,6 +17,26 @@ import (
 // where the model reply is known.
 const llmPolicyEvaluationPublished = "published"
 
+// llmPolicyEvaluationShadowPublished is the policy_evaluations outcome
+// recorded once a shadow-mode batch's analysis requests are acknowledged by
+// the topic, one per published message, so the comparison lane's volume can
+// be lined up with the legacy engines' inline scans of the same batch.
+const llmPolicyEvaluationShadowPublished = "shadow_published"
+
+// llmPolicyEvaluationShadowSkipped is the policy_evaluations outcome recorded
+// when the organization is in the shadow engine mode but the worker has no
+// analyzer configured, so the batch ran the legacy engines alone and the
+// comparison lane produced nothing. Counted once per batch.
+const llmPolicyEvaluationShadowSkipped = "shadow_skipped"
+
+// llmPolicyEvaluationShadowPublishError is the policy_evaluations outcome
+// recorded for each shadow-mode analysis request the topic did not
+// acknowledge. The batch keeps the legacy engines' results and does not
+// fail: the comparison lane loses these messages, enforcement loses nothing.
+// Counted per unacknowledged message, alongside shadow_published for the
+// acknowledged ones of the same batch.
+const llmPolicyEvaluationShadowPublishError = "shadow_publish_error"
+
 // llmPolicyEvaluationFallbackLegacy is the policy_evaluations outcome recorded
 // when the organization is on the LLM analyzer flag but the worker has no
 // analyzer configured, so the batch ran the legacy engines instead. It is
@@ -55,10 +75,24 @@ func llmMessageSources(masks CategoryScopeMasks, i int, coveredSources []string)
 // source, carrying the same provenance the legacy analysis requests carry so
 // findings and usage readings attribute identically. Messages every covered
 // source's detection scope excludes are not published, just as the legacy
-// engines never scan them. The publish must succeed for the activity to
-// succeed: this lane is the only engine evaluating the covered sources for
-// the organization, so a dropped request is a silently unscanned message.
-func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, orgSlug string, coveredSources []string, masks CategoryScopeMasks) error {
+// engines never scan them. In the llm mode this lane is the only engine
+// evaluating the covered sources for the organization, so a dropped request
+// is a silently unscanned message and the publish must succeed for the
+// activity to succeed. In the shadow mode (shadow true, execution path
+// llm_shadow_stream) the lane only compares, so the caller counts the
+// messages that were not acknowledged (failed) as shadow_publish_error and
+// keeps the legacy engines' results rather than hold enforcement behind the
+// LLM transport, and the acknowledged messages are counted as
+// shadow_published so a partial publish is not undercounted. In the llm mode
+// published is only recorded once every message was acknowledged, since the
+// activity retry republishes the whole batch otherwise.
+func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeBatchArgs, messages []batchMessage, orgSlug string, coveredSources []string, masks CategoryScopeMasks, shadow bool) (failed int, err error) {
+	executionPath := llmAnalyzerStreamExecutionPath
+	outcome := llmPolicyEvaluationPublished
+	if shadow {
+		executionPath = llmShadowStreamExecutionPath
+		outcome = llmPolicyEvaluationShadowPublished
+	}
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	requestID := batchScanRequestID(args, "standard")
@@ -68,7 +102,7 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 			continue
 		}
 		chatMessageID, contentPartID := msg.anchorIDStrings()
-		provenance := batchRiskProvenance(args, msg, llmAnalyzerStreamExecutionPath, requestID.String())
+		provenance := batchRiskProvenance(args, msg, executionPath, requestID.String())
 		body, toolCalls := llmMessageInput(msg)
 
 		publishResults = append(publishResults, a.llmPub.Publish(ctx, riskv1.LLMAnalysis_builder{
@@ -85,7 +119,7 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 			OriginRiskPolicyId:      new(args.RiskPolicyID.String()),
 			OriginRiskPolicyVersion: &args.PolicyVersion,
 			MessageLinkReason:       &provenance.MessageLinkReason,
-			ExecutionPath:           new(llmAnalyzerStreamExecutionPath),
+			ExecutionPath:           &executionPath,
 			ToolCallId:              &provenance.ToolCallID,
 			HookSource:              &msg.Source,
 			PolicyLinkReason:        nil,
@@ -103,13 +137,18 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 			// reports truncation on its own span; the request carries the
 			// full text.
 			ContentTruncated: new(false),
+			Shadow:           &shadow,
 		}.Build()))
 	}
-	if err := drainPublishAcks(ctx, "publish llm analysis requests", publishResults); err != nil {
-		return err
+	acked, err := countPublishAcks(ctx, "publish llm analysis requests", publishResults)
+	// The shadow lane keeps a partial batch, so its acknowledged messages are
+	// counted now. The enforcing lane fails the activity on any unacknowledged
+	// message and the retry republishes the whole batch, so counting a partial
+	// publish would count the acknowledged messages again on the retry.
+	if acked > 0 && (shadow || err == nil) {
+		a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), outcome, acked)
 	}
-	a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), llmPolicyEvaluationPublished, len(publishResults))
-	return nil
+	return len(publishResults) - acked, err
 }
 
 // llmMessageInput renders the message the way the judge lane does: a tool

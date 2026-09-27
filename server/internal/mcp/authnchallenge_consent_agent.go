@@ -101,7 +101,7 @@ func (s *Service) agentAuthorizationRollout(ctx context.Context, logger *slog.Lo
 		return false, "", fmt.Errorf("read organization metadata: %w", err)
 	}
 	groups := feature.OrgProjectGroups(organization.Slug, "")
-	for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentMCPAuthorizationM2} {
+	for _, flag := range []feature.Flag{feature.FlagAgentManagement, feature.FlagAgentIdentityCredentials} {
 		evaluation, err := feature.EvaluateFlag(ctx, s.features, flag, endpoint.OrganizationID, groups)
 		if err != nil {
 			logger.WarnContext(ctx, "agent authorization rollout evaluation unavailable")

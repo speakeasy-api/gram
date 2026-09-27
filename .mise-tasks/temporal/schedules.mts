@@ -35,14 +35,12 @@ const LOCK_ATTEMPTS = 60;
 const temporal = [
   "docker",
   "compose",
-  "-f",
-  "compose.shared.yml",
-  "-p",
-  "gram-shared",
   "exec",
   "-T",
   "gram-temporal",
   "temporal",
+  "--command-timeout",
+  "15s",
 ];
 const capture = $({ stdio: ["ignore", "pipe", "inherit"] });
 const quiet = $({ stdio: ["ignore", "ignore", "inherit"] });

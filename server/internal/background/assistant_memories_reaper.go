@@ -19,6 +19,9 @@ const (
 	assistantMemoriesReaperScheduleID = "v1:assistant-memories-reaper-schedule"
 	assistantMemoriesReaperInterval   = 7 * 24 * time.Hour
 
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	assistantMemoriesReaperCatchupWindow = assistantMemoriesReaperInterval - time.Second
+
 	// AssistantMemoryReapAfter is the grace period a soft-deleted
 	// assistant_memories row stays around before the reaper hard-deletes
 	// it. Long enough for accidental-delete recovery, short enough that
@@ -58,8 +61,9 @@ func AssistantMemoriesReaperWorkflow(ctx workflow.Context) error {
 }
 
 func AddAssistantMemoriesReaperSchedule(ctx context.Context, temporalEnv *tenv.Environment) error {
-	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
-		ID: assistantMemoriesReaperScheduleID,
+	_, err := createScheduleWithCatchup(ctx, temporalEnv.Client().ScheduleClient(), client.ScheduleOptions{
+		CatchupWindow: assistantMemoriesReaperCatchupWindow,
+		ID:            assistantMemoriesReaperScheduleID,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{{Every: assistantMemoriesReaperInterval}},
 		},

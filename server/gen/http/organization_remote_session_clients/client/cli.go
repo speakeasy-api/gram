@@ -101,6 +101,32 @@ func BuildGetClientPayload(organizationRemoteSessionClientsGetClientID string, o
 	return v, nil
 }
 
+// BuildGetClientDelegationStatusPayload builds the payload for the
+// organizationRemoteSessionClients getClientDelegationStatus endpoint from CLI
+// flags.
+func BuildGetClientDelegationStatusPayload(organizationRemoteSessionClientsGetClientDelegationStatusID string, organizationRemoteSessionClientsGetClientDelegationStatusSessionToken string) (*organizationremotesessionclients.GetClientDelegationStatusPayload, error) {
+	var err error
+	var id string
+	{
+		id = organizationRemoteSessionClientsGetClientDelegationStatusID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationRemoteSessionClientsGetClientDelegationStatusSessionToken != "" {
+			sessionToken = &organizationRemoteSessionClientsGetClientDelegationStatusSessionToken
+		}
+	}
+	v := &organizationremotesessionclients.GetClientDelegationStatusPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGetClientDeletePreflightPayload builds the payload for the
 // organizationRemoteSessionClients getClientDeletePreflight endpoint from CLI
 // flags.

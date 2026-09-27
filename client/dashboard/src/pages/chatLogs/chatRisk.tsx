@@ -25,8 +25,11 @@ import {
   getMatchStrings,
   getRiskBadgeLabel,
   highlightMatches,
+  maskBlock,
   maskValue,
   matchShownInDescription,
+  needsWholeMessageMask,
+  resultIsSpanlessSensitive,
   resultsAreSensitive,
   shouldShowRiskRuleId,
   useRowReveal,
@@ -77,6 +80,9 @@ export function HighlightedMessageText({
   const [expanded, setExpanded] = useState(false);
   const collapsed = snippets !== null && !expanded;
   const masked = sensitive && !revealed;
+  // A sensitive finding without a span (the LLM analyzer's) leaves nothing to
+  // dot out but the message itself, so the whole body masks as one block.
+  const maskWhole = needsWholeMessageMask(results);
   // Lets a reviewer act on a flagged (especially just-revealed) secret right
   // where it's read, not just from the turn-level "N risks" popover.
   const actions = useFindingActions(results);
@@ -90,13 +96,19 @@ export function HighlightedMessageText({
               {snippets.map((snippet, i) => (
                 <Fragment key={i}>
                   {i > 0 && <Ellipsis />}
-                  {highlightMatches(snippet.text, matches, masked, sensitive)}
+                  {highlightMatches(
+                    snippet.text,
+                    matches,
+                    masked,
+                    sensitive,
+                    maskWhole,
+                  )}
                 </Fragment>
               ))}
               {snippets[snippets.length - 1]!.elidedAfter && <Ellipsis />}
             </>
           ) : (
-            highlightMatches(text, matches, masked, sensitive)
+            highlightMatches(text, matches, masked, sensitive, maskWhole)
           )}
         </div>
       )}
@@ -183,6 +195,33 @@ function MaskedMatchInline({ value }: { value: string }): ReactNode {
   );
 }
 
+// The rationale of a sensitive finding that has no span of its own (the LLM
+// analyzer's secret / PII verdicts) may quote the flagged value, so it stays
+// dotted out until the viewer asks for it — same gating, and same chat:read
+// reasoning, as MaskedMatchInline above.
+function MaskedRationale({ text }: { text: string }): ReactNode {
+  const { revealed, setRevealed } = useRowReveal(true);
+  return (
+    <p className="text-muted-foreground mt-1 flex items-start gap-1 text-xs">
+      <span className="min-w-0 whitespace-pre-wrap">
+        {revealed ? text : maskBlock(text)}
+      </span>
+      <button
+        type="button"
+        className="text-muted-foreground hover:text-foreground mt-0.5 shrink-0"
+        aria-label={revealed ? "Hide rationale" : "Reveal rationale"}
+        onClick={() => setRevealed(!revealed)}
+      >
+        {revealed ? (
+          <Eye className="h-3 w-3" />
+        ) : (
+          <EyeOff className="h-3 w-3" />
+        )}
+      </button>
+    </p>
+  );
+}
+
 type FindingSpan = { match: string; field?: string; path?: string };
 
 type TranscriptFindingSpan = FindingSpan;
@@ -191,6 +230,9 @@ type TranscriptFinding = {
   id: string;
   label: string;
   rationale?: string;
+  /** The rationale may quote a secret or personal datum the finding could not
+   * point at otherwise: keep it masked until revealed. */
+  rationaleSensitive?: boolean;
   ruleId?: string;
   blockId?: string;
   spans?: TranscriptFindingSpan[];
@@ -279,11 +321,14 @@ function TranscriptFindingsCard({
                   </div>
                 )}
               </div>
-              {finding.rationale && (
-                <p className="text-muted-foreground mt-1 text-xs">
-                  {finding.rationale}
-                </p>
-              )}
+              {finding.rationale &&
+                (finding.rationaleSensitive ? (
+                  <MaskedRationale text={finding.rationale} />
+                ) : (
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {finding.rationale}
+                  </p>
+                ))}
               {/* When a durable tool call block was recorded for this finding's
                * message (any agent — Claude, Cursor, Codex), link to its block
                * page where the viewer can read the full reason and leave 👍/👎
@@ -354,6 +399,7 @@ function riskResultToTranscriptFinding({
     id: result.id,
     label: getRiskBadgeLabel(result),
     rationale: result.description,
+    rationaleSensitive: resultIsSpanlessSensitive(result),
     ruleId: result.ruleId,
     blockId: result.blockId,
     spans: matchShownInDescription(result) ? [] : spans,

@@ -30,6 +30,9 @@ const (
 	// ever, and the scan returns nothing on almost every run.
 	trialDemotionScheduleInterval = time.Hour
 
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	trialDemotionCatchupWindow = trialDemotionScheduleInterval - time.Second
+
 	// The sweep walks organizations one at a time, so this bounds a burst of
 	// trials that all expire in the same hour. A run that overruns it leaves
 	// the organizations it did not reach unstamped, and the next tick picks
@@ -90,9 +93,10 @@ func AddTrialDemotionSchedule(ctx context.Context, temporalEnv *tenv.Environment
 	}
 
 	_, err := sc.Create(ctx, client.ScheduleOptions{
-		ID:     trialDemotionScheduleID,
-		Spec:   spec,
-		Action: action,
+		CatchupWindow: trialDemotionCatchupWindow,
+		ID:            trialDemotionScheduleID,
+		Spec:          spec,
+		Action:        action,
 	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
@@ -102,6 +106,7 @@ func AddTrialDemotionSchedule(ctx context.Context, temporalEnv *tenv.Environment
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, trialDemotionCatchupWindow)
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,

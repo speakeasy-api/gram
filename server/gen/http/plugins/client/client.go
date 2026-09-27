@@ -18,6 +18,14 @@ import (
 
 // Client lists the plugins service endpoint HTTP clients.
 type Client struct {
+	// ListDistributionPlugins Doer is the HTTP client used to make requests to the
+	// listDistributionPlugins endpoint.
+	ListDistributionPluginsDoer goahttp.Doer
+
+	// GetDistributionPlugin Doer is the HTTP client used to make requests to the
+	// getDistributionPlugin endpoint.
+	GetDistributionPluginDoer goahttp.Doer
+
 	// ListPlugins Doer is the HTTP client used to make requests to the listPlugins
 	// endpoint.
 	ListPluginsDoer goahttp.Doer
@@ -106,6 +114,8 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
+		ListDistributionPluginsDoer:     doer,
+		GetDistributionPluginDoer:       doer,
 		ListPluginsDoer:                 doer,
 		GetPluginDoer:                   doer,
 		CreatePluginDoer:                doer,
@@ -128,6 +138,54 @@ func NewClient(
 		host:                            host,
 		decoder:                         dec,
 		encoder:                         enc,
+	}
+}
+
+// ListDistributionPlugins returns an endpoint that makes HTTP requests to the
+// plugins service listDistributionPlugins server.
+func (c *Client) ListDistributionPlugins() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListDistributionPluginsRequest(c.encoder)
+		decodeResponse = DecodeListDistributionPluginsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListDistributionPluginsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListDistributionPluginsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "listDistributionPlugins", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetDistributionPlugin returns an endpoint that makes HTTP requests to the
+// plugins service getDistributionPlugin server.
+func (c *Client) GetDistributionPlugin() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetDistributionPluginRequest(c.encoder)
+		decodeResponse = DecodeGetDistributionPluginResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetDistributionPluginRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetDistributionPluginDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("plugins", "getDistributionPlugin", err)
+		}
+		return decodeResponse(resp)
 	}
 }
 

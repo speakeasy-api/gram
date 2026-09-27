@@ -339,7 +339,7 @@ func TestSkillCapture_PolicyVersionChangeRescansVersion(t *testing.T) {
 type failPolicyGenerationQuery struct{}
 
 func (failPolicyGenerationQuery) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
-	if strings.HasPrefix(data.SQL, "-- name: ListEnabledRiskPoliciesByProject") {
+	if strings.HasPrefix(data.SQL, "-- name: ListEnabledUnscopedRiskPoliciesByProject") {
 		queryCtx, cancel := context.WithCancel(ctx)
 		cancel()
 		return queryCtx

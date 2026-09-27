@@ -115,6 +115,8 @@ export const ImpersonationBanner = (): JSX.Element => {
   };
 
   // Height must stay 2.25rem (h-9) to match --header-offset / --banner-offset.
+  // Sticky so it stays above the fixed sidebar and sticky page header while
+  // the document scrolls.
   // Solid ink-family bars (editorial): demo = ink, impersonation = deep brand
   // red. White mono label; the exit action is a hairline-outlined light chip.
   const toneClasses = isDemo
@@ -125,7 +127,7 @@ export const ImpersonationBanner = (): JSX.Element => {
   return (
     <div
       className={cn(
-        "flex h-9 items-center justify-center gap-3 border-b px-4",
+        "sticky top-0 z-40 flex h-9 items-center justify-center gap-3 border-b px-4",
         toneClasses,
       )}
       role="alert"
@@ -153,10 +155,10 @@ const AppLayoutContent = ({
   isImpersonating: boolean;
 }) => {
   return (
-    <div className="relative flex h-screen w-full flex-col">
+    <div className="relative flex min-h-screen w-full flex-col">
       {isImpersonating && <ImpersonationBanner />}
       <ModeSwitcher mode="canvas" />
-      <ModeSurface mode="canvas" className="flex w-full flex-1 overflow-hidden">
+      <ModeSurface mode="canvas" className="flex w-full flex-1 overflow-x-clip">
         {/* Default (non-inset) variant: flat panes divided by a hairline
             instead of a floating bordered card. */}
         <AppSidebar />
@@ -255,12 +257,12 @@ export const OrgLayout = (): JSX.Element => {
         } as React.CSSProperties
       }
     >
-      <div className="relative flex h-screen w-full flex-col">
+      <div className="relative flex min-h-screen w-full flex-col">
         {isImpersonating && <ImpersonationBanner />}
         <ModeSwitcher mode="canvas" />
         <ModeSurface
           mode="canvas"
-          className="flex w-full flex-1 overflow-hidden"
+          className="flex w-full flex-1 overflow-x-clip"
         >
           <OrgSidebar />
           <SidebarInset>

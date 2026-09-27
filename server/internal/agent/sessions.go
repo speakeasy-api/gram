@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -179,7 +180,7 @@ func (s *Service) ReportSessionMoved(ctx context.Context, payload *gen.ReportSes
 		childChatID = uuid.NullUUID{UUID: chat.SessionIDToChatID(childSessionID), Valid: true}
 	}
 	sourceSurface := strings.TrimSpace(conv.PtrValOr(payload.SourceSurface, ""))
-	deviceSerial := normalizeSerial(payload.SerialNumber)
+	deviceSerial := deviceidentity.NormalizeSerial(payload.SerialNumber)
 	deviceHostname := strings.TrimSpace(conv.PtrValOr(payload.Hostname, ""))
 
 	dbtx, err := s.db.Begin(ctx)

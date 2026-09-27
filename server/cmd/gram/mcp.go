@@ -197,6 +197,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err := validateServerURL(serverURL, serviceEnv); err != nil {
 		return fmt.Errorf("invalid server url: %w", err)
 	}
+	authenticationHost, err := mcp.NewAuthenticationHost(c.String("authentication-host-url"), serverURL, serviceEnv)
+	if err != nil {
+		return fmt.Errorf("invalid authentication host url: %w", err)
+	}
 
 	enc, err := encryption.New(c.String("encryption-key"))
 	if err != nil {
@@ -247,6 +251,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return fmt.Errorf("create publishers: %w", err)
 	}
+	publishersShutdown := len(shutdown.funcs)
 	shutdown.funcs = append(shutdown.funcs, stop)
 
 	logsEnabled := newFeatureChecker(logger, productFeatures, productfeatures.FeatureLogs)
@@ -266,6 +271,20 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		chat.NewChatMessageCaptureStrategy(logger, meterProvider, db, chatWriter), chat.NewDefaultUsageTrackingStrategy(db, logger, billingTracker), nil, telemLogger)
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
+	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
+	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
+		c, logger, tracerProvider, meterProvider, db, redisClient, featureFlags, completions, publishers, shadowMCPClient,
+	)
+	if err != nil {
+		return err
+	}
+	shutdown.funcs = append(shutdown.funcs, mcpRiskScanner.Shutdown)
+	// Shutdown funcs run concurrently, so flag findings drain inside the
+	// publishers' stop instead of racing it.
+	stopPublishers := shutdown.funcs[publishersShutdown]
+	shutdown.funcs[publishersShutdown] = func(ctx context.Context) error {
+		return errors.Join(mcpRiskEvaluator.Drain(ctx), stopPublishers(ctx))
+	}
 	slackClient := slack_client.NewSlackClient(guardianPolicy)
 	// Listing and reading triggers works without Temporal; scheduling one
 	// returns an error from the trigger tool instead of dispatching.
@@ -280,6 +299,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("build kms signing client factory: %w", err)
 	}
 	clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
+	clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
 
 	tunnelHTTPClient, err := newTunnelHTTPClient(c, guardianPolicy, redisClient)
 	if err != nil {
@@ -296,7 +316,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		Encryption: enc, Guardian: guardianPolicy, Functions: functionsOrchestrator,
 		BillingTracker: billingTracker, Billing: billingRepo, Telemetry: telemLogger, TelemetryService: telemSvc,
 		RAG: ragService, Triggers: triggerApp, Authz: authzEngine, AssistantTokens: assistantTokenManager,
-		ShadowMCP: shadowmcp.NewClient(logger, db, cacheImpl, serverURL), Audit: auditLogger,
+		ShadowMCP: shadowMCPClient, MCPRisk: mcpRiskEvaluator, Audit: auditLogger,
 		PlatformExtras: platformExtras, PlatformFeatureChecker: productFeatures.PlatformFeatureCheck,
 		PlatformToolsets: map[string]platformtools.Toolset{}, Identity: identityResolver, Challenges: remoteSessionDeps.Challenges,
 	})
@@ -315,12 +335,14 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("build MCP server runtime: %w", err)
 	}
 
-	mux, err := newMCPServerMux(c, logger, db, serverURL, chatSessions, publishers)
+	mux, err := newMCPServerMux(c, logger, db, serverURL, authenticationHost, chatSessions, publishers)
 	if err != nil {
 		return err
 	}
 	mcp.Attach(mux, runtime.MCP, runtime.Metadata)
 	xmcp.Attach(mux, runtime.XMCP, runtime.Metadata)
+	mcp.AttachAuthenticationHost(authenticationHost, runtime.MCP)
+	xmcp.AttachAuthenticationHost(authenticationHost, runtime.XMCP)
 	usersessions.AttachRetiredProxy(mux, logger)
 
 	srv := &http.Server{
@@ -394,7 +416,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 // newMCPServerMux builds the public listener middleware chain for the MCP
 // tier. It mirrors the public-route portion of the `gram start` chain and
 // omits the marketplace, hooks, and management-API layers.
-func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, chatSessions middleware.ChatSessionValidator, publishers *background.Publishers) (goahttp.Muxer, error) {
+func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serverURL *url.URL, authenticationHost *mcp.AuthenticationHost, chatSessions middleware.ChatSessionValidator, publishers *background.Publishers) (goahttp.Muxer, error) {
 	mux := goahttp.NewMuxer()
 	mux.Use(middleware.NetworkServingPolicyVersion)
 	mux.Use(middleware.StripPrivateIngressHeaders)
@@ -418,13 +440,22 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	mux.Use(middleware.MCPProtocolVersionTelemetry)
 	mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 	mux.Use(middleware.NewRecovery(logger))
-	mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), chatSessions))
-	mcpSecurity, err := middleware.MCPSecurity(logger, []string{c.String("server-url"), c.String("site-url")})
+	platformHosts, err := parsePlatformHosts(c, authenticationHost)
+	if err != nil {
+		return nil, err
+	}
+	mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url"), platformOrigins(platformHosts), chatSessions))
+	mcpSecurity, err := middleware.MCPSecurity(logger, append([]string{c.String("server-url"), c.String("site-url")}, platformOrigins(platformHosts)...))
 	if err != nil {
 		return nil, fmt.Errorf("configure mcp security middleware: %w", err)
 	}
+	// Below CORS, which browser OAuth clients need on the authentication
+	// host too. Above MCPSecurity, so MCP endpoint paths answer 404 there like
+	// every route the host does not serve, and above customdomains.Middleware,
+	// which refuses hosts it does not know.
+	mux.Use(authenticationHost.Middleware)
 	mux.Use(mcpSecurity)
-	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
+	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL, platformHosts))
 	mux.Use(metering.NewMCPBandwidthMiddleware(logger, publishers.MeterReadings))
 	mux.Use(middleware.SessionMiddleware)
 	return mux, nil

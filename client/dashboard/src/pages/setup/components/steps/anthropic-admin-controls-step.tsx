@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
-import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { StepContainer } from "../step-container";
 import { StepSection } from "../step-section";
 import { EnableLoggingSection } from "../enable-logging-section";
@@ -49,11 +48,6 @@ export function AnthropicAdminControlsStep({
 
   return (
     <StepContainer
-      icon={
-        <div className="bg-secondary flex h-12 w-12 items-center justify-center">
-          <AgentProviderIcon source="claude" className="h-6 w-6" />
-        </div>
-      }
       title="Set up Anthropic admin controls"
       description="Claude Cowork and Claude Code are both configured from Claude.ai: organization plugins make the observability plugin required in Cowork, which runs in Claude.ai's cloud sandbox out of the device agent's reach, and managed settings push it to Claude Code. Turn logging on, publish your plugin marketplace, connect each of them, optionally connect Cursor from the same marketplace, and confirm their events arrive."
       onContinue={onComplete}

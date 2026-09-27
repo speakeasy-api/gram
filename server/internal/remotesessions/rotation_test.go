@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,10 +17,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -87,13 +90,15 @@ const invalidClientBody = `{"error":"invalid_client","error_description":"Client
 func stageRegistration(t *testing.T, env syntheticExpiryEnv, registrationEndpoint string, rejectedAt, secretExpiresAt *time.Time) {
 	t.Helper()
 	ctx := t.Context()
-	n, err := env.q.ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, repo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
+	n, err := testrepo.New(env.db).ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
+		ProjectID: conv.ToNullUUID(env.projectID), OrganizationID: conv.ToPGText(env.organizationID),
 		RegistrationEndpoint: conv.ToPGTextEmpty(registrationEndpoint),
 		ClientID:             env.clientID,
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
-	n, err = env.q.ForceRemoteSessionClientRegistrationFixture(ctx, repo.ForceRemoteSessionClientRegistrationFixtureParams{
+	n, err = testrepo.New(env.db).ForceRemoteSessionClientRegistrationFixture(ctx, testrepo.ForceRemoteSessionClientRegistrationFixtureParams{
+		ProjectID: conv.ToNullUUID(env.projectID), OrganizationID: conv.ToPGText(env.organizationID),
 		ClientSecretExpiresAt: conv.PtrToPGTimestamptz(secretExpiresAt),
 		UpstreamRejectedAt:    conv.PtrToPGTimestamptz(rejectedAt),
 		ID:                    env.clientID,
@@ -197,11 +202,17 @@ func TestBuildAuthorizationUrl_RotatesRejectedRegistration(t *testing.T) {
 	upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
 	// The rotator must release its advisory-lock connection before detached
 	// revocation workers borrow from the same pool.
-	ctx, env := newSyntheticExpiryEnv(t, "rotate-rejected", upstream.handler(), withMaxDBConns(1))
+	ctx, env := newSyntheticExpiryEnv(t, "rotate-rejected", upstream.handler(), withMaxDBConns(2))
 	rejectedAt := time.Now().Add(-time.Hour)
 	stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/register", &rejectedAt, nil)
 
+	// Admission reserves ordinary-work capacity; occupy it to retain the
+	// regression proving rotation needs only one available connection.
+	reserved, reserveErr := env.db.Acquire(t.Context())
+	require.NoError(t, reserveErr)
+	t.Cleanup(reserved.Release)
 	require.Equal(t, "rotated-cid", mintLogin(t, env))
+	reserved.Release()
 
 	require.EqualValues(t, 1, upstream.refreshAttempts.Load(), "the rejection is confirmed against the token endpoint before anything changes")
 	require.EqualValues(t, 1, upstream.registrationAttempts.Load())
@@ -231,11 +242,17 @@ func TestBuildAuthorizationUrl_KeepsRegistrationTheIssuerStillRecognizes(t *test
 	upstream := &rotationUpstream{refreshStatus: http.StatusBadRequest, refreshBody: `{"error":"invalid_grant","error_description":"Unknown refresh token"}`}
 	// Clearing the stale rejection marker must reuse the advisory-lock
 	// connection instead of waiting for a second pooled connection.
-	_, env := newSyntheticExpiryEnv(t, "rotate-recognized", upstream.handler(), withMaxDBConns(1))
+	_, env := newSyntheticExpiryEnv(t, "rotate-recognized", upstream.handler(), withMaxDBConns(2))
 	rejectedAt := time.Now().Add(-time.Hour)
 	stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/register", &rejectedAt, nil)
 
+	// Admission reserves ordinary-work capacity; occupy it to retain the
+	// regression proving rotation needs only one available connection.
+	reserved, reserveErr := env.db.Acquire(t.Context())
+	require.NoError(t, reserveErr)
+	t.Cleanup(reserved.Release)
 	require.Equal(t, "synthetic-cid-rotate-recognized", mintLogin(t, env))
+	reserved.Release()
 
 	require.EqualValues(t, 1, upstream.refreshAttempts.Load())
 	require.Zero(t, upstream.registrationAttempts.Load())
@@ -300,6 +317,29 @@ func TestBuildAuthorizationUrl_KeepsClientWhenReRegistrationFails(t *testing.T) 
 	client := loadClient(t, env)
 	require.Equal(t, "synthetic-cid-rotate-register-fails", client.ClientID)
 	require.True(t, client.UpstreamRejectedAt.Valid, "the marker stays so the next login tries again")
+}
+
+// A rotation is a dynamic client registration like any other, so a
+// re-registration the issuer refuses is classified and counted as one. Without
+// this the failure that strands every login at the issuer until an
+// administrator re-registers by hand is the one the taxonomy never sees.
+func TestBuildAuthorizationUrl_RecordsRefusedReRegistration(t *testing.T) {
+	t.Parallel()
+
+	upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
+	_, env := newSyntheticExpiryEnv(t, "rotate-register-recorded", upstream.handler(), withRegistrationTelemetry())
+	rejectedAt := time.Now().Add(-time.Hour)
+	// A path the fake issuer does not serve as a registration endpoint.
+	stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/missing", &rejectedAt, nil)
+
+	require.Equal(t, "synthetic-cid-rotate-register-recorded", mintLogin(t, env))
+
+	points := registrationFailurePoints(t, env.registrationTelemetryReader)
+	require.Len(t, points, 1, "a refused re-registration records exactly one failure")
+	require.EqualValues(t, 1, points[0].Value)
+	method, ok := points[0].Attributes.Value(attr.OAuthRegistrationMethod(registration.MethodDCR).Key)
+	require.True(t, ok, "the rotation failure carries a registration method")
+	require.Equal(t, string(registration.MethodDCR), method.AsString())
 }
 
 // An issuer that reports an expiry at or before the issuance would otherwise
@@ -402,6 +442,8 @@ func TestBuildAuthorizationUrl_WaitsForConcurrentRotation(t *testing.T) {
 			ExpectedClientID:        before.ClientID,
 			ExpectedUpdatedAt:       before.UpdatedAt,
 			ExpectedIssuerID:        before.RemoteSessionIssuerID,
+			ExpectedProjectID:       before.ProjectID,
+			ExpectedOrganizationID:  before.OrganizationID,
 		})
 	}()
 
@@ -425,6 +467,8 @@ func replaceAsWinner(ctx context.Context, env syntheticExpiryEnv, before repo.Re
 		ExpectedClientID:        before.ClientID,
 		ExpectedUpdatedAt:       before.UpdatedAt,
 		ExpectedIssuerID:        before.RemoteSessionIssuerID,
+		ExpectedProjectID:       before.ProjectID,
+		ExpectedOrganizationID:  before.OrganizationID,
 	})
 	if err != nil {
 		return fmt.Errorf("replace registration as winner: %w", err)
@@ -561,7 +605,8 @@ func TestBuildAuthorizationUrl_AdoptsConcurrentReplacementWhenIssuerLostRegistra
 
 	stale := listClient(t, env)
 	require.NoError(t, replaceAsWinner(ctx, env, loadClient(t, env)))
-	n, err := env.q.ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, repo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
+	n, err := testrepo.New(env.db).ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerRegistrationEndpointFixtureParams{
+		ProjectID: conv.ToNullUUID(env.projectID), OrganizationID: conv.ToPGText(env.organizationID),
 		RegistrationEndpoint: pgtype.Text{String: "", Valid: false},
 		ClientID:             env.clientID,
 	})
@@ -690,4 +735,57 @@ func TestBuildAuthorizationUrl_RotationOfBoundIssuerRidesTheTunnel(t *testing.T)
 	client := loadClient(t, env)
 	require.Equal(t, "rotated-cid", client.ClientID)
 	require.False(t, client.UpstreamRejectedAt.Valid, "a completed rotation clears the marker")
+}
+
+func TestBuildAuthorizationUrl_LegacyRegistrationCallback(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name         string
+		endpointPath string
+		rotate       bool
+	}{
+		{name: "successful rotation", endpointPath: "/register", rotate: true},
+		{name: "failed rotation", endpointPath: "/missing"},
+		{name: "no rotation"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
+			ctx, env := newSyntheticExpiryEnv(t, "legacy-callback", upstream.handler(), func(options *syntheticLoginOptions) {
+				options.legacyCallbackURL = true
+			})
+			if tc.endpointPath != "" {
+				rejectedAt := time.Now().Add(-time.Hour)
+				stageRegistration(t, env, issuerTokenEndpoint(t, env)+tc.endpointPath, &rejectedAt, nil)
+			}
+
+			client := listClient(t, env)
+			require.True(t, client.LegacyCallbackUrl)
+			authURL, err := env.mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+				ID:                  uuid.NewString(),
+				ProjectID:           env.projectID,
+				OrganizationID:      env.organizationID,
+				UserSessionIssuerID: env.session.UserSessionIssuerID,
+				Subject:             &env.subject,
+				McpSlug:             "rotation-mcp",
+			}, client)
+			require.NoError(t, err)
+			parsed, err := url.Parse(authURL)
+			require.NoError(t, err)
+			callback, err := url.Parse(parsed.Query().Get("redirect_uri"))
+			require.NoError(t, err)
+			stored := loadClient(t, env)
+			require.Equal(t, !tc.rotate, stored.LegacyCallbackUrl)
+			if tc.rotate {
+				require.Equal(t, "rotated-cid", parsed.Query().Get("client_id"))
+				require.Equal(t, "/mcp/remote_login_callback", callback.Path)
+				registration := *upstream.lastRegistration.Load()
+				require.Equal(t, []any{callback.String()}, registration["redirect_uris"], "registration and authorization must use the same canonical callback")
+			} else {
+				require.Equal(t, client.ExternalClientID, parsed.Query().Get("client_id"))
+				require.Equal(t, "/oauth/callback", callback.Path)
+			}
+		})
+	}
 }

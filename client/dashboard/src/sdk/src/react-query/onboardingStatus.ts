@@ -59,7 +59,7 @@ export type OnboardingStatusQueryError =
  * getOnboardingStatus organizations
  *
  * @remarks
- * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
+ * Get the onboarding status for the active organization by checking WorkOS domain verification, SSO connections, and directory sync state.
  */
 export function useOnboardingStatus(
   request?: GetOnboardingStatusRequest | undefined,
@@ -85,7 +85,7 @@ export function useOnboardingStatus(
  * getOnboardingStatus organizations
  *
  * @remarks
- * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
+ * Get the onboarding status for the active organization by checking WorkOS domain verification, SSO connections, and directory sync state.
  */
 export function useOnboardingStatusSuspense(
   request?: GetOnboardingStatusRequest | undefined,

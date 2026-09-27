@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 func TestIsClientIDURL(t *testing.T) {

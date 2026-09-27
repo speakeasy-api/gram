@@ -295,6 +295,40 @@ func (q *Queries) FinishReconcileRun(ctx context.Context, arg FinishReconcileRun
 	return i, err
 }
 
+const getApplicationState = `-- name: GetApplicationState :one
+SELECT
+    a.status
+  , (SELECT COUNT(*) FROM okta_application_assignments AS s
+      WHERE s.organization_id = a.organization_id
+        AND s.identity_provider_connection_id = a.identity_provider_connection_id
+        AND s.okta_app_id = a.okta_app_id
+        AND s.removed_at IS NULL)::integer AS assignments
+FROM okta_applications AS a
+WHERE a.organization_id = $1
+  AND a.identity_provider_connection_id = $2
+  AND a.okta_app_id = $3
+  AND a.removed_at IS NULL
+`
+
+type GetApplicationStateParams struct {
+	OrganizationID               string
+	IdentityProviderConnectionID uuid.UUID
+	OktaAppID                    string
+}
+
+type GetApplicationStateRow struct {
+	Status      string
+	Assignments int32
+}
+
+// Reads the last sync, so it is only as fresh as that sync.
+func (q *Queries) GetApplicationState(ctx context.Context, arg GetApplicationStateParams) (GetApplicationStateRow, error) {
+	row := q.db.QueryRow(ctx, getApplicationState, arg.OrganizationID, arg.IdentityProviderConnectionID, arg.OktaAppID)
+	var i GetApplicationStateRow
+	err := row.Scan(&i.Status, &i.Assignments)
+	return i, err
+}
+
 const getApplicationsSyncedAt = `-- name: GetApplicationsSyncedAt :one
 SELECT applications_synced_at
 FROM okta_identity_provider_connections

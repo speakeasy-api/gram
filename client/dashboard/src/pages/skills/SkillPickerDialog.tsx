@@ -1,3 +1,7 @@
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
+import { useProject } from "@/contexts/Auth";
+import { hasScopeInGrants, useRBAC } from "@/hooks/useRBAC";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { Page } from "@/components/page-layout";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -48,6 +52,14 @@ export function SkillPickerDialog({
   renderSelectionNotice?: (selectedCount: number) => ReactNode;
   onBatchComplete: (result: SkillPickerResult) => void | Promise<void>;
 }): JSX.Element {
+  const canWritePlugin = usePluginWriteAccess();
+  const project = useProject();
+  const scope = usePluginQueryScope();
+  const { grants, isLoading: isLoadingPermissions } = useRBAC();
+  const canReadSkills =
+    !isLoadingPermissions &&
+    hasScopeInGrants(grants ?? [], "skill:read", project.id, project.id);
+  const canLoadSkills = !target.pluginId || (canWritePlugin && canReadSkills);
   const [search, setSearch] = useState("");
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
   const [isBatchAdding, setIsBatchAdding] = useState(false);
@@ -56,20 +68,39 @@ export function SkillPickerDialog({
     setSearch("");
     setSelectedSkillIds([]);
   }, [open, target.assistantId, target.pluginId]);
-  const skillsQuery = useSkillsInfinite({ limit: 200 }, undefined, {
+  const skillsQuery = useSkillsInfinite({ ...scope, limit: 200 }, undefined, {
     throwOnError: false,
-    enabled: open,
+    enabled: open && canLoadSkills,
   });
-  useDrainInfiniteQuery(skillsQuery, open);
-  const isLoading = skillsQuery.isPending || skillsQuery.hasNextPage;
+  useDrainInfiniteQuery(skillsQuery, open && canLoadSkills);
+  const isLoading =
+    canLoadSkills && (skillsQuery.isPending || skillsQuery.hasNextPage);
   const availableSkills = useMemo(() => {
     const excluded = new Set(excludedSkillIds);
     return prioritizeAddableSkills(
       (
         skillsQuery.data?.pages.flatMap((page) => page.result.skills) ?? []
-      ).filter((skill) => !excluded.has(skill.id)),
+      ).filter(
+        (skill) =>
+          !excluded.has(skill.id) &&
+          (!target.pluginId ||
+            (canLoadSkills &&
+              hasScopeInGrants(
+                grants ?? [],
+                "skill:read",
+                [skill.id, project.id],
+                project.id,
+              ))),
+      ),
     );
-  }, [excludedSkillIds, skillsQuery.data?.pages]);
+  }, [
+    excludedSkillIds,
+    skillsQuery.data?.pages,
+    target.pluginId,
+    canLoadSkills,
+    grants,
+    project.id,
+  ]);
   const visibleSkills = useMemo(
     () => filterSkills(availableSkills, search, [], []),
     [availableSkills, search],
@@ -105,6 +136,20 @@ export function SkillPickerDialog({
 
   const handleSubmit = async () => {
     if (selectedSkillIds.length === 0 || isBatchAdding) return;
+    if (
+      target.pluginId &&
+      (!canLoadSkills ||
+        selectedSkillIds.some(
+          (id) =>
+            !hasScopeInGrants(
+              grants ?? [],
+              "skill:read",
+              [id, project.id],
+              project.id,
+            ),
+        ))
+    )
+      return;
     setIsBatchAdding(true);
     try {
       const results = await Promise.allSettled(

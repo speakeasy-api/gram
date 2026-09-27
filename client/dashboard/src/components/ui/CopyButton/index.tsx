@@ -40,18 +40,15 @@ export const CopyButton = ({
       size={size ?? "md"}
       onClick={handleCopy}
       tooltip={tooltip}
+      aria-label={tooltip ?? "Copy"}
       className={cn(
         absolute && "absolute top-3 right-3 z-10 shadow-md",
-        size === "xs" && "h-6 w-6",
+        size === "xs" && "h-6 w-6 p-0",
         className,
       )}
       style={absolute ? { boxShadow: "0 2px 8px rgba(0,0,0,0.08)" } : undefined}
     >
-      {recentlyCopied ? (
-        <Check className="h-5 w-5" />
-      ) : (
-        <Icon className="h-5 w-5" />
-      )}
+      <Button.LeftIcon>{recentlyCopied ? <Check /> : <Icon />}</Button.LeftIcon>
     </Button>
   );
 };

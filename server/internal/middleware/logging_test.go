@@ -34,6 +34,11 @@ func TestLogSafeURL(t *testing.T) {
 			want: "/rpc/skills.getShared?token=REDACTED",
 		},
 		{
+			name: "staff OAuth query credentials redacted",
+			in:   "/admin-mcp/authorize?code=secret&state=secret&code_verifier=secret&return_to=secret&client_id=client_123",
+			want: "/admin-mcp/authorize?code=REDACTED&state=REDACTED&code_verifier=REDACTED&return_to=REDACTED&client_id=client_123",
+		},
+		{
 			name: "support handoff query parameter redacted",
 			in:   "/rpc/auth.login?support_handoff=opaque-secret&redirect=%2Fhome",
 			want: "/rpc/auth.login?support_handoff=REDACTED&redirect=%2Fhome",

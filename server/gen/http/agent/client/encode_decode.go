@@ -2648,6 +2648,21 @@ func unmarshalDeviceAgentConfigurationResponseBodyToAgentDeviceAgentConfiguratio
 	return res
 }
 
+// unmarshalAgentPollingPrincipalResponseBodyToAgentAgentPollingPrincipal
+// builds a value of type *agent.AgentPollingPrincipal from a value of type
+// *AgentPollingPrincipalResponseBody.
+func unmarshalAgentPollingPrincipalResponseBodyToAgentAgentPollingPrincipal(v *AgentPollingPrincipalResponseBody) *agent.AgentPollingPrincipal {
+	if v == nil {
+		return nil
+	}
+	res := &agent.AgentPollingPrincipal{
+		Urn:         *v.Urn,
+		DisplayName: *v.DisplayName,
+	}
+
+	return res
+}
+
 // unmarshalSyncedAgentUserResponseBodyToAgentSyncedAgentUser builds a value of
 // type *agent.SyncedAgentUser from a value of type
 // *SyncedAgentUserResponseBody.

@@ -667,6 +667,10 @@ func (r *Resolver) upsertOrgFromMembership(ctx context.Context, m workos.Member)
 			Slug:        uniqueSlug,
 			WorkosID:    pgtype.Text{String: m.OrganizationID, Valid: true},
 			Whitelisted: pgtype.Bool{Bool: false, Valid: false},
+			// Null, not a source of its own. WorkOS tells this path that an
+			// organization exists, never what asked for it, and a row it
+			// inserts first is filled in by the flow that did know.
+			CreationSource: pgtype.Text{String: "", Valid: false},
 		}); err != nil {
 			return fmt.Errorf("upsert org metadata from workos %q: %w", m.OrganizationID, err)
 		}

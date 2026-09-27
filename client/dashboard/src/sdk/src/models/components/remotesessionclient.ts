@@ -51,7 +51,7 @@ export type RemoteSessionClient = {
    * The client_id used to identify this client at the issuer's token and authorization endpoints.
    */
   clientId: string;
-  clientIdIssuedAt: Date;
+  clientIdIssuedAt?: Date | undefined;
   /**
    * When set, the client is in Client ID Metadata Document (CIMD) mode: Gram hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.
    */
@@ -61,6 +61,10 @@ export type RemoteSessionClient = {
    */
   clientSecretExpiresAt?: Date | undefined;
   createdAt: Date;
+  /**
+   * Recorded effective registration grants. Null means unknown; an empty array means no recorded grants.
+   */
+  grantTypes: Array<string> | null;
   /**
    * The remote_session_client id.
    */
@@ -125,9 +129,8 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
   z.object({
     audience: z.optional(z.string()),
     client_id: z.string(),
-    client_id_issued_at: z.pipe(
-      z.iso.datetime({ offset: true }),
-      z.transform(v => new Date(v)),
+    client_id_issued_at: z.optional(
+      z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     client_id_metadata_uri: z.optional(z.string()),
     client_secret_expires_at: z.optional(
@@ -137,6 +140,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    grant_types: z.nullable(z.array(z.string())),
     id: z.string(),
     json_web_key_set_id: z.optional(z.string()),
     organization_id: z.string(),
@@ -165,6 +169,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "client_id_metadata_uri": "clientIdMetadataUri",
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",
+      "grant_types": "grantTypes",
       "json_web_key_set_id": "jsonWebKeySetId",
       "organization_id": "organizationId",
       "project_id": "projectId",

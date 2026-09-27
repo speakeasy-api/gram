@@ -234,6 +234,106 @@ func BuildDeleteIssuerPayload(organizationUserSessionIssuersDeleteIssuerID strin
 	return v, nil
 }
 
+// BuildMoveIssuerPayload builds the payload for the
+// organizationUserSessionIssuers moveIssuer endpoint from CLI flags.
+func BuildMoveIssuerPayload(organizationUserSessionIssuersMoveIssuerBody string, organizationUserSessionIssuersMoveIssuerSessionToken string) (*organizationusersessionissuers.MoveIssuerPayload, error) {
+	var err error
+	var body MoveIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationUserSessionIssuersMoveIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if body.ProjectID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", *body.ProjectID, goa.FormatUUID))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersMoveIssuerSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersMoveIssuerSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.MoveIssuerPayload{
+		ID:        body.ID,
+		ProjectID: body.ProjectID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildGetIssuerMigratePreflightPayload builds the payload for the
+// organizationUserSessionIssuers getIssuerMigratePreflight endpoint from CLI
+// flags.
+func BuildGetIssuerMigratePreflightPayload(organizationUserSessionIssuersGetIssuerMigratePreflightSourceID string, organizationUserSessionIssuersGetIssuerMigratePreflightTargetID string, organizationUserSessionIssuersGetIssuerMigratePreflightSessionToken string) (*organizationusersessionissuers.GetIssuerMigratePreflightPayload, error) {
+	var err error
+	var sourceID string
+	{
+		sourceID = organizationUserSessionIssuersGetIssuerMigratePreflightSourceID
+		err = goa.MergeErrors(err, goa.ValidateFormat("source_id", sourceID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var targetID string
+	{
+		targetID = organizationUserSessionIssuersGetIssuerMigratePreflightTargetID
+		err = goa.MergeErrors(err, goa.ValidateFormat("target_id", targetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersGetIssuerMigratePreflightSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersGetIssuerMigratePreflightSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.GetIssuerMigratePreflightPayload{}
+	v.SourceID = sourceID
+	v.TargetID = targetID
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildMigrateIssuerPayload builds the payload for the
+// organizationUserSessionIssuers migrateIssuer endpoint from CLI flags.
+func BuildMigrateIssuerPayload(organizationUserSessionIssuersMigrateIssuerBody string, organizationUserSessionIssuersMigrateIssuerSessionToken string) (*organizationusersessionissuers.MigrateIssuerPayload, error) {
+	var err error
+	var body MigrateIssuerRequestBody
+	{
+		err = json.Unmarshal([]byte(organizationUserSessionIssuersMigrateIssuerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"confirmed_warnings_fingerprint\": \"abc123\",\n      \"source_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"target_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.source_id", body.SourceID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.target_id", body.TargetID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if organizationUserSessionIssuersMigrateIssuerSessionToken != "" {
+			sessionToken = &organizationUserSessionIssuersMigrateIssuerSessionToken
+		}
+	}
+	v := &organizationusersessionissuers.MigrateIssuerPayload{
+		SourceID:                     body.SourceID,
+		TargetID:                     body.TargetID,
+		ConfirmedWarningsFingerprint: body.ConfirmedWarningsFingerprint,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCreateCimdClientPayload builds the payload for the
 // organizationUserSessionIssuers createCimdClient endpoint from CLI flags.
 func BuildCreateCimdClientPayload(organizationUserSessionIssuersCreateCimdClientBody string, organizationUserSessionIssuersCreateCimdClientSessionToken string) (*organizationusersessionissuers.CreateCimdClientPayload, error) {

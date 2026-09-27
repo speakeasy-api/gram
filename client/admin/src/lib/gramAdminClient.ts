@@ -2,6 +2,9 @@ import type { UseQueryOptions } from "@tanstack/react-query";
 import type { AdminMeterUsageResponse } from "@gram/admin-client/models/components/adminmeterusageresponse";
 import { buildAdminGetMeterUsageQuery } from "@gram/admin-client/react-query/adminGetMeterUsage.core";
 import type { AdminGetMeterUsageRequest } from "@gram/admin-client/models/operations/admingetmeterusage";
+import type { AdminSpendBreakdownResponse } from "@gram/admin-client/models/components/adminspendbreakdownresponse";
+import { buildAdminGetSpendBreakdownQuery } from "@gram/admin-client/react-query/adminGetSpendBreakdown.core";
+import type { AdminGetSpendBreakdownRequest } from "@gram/admin-client/models/operations/admingetspendbreakdown";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
 import {
@@ -66,6 +69,10 @@ import {
   type AdminListOrganizationActivityPageParams,
 } from "@gram/admin-client/react-query/adminListOrganizationActivity.core";
 import { buildAdminOrganizationFeaturesQuery } from "@gram/admin-client/react-query/adminOrganizationFeatures.core";
+import { buildAdminOrganizationOnboardingQuery } from "@gram/admin-client/react-query/adminOrganizationOnboarding.core";
+import { buildSetAdminOrganizationOnboardingMutation } from "@gram/admin-client/react-query/setAdminOrganizationOnboarding";
+import type { AdminOnboardingConfiguration } from "@gram/admin-client/models/components/adminonboardingconfiguration";
+import type { SetOrganizationOnboardingRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingrequestbody";
 import { buildSetAdminOrganizationFeatureMutation } from "@gram/admin-client/react-query/setAdminOrganizationFeature";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
@@ -152,6 +159,19 @@ export function organizationMeterUsageQuery(
     staleTime: 30_000,
   });
 }
+export function organizationSpendBreakdownQuery(
+  request: AdminGetSpendBreakdownRequest,
+): UseQueryOptions<AdminSpendBreakdownResponse> {
+  const generated = buildAdminGetSpendBreakdownQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    staleTime: 30_000,
+  });
+}
 
 function createOrganizationFeaturesQuery(organizationId: string) {
   const request: AdminGetOrganizationFeaturesRequest = { organizationId };
@@ -169,6 +189,31 @@ export function organizationFeaturesQuery(
   organizationId: string,
 ): ReturnType<typeof createOrganizationFeaturesQuery> {
   return createOrganizationFeaturesQuery(organizationId);
+}
+
+function createOrganizationOnboardingQuery(organizationId: string) {
+  const generated = buildAdminOrganizationOnboardingQuery(redirectingClient, {
+    organizationId,
+  });
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+export function organizationOnboardingQuery(
+  organizationId: string,
+): ReturnType<typeof createOrganizationOnboardingQuery> {
+  return createOrganizationOnboardingQuery(organizationId);
+}
+
+const generatedOnboardingMutation =
+  buildSetAdminOrganizationOnboardingMutation(mutationClient);
+
+export function setAdminOrganizationOnboarding(
+  request: SetOrganizationOnboardingRequestBody,
+): Promise<AdminOnboardingConfiguration> {
+  return generatedOnboardingMutation.mutationFn({ request });
 }
 
 function createOrganizationActivityQuery(organizationId: string) {
@@ -243,6 +288,7 @@ export function organizationFromSdk(
     trial_tier: org.trialTier,
     trial_converted_at: org.trialConvertedAt?.toISOString(),
     trial_demoted_at: org.trialDemotedAt?.toISOString(),
+    creation_source: org.creationSource,
     member_count: org.memberCount,
     created_at: org.createdAt.toISOString(),
     updated_at: org.updatedAt.toISOString(),

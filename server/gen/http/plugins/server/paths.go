@@ -7,6 +7,16 @@
 
 package server
 
+// ListDistributionPluginsPluginsPath returns the URL path to the plugins service listDistributionPlugins HTTP endpoint.
+func ListDistributionPluginsPluginsPath() string {
+	return "/rpc/plugins.listDistributionPlugins"
+}
+
+// GetDistributionPluginPluginsPath returns the URL path to the plugins service getDistributionPlugin HTTP endpoint.
+func GetDistributionPluginPluginsPath() string {
+	return "/rpc/plugins.getDistributionPlugin"
+}
+
 // ListPluginsPluginsPath returns the URL path to the plugins service listPlugins HTTP endpoint.
 func ListPluginsPluginsPath() string {
 	return "/rpc/plugins.listPlugins"

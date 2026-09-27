@@ -104,7 +104,7 @@ func handleToolsCall(
 	auditLogger *audit.Logger,
 	platformExtras []platformtools.ExternalTool,
 	clientInfoStore sessionClientInfoStore,
-	scan mcpriskscan.Evaluator,
+	scan *mcpriskscan.Evaluator,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -447,18 +447,24 @@ func handleToolsCall(
 	if plan.Kind == gateway.ToolKindExternalMCP {
 		toolName = descriptor.URN.Name
 	}
-	scan.Scan(ctx, bytes.NewReader(params.Arguments), mcpriskscan.Event{
+	decision := scan.Scan(ctx, mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:        mcpriskscan.SurfaceHostedMCP,
 		Method:         mcpriskscan.MethodToolsCall,
 		OrganizationID: descriptor.OrganizationID,
 		ProjectID:      descriptor.ProjectID,
 		ServerID:       serverID,
+		MetaServerID:   payload.metaMcpServerID,
 		ToolsetID:      toolset.ID,
 		ToolName:       toolName,
 		ResourceURI:    "",
 		PromptName:     "",
-		Phase:          mcpriskscan.PhaseBeforeExecution,
-	})
+		ChatID:         payload.chatID,
+	}, mcpriskscan.BorrowPayload(params.Arguments)))
+	if decision.Denied() {
+		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+		recordToolCallErrorStatus(ctx, rw, failure)
+		return nil, failure
+	}
 	err = toolProxy.Do(ctx, rw, bytes.NewReader(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
 		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {

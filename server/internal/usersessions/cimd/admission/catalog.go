@@ -60,12 +60,13 @@ func (p Preset) IsPattern() bool {
 	return isPattern(p.URL)
 }
 
-// catalog is Gram's curated preset list. Issuers in ModePresets — which is
-// the default for any issuer that has never had a mode explicitly set —
-// accept every enabled entry here, with no per-issuer rows and no customer
-// action required. Adding a vendor extends every presets-mode issuer on
-// deploy; that implicit membership is the documented contract, and is what
-// makes "Gram trusts Claude Code" a thing an operator gets for free.
+// catalog is Gram's curated preset list. Issuers in ModePresets accept every
+// enabled entry here, with no per-issuer rows and no customer action required.
+// ModePresets is opt-in; an issuer without an explicit mode uses ModeOpen and
+// evaluates this catalog only for its shadow measurement. Adding a vendor
+// extends every presets-mode issuer on deploy; that implicit membership is the
+// documented contract, and is what makes "Gram trusts Claude Code" a thing an
+// operator gets for free.
 //
 // The flip side: a MISSING entry is a hard, unrecoverable auth failure for
 // that client. MCP clients pick CIMD over dynamic client registration once,

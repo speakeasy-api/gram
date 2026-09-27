@@ -82,9 +82,10 @@ func (a *AuthenticatedUserPrincipalAdapter) ValidateCurrentOrganization(ctx cont
 // Only KindUserSession claims an authoritative acting user; that claim is
 // then revalidated as an active organization membership before producing the
 // single concrete candidate. Anonymous, API-key, assistant, agent,
-// chat-session, and workload provenance are deliberately unsupported.
-// Enforcement checkpoints explicitly reject agent and workload provenance until
-// the definition supports it. A stamped identity with a zero or
+// chat-session, and workload provenance are unsupported by this user adapter.
+// The separate agent adapter handles agent provenance without contributing a
+// user candidate. Checkpoints reject unsupported agent and workload provenance.
+// A stamped identity with a zero or
 // unknown kind, a malformed authoritative claim, or a membership lookup
 // failure is an error and follows the definition's fail-closed policy.
 func (a *AuthenticatedUserPrincipalAdapter) DeriveCandidates(ctx context.Context, organizationID killswitches.OrganizationID, source any) (killswitches.PrincipalCandidateResult, error) {

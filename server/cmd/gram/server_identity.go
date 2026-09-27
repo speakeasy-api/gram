@@ -74,7 +74,7 @@ func newServerIdentity(ctx context.Context, c *cli.Context, logger *slog.Logger,
 	if err != nil {
 		return nil, err
 	}
-	billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
+	billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
 	if err != nil {
 		return nil, err
 	}

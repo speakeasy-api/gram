@@ -177,6 +177,35 @@ func (s *RefreshService) FallbackResourceForClient(ctx context.Context, clientID
 	return clientUpstreamResource(rows), nil
 }
 
+// ResourceForClientAtUpstream derives the RFC 8707 resource for a client
+// connected through upstream, weighed against the other clients bound to the
+// same endpoint; see claimableUpstream. Siblings are only consulted when the
+// client's own attachments leave the claim open.
+func (s *RefreshService) ResourceForClientAtUpstream(ctx context.Context, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
+	q := remotesessions_repo.New(s.db)
+	own, err := q.ListOrganizationMcpServersForClient(ctx, clientID)
+	if err != nil {
+		return "", fmt.Errorf("list mcp servers for client: %w", err)
+	}
+	resource, claimable := claimableUpstream(own, upstream)
+	if !claimable {
+		return resource, nil
+	}
+	for _, id := range siblingIDs {
+		if id == clientID {
+			continue
+		}
+		rows, err := q.ListOrganizationMcpServersForClient(ctx, id)
+		if err != nil {
+			return "", fmt.Errorf("list mcp servers for sibling client: %w", err)
+		}
+		if rowsServeUpstream(rows, resource) {
+			return "", nil
+		}
+	}
+	return resource, nil
+}
+
 var errRefreshNotApplied = errors.New("remotesessions: refreshed tokens matched no active session")
 
 // Ordering is the invariant, guarded by TestRefreshTimingInvariant. Invert it
@@ -379,8 +408,8 @@ func (s *RefreshService) refresh(
 		RemoteSessionClientID: sess.RemoteSessionClientID,
 	})
 	switch {
-	case errors.Is(currentErr, pgx.ErrNoRows):
-		// Revoked while we were acquiring. Refreshing anyway would rotate
+	case errors.Is(currentErr, pgx.ErrNoRows), currentErr == nil && current.ID != sess.ID:
+		// Revoked or replaced while we were acquiring. Refreshing would rotate
 		// tokens upstream that nothing will ever hold.
 		var inactive remotesessions_repo.RemoteSession
 		return RefreshResult{Session: inactive, AccessToken: "", SourceUpdatedAt: time.Time{}, Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive, IssuerURL: ""}, nil, nil, nil
@@ -506,6 +535,10 @@ func (s *RefreshService) refresh(
 		SubjectUrn:            sess.SubjectUrn,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && latest.ID != sess.ID) {
+		zero.Outcome = remotesessionmetrics.RefreshOutcomeSessionInactive
+		return zero, &client, nil, nil
+	}
 	if err != nil {
 		return zero, &client, nil, refreshErr
 	}
@@ -578,8 +611,9 @@ func authorizationUsable(sess remotesessions_repo.RemoteSession, now time.Time) 
 }
 
 // awaitRefreshedSession returns the session row and access token the lock
-// holder wrote. Reports false if the row has not moved within
-// refreshWaitBudget, rather than stranding the caller on a dead holder.
+// holder wrote, or a terminal inactive result if that exact row was revoked
+// or replaced. Reports false if the row has not moved within refreshWaitBudget,
+// rather than stranding the caller on a dead holder.
 func (s *RefreshService) awaitRefreshedSession(
 	ctx context.Context,
 	q *remotesessions_repo.Queries,
@@ -606,6 +640,11 @@ func (s *RefreshService) awaitRefreshedSession(
 			SubjectUrn:            sess.SubjectUrn,
 			RemoteSessionClientID: sess.RemoteSessionClientID,
 		})
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && latest.ID != sess.ID) {
+			// Terminal for this exact row: do not fall through to a new POST.
+			zero.Outcome = remotesessionmetrics.RefreshOutcomeSessionInactive
+			return zero, true
+		}
 		if err != nil {
 			return zero, false
 		}

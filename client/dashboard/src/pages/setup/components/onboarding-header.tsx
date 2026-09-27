@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { ArrowRight, ExternalLink, LifeBuoy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { GramLogo } from "@/components/gram-logo";
+import { cn } from "@/lib/utils";
 import { showPylonChat } from "@/lib/pylon";
+import { SETUP_CONTAINER } from "./setup-container";
 
 interface OnboardingHeaderProps {
   onLeave?: () => void;
@@ -15,7 +17,12 @@ export function OnboardingHeader({
 }: OnboardingHeaderProps): JSX.Element {
   return (
     <header className="border-border bg-background w-full border-b">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+      <div
+        className={cn(
+          SETUP_CONTAINER,
+          "flex items-center justify-between py-4",
+        )}
+      >
         <div className="flex items-center gap-3">
           <GramLogo variant="horizontal" className="w-32" />
           <div className="bg-border hidden h-5 w-px sm:block" />

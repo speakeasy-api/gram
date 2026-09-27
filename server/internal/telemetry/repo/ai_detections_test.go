@@ -66,3 +66,40 @@ func TestUpsertAIDetectionsAcceptsEveryKnownCategory(t *testing.T) {
 	require.ElementsMatch(t, known, aiDetectionCategories,
 		"the ClickHouse write path and the scan-report ingest must accept the same categories")
 }
+
+func TestBuildListAIDetectionUsersQueryRequiresTargetID(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := buildListAIDetectionUsersQuery(ListAIDetectionUsersParams{
+		OrganizationID:       "org_0123456789",
+		TargetID:             "",
+		CanonicalIdentityOrg: "",
+	})
+	require.ErrorContains(t, err, "target id is required")
+}
+
+// The per-user expansion buckets by email, which is exactly the read the
+// canonical fold exists for: without it one employee's work, personal and
+// case-variant emails would come back as separate people.
+func TestBuildListAIDetectionUsersQueryFoldsEmailWhenRolledOut(t *testing.T) {
+	t.Parallel()
+
+	folded, _, err := buildListAIDetectionUsersQuery(ListAIDetectionUsersParams{
+		OrganizationID:       "org_0123456789",
+		TargetID:             "cursor",
+		CanonicalIdentityOrg: "org_0123456789",
+	})
+	require.NoError(t, err)
+	require.Contains(t, folded, "joinGet('identity_map', 'canonical_email', 'org_0123456789', lowerUTF8(user_email))")
+	require.Contains(t, folded, "GROUP BY person_email")
+	require.Contains(t, folded, "SETTINGS use_query_condition_cache = 0")
+
+	plain, _, err := buildListAIDetectionUsersQuery(ListAIDetectionUsersParams{
+		OrganizationID:       "org_0123456789",
+		TargetID:             "cursor",
+		CanonicalIdentityOrg: "",
+	})
+	require.NoError(t, err)
+	require.NotContains(t, plain, "joinGet")
+	require.Contains(t, plain, "user_email AS person_email")
+}

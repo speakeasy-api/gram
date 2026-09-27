@@ -332,6 +332,10 @@ func (s *Service) settleClientKeySet(
 		return nil, err
 	}
 
+	if err := guardEMABindingsForClient(ctx, txRepo, authCtx.ActiveOrganizationID, existing.ProjectID.UUID, existing.ID); err != nil {
+		return nil, err
+	}
+
 	updated, err := write(ctx)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

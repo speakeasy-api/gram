@@ -30,7 +30,7 @@ type LogChatSessionAccessEvent struct {
 	// OwnerUserID is the user id of the session owner, recorded so reviewers can
 	// see whose session was accessed even when the accessor differs. It is the
 	// raw WorkOS user id (stored as the subject slug), not a URN subject.
-	OwnerUserID string //nolint:glint // owner user id is auxiliary context, not the audit subject (which is ChatSessionURN)
+	OwnerUserID string //nolint:glint // auditeventurnnaming: owner user id is auxiliary context, not the audit subject (which is ChatSessionURN)
 }
 
 // LogChatSessionAccess records that a chat session transcript was read. Unlike
@@ -77,14 +77,14 @@ type LogChatSessionMoveEvent struct {
 	ChatTitle      string
 	// OwnerUserID mirrors LogChatSessionAccessEvent: auxiliary context naming
 	// whose session moved, not the audit subject.
-	OwnerUserID string //nolint:glint // owner user id is auxiliary context, not the audit subject (which is ChatSessionURN)
+	OwnerUserID string //nolint:glint // auditeventurnnaming: owner user id is auxiliary context, not the audit subject (which is ChatSessionURN)
 
 	// TargetHarness is where the session was moved to (e.g. cursor, codex).
 	TargetHarness string
 	// TargetSessionID is the native session id minted for the continuation,
 	// when the daemon knew it at launch time. Empty for targets whose ids are
 	// minted server-side (Cursor).
-	TargetSessionID string //nolint:glint // native harness session id, not a Gram resource with a URN
+	TargetSessionID string //nolint:glint // auditeventurnnaming: native harness session id, not a Gram resource with a URN
 	// SourceSurface is the harness the session originated in, when known.
 	SourceSurface string
 	// DeviceSerial and DeviceHostname attribute the machine the move happened
@@ -159,11 +159,11 @@ type LogChatSessionRecallEvent struct {
 	ChatTitle      string
 	// OwnerUserID mirrors LogChatSessionAccessEvent: auxiliary context naming
 	// whose session was recalled, not the audit subject.
-	OwnerUserID string //nolint:glint // owner user id is auxiliary context, not the audit subject (which is ChatSessionURN)
+	OwnerUserID string //nolint:glint // auditeventurnnaming: owner user id is auxiliary context, not the audit subject (which is ChatSessionURN)
 
 	// SourceSessionID is the native harness session id the recalled chat was
 	// captured from, when known.
-	SourceSessionID string //nolint:glint // native harness session id, not a Gram resource with a URN
+	SourceSessionID string //nolint:glint // auditeventurnnaming: native harness session id, not a Gram resource with a URN
 
 	// The remaining fields describe the digest that was served — counts and
 	// sizes only. Like the handoff-export event this entry records that content

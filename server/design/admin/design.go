@@ -59,6 +59,10 @@ var AdminOrganization = Type("AdminOrganization", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("member_count", Int, "Number of active members in the organization.")
+	// Deliberately not an Enum. The value is whatever the creating flow
+	// recorded, so a new flow added on the server would otherwise fail response
+	// validation until this list caught up. Absent means no flow recorded one.
+	Attribute("creation_source", String, "The flow that created the organization (e.g. signup, assistants, platform_admin). Absent when nothing recorded one. Informational only.")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the organization.")
 		Format(FormatDateTime)
@@ -145,6 +149,28 @@ var AdminListOrganizationProjectsResult = Type("AdminListOrganizationProjectsRes
 	Required("projects")
 
 	Attribute("projects", ArrayOf(AdminProject), "The projects belonging to the organization.")
+})
+
+var AdminMcpServer = Type("AdminMcpServer", func() {
+	Description("MCP server surfaced to admin operators. Covers both server models: mcp_servers rows and mcp_enabled toolsets that no mcp_servers row points at.")
+	Required("id", "name", "visibility", "source", "created_at")
+
+	Attribute("id", String, "The mcp_servers row ID, or the toolset ID for a toolset-only server.")
+	Attribute("name", String, "Display name of the server.")
+	Attribute("url", String, "The URL clients connect to. Omitted when the server has no routable address.")
+	Attribute("visibility", String, "The visibility of the server.", func() {
+		Enum("disabled", "private", "public")
+	})
+	Attribute("source", String, "What backs the server. toolset_only is a toolset with no mcp_servers row.", func() {
+		Enum("toolset", "remote", "tunneled", "unproxied", "toolset_only")
+	})
+	Attribute("created_at", String, func() { Format(FormatDateTime) })
+})
+
+var AdminListProjectMcpServersResult = Type("AdminListProjectMcpServersResult", func() {
+	Required("mcp_servers")
+
+	Attribute("mcp_servers", ArrayOf(AdminMcpServer), "The project's MCP servers, oldest first.")
 })
 
 var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
@@ -265,10 +291,44 @@ var AdminMeterUsageResponse = Type("AdminMeterUsageResponse", func() {
 	Required("family", "window", "billing_cycles", "unit", "total", "buckets", "queried_at", "measurement_method")
 })
 
+var AdminSpendBreakdownResponse = Type("AdminSpendBreakdownResponse", func() {
+	Attribute("window", usage.MeterUsageWindow)
+	Attribute("billing_cycles", ArrayOf(usage.MeterUsageWindow), "Trailing twelve billing-cycle date windows")
+	Attribute("currency", String, func() { Enum("USD") })
+	Attribute("pricing_basis", String, func() { Enum("current_payg_list_price") })
+	Attribute("queried_at", String, "Retrieval timestamp used to distinguish current and future buckets", func() { Format(FormatDateTime) })
+	Attribute("total_cost_usd", String, "Exact estimated total at current PAYG list prices")
+	Attribute("products", ArrayOf(usage.SpendProduct), "The three metered products in stable display order")
+	Required("window", "billing_cycles", "currency", "pricing_basis", "queried_at", "total_cost_usd", "products")
+})
+
 var AdminSession = Type("AdminSession", func() {
 	Attribute("email", String)
 	Attribute("name", String)
 	Required("email")
+})
+
+var AdminOnboardingTask = Type("AdminOnboardingTask", func() {
+	Attribute("key", String)
+	Attribute("title", String)
+	Attribute("description", String)
+	Attribute("hidden", Boolean)
+	Required("key", "title", "description", "hidden")
+})
+
+var AdminOnboardingPreset = Type("AdminOnboardingPreset", func() {
+	Attribute("key", String)
+	Attribute("title", String)
+	Attribute("visible_task_keys", ArrayOf(String))
+	Required("key", "title", "visible_task_keys")
+})
+
+var AdminOnboardingConfiguration = Type("AdminOnboardingConfiguration", func() {
+	Attribute("organization_id", String)
+	Attribute("preset", String, "Absent for legacy organizations.")
+	Attribute("tasks", ArrayOf(AdminOnboardingTask))
+	Attribute("presets", ArrayOf(AdminOnboardingPreset))
+	Required("organization_id", "tasks", "presets")
 })
 
 var AdminChatAnalysisSettings = Type("AdminChatAnalysisSettings", func() {
@@ -665,6 +725,30 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminListOrganizationProjects")
 	})
 
+	Method("listProjectMcpServers", func() {
+		Description("Lists the MCP servers in a project (admin view, no auth scoping).")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "project_id")
+
+			Attribute("organization_id", String, "Organization the project must belong to. A project outside it is reported as not found.")
+			Attribute("project_id", String, "Project ID.", func() { Format(FormatUUID) })
+		})
+
+		Result(AdminListProjectMcpServersResult)
+
+		HTTP(func() {
+			GET("/admin/project.mcpServers")
+
+			Param("organization_id")
+			Param("project_id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminListProjectMcpServers")
+	})
+
 	Method("listOrganizationActivity", func() {
 		Description("Lists activity belonging to an organization for admin operators.")
 
@@ -785,21 +869,12 @@ var _ = Service("admin", func() {
 
 		Payload(func() {
 			security.AdminAuthPayload()
-			Required("name")
-
-			// A body of one required string is structurally identical to several
-			// others in this design, and Goa's OpenAPI emitter deduplicates
-			// request bodies by shape, reusing whichever name it registered
-			// first. MinLength makes this shape its own, and an explicit
-			// typename stops a future identically-shaped body from taking it.
+			Required("url", "ownership_confirmed")
 			Meta("openapi:typename", "CreateOrganizationRequestBody")
-
-			// The length and character rules live in orgprovision.ValidateName,
-			// which the handler runs and which the signup path runs too. Only
-			// the emptiness floor is repeated here.
-			Attribute("name", String, "Display name for the new organization.", func() {
+			Attribute("url", String, "Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.", func() {
 				MinLength(1)
 			})
+			Attribute("ownership_confirmed", Boolean, "The operator confirms that domain ownership was established outside this form.")
 		})
 
 		Result(AdminOrganization)
@@ -1026,6 +1101,28 @@ var _ = Service("admin", func() {
 
 		Meta("openapi:operationId", "adminMarkEnterpriseTrialConverted")
 	})
+
+	Method("getOrganizationOnboarding", func() {
+		Payload(func() { security.AdminAuthPayload(); Attribute("organization_id", String); Required("organization_id") })
+		Result(AdminOnboardingConfiguration)
+		HTTP(func() { GET("/admin/organization.onboarding"); Param("organization_id"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminGetOrganizationOnboarding")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminOrganizationOnboarding"}`)
+	})
+
+	Method("setOrganizationOnboarding", func() {
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("visible_task_keys", ArrayOf(String), "Complete explicit selection; an empty array selects no tasks.")
+			Attribute("preset", String, "A key from presets. Omit to preserve the saved preset. Null/reset is not supported.")
+			Required("organization_id", "visible_task_keys")
+		})
+		Result(AdminOnboardingConfiguration)
+		HTTP(func() { POST("/admin/organization.onboarding"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminSetOrganizationOnboarding")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SetAdminOrganizationOnboarding"}`)
+	})
 	remoteSessionIssuerMethods()
 	platformAssetMethods()
 
@@ -1106,6 +1203,34 @@ var _ = Service("admin", func() {
 		Meta("openapi:operationId", "adminGetMeterUsage")
 	})
 
+	Method("getSpendBreakdown", func() {
+		Description("Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Attribute("organization_id", String, "Organization ID or canonical slug.")
+			Attribute("from", String, "Inclusive UTC midnight reporting boundary. Must be paired with to.", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("to", String, "Exclusive UTC midnight reporting boundary. Must be paired with from and no later than three calendar months after from, clamped to the target month's last day.", func() {
+				Format(FormatDateTime)
+			})
+			Required("organization_id")
+		})
+		Result(AdminSpendBreakdownResponse)
+		declareUnavailable()
+		HTTP(func() {
+			GET("/admin/organization.spendBreakdown")
+			Param("organization_id")
+			Param("from")
+			Param("to")
+			Response(StatusOK)
+			declareUnavailableResponse()
+		})
+		Meta("openapi:operationId", "adminGetSpendBreakdown")
+		Meta("openapi:extension:x-speakeasy-name-override", "getSpendBreakdown")
+	})
+
 	supportMatrixMethods()
+	supportCoverageMethods()
 
 })

@@ -2,6 +2,36 @@
 
 # Config docs: https://pitchfork.jdx.dev/reference/configuration.html
 
+# Lifecycle operations and the parked page are explicitly started, never part
+# of application startup. Bulk stop still includes them for worktree removal.
+[groups.application]
+daemons = ["dev-idp", "dev-idp-dashboard", "admin", "admin-dashboard", "mock-oidc", "server", "worker", "streams", "pystreams-multi", "dashboard", "assistant-runtime", "tunnel-gateway"]
+
+[groups.default]
+daemons = ["dev-idp", "dev-idp-dashboard", "admin", "admin-dashboard", "mock-oidc", "server", "worker", "streams", "pystreams-multi", "dashboard", "assistant-runtime", "tunnel-gateway", "idle-pause"]
+
+[daemons.park]
+run = "mise run park"
+ready_output = "Parked on port"
+retry = 0
+
+# Finite operations: acknowledge dispatch immediately; Pitchfork retains
+# ownership until exit. They must not wait on the daemon they are stopping.
+# Only these Compose-using daemons need a primary-checkout fallback instead of
+# inheriting another worktree's project from the supervisor. `mise run` applies
+# the linked worktree's mise.local.toml override after this environment.
+[daemons.pause-stack]
+run = "mise run pause"
+env = { COMPOSE_PROJECT_NAME = "gram" }
+ready_delay = 0
+retry = 0
+
+[daemons.wake-stack]
+run = "mise run wake"
+env = { COMPOSE_PROJECT_NAME = "gram" }
+ready_delay = 0
+retry = 0
+
 [daemons.dev-idp]
 run = "mise run start:dev-idp"
 ready_cmd = "mise run check:daemon --name {{name}}"
@@ -70,4 +100,5 @@ ready_cmd = "mise run check:daemon --name {{name}}"
 # and `mise run wake` brings this back with everything else.
 [daemons.idle-pause]
 run = "mise run idle-pause"
+env = { COMPOSE_PROJECT_NAME = "gram" }
 cron = "0 */5 * * * *"

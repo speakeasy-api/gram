@@ -282,6 +282,9 @@ type QueryRequestBody struct {
 	// from the time range and is floored to 3600 (the source data is bucketed
 	// hourly).
 	GranularitySeconds *int64 `form:"granularity_seconds,omitempty" json:"granularity_seconds,omitempty" xml:"granularity_seconds,omitempty"`
+	// Whether to include distinct values for other dimensions in each table row.
+	// When omitted, defaults to true.
+	IncludeDimensionValues bool `form:"include_dimension_values" json:"include_dimension_values" xml:"include_dimension_values"`
 	// When group_by is set, keep at most this many groups (ranked by sort_by); the
 	// remainder are rolled into an 'Other' group. Defaults to 10.
 	TopN int `form:"top_n" json:"top_n" xml:"top_n"`
@@ -9266,12 +9269,13 @@ func NewGetUnproxiedMcpServerClientUsageRequestBody(p *telemetry.GetUnproxiedMcp
 // "query" endpoint of the "telemetry" service.
 func NewQueryRequestBody(p *telemetry.QueryPayload) *QueryRequestBody {
 	body := &QueryRequestBody{
-		From:               p.From,
-		To:                 p.To,
-		GroupBy:            p.GroupBy,
-		GranularitySeconds: p.GranularitySeconds,
-		TopN:               p.TopN,
-		SortBy:             p.SortBy,
+		From:                   p.From,
+		To:                     p.To,
+		GroupBy:                p.GroupBy,
+		GranularitySeconds:     p.GranularitySeconds,
+		IncludeDimensionValues: p.IncludeDimensionValues,
+		TopN:                   p.TopN,
+		SortBy:                 p.SortBy,
 	}
 	if p.Filters != nil {
 		body.Filters = make([]*QueryFilterRequestBody, len(p.Filters))
@@ -9281,6 +9285,12 @@ func NewQueryRequestBody(p *telemetry.QueryPayload) *QueryRequestBody {
 				continue
 			}
 			body.Filters[i] = marshalTelemetryQueryFilterToQueryFilterRequestBody(val)
+		}
+	}
+	{
+		var zero bool
+		if body.IncludeDimensionValues == zero {
+			body.IncludeDimensionValues = true
 		}
 	}
 	{
@@ -26825,8 +26835,8 @@ func ValidateSkillBreakdownRowResponseBody(body *SkillBreakdownRowResponseBody) 
 // ValidateToolUsageUserFilterRequestBody runs the validations defined on
 // ToolUsageUserFilterRequestBody
 func ValidateToolUsageUserFilterRequestBody(body *ToolUsageUserFilterRequestBody) (err error) {
-	if !(body.Kind == "email" || body.Kind == "external_user_id" || body.Kind == "user_id" || body.Kind == "unknown") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", body.Kind, []any{"email", "external_user_id", "user_id", "unknown"}))
+	if !(body.Kind == "email" || body.Kind == "external_user_id" || body.Kind == "user_id" || body.Kind == "agent_id" || body.Kind == "unknown") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", body.Kind, []any{"email", "external_user_id", "user_id", "agent_id", "unknown"}))
 	}
 	return
 }
@@ -26935,8 +26945,8 @@ func ValidateToolUsageUserSummaryResponseBody(body *ToolUsageUserSummaryResponse
 		err = goa.MergeErrors(err, goa.MissingFieldError("failure_rate", "body"))
 	}
 	if body.UserKind != nil {
-		if !(*body.UserKind == "email" || *body.UserKind == "external_user_id" || *body.UserKind == "user_id" || *body.UserKind == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_kind", *body.UserKind, []any{"email", "external_user_id", "user_id", "unknown"}))
+		if !(*body.UserKind == "email" || *body.UserKind == "external_user_id" || *body.UserKind == "user_id" || *body.UserKind == "agent_id" || *body.UserKind == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_kind", *body.UserKind, []any{"email", "external_user_id", "user_id", "agent_id", "unknown"}))
 		}
 	}
 	return
@@ -27007,8 +27017,8 @@ func ValidateToolUsageUserTimeSeriesPointResponseBody(body *ToolUsageUserTimeSer
 		err = goa.MergeErrors(err, goa.MissingFieldError("failure_count", "body"))
 	}
 	if body.UserKind != nil {
-		if !(*body.UserKind == "email" || *body.UserKind == "external_user_id" || *body.UserKind == "user_id" || *body.UserKind == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_kind", *body.UserKind, []any{"email", "external_user_id", "user_id", "unknown"}))
+		if !(*body.UserKind == "email" || *body.UserKind == "external_user_id" || *body.UserKind == "user_id" || *body.UserKind == "agent_id" || *body.UserKind == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_kind", *body.UserKind, []any{"email", "external_user_id", "user_id", "agent_id", "unknown"}))
 		}
 	}
 	return
@@ -27055,8 +27065,8 @@ func ValidateToolUsageUsersByTargetRowResponseBody(body *ToolUsageUsersByTargetR
 		}
 	}
 	if body.UserKind != nil {
-		if !(*body.UserKind == "email" || *body.UserKind == "external_user_id" || *body.UserKind == "user_id" || *body.UserKind == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_kind", *body.UserKind, []any{"email", "external_user_id", "user_id", "unknown"}))
+		if !(*body.UserKind == "email" || *body.UserKind == "external_user_id" || *body.UserKind == "user_id" || *body.UserKind == "agent_id" || *body.UserKind == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_kind", *body.UserKind, []any{"email", "external_user_id", "user_id", "agent_id", "unknown"}))
 		}
 	}
 	return
@@ -27226,8 +27236,8 @@ func ValidateToolUsageTraceSummaryResponseBody(body *ToolUsageTraceSummaryRespon
 		}
 	}
 	if body.UserKind != nil {
-		if !(*body.UserKind == "email" || *body.UserKind == "external_user_id" || *body.UserKind == "user_id" || *body.UserKind == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_kind", *body.UserKind, []any{"email", "external_user_id", "user_id", "unknown"}))
+		if !(*body.UserKind == "email" || *body.UserKind == "external_user_id" || *body.UserKind == "user_id" || *body.UserKind == "agent_id" || *body.UserKind == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_kind", *body.UserKind, []any{"email", "external_user_id", "user_id", "agent_id", "unknown"}))
 		}
 	}
 	if body.HookStatus != nil {
@@ -27313,8 +27323,8 @@ func ValidateToolUsageUserFilterOptionResponseBody(body *ToolUsageUserFilterOpti
 		err = goa.MergeErrors(err, goa.MissingFieldError("event_count", "body"))
 	}
 	if body.UserKind != nil {
-		if !(*body.UserKind == "email" || *body.UserKind == "external_user_id" || *body.UserKind == "user_id" || *body.UserKind == "unknown") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_kind", *body.UserKind, []any{"email", "external_user_id", "user_id", "unknown"}))
+		if !(*body.UserKind == "email" || *body.UserKind == "external_user_id" || *body.UserKind == "user_id" || *body.UserKind == "agent_id" || *body.UserKind == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.user_kind", *body.UserKind, []any{"email", "external_user_id", "user_id", "agent_id", "unknown"}))
 		}
 	}
 	return

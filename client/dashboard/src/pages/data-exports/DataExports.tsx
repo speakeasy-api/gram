@@ -63,11 +63,15 @@ const DATA_SOURCE_OPTIONS: DataSourceOption[] = [
     value: DataSource.RiskFindings,
     label: "Risk findings",
   },
+  {
+    value: DataSource.ToolCallLogs,
+    label: "Tool call logs",
+  },
 ];
 
 function renderDataSourceDescription(
   dataSource: DataSourceValue,
-  links: { eventFeed?: string; riskPolicies?: string } = {},
+  links: { eventFeed?: string; riskPolicies?: string; toolLogs?: string } = {},
 ): ReactNode {
   if (dataSource === DataSource.ProductTelemetry) {
     return (
@@ -105,6 +109,27 @@ function renderDataSourceDescription(
           "risk policies"
         )}
         .
+      </>
+    );
+  }
+
+  if (dataSource === DataSource.ToolCallLogs) {
+    return (
+      <>
+        OTLP logs for every tool call served for hosted or proxied MCP servers,
+        successes and failures alike. These are the same records the{" "}
+        {links.toolLogs ? (
+          <Link
+            to={links.toolLogs}
+            className="pointer-events-auto relative z-30 text-link-primary"
+          >
+            Tool Logs
+          </Link>
+        ) : (
+          "Tool Logs"
+        )}{" "}
+        pages show. Tool use your agents report through hooks arrives as product
+        telemetry instead.
       </>
     );
   }
@@ -152,6 +177,7 @@ type VisualSource = {
 type ExportMapDescriptionLinks = {
   eventFeed: string;
   riskPolicies: (project: ProjectEntry) => string;
+  toolLogs: (project: ProjectEntry) => string;
 };
 
 function visualSource(
@@ -164,6 +190,7 @@ function visualSource(
     detail: renderDataSourceDescription(route.dataSource, {
       eventFeed: links?.eventFeed,
       riskPolicies: links?.riskPolicies(project),
+      toolLogs: links?.toolLogs(project),
     }),
   };
 }
@@ -301,12 +328,18 @@ function DataExportsInner(): JSX.Element {
   );
   const defaultProject =
     projects.find((project) => project.slug === "default") ?? projects[0];
+  // Tool Logs is per-project, so the link follows the project being
+  // configured when the sheet has one; the unscoped picker falls back.
+  const toolLogsProject = configureState?.project ?? defaultProject;
   const linkedDataSourceOptions = DATA_SOURCE_OPTIONS.map((source) => ({
     ...source,
     description: renderDataSourceDescription(source.value, {
       eventFeed: `/${organization.slug}/data/event-feed`,
       riskPolicies: defaultProject
         ? `/${organization.slug}/projects/${defaultProject.slug}/risk-policies?tab=policies`
+        : undefined,
+      toolLogs: toolLogsProject
+        ? `/${organization.slug}/projects/${toolLogsProject.slug}/logs`
         : undefined,
     }),
   }));
@@ -518,7 +551,7 @@ function DataExportsInner(): JSX.Element {
           setConfigureTarget({ projectSlug: newExportProject.slug })
         }
       >
-        New export
+        New data export
       </Button>
     </RequireScope>
   ) : null;
@@ -544,6 +577,8 @@ function DataExportsInner(): JSX.Element {
             eventFeed: `/${organization.slug}/data/event-feed`,
             riskPolicies: (project) =>
               `/${organization.slug}/projects/${project.slug}/risk-policies?tab=policies`,
+            toolLogs: (project) =>
+              `/${organization.slug}/projects/${project.slug}/logs`,
           }}
           mutating={mutating}
           onConfigure={(project, route) =>

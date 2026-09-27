@@ -18,14 +18,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -103,7 +104,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 	}
 
 	req.SetDefaults()
-	if err := req.Validate(usersessions.SupportedGrantTypes, usersessions.SupportedAuthMethods); err != nil {
+	if err := req.Validate(usersessions.RegistrableGrantTypes, usersessions.SupportedAuthMethods); err != nil {
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
 			return writeDCRError(ctx, w, logger, oauthErr.Code, oauthErr.Description)
 		}
@@ -153,6 +154,12 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 		ClientJwksUri:           conv.ToPGTextEmpty(req.JWKSURI),
 	})
 	if err != nil {
+		// The insert re-reads the issuer under lock, so a registration that
+		// resolved the endpoint before a migration or delete retired its
+		// issuer lands here instead of on a tombstone.
+		if errors.Is(err, pgx.ErrNoRows) {
+			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, logger)
+		}
 		return oops.E(oops.CodeUnexpected, err, "failed to create user session client").LogError(ctx, logger)
 	}
 

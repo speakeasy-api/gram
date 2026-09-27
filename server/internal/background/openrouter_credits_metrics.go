@@ -29,6 +29,10 @@ const (
 	openRouterCreditsMetricsActivityMaxRetries = 2
 	openRouterCreditsMetricsActivityTimeout    = 30 * time.Second
 	openRouterCreditsMetricsScheduleInterval   = 5 * time.Minute
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	openRouterCreditsMetricsCatchupWindow = openRouterCreditsMetricsScheduleInterval - time.Second
+
 	openRouterCreditsMetricsWorkflowRunTimeout = 4 * time.Minute
 )
 
@@ -103,9 +107,10 @@ func AddOpenRouterCreditsMetricsSchedule(ctx context.Context, temporalEnv *tenv.
 	}
 
 	_, err := sc.Create(ctx, client.ScheduleOptions{
-		ID:     openRouterCreditsMetricsScheduleID,
-		Spec:   spec,
-		Action: action,
+		CatchupWindow: openRouterCreditsMetricsCatchupWindow,
+		ID:            openRouterCreditsMetricsScheduleID,
+		Spec:          spec,
+		Action:        action,
 	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
@@ -116,6 +121,7 @@ func AddOpenRouterCreditsMetricsSchedule(ctx context.Context, temporalEnv *tenv.
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, openRouterCreditsMetricsCatchupWindow)
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,

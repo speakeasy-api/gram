@@ -464,3 +464,50 @@ func TestScanner_LLMLaneDeadLetterKeepsWarnSentinelOverChallenge(t *testing.T) {
 	require.Equal(t, "unavailable", result.DeadLetterReason)
 	require.Empty(t, result.CallFingerprint)
 }
+
+// TestScanner_LLMModeTruncatedDispatchIsIncomplete pins that a size-limited
+// dispatch in the llm mode is never taken as a complete clean scan: the
+// lane's verdict on the prefix still enforces, but the scan is marked
+// incomplete and the lane counts as degraded, failing open for the tail the
+// model never saw.
+func TestScanner_LLMModeTruncatedDispatchIsIncomplete(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	insertRealtimeEnforcingPolicy(t, ti, ctx, "secrets", []string{risk_analysis.SourceGitleaks}, nil, "block")
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	flags := &feature.InMemory{}
+	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, authCtx.ActiveOrganizationID, feature.VariantRiskLLMLLM)
+	request := realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, shadowScanText, message.User, "")
+
+	// A clean verdict on the prefix allows, but not as a complete scan.
+	clean := perLaneDispatcherTruncated(nil, true, func(lane enforcereply.Lane) *riskv1.EnforcementReply { return okReply(lane) })
+	scanner, reader := newMeteredScanner(t, ti, &instrumentedPIIScanner{}, &recordingPIEngine{}, flags, clean)
+	outcome, err := scanner.ScanForInferenceEnforcement(ctx, request)
+	require.NoError(t, err)
+	require.Nil(t, outcome.Result, "the verdict on the prefix still applies")
+	require.False(t, outcome.Complete, "a truncated dispatch never completes the scan")
+	require.Equal(t, map[string]int64{"ENFORCEMENT_SCANNER_LLM_ANALYZER/open": 1}, degradedFailModes(t, reader))
+
+	// A hit on the prefix still denies.
+	hit := perLaneDispatcherTruncated(nil, true, func(lane enforcereply.Lane) *riskv1.EnforcementReply {
+		return okReply(lane, llmReplyFinding(llmanalyzer.RuleSecret, "secrets", "An AWS access key id appears in the message."))
+	})
+	scanner, reader = newMeteredScanner(t, ti, &instrumentedPIIScanner{}, &recordingPIEngine{}, flags, hit)
+	outcome, err = scanner.ScanForInferenceEnforcement(ctx, request)
+	require.NoError(t, err)
+	require.NotNil(t, outcome.Result)
+	require.Equal(t, llmanalyzer.Source, outcome.Result.Source)
+	require.False(t, outcome.Complete)
+	require.Equal(t, map[string]int64{"ENFORCEMENT_SCANNER_LLM_ANALYZER/open": 1}, degradedFailModes(t, reader))
+
+	// A truncated request whose lane also timed out is one degradation,
+	// under the deadline, and the sentinel still denies.
+	deadline := perLaneDispatcherTruncated(nil, true, func(enforcereply.Lane) *riskv1.EnforcementReply { return nil })
+	scanner, reader = newMeteredScanner(t, ti, &instrumentedPIIScanner{}, &recordingPIEngine{}, flags, deadline)
+	outcome, err = scanner.ScanForInferenceEnforcement(ctx, request)
+	require.NoError(t, err)
+	require.NotNil(t, outcome.Result)
+	require.True(t, outcome.Result.AnalysisUnavailable())
+	require.False(t, outcome.Complete)
+	require.Equal(t, map[string]int64{"ENFORCEMENT_SCANNER_LLM_ANALYZER/closed": 1}, degradedFailModes(t, reader), "the deadline is the only degradation counted")
+}

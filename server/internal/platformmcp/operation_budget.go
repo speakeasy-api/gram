@@ -30,6 +30,8 @@ const (
 	SessionRecallOrganizationLimitName = "platform-mcp-session-recall-organization"
 	RiskMutationConnectionLimitName    = "platform-mcp-risk-mutation-connection"
 	RiskMutationOrganizationLimitName  = "platform-mcp-risk-mutation-organization"
+	ReviewRequestConnectionLimitName   = "platform-mcp-review-request-connection"
+	ReviewRequestOrganizationLimitName = "platform-mcp-review-request-organization"
 )
 
 const (
@@ -77,6 +79,8 @@ const (
 	AccessRoleMutationsPerOrganizationPerMinute       = 50
 	ShadowAccessDecisionsPerConnectionPerMinute       = 5
 	ShadowAccessDecisionsPerOrganizationPerMinute     = 50
+	ReviewRequestsPerConnectionPerMinute              = 5
+	ReviewRequestsPerOrganizationPerMinute            = 50
 
 	// DrilldownRowsPerConnectionPerWindow and
 	// DrilldownMetricQueriesPerConnectionPerWindow are the second cap the
@@ -197,12 +201,15 @@ func operationBudgetActorKey(principal Principal) (string, error) {
 // operations. Every value is injected at composition; no production defaults
 // are assigned here.
 type OperationBudgets struct {
-	Catalog      OperationBudget
-	Registration OperationBudget
-	Handoff      OperationBudget
-	SetupStart   OperationBudget
-	Repair       OperationBudget
-	Docs         OperationBudget
+	// RiskFindings meters row-level Watchdog reads independently.
+	RiskFindings   OperationBudget
+	Catalog        OperationBudget
+	Registration   OperationBudget
+	ReviewRequests OperationBudget
+	Handoff        OperationBudget
+	SetupStart     OperationBudget
+	Repair         OperationBudget
+	Docs           OperationBudget
 	// Skills meters authoring and distribution together. Reads and writes share
 	// one allowance because they are one workflow: a caller reads a skill to
 	// obtain the version token its next write needs, and metering the read
@@ -290,5 +297,5 @@ func (b DrilldownVolumeBudget) allow(ctx context.Context, principal Principal, l
 }
 
 func (b OperationBudgets) Valid() bool {
-	return b.Catalog.valid() && b.Registration.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Plugins.valid() && b.AccessReads.valid() && b.AccessRoleMutations.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
+	return b.RiskFindings.valid() && b.Catalog.valid() && b.Registration.valid() && b.ReviewRequests.valid() && b.Handoff.valid() && b.SetupStart.valid() && b.Repair.valid() && b.Docs.valid() && b.Skills.valid() && b.LifecycleMetadata.valid() && b.Plugins.valid() && b.AccessReads.valid() && b.AccessRoleMutations.valid() && b.Diagnostics.valid() && b.SensitiveDiagnostics.valid() && b.SensitiveSessionRecall.valid() && b.RiskMutations.valid() && b.DrilldownVolume.valid()
 }

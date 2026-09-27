@@ -466,12 +466,19 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
+	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "invalid consent browser binding")
+	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
 		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
 			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
 		}
 		return oauthAuthorityError(err).LogError(ctx, logger)
+	}
+
+	if challengeState.Federation != nil {
+		return s.completeFederatedBrowserHandoff(w, r, challengeState)
 	}
 
 	// First-party challenges (minted by ServeFirstPartyConnect) have no
@@ -708,6 +715,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
+	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "invalid consent browser binding")
+	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	issuerID := endpoint.UserSessionIssuerID.String()
 	mcpSlug := endpoint.Slug
@@ -737,7 +747,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// return leg re-enters consent on the platform origin, so a POST carrying
 	// a custom-domain context can still be completing a flow the client
 	// recorded under a different origin (or vice versa).
-	issuer, err := endpoint.RootURL(challengeState.mintOriginOr(s.BaseURLForRequest(r)))
+	issuer, err := s.issuerURL(endpoint, challengeState.mintOriginOr(s.BaseURLForRequest(r)))
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		return oops.E(oops.CodeUnexpected, err, "build authorization response issuer").LogError(ctx, logger)
@@ -792,8 +802,22 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		if enabled, _, _ := s.agentAuthorizationRollout(ctx, logger, endpoint); !enabled {
 			return oops.E(oops.CodeForbidden, nil, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
-		if _, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID); err != nil {
+		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
+		if err != nil {
 			return oops.E(oops.CodeForbidden, err, "selected agent is not eligible").LogWarn(ctx, logger)
+		}
+		// Keep the challenge retryable while the human connects and attaches
+		// required services. Human-owned tokens alone do not authorize an agent.
+		subject := urn.NewAgentSubject(selectedAgent.AgentID)
+		agentCtx, err := s.contextForSessionSubject(ctx, endpoint, subject, "", "")
+		if err != nil {
+			return oops.E(oops.CodeUnavailable, err, "resolve selected agent identity").LogWarn(ctx, logger)
+		}
+		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); err != nil {
+			if !errors.Is(err, remotesessions.ErrNoValidToken) {
+				return oops.E(oops.CodeUnavailable, err, "check agent connections").LogError(ctx, logger)
+			}
+			return oops.E(oops.CodeConflict, err, "connect and attach the required services before authorizing this agent").LogWarn(ctx, logger)
 		}
 	}
 
@@ -908,6 +932,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			RemoteSetHash:       remoteSetHashEmpty,
 		}); err != nil && !isUniqueViolation(err) {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return oops.E(oops.CodeNotFound, err, "oauth client not found").LogWarn(ctx, logger)
+			}
 			return oops.E(oops.CodeUnexpected, err, "record consent").LogError(ctx, logger)
 		}
 	}
@@ -1564,7 +1591,7 @@ func (s *Service) maybeAutoConnect(
 	// autoRefresh is nil: the subject has not been shown the control yet, so
 	// there is no choice to record. The page's own Connect action is what
 	// authors a stored preference.
-	challengeURL, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, nil)
+	challengeURL, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, clients, nil)
 	if err != nil {
 		// Already logged. Render the page so the user can connect manually
 		// rather than seeing an error for a step they did not take.

@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -119,7 +120,12 @@ type EndpointRef struct {
 // round-trip through the IDP and land on /connect, short enough that
 // abandoned flows don't pile up.
 type AuthnChallengeState struct {
-	ID string `json:"id"`
+	Browser    *ChallengeBrowserBinding `json:"browser,omitempty"`
+	Federation *FederatedChallenge      `json:"federation,omitempty"`
+	// Preserve only non-secret login binding and retry budget through consent.
+	FederatedBinding    *FederatedConsentBinding `json:"federated_binding,omitempty"`
+	DelegationRetryUsed bool                     `json:"delegation_retry_used,omitempty"`
+	ID                  string                   `json:"id"`
 	// FlowID is the stable correlation identifier for the whole OAuth flow,
 	// minted once at /authorize. Unlike ID — which idp_callback rotates to
 	// rotate the Redis cache key — FlowID is preserved across the rotation
@@ -710,7 +716,8 @@ type issuerGateAuthentication struct {
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
 // the toolset-keyed (/mcp) and mcp_server-keyed (/x/mcp) MCP runtime
 // paths. It validates the bearer token as a user-session JWT and falls back
-// to an assistant-runtime JWT scoped to the endpoint's project. Upstream
+// to an assistant-runtime JWT scoped to the endpoint's project or an admitted
+// agent principal API key scoped to the endpoint's tenant. Upstream
 // remote-session credentials are deliberately resolved by a separate step so
 // hosted tool calls can evaluate kill switches first.
 //
@@ -766,8 +773,16 @@ func (s *Service) authenticateIssuerGate(
 			newCtx, subject = s.identityValidator.StampAssistant(assistCtx), &ssubj
 		}
 	}
+	if subject == nil && strings.HasPrefix(authToken, "gram_") {
+		newCtx, subject, valErr = s.authenticateIssuerGateAgentKey(ctx, authToken, endpoint)
+		var denied *oops.ShareableError
+		if errors.As(valErr, &denied) && denied.Code == oops.CodeNotFound {
+			return ctx, nil, nil, valErr
+		}
+
+	}
 	if subject == nil {
-		// Both the user-session and assistant-runtime paths rejected the
+		// All supported credential paths rejected the
 		// token. valErr is nil for the no-credentials handshake probe and
 		// never set for a token the assistant path just accepted. It usually
 		// carries a credential rejection (audience mismatch / expiry / bad
@@ -920,6 +935,12 @@ func (s *Service) RequireUserSessionIssuer(ctx context.Context, endpoint *Resolv
 	// place that decides what an absent or unrecognized value means.
 	endpoint.CIMDAdmissionModeRaw = issuer.ClientIDMetadataAdmissionMode
 	endpoint.idJAGConfigured = !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
+	endpoint.useAuthenticationHost = issuer.UseAuthenticationHost
+	// The authentication host serves only issuers that opt in to it. To any
+	// other issuer it is a host that serves nothing.
+	if OnAuthenticationHost(ctx) && !issuer.UseAuthenticationHost {
+		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+	}
 	return nil
 }
 

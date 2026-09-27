@@ -207,10 +207,15 @@ function GrantRow({
         <input
           type="checkbox"
           checked={selected}
+          aria-checked={selected}
           disabled={disabled}
           onChange={(event) => onToggle(event.target.checked)}
         />
-        <span className="min-w-0 font-mono text-sm">{grant.scope}</span>
+        <span className="min-w-0 font-mono text-sm">
+          {grant.scope === "mcp:connect"
+            ? "Use tools (mcp:connect)"
+            : grant.scope}
+        </span>
       </label>
       <div className="pl-6">
         <Text small muted>

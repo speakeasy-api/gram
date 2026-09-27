@@ -20,16 +20,18 @@ import (
 )
 
 type StubClient struct {
-	mut    sync.Mutex
-	logger *slog.Logger
-	tracer trace.Tracer
+	mut           sync.Mutex
+	logger        *slog.Logger
+	tracer        trace.Tracer
+	localProfiles LocalProfileReader
 }
 
 func NewStubClient(logger *slog.Logger, tracerProvider trace.TracerProvider) *StubClient {
 	return &StubClient{
-		mut:    sync.Mutex{},
-		logger: logger.With(attr.SlogComponent("billing_stub")),
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/billing"),
+		mut:           sync.Mutex{},
+		logger:        logger.With(attr.SlogComponent("billing_stub")),
+		tracer:        tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/billing"),
+		localProfiles: nil,
 	}
 }
 
@@ -37,9 +39,17 @@ var _ Tracker = (*StubClient)(nil)
 var _ Repository = (*StubClient)(nil)
 
 func (s *StubClient) GetCustomerTier(ctx context.Context, orgID string) (*Tier, bool, error) {
-	_, span := s.tracer.Start(ctx, "stub_client.get_customer")
+	ctx, span := s.tracer.Start(ctx, "stub_client.get_customer")
 	defer span.End()
 
+	if s.localProfiles != nil {
+		tier, active, err := s.getLocalCustomerTier(ctx, orgID)
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			return nil, false, fmt.Errorf("get local customer tier: %w", err)
+		}
+		return tier, active, nil
+	}
 	return new(TierPro), true, nil
 }
 
@@ -194,8 +204,10 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"25 chat based credits / month",
 				"Slack community support",
 			},
-			AddOnBullets:          []string{},
-			TumPricePerMillionUsd: nil,
+			AddOnBullets:               []string{},
+			TumPricePerMillionUsd:      nil,
+			RiskScanPricePerMillionUsd: nil,
+			McpEgressPricePerGibUsd:    nil,
 		},
 		Pro: &gen.TierLimits{
 			BasePrice:                  500,
@@ -220,7 +232,9 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"$0.05 / month / additional 5000 tool calls",
 				"$11 per 10 additional chat based credits",
 			},
-			TumPricePerMillionUsd: nil,
+			TumPricePerMillionUsd:      nil,
+			RiskScanPricePerMillionUsd: nil,
+			McpEgressPricePerGibUsd:    nil,
 		},
 		Payg: NewPaygTierLimits(),
 		Enterprise: &gen.TierLimits{
@@ -242,8 +256,10 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 				"Tool design support",
 				"SLA-backed support",
 			},
-			AddOnBullets:          []string{},
-			TumPricePerMillionUsd: nil,
+			AddOnBullets:               []string{},
+			TumPricePerMillionUsd:      nil,
+			RiskScanPricePerMillionUsd: nil,
+			McpEgressPricePerGibUsd:    nil,
 		},
 	}, nil
 }

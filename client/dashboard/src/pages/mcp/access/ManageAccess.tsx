@@ -507,10 +507,7 @@ function PrincipalRow({
   const userId =
     row.kind === "user" ? row.principalUrn.replace(/^user:/, "") : null;
   const reaches = inheritedGrants(row).length > 0;
-  // Removing a row something else still reaches is written as blocks, and an
-  // agent cannot hold those, so the control explains itself rather than
-  // writing a rule nothing would enforce.
-  const canRemove = canManage && (row.kind !== "agent" || !reaches);
+  const canRemove = canManage;
   const showFaces = row.kind === "role" && faces.length > 0;
 
   return (
@@ -564,11 +561,9 @@ function PrincipalRow({
             label={
               !canManage
                 ? "Only organization admins can change access."
-                : !canRemove
-                  ? `${row.displayName} is reached by another rule, and an agent cannot be blocked. Remove that rule instead.`
-                  : reaches
-                    ? `Remove ${row.displayName} from this server`
-                    : `Remove ${row.displayName}`
+                : reaches
+                  ? `Remove ${row.displayName} from this server`
+                  : `Remove ${row.displayName}`
             }
             onClick={onRevoke}
             disabled={pending || !canRemove}
@@ -744,17 +739,11 @@ function scopeOptions({
   // would survive it: the change has to be made where the block is.
   if (!state.granted && state.capped) return [];
 
-  // An agent cannot hold the "blocked_" scopes. They are registered but not
-  // agent-runtime-safe, so a block written against an agent is dropped the
-  // moment its policy loads. Any change that has to be written as a
-  // subtraction is withheld here rather than offered and silently ignored.
-  const canSubtract = row.kind !== "agent" || !state.subtracts;
-
   if (scope !== "use") {
     // View and manage cover the server itself; there is nothing inside one
     // to narrow, so the line is on or off.
     if (state.granted) {
-      return canSubtract ? [{ label: "No access", onSelect: onRevoke }] : [];
+      return [{ label: "No access", onSelect: onRevoke }];
     }
     return [{ label: "Allowed", onSelect: onAllow }];
   }
@@ -764,12 +753,7 @@ function scopeOptions({
   const options: InlineChoiceOption[] = state.capped
     ? []
     : [{ label: "All tools", onSelect: onAllow }];
-  // Narrowing here is written as a block when something other than this row's
-  // own rule grants the line, so it is withheld from an agent that cannot
-  // hold one.
-  if (canSubtract) {
-    options.push({ label: "Specific tools\u2026", onSelect: onNarrow });
-  }
+  options.push({ label: "Specific tools\u2026", onSelect: onNarrow });
   // Keeping someone off the destructive tools is the common restriction, and
   // an annotation expresses it without a catalogue: it keeps covering tools
   // added later, so it is offered on every server rather than only the ones
@@ -783,18 +767,14 @@ function scopeOptions({
         label: "Allow destructive tools",
         onSelect: onAllowDestructive,
       });
-    } else if (
-      canSubtract &&
-      !destructiveBlock(row) &&
-      !row.cells.use.ownBlock
-    ) {
+    } else if (!destructiveBlock(row) && !row.cells.use.ownBlock) {
       options.push({
         label: "Block destructive tools",
         onSelect: onBlockDestructive,
       });
     }
   }
-  if (state.canRevoke && canSubtract) {
+  if (state.canRevoke) {
     options.push({ label: "No access", onSelect: onRevoke });
   }
   return options;

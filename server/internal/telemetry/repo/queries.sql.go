@@ -97,7 +97,7 @@ func withUserIdentityFilter(sb squirrel.SelectBuilder, identity UserIdentity, ca
 	if len(identity.Emails) > 0 {
 		match = append(match, squirrel.And{
 			squirrel.Eq{"telemetry_logs.user_id": ""},
-			squirrel.Eq{"lower(telemetry_logs.user_email)": identity.Emails}, //nolint:glint // legacy flag-off identity path; deleted at GA with the canonical fold rollout
+			squirrel.Eq{"lower(telemetry_logs.user_email)": identity.Emails}, //nolint:glint // norawuseremailfilter: legacy flag-off identity path; deleted at GA with the canonical fold rollout
 		})
 	}
 
@@ -2992,6 +2992,10 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 type GetChatMetricsByIDsParams struct {
 	GramProjectID string
 	ChatIDs       []string // UUIDs of chats to get metrics for
+
+	// EventTimeFrom, when non-zero, restricts reads to events at or after this
+	// instant so ClickHouse can prune partitions and hourly summary buckets.
+	EventTimeFrom time.Time
 }
 
 // ChatMetricsRow represents token and cost metrics for a single chat.
@@ -3004,14 +3008,60 @@ type ChatMetricsRow struct {
 }
 
 // GetChatMetricsByIDs retrieves token and cost metrics for specific chat IDs.
-// This is used to enrich chat overview data from PostgreSQL with metrics from ClickHouse.
-//
-//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+// Agent-session surfaces (Claude Code, Codex, Cursor, …) are served from
+// chat_session_summaries so chat.load does not scan raw telemetry_logs.
+// Managed assistant completions are absent from that summary, so any chat
+// missing from it falls back to the raw gen_ai.usage projection.
 func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByIDsParams) (map[string]ChatMetricsRow, error) {
 	if len(arg.ChatIDs) == 0 {
 		return make(map[string]ChatMetricsRow), nil
 	}
 
+	metricsMap, err := q.scanChatMetrics(ctx, chatMetricsFromSessionSummaries(arg))
+	if err != nil {
+		return nil, fmt.Errorf("get chat metrics from session summaries: %w", err)
+	}
+
+	missing := make([]string, 0)
+	for _, id := range arg.ChatIDs {
+		if _, ok := metricsMap[id]; !ok {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return metricsMap, nil
+	}
+
+	raw, err := q.scanChatMetrics(ctx, chatMetricsFromRawLogs(GetChatMetricsByIDsParams{
+		GramProjectID: arg.GramProjectID,
+		ChatIDs:       missing,
+		EventTimeFrom: arg.EventTimeFrom,
+	}))
+	if err != nil {
+		return nil, fmt.Errorf("get chat metrics from telemetry logs: %w", err)
+	}
+	for id, row := range raw {
+		metricsMap[id] = row
+	}
+	return metricsMap, nil
+}
+
+func chatMetricsFromSessionSummaries(arg GetChatMetricsByIDsParams) squirrel.SelectBuilder {
+	sb := sq.Select(
+		"s.chat_id as gram_chat_id",
+		"sum(s.total_input_tokens) as total_input_tokens",
+		"sum(s.total_output_tokens) as total_output_tokens",
+		"sum(s.total_tokens) as total_tokens",
+		"sum(s.total_cost) as total_cost",
+	).
+		From("chat_session_summaries s").
+		Where("s.gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"s.chat_id": arg.ChatIDs}).
+		GroupBy("s.chat_id")
+	return withChatMetricsEventTimeFrom(sb, "s.time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?, 'UTC'))", arg.EventTimeFrom)
+}
+
+func chatMetricsFromRawLogs(arg GetChatMetricsByIDsParams) squirrel.SelectBuilder {
 	sb := sq.Select(
 		"chat_id as gram_chat_id",
 		"sumIf(toInt64OrZero(toString(attributes.gen_ai.usage.input_tokens)), toString(attributes.gen_ai.usage.input_tokens) != '') as total_input_tokens",
@@ -3023,7 +3073,18 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where(squirrel.Eq{"chat_id": arg.ChatIDs}).
 		GroupBy("chat_id")
+	return withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
+}
 
+func withChatMetricsEventTimeFrom(sb squirrel.SelectBuilder, pred string, eventTimeFrom time.Time) squirrel.SelectBuilder {
+	if eventTimeFrom.IsZero() {
+		return sb
+	}
+	return sb.Where(pred, eventTimeFrom.UnixNano())
+}
+
+//nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
+func (q *Queries) scanChatMetrics(ctx context.Context, sb squirrel.SelectBuilder) (map[string]ChatMetricsRow, error) {
 	query, args, err := sb.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("building get chat metrics by IDs query: %w", err)
@@ -3056,6 +3117,10 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 type GetClaudeTurnUsageByChatIDsParams struct {
 	GramProjectID string
 	ChatIDs       []string
+
+	// EventTimeFrom, when non-zero, restricts the raw telemetry_logs scan to
+	// events at or after this instant so ClickHouse can prune daily partitions.
+	EventTimeFrom time.Time
 }
 
 // ClaudeTurnUsageRow represents aggregated Claude Code usage for one prompt.id turn.
@@ -3130,8 +3195,10 @@ func (q *Queries) GetClaudeTurnUsageByChatIDs(ctx context.Context, arg GetClaude
 		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
 		Where("gram_chat_id IS NOT NULL").
 		Where("gram_chat_id != ''").
-		Where(promptIDExpr+" != ''").
-		Where(isClaudeCodeExpr).
+		Where(promptIDExpr + " != ''").
+		Where(isClaudeCodeExpr)
+	sb = withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
+	sb = sb.
 		GroupBy("gram_chat_id", promptIDExpr).
 		OrderBy("gram_chat_id ASC", "start_time_unix_nano ASC", "prompt_id ASC")
 
@@ -3193,10 +3260,12 @@ func (q *Queries) GetClaudeToolUsageByChatIDs(ctx context.Context, arg GetClaude
 		Where(squirrel.Eq{"gram_chat_id": arg.ChatIDs}).
 		Where("gram_chat_id IS NOT NULL").
 		Where("gram_chat_id != ''").
-		Where(toolUseIDExpr+" != ''").
-		Where(promptIDExpr+" != ''").
+		Where(toolUseIDExpr + " != ''").
+		Where(promptIDExpr + " != ''").
 		Where(isToolResultExpr).
-		Where(isClaudeCodeExpr).
+		Where(isClaudeCodeExpr)
+	sb = withChatMetricsEventTimeFrom(sb, "time_unix_nano >= ?", arg.EventTimeFrom)
+	sb = sb.
 		GroupBy("gram_chat_id", toolUseIDExpr, promptIDExpr).
 		OrderBy("gram_chat_id ASC", "min(time_unix_nano) ASC", "tool_use_id ASC")
 
@@ -4009,6 +4078,7 @@ const (
 	toolUsageTargetKindLocalTools = "local_tools"
 	toolUsageTargetKindSkill      = "skill"
 
+	toolUsageUserKindAgentID        = "agent_id"
 	toolUsageUserKindEmail          = "email"
 	toolUsageUserKindExternalUserID = "external_user_id"
 	toolUsageUserKindUserID         = "user_id"
@@ -5574,6 +5644,11 @@ func appendMetaMCPTargetBranch(typeArgs, kindArgs, idArgs, labelArgs *[]string, 
 	*labelArgs = append(*labelArgs, condition, "arrayElement(?, meta_mcp_match_index)")
 }
 
+// Only the authenticated managed-agent actor is an agent identity; owners and
+// approving humans are credential provenance, never the caller. Keep in sync
+// with trace_summaries_mv.agent_id. Client-supplied hook attributes are untrusted.
+const toolUsageAgentIDExpr = "if(telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery') AND toString(attributes.gram.authorization.actor.type) = 'agent', toString(attributes.gram.authorization.actor.id), '')"
+
 // The gateway an event belongs to: the target itself, else the gateway that dispatched it.
 const toolUsageGatewayIDExpr = "if(target_type = '" + ToolUsageTargetTypeMetaMCP + "', target_id, meta_mcp_server_id)"
 
@@ -5597,6 +5672,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"any(user_email) AS g_user_email",
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
+		"max(agent_id) AS g_agent_id",
 		"any(hook_source) AS g_hook_source",
 		"any(event_source) AS g_event_source",
 		"max(mcp_match) AS g_mcp_match",
@@ -5744,8 +5820,10 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		)
 	}
 
-	userKey := chFirstNonEmpty("g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
+	userKey := chFirstNonEmpty("g_agent_id", "g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
+	userLabel := chMultiIf("g_agent_id != ''", "concat('agent:', g_agent_id)", userKey)
 	userKind := chMultiIf(
+		"g_agent_id != ''", "'"+toolUsageUserKindAgentID+"'",
 		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
 		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
@@ -5790,7 +5868,7 @@ FROM (%s)`,
 		targetID,
 		targetLabel,
 		userKey,
-		userKey,
+		userLabel,
 		userKind,
 		hookStatus,
 		clientKey,
@@ -5861,6 +5939,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"user_email",
 		"external_user_id",
 		"user_id",
+		toolUsageAgentIDExpr+" AS agent_id",
 		"account_type",
 		"meta_mcp_server_id",
 		"mcp_client_name",
@@ -5953,13 +6032,6 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		sourceArgs = append(sourceArgs, rawArgs...)
 	}
 
-	userKind := chMultiIf(
-		"user_email != ''", "'"+toolUsageUserKindEmail+"'",
-		"external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
-		"user_id != ''", "'"+toolUsageUserKindUserID+"'",
-		"'"+toolUsageUserKindUnknown+"'",
-	)
-	userKey := chFirstNonEmpty("user_email", "external_user_id", "user_id", "'Unknown'")
 	logGroupKind := chMultiIf(
 		"trace_id != ''", "'trace_id'",
 		"trigger_correlation_id != ''", "'correlation_id'",
@@ -5972,6 +6044,18 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		"trigger_event_id != ''", "trigger_event_id",
 		"toString(log_id)",
 	)
+	// Reuse the existing trace/log-group window so sparse actor attributes win
+	// before user identity enters GROUP BY, without another scan or join.
+	traceAgentID := "max(agent_id) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
+	userKind := chMultiIf(
+		traceAgentID+" != ''", "'"+toolUsageUserKindAgentID+"'",
+		"user_email != ''", "'"+toolUsageUserKindEmail+"'",
+		"external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
+		"user_id != ''", "'"+toolUsageUserKindUserID+"'",
+		"'"+toolUsageUserKindUnknown+"'",
+	)
+	userKey := chFirstNonEmpty(traceAgentID, "user_email", "external_user_id", "user_id", "'Unknown'")
+	userLabel := chMultiIf(traceAgentID+" != ''", "concat('agent:', "+traceAgentID+")", userKey)
 	eventSkillName := chFirstNonEmpty("skill_name", "JSONExtractString(tool_call_arguments, 'skill')")
 	skillName := "anyIf(" + eventSkillName + ", " + eventSkillName + " != '') OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
 	// Spans without a name inherit one from their trace before grouping. Keep
@@ -6089,7 +6173,7 @@ SELECT
 	meta_mcp_server_id,
 	mcp_client_name,
 	mcp_client_version
-FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, resolvedToolName), targetType, targetKind, targetID, targetLabel, userKey, userKey, userKind, sourceSQL)
+FROM (%s)`, logGroupKind, logGroupValue, chMultiIf(isSkillCall, skillLabel, resolvedToolName), targetType, targetKind, targetID, targetLabel, userKey, userLabel, userKind, sourceSQL)
 
 	normalizedArgs := make([]any, 0, 7+len(sourceArgs))
 	if len(mcpSourceIDs) > 0 {
@@ -6260,12 +6344,14 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	// aggregate, which nests any()/sum() and fails with ILLEGAL_AGGREGATION once a
 	// caller (uniqExact(tool_name), sum(success), ...) aggregates over normalized_events.
 	userKind := chMultiIf(
+		"g_agent_id != ''", "'"+toolUsageUserKindAgentID+"'",
 		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
 		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
 		"'"+toolUsageUserKindUnknown+"'",
 	)
-	userKey := chFirstNonEmpty("g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
+	userKey := chFirstNonEmpty("g_agent_id", "g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
+	userLabel := chMultiIf("g_agent_id != ''", "concat('agent:', g_agent_id)", userKey)
 
 	// The MCP client is self-reported at the initialize handshake, so it is only
 	// present on traffic Gram terminated as an MCP server. Hook-observed calls,
@@ -6285,6 +6371,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"any(user_email) AS g_user_email",
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
+		"max(agent_id) AS g_agent_id",
 		"ifNull(anyIfMerge(http_status_code), 0) AS g_http_status_code",
 		"max(has_tool_error) AS g_has_tool_error",
 		"max(account_type) AS g_account_type",
@@ -6309,6 +6396,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 		"any(user_email) AS g_user_email",
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
+		"max(agent_id) AS g_agent_id",
 		"any(skill_name) AS g_skill_name",
 		"max(mcp_match) AS g_mcp_match",
 		"max(mcp_server_url) AS g_mcp_server_url",
@@ -6412,7 +6500,7 @@ FROM (%s)`,
 		directTargetLabel,
 		chFirstNonEmpty("g_tool_name", "g_gram_urn"),
 		userKey,
-		userKey,
+		userLabel,
 		userKind,
 		clientKey,
 		clientLabel,
@@ -6540,7 +6628,7 @@ SELECT
 	%s AS client_key,
 	%s AS client_label,
 	g_mcp_client_version AS client_version
-FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userKey, userKind, clientKey, clientLabel, hookSourceSQL)
+FROM (%s)`, hookTargetType, hookTargetKind, hookTargetID, hookTargetLabel, hookToolName, userKey, userLabel, userKind, clientKey, clientLabel, hookSourceSQL)
 
 	directArgs := make([]any, 0, 3+len(directSourceArgs))
 	if len(mcpSourceIDs) > 0 {
@@ -7321,7 +7409,7 @@ func (q *Queries) ListHooksTraces(ctx context.Context, arg ListHooksTracesParams
 		}
 	}
 
-	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source", "skill_name") //nolint:glint // fold-neutral: trace_id keys the group (one trace = one email) and the trace list deliberately displays the literal email; the drill filters above fold
+	sb = sb.GroupBy("trace_id", "tool_name", "tool_source", "event_source", "user_email", "hook_source", "skill_name") //nolint:glint // norawuseremailfilter: fold-neutral: trace_id keys the group (one trace = one email) and the trace list deliberately displays the literal email; the drill filters above fold
 
 	// Pagination based on trace_id cursor
 	if arg.Cursor != "" {

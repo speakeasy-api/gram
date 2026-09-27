@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   cancelMutate: vi.fn(),
   resumeMutate: vi.fn(),
   invalidate: vi.fn(),
+  checkoutMutate: vi.fn(),
 }));
 
 vi.mock("@/hooks/useProductTier", () => ({
@@ -54,7 +55,7 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
 
 vi.mock("@gram/client/react-query/createStripeCheckout.js", () => ({
   useCreateStripeCheckoutMutation: () => ({
-    mutate: vi.fn(),
+    mutate: mocks.checkoutMutate,
     isPending: false,
   }),
 }));
@@ -105,6 +106,7 @@ vi.mock("@/components/page-layout", () => {
 });
 
 import { PaygPlanSection } from "./payg-plan-section";
+import { resetPaygCheckoutLocks } from "./payg-checkout-lock";
 
 // Midday UTC so the formatted day can't slide either side of the date line in
 // whichever time zone the tests happen to run in.
@@ -184,12 +186,14 @@ const DAY = 24 * 60 * 60 * 1000;
 describe("PaygPlanSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPaygCheckoutLocks();
     mocks.productTier.mockReturnValue("payg");
     mocks.hasAnyScope.mockReturnValue(true);
     mocks.flagResult.mockReturnValue({ status: "enabled" });
     mocks.session.mockReturnValue({
       trial: null,
       activeOrganizationId: "org-1",
+      rawGramAccountType: "payg",
     });
     queryState({ data: subscription() });
   });
@@ -420,39 +424,53 @@ describe("PaygPlanSection", () => {
     expect(cancelTrigger()).toBeNull();
   });
 
-  // The pay-as-you-go tier predates Stripe, so an organization can hold it
-  // without a Stripe subscription behind it. That 404 is a stable answer, and
-  // dressing it up as an outage would leave the admin retrying forever.
   describe("when the organization has no Stripe subscription", () => {
     beforeEach(() => {
       queryState({ isError: true, error: notFound() });
     });
 
-    it("says so instead of reporting an outage", () => {
+    it("gives an eligible admin actionable setup without management controls", () => {
       render(<PaygPlanSection />);
 
-      expect(screen.getByText(/no stripe subscription/i)).toBeTruthy();
-      expect(
-        screen.getByText(/no payment method or invoice history/i),
-      ).toBeTruthy();
-      expect(screen.queryByText(/couldn't load your subscription/i)).toBeNull();
+      expect(screen.getByText(/finish setting up billing/i)).toBeTruthy();
+      expect(portalButton()).toBeNull();
+      expect(checkoutCta()).not.toBeNull();
+      expect(cancelTrigger()).toBeNull();
+      expect(resumeButton()).toBeNull();
     });
 
-    it("offers nothing to retry", () => {
-      render(<PaygPlanSection />);
+    it("lets an admin restart checkout after abandoning a trial conversion", () => {
+      mocks.session.mockReturnValue({
+        activeOrganizationId: "org-1",
+        rawGramAccountType: "payg",
+        whitelisted: true,
+        // Converted trials are omitted from the session, even before their end.
+        trial: null,
+      });
 
-      expect(screen.queryByRole("button", { name: /^retry$/i })).toBeNull();
+      render(<PaygPlanSection />);
+      fireEvent.click(checkoutCta()!);
+
+      expect(mocks.checkoutMutate).toHaveBeenCalledTimes(1);
       expect(mocks.refetch).not.toHaveBeenCalled();
     });
 
-    // There is no Stripe customer to open a portal for, and no lifecycle to
-    // cancel or resume.
-    it("offers no billing controls", () => {
+    it("shows a member the inactive state without setup instructions", () => {
+      mocks.hasAnyScope.mockReturnValue(false);
       render(<PaygPlanSection />);
 
-      expect(portalButton()).toBeNull();
-      expect(cancelTrigger()).toBeNull();
-      expect(resumeButton()).toBeNull();
+      expect(screen.getByText(/no active billing subscription/i)).toBeTruthy();
+      expect(screen.queryByText(/finish setting up billing/i)).toBeNull();
+      expect(checkoutCta()).toBeNull();
+    });
+
+    it("shows the inactive state when self-serve billing is disabled", () => {
+      mocks.flagResult.mockReturnValue({ status: "disabled" });
+      render(<PaygPlanSection />);
+
+      expect(screen.getByText(/no active billing subscription/i)).toBeTruthy();
+      expect(screen.queryByText(/finish setting up billing/i)).toBeNull();
+      expect(checkoutCta()).toBeNull();
     });
 
     // The answer is definitive, so it outranks whatever the cache still holds.
@@ -465,7 +483,7 @@ describe("PaygPlanSection", () => {
 
       render(<PaygPlanSection />);
 
-      expect(screen.getByText(/no stripe subscription/i)).toBeTruthy();
+      expect(checkoutCta()).not.toBeNull();
       expect(screen.queryByText("Pay as you go")).toBeNull();
       expect(cancelTrigger()).toBeNull();
     });

@@ -17,6 +17,14 @@ function rangeFromPicker(from: Date, to: Date): MeterPeriod {
     to: new Date(Date.UTC(to.getFullYear(), to.getMonth(), to.getDate() + 1)),
   };
 }
+export function meterPeriodDisplayRange(period: MeterPeriod): MeterPeriod {
+  const calendarDate = (date: Date): Date =>
+    new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return {
+    from: calendarDate(period.from),
+    to: calendarDate(new Date(period.to.getTime() - 1)),
+  };
+}
 
 export function useMeterPeriod(cycles: MeterCycleWindow[]): {
   period: MeterPeriod | null;

@@ -12,17 +12,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.temporal.io/sdk/testsuite"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -72,6 +78,53 @@ type llmLanePublishers struct {
 // captured LLM publisher when non-nil.
 func runLLMLaneBatch(t *testing.T, conn *pgxpool.Pool, td testData, flags feature.Provider, analyzerEnabled bool, piiScanner risk_analysis.PIIScanner, llmPub gcp.Publisher[*riskv1.LLMAnalysis], messageIDs []uuid.UUID, sources []string) (risk_analysis.AnalyzeBatchResult, llmLanePublishers, error) {
 	t.Helper()
+	return runLLMLaneBatchWithMeter(t, conn, td, flags, analyzerEnabled, testenv.NewMeterProvider(t), piiScanner, llmPub, messageIDs, sources)
+}
+
+// newManualMeter returns a meter provider whose counters the test reads back
+// through the returned reader.
+func newManualMeter(t *testing.T) (*sdkmetric.MeterProvider, *sdkmetric.ManualReader) {
+	t.Helper()
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+	return provider, reader
+}
+
+// llmPolicyEvaluations sums risk.llm.policy_evaluations for the async scan
+// mode and the given outcome.
+func llmPolicyEvaluations(t *testing.T, reader *sdkmetric.ManualReader, outcome string) int64 {
+	t.Helper()
+	var data metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &data))
+	want := []attribute.KeyValue{attr.RiskScanMode(llmanalyzer.ScanModeAsync), attr.Outcome(outcome)}
+	var total int64
+	for _, scope := range data.ScopeMetrics {
+		for _, instrument := range scope.Metrics {
+			if instrument.Name != "risk.llm.policy_evaluations" {
+				continue
+			}
+			sum, ok := instrument.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, dp := range sum.DataPoints {
+				matched := true
+				for _, kv := range want {
+					if got, ok := dp.Attributes.Value(kv.Key); !ok || got != kv.Value {
+						matched = false
+						break
+					}
+				}
+				if matched {
+					total += dp.Value
+				}
+			}
+		}
+	}
+	return total
+}
+
+func runLLMLaneBatchWithMeter(t *testing.T, conn *pgxpool.Pool, td testData, flags feature.Provider, analyzerEnabled bool, meterProvider metric.MeterProvider, piiScanner risk_analysis.PIIScanner, llmPub gcp.Publisher[*riskv1.LLMAnalysis], messageIDs []uuid.UUID, sources []string) (risk_analysis.AnalyzeBatchResult, llmLanePublishers, error) {
+	t.Helper()
 	capturedLLMPub, llmPublished := capturingPub[*riskv1.LLMAnalysis](t)
 	gitleaksPub, gitleaksPublished := capturingPub[*riskv1.GitleaksAnalysis](t)
 	presidioPub, presidioPublished := capturingPub[*riskv1.PresidioAnalysis](t)
@@ -82,7 +135,7 @@ func runLLMLaneBatch(t *testing.T, conn *pgxpool.Pool, td testData, flags featur
 	ab, err := risk_analysis.NewAnalyzeBatch(
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
-		testenv.NewMeterProvider(t),
+		meterProvider,
 		conn,
 		nil,
 		piiScanner,
@@ -311,4 +364,205 @@ func TestAnalyzeBatch_LLMAnalyzer_FlagOnAnalyzerDisabledFallsBackToLegacyEngines
 	}
 	assert.True(t, sourcesSeen[risk_analysis.SourceGitleaks], "gitleaks finding is stored")
 	assert.True(t, sourcesSeen[risk_analysis.SourceCustom], "custom rule finding is stored")
+}
+
+// TestAnalyzeBatch_LLMAnalyzer_ShadowModeRunsLegacyAndPublishesShadowLane
+// pins the batch half of the shadow engine mode: the legacy engines scan and
+// publish exactly as in the off mode, and the same messages are additionally
+// published to the LLM lane marked shadow.
+func TestAnalyzeBatch_LLMAnalyzer_ShadowModeRunsLegacyAndPublishesShadowLane(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgID := insertUserMessage(t, conn, td, "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd")
+
+	flags := &feature.InMemory{}
+	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, td.orgID, feature.VariantRiskLLMShadow)
+	pii := &countingPIIScanner{}
+	meterProvider, reader := newManualMeter(t)
+	result, pubs, err := runLLMLaneBatchWithMeter(t, conn, td, flags, true, meterProvider, pii, nil, []uuid.UUID{msgID}, []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePresidio})
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, result.Processed)
+	assert.Equal(t, 1, result.Findings, "inline gitleaks still scans and enforces under shadow")
+	assert.Len(t, *pubs.gitleaks, 1, "the legacy gitleaks lane is still dispatched")
+	assert.Len(t, *pubs.presidio, 1, "the legacy presidio lane is still dispatched")
+	assert.Equal(t, int32(1), pii.calls.Load(), "inline presidio still runs")
+
+	require.Len(t, *pubs.llm, 1, "one shadow LLM analysis request per message")
+	req := (*pubs.llm)[0]
+	assert.True(t, req.GetShadow(), "the request is marked shadow")
+	assert.Equal(t, "llm_shadow_stream", req.GetExecutionPath())
+	assert.Equal(t, msgID.String(), req.GetChatMessageId())
+	assert.Equal(t, []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePresidio}, req.GetSources())
+	assert.Equal(t, td.orgID, req.GetOrganizationSlug())
+	assert.Contains(t, req.GetBody(), "ASIAZ2XY3WNBQR5TUVWX")
+
+	assert.Equal(t, int64(1), llmPolicyEvaluations(t, reader, "shadow_published"))
+	assert.Equal(t, int64(0), llmPolicyEvaluations(t, reader, "published"))
+	assert.Equal(t, int64(0), llmPolicyEvaluations(t, reader, "fallback_legacy"))
+
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "the legacy gitleaks finding still lands in Postgres")
+	assert.Equal(t, risk_analysis.SourceGitleaks, rows[0].Source)
+}
+
+func TestAnalyzeBatch_LLMAnalyzer_ShadowModeAnalyzerDisabledSkipsShadowLane(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgID := insertUserMessage(t, conn, td, "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd")
+
+	flags := &feature.InMemory{}
+	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, td.orgID, feature.VariantRiskLLMShadow)
+	pii := &countingPIIScanner{}
+	meterProvider, reader := newManualMeter(t)
+	result, pubs, err := runLLMLaneBatchWithMeter(t, conn, td, flags, false, meterProvider, pii, nil, []uuid.UUID{msgID}, []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePresidio})
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, result.Findings, "the legacy engines enforce as in the off mode")
+	assert.Empty(t, *pubs.llm, "no shadow request without an analyzer to serve it")
+	assert.Len(t, *pubs.gitleaks, 1)
+	assert.Len(t, *pubs.presidio, 1)
+	assert.Equal(t, int32(1), pii.calls.Load())
+	assert.Equal(t, int64(1), llmPolicyEvaluations(t, reader, "shadow_skipped"))
+	assert.Equal(t, int64(0), llmPolicyEvaluations(t, reader, "fallback_legacy"), "the shadow mode has nothing to fall back from")
+}
+
+func TestAnalyzeBatch_LLMAnalyzer_OffVariantBeatsBooleanFlag(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgID := insertUserMessage(t, conn, td, "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd")
+
+	// The boolean read is only the transition rule for a key without
+	// variants; an explicit off variant keeps the legacy engines.
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagRiskLLMAnalyzer, td.orgID, true)
+	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, td.orgID, feature.VariantRiskLLMOff)
+	pii := &countingPIIScanner{}
+	result, pubs, err := runLLMLaneBatch(t, conn, td, flags, true, pii, nil, []uuid.UUID{msgID}, []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePresidio})
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, result.Findings)
+	assert.Empty(t, *pubs.llm, "no LLM analysis request in the off mode")
+	assert.Len(t, *pubs.gitleaks, 1)
+	assert.Len(t, *pubs.presidio, 1)
+	assert.Equal(t, int32(1), pii.calls.Load())
+}
+
+func TestAnalyzeBatch_LLMAnalyzer_LLMVariantRoutesCoveredSources(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgID := insertUserMessage(t, conn, td, "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd")
+
+	flags := &feature.InMemory{}
+	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, td.orgID, feature.VariantRiskLLMLLM)
+	pii := &countingPIIScanner{}
+	meterProvider, reader := newManualMeter(t)
+	result, pubs, err := runLLMLaneBatchWithMeter(t, conn, td, flags, true, meterProvider, pii, nil, []uuid.UUID{msgID}, []string{risk_analysis.SourceGitleaks, risk_analysis.SourcePresidio})
+	require.NoError(t, err)
+
+	assert.Equal(t, 0, result.Findings, "no inline engine scans the covered sources in the llm mode")
+	assert.Empty(t, *pubs.gitleaks)
+	assert.Empty(t, *pubs.presidio)
+	assert.Equal(t, int32(0), pii.calls.Load())
+	require.Len(t, *pubs.llm, 1)
+	req := (*pubs.llm)[0]
+	assert.False(t, req.GetShadow(), "the llm mode enforces, so the request is not shadow")
+	assert.Equal(t, "llm_analyzer_stream", req.GetExecutionPath())
+	assert.Equal(t, int64(1), llmPolicyEvaluations(t, reader, "published"))
+	assert.Equal(t, int64(0), llmPolicyEvaluations(t, reader, "shadow_published"))
+}
+
+// TestAnalyzeBatch_LLMAnalyzer_ShadowPublishFailureKeepsLegacyResults pins
+// that the shadow lane never gates enforcement: an LLM transport outage costs
+// the comparison lane its messages, counted as shadow_publish_error, while
+// the legacy engines' inline findings still land and the activity succeeds.
+func TestAnalyzeBatch_LLMAnalyzer_ShadowPublishFailureKeepsLegacyResults(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	msgID := insertUserMessage(t, conn, td, "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd")
+
+	flags := &feature.InMemory{}
+	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, td.orgID, feature.VariantRiskLLMShadow)
+	failing := gcp.NewMockPublisher[*riskv1.LLMAnalysis]()
+	failing.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(errors.New("topic unavailable")))
+
+	meterProvider, reader := newManualMeter(t)
+	result, pubs, err := runLLMLaneBatchWithMeter(t, conn, td, flags, true, meterProvider, &countingPIIScanner{}, failing, []uuid.UUID{msgID}, []string{risk_analysis.SourceGitleaks})
+	require.NoError(t, err, "a shadow publish failure never fails the batch")
+	assert.Equal(t, 1, result.Processed)
+	assert.Equal(t, 1, result.Findings, "the inline gitleaks finding still enforces")
+	assert.Len(t, *pubs.gitleaks, 1, "the legacy gitleaks lane is still dispatched")
+	assert.Equal(t, int64(1), llmPolicyEvaluations(t, reader, "shadow_publish_error"))
+	assert.Equal(t, int64(0), llmPolicyEvaluations(t, reader, "shadow_published"))
+
+	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
+		ProjectID:    td.projectID,
+		RiskPolicyID: td.policyID,
+		CursorID:     uuid.NullUUID{},
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "the legacy gitleaks finding still lands in Postgres")
+	assert.Equal(t, risk_analysis.SourceGitleaks, rows[0].Source)
+}
+
+// TestAnalyzeBatch_LLMAnalyzer_ShadowPartialPublishCountsBothOutcomes pins
+// that a partially acknowledged shadow publish counts the acknowledged
+// messages as shadow_published and only the rest as shadow_publish_error, so
+// the comparison lane's coverage denominator stays exact.
+func TestAnalyzeBatch_LLMAnalyzer_ShadowPartialPublishCountsBothOutcomes(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	first := insertUserMessage(t, conn, td, "hello one")
+	second := insertUserMessage(t, conn, td, "hello two")
+
+	flags := &feature.InMemory{}
+	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, td.orgID, feature.VariantRiskLLMShadow)
+	partial := gcp.NewMockPublisher[*riskv1.LLMAnalysis]()
+	partial.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(errors.New("topic unavailable"))).Once()
+	partial.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+
+	meterProvider, reader := newManualMeter(t)
+	result, _, err := runLLMLaneBatchWithMeter(t, conn, td, flags, true, meterProvider, &countingPIIScanner{}, partial, []uuid.UUID{first, second}, []string{risk_analysis.SourceGitleaks})
+	require.NoError(t, err, "a partial shadow publish never fails the batch")
+	assert.Equal(t, 2, result.Processed)
+	assert.Equal(t, int64(1), llmPolicyEvaluations(t, reader, "shadow_published"), "the acknowledged message is counted")
+	assert.Equal(t, int64(1), llmPolicyEvaluations(t, reader, "shadow_publish_error"), "only the unacknowledged message is counted as an error")
+}
+
+// TestAnalyzeBatch_LLMAnalyzer_PartialPublishFailsActivityWithoutCounting
+// pins the enforcing lane's side of the partial-publish accounting: the
+// activity fails so the retry republishes the whole batch, and nothing is
+// counted as published, or the acknowledged messages would be counted twice.
+func TestAnalyzeBatch_LLMAnalyzer_PartialPublishFailsActivityWithoutCounting(t *testing.T) {
+	t.Parallel()
+	conn := cloneDB(t)
+	td := seedTestData(t, conn, true)
+	first := insertUserMessage(t, conn, td, "hello one")
+	second := insertUserMessage(t, conn, td, "hello two")
+
+	flags := &feature.InMemory{}
+	flags.SetFlagVariant(feature.FlagRiskLLMAnalyzer, td.orgID, feature.VariantRiskLLMLLM)
+	partial := gcp.NewMockPublisher[*riskv1.LLMAnalysis]()
+	partial.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewErrPublishResult(errors.New("topic unavailable"))).Once()
+	partial.On("Publish", mock.Anything, mock.Anything).Return(gcp.NewSuccessPublishResult())
+
+	meterProvider, reader := newManualMeter(t)
+	_, _, err := runLLMLaneBatchWithMeter(t, conn, td, flags, true, meterProvider, &countingPIIScanner{}, partial, []uuid.UUID{first, second}, []string{risk_analysis.SourceGitleaks})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "llm analyzer scan dispatch")
+	assert.Equal(t, int64(0), llmPolicyEvaluations(t, reader, "published"), "a partial enforcing publish counts nothing before the retry")
+	assert.Equal(t, int64(0), llmPolicyEvaluations(t, reader, "shadow_publish_error"))
 }

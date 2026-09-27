@@ -5,6 +5,12 @@ export type AdminMeterUsage = AdminMeterUsageResponse;
 export type MeterFamily = AdminMeterUsage["family"];
 export type MeterGranularity = "daily" | "weekly" | "monthly";
 
+export const METER_FAMILY_COLOR: Record<MeterFamily, string> = {
+  agent_session_storage: "var(--billing-storage)",
+  risk_content_scans: "var(--billing-risk)",
+  mcp_bandwidth: "var(--billing-mcp)",
+};
+
 export type MeterPoint = {
   from: string;
   to: string;
@@ -24,7 +30,10 @@ const meterDate = new Intl.DateTimeFormat("en-US", {
 const TOKEN_UNITS = ["tokens", "KTok", "MTok", "BTok"] as const;
 const BYTE_UNITS = ["bytes", "KiB", "MiB", "GiB"] as const;
 
-function groupStart(ms: number, granularity: MeterGranularity): number {
+export function meterGroupStart(
+  ms: number,
+  granularity: MeterGranularity,
+): number {
   const date = new Date(ms);
   const day = Date.UTC(
     date.getUTCFullYear(),
@@ -42,7 +51,10 @@ function groupStart(ms: number, granularity: MeterGranularity): number {
   }
 }
 
-function groupEnd(ms: number, granularity: MeterGranularity): number {
+export function meterGroupEnd(
+  ms: number,
+  granularity: MeterGranularity,
+): number {
   const date = new Date(ms);
   switch (granularity) {
     case "daily":
@@ -71,7 +83,7 @@ export function meterPoints(
     const bucketTo = bucket.to.getTime();
     if (bucketFrom >= effectiveTo || bucketTo <= reportFrom) continue;
 
-    const start = groupStart(bucketFrom, granularity);
+    const start = meterGroupStart(bucketFrom, granularity);
     totals.set(start, (totals.get(start) ?? 0n) + BigInt(bucket.total));
   }
 
@@ -83,7 +95,7 @@ export function meterPoints(
       return {
         from: new Date(Math.max(start, reportFrom)).toISOString(),
         to: new Date(
-          Math.min(groupEnd(start, granularity), effectiveTo),
+          Math.min(meterGroupEnd(start, granularity), effectiveTo),
         ).toISOString(),
         total: total.toString(),
         value: Number(total),

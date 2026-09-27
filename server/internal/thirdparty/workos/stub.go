@@ -23,6 +23,7 @@ type StubClient struct {
 	orgExternalIDUpdates  []OrgExternalIDUpdate
 	directories           map[string][]Directory
 	directoryUsers        map[string][]DirectoryUser
+	directoryGroups       map[string][]DirectoryGroup
 	next                  int
 	nowFn                 func() time.Time
 }
@@ -60,6 +61,7 @@ func NewStubClient() *StubClient {
 		orgExternalIDUpdates:  make([]OrgExternalIDUpdate, 0),
 		directories:           make(map[string][]Directory),
 		directoryUsers:        make(map[string][]DirectoryUser),
+		directoryGroups:       make(map[string][]DirectoryGroup),
 		next:                  1,
 		nowFn:                 time.Now,
 	}
@@ -364,6 +366,20 @@ func (s *StubClient) SetDirectoryUsers(directoryID string, users ...DirectoryUse
 	defer s.mut.Unlock()
 
 	s.directoryUsers[directoryID] = append([]DirectoryUser(nil), users...)
+}
+
+func (s *StubClient) ListDirectoryGroups(_ context.Context, directoryID string) ([]DirectoryGroup, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	return append([]DirectoryGroup(nil), s.directoryGroups[directoryID]...), nil
+}
+
+func (s *StubClient) SetDirectoryGroups(directoryID string, groups ...DirectoryGroup) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	s.directoryGroups[directoryID] = append([]DirectoryGroup(nil), groups...)
 }
 
 func (s *StubClient) EnsureOrgExternalID(_ context.Context, workosOrgID, gramOrgID string) error {

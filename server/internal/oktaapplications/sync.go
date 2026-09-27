@@ -57,6 +57,9 @@ const (
 
 	// runRetention bounds the reconcile run history per connection.
 	runRetention = 30 * 24 * time.Hour
+
+	// appStatusActive is Okta's status for an enabled application.
+	appStatusActive = "ACTIVE"
 )
 
 var (
@@ -172,6 +175,28 @@ func ListSnapshot(ctx context.Context, db repo.DBTX, organizationID string, conn
 		return nil, fmt.Errorf("list applications snapshot: %w", err)
 	}
 	return rows, nil
+}
+
+// AppState is one live application as the last sync saw it.
+type AppState struct {
+	Active   bool
+	Assigned bool
+}
+
+// GetAppState returns a live application's state, or nil when the snapshot has no such app.
+func GetAppState(ctx context.Context, db repo.DBTX, organizationID string, connectionID uuid.UUID, oktaAppID string) (*AppState, error) {
+	row, err := repo.New(db).GetApplicationState(ctx, repo.GetApplicationStateParams{
+		OrganizationID:               organizationID,
+		IdentityProviderConnectionID: connectionID,
+		OktaAppID:                    oktaAppID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load application state: %w", err)
+	}
+	return &AppState{Active: row.Status == appStatusActive, Assigned: row.Assignments > 0}, nil
 }
 
 // LatestRun returns the newest reconcile run, or nil before the first.

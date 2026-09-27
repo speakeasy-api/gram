@@ -79,6 +79,14 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
 
+-- name: GetProjectByIDAndOrganizationIDForUpdate :one
+SELECT *
+FROM projects
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
 -- name: GetProjectWithOrganizationMetadata :one
 SELECT 
     -- Project fields
@@ -145,3 +153,12 @@ UPDATE organization_metadata
 SET whitelisted = @whitelisted,
     updated_at = clock_timestamp()
 WHERE id = @organization_id;
+
+-- name: LockProjectForEMADeletion :one
+SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id AND deleted IS FALSE FOR UPDATE;
+
+-- name: CountActiveProjectEMABindings :one
+SELECT count(*) FROM remote_session_ema_bindings WHERE project_id = @project_id AND organization_id = @organization_id AND state IS DISTINCT FROM 'unlinked';
+
+-- name: DeleteProjectEMATombstones :exec
+DELETE FROM remote_session_ema_bindings WHERE project_id = @project_id AND organization_id = @organization_id AND state = 'unlinked';

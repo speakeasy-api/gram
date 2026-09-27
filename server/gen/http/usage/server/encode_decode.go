@@ -439,6 +439,220 @@ func EncodeGetMeterUsageError(encoder func(context.Context, http.ResponseWriter)
 	}
 }
 
+// EncodeGetSpendBreakdownResponse returns an encoder for responses returned by
+// the usage getSpendBreakdown endpoint.
+func EncodeGetSpendBreakdownResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+	return func(ctx context.Context, w http.ResponseWriter, v any) error {
+		res, _ := v.(*usage.SpendBreakdownResponse)
+		enc := encoder(ctx, w)
+		body := NewGetSpendBreakdownResponseBody(res)
+		w.WriteHeader(http.StatusOK)
+		return enc.Encode(body)
+	}
+}
+
+// DecodeGetSpendBreakdownRequest returns a decoder for requests sent to the
+// usage getSpendBreakdown endpoint.
+func DecodeGetSpendBreakdownRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*usage.GetSpendBreakdownPayload, error) {
+	return func(r *http.Request) (*usage.GetSpendBreakdownPayload, error) {
+		var payload *usage.GetSpendBreakdownPayload
+		var (
+			from         *string
+			to           *string
+			sessionToken *string
+			err          error
+		)
+		qp := r.URL.Query()
+		fromRaw := qp.Get("from")
+		if fromRaw != "" {
+			from = &fromRaw
+		}
+		if from != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+		}
+		toRaw := qp.Get("to")
+		if toRaw != "" {
+			to = &toRaw
+		}
+		if to != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
+		}
+		if err != nil {
+			return payload, err
+		}
+		payload = NewGetSpendBreakdownPayload(from, to, sessionToken)
+		if payload.SessionToken != nil {
+			if strings.Contains(*payload.SessionToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
+				payload.SessionToken = &cred
+			}
+		}
+
+		return payload, nil
+	}
+}
+
+// EncodeGetSpendBreakdownError returns an encoder for errors returned by the
+// getSpendBreakdown usage endpoint.
+func EncodeGetSpendBreakdownError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
+	return func(ctx context.Context, w http.ResponseWriter, v error) error {
+		var en goa.GoaErrorNamer
+		if !errors.As(v, &en) {
+			return encodeError(ctx, w, v)
+		}
+		switch en.GoaErrorName() {
+		case "unauthorized":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSpendBreakdownUnauthorizedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnauthorized)
+			return enc.Encode(body)
+		case "forbidden":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSpendBreakdownForbiddenResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusForbidden)
+			return enc.Encode(body)
+		case "bad_request":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSpendBreakdownBadRequestResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadRequest)
+			return enc.Encode(body)
+		case "not_found":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSpendBreakdownNotFoundResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusNotFound)
+			return enc.Encode(body)
+		case "conflict":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSpendBreakdownConflictResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusConflict)
+			return enc.Encode(body)
+		case "unsupported_media":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSpendBreakdownUnsupportedMediaResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return enc.Encode(body)
+		case "invalid":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSpendBreakdownInvalidResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			return enc.Encode(body)
+		case "invariant_violation":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSpendBreakdownInvariantViolationResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "unexpected":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSpendBreakdownUnexpectedResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusInternalServerError)
+			return enc.Encode(body)
+		case "gateway_error":
+			var res *goa.ServiceError
+			errors.As(v, &res)
+			ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "application/json")
+			enc := encoder(ctx, w)
+			var body any
+			if formatter != nil {
+				body = formatter(ctx, res)
+			} else {
+				body = NewGetSpendBreakdownGatewayErrorResponseBody(res)
+			}
+			w.Header().Set("goa-error", res.GoaErrorName())
+			w.WriteHeader(http.StatusBadGateway)
+			return enc.Encode(body)
+		default:
+			return encodeError(ctx, w, v)
+		}
+	}
+}
+
 // EncodeGetTokensUnderManagementResponse returns an encoder for responses
 // returned by the usage getTokensUnderManagement endpoint.
 func EncodeGetTokensUnderManagementResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
@@ -3632,6 +3846,47 @@ func marshalUsageMeterUsageSeriesToMeterUsageSeriesResponseBody(v *usage.MeterUs
 	return res
 }
 
+// marshalUsageSpendProductToSpendProductResponseBody builds a value of type
+// *SpendProductResponseBody from a value of type *usage.SpendProduct.
+func marshalUsageSpendProductToSpendProductResponseBody(v *usage.SpendProduct) *SpendProductResponseBody {
+	res := &SpendProductResponseBody{
+		ID:           v.ID,
+		Label:        v.Label,
+		Unit:         v.Unit,
+		Quantity:     v.Quantity,
+		RateQuantity: v.RateQuantity,
+		RateUsd:      v.RateUsd,
+		CostUsd:      v.CostUsd,
+	}
+	if v.Buckets != nil {
+		res.Buckets = make([]*SpendBucketResponseBody, len(v.Buckets))
+		for i, val := range v.Buckets {
+			if val == nil {
+				res.Buckets[i] = nil
+				continue
+			}
+			res.Buckets[i] = marshalUsageSpendBucketToSpendBucketResponseBody(val)
+		}
+	} else {
+		res.Buckets = []*SpendBucketResponseBody{}
+	}
+
+	return res
+}
+
+// marshalUsageSpendBucketToSpendBucketResponseBody builds a value of type
+// *SpendBucketResponseBody from a value of type *usage.SpendBucket.
+func marshalUsageSpendBucketToSpendBucketResponseBody(v *usage.SpendBucket) *SpendBucketResponseBody {
+	res := &SpendBucketResponseBody{
+		From:     v.From,
+		To:       v.To,
+		Quantity: v.Quantity,
+		CostUsd:  v.CostUsd,
+	}
+
+	return res
+}
+
 // marshalUsageTUMPeriodToTUMPeriodResponseBody builds a value of type
 // *TUMPeriodResponseBody from a value of type *usage.TUMPeriod.
 func marshalUsageTUMPeriodToTUMPeriodResponseBody(v *usage.TUMPeriod) *TUMPeriodResponseBody {
@@ -3692,6 +3947,8 @@ func marshalUsageTierLimitsToTierLimitsResponseBody(v *usage.TierLimits) *TierLi
 		PricePerAdditionalToolCall: v.PricePerAdditionalToolCall,
 		PricePerAdditionalServer:   v.PricePerAdditionalServer,
 		TumPricePerMillionUsd:      v.TumPricePerMillionUsd,
+		RiskScanPricePerMillionUsd: v.RiskScanPricePerMillionUsd,
+		McpEgressPricePerGibUsd:    v.McpEgressPricePerGibUsd,
 	}
 	if v.FeatureBullets != nil {
 		res.FeatureBullets = make([]string, len(v.FeatureBullets))

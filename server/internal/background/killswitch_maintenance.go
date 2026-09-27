@@ -21,11 +21,15 @@ import (
 // organization, prescription, operation, or note data — only batch sizes in
 // and aggregate counts out.
 const (
-	killswitchMaintenanceScheduleID       = "v1:killswitch-maintenance-schedule"
-	killswitchMaintenanceWorkflowID       = killswitchMaintenanceScheduleID + "/scheduled"
-	killswitchMaintenanceInterval         = 5 * time.Minute
-	killswitchExpiryBatchSize       int32 = 100
-	killswitchCleanupBatchSize      int32 = 500
+	killswitchMaintenanceScheduleID = "v1:killswitch-maintenance-schedule"
+	killswitchMaintenanceWorkflowID = killswitchMaintenanceScheduleID + "/scheduled"
+	killswitchMaintenanceInterval   = 5 * time.Minute
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	killswitchMaintenanceCatchupWindow = killswitchMaintenanceInterval - time.Second
+
+	killswitchExpiryBatchSize  int32 = 100
+	killswitchCleanupBatchSize int32 = 500
 )
 
 func KillswitchMaintenanceWorkflow(ctx workflow.Context) error {
@@ -92,10 +96,11 @@ func AddKillswitchMaintenanceSchedule(ctx context.Context, temporalEnv *tenv.Env
 	}
 
 	_, err := sc.Create(ctx, client.ScheduleOptions{
-		ID:      killswitchMaintenanceScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec:    spec,
-		Action:  action,
+		CatchupWindow: killswitchMaintenanceCatchupWindow,
+		ID:            killswitchMaintenanceScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Spec:          spec,
+		Action:        action,
 	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
@@ -103,6 +108,7 @@ func AddKillswitchMaintenanceSchedule(ctx context.Context, temporalEnv *tenv.Env
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, killswitchMaintenanceCatchupWindow)
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,

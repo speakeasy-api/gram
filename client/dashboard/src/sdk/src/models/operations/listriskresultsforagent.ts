@@ -30,6 +30,10 @@ export type ListRiskResultsForAgentRequest = {
    */
   chatId?: string | undefined;
   /**
+   * Optional concrete MCP server ID to match exactly.
+   */
+  mcpServerId?: string | undefined;
+  /**
    * Optional rule category key to filter by (e.g. secrets, pii, financial).
    */
   category?: string | undefined;
@@ -194,6 +198,7 @@ export function listRiskResultsForAgentSecurityToJSON(
 export type ListRiskResultsForAgentRequest$Outbound = {
   policy_id?: string | undefined;
   chat_id?: string | undefined;
+  mcp_server_id?: string | undefined;
   category?: string | undefined;
   rule_id?: string | undefined;
   user_id?: string | undefined;
@@ -217,6 +222,7 @@ export const ListRiskResultsForAgentRequest$outboundSchema: z.ZodMiniType<
   z.object({
     policyId: z.optional(z.string()),
     chatId: z.optional(z.string()),
+    mcpServerId: z.optional(z.string()),
     category: z.optional(z.string()),
     ruleId: z.optional(z.string()),
     userId: z.optional(z.string()),
@@ -235,6 +241,7 @@ export const ListRiskResultsForAgentRequest$outboundSchema: z.ZodMiniType<
     return remap$(v, {
       policyId: "policy_id",
       chatId: "chat_id",
+      mcpServerId: "mcp_server_id",
       ruleId: "rule_id",
       userId: "user_id",
       uniqueMatch: "unique_match",

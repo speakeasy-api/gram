@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -141,7 +142,14 @@ type policyBypassPrincipalKey struct {
 }
 
 func (e *PolicyBypassEvaluator) loadGrants(ctx context.Context, organizationID string, userID string, policyID string) ([]authz.Grant, bool) {
-	principals, err := authz.ResolveUserPrincipals(ctx, e.db, organizationID, userID)
+	var principals []urn.Principal
+	var err error
+	// An agent actor is evaluated as itself and its roles, never as a supplied user.
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
+		principals, err = authz.ResolveAgentPrincipals(ctx, e.db, organizationID, actor)
+	} else {
+		principals, err = authz.ResolveUserPrincipals(ctx, e.db, organizationID, userID)
+	}
 	if err != nil {
 		e.logger.WarnContext(ctx, "failed to resolve principals for risk policy bypass",
 			attr.SlogError(err),

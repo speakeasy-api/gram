@@ -189,24 +189,8 @@ if grep -E '^OTEL_EXPORTER_OTLP_ENDPOINT[[:space:]]*=' mise.local.toml \
   echo "✅ Reset auto-generated LGTM ports to the shared defaults."
 fi
 
-# Temporal now runs in the shared stack. Old worktrees have generated remaps for
-# both published ports and TEMPORAL_ADDRESS; reset those to the fixed shared
-# endpoint. The address template proves the values came from zero:remap-ports,
-# so explicit custom Temporal endpoints remain untouched.
-if grep -E '^TEMPORAL_ADDRESS[[:space:]]*=' mise.local.toml \
-     | grep -qF '{{env.TEMPORAL_PORT}}'; then
-  for key in TEMPORAL_ADDRESS TEMPORAL_PORT TEMPORAL_WEB_PORT; do
-    if grep -qE "^${key}[[:space:]]*=" mise.local.toml; then
-      mise unset --file mise.local.toml "$key"
-    fi
-  done
-  echo "✅ Reset auto-generated Temporal ports to the shared defaults."
-fi
-
-# Shared singleton services need a worktree dimension. `git:workinit` writes
-# all three values for new worktrees; add them here for older worktrees. Preserve
-# custom configuration except Temporal's old `default` value: sharing that
-# namespace across worktrees defeats the isolation this migration establishes.
+# Backfill worktree identities written by git:workinit, preserving custom values.
+# Keep the namespace convention used before Temporal moved back to local containers.
 worktree_project=$(mise set --file mise.local.toml 2>/dev/null \
   | awk '$1 == "COMPOSE_PROJECT_NAME" { print $2 }')
 if [ -n "$worktree_project" ]; then

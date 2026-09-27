@@ -46,14 +46,15 @@ func DiscoverWorkloadJWKSURI(t *testing.T, issuer *devidptest.Instance) string {
 }
 
 // MintWorkloadAssertion signs claims with the dev-idp's current key, naming
-// its current kid. After RotateKey it signs with the new key, and anything
-// minted before names a kid the published set no longer contains.
-func MintWorkloadAssertion(t *testing.T, issuer *devidptest.Instance, claims jwt.Claims) string {
+// its current kid, with typ as the JOSE typ header. After RotateKey it signs
+// with the new key, and anything minted before names a kid the published set
+// no longer contains.
+func MintWorkloadAssertion(t *testing.T, issuer *devidptest.Instance, typ string, claims jwt.Claims) string {
 	t.Helper()
 
 	signer, err := jose.NewSigner(
 		jose.SigningKey{Algorithm: jose.RS256, Key: issuer.SigningKey()},
-		(&jose.SignerOptions{}).WithType("JWT").WithHeader(jose.HeaderKey("kid"), issuer.KeyID()),
+		(&jose.SignerOptions{}).WithType(jose.ContentType(typ)).WithHeader(jose.HeaderKey("kid"), issuer.KeyID()),
 	)
 	require.NoError(t, err, "build signer")
 

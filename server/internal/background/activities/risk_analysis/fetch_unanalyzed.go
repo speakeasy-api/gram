@@ -67,7 +67,7 @@ func (a *FetchUnanalyzed) Do(ctx context.Context, args FetchUnanalyzedArgs) (_ *
 
 	queries := repo.New(a.db)
 
-	policies, err := queries.ListEnabledRiskPoliciesByProject(ctx, args.ProjectID)
+	policies, err := queries.ListEnabledUnscopedRiskPoliciesByProject(ctx, args.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("list enabled risk policies: %w", err)
 	}

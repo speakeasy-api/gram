@@ -705,6 +705,83 @@ func (q *Queries) GetBypassRequestForPromotion(ctx context.Context, arg GetBypas
 	return i, err
 }
 
+const getPlatformRequesterApprovalRequest = `-- name: GetPlatformRequesterApprovalRequest :one
+SELECT
+  r.id
+  , r.target_kind
+  , r.target_raw
+  , r.status
+  , CASE
+      WHEN r.status = 'superseded' THEN ''
+      ELSE COALESCE((
+        SELECT d.decision
+        FROM mcp_approval_decisions d
+        WHERE d.mcp_approval_request_id = r.id
+          AND d.project_id = r.project_id
+          AND d.deleted IS FALSE
+          AND d.decision IN ('approved', 'denied')
+        ORDER BY d.decided_at DESC, d.id DESC
+        LIMIT 1
+      ), '')
+    END::text AS standing_decision
+  , req.requested_at
+  , r.created_at
+  , r.updated_at
+FROM mcp_approval_requests r
+JOIN mcp_approval_request_requesters req
+  ON req.mcp_approval_request_id = r.id
+  AND req.organization_id = r.organization_id
+  AND req.project_id = r.project_id
+  AND req.deleted IS FALSE
+WHERE r.id = $1
+  AND r.organization_id = $2
+  AND r.project_id = $3
+  AND req.user_id = $4
+  AND r.deleted IS FALSE
+`
+
+type GetPlatformRequesterApprovalRequestParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	UserID         string
+}
+
+type GetPlatformRequesterApprovalRequestRow struct {
+	ID               uuid.UUID
+	TargetKind       string
+	TargetRaw        string
+	Status           string
+	StandingDecision string
+	RequestedAt      pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+// Returns one request only when the calling user is attached as a requester.
+// The organization, project, request, and user pins make cross-tenant and
+// other-requester reads indistinguishable from a missing request.
+func (q *Queries) GetPlatformRequesterApprovalRequest(ctx context.Context, arg GetPlatformRequesterApprovalRequestParams) (GetPlatformRequesterApprovalRequestRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformRequesterApprovalRequest,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserID,
+	)
+	var i GetPlatformRequesterApprovalRequestRow
+	err := row.Scan(
+		&i.ID,
+		&i.TargetKind,
+		&i.TargetRaw,
+		&i.Status,
+		&i.StandingDecision,
+		&i.RequestedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getResearchReportForDecision = `-- name: GetResearchReportForDecision :one
 SELECT id
 FROM mcp_research_reports

@@ -39,6 +39,7 @@ type Server struct {
 	GetOrganization                       http.Handler
 	ListOrganizationMembers               http.Handler
 	ListOrganizationProjects              http.Handler
+	ListProjectMcpServers                 http.Handler
 	ListOrganizationActivity              http.Handler
 	ListOrganizations                     http.Handler
 	ExtendTrial                           http.Handler
@@ -55,6 +56,8 @@ type Server struct {
 	CancelStripeSubscription              http.Handler
 	ResumeStripeSubscription              http.Handler
 	MarkEnterpriseTrialConverted          http.Handler
+	GetOrganizationOnboarding             http.Handler
+	SetOrganizationOnboarding             http.Handler
 	CreateGlobalIssuer                    http.Handler
 	GetGlobalIssuerDuplicatePreflight     http.Handler
 	ListGlobalIssuers                     http.Handler
@@ -71,8 +74,10 @@ type Server struct {
 	StartTrial                            http.Handler
 	ChangeTrialEndDate                    http.Handler
 	GetMeterUsage                         http.Handler
+	GetSpendBreakdown                     http.Handler
 	GetSupportMatrix                      http.Handler
 	UpdateSupportMatrix                   http.Handler
+	GetSupportCoverage                    http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -120,6 +125,7 @@ func New(
 			{"GetOrganization", "GET", "/admin/organization.get"},
 			{"ListOrganizationMembers", "GET", "/admin/organization.members"},
 			{"ListOrganizationProjects", "GET", "/admin/organization.projects"},
+			{"ListProjectMcpServers", "GET", "/admin/project.mcpServers"},
 			{"ListOrganizationActivity", "GET", "/admin/organization.activity"},
 			{"ListOrganizations", "GET", "/admin/organizations.list"},
 			{"ExtendTrial", "POST", "/admin/trial.extend"},
@@ -136,6 +142,8 @@ func New(
 			{"CancelStripeSubscription", "POST", "/admin/organization.cancelStripeSubscription"},
 			{"ResumeStripeSubscription", "POST", "/admin/organization.resumeStripeSubscription"},
 			{"MarkEnterpriseTrialConverted", "POST", "/admin/trial.convert"},
+			{"GetOrganizationOnboarding", "GET", "/admin/organization.onboarding"},
+			{"SetOrganizationOnboarding", "POST", "/admin/organization.onboarding"},
 			{"CreateGlobalIssuer", "POST", "/admin/remote-session-issuers.createGlobalIssuer"},
 			{"GetGlobalIssuerDuplicatePreflight", "GET", "/admin/remote-session-issuers.getGlobalIssuerDuplicatePreflight"},
 			{"ListGlobalIssuers", "GET", "/admin/remote-session-issuers.list"},
@@ -152,8 +160,10 @@ func New(
 			{"StartTrial", "POST", "/admin/trial.start"},
 			{"ChangeTrialEndDate", "POST", "/admin/trial.changeEndDate"},
 			{"GetMeterUsage", "GET", "/admin/organizations.getMeterUsage"},
+			{"GetSpendBreakdown", "GET", "/admin/organization.spendBreakdown"},
 			{"GetSupportMatrix", "GET", "/admin/supportMatrix.get"},
 			{"UpdateSupportMatrix", "POST", "/admin/supportMatrix.update"},
+			{"GetSupportCoverage", "GET", "/admin/supportCoverage.get"},
 		},
 		Login:                                 NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                              NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -173,6 +183,7 @@ func New(
 		GetOrganization:                       NewGetOrganizationHandler(e.GetOrganization, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizationMembers:               NewListOrganizationMembersHandler(e.ListOrganizationMembers, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizationProjects:              NewListOrganizationProjectsHandler(e.ListOrganizationProjects, mux, decoder, encoder, errhandler, formatter),
+		ListProjectMcpServers:                 NewListProjectMcpServersHandler(e.ListProjectMcpServers, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizationActivity:              NewListOrganizationActivityHandler(e.ListOrganizationActivity, mux, decoder, encoder, errhandler, formatter),
 		ListOrganizations:                     NewListOrganizationsHandler(e.ListOrganizations, mux, decoder, encoder, errhandler, formatter),
 		ExtendTrial:                           NewExtendTrialHandler(e.ExtendTrial, mux, decoder, encoder, errhandler, formatter),
@@ -189,6 +200,8 @@ func New(
 		CancelStripeSubscription:              NewCancelStripeSubscriptionHandler(e.CancelStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 		ResumeStripeSubscription:              NewResumeStripeSubscriptionHandler(e.ResumeStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 		MarkEnterpriseTrialConverted:          NewMarkEnterpriseTrialConvertedHandler(e.MarkEnterpriseTrialConverted, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationOnboarding:             NewGetOrganizationOnboardingHandler(e.GetOrganizationOnboarding, mux, decoder, encoder, errhandler, formatter),
+		SetOrganizationOnboarding:             NewSetOrganizationOnboardingHandler(e.SetOrganizationOnboarding, mux, decoder, encoder, errhandler, formatter),
 		CreateGlobalIssuer:                    NewCreateGlobalIssuerHandler(e.CreateGlobalIssuer, mux, decoder, encoder, errhandler, formatter),
 		GetGlobalIssuerDuplicatePreflight:     NewGetGlobalIssuerDuplicatePreflightHandler(e.GetGlobalIssuerDuplicatePreflight, mux, decoder, encoder, errhandler, formatter),
 		ListGlobalIssuers:                     NewListGlobalIssuersHandler(e.ListGlobalIssuers, mux, decoder, encoder, errhandler, formatter),
@@ -205,8 +218,10 @@ func New(
 		StartTrial:                            NewStartTrialHandler(e.StartTrial, mux, decoder, encoder, errhandler, formatter),
 		ChangeTrialEndDate:                    NewChangeTrialEndDateHandler(e.ChangeTrialEndDate, mux, decoder, encoder, errhandler, formatter),
 		GetMeterUsage:                         NewGetMeterUsageHandler(e.GetMeterUsage, mux, decoder, encoder, errhandler, formatter),
+		GetSpendBreakdown:                     NewGetSpendBreakdownHandler(e.GetSpendBreakdown, mux, decoder, encoder, errhandler, formatter),
 		GetSupportMatrix:                      NewGetSupportMatrixHandler(e.GetSupportMatrix, mux, decoder, encoder, errhandler, formatter),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixHandler(e.UpdateSupportMatrix, mux, decoder, encoder, errhandler, formatter),
+		GetSupportCoverage:                    NewGetSupportCoverageHandler(e.GetSupportCoverage, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -233,6 +248,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetOrganization = m(s.GetOrganization)
 	s.ListOrganizationMembers = m(s.ListOrganizationMembers)
 	s.ListOrganizationProjects = m(s.ListOrganizationProjects)
+	s.ListProjectMcpServers = m(s.ListProjectMcpServers)
 	s.ListOrganizationActivity = m(s.ListOrganizationActivity)
 	s.ListOrganizations = m(s.ListOrganizations)
 	s.ExtendTrial = m(s.ExtendTrial)
@@ -249,6 +265,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CancelStripeSubscription = m(s.CancelStripeSubscription)
 	s.ResumeStripeSubscription = m(s.ResumeStripeSubscription)
 	s.MarkEnterpriseTrialConverted = m(s.MarkEnterpriseTrialConverted)
+	s.GetOrganizationOnboarding = m(s.GetOrganizationOnboarding)
+	s.SetOrganizationOnboarding = m(s.SetOrganizationOnboarding)
 	s.CreateGlobalIssuer = m(s.CreateGlobalIssuer)
 	s.GetGlobalIssuerDuplicatePreflight = m(s.GetGlobalIssuerDuplicatePreflight)
 	s.ListGlobalIssuers = m(s.ListGlobalIssuers)
@@ -265,8 +283,10 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.StartTrial = m(s.StartTrial)
 	s.ChangeTrialEndDate = m(s.ChangeTrialEndDate)
 	s.GetMeterUsage = m(s.GetMeterUsage)
+	s.GetSpendBreakdown = m(s.GetSpendBreakdown)
 	s.GetSupportMatrix = m(s.GetSupportMatrix)
 	s.UpdateSupportMatrix = m(s.UpdateSupportMatrix)
+	s.GetSupportCoverage = m(s.GetSupportCoverage)
 }
 
 // MethodNames returns the methods served.
@@ -292,6 +312,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetOrganizationHandler(mux, h.GetOrganization)
 	MountListOrganizationMembersHandler(mux, h.ListOrganizationMembers)
 	MountListOrganizationProjectsHandler(mux, h.ListOrganizationProjects)
+	MountListProjectMcpServersHandler(mux, h.ListProjectMcpServers)
 	MountListOrganizationActivityHandler(mux, h.ListOrganizationActivity)
 	MountListOrganizationsHandler(mux, h.ListOrganizations)
 	MountExtendTrialHandler(mux, h.ExtendTrial)
@@ -308,6 +329,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCancelStripeSubscriptionHandler(mux, h.CancelStripeSubscription)
 	MountResumeStripeSubscriptionHandler(mux, h.ResumeStripeSubscription)
 	MountMarkEnterpriseTrialConvertedHandler(mux, h.MarkEnterpriseTrialConverted)
+	MountGetOrganizationOnboardingHandler(mux, h.GetOrganizationOnboarding)
+	MountSetOrganizationOnboardingHandler(mux, h.SetOrganizationOnboarding)
 	MountCreateGlobalIssuerHandler(mux, h.CreateGlobalIssuer)
 	MountGetGlobalIssuerDuplicatePreflightHandler(mux, h.GetGlobalIssuerDuplicatePreflight)
 	MountListGlobalIssuersHandler(mux, h.ListGlobalIssuers)
@@ -324,8 +347,10 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountStartTrialHandler(mux, h.StartTrial)
 	MountChangeTrialEndDateHandler(mux, h.ChangeTrialEndDate)
 	MountGetMeterUsageHandler(mux, h.GetMeterUsage)
+	MountGetSpendBreakdownHandler(mux, h.GetSpendBreakdown)
 	MountGetSupportMatrixHandler(mux, h.GetSupportMatrix)
 	MountUpdateSupportMatrixHandler(mux, h.UpdateSupportMatrix)
+	MountGetSupportCoverageHandler(mux, h.GetSupportCoverage)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -1294,6 +1319,59 @@ func NewListOrganizationProjectsHandler(
 	})
 }
 
+// MountListProjectMcpServersHandler configures the mux to serve the "admin"
+// service "listProjectMcpServers" endpoint.
+func MountListProjectMcpServersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/project.mcpServers", f)
+}
+
+// NewListProjectMcpServersHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listProjectMcpServers" endpoint.
+func NewListProjectMcpServersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListProjectMcpServersRequest(mux, decoder)
+		encodeResponse = EncodeListProjectMcpServersResponse(encoder)
+		encodeError    = EncodeListProjectMcpServersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listProjectMcpServers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountListOrganizationActivityHandler configures the mux to serve the "admin"
 // service "listOrganizationActivity" endpoint.
 func MountListOrganizationActivityHandler(mux goahttp.Muxer, h http.Handler) {
@@ -2125,6 +2203,114 @@ func NewMarkEnterpriseTrialConvertedHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "markEnterpriseTrialConverted")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOrganizationOnboardingHandler configures the mux to serve the
+// "admin" service "getOrganizationOnboarding" endpoint.
+func MountGetOrganizationOnboardingHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.onboarding", f)
+}
+
+// NewGetOrganizationOnboardingHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getOrganizationOnboarding"
+// endpoint.
+func NewGetOrganizationOnboardingHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationOnboardingRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationOnboardingResponse(encoder)
+		encodeError    = EncodeGetOrganizationOnboardingError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationOnboarding")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetOrganizationOnboardingHandler configures the mux to serve the
+// "admin" service "setOrganizationOnboarding" endpoint.
+func MountSetOrganizationOnboardingHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.onboarding", f)
+}
+
+// NewSetOrganizationOnboardingHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "setOrganizationOnboarding"
+// endpoint.
+func NewSetOrganizationOnboardingHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetOrganizationOnboardingRequest(mux, decoder)
+		encodeResponse = EncodeSetOrganizationOnboardingResponse(encoder)
+		encodeError    = EncodeSetOrganizationOnboardingError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setOrganizationOnboarding")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -3037,6 +3223,59 @@ func NewGetMeterUsageHandler(
 	})
 }
 
+// MountGetSpendBreakdownHandler configures the mux to serve the "admin"
+// service "getSpendBreakdown" endpoint.
+func MountGetSpendBreakdownHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.spendBreakdown", f)
+}
+
+// NewGetSpendBreakdownHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getSpendBreakdown" endpoint.
+func NewGetSpendBreakdownHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSpendBreakdownRequest(mux, decoder)
+		encodeResponse = EncodeGetSpendBreakdownResponse(encoder)
+		encodeError    = EncodeGetSpendBreakdownError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSpendBreakdown")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
 // MountGetSupportMatrixHandler configures the mux to serve the "admin" service
 // "getSupportMatrix" endpoint.
 func MountGetSupportMatrixHandler(mux goahttp.Muxer, h http.Handler) {
@@ -3120,6 +3359,59 @@ func NewUpdateSupportMatrixHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateSupportMatrix")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetSupportCoverageHandler configures the mux to serve the "admin"
+// service "getSupportCoverage" endpoint.
+func MountGetSupportCoverageHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/supportCoverage.get", f)
+}
+
+// NewGetSupportCoverageHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "getSupportCoverage" endpoint.
+func NewGetSupportCoverageHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetSupportCoverageRequest(mux, decoder)
+		encodeResponse = EncodeGetSupportCoverageResponse(encoder)
+		encodeError    = EncodeGetSupportCoverageError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getSupportCoverage")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

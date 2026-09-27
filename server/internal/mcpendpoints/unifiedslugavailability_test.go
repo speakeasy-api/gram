@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -222,6 +223,40 @@ func TestCheckSlugAvailable_OwnerExclusionToolset(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.True(t, available)
+}
+
+func TestHasPluginMembershipForMCPServer_LegacyToolsetWrapper(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-wrapper")
+	wrapperID := seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	pluginsQueries := pluginsrepo.New(ti.conn)
+	plugin, err := pluginsQueries.CreateDefaultPlugin(ctx, pluginsrepo.CreateDefaultPluginParams{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	_, err = pluginsQueries.AddPluginServer(ctx, pluginsrepo.AddPluginServerParams{
+		PluginID: plugin.ID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		DisplayName: "Legacy wrapper", Policy: "required",
+	})
+	require.NoError(t, err)
+
+	attached, err := pluginsQueries.HasPluginMembershipForMCPServer(ctx, pluginsrepo.HasPluginMembershipForMCPServerParams{
+		ProjectID: *authCtx.ProjectID, McpServerID: wrapperID,
+	})
+	require.NoError(t, err)
+	require.True(t, attached)
+
+	// An ambiguous toolset wrapper must not queue a publish that the publisher will reject.
+	seedToolsetBackedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	attached, err = pluginsQueries.HasPluginMembershipForMCPServer(ctx, pluginsrepo.HasPluginMembershipForMCPServerParams{
+		ProjectID: *authCtx.ProjectID, McpServerID: wrapperID,
+	})
+	require.NoError(t, err)
+	require.False(t, attached)
 }
 
 func TestCheckSlugAvailable_OwnerExclusionMcpServer(t *testing.T) {

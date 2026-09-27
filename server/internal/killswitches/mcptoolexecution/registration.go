@@ -28,12 +28,16 @@ const (
 	// are user IDs of authoritative active organization members.
 	PrincipalKindUser killswitches.PrincipalKind = "user"
 
+	// PrincipalKindAgent is a concrete agent UUID, independent of owner attribution.
+	PrincipalKindAgent killswitches.PrincipalKind = "agent"
+
 	// ResourceKindMCPServer is the canonical MCP server resource namespace;
 	// keys are fronting mcp_servers row IDs.
 	ResourceKindMCPServer killswitches.ResourceKind = "mcp_server"
 
 	// IdentityContractKeyAuthenticatedUserMCPServer pairs the authoritative
-	// user principal with the canonical mcp_server resource.
+	// user or agent principal with the canonical mcp_server resource. The key
+	// remains stable for existing prescriptions; user rules remain user-only.
 	IdentityContractKeyAuthenticatedUserMCPServer killswitches.IdentityContractKey = "authenticated_user_mcp_server"
 
 	// SurfaceHostedToolsCall is hosted MCP tools/call dispatch.
@@ -68,7 +72,7 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 	return killswitches.Registration{
 		Definitions: []killswitches.Definition{{
 			Key:                 DefinitionKeyMCPToolExecution,
-			PrincipalKinds:      []killswitches.PrincipalKind{PrincipalKindUser},
+			PrincipalKinds:      []killswitches.PrincipalKind{PrincipalKindUser, PrincipalKindAgent},
 			ResourceKinds:       []killswitches.ResourceKind{ResourceKindMCPServer},
 			FailurePolicy:       killswitches.FailurePolicyFailClosed,
 			DefaultExternalNote: DefaultExternalNote,
@@ -79,12 +83,18 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 		}},
 		IdentityContracts: []killswitches.IdentityContract{{
 			Key:            IdentityContractKeyAuthenticatedUserMCPServer,
-			PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser},
+			PrincipalKinds: []killswitches.PrincipalKind{PrincipalKindUser, PrincipalKindAgent},
 			ResourceKinds:  []killswitches.ResourceKind{ResourceKindMCPServer},
 		}},
 		PrincipalAdapters: []killswitches.PrincipalAdapterRegistration{{
 			Adapter:  NewAuthenticatedUserPrincipalAdapter(db),
 			Fixtures: principalFixtures(),
+		}, {
+			Adapter: NewAgentPrincipalAdapter(db),
+			Fixtures: []killswitches.PrincipalCanonicalizationFixture{
+				{OrganizationID: "org_fixture", Input: "22222222-2222-2222-2222-222222222222", Expected: supportedKey(killswitches.PrincipalKey("22222222-2222-2222-2222-222222222222"))},
+				{OrganizationID: "org_fixture", Input: "invalid", Expected: killswitches.UnsupportedCanonicalizationResult[killswitches.PrincipalKey]()},
+			},
 		}},
 		ResourceAdapters: []killswitches.ResourceAdapterRegistration{{
 			Adapter:  NewMCPServerResourceAdapter(db),
@@ -99,7 +109,7 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 			{
 				Definition:       DefinitionKeyMCPToolExecution,
 				Surface:          SurfaceHostedToolsCall,
-				PrincipalSource:  "Validated user-session provenance (mcpidentity), revalidated as an active organization member on every covered call.",
+				PrincipalSource:  "Validated user or agent provenance (mcpidentity), revalidated in the organization on every covered call; owner and authorizer attribution never contributes candidates.",
 				ResourceSource:   "Fronting mcp_servers.id resolved from the mcp_endpoint route, validated as a live server in a live project of the organization. Never a slug, URL, toolset, backend ID, or caller-provided value.",
 				Checkpoint:       "After trusted authentication, tenant resolution, and acting-user validation on hosted MCP tools/call dispatch.",
 				ProtectedWork:    "Loading or applying tool configuration, resolving protected credentials, and dispatching local, dynamic, function, platform, or external-MCP proxy execution.",
@@ -111,7 +121,7 @@ func NewRegistration(db *pgxpool.Pool) killswitches.Registration {
 			{
 				Definition:       DefinitionKeyMCPToolExecution,
 				Surface:          SurfacePrivateProxyToolsCall,
-				PrincipalSource:  "Validated user-session provenance (mcpidentity), revalidated as an active organization member on every covered call.",
+				PrincipalSource:  "Validated user or agent provenance (mcpidentity), revalidated in the organization on every covered call; owner and authorizer attribution never contributes candidates.",
 				ResourceSource:   "Fronting mcp_servers.id resolved from the mcp_endpoint route, validated as a live server in a live project of the organization. The remote or tunneled backend ID is never the key, so hosted and private routes to one server share one canonical resource.",
 				Checkpoint:       "After trusted authentication, tenant resolution, and acting-user validation on private proxied or remote MCP tools/call forwarding. Registration does not deploy this checkpoint; the forwarding wiring ships separately (DNO-980).",
 				ProtectedWork:    "Tool-level authorization-dependent forwarding work and any upstream request; per-server connection configuration may already be loaded.",
@@ -171,7 +181,7 @@ var excludedMCPSurfaces = []ExcludedMCPSurface{
 	},
 	{
 		Name:   "API-key and chat-session authenticated calls",
-		Reason: "These credentials prove an organization or a machine, never an acting user. Creator or owner attribution must not be promoted to a principal.",
+		Reason: "Legacy API keys and chat sessions prove no supported actor. Validated agent-principal API keys are covered separately; creator or owner attribution must not be promoted to a principal.",
 	},
 }
 

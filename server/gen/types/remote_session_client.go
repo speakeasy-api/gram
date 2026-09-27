@@ -10,6 +10,9 @@ package types
 // RemoteSessionClient is the result type of the
 // organizationRemoteSessionClients service getClient method.
 type RemoteSessionClient struct {
+	// Recorded effective registration grants. Null means unknown; an empty array
+	// means no recorded grants.
+	GrantTypes []string `json:"grant_types"`
 	// The remote_session_client id.
 	ID string
 	// The owning project id. Empty for organization-level and global clients.
@@ -29,7 +32,7 @@ type RemoteSessionClient struct {
 	// hosts its OAuth client metadata document at this URL and uses it as the
 	// client_id. Null for non-CIMD clients.
 	ClientIDMetadataURI *string
-	ClientIDIssuedAt    string
+	ClientIDIssuedAt    *string
 	// Null when the secret does not expire.
 	ClientSecretExpiresAt *string
 	// When the issuer's token endpoint last answered invalid_client for this

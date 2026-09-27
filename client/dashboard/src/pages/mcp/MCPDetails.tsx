@@ -1,5 +1,6 @@
 import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
+import { ToolsetAttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { MCPToolFilteringSection } from "@/components/mcp-tool-filtering-section";
 import {
@@ -246,6 +247,7 @@ function renderMcpDetailTabContent(
           <ClientsAndSessionsTab
             issuerId={toolset.userSessionIssuerId}
             authTabPath="authentication"
+            attachedSessions={<ToolsetAttachedUserSessions toolset={toolset} />}
           />
         </RequireScope>
       );

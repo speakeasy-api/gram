@@ -69,12 +69,9 @@ var audienceBlockLevels = []string{
 	audienceLevelBlockedManage,
 }
 
-// agentAudienceLevels are the levels an agent principal can hold. The "blocked_"
-// scopes are registered for parsing but are not agent-runtime-safe, so a block
-// written against an agent is dropped the moment its policy loads. Refusing
-// them here keeps the surface honest rather than storing a rule nothing
-// enforces; an agent is taken off a server by removing its rule.
-var agentAudienceLevels = []string{audienceLevelUse, audienceLevelView, audienceLevelManage}
+// Agent restrictions use the same server-local exclusions as other principals.
+// They constrain live parent policy, not the allow-only delegated credential.
+var agentAudienceLevels = []string{audienceLevelUse, audienceLevelView, audienceLevelManage, audienceLevelBlocked, audienceLevelBlockedView, audienceLevelBlockedManage}
 
 // Widest first: a principal holding several scopes is reported at its highest
 // level, and a block outranks every grant.
@@ -187,6 +184,10 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 		return nil, err
 	}
 
+	if err := preserveUnassignableAgentBlocks(retainableAgents, assignableAgents, payload.Entries); err != nil {
+		return nil, err
+	}
+
 	principalsByLevel := make(map[string][]authz.PrincipalSelectors, len(audienceLevelScopes))
 	seen := make(map[string]struct{}, len(payload.Entries))
 	for _, entry := range payload.Entries {
@@ -204,12 +205,12 @@ func (s *Service) SetResourceAudience(ctx context.Context, payload *gen.SetResou
 			if !slices.Contains(agentAudienceLevels, entry.Level) {
 				return nil, oops.E(oops.CodeInvalid, nil, "agents cannot be given %q access; remove the agent's rule instead", entry.Level)
 			}
-			if _, assignable := assignableAgents[principal.String()]; !assignable {
+			if _, assignable := assignableAgents[principal.String()]; !assignable && !strings.HasPrefix(entry.Level, "blocked") {
 				// A suspended or revoked agent may keep the access it already
 				// has, which has to mean the identical rule: matching on the
 				// principal alone would let a tool-limited grant be rewritten
 				// as an unrestricted one, widening what the agent gets back
-				// when it resumes. Removing the rule is always allowed, since
+				// when it resumes. Removing a grant is always allowed, since
 				// that is just leaving it out of the payload.
 				rules, known := retainableAgents[principal.String()]
 				if !known {
@@ -654,17 +655,6 @@ func (s *Service) storedAgentRules(ctx context.Context, organizationID, resource
 		stored[entry.PrincipalUrn][audienceRuleKey(entry.Level, entry.Tools, entry.Dispositions)] = struct{}{}
 	}
 	return stored, nil
-}
-
-// audienceRuleKey identifies one rule by everything that decides how much it
-// grants: the level, and the narrowing that limits it. Order within the
-// narrowing is not part of the rule, so it is sorted out of the key.
-func audienceRuleKey(level string, tools, dispositions []string) string {
-	sortedTools := slices.Clone(tools)
-	slices.Sort(sortedTools)
-	sortedDispositions := slices.Clone(dispositions)
-	slices.Sort(sortedDispositions)
-	return level + "|" + strings.Join(sortedTools, ",") + "|" + strings.Join(sortedDispositions, ",")
 }
 
 // assignableAgentPrincipals returns the agents that may be given new access.

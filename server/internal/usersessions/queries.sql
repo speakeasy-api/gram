@@ -170,12 +170,719 @@ WHERE id = @id
   AND deleted IS FALSE
 FOR NO KEY UPDATE;
 
+-- name: LockLiveUserSessionIssuerForChildWrite :one
+-- First lock for a transaction that writes issuer children after locking
+-- other rows, such as refresh rotation (old session row, then new session) or
+-- agent admission (principal bindings, then session). Issuer migration holds
+-- the issuer FOR UPDATE and then locks those same child rows, so a child write
+-- that reached the issuer's foreign key only after taking its own row locks
+-- would deadlock with it. Taking the key-share lock up front puts both sides
+-- in issuer-first order, and the liveness predicate is re-evaluated once the
+-- migration commits, so a retired issuer yields no rows. FOR KEY SHARE is the
+-- mode the foreign key takes anyway: it does not conflict with the FOR NO KEY
+-- UPDATE that issuer deletion holds, which keeps deletion's own cascade the
+-- one that sweeps a write that raced it.
+SELECT id
+FROM user_session_issuers
+WHERE id = @id
+  AND (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id = @organization_id::text))
+  AND deleted IS FALSE
+FOR KEY SHARE;
+
+-- name: GetOrganizationManagedUserSessionIssuerByID :one
+-- Organization administration spans organization-owned issuers and every
+-- project-owned issuer whose project belongs to the organization.
+SELECT issuer.*
+FROM user_session_issuers AS issuer
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = @id
+  AND issuer.deleted IS FALSE
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+  );
+
+-- name: GetOrganizationManagedUserSessionIssuerByIDForUpdate :one
+SELECT issuer.*
+FROM user_session_issuers AS issuer
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = @id
+  AND issuer.deleted IS FALSE
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+  )
+FOR UPDATE OF issuer;
+
+-- name: NormalizeLegacyProjectUserSessionIssuerOrganization :one
+-- Older project-owned issuers may predate organization_id on the issuer row.
+-- The owning project remains authoritative for their tenant.
+UPDATE user_session_issuers AS issuer
+SET organization_id = @organization_id::text,
+    updated_at = clock_timestamp()
+FROM projects AS project
+WHERE issuer.id = @id
+  AND issuer.project_id = project.id
+  AND issuer.deleted IS FALSE
+  AND project.organization_id = @organization_id::text
+  AND project.deleted IS FALSE
+RETURNING issuer.*;
+
+-- name: CountUserSessionIssuerIncompatibleProjectReferences :one
+-- Narrowing to a project is safe only when every project-scoped consumer is
+-- already in that project and every linked remote client is visible there.
+WITH scoped_issuer AS (
+  SELECT issuer.id
+  FROM user_session_issuers AS issuer
+  LEFT JOIN projects AS project ON project.id = issuer.project_id
+  WHERE issuer.id = sqlc.arg('user_session_issuer_id')::uuid
+    AND issuer.deleted IS FALSE
+    AND (
+      (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+      OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+    )
+)
+SELECT COUNT(*)::int
+FROM (
+  SELECT client.id
+  FROM user_session_clients AS client
+  JOIN scoped_issuer ON scoped_issuer.id = client.user_session_issuer_id
+  WHERE client.user_session_issuer_id = sqlc.arg('user_session_issuer_id')::uuid
+    AND client.deleted IS FALSE
+    AND client.project_id IS NOT NULL
+    AND client.project_id <> @target_project_id::uuid
+
+  UNION ALL
+
+  SELECT session.id
+  FROM user_sessions AS session
+  JOIN scoped_issuer ON scoped_issuer.id = session.user_session_issuer_id
+  WHERE session.user_session_issuer_id = sqlc.arg('user_session_issuer_id')::uuid
+    AND session.deleted IS FALSE
+    AND session.project_id IS NOT NULL
+    AND session.project_id <> @target_project_id::uuid
+
+  UNION ALL
+
+  SELECT consent.id
+  FROM user_session_consents AS consent
+  JOIN user_session_clients AS client ON client.id = consent.user_session_client_id
+  JOIN scoped_issuer ON scoped_issuer.id = client.user_session_issuer_id
+  WHERE client.user_session_issuer_id = sqlc.arg('user_session_issuer_id')::uuid
+    AND consent.deleted IS FALSE
+    AND consent.project_id IS NOT NULL
+    AND consent.project_id <> @target_project_id::uuid
+
+  UNION ALL
+
+  SELECT cimd.id
+  FROM user_session_issuer_cimd_clients AS cimd
+  JOIN scoped_issuer ON scoped_issuer.id = cimd.user_session_issuer_id
+  WHERE cimd.user_session_issuer_id = sqlc.arg('user_session_issuer_id')::uuid
+    AND cimd.deleted IS FALSE
+    AND cimd.project_id IS NOT NULL
+    AND cimd.project_id <> @target_project_id::uuid
+
+  UNION ALL
+
+  SELECT server.id
+  FROM mcp_servers AS server
+  JOIN projects AS project ON project.id = server.project_id
+  WHERE server.user_session_issuer_id = @user_session_issuer_id
+    AND server.deleted IS FALSE
+    AND project.organization_id = @organization_id::text
+    AND server.project_id <> @target_project_id::uuid
+
+  UNION ALL
+
+  SELECT toolset.id
+  FROM toolsets AS toolset
+  JOIN projects AS project ON project.id = toolset.project_id
+  WHERE toolset.user_session_issuer_id = @user_session_issuer_id
+    AND toolset.deleted IS FALSE
+    AND project.organization_id = @organization_id::text
+    AND toolset.project_id <> @target_project_id::uuid
+
+  UNION ALL
+
+  SELECT meta.id
+  FROM meta_mcp_servers AS meta
+  WHERE meta.user_session_issuer_id = @user_session_issuer_id
+    AND meta.deleted IS FALSE
+    AND meta.organization_id = @organization_id::text
+    AND meta.project_id <> @target_project_id::uuid
+
+  UNION ALL
+
+  SELECT registration.id
+  FROM platform_mcp_catalog_registrations AS registration
+  WHERE registration.user_session_issuer_id = @user_session_issuer_id
+    AND registration.deleted IS FALSE
+    AND registration.organization_id = @organization_id::text
+    AND registration.project_id <> @target_project_id::uuid
+
+  UNION ALL
+
+  SELECT binding.id
+  FROM principal_remote_session_bindings AS binding
+  WHERE binding.user_session_issuer_id = @user_session_issuer_id
+    AND binding.organization_id = @organization_id::text
+    AND binding.project_id <> @target_project_id::uuid
+
+  UNION ALL
+
+  SELECT binding.id
+  FROM remote_session_ema_bindings AS binding
+  WHERE binding.user_session_issuer_id = @user_session_issuer_id
+    AND binding.organization_id = @organization_id::text
+    AND binding.project_id <> @target_project_id::uuid
+
+  UNION ALL
+
+  SELECT client.id
+  FROM remote_session_client_user_session_issuers AS link
+  JOIN remote_session_clients AS client ON client.id = link.remote_session_client_id
+  WHERE link.user_session_issuer_id = @user_session_issuer_id
+    AND client.deleted IS FALSE
+    AND NOT (
+      client.project_id = @target_project_id::uuid
+      OR (client.project_id IS NULL AND client.organization_id = @organization_id::text)
+      OR (client.project_id IS NULL AND client.organization_id IS NULL)
+    )
+) AS incompatible;
+
+-- name: UserSessionIssuerIsPlatformOwned :one
+SELECT EXISTS (
+  SELECT 1
+  FROM platform_mcp_catalog_registrations AS registration
+  WHERE registration.user_session_issuer_id = @user_session_issuer_id
+    AND registration.organization_id = @organization_id::text
+    AND registration.user_session_issuer_owned IS TRUE
+    AND registration.deleted IS FALSE
+);
+
+-- name: SetOrganizationManagedUserSessionIssuerProject :one
+UPDATE user_session_issuers AS issuer
+SET project_id = sqlc.narg('project_id')::uuid,
+    organization_id = @organization_id::text,
+    updated_at = clock_timestamp()
+WHERE issuer.id = @id
+  AND issuer.deleted IS FALSE
+  AND issuer.classification = 'custom'
+  AND (
+    issuer.organization_id = @organization_id::text
+    OR EXISTS (
+      SELECT 1 FROM projects AS project
+      WHERE project.id = issuer.project_id
+        AND project.organization_id = @organization_id::text
+        AND project.deleted IS FALSE
+    )
+  )
+RETURNING issuer.*;
+
+-- name: RetierUserSessionClients :execrows
+UPDATE user_session_clients AS client
+SET project_id = sqlc.narg('project_id')::uuid,
+    organization_id = @organization_id::text,
+    updated_at = clock_timestamp()
+WHERE client.user_session_issuer_id = @user_session_issuer_id
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id = @user_session_issuer_id
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: RetierUserSessions :execrows
+UPDATE user_sessions AS session
+SET project_id = sqlc.narg('project_id')::uuid,
+    organization_id = @organization_id::text,
+    updated_at = clock_timestamp()
+WHERE session.user_session_issuer_id = @user_session_issuer_id
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id = @user_session_issuer_id
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: RetierUserSessionConsents :execrows
+UPDATE user_session_consents AS consent
+SET project_id = sqlc.narg('project_id')::uuid,
+    organization_id = @organization_id::text,
+    updated_at = clock_timestamp()
+FROM user_session_clients AS client
+WHERE consent.user_session_client_id = client.id
+  AND client.user_session_issuer_id = @user_session_issuer_id
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id = @user_session_issuer_id
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: RetierUserSessionIssuerCimdClients :execrows
+UPDATE user_session_issuer_cimd_clients AS cimd
+SET project_id = sqlc.narg('project_id')::uuid,
+    organization_id = @organization_id::text,
+    updated_at = clock_timestamp()
+WHERE cimd.user_session_issuer_id = @user_session_issuer_id
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id = @user_session_issuer_id
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: LockUserSessionIssuerClientsForMigration :exec
+-- Locking an issuer row serializes direct child writes through PostgreSQL's
+-- foreign-key key-share lock. Consents hang off clients instead, so lock the
+-- source clients too before taking an authoritative migration preflight.
+SELECT client.id
+FROM user_session_clients AS client
+WHERE client.user_session_issuer_id = @user_session_issuer_id
+FOR UPDATE;
+
+-- name: CountUserSessionIssuerSessionsForMigration :one
+SELECT COUNT(*)::int
+FROM user_sessions AS session
+JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = @user_session_issuer_id
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+  )
+  AND session.deleted IS FALSE;
+
+-- name: CountUserSessionIssuerClientsForMigration :one
+SELECT COUNT(*)::int
+FROM user_session_clients AS client
+JOIN user_session_issuers AS issuer ON issuer.id = client.user_session_issuer_id
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = @user_session_issuer_id
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+  )
+  AND client.deleted IS FALSE;
+
+-- name: CountUserSessionIssuerConsentsForMigration :one
+SELECT COUNT(*)::int
+FROM user_session_consents AS consent
+JOIN user_session_clients AS client ON client.id = consent.user_session_client_id
+JOIN user_session_issuers AS issuer ON issuer.id = client.user_session_issuer_id
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = @user_session_issuer_id
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+  )
+  AND consent.deleted IS FALSE;
+
+-- name: CountUserSessionIssuerCimdClientsForMigration :one
+SELECT COUNT(*)::int
+FROM user_session_issuer_cimd_clients AS cimd
+JOIN user_session_issuers AS issuer ON issuer.id = cimd.user_session_issuer_id
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = @user_session_issuer_id
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+  )
+  AND cimd.deleted IS FALSE;
+
+-- name: CountUserSessionIssuerRemoteSessionsForMigration :one
+SELECT COUNT(*)::int
+FROM remote_sessions AS session
+JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE issuer.id = @user_session_issuer_id
+  AND (
+    (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+    OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+  )
+  AND session.deleted IS FALSE;
+
+-- name: ListUserSessionIssuerClientIDConflicts :many
+SELECT source.client_id
+FROM user_session_clients AS source
+JOIN user_session_clients AS target
+  ON target.user_session_issuer_id = @target_issuer_id
+ AND target.client_id = source.client_id
+ AND target.deleted IS FALSE
+WHERE source.user_session_issuer_id = @source_issuer_id
+  AND source.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  )
+ORDER BY source.client_id;
+
+-- name: CountUserSessionIssuerPrincipalBindingConflicts :one
+SELECT COUNT(*)::int
+FROM principal_remote_session_bindings AS source
+JOIN principal_remote_session_bindings AS target
+  ON target.project_id = source.project_id
+ AND target.principal_id = source.principal_id
+ AND target.remote_session_client_id = source.remote_session_client_id
+ AND target.user_session_issuer_id = @target_issuer_id
+ AND target.revoked_at IS NULL
+WHERE source.user_session_issuer_id = @source_issuer_id
+  AND source.organization_id = @organization_id::text
+  AND source.revoked_at IS NULL
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: CountUserSessionIssuerEMABindingConflicts :one
+SELECT COUNT(*)::int
+FROM remote_session_ema_bindings AS source
+JOIN remote_session_ema_bindings AS target
+  ON target.project_id = source.project_id
+ AND target.remote_session_issuer_id = source.remote_session_issuer_id
+ AND target.resource = source.resource
+ AND target.user_session_issuer_id = @target_issuer_id
+WHERE source.user_session_issuer_id = @source_issuer_id
+  AND source.organization_id = @organization_id::text
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: UpdateUserSessionClientsToIssuer :execrows
+UPDATE user_session_clients AS client
+SET user_session_issuer_id = @target_issuer_id,
+    project_id = sqlc.narg('target_project_id')::uuid,
+    organization_id = @organization_id::text,
+    updated_at = clock_timestamp()
+WHERE client.user_session_issuer_id = @source_issuer_id
+  AND client.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: UpdateUserSessionsToIssuer :execrows
+UPDATE user_sessions AS session
+SET user_session_issuer_id = @target_issuer_id,
+    project_id = sqlc.narg('target_project_id')::uuid,
+    organization_id = @organization_id::text,
+    updated_at = clock_timestamp()
+WHERE session.user_session_issuer_id = @source_issuer_id
+  AND session.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: UpdateUserSessionConsentsToIssuerScope :execrows
+UPDATE user_session_consents AS consent
+SET project_id = sqlc.narg('target_project_id')::uuid,
+    organization_id = @organization_id::text,
+    updated_at = clock_timestamp()
+FROM user_session_clients AS client
+WHERE consent.user_session_client_id = client.id
+  AND client.user_session_issuer_id = @source_issuer_id
+  AND consent.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: MergeDuplicateUserSessionIssuerCimdClients :execrows
+UPDATE user_session_issuer_cimd_clients AS source
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE source.user_session_issuer_id = @source_issuer_id
+  AND source.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  )
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_issuer_cimd_clients AS target
+    WHERE target.user_session_issuer_id = @target_issuer_id
+      AND target.client_id_metadata_uri = source.client_id_metadata_uri
+      AND target.deleted IS FALSE
+  );
+
+-- name: UpdateUserSessionIssuerCimdClientsToIssuer :execrows
+UPDATE user_session_issuer_cimd_clients AS cimd
+SET user_session_issuer_id = @target_issuer_id,
+    project_id = sqlc.narg('target_project_id')::uuid,
+    organization_id = @organization_id::text,
+    updated_at = clock_timestamp()
+WHERE cimd.user_session_issuer_id = @source_issuer_id
+  AND cimd.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: InsertTargetRemoteSessionClientIssuerLinks :execrows
+INSERT INTO remote_session_client_user_session_issuers (remote_session_client_id, user_session_issuer_id)
+SELECT link.remote_session_client_id, @target_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+WHERE link.user_session_issuer_id = @source_issuer_id
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  )
+ON CONFLICT (remote_session_client_id, user_session_issuer_id) DO NOTHING;
+
+-- name: UpdateRemoteSessionsToUserSessionIssuer :execrows
+UPDATE remote_sessions AS session
+SET user_session_issuer_id = @target_issuer_id,
+    updated_at = clock_timestamp()
+WHERE session.user_session_issuer_id = @source_issuer_id
+  AND session.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: DeleteSourceRemoteSessionClientIssuerLinks :execrows
+DELETE FROM remote_session_client_user_session_issuers AS link
+WHERE link.user_session_issuer_id = @source_issuer_id
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: UpdateRemoteSessionEMABindingsToUserSessionIssuer :execrows
+UPDATE remote_session_ema_bindings AS binding
+SET user_session_issuer_id = @target_issuer_id,
+    generation = generation + 1,
+    updated_at = clock_timestamp()
+WHERE binding.user_session_issuer_id = @source_issuer_id
+  AND binding.organization_id = @organization_id::text
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: UpdateMCPServersToUserSessionIssuer :execrows
+UPDATE mcp_servers AS server
+SET user_session_issuer_id = @target_issuer_id,
+    updated_at = clock_timestamp()
+FROM projects AS project
+WHERE server.user_session_issuer_id = @source_issuer_id
+  AND project.id = server.project_id
+  AND project.organization_id = @organization_id::text
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS issuer_project ON issuer_project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = @organization_id::text AND issuer_project.deleted IS FALSE)
+      )
+  );
+
+-- name: ListMCPServerProjectIDsForUserSessionIssuerMigration :many
+-- Every affected project must recompute its denormalized remote-session issuer
+-- after client links and server ownership move to the target issuer.
+SELECT DISTINCT server.project_id
+FROM mcp_servers AS server
+JOIN projects AS project ON project.id = server.project_id
+WHERE server.user_session_issuer_id IN (@source_issuer_id, @target_issuer_id)
+  AND server.deleted IS FALSE
+  AND project.organization_id = @organization_id::text
+  AND project.deleted IS FALSE
+ORDER BY server.project_id;
+
+-- name: UpdateToolsetsToUserSessionIssuer :execrows
+UPDATE toolsets AS toolset
+SET user_session_issuer_id = @target_issuer_id,
+    updated_at = clock_timestamp()
+FROM projects AS project
+WHERE toolset.user_session_issuer_id = @source_issuer_id
+  AND project.id = toolset.project_id
+  AND project.organization_id = @organization_id::text
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS issuer_project ON issuer_project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = @organization_id::text AND issuer_project.deleted IS FALSE)
+      )
+  );
+
+-- name: UpdateMetaMCPServersToUserSessionIssuer :execrows
+UPDATE meta_mcp_servers AS server
+SET user_session_issuer_id = @target_issuer_id,
+    updated_at = clock_timestamp()
+WHERE server.user_session_issuer_id = @source_issuer_id
+  AND server.organization_id = @organization_id::text
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: UpdatePlatformMCPRegistrationsToUserSessionIssuer :execrows
+UPDATE platform_mcp_catalog_registrations AS registration
+SET user_session_issuer_id = @target_issuer_id,
+    updated_at = clock_timestamp()
+WHERE registration.user_session_issuer_id = @source_issuer_id
+  AND registration.organization_id = @organization_id::text
+  AND registration.user_session_issuer_owned IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  );
+
+-- name: SoftDeleteMigratedUserSessionIssuer :one
+UPDATE user_session_issuers AS issuer
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE issuer.id = @source_issuer_id
+  AND issuer.deleted IS FALSE
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS scoped_issuer
+    LEFT JOIN projects AS project ON project.id = scoped_issuer.project_id
+    WHERE scoped_issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND scoped_issuer.deleted IS FALSE
+      AND (
+        (scoped_issuer.project_id IS NULL AND scoped_issuer.organization_id = @organization_id::text)
+        OR (scoped_issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  )
+RETURNING issuer.*;
+
 -- name: DeleteUserSessionIssuer :one
 -- Recheck active owners in the write so an owner added after the handler's
 -- preflight check prevents the issuer from being soft-deleted.
 --
 -- This endpoint only mutates project-owned issuers. Organization-owned rows
 -- have a separate org-admin API and cannot be deleted with project:write.
+WITH deleted_parent AS (
 UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
 WHERE issuer.id = @id
@@ -204,7 +911,14 @@ WHERE issuer.id = @id
       AND meta_mcp_server.user_session_issuer_id = issuer.id
       AND meta_mcp_server.deleted IS FALSE
   )
-RETURNING issuer.*;
+RETURNING issuer.*
+), tombstones AS (
+ DELETE FROM remote_session_ema_bindings b USING deleted_parent p
+ WHERE b.user_session_issuer_id = p.id AND b.state = 'unlinked'
+ AND (p.project_id IS NULL OR b.project_id = p.project_id)
+ AND (p.project_id IS NOT NULL OR p.organization_id IS NULL OR b.organization_id = p.organization_id)
+)
+SELECT * FROM deleted_parent;
 
 -- name: UserSessionIssuerHasActiveOwner :one
 -- An issuer can be referenced by an MCP server, toolset, or meta MCP server.
@@ -298,6 +1012,7 @@ WHERE issuer.id = @user_session_issuer_id
   AND session.refresh_expires_at > now();
 
 -- name: DeleteOrganizationUserSessionIssuer :one
+WITH deleted_parent AS (
 UPDATE user_session_issuers AS issuer
 SET deleted_at = clock_timestamp()
 WHERE issuer.id = @id
@@ -323,7 +1038,14 @@ WHERE issuer.id = @id
       AND project.deleted IS FALSE
       AND project.organization_id = issuer.organization_id
   )
-RETURNING issuer.*;
+RETURNING issuer.*
+), tombstones AS (
+ DELETE FROM remote_session_ema_bindings b USING deleted_parent p
+ WHERE b.user_session_issuer_id = p.id AND b.state = 'unlinked'
+ AND (p.project_id IS NULL OR b.project_id = p.project_id)
+ AND (p.project_id IS NOT NULL OR p.organization_id IS NULL OR b.organization_id = p.organization_id)
+)
+SELECT * FROM deleted_parent;
 
 -- name: SoftDeleteUserSessionsByIssuerID :many
 -- Cascading soft-delete of user_sessions for an issuer being soft-deleted.
@@ -692,7 +1414,7 @@ RETURNING s.*;
 UPDATE user_sessions
 SET deleted_at = clock_timestamp()
 WHERE user_session_issuer_id = @user_session_issuer_id
-  AND refresh_token_hash = @refresh_token_hash
+  AND refresh_token_hash = @refresh_token_hash::text
   AND deleted IS FALSE
 RETURNING *;
 
@@ -757,7 +1479,7 @@ WHERE user_session_issuer_id = @user_session_issuer_id
 SELECT *
 FROM user_sessions
 WHERE user_session_issuer_id = @user_session_issuer_id
-  AND refresh_token_hash = @refresh_token_hash
+  AND refresh_token_hash = @refresh_token_hash::text
   AND deleted IS FALSE;
 
 -- The Create* queries below are exercised by tests and by the OAuth surface
@@ -766,6 +1488,21 @@ WHERE user_session_issuer_id = @user_session_issuer_id
 
 -- name: CreateUserSessionClient :one
 -- Registers a client from an RFC 7591 request.
+--
+-- The issuer is read under FOR KEY SHARE, the lock the row's foreign key
+-- takes anyway, with the liveness predicate inside the locking read. A
+-- migration or delete holding a conflicting lock makes this statement wait,
+-- and once it commits the row is re-evaluated against its new version: a
+-- retired issuer then yields no rows instead of a client that satisfies the
+-- foreign key but belongs to a tombstone. The caller's earlier liveness
+-- check cannot provide this, since it ran before the wait.
+WITH issuer AS (
+    SELECT issuer.id, issuer.project_id, issuer.organization_id
+    FROM user_session_issuers AS issuer
+    WHERE issuer.id = @user_session_issuer_id
+      AND issuer.deleted IS FALSE
+    FOR KEY SHARE OF issuer
+)
 INSERT INTO user_session_clients (
     project_id,
     organization_id,
@@ -779,10 +1516,10 @@ INSERT INTO user_session_clients (
     client_jwks,
     client_jwks_uri
 )
-VALUES (
-    (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
-    (SELECT organization_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
-    @user_session_issuer_id,
+SELECT
+    issuer.project_id,
+    issuer.organization_id,
+    issuer.id,
     @client_id,
     @client_secret_hash,
     @client_name,
@@ -791,7 +1528,7 @@ VALUES (
     @token_endpoint_auth_method::text,
     sqlc.narg('client_jwks')::jsonb,
     sqlc.narg('client_jwks_uri')::text
-)
+FROM issuer
 RETURNING *;
 
 -- name: UpsertUserSessionClientFromCIMD :one
@@ -993,6 +1730,22 @@ RETURNING *;
 -- user_session_client_id binds the session to the DCR client that minted it.
 -- The /token refresh path requires the same client to refresh; see
 -- HandleToken's refresh_token grant.
+--
+-- The issuer is read under FOR KEY SHARE with the liveness predicate inside
+-- the locking read, so a session minted while a migration or delete holds the
+-- issuer waits for it and is then re-evaluated against the committed row: a
+-- retired issuer yields no rows rather than a session stranded on a tombstone.
+-- Transactions that lock other rows before minting take
+-- LockLiveUserSessionIssuerForChildWrite first so this wait never sits behind
+-- a lock the migration is queued on.
+WITH issuer AS (
+    SELECT issuer.id, issuer.project_id, COALESCE(issuer.organization_id, project.organization_id) AS organization_id
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id = @user_session_issuer_id
+      AND issuer.deleted IS FALSE
+    FOR KEY SHARE OF issuer
+)
 INSERT INTO user_sessions (
     project_id,
     organization_id,
@@ -1008,15 +1761,10 @@ INSERT INTO user_sessions (
     expires_at,
     tool_selection
 )
-VALUES (
-    (SELECT project_id FROM user_session_issuers WHERE id = @user_session_issuer_id),
-    (
-        SELECT COALESCE(issuer.organization_id, project.organization_id)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id = @user_session_issuer_id
-    ),
-    @user_session_issuer_id,
+SELECT
+    issuer.project_id,
+    issuer.organization_id,
+    issuer.id,
     @user_session_client_id,
     @subject_urn,
     @authorizer_user_id,
@@ -1027,10 +1775,21 @@ VALUES (
     @refresh_expires_at,
     @expires_at,
     @tool_selection
-)
+FROM issuer
 RETURNING *;
 
 -- name: CreateUserSessionConsent :one
+-- Tenancy is inherited from the client, read under FOR KEY SHARE with the
+-- liveness predicate inside the locking read: a consent recorded while a
+-- migration moves the client waits for it and then copies the client's
+-- committed tenancy, and a revoked client yields no rows.
+WITH client AS (
+    SELECT client.id, client.project_id, client.organization_id
+    FROM user_session_clients AS client
+    WHERE client.id = @user_session_client_id
+      AND client.deleted IS FALSE
+    FOR KEY SHARE OF client
+)
 INSERT INTO user_session_consents (
     project_id,
     organization_id,
@@ -1038,13 +1797,13 @@ INSERT INTO user_session_consents (
     user_session_client_id,
     remote_set_hash
 )
-VALUES (
-    (SELECT project_id FROM user_session_clients WHERE id = @user_session_client_id),
-    (SELECT organization_id FROM user_session_clients WHERE id = @user_session_client_id),
+SELECT
+    client.project_id,
+    client.organization_id,
     @subject_urn,
-    @user_session_client_id,
+    client.id,
     @remote_set_hash
-)
+FROM client
 RETURNING *;
 
 -- name: ListUserSessionServerFacets :many
@@ -1109,6 +1868,14 @@ WHERE (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id
 -- client was since detached from it: those tokens are still live upstream and
 -- SoftDeleteRemoteSessionsBySubjectAndUserSessionIssuer still destroys them,
 -- so hiding them would show an empty page for a revoke that is not a no-op.
+-- Agents instead use the exact live owner attachment relationship from
+-- GetPrincipalRemoteSessionBinding: no direct subject match or provenance-only
+-- fallback, and no credential-specific attachment. Keep its authority, tenant,
+-- client and grant-generation predicates aligned with that canonical lookup.
+-- Expiry is deliberately not filtered: refreshable grants retain lineage and
+-- the existing view computes status without fetching or refreshing tokens.
+-- Only the requesting actor is projected, never the attached owner identity.
+-- EXISTS prevents duplicate rows for the same actor and upstream grant.
 -- The projected user_session_issuer_id is the requesting issuer, which is the
 -- key the caller indexes by.
 -- Takes the page's pairs as parallel arrays rather than two independent IN
@@ -1126,7 +1893,7 @@ WHERE (project_id = @project_id::uuid OR (project_id IS NULL AND organization_id
 -- still match, so a row that somehow paired one project's client with another
 -- project's issuer stays invisible rather than being read as a shared one.
 SELECT rs.id,
-       rs.subject_urn,
+       pair.subject_urn::text AS subject_urn,
        usi.id AS user_session_issuer_id,
        rs.remote_session_client_id,
        rc.remote_session_issuer_id,
@@ -1145,7 +1912,46 @@ JOIN (
        SELECT unnest(@subject_urns::text[]) AS subject_urn,
               unnest(@issuer_ids::uuid[]) AS issuer_id
      ) AS pair
-  ON rs.subject_urn = pair.subject_urn
+  ON (
+    (pair.subject_urn NOT LIKE 'agent:%' AND rs.subject_urn = pair.subject_urn)
+    OR EXISTS (
+      SELECT 1
+      FROM principal_remote_session_bindings AS b
+      JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+        AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
+        AND a.owner_reassignment_required_at IS NULL
+      JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+      JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
+        AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
+      JOIN remote_sessions AS s ON s.id = b.remote_session_id
+        AND s.subject_urn = 'user:' || a.owner_user_id
+        AND b.attached_by_subject_id = s.subject_urn
+        AND s.grant_generation = b.grant_generation
+        AND s.remote_session_client_id = b.remote_session_client_id
+      JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
+      JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
+      JOIN user_session_issuers AS provenance ON provenance.id = s.user_session_issuer_id
+      JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+      JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
+      JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
+      WHERE b.project_id = @project_id::uuid
+        AND b.organization_id = @organization_id::text
+        AND 'agent:' || b.principal_id::text = pair.subject_urn
+        AND b.user_session_issuer_id = pair.issuer_id
+        AND b.remote_session_client_id = rs.remote_session_client_id
+        AND b.revoked_at IS NULL
+        AND s.deleted IS FALSE
+        AND c.deleted IS FALSE
+        AND target.deleted IS FALSE
+        AND provenance.deleted IS FALSE
+        AND issuer.deleted IS FALSE
+        AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
+        AND (provenance.project_id = @project_id::uuid OR (provenance.project_id IS NULL AND provenance.organization_id = @organization_id::text))
+        AND (target.project_id = @project_id::uuid OR (target.project_id IS NULL AND target.organization_id = @organization_id::text))
+        AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+        AND s.id = rs.id
+    )
+  )
 JOIN user_session_issuers AS usi ON usi.id = pair.issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
@@ -1174,6 +1980,11 @@ UPDATE user_session_clients
 SET token_endpoint_auth_method = NULL
 WHERE id = @id
 RETURNING *;
+
+-- name: AdvanceOrganizationUserSessionIssuerVersionFixture :exec
+-- Test fixture: invalidate in-flight login configuration without changing its identity.
+UPDATE user_session_issuers SET updated_at = updated_at + interval '1 second'
+WHERE id = @id AND organization_id = @organization_id AND project_id IS NULL;
 
 -- name: ListWorkloadSessionLabels :many
 -- Resolves the workloads behind one page of workload sessions into something

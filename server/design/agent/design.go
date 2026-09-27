@@ -154,7 +154,7 @@ var _ = Service("agent", func() {
 
 		Payload(func() {
 			security.SessionPayload()
-			Attribute("config", MapOf(String, Any), "Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, and ai_scan_interval_seconds. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Gram injects from the organization's scan target list when serving agents.")
+			Attribute("config", MapOf(String, Any), "Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, ai_scan_interval_seconds, and disable_ai_scan. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Gram injects from the organization's scan target list when serving agents.")
 			Required("config")
 		})
 
@@ -433,6 +433,13 @@ var GetPluginsResult = Type("GetPluginsResult", func() {
 	Attribute("marketplaces", ArrayOf(AgentMarketplaceModel), "Plugin marketplaces the agent should register with the tools it manages. Sorted by name.")
 	Attribute("plugins", ArrayOf(AgentPluginModel), "Plugins the agent should enable. Each entry references one of the marketplaces above by name.")
 	Attribute("configuration", DeviceAgentConfigurationModel, "Organization-wide remote configuration. Absent until an administrator saves a configuration, allowing an agent with no cached remote layer to keep using its local configuration.")
+	Attribute("principal", AgentPollingPrincipalModel, "The non-human principal the plugin set was resolved for. Present only when the caller authenticated with an agent API key.")
+})
+
+var AgentPollingPrincipalModel = Type("AgentPollingPrincipal", func() {
+	Required("urn", "display_name")
+	Attribute("urn", String, "Principal URN of the agent identity, for example `agent:<uuid>`.")
+	Attribute("display_name", String, "Human-readable name of the agent identity.")
 })
 
 var DeviceAgentConfigurationModel = Type("DeviceAgentConfiguration", func() {

@@ -1,3 +1,7 @@
+import { useOrganization } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
+import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
+import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
 import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Popover,
@@ -83,6 +87,21 @@ export function PluginStatusBanner({
 }: {
   server: HostedServerRef;
 }): React.JSX.Element | null {
+  const canWritePlugins = usePluginWriteAccess();
+  return canWritePlugins ? (
+    <WritablePluginStatusBanner server={server} />
+  ) : null;
+}
+
+function WritablePluginStatusBanner({
+  server,
+}: {
+  server: HostedServerRef;
+}): React.JSX.Element | null {
+  const scope = usePluginQueryScope();
+  const organization = useOrganization();
+  const { hasScope } = useRBAC();
+  const canAdmin = hasScope("org:admin", organization.id);
   const routes = useRoutes();
   const queryClient = useQueryClient();
   // throwOnError: false — this query calls EnsureDefaultPlugin server-side,
@@ -90,16 +109,14 @@ export function PluginStatusBanner({
   // detail page shouldn't crash the whole page via the error boundary when
   // it does. The existing `if (!data) return null` below already degrades
   // gracefully on a failed fetch.
-  const { data, isFetching: isPluginsFetching } = usePlugins(
-    undefined,
-    undefined,
-    { throwOnError: false },
-  );
+  const { data, isFetching: isPluginsFetching } = usePlugins(scope, undefined, {
+    throwOnError: false,
+  });
   const [isInstallDialogOpen, setIsInstallDialogOpen] = useState(false);
   // Polled so the banner picks up the Temporal generator-rollout schedule's
   // auto-sync without a manual refresh.
   const { data: publishStatus, isFetching: isPublishStatusFetching } =
-    usePublishStatus(undefined, undefined, {
+    usePublishStatus(scope, undefined, {
       refetchInterval: 5_000,
     });
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
@@ -346,33 +363,37 @@ export function PluginStatusBanner({
             publishStatus?.repoOwner &&
             publishStatus.repoName ? (
               <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="primary"
-                  onClick={() => setIsInstallDialogOpen(true)}
-                >
-                  <Button.LeftIcon>
-                    <Plus className="h-4 w-4" />
-                  </Button.LeftIcon>
-                  <Button.Text>Install</Button.Text>
-                </Button>
+                {canAdmin && (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => setIsInstallDialogOpen(true)}
+                  >
+                    <Button.LeftIcon>
+                      <Plus className="h-4 w-4" />
+                    </Button.LeftIcon>
+                    <Button.Text>Install</Button.Text>
+                  </Button>
+                )}
                 <routes.plugins.Link>
                   <Button size="sm" variant="secondary">
                     <Button.Text>Go to plugins</Button.Text>
                   </Button>
                 </routes.plugins.Link>
-                <InstallInstructionsDialog
-                  open={isInstallDialogOpen}
-                  onOpenChange={setIsInstallDialogOpen}
-                  repoOwner={publishStatus.repoOwner}
-                  repoName={publishStatus.repoName}
-                  marketplaceUrl={publishStatus.marketplaceUrl}
-                  candidatePlugins={memberPlugins.map((plugin) => ({
-                    name: plugin.name,
-                    slug: plugin.slug,
-                    description: plugin.description,
-                  }))}
-                />
+                {canAdmin && (
+                  <InstallInstructionsDialog
+                    open={isInstallDialogOpen}
+                    onOpenChange={setIsInstallDialogOpen}
+                    repoOwner={publishStatus.repoOwner}
+                    repoName={publishStatus.repoName}
+                    marketplaceUrl={publishStatus.marketplaceUrl}
+                    candidatePlugins={memberPlugins.map((plugin) => ({
+                      name: plugin.name,
+                      slug: plugin.slug,
+                      description: plugin.description,
+                    }))}
+                  />
+                )}
               </div>
             ) : (
               <routes.plugins.Link>

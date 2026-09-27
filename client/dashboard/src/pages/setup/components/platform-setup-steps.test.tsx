@@ -32,7 +32,7 @@ vi.mock("@/routes", () => ({
 
 const step = AGENT_PLATFORMS.find(
   ({ id }) => id === "claude-cowork",
-)!.setupSteps.at(-1)!;
+)!.setupSteps.find(({ title }) => title === "Enable OTEL export")!;
 const writeText = vi.fn<(value: string) => Promise<void>>();
 const retry = vi.fn<() => void>();
 function body(

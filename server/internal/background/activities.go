@@ -112,6 +112,7 @@ type expiredTrialDemoter interface {
 }
 
 type Activities struct {
+	trialFixtureHandler              activities.TrialFixtureHandler
 	db                               *pgxpool.Pool
 	temporalEnv                      *tenv.Environment
 	collectOpenRouterCreditsMetrics  *activities.CollectOpenRouterCreditsMetrics
@@ -134,15 +135,11 @@ type Activities struct {
 	promoteStagedTelemetry           *activities.PromoteStagedTelemetry
 	listStagedTelemetryProjects      *activities.ListStagedTelemetryProjects
 	generateChatTitle                *activities.GenerateChatTitle
-	getAllOrganizations              *activities.GetAllOrganizations
 	processDeployment                *activities.ProcessDeployment
 	provisionFunctionsAccess         *activities.ProvisionFunctionsAccess
 	deployFunctionRunners            *activities.DeployFunctionRunners
 	reapFlyApps                      *activities.ReapFlyApps
-	refreshBillingUsage              *activities.RefreshBillingUsage
-	snapshotBillingCycleUsage        *activities.SnapshotBillingCycleUsage
 	weeklyUsageSummary               *activities.WeeklyUsageSummary
-	forwardTokenUsageToPostHog       *activities.ForwardTokenUsageToPostHog
 	refreshOpenRouterKey             *activities.RefreshOpenRouterKey
 	setOpenRouterSpendCap            *activities.SetOpenRouterSpendCap
 	reconcilePaygOpenRouterChatKey   *activities.ReconcilePaygOpenRouterChatKey
@@ -225,6 +222,7 @@ func NewActivities(
 	temporalEnv *tenv.Environment,
 	telemetryLogger *telemetry.Logger,
 	chConn clickhouse.Conn,
+	meterReadConn clickhouse.Conn,
 	telemetryRepo *telemetryrepo.Queries,
 	triggerApp *bgtriggers.App,
 	cacheAdapter cache.Cache,
@@ -244,6 +242,7 @@ func NewActivities(
 	judgeRateLimiter *ratelimit.Limiter,
 	builtinPresets *presetlib.Library,
 	trialEmailsService *trialemails.Service,
+	trialFixtureHandler activities.TrialFixtureHandler,
 	githubEvidenceToken string,
 	riskFingerprinter risk.Fingerprinter,
 	disableRiskRetroReconcile bool,
@@ -434,15 +433,11 @@ func NewActivities(
 		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
-		getAllOrganizations:              activities.NewGetAllOrganizations(logger, db),
 		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpRegistryClient),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
-		refreshBillingUsage:              activities.NewRefreshBillingUsage(logger, db, billingRepo),
-		snapshotBillingCycleUsage:        activities.NewSnapshotBillingCycleUsage(logger, db, chConn, cacheAdapter, emailService),
-		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, chConn, emailService, siteURL),
-		forwardTokenUsageToPostHog:       activities.NewForwardTokenUsageToPostHog(logger, db, posthogClient, cacheAdapter),
+		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, meterReadConn, emailService, siteURL),
 		refreshOpenRouterKey:             activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		setOpenRouterSpendCap:            activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
 		reconcilePaygOpenRouterChatKey:   activities.NewReconcilePaygOpenRouterChatKey(logger, db, openrouterProvisioner),
@@ -491,6 +486,7 @@ func NewActivities(
 			auditLogger,
 			&TemporalTrialEmailNotifier{TemporalEnv: temporalEnv},
 			productFeatures,
+			trialFixtureHandler,
 		),
 		evaluateOrgSpendRules: spend_rules.NewEvaluateOrg(logger, tracerProvider, db, spendRulesCH, cacheAdapter, features),
 		// The judge draws on the same per-(org, model) bucket and the same
@@ -507,6 +503,7 @@ func NewActivities(
 		skillSuggestionAnalyzer: skillSuggestionAnalyzer,
 		remoteSessionRefresh:    remoteSessionRefresh,
 		trialEmails:             trialEmailsService,
+		trialFixtureHandler:     trialFixtureHandler,
 		mcpResearch:             mcpResearch,
 		mcpApprovalRecheck:      mcpApprovalRecheck,
 		billingNotifications:    billingnotifications.NewService(logger, db, emailService, features, siteURL),
@@ -523,6 +520,12 @@ func NewActivities(
 }
 
 func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLifecycleEmailInput) error {
+	if a.trialFixtureHandler != nil {
+		handled, err := a.trialFixtureHandler(ctx, input.OrganizationID)
+		if err != nil || handled {
+			return err
+		}
+	}
 	if a.trialEmails == nil {
 		return fmt.Errorf("trial email service is not configured")
 	}
@@ -549,6 +552,12 @@ func (a *Activities) SendTrialLifecycleEmail(ctx context.Context, input TrialLif
 }
 
 func (a *Activities) ResolveTrialEndingReminder(ctx context.Context, organizationID string) (billingnotifications.TrialReminderState, error) {
+	if a.trialFixtureHandler != nil {
+		handled, err := a.trialFixtureHandler(ctx, organizationID)
+		if err != nil || handled {
+			return billingnotifications.TrialReminderState{}, err
+		}
+	}
 	if a.billingNotifications == nil {
 		return billingnotifications.TrialReminderState{}, fmt.Errorf("billing notification service is not configured")
 	}
@@ -560,6 +569,12 @@ func (a *Activities) ResolveTrialEndingReminder(ctx context.Context, organizatio
 }
 
 func (a *Activities) SendTrialEndingSoonEmail(ctx context.Context, input billingnotifications.SendTrialEndingSoonInput) (billingnotifications.SendTrialEndingSoonResult, error) {
+	if a.trialFixtureHandler != nil {
+		handled, err := a.trialFixtureHandler(ctx, input.OrganizationID)
+		if err != nil || handled {
+			return billingnotifications.SendTrialEndingSoonResult{}, err
+		}
+	}
 	if a.billingNotifications == nil {
 		return billingnotifications.SendTrialEndingSoonResult{}, fmt.Errorf("billing notification service is not configured")
 	}
@@ -750,18 +765,6 @@ func (a *Activities) RunOktaApplicationSync(ctx context.Context, input string) e
 	return a.runOktaApplicationSync.Do(ctx, input)
 }
 
-func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {
-	return a.refreshBillingUsage.Do(ctx, orgIDs)
-}
-
-func (a *Activities) SnapshotBillingCycleUsage(ctx context.Context, orgIDs []string) error {
-	return a.snapshotBillingCycleUsage.Do(ctx, orgIDs)
-}
-
-func (a *Activities) ForwardTokenUsageToPostHog(ctx context.Context, orgIDs []string) error {
-	return a.forwardTokenUsageToPostHog.Do(ctx, orgIDs)
-}
-
 func (a *Activities) ListWeeklyUsageSummaryTargets(ctx context.Context) ([]activities.WeeklyUsageSummaryTarget, error) {
 	targets, err := a.weeklyUsageSummary.ListTargets(ctx)
 	if err != nil {
@@ -775,10 +778,6 @@ func (a *Activities) SendWeeklyUsageSummary(ctx context.Context, args activities
 		return fmt.Errorf("send weekly usage summary: %w", err)
 	}
 	return nil
-}
-
-func (a *Activities) GetAllOrganizations(ctx context.Context) ([]string, error) {
-	return a.getAllOrganizations.Do(ctx)
 }
 
 func (a *Activities) ProvisionFunctionsAccess(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID) error {
@@ -1038,11 +1037,11 @@ func (a *Activities) RepairOrphanedAPIKeyCreators(ctx context.Context) error {
 }
 
 func (a *Activities) PublishPluginProject(ctx context.Context, input plugins.PublishProjectInput) (*plugins.PublishProjectResult, error) {
-	result, err := a.pluginPublisher.PublishProject(ctx, input)
-	if err != nil {
-		return nil, fmt.Errorf("publish plugin project: %w", err)
-	}
-	return result, nil
+	// Returned unwrapped: the Temporal SDK serializes only a top-level
+	// *ApplicationError's non-retryable flag and type, so any wrapper here would
+	// turn PluginPublisher's permanent rejections back into retried failures
+	// the workflow can no longer match on.
+	return a.pluginPublisher.PublishProject(ctx, input) //nolint:wrapcheck // PluginPublisher already prefixes its errors; see above
 }
 
 func (a *Activities) ListSpendRuleOrgs(ctx context.Context) ([]string, error) {

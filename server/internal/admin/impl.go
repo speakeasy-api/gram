@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/assets"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"io"
 	"log/slog"
 	"math"
@@ -29,6 +27,7 @@ import (
 	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	usagegen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/admin/repo"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
@@ -48,9 +47,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/trials"
 	trialsRepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
@@ -72,10 +73,14 @@ type Service struct {
 	dashboardURL         *url.URL
 	supportHandoffIssuer supportHandoffIssuer
 
+	// mcpServerURL is the public Gram server origin that platform-domain MCP
+	// URLs are built on. Nil leaves those URLs out.
+	mcpServerURL *url.URL
+
 	// workos creates organizations in the identity provider. Deployments with
 	// no WorkOS configuration get orgprovision.Unavailable, whose failure
 	// CreateOrganization reports rather than working around.
-	workos orgprovision.WorkOSOrganizationCreator
+	workos orgprovision.WorkOSVerifiedDomainCreator
 
 	openRouter           TrialKeyReviver
 	openRouterSpendCap   OpenRouterSpendCapScheduler
@@ -87,11 +92,14 @@ type Service struct {
 
 	trial   trialemails.Notifier
 	billing BillingOperations
+
+	supportCoverage SupportCoverageReader
 }
 
 type BillingOperations interface {
 	GetPaygBillingSummaryForOrganization(context.Context, string) (*usage.PaygBillingSummary, error)
 	GetMeterUsageForOrganization(context.Context, string, *usagegen.GetMeterUsagePayload) (*usagegen.MeterUsageResponse, error)
+	GetSpendBreakdownForOrganization(context.Context, string, *usagegen.GetSpendBreakdownPayload) (*usagegen.SpendBreakdownResponse, error)
 	GetStripeCustomer(context.Context, string) (*stripeclient.CustomerDetails, error)
 	GetStripeSubscriptionForOrganization(context.Context, string) (*usage.StripeSubscription, error)
 	SetStripeSubscriptionCancelAtPeriodEndForOrganization(context.Context, string, usage.BillingActor, bool) (*usage.StripeSubscription, error)
@@ -182,13 +190,14 @@ func NewService(
 	oidcClient *OIDCClient,
 	encryptionClient *encryption.Client,
 	allowedOrigins []string,
-	workosClient orgprovision.WorkOSOrganizationCreator,
+	workosClient orgprovision.WorkOSVerifiedDomainCreator,
 	openRouter AdminOpenRouter,
 	trialNotifier trialemails.Notifier,
 	productFeatures *productfeatures.Client,
 	chatAnalysisSignaler analysis.Signaler,
 	openRouterSpendCap OpenRouterSpendCapScheduler,
 	billing BillingOperations,
+	supportCoverage SupportCoverageReader,
 	dashboardURL *url.URL,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("admin"))
@@ -207,7 +216,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{remoteSessions: nil, assets: nil,
+	return &Service{remoteSessions: nil, assets: nil, mcpServerURL: nil,
 		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:         logger,
 		db:             db,
@@ -231,8 +240,9 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:   trialNotifier,
-		billing: billing,
+		trial:           trialNotifier,
+		billing:         billing,
+		supportCoverage: supportCoverage,
 	}
 }
 
@@ -263,6 +273,20 @@ func (s *Service) GetOrganizationFeatures(ctx context.Context, payload *gen.GetO
 		return nil, err
 	}
 	return productFeaturesResult(s.productFeatures.Snapshot(ctx, organizationID)), nil
+}
+
+// GetOrganizationFeaturesStrict is the staff MCP read path. An incomplete flag
+// lookup must not be reported as a set of disabled entitlements.
+func (s *Service) GetOrganizationFeaturesStrict(ctx context.Context, organizationID string) (*gen.ProductFeatures, error) {
+	organizationID, err := s.canonicalAdminOrganizationForRequest(ctx, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := s.productFeatures.SnapshotStrict(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("read organization features: %w", err)
+	}
+	return productFeaturesResult(snapshot), nil
 }
 
 func (s *Service) SetOrganizationFeature(ctx context.Context, payload *gen.SetOrganizationFeaturePayload) (*gen.ProductFeatures, error) {
@@ -368,12 +392,16 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	// Goa lazily assigns a nil error formatter inside a shared request closure.
 	// Supply its default eagerly so concurrent error responses do not race.
 	server := adminserver.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, goahttp.NewErrorResponse)
+	server.Callback = scopeMCPAdminCookie(server.Callback)
 	server.ListOrganizations = service.rejectEmptyOrganizationStatus(server.ListOrganizations)
 	server.GetSession = service.preauthorizeAdmin(server.GetSession)
+	server.GetOrganizationOnboarding = service.preauthorizeAdmin(server.GetOrganizationOnboarding)
+	server.SetOrganizationOnboarding = service.strictAdminJSON(server.SetOrganizationOnboarding, func() any { return new(onboardingRequestBody) })
 	server.GetOrganizationFeatures = service.preauthorizeAdmin(server.GetOrganizationFeatures)
 	server.GetOrganizationChatAnalysisSettings = service.preauthorizeAdmin(server.GetOrganizationChatAnalysisSettings)
 	server.GetStripeCustomer = service.preauthorizeAdmin(server.GetStripeCustomer)
 	server.GetMeterUsage = service.preauthorizeAdmin(server.GetMeterUsage)
+	server.GetSpendBreakdown = service.preauthorizeAdmin(server.GetSpendBreakdown)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
@@ -395,6 +423,42 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
 	adminserver.Mount(mux, server)
 
+}
+
+// Keep the dashboard's /admin session cookie unchanged. A successful MCP
+// login also needs the same session on /admin-mcp for browser consent. A
+// dashboard login clears any older MCP-scoped browser cookie.
+func scopeMCPAdminCookie(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(&adminCallbackWriter{ResponseWriter: w}, r)
+	})
+}
+
+type adminCallbackWriter struct{ http.ResponseWriter }
+
+func (w *adminCallbackWriter) WriteHeader(status int) {
+	if status == http.StatusTemporaryRedirect {
+		for _, cookie := range (&http.Response{Header: w.Header()}).Cookies() { //nolint:exhaustruct // Only response headers are needed to parse cookies.
+			if cookie.Name != constants.AdminSessionCookie || cookie.Value == "" {
+				continue
+			}
+			mcpCookie := &http.Cookie{ //nolint:exhaustruct // No Domain so middleware controls cookie sharing.
+				Name:     constants.AdminSessionCookie,
+				Path:     "/admin-mcp",
+				Secure:   true,
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			}
+			if strings.HasPrefix(w.Header().Get("Location"), "/admin-mcp/connect?state=") {
+				mcpCookie.Value = cookie.Value
+			} else {
+				mcpCookie.MaxAge = -1
+			}
+			http.SetCookie(w.ResponseWriter, mcpCookie)
+			break
+		}
+	}
+	w.ResponseWriter.WriteHeader(status)
 }
 
 // Goa's optional string query decoder treats present-but-empty values as absent,
@@ -456,6 +520,9 @@ func (s *Service) strictAdminJSON(next http.Handler, body func() any) http.Handl
 		return nil
 	})
 }
+
+// Verifier exposes the live staff session verifier to the admin-only MCP transport.
+func (s *Service) Verifier() *Verifier { return s.verifier }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	if preauthorized, _ := ctx.Value(adminPreauthorizedKey{}).(bool); preauthorized {
@@ -1302,26 +1369,32 @@ func (s *Service) rejectTrialChange(ctx context.Context, logger *slog.Logger, or
 	return oops.E(oops.CodeConflict, nil, "%s", conflictMessage)
 }
 
+const organizationCreationUncertain = "Creation could not be confirmed. Check existing organizations before retrying."
+
 // CreateOrganization creates an organization in WorkOS and then in Gram.
 //
 // The WorkOS create happens before the transaction opens, because it is the one
 // step that cannot be rolled back. Everything Gram stores is written inside a
-// single transaction afterwards, so a failure below leaves no organization row,
-// no role grants and no entitlements from this call.
+// single transaction afterwards. A transaction failure rolls back local writes;
+// a response read failure can occur after those writes have committed.
 //
-// That is not the same as leaving nothing. Wherever the WorkOS webhook is
-// configured, organization.created arrives about ten seconds later and the sync
-// activity writes the organization row and its role grants anyway, without the
-// default entitlements this handler would have seeded. AGE-3213 covers that gap.
-// Retrying the create is still the right move: the derived ID makes the retry
-// land on that row rather than beside it.
+// A webhook can still provision the remote organization after a failed request.
+// Repeating the request creates a new WorkOS organization, not an idempotent retry.
 func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrganizationPayload) (*gen.AdminOrganization, error) {
-	name, err := orgprovision.ValidateName(payload.Name)
+	if !payload.OwnershipConfirmed {
+		return nil, oops.E(oops.CodeInvalid, nil, "confirm that the organization owns this domain before creating it")
+	}
+	hostname, err := organizationHostname(payload.URL)
 	if err != nil {
 		return nil, err
 	}
 
-	created, err := orgprovision.CreateInWorkOS(ctx, s.workos, name)
+	name, err := orgprovision.ValidateName(orgprovision.NameFromHostname(hostname))
+	if err != nil {
+		return nil, err
+	}
+
+	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(ctx, s.workos, name, hostname)
 	switch {
 	case errors.Is(err, orgprovision.ErrUnavailable):
 		// CodeInvalid and not CodeInvariantViolation, which reads like the
@@ -1331,8 +1404,10 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		// operator. oops.CodeMap disagrees and maps it to 422; the Goa HTTP
 		// layer does not read that map.
 		return nil, oops.E(oops.CodeInvalid, err, "this server has no WorkOS configuration, so it cannot create organizations")
+	case errors.Is(err, workos.ErrOrganizationCreationRejected):
+		return nil, oops.E(oops.CodeInvalid, err, "WorkOS rejected organization creation. Check the company URL and whether its domain is eligible for verification.").LogWarn(ctx, s.logger)
 	case err != nil:
-		return nil, oops.E(oops.CodeGatewayError, err, "create organization in WorkOS").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeGatewayError, err, organizationCreationUncertain).LogError(ctx, s.logger)
 	}
 
 	logger := s.logger.With(
@@ -1342,7 +1417,7 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "begin organization creation transaction").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("begin organization creation transaction: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
@@ -1364,10 +1439,10 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		// of two.
 		base, baseErr := orgslug.StableBase(name, created.WorkOSOrganizationID)
 		if baseErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, baseErr, "derive organization slug").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("derive organization slug: %w", baseErr), organizationCreationUncertain).LogError(ctx, logger)
 		}
 		if lockErr := queries.LockOrganizationSlug(ctx, base); lockErr != nil {
-			return nil, oops.E(oops.CodeUnexpected, lockErr, "lock organization slug").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("lock organization slug: %w", lockErr), organizationCreationUncertain).LogError(ctx, logger)
 		}
 
 		// Read again now that the lock is held. The read above was taken before
@@ -1383,14 +1458,14 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		case errors.Is(reReadErr, pgx.ErrNoRows):
 			found, findErr := orgslug.FindUnique(ctx, queries, base)
 			if findErr != nil {
-				return nil, oops.E(oops.CodeUnexpected, findErr, "find unique organization slug").LogError(ctx, logger)
+				return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find unique organization slug: %w", findErr), organizationCreationUncertain).LogError(ctx, logger)
 			}
 			uniqueSlug = found
 		default:
-			return nil, oops.E(oops.CodeUnexpected, reReadErr, "look up organization after slug lock").LogError(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("look up organization after slug lock: %w", reReadErr), organizationCreationUncertain).LogError(ctx, logger)
 		}
 	default:
-		return nil, oops.E(oops.CodeUnexpected, err, "look up organization before create").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("look up organization before create: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	// Keyed on the derived ID with ON CONFLICT (id) DO UPDATE, so a webhook that
@@ -1411,24 +1486,33 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		// FALSE states that an operator creating an organization is not
 		// whitelisting it.
 		Whitelisted: pgtype.Bool{Bool: false, Valid: true},
+		// Records the prospect flow this create starts. The conflict arm above
+		// is reachable — the WorkOS webhook can have inserted the row already —
+		// and that path records no source, so writing it here is what makes the
+		// two orderings agree.
+		CreationSource: conv.ToPGText(orgprovision.SourcePlatformAdmin),
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "create organization metadata").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create organization metadata: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	if err := authz.SeedSystemRoleGrantsTx(ctx, tx, org.ID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "provision organization access defaults").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("provision organization access defaults: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	if err := productfeatures.SeedOrganizationDefaultsTx(ctx, tx, org.ID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "seed organization default entitlements").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("seed organization default entitlements: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "commit organization creation transaction").LogError(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("commit organization creation transaction: %w", err), organizationCreationUncertain).LogError(ctx, logger)
 	}
 
-	return s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")
+	result, err := s.readOrganizationAfterWrite(ctx, org.ID, "fetch organization after create")
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, organizationCreationUncertain)
+	}
+	return result, nil
 }
 
 // RearmTrial atomically replaces trial_demotion with the active-trial key policy.
@@ -1767,6 +1851,7 @@ func adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) *gen.AdminOrg
 		TrialEndsAt:          pgTimestampPtr(row.TrialEndsAt),
 		TrialConvertedAt:     pgTimestampPtr(row.TrialConvertedAt),
 		TrialDemotedAt:       pgTimestampPtr(row.TrialDemotedAt),
+		CreationSource:       conv.FromPGText[string](row.CreationSource),
 		MemberCount:          int(row.MemberCount),
 		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
@@ -1789,9 +1874,12 @@ func adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *gen.AdminOrga
 		TrialEndsAt:          pgTimestampPtr(row.TrialEndsAt),
 		TrialConvertedAt:     nil,
 		TrialDemotedAt:       nil,
-		MemberCount:          int(row.MemberCount),
-		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
+		// The list does not select it. The record view asks for one organization
+		// and reads it there, like trial_tier above.
+		CreationSource: nil,
+		MemberCount:    int(row.MemberCount),
+		CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

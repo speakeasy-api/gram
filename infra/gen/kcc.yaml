@@ -846,6 +846,32 @@ pubsub:
       type: PROTOCOL_BUFFER
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-organization-publication-requested
+    name: gram-plugins-v1-organization-publication-requested
+    spec:
+      definition: |
+        edition = "2024";
+        message OrganizationPublicationRequested {
+          string organization_id = 1;
+          string created_by_user_id = 2;
+          string after_project_id = 3;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-publication-requested
+    name: gram-plugins-v1-publication-requested
+    spec:
+      definition: |
+        edition = "2024";
+        message PublicationRequested {
+          string organization_id = 1;
+          string project_id = 2;
+          string created_by_user_id = 3;
+        }
+      type: PROTOCOL_BUFFER
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
     name: gram-risk-v1-custom-rules-analysis
     spec:
@@ -890,6 +916,38 @@ pubsub:
       definition: |
         edition = "2024";
         message Finding {
+          enum EnforcementOutcome {
+            ENFORCEMENT_OUTCOME_UNSPECIFIED = 0;
+            ENFORCEMENT_OUTCOME_LOGGED = 1;
+            ENFORCEMENT_OUTCOME_DENIED = 2;
+            ENFORCEMENT_OUTCOME_WITHHELD = 3;
+            ENFORCEMENT_OUTCOME_WARNED_PENDING = 4;
+            ENFORCEMENT_OUTCOME_WARNED_ACKNOWLEDGED = 5;
+            ENFORCEMENT_OUTCOME_WARNED_ABANDONED = 6;
+            ENFORCEMENT_OUTCOME_QUARANTINED = 7;
+          }
+          message Attribution {
+            string chat_id = 1;
+            string user_id = 2;
+            string external_user_id = 3;
+            string assistant_id = 4;
+            string message_created_at = 5;
+            string chat_source = 6;
+            string team = 7;
+            string user_email = 8;
+          }
+          message Execution {
+            string execution_id = 1;
+            string mcp_server_id = 2;
+            string meta_mcp_server_id = 3;
+            string toolset_id = 4;
+            string tool_name = 5;
+            string phase = 6;
+            string mediation_surface = 7;
+            string method = 8;
+            string principal_kind = 9;
+            bool identity_stamped = 10;
+          }
           string id = 1;
           string request_id = 2;
           string chat_message_id = 3;
@@ -917,6 +975,10 @@ pubsub:
           string excluded_reason = 25;
           string excluded_detail = 26;
           string event_kind = 27;
+          bool shadow = 28;
+          Attribution attribution = 29;
+          Execution execution = 30;
+          EnforcementOutcome enforcement_outcome = 31;
         }
       type: PROTOCOL_BUFFER
   - labels:
@@ -1021,6 +1083,7 @@ pubsub:
           string organization_slug = 25;
           repeated string sources = 26;
           bool content_truncated = 27;
+          bool shadow = 28;
           message ToolCall {
             string id = 1;
             string name = 2;
@@ -1555,6 +1618,42 @@ pubsub:
         name: gram-ping-v2-message
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-organization-publication-scheduler
+      topic_proto_message: gram-plugins-v1-organization-publication-requested
+    name: gram-plugins-v1-organization-publication-scheduler
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-plugins-v1-organization-publication-scheduler-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-plugins-v1-organization-publication-requested
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-publication-scheduler
+      topic_proto_message: gram-plugins-v1-publication-requested
+    name: gram-plugins-v1-publication-scheduler
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-plugins-v1-publication-scheduler-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: false
+      retryPolicy:
+        maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-plugins-v1-publication-requested
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analyzer
       topic_proto_message: gram-risk-v1-custom-rules-analysis
     name: gram-risk-v1-custom-rules-analyzer
@@ -1734,6 +1833,24 @@ pubsub:
       retainAckedMessages: false
       retryPolicy:
         maximumBackoff: 600s
+        minimumBackoff: 10s
+      topicRef:
+        name: gram-telemetry-v1-log-record
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-tool-call-log-relay
+      topic_proto_message: gram-telemetry-v1-log-record
+    name: gram-telemetry-v1-tool-call-log-relay
+    spec:
+      ackDeadlineSeconds: 60
+      deadLetterPolicy:
+        deadLetterTopicRef:
+          name: gram-telemetry-v1-tool-call-log-relay-dlq
+        maxDeliveryAttempts: 10
+      messageRetentionDuration: 604800s
+      retainAckedMessages: true
+      retryPolicy:
+        maximumBackoff: 60s
         minimumBackoff: 10s
       topicRef:
         name: gram-telemetry-v1-log-record
@@ -1961,6 +2078,40 @@ pubsub:
       messageRetentionDuration: 3600s
   - labels:
       managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-organization-publication-requested
+    name: gram-plugins-v1-organization-publication-requested
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-plugins-v1-organization-publication-requested
+  - labels:
+      dlq_for: gram-plugins-v1-organization-publication-scheduler
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-organization-publication-scheduler
+    name: gram-plugins-v1-organization-publication-scheduler-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-publication-requested
+    name: gram-plugins-v1-publication-requested
+    spec:
+      messageRetentionDuration: 604800s
+      schemaSettings:
+        encoding: BINARY
+        schemaRef:
+          name: gram-plugins-v1-publication-requested
+  - labels:
+      dlq_for: gram-plugins-v1-publication-scheduler
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-plugins-v1-publication-scheduler
+    name: gram-plugins-v1-publication-scheduler-dlq
+    spec:
+      messageRetentionDuration: 604800s
+  - labels:
+      managed_by: proto-pubsub-orchestrator
       proto_message: gram-risk-v1-custom-rules-analysis
     name: gram-risk-v1-custom-rules-analysis
     spec:
@@ -2097,6 +2248,13 @@ pubsub:
         encoding: BINARY
         schemaRef:
           name: gram-telemetry-v1-log-record
+  - labels:
+      dlq_for: gram-telemetry-v1-tool-call-log-relay
+      managed_by: proto-pubsub-orchestrator
+      proto_message: gram-telemetry-v1-tool-call-log-relay
+    name: gram-telemetry-v1-tool-call-log-relay-dlq
+    spec:
+      messageRetentionDuration: 604800s
   - labels:
       managed_by: proto-pubsub-orchestrator
       proto_message: gram-webhooks-v1-event

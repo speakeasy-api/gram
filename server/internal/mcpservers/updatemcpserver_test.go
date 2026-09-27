@@ -15,13 +15,87 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
+
+func TestUpdateMcpServer_NetworkModeOnlyTransaction(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name: "network mode only", RemoteMcpServerID: &remoteID,
+		Visibility: types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created.UserSessionIssuerID)
+	issuerBefore := created.UserSessionIssuerID
+
+	beforeCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
+	require.NoError(t, err)
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the network-mode-only write
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	updated, err := mcpservers.UpdateMCPServerNetworkAccessModeInTransaction(ctx, tx, audit.NewLogger(), mcpservers.LifecycleUpdateInput{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		ActorUserID: authCtx.UserID, ActorEmail: authCtx.Email,
+		ServerID: uuid.MustParse(created.ID),
+	}, networkaccess.ModeDual, networkaccess.NewAdmissionFinalizer(func(context.Context, pgx.Tx) error { return nil }))
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	require.Equal(t, *created.Name, conv.FromPGTextOrEmpty[string](updated.Name))
+	require.Equal(t, *issuerBefore, updated.UserSessionIssuerID.UUID.String())
+	require.Equal(t, "dual", updated.NetworkAccessMode.String)
+
+	afterCount, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerUpdate)
+	require.NoError(t, err)
+	require.Equal(t, beforeCount+1, afterCount)
+}
+
+func TestUpdateMcpServer_LifecycleRejectsUnproxiedPrivateMode(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	unproxiedID := seedUnproxiedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	created, err := ti.service.CreateMcpServer(withStaffEmail(t, ctx), &gen.CreateMcpServerPayload{
+		Name: "unproxied lifecycle", UnproxiedMcpServerID: &unproxiedID,
+		Visibility: types.McpServerVisibility("private"),
+	})
+	require.NoError(t, err)
+
+	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the network-mode-only write
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	existing, err := mcpserversrepo.New(tx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{
+		ID: uuid.MustParse(created.ID), ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	mode := networkaccess.ModePrivateOnly
+	_, err = mcpservers.UpdateMCPServerLifecycleInTransaction(ctx, tx, audit.NewLogger(), existing, mcpservers.LifecycleUpdateInput{
+		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
+		ActorUserID: authCtx.UserID, ActorEmail: authCtx.Email,
+		ServerID: existing.ID, Visibility: existing.Visibility,
+		NetworkAccessMode:    &mode,
+		UnproxiedMcpServerID: existing.UnproxiedMcpServerID,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
 
 func TestUpdateMcpServer_FullReplace(t *testing.T) {
 	t.Parallel()
@@ -75,6 +149,97 @@ func TestUpdateMcpServer_FullReplace(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, record.BeforeSnapshot)
 	require.NotNil(t, record.AfterSnapshot)
+}
+
+func TestUpdateMcpServer_ReplacesIssuerAndRetainsPreviousIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name: "replace issuer", RemoteMcpServerID: &remoteID,
+		Visibility: types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, created.UserSessionIssuerID)
+	previousIssuerID := uuid.MustParse(*created.UserSessionIssuerID)
+
+	organizationIssuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               pgtype.Text{String: authCtx.ActiveOrganizationID, Valid: true},
+		Slug:                         "shared-workforce",
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: 14 * 24 * 60 * 60 * 1_000_000, Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	organizationIssuerID := organizationIssuer.ID.String()
+
+	updated, err := ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID: created.ID, RemoteMcpServerID: &remoteID,
+		UserSessionIssuerID: &organizationIssuerID,
+		Visibility:          types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, organizationIssuerID, *updated.UserSessionIssuerID)
+
+	_, err = usersessionsrepo.New(ti.conn).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
+		ID:             previousIssuerID,
+		ProjectID:      *authCtx.ProjectID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+}
+
+func TestUpdateMcpServer_RejectsForeignOrganizationUserSessionIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	remoteID := seedRemoteMcpServer(t, ctx, ti.conn, *authCtx.ProjectID).String()
+	created, err := ti.service.CreateMcpServer(ctx, &gen.CreateMcpServerPayload{
+		Name:              "keep current issuer",
+		RemoteMcpServerID: &remoteID,
+		Visibility:        types.McpServerVisibility("disabled"),
+	})
+	require.NoError(t, err)
+
+	foreignOrganizationID := "org-" + uuid.NewString()
+	require.NoError(t, organizationsrepo.New(ti.conn).CreateOrganizationMetadata(ctx, organizationsrepo.CreateOrganizationMetadataParams{
+		ID:   foreignOrganizationID,
+		Name: "Foreign Organization",
+		Slug: "foreign-" + uuid.NewString(),
+	}))
+	foreignIssuer, err := usersessionsrepo.New(ti.conn).CreateOrganizationUserSessionIssuer(ctx, usersessionsrepo.CreateOrganizationUserSessionIssuerParams{
+		OrganizationID:               pgtype.Text{String: foreignOrganizationID, Valid: true},
+		Slug:                         "foreign-workforce",
+		AuthnChallengeMode:           "interactive",
+		SessionDuration:              pgtype.Interval{Microseconds: 14 * 24 * 60 * 60 * 1_000_000, Valid: true},
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	foreignIssuerID := foreignIssuer.ID.String()
+
+	_, err = ti.service.UpdateMcpServer(ctx, &gen.UpdateMcpServerPayload{
+		ID:                    created.ID,
+		RemoteMcpServerID:     &remoteID,
+		UserSessionIssuerID:   &foreignIssuerID,
+		Visibility:            types.McpServerVisibility("disabled"),
+		NetworkAccessMode:     nil,
+		EnvironmentID:         nil,
+		TunneledMcpServerID:   nil,
+		ToolsetID:             nil,
+		UnproxiedMcpServerID:  nil,
+		ToolVariationsGroupID: nil,
+	})
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	stored, err := ti.service.GetMcpServer(ctx, &gen.GetMcpServerPayload{ID: &created.ID})
+	require.NoError(t, err)
+	require.Equal(t, created.UserSessionIssuerID, stored.UserSessionIssuerID)
 }
 
 func TestUpdateMcpServer_NonPublicOmissionFailsClosedAndPublicRecoverySucceeds(t *testing.T) {

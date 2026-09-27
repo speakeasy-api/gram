@@ -27,6 +27,7 @@ import (
 	directoryrepo "github.com/speakeasy-api/gram/server/internal/directory/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -35,7 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -238,7 +238,7 @@ func TestTokenIDJAGExchangeMintsResourceBoundAccessOnlySession(t *testing.T) {
 		Jti:                 validated.JTI(),
 	})
 	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(session.RefreshTokenHash, "id-jag:"))
+	require.True(t, strings.HasPrefix(session.RefreshTokenHash.String, "id-jag:"))
 
 	replay := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion)
 	require.Equal(t, http.StatusBadRequest, replay.Code, replay.Body.String())

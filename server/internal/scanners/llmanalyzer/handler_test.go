@@ -6,11 +6,14 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 
 	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/metering"
+	"github.com/speakeasy-api/gram/server/internal/scanners"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -78,6 +81,7 @@ func newAnalysis(body string) *riskv1.LLMAnalysis {
 		OrganizationSlug:        new("org-slug"),
 		Sources:                 []string{"gitleaks", "presidio"},
 		ContentTruncated:        new(false),
+		Shadow:                  new(false),
 	}.Build()
 }
 
@@ -355,4 +359,49 @@ func TestHandle_SingleToolRequestRendersRequestToolCallID(t *testing.T) {
 	require.Contains(t, userPrompt, "call_read_readme")
 	require.Contains(t, userPrompt, "read_file")
 	require.Contains(t, userPrompt, "README.md")
+}
+
+// TestHandle_ShadowRequestPublishesMarkedFindings pins the consumer half of
+// the shadow engine mode: the model is called and metered exactly as for an
+// enforcing request, and its findings reach the Finding topic carrying the
+// shadow marker so the findings store records them for comparison and hides
+// them from users.
+func TestHandle_ShadowRequestPublishesMarkedFindings(t *testing.T) {
+	t.Parallel()
+
+	pub, findings := capturingFindingsPub(t)
+	meterPub, readings := capturingMeterPub(t)
+	stub := &llmanalyzer.StubCompleter{
+		Response:         llmanalyzer.VerdictJSON(map[string]int{llmanalyzer.KeySecretsLeak: 1}, "Credential in plaintext."),
+		Err:              nil,
+		PromptTokens:     120,
+		CompletionTokens: 40,
+		Model:            "risk-judge-4b",
+		Calls:            nil,
+		ParseFailures:    0,
+	}
+	meterProvider, reader := newEnforceMeterProvider(t)
+	analyzer := llmanalyzer.NewAnalyzer(testenv.NewLogger(t), testenv.NewTracerProvider(t), stub)
+	h := llmanalyzer.NewHandler(testenv.NewLogger(t), meterProvider, analyzer, pub, metering.NewRiskRecorder(meterPub))
+
+	request := newAnalysis("AKIA0000000000000000")
+	request.SetShadow(true)
+	request.SetExecutionPath("llm_shadow_stream")
+	require.NoError(t, h.Handle(t.Context(), request, gcp.MessageMetadata{}))
+
+	require.Len(t, *findings, 1, "shadow findings are published")
+	published := (*findings)[0]
+	require.True(t, published.GetShadow(), "shadow findings carry the marker")
+	require.Equal(t, llmanalyzer.Source, published.GetSource())
+	require.Equal(t, testPolicyID, published.GetRiskPolicyId())
+	require.Len(t, stub.CallsSnapshot(), 1, "the model is consulted")
+	require.Len(t, *readings, 1, "shadow scans are metered like enforcing ones")
+	reading := (*readings)[0]
+	require.Equal(t, string(metering.MeterRiskLLMAnalyzer), reading.GetMeterId())
+	require.Equal(t, "llm_shadow_stream", reading.GetAttributes()[metering.AttributeScanExecutionPath])
+
+	data := collectMetrics(t, reader)
+	require.Equal(t, int64(1), counterValue(t, data, "risk.async_scan.handler_messages",
+		attr.Outcome(scanners.AsyncScanOutcomeShadowPublished), attribute.String("scanner", llmanalyzer.Source)))
+	require.Equal(t, int64(0), counterValue(t, data, "risk.async_scan.handler_messages", attr.Outcome(scanners.AsyncScanOutcomeOK)))
 }

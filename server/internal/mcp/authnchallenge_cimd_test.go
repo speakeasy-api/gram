@@ -182,7 +182,7 @@ func (ds *cimdDocServer) certPool() *x509.CertPool {
 //
 // The seeded issuer is put in "open" admission mode. These tests exercise
 // DOCUMENT validation, and the doc server's URL is (necessarily) not a
-// catalog preset, so the default "presets" mode would deny every one of them
+// catalog preset, so "presets" mode would deny every one of them
 // before a document was ever fetched. Admission itself is covered by
 // authnchallenge_cimd_admission_test.go, which seeds modes explicitly.
 func newTestCIMDService(t *testing.T) (context.Context, *testInstance, *cimdDocServer, toolsets_repo.Toolset) {

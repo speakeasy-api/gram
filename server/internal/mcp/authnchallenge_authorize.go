@@ -20,11 +20,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 // HandleAuthorize implements the OAuth 2.1 authorization endpoint (RFC 6749
@@ -135,20 +135,26 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeUnexpected, err, "check ai tool gateway block").LogError(ctx, logger)
 	}
 
-	// The origin this request was addressed at. It is the mint origin by
-	// definition — the challenge below snapshots it — and it is what the AS
-	// metadata document advertises as the issuer, so both the error redirect
-	// below and every response built later in the flow agree on it.
+	// The origin of the endpoint's resource. It is the mint origin by
+	// definition — the challenge below snapshots it — and the issuer derives
+	// from it, so both the error redirect below and every response built later
+	// in the flow agree on it. On the authentication host it is the platform
+	// origin.
 	baseURL := s.BaseURLForRequest(r)
 
-	// The endpoint's canonical URI at the address this request arrived on. One
-	// value serves three contracts: the RFC 9207 `iss` on every authorization
-	// response, the AS metadata issuer, and the RFC 9728 protected-resource
-	// `resource`. That identity is what lets the RFC 8707 check below compare
-	// against a value the client was already handed.
-	issuer, err := endpoint.RootURL(baseURL)
+	// The RFC 9207 `iss` on every authorization response, equal to the AS
+	// metadata issuer. It names the authentication host when the endpoint's
+	// issuer opts in, and the endpoint's canonical URI otherwise.
+	issuer, err := s.issuerURL(endpoint, baseURL)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "build authorization response issuer").LogError(ctx, logger)
+	}
+	// The RFC 9728 protected-resource `resource`, which always stays on the
+	// MCP host. It is what the RFC 8707 check below compares against: a value
+	// the client was already handed.
+	resource, err := endpoint.RootURL(baseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "build resource identifier").LogError(ctx, logger)
 	}
 
 	// At this point the redirect_uri is trusted (matched against the
@@ -164,7 +170,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// believes it is getting a token for an endpoint this one will never mint
 	// for. Rejecting makes that misconfiguration visible at the point it
 	// happens instead of at first use.
-	if err := oauthwire.ValidateResourceIndicators(req.Resources, issuer); err != nil {
+	if err := oauthwire.ValidateResourceIndicators(req.Resources, resource); err != nil {
 		return redirectAuthorizeOAuthError(ctx, w, r, logger, issuer, req.RedirectURI, req.State, "resource_mismatch", err)
 	}
 
@@ -200,7 +206,9 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeUnauthorized, err, "capture OAuth endpoint authority").LogError(ctx, logger)
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)
-	challengeState := AuthnChallengeState{
+	challengeState := AuthnChallengeState{FederatedBinding: nil, DelegationRetryUsed: false,
+		Browser:                  nil,
+		Federation:               nil,
 		ID:                       challengeID,
 		FlowID:                   flowID,
 		UserSessionIssuerID:      endpoint.UserSessionIssuerID,
@@ -232,6 +240,18 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	logger.InfoContext(ctx, "oauth flow started")
 
 	if forceIDP {
+		federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
+		if err != nil {
+			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+			failureCode, cause := federatedFailure(err)
+			return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
+		}
+		if federatedURL != nil {
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Referrer-Policy", "no-referrer")
+			http.Redirect(w, r, federatedURL.String(), http.StatusFound)
+			return nil
+		}
 		callbackURL, err := endpoint.IDPCallbackURL(s.serverURL.String())
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
@@ -255,7 +275,9 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return nil
 	}
 
-	consentURL, err := endpoint.ConsentURL(baseURL, challengeID)
+	// Consent is an authorization server page, so it is served where the
+	// issuer lives.
+	consentURL, err := endpoint.ConsentURL(s.authorizationServerBaseURL(endpoint, baseURL), challengeID)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)

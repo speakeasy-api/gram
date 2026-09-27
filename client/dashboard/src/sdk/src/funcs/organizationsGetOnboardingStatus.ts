@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getOnboardingStatus organizations
  *
  * @remarks
- * Get the onboarding status for the active organization by checking WorkOS SSO connections and directory sync state.
+ * Get the onboarding status for the active organization by checking WorkOS domain verification, SSO connections, and directory sync state.
  */
 export function organizationsGetOnboardingStatus(
   client: GramCore,

@@ -14,6 +14,9 @@ vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => false }),
 }));
+vi.mock("@/hooks/useReadableAgents", () => ({
+  useReadableAgents: () => ({ data: [], isError: false }),
+}));
 vi.mock("@/components/filters", () => ({
   defineFilters: (filters: unknown) => filters,
   useFilterState: () => ({ values: {} }),

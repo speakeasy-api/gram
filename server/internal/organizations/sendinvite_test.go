@@ -87,6 +87,28 @@ func TestService_SendInvite_RejectsEmailOutsideTrustedDomains(t *testing.T) {
 	require.Empty(t, invites.Invitations)
 }
 
+func TestService_SendInvite_VerifiedSubdomainRequiresExactMatch(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestOrganizationsService(t)
+	ti.orgs.On("GetOrganizationDomainPolicy", mock.Anything, mock.Anything).Return(&thirdpartyworkos.OrganizationDomainPolicy{
+		Domains: []thirdpartyworkos.OrganizationDomain{
+			{Domain: "www.example.com", State: thirdpartyworkos.OrganizationDomainStateVerified},
+		},
+	}, nil).Times(4)
+	for _, email := range []string{"person@example.com", "person@nested.www.example.com", "person@other.com"} {
+		_, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: email})
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
+		require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+	}
+	invites, err := ti.service.ListInvites(ctx, &gen.ListInvitesPayload{})
+	require.NoError(t, err)
+	require.Empty(t, invites.Invitations)
+	invite, err := ti.service.SendInvite(ctx, &gen.SendInvitePayload{Email: "person@www.example.com"})
+	require.NoError(t, err)
+	require.Equal(t, "person@www.example.com", invite.Email)
+}
+
 func TestService_SendInvite_WithRoleID(t *testing.T) {
 	t.Parallel()
 

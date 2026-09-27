@@ -790,6 +790,65 @@ func TestGenerateSinglePluginPackageCodex(t *testing.T) {
 	err = json.Unmarshal(files[".codex-plugin/plugin.json"], &meta)
 	require.NoError(t, err)
 	require.Equal(t, "test", meta.Name, "flat package should use the raw slug, not slug-codex")
+	require.Equal(t, "Tools and skills for Test.", meta.Description)
+	require.NotNil(t, meta.Interface)
+	require.Equal(t, meta.Description, meta.Interface.ShortDescription)
+	require.Equal(t, meta.Description, meta.Interface.LongDescription)
+}
+
+func TestGenerateCodexPluginDescriptions(t *testing.T) {
+	t.Parallel()
+
+	for _, description := range []string{"", " \t\n\u2003", "Review code", strings.Repeat("界", 240), strings.Repeat("界", 241), "First line\nSecond\tline", strings.Repeat("界", 4001)} {
+		plugin := PluginInfo{Name: "Test", Slug: "test", Description: description}
+		files, err := GenerateSinglePluginPackage(plugin, GenerateConfig{}, "codex")
+		require.NoError(t, err)
+
+		var manifest struct {
+			Description string `json:"description"`
+			Interface   struct {
+				ShortDescription string `json:"shortDescription"`
+				LongDescription  string `json:"longDescription"`
+			} `json:"interface"`
+		}
+		require.NoError(t, json.Unmarshal(files[".codex-plugin/plugin.json"], &manifest))
+		want := strings.TrimSpace(description)
+		if want == "" {
+			want = "Tools and skills for Test."
+		}
+		require.Equal(t, want, manifest.Description)
+		require.NotEmpty(t, strings.TrimSpace(manifest.Interface.ShortDescription))
+		require.LessOrEqual(t, len([]rune(manifest.Interface.ShortDescription)), 240)
+		require.NotContains(t, manifest.Interface.ShortDescription, "\n")
+		require.NotContains(t, manifest.Interface.ShortDescription, "\t")
+		require.Equal(t, string([]rune(want)[:min(len([]rune(want)), 4000)]), manifest.Interface.LongDescription)
+		if len([]rune(want)) <= 240 {
+			require.Equal(t, strings.Join(strings.Fields(want), " "), manifest.Interface.ShortDescription)
+		}
+	}
+}
+
+func TestGenerateCodexMarketplaceDescriptions(t *testing.T) {
+	t.Parallel()
+
+	files, err := GeneratePluginPackages([]PluginInfo{{Name: "Test", Slug: "test", Description: " \t\n"}}, GenerateConfig{OrgName: "Example", ServerURL: "https://example.com", HooksAPIKey: "EXAMPLE_HOOKS_KEY"})
+	require.NoError(t, err)
+	count := 0
+	for name, content := range files {
+		if !strings.HasSuffix(name, "/.codex-plugin/plugin.json") {
+			continue
+		}
+		count++
+		var manifest codexPluginMeta
+		require.NoError(t, json.Unmarshal(content, &manifest), name)
+		require.NotEmpty(t, strings.TrimSpace(manifest.Description), name)
+		require.NotNil(t, manifest.Interface, name)
+		require.NotEmpty(t, strings.TrimSpace(manifest.Interface.ShortDescription), name)
+		require.LessOrEqual(t, len([]rune(manifest.Interface.ShortDescription)), 240, name)
+		require.Equal(t, manifest.Description, manifest.Interface.LongDescription, name)
+	}
+	// Native, shared Agent Plugins overlay, and observability manifests.
+	require.GreaterOrEqual(t, count, 3)
 }
 
 func TestGenerateReadmeEscapesMarkdownInTableCells(t *testing.T) {
@@ -2018,11 +2077,45 @@ func TestGenerateOpenCodeObservabilityPluginPackage(t *testing.T) {
 	require.Contains(t, string(shim), "bootstrap.sh")
 	require.Contains(t, string(shim), `"x-gram-agent-provider": "opencode"`)
 	require.Contains(t, string(shim), `"x-gram-agent-turn-id": messageID`)
+	require.Contains(t, string(shim), `export default { id: "speakeasy.observability", setup, server: legacy }`)
+	require.Contains(t, string(shim), `ctx.session.hook("model.request"`)
+	require.Contains(t, string(shim), `ev.headers["x-gram-agent-turn-id"] = messageID`)
+	require.NotRegexp(t, `(?m)^export[ \t]+(const|let|var|function|class|type|interface|enum|\{|\*)`, string(shim), "named exports are invoked as a second V1 plugin")
 
 	_, ok = files["speakeasy.json"]
 	require.True(t, ok, "opencode package must ship speakeasy.json alongside the shim")
 	_, ok = files["hooks/bootstrap.sh"]
 	require.True(t, ok, "opencode package must ship the hooks bootstrapper the shim spawns")
+}
+
+// Pins the V2 {id, setup} export and the V1 server() bridge.
+func TestGenerateOpenCodeFeatureLoaderSupportsV1AndV2(t *testing.T) {
+	t.Parallel()
+	p := PluginInfo{
+		Name:    "Engineering Tools",
+		Slug:    "engineering-tools",
+		Servers: []PluginServerInfo{{DisplayName: "widget", MCPURL: "https://app.getgram.ai/mcp/widget"}},
+		Skills:  []PluginSkillInfo{{Name: "triage", Content: "---\nname: triage\ndescription: Triage\n---\nBody\n"}},
+	}
+	files := map[string][]byte{}
+	require.NoError(t, generateOpenCodePluginInDir(files, "", p, GenerateConfig{OrgName: "Acme"}))
+
+	loader := string(files["plugin/engineering-tools.ts"])
+	require.NotContains(t, loader, "__SLUG__")
+	require.Contains(t, loader, `join(dirname(fileURLToPath(import.meta.url)), "..", "engineering-tools")`)
+	require.Contains(t, loader, "export default {")
+	require.Contains(t, loader, `id: "speakeasy.engineering-tools"`)
+	require.Contains(t, loader, "async setup(ctx: any)")
+	require.Contains(t, loader, "ctx.mcp.transform(")
+	require.Contains(t, loader, "ctx.skill.transform(")
+	require.Contains(t, loader, "async server()")
+	require.Contains(t, loader, "config: async (cfg: any)")
+	require.NotRegexp(t, `(?m)^export[ \t]+(const|let|var|function|class|type|interface|enum|\{|\*)`, loader, "named exports are invoked as a second V1 plugin")
+
+	_, ok := files["engineering-tools/mcp.json"]
+	require.True(t, ok, "the loader reads its servers from the sibling mcp.json")
+	_, ok = files["engineering-tools/skills/triage/SKILL.md"]
+	require.True(t, ok, "the loader registers skills from the sibling skills dir")
 }
 
 // The whole OpenClaw hook registration is the index.js shim and plugin
@@ -3021,6 +3114,23 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 	require.Equal(t, base["plugin-b"], changedFP["plugin-b"], "untouched plugin's fingerprint must be stable")
 }
 
+func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const skill = "skills/configure-private-mcp-access/SKILL.md"
+	content := files["speakeasy/"+skill]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+skill])
+	workflow := string(content)
+	for _, name := range []string{"list_projects", "list_plugins", "get_plugin", "get_mcp_connection_settings", "set_mcp_address", "set_mcp_network_access"} {
+		require.Contains(t, workflow, name)
+	}
+	require.Contains(t, workflow, "explicit confirmation")
+	require.Contains(t, workflow, "An enqueued request is not a published package")
+	require.NotContains(t, workflow, "speakeasy-skill-feedback")
+}
+
 func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	t.Parallel()
 	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
@@ -3069,6 +3179,37 @@ func TestGeneratePlatformMCPPackageEmitsExistingServersWorkflow(t *testing.T) {
 	require.NotContains(t, workflow, "speakeasy-skill-feedback")
 	require.NotContains(t, workflow, "claude mcp add")
 	require.NotContains(t, workflow, "claude mcp remove")
+}
+
+// Diagnostics are opt-in field tooling: the packaged instructions must keep the
+// consent, the user-visible section and the "never blocks the import" boundary.
+func TestGeneratePlatformMCPExistingServersDiagnosticsAreOptIn(t *testing.T) {
+	t.Parallel()
+	files, err := PublicPlatformMCPFiles("https://app.example.com", "17")
+	require.NoError(t, err)
+	const path = "skills/add-existing-mcp-servers/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	workflow := string(content)
+	for _, required := range []string{
+		"record_workflow_run",
+		"The trigger is the literal string `with diagnostics`",
+		"never your own initiative",
+		"ask them to repeat the request with `with diagnostics` in it",
+		"**Run diagnostics** section",
+		"the table and the payload carry the same rows and the same reasons",
+		"Proceed only after they agree",
+		"Never send raw discovery output",
+		"carries scheme, host and path only",
+		"Drop the query string and the fragment before writing it",
+		"Diagnostics never gate the import",
+		"`added_unverified`",
+		"Never report a completed add as `blocked`",
+		"omit it unless it is an `https` URL",
+	} {
+		require.Contains(t, workflow, required)
+	}
 }
 
 // These are packaged-instruction regressions, not simulated agent/tool executions.
@@ -3223,6 +3364,96 @@ func TestGeneratePlatformMCPPackageEmitsReviewedShadowWorkflow(t *testing.T) {
 		"get_shadow_mcp_audience",
 		"inspect_mcp_candidate",
 		"register_remote_mcp",
+	} {
+		require.NotContains(t, workflow, forbidden)
+	}
+}
+
+func TestGeneratePlatformMCPPackageEmitsMigrateWorkflow(t *testing.T) {
+	t.Parallel()
+
+	files, err := PublicPlatformMCPFiles("https://app.getgram.ai", "17")
+	require.NoError(t, err)
+
+	const skillPath = "skills/migrate-mcp-between-projects/SKILL.md"
+	claudeSkill := files["speakeasy/"+skillPath]
+	require.NotEmpty(t, claudeSkill)
+	require.Equal(t, claudeSkill, files["agent-plugins/speakeasy/"+skillPath])
+
+	workflow := string(claudeSkill)
+	cursor := 0
+	for _, tool := range []string{
+		"list_projects",
+		"find_mcp",
+		"get_mcp",
+		"get_mcp_access",
+		"get_mcp_client_admission",
+		"list_plugins",
+		"get_plugin",
+		"inspect_mcp_candidate",
+		"inspect_mcp_candidate",
+		"register_catalog_mcp",
+		"register_remote_mcp",
+		"find_mcp",
+		"get_mcp",
+		"update_mcp_metadata",
+		"get_mcp_readiness",
+		"get_mcp_readiness",
+		"attach_platform_mcp_identity_provider",
+		"attach_platform_mcp_identity_provider",
+		"get_setup_handoff",
+		"get_mcp_readiness",
+		"get_mcp_client_admission",
+		"set_mcp_client_admission",
+		"list_plugins",
+		"get_plugin",
+		"list_plugin_assignments",
+		"set_plugin_assignments",
+		"get_mcp_readiness",
+		"distribute_mcp_to_plugin",
+		"get_plugin",
+		"get_mcp",
+		"get_mcp",
+		"disable_mcp",
+		"get_mcp",
+		"get_mcp",
+		"enable_mcp",
+		"remove_mcp_from_plugin",
+	} {
+		token := "`" + tool + "`"
+		index := strings.Index(workflow[cursor:], token)
+		require.NotEqual(t, -1, index, "%s must appear in the required workflow order", tool)
+		cursor += index + len(token)
+	}
+	for _, guardrail := range []string{
+		"report that project discovery is incomplete and hand off to the AICP dashboard",
+		"Secrets never enter chat.",
+		"never let the source and target be the same project",
+		"Nothing is dropped silently.",
+		"a fresh idempotency key",
+		"`confirmed: true`",
+		"`force: true`",
+		"immediately preceding `expected_version`",
+		"Registration is private and does not distribute the MCP.",
+		"Do not choose for them and do not assume the default plugin.",
+		"never disable the source to make the target succeed",
+		"Do not claim that users have the MCP unless the returned live state supports that conclusion.",
+		"Never delete anything.",
+		"It is not available to managed project assistants",
+		"never disable the source until the target's live state has been verified and the user confirms retirement",
+		"Never retry a mutation automatically",
+		"Use `send_platform_mcp_feedback` only after asking for consent",
+	} {
+		require.Contains(t, workflow, guardrail)
+	}
+	for _, forbidden := range []string{
+		"Gram",
+		"api key",
+		"client_secret",
+		"Authorization:",
+		"hooks",
+		"speakeasy-skill-feedback",
+		"app.getgram.ai",
 	} {
 		require.NotContains(t, workflow, forbidden)
 	}

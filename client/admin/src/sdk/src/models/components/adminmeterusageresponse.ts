@@ -24,11 +24,13 @@ export const Family = {
 } as const;
 export type Family = ClosedEnum<typeof Family>;
 
-export const Unit = {
+export const AdminMeterUsageResponseUnit = {
   Stokens: "stokens",
   Bytes: "bytes",
 } as const;
-export type Unit = ClosedEnum<typeof Unit>;
+export type AdminMeterUsageResponseUnit = ClosedEnum<
+  typeof AdminMeterUsageResponseUnit
+>;
 
 export type AdminMeterUsageResponse = {
   /**
@@ -49,7 +51,7 @@ export type AdminMeterUsageResponse = {
    * Exact integer ordinary usage period total as a decimal string
    */
   total: string;
-  unit: Unit;
+  unit: AdminMeterUsageResponseUnit;
   window: MeterUsageWindow;
 };
 
@@ -59,7 +61,9 @@ export const Family$inboundSchema: z.ZodMiniEnum<typeof Family> = z.enum(
 );
 
 /** @internal */
-export const Unit$inboundSchema: z.ZodMiniEnum<typeof Unit> = z.enum(Unit);
+export const AdminMeterUsageResponseUnit$inboundSchema: z.ZodMiniEnum<
+  typeof AdminMeterUsageResponseUnit
+> = z.enum(AdminMeterUsageResponseUnit);
 
 /** @internal */
 export const AdminMeterUsageResponse$inboundSchema: z.ZodMiniType<
@@ -76,7 +80,7 @@ export const AdminMeterUsageResponse$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     total: z.string(),
-    unit: Unit$inboundSchema,
+    unit: AdminMeterUsageResponseUnit$inboundSchema,
     window: MeterUsageWindow$inboundSchema,
   }),
   z.transform((v) => {

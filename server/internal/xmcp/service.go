@@ -153,6 +153,26 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, http.MethodGet, "/x/mcp/remote_login_callback", oops.ErrHandle(service.logger, service.mcpService.HandleRemoteLoginCallback).ServeHTTP)
 }
 
+// AttachAuthenticationHost mounts the /x/mcp authorization server routes on
+// the authentication host. It is a no-op when the host is disabled. As on
+// [Attach], the login callbacks stay on the platform host.
+func AttachAuthenticationHost(host *mcp.AuthenticationHost, service *Service) {
+	handle := func(method, pattern string, handler func(http.ResponseWriter, *http.Request) error) {
+		host.Handle(method, pattern, oops.ErrHandle(service.logger, handler).ServeHTTP)
+	}
+	handle(http.MethodGet, wellknown.OAuthAuthorizationServerPath+"/x/mcp/{mcpSlug}", service.HandleWellKnownOAuthServerMetadata)
+	handle(http.MethodPost, "/x/mcp/{mcpSlug}/register", service.handleOAuthRegister)
+	handle(http.MethodGet, "/x/mcp/{mcpSlug}/authorize", service.handleOAuthAuthorize)
+	handle(http.MethodGet, "/x/mcp/{mcpSlug}/connect", service.handleOAuthConsent)
+	handle(http.MethodPost, "/x/mcp/{mcpSlug}/connect", service.handleOAuthConsent)
+	handle(http.MethodPost, "/x/mcp/{mcpSlug}/connect/remote-session", service.handleOAuthConsentAction)
+	handle(http.MethodPost, "/x/mcp/{mcpSlug}/connect/mcp", service.handleOAuthConsentMCP)
+	handle(http.MethodDelete, "/x/mcp/{mcpSlug}/connect/mcp", service.handleOAuthConsentMCP)
+	handle(http.MethodGet, "/x/mcp/{mcpSlug}/connect/first-party", service.handleFirstPartyConnect)
+	handle(http.MethodPost, "/x/mcp/{mcpSlug}/token", service.handleOAuthToken)
+	handle(http.MethodPost, "/x/mcp/{mcpSlug}/revoke", service.handleOAuthRevoke)
+}
+
 // handleOAuthRegister adapts the chi /x/mcp/{mcpSlug}/register route to
 // mcp.Service.ServeRegister by resolving the slug to an ResolvedMcpEndpoint.
 func (s *Service) handleOAuthRegister(w http.ResponseWriter, r *http.Request) error {

@@ -25,6 +25,9 @@ const (
 	// coordinator checks for due integrations.
 	aiUsagePollerCoordinatorInterval = 5 * time.Minute
 
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	aiUsagePollerCoordinatorCatchupWindow = aiUsagePollerCoordinatorInterval - time.Second
+
 	// aiUsagePollerCoordinatorRunTimeout is the total budgeted
 	// time for each scheduled coordinator run.
 	aiUsagePollerCoordinatorRunTimeout = 8 * time.Hour
@@ -183,13 +186,7 @@ func AddAIUsagePollerCoordinatorSchedule(ctx context.Context, temporalEnv *tenv.
 			schedule := input.Description.Schedule
 			schedule.Spec = &options.Spec
 			schedule.Action = options.Action
-			if schedule.Policy == nil {
-				schedule.Policy = &client.SchedulePolicies{
-					Overlap:        enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-					CatchupWindow:  0,
-					PauseOnFailure: false,
-				}
-			}
+			setScheduleCatchup(&schedule, aiUsagePollerCoordinatorCatchupWindow)
 			return &client.ScheduleUpdate{Schedule: &schedule, TypedSearchAttributes: nil}, nil
 		},
 	}); err != nil {
@@ -200,8 +197,9 @@ func AddAIUsagePollerCoordinatorSchedule(ctx context.Context, temporalEnv *tenv.
 
 func buildScheduleOptions(temporalEnv *tenv.Environment) client.ScheduleOptions {
 	return client.ScheduleOptions{
-		ID:      aiUsagePollerCoordinatorScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		CatchupWindow: aiUsagePollerCoordinatorCatchupWindow,
+		ID:            aiUsagePollerCoordinatorScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{{Every: aiUsagePollerCoordinatorInterval}},
 		},

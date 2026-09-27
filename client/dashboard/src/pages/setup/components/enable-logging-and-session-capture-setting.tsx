@@ -4,6 +4,7 @@ import { Text } from "@/components/ui/Text";
 import { Stack } from "@/components/ui/Stack";
 import { useOrganization } from "@/contexts/Auth";
 import { useIsCurrentOrganization } from "@/hooks/useIsCurrentOrganization";
+import { invalidateOrganizationSetupTasks } from "@/hooks/useOrganizationSetupTasks";
 import { handleAPIError } from "@/lib/errors";
 import { FeatureName } from "@gram/client/models/components/setproductfeaturerequestbody.js";
 import { useFeaturesSetMutation } from "@gram/client/react-query/featuresSet.js";
@@ -149,6 +150,7 @@ function EnableLoggingAndSessionCaptureSettingInner({
         handleAPIError(error, "Failed to update setting");
       } finally {
         setIsSaving(false);
+        await invalidateOrganizationSetupTasks(queryClient, organizationId);
         if (isCurrentOrganization()) {
           await invalidateAllProductFeatures(queryClient);
         }

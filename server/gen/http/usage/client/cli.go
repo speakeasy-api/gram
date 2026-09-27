@@ -86,6 +86,44 @@ func BuildGetMeterUsagePayload(usageGetMeterUsageFamily string, usageGetMeterUsa
 	return v, nil
 }
 
+// BuildGetSpendBreakdownPayload builds the payload for the usage
+// getSpendBreakdown endpoint from CLI flags.
+func BuildGetSpendBreakdownPayload(usageGetSpendBreakdownFrom string, usageGetSpendBreakdownTo string, usageGetSpendBreakdownSessionToken string) (*usage.GetSpendBreakdownPayload, error) {
+	var err error
+	var from *string
+	{
+		if usageGetSpendBreakdownFrom != "" {
+			from = &usageGetSpendBreakdownFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if usageGetSpendBreakdownTo != "" {
+			to = &usageGetSpendBreakdownTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if usageGetSpendBreakdownSessionToken != "" {
+			sessionToken = &usageGetSpendBreakdownSessionToken
+		}
+	}
+	v := &usage.GetSpendBreakdownPayload{}
+	v.From = from
+	v.To = to
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildGetTokensUnderManagementPayload builds the payload for the usage
 // getTokensUnderManagement endpoint from CLI flags.
 func BuildGetTokensUnderManagementPayload(usageGetTokensUnderManagementSessionToken string) (*usage.GetTokensUnderManagementPayload, error) {

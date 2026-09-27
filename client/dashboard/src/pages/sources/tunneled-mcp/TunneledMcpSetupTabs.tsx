@@ -93,7 +93,7 @@ export function TunneledMcpSetupTabs({
       </div>
 
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="bg-card border-border flex flex-col gap-3 border px-4 py-3 shadow-md lg:sticky lg:top-6 dark:bg-neutral-950">
+        <div className="bg-card border-border flex flex-col gap-3 border px-4 py-3 shadow-md lg:sticky lg:top-[calc(var(--page-sticky-top,0px)+1.5rem)] dark:bg-neutral-950">
           <Text className="font-semibold">Tunnel config</Text>
           <ConfigGroup label="Tunnel endpoint">
             <Tabs value={mode} onValueChange={handleModeChange}>

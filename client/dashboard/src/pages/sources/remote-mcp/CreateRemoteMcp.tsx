@@ -3,20 +3,36 @@ import { useGatewayCreation } from "@/pages/mcp/gateway/useGatewayCreation";
 import { FormPage } from "@/components/page-templates";
 import { Input } from "@/components/ui/Input";
 import { Text } from "@/components/ui/Text";
-import { mcpServerRouteParam, validateMcpServerUrl } from "@/lib/sources";
+import {
+  deriveRemoteSessionIssuerNameFromUrl,
+  mcpServerRouteParam,
+  validateMcpServerUrl,
+} from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import { Stack } from "@/components/ui/Stack";
-import { useIsSpeakeasyStaff } from "@/contexts/Auth";
+import { useIsSpeakeasyStaff, useProject } from "@/contexts/Auth";
+import { useRBAC } from "@/hooks/useRBAC";
 import { AlertCircle, Loader2, Plug } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useCreateRemoteMcpSource } from "./hooks";
 import { useCreateUnproxiedMcpSource } from "../unproxied-mcp/hooks";
 import { useVerifyRemoteMcpUrl } from "./useVerifyRemoteMcpUrl";
 import { VerifyRemoteMcpUrlAlert } from "./VerifyRemoteMcpUrlButton";
+import { UserSessionIssuerSelect } from "@/components/user-session-issuer-select";
+import {
+  PROJECT_SPECIFIC_ISSUER_VALUE,
+  defaultCreationUserSessionIssuerValue,
+} from "@/components/user-session-issuer-select.utils";
+import { useEffectiveUserSessionIssuers } from "@/hooks/useEffectiveUserSessionIssuers";
+import type { RemoteMcpCreationIdentity } from "./configureCreatedIdentity";
+import { MCP_AUTHENTICATION_SECTION_ID } from "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection";
+import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
+import { useAgentCredentialFields } from "@/lib/remote-identity";
 
 // Both backends are, to the administrator, the same thing: a server that lives
 // at a URL somewhere else. The only difference is whether Gram sits in the
@@ -32,18 +48,34 @@ function CreateRemoteMcpForm() {
   const flow = useGatewayCreation();
   const creationLocked = flow.createdServerId !== null || flow.isAttaching;
   const routes = useRoutes();
+  const navigate = useNavigate();
   const isSpeakeasyStaff = useIsSpeakeasyStaff();
+  const project = useProject();
+  const { hasScope, isLoading: rbacLoading } = useRBAC();
+  const canCreateIdentity =
+    !rbacLoading && hasScope("project:write", project.id);
   const createRemote = useCreateRemoteMcpSource();
   const createUnproxied = useCreateUnproxiedMcpSource();
+  const issuerQuery = useEffectiveUserSessionIssuers();
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [mode, setMode] = useState<ProxyMode>("proxied");
+  const [issuerSelection, setIssuerSelection] = useState<string | null>(null);
+  const [identityMode, setIdentityMode] =
+    useState<RemoteMcpCreationIdentity>("none");
+  const [identityChoiceTouched, setIdentityChoiceTouched] = useState(false);
+  const agentCredential = useAgentCredentialFields();
   // Track whether the field has been touched so we don't surface "URL is
   // required" the moment the page renders.
   const [touched, setTouched] = useState(false);
 
   const verify = useVerifyRemoteMcpUrl(url);
+
+  // The identity copy names the service in sentence-initial position, so an
+  // unnamed server falls back to its host rather than to a bare "this server".
+  const upstreamName =
+    name.trim() || deriveRemoteSessionIssuerNameFromUrl(url) || "This server";
 
   const isPending = createRemote.isPending || createUnproxied.isPending;
   // Read from the mutation the current mode would run, so switching Connection
@@ -57,6 +89,26 @@ function CreateRemoteMcpForm() {
   // The verify result is cleared whenever the URL changes (see
   // useVerifyRemoteMcpUrl), so this can only be true for the URL on screen.
   const isVerified = verify.result?.verified === true;
+  const defaultIssuerSelection = defaultCreationUserSessionIssuerValue(
+    issuerQuery.organizationIssuers,
+  );
+  const selectedIssuer = issuerSelection ?? defaultIssuerSelection;
+  const issuerSelectionBlocked =
+    mode === "proxied" &&
+    (issuerQuery.isLoading || issuerQuery.isError || selectedIssuer === "");
+
+  useEffect(() => {
+    if (!verify.result) {
+      setIdentityChoiceTouched(false);
+      setIdentityMode("none");
+      return;
+    }
+    if (!identityChoiceTouched && verify.result.verified) {
+      setIdentityMode(
+        verify.result.outcome === "authentication_required" ? "user" : "none",
+      );
+    }
+  }, [identityChoiceTouched, verify.result]);
 
   const handleVerify = () => {
     setTouched(true);
@@ -76,6 +128,7 @@ function CreateRemoteMcpForm() {
       void verify.trigger();
       return;
     }
+    if (issuerSelectionBlocked) return;
 
     const trimmedName = name.trim();
     try {
@@ -89,18 +142,36 @@ function CreateRemoteMcpForm() {
         return;
       }
 
-      const { authAutoConfig, mcpServer } = await createRemote.mutateAsync({
-        name: trimmedName === "" ? undefined : trimmedName,
-        url: url.trim(),
-      });
-      if (authAutoConfig.status === "configured") {
-        toast.success("MCP server added and authentication configured");
-      } else {
-        toast.success("MCP server added");
-        if (authAutoConfig.warn) {
-          toast.warning(authAutoConfig.message);
-        }
+      const { identityConfiguration, mcpServer } =
+        await createRemote.mutateAsync({
+          name: trimmedName === "" ? undefined : trimmedName,
+          url: url.trim(),
+          userSessionIssuerId:
+            selectedIssuer === PROJECT_SPECIFIC_ISSUER_VALUE
+              ? undefined
+              : selectedIssuer,
+          organizationOwnedUserSessionIssuer:
+            selectedIssuer !== PROJECT_SPECIFIC_ISSUER_VALUE,
+          identityMode,
+          agentAuthorization:
+            identityMode === "agent"
+              ? agentCredential.authorizationValue.trim()
+              : undefined,
+        });
+      if (identityConfiguration.status === "setup-required") {
+        toast.warning(
+          `MCP server added but kept disabled. ${identityConfiguration.message}`,
+        );
+        void navigate(
+          `${routes.mcp.x.settings.href(mcpServerRouteParam(mcpServer))}#${MCP_AUTHENTICATION_SECTION_ID}`,
+        );
+        return;
       }
+      toast.success(
+        identityMode === "none"
+          ? "MCP server added"
+          : "MCP server added and identity configured",
+      );
       if (flow.gatewayId) {
         await flow.complete(mcpServer.id);
       } else {
@@ -225,8 +296,52 @@ function CreateRemoteMcpForm() {
                 )}
               </Stack>
             )}
+
+            {mode === "proxied" ? (
+              <Stack gap={1}>
+                <label className="text-sm leading-none font-medium">
+                  User session issuer
+                </label>
+                <UserSessionIssuerSelect
+                  issuers={issuerQuery.organizationIssuers}
+                  value={selectedIssuer}
+                  onValueChange={setIssuerSelection}
+                  includeProjectSpecific
+                  disabled={issuerQuery.isLoading || issuerQuery.isError}
+                />
+                <Text muted small>
+                  Organization issuers are shared across projects. Creating a
+                  project-specific issuer is available for exceptional setups.
+                </Text>
+                {issuerQuery.isError ? (
+                  <Alert variant="error" dismissible={false}>
+                    Failed to load organization user session issuers.
+                  </Alert>
+                ) : null}
+              </Stack>
+            ) : null}
           </fieldset>
           <GatewayAttachmentStatus flow={flow} />
+          {mode === "proxied" && isVerified ? (
+            <CreationIdentityChoice
+              value={identityMode}
+              onChange={(next) => {
+                setIdentityChoiceTouched(true);
+                setIdentityMode(next);
+              }}
+              credential={agentCredential}
+              upstreamName={upstreamName}
+              advertisesOAuth={
+                verify.result?.outcome === "authentication_required"
+              }
+              authenticationRequired={
+                verify.result?.outcome === "authentication_required"
+              }
+              canCreateIdentity={canCreateIdentity}
+              rbacLoading={rbacLoading}
+            />
+          ) : null}
+
           {isCreateError && createError && (
             <Alert variant="error" dismissible={false}>
               {createError.message}
@@ -242,7 +357,19 @@ function CreateRemoteMcpForm() {
               type="submit"
               variant="primary"
               disabled={
-                creationLocked || !urlUsable || verify.isPending || isPending
+                creationLocked ||
+                !urlUsable ||
+                verify.isPending ||
+                isPending ||
+                (mode === "proxied" &&
+                  isVerified &&
+                  identityMode === "agent" &&
+                  agentCredential.authorizationValue.trim() === "") ||
+                (mode === "proxied" &&
+                  isVerified &&
+                  identityMode === "user" &&
+                  !canCreateIdentity) ||
+                issuerSelectionBlocked
               }
             >
               {verify.isPending || isPending ? (

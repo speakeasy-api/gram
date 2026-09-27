@@ -11,6 +11,7 @@ type Reason string
 const (
 	ReasonAssertionMissing       Reason = "assertion_missing"
 	ReasonMalformed              Reason = "assertion_malformed"
+	ReasonTypeNotBearer          Reason = "assertion_type_not_bearer"
 	ReasonKeyUnknown             Reason = "assertion_key_unknown"
 	ReasonKeyUnresolvable        Reason = "assertion_key_unresolvable"
 	ReasonSignatureInvalid       Reason = "assertion_signature_invalid"

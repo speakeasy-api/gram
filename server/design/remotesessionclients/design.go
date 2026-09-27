@@ -59,6 +59,7 @@ var _ = Service("remoteSessionClients", func() {
 		Scope("producer")
 	})
 	shared.DeclareErrorResponses()
+	identityChainingMethods()
 
 	Method("createRemoteSessionClient", func() {
 		Description("Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.")
@@ -429,6 +430,26 @@ var _ = Service("organizationRemoteSessionClients", func() {
 		Meta("openapi:operationId", "getOrganizationRemoteSessionClient")
 		Meta("openapi:extension:x-speakeasy-name-override", "get")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClient"}`)
+	})
+
+	Method("getClientDelegationStatus", func() {
+		Security(security.Session)
+		Description("Read sanitized delegation observations for the current upstream configuration in the last 30 days. Requires org:admin. Never exercises credentials; presence is not proof of future refresh success.")
+		Payload(func() {
+			Attribute("id", String, "The remote_session_client id.", func() { Format(FormatUUID) })
+			Required("id")
+			security.SessionPayload()
+		})
+		Result(OrganizationClientDelegationStatus)
+		HTTP(func() {
+			GET("/rpc/organizationRemoteSessionClients.getDelegationStatus")
+			Param("id")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "getOrganizationRemoteSessionClientDelegationStatus")
+		Meta("openapi:extension:x-speakeasy-name-override", "getDelegationStatus")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "OrganizationRemoteSessionClientDelegationStatus"}`)
 	})
 
 	Method("getClientDeletePreflight", func() {
@@ -830,6 +851,9 @@ var DetachUserSessionIssuerForm = Type("DetachUserSessionIssuerForm", func() {
 })
 
 var RemoteSessionClient = Type("RemoteSessionClient", func() {
+	Attribute("grant_types", ArrayOf(String), "Recorded effective registration grants. Null means unknown; an empty array means no recorded grants.", func() {
+		Meta("struct:tag:json", "grant_types")
+	})
 	Meta("struct:pkg:path", "types")
 
 	Description("A remote_session_client record. client_secret_encrypted is never returned.")
@@ -880,7 +904,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "client_id_issued_at", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "created_at", "updated_at")
 })
 
 var ListRemoteSessionClientsResult = Type("ListRemoteSessionClientsResult", func() {

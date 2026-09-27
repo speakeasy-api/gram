@@ -8,10 +8,93 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
+
+func TestMCPScopeAppliesToDirectServerAndCurrentGatewayMembership(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.New()
+	gatewayID := uuid.New()
+	otherID := uuid.New()
+	scope := &MCPScope{Servers: []MCPServerScope{
+		{MCPServerID: serverID, Tools: []string{"search"}},
+		{MCPServerID: gatewayID},
+	}}
+
+	require.True(t, (*MCPScope)(nil).Applies(serverID, "anything", nil, nil))
+	require.True(t, scope.Applies(serverID, "search", nil, nil))
+	require.False(t, scope.Applies(serverID, "write", nil, nil))
+	require.True(t, scope.Applies(serverID, "", nil, nil), "omitted tool filters only at server level")
+	require.True(t, scope.Applies(otherID, "anything", nil, []uuid.UUID{gatewayID}))
+	require.False(t, scope.Applies(otherID, "anything", nil, nil))
+}
+
+func TestMCPScopeAppliesToolRuleAndAllServersOverrides(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.New()
+	otherID := uuid.New()
+	scope := &MCPScope{
+		AllServers:      true,
+		ToolAnnotations: []string{"destructiveHint"},
+		Servers: []MCPServerScope{{
+			MCPServerID: serverID,
+			Tools:       []string{"safe_override"},
+		}},
+	}
+	destructive := &types.ToolAnnotations{DestructiveHint: new(true)}
+
+	require.True(t, scope.Applies(otherID, "delete", destructive, nil))
+	require.False(t, scope.Applies(otherID, "delete", nil, nil))
+	require.True(t, scope.Applies(serverID, "safe_override", nil, nil), "custom tools ignore the policy rule")
+	require.False(t, scope.Applies(serverID, "delete", destructive, nil), "custom tools override all-servers rule matching")
+
+	selected := &MCPScope{
+		ToolAnnotations: []string{"readOnlyHint"},
+		Servers:         []MCPServerScope{{MCPServerID: serverID}},
+	}
+	readOnly := &types.ToolAnnotations{ReadOnlyHint: new(true)}
+	require.True(t, selected.Applies(serverID, "list", readOnly, nil))
+	require.False(t, selected.Applies(serverID, "list", nil, nil))
+}
+
+func TestUnmarshalMCPScopeNormalizesEmptyAndFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, unmarshalMCPScope(nil))
+	require.Nil(t, unmarshalMCPScope([]byte(`null`)))
+	require.Nil(t, unmarshalMCPScope([]byte(`{"servers":[]}`)))
+
+	allServers := unmarshalMCPScope([]byte(`{"all_servers":true,"tool_annotations":["destructiveHint"],"servers":[]}`))
+	require.NotNil(t, allServers)
+	require.True(t, allServers.AllServers)
+	require.Equal(t, []string{"destructiveHint"}, allServers.ToolAnnotations)
+
+	for _, raw := range [][]byte{
+		[]byte(`{}`),
+		[]byte(`{"servers":null}`),
+		[]byte(`{"tool_annotations":["unknownHint"],"servers":[]}`),
+		[]byte(`not-json`),
+	} {
+		scope := unmarshalMCPScope(raw)
+		require.NotNil(t, scope)
+		require.Empty(t, scope.Servers)
+	}
+}
+
+func TestUnmarshalMCPScopeFailsClosedOnExplicitEmptyTools(t *testing.T) {
+	t.Parallel()
+
+	scope := unmarshalMCPScope([]byte(`{"all_servers":true,"servers":[{"mcp_server_id":"11111111-1111-4111-8111-111111111111","tools":[]}]}`))
+	require.NotNil(t, scope)
+	require.False(t, scope.AllServers)
+	require.Nil(t, scope.ToolAnnotations)
+	require.Empty(t, scope.Servers)
+}
 
 func TestProjectPreservesPolicyReadSemantics(t *testing.T) {
 	t.Parallel()

@@ -1866,6 +1866,9 @@ var QueryPayload = Type("QueryPayload", func() {
 	})
 	Attribute("filters", ArrayOf(QueryFilter), "Optional filters; all filters are ANDed together.")
 	Attribute("granularity_seconds", Int64, "Optional timeseries bucket size in seconds. Defaults to an interval derived from the time range and is floored to 3600 (the source data is bucketed hourly).")
+	Attribute("include_dimension_values", Boolean, "Whether to include distinct values for other dimensions in each table row. When omitted, defaults to true.", func() {
+		Default(true)
+	})
 	Attribute("top_n", Int, "When group_by is set, keep at most this many groups (ranked by sort_by); the remainder are rolled into an 'Other' group. Defaults to 10.", func() {
 		Default(10)
 		Minimum(1)
@@ -2497,7 +2500,7 @@ var ToolUsageStatus = Type("ToolUsageStatus", String, func() {
 
 var ToolUsageUserKind = Type("ToolUsageUserKind", String, func() {
 	Description("Tool usage user identity kind")
-	Enum("email", "external_user_id", "user_id", "unknown")
+	Enum("email", "external_user_id", "user_id", "agent_id", "unknown")
 })
 
 var ToolUsageUserFilter = Type("ToolUsageUserFilter", func() {

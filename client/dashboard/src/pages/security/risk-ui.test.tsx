@@ -1,7 +1,12 @@
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EventMatchDialog, MaskedMatch, RuleLabel } from "./risk-ui";
+import {
+  CategoryLabel,
+  EventMatchDialog,
+  MaskedMatch,
+  RuleLabel,
+} from "./risk-ui";
 
 const hasScope = vi.fn<(scope: string) => boolean>();
 
@@ -87,6 +92,20 @@ describe("EventMatchDialog", () => {
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.getByRole("img", { name: /chat:read/ })).toBeTruthy();
   });
+
+  it("shows the LLM analyzer's reasoning with no reveal, since it stores no match", () => {
+    hasScope.mockReturnValue(true);
+    const reasoning =
+      "The tool output contains an AWS access key id followed by its secret.";
+    // The analyzer reports no spans, so the server fingerprints the empty
+    // match to the no-match sentinel — same shape as a judge verdict.
+    renderCell(reasoning, "<redacted len=0>");
+
+    expect(screen.getByText(reasoning)).toBeTruthy();
+    expect(screen.queryByText("Click to reveal")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByText("<redacted len=0>")).toBeNull();
+  });
 });
 
 function renderMasked(matchRedacted = "<redacted len=42 sha=deadbeef>") {
@@ -137,5 +156,40 @@ describe("RuleLabel", () => {
   it("renders the rule title for detector sources", () => {
     render(<RuleLabel source="presidio" ruleId="pii.us_ssn" />);
     expect(screen.getByText("US Social Security Number")).toBeTruthy();
+  });
+
+  it.each([
+    ["secret.llm", "Secret"],
+    ["pii.llm", "PII"],
+    ["prompt_injection.llm", "Prompt injection"],
+    ["destructive_tool.llm", "Destructive tool"],
+    ["cli_destructive.llm", "Destructive command"],
+    ["llm_analyzer.dead_letter", "Analysis unavailable"],
+  ])(
+    "renders %s from the LLM analyzer as %s, never the raw id",
+    (ruleId, label) => {
+      render(<RuleLabel source="llm_analyzer" ruleId={ruleId} />);
+      const line = screen.getByText(label);
+      expect(line.getAttribute("title")).toBe(label);
+      expect(document.body.textContent).not.toContain(ruleId);
+    },
+  );
+});
+
+describe("CategoryLabel", () => {
+  it.each([
+    ["secret.llm", "Secrets"],
+    ["pii.llm", "Personal Identifiable Information"],
+    ["prompt_injection.llm", "Prompt Injection"],
+    ["destructive_tool.llm", "Destructive Tools"],
+    ["cli_destructive.llm", "Destructive CLI Commands"],
+  ])("classifies the LLM analyzer's %s under %s", (ruleId, label) => {
+    render(
+      <TooltipProvider>
+        <CategoryLabel source="llm_analyzer" ruleId={ruleId} />
+      </TooltipProvider>,
+    );
+    expect(screen.getByText(label)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/llm/i);
   });
 });

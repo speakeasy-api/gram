@@ -84,6 +84,7 @@ function DetectedClients({
 
 interface ConfirmTrafficSectionProps {
   index: number;
+  onConfirmed?: (confirmed: boolean) => void;
   /** What the admin should do to make an event show up. */
   description: string;
   /**
@@ -110,6 +111,7 @@ export function ConfirmTrafficSection({
   description,
   callout,
   matchesSource,
+  onConfirmed,
 }: ConfirmTrafficSectionProps): JSX.Element {
   // Only count events that arrive after the admin opened this card.
   const sessionStartNanoRef = useRef<string>(
@@ -138,6 +140,10 @@ export function ConfirmTrafficSection({
   }, [data, matchesSource]);
 
   const { events, hasEvents } = useTrafficArrivals(incoming);
+
+  useEffect(() => {
+    onConfirmed?.(hasEvents);
+  }, [hasEvents, onConfirmed]);
 
   // Advance the cursor past everything the poll returned, matching or not, so
   // filtered-out events aren't refetched on every tick. Declared after the

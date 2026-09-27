@@ -49,6 +49,7 @@ export const ToolUsageUsersByTargetRowUserKind = {
   Email: "email",
   ExternalUserId: "external_user_id",
   UserId: "user_id",
+  AgentId: "agent_id",
   Unknown: "unknown",
 } as const;
 /**

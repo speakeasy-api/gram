@@ -554,7 +554,10 @@ export class Gram<
       validatedInput = request.input as Record<string, unknown>;
     } else {
       ctx.fail(
-        { error: vres.error.message, issues: vres.error.issues },
+        {
+          error: summarizeIssues(vres.error.issues),
+          issues: vres.error.issues,
+        },
         { status: 400 },
       );
     }
@@ -660,6 +663,57 @@ export class Gram<
       ...(resources.length > 0 ? { resources } : {}),
     };
   }
+}
+
+const LINE_BREAKS = /[\r\n]+/g;
+const BARE_IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+
+/**
+ * Renders validation issues as one line, each issue prefixed by the input path
+ * it concerns, e.g. `org_id: Invalid input: expected string, received
+ * undefined`.
+ *
+ * The failure body carries the structured `issues` array as well, so the
+ * message only has to be readable. `ZodError.message` is that same array
+ * re-serialized as pretty-printed JSON, which reports the failure twice and
+ * spends an MCP client's context on the unreadable copy.
+ */
+function summarizeIssues(issues: readonly z.core.$ZodIssue[]): string {
+  const lines = issues.map((issue) => {
+    const path = formatIssuePath(issue.path ?? []);
+    const line = path === "" ? issue.message : `${path}: ${issue.message}`;
+
+    // A schema is free to carry a multi-line custom message. Flatten it so one
+    // issue stays one line; `issues` still carries the message verbatim.
+    return line.replace(LINE_BREAKS, " ").trim();
+  });
+
+  return lines.join("; ") || "invalid input";
+}
+
+/**
+ * Renders an issue path — object keys and array indices — the way it would be
+ * written in JavaScript, e.g. `filters[0].name`.
+ */
+function formatIssuePath(path: readonly PropertyKey[]): string {
+  let out = "";
+  for (const segment of path) {
+    if (typeof segment === "number") {
+      out += `[${segment}]`;
+      continue;
+    }
+
+    // A key that is not a bare identifier — `a.b`, `0`, the empty string —
+    // would be ambiguous or invisible joined with a dot.
+    const key = String(segment);
+    if (BARE_IDENTIFIER.test(key)) {
+      out += out === "" ? key : `.${key}`;
+    } else {
+      out += `[${JSON.stringify(key)}]`;
+    }
+  }
+
+  return out;
 }
 
 /**

@@ -48,6 +48,25 @@ func (q *Queries) DisableUser(ctx context.Context, arg DisableUserParams) ([]str
 	return items, nil
 }
 
+const duplicateOrganizationUserEmailFixture = `-- name: DuplicateOrganizationUserEmailFixture :exec
+INSERT INTO users (id, email, display_name)
+SELECT $1, upper(u.email), 'Ambiguous test human'
+FROM users u JOIN organization_user_relationships m ON m.user_id = u.id
+WHERE u.id = $2 AND m.organization_id = $3
+`
+
+type DuplicateOrganizationUserEmailFixtureParams struct {
+	DuplicateUserID string
+	UserID          string
+	OrganizationID  string
+}
+
+// Test fixture: distinct raw emails that collide under case-insensitive lookup.
+func (q *Queries) DuplicateOrganizationUserEmailFixture(ctx context.Context, arg DuplicateOrganizationUserEmailFixtureParams) error {
+	_, err := q.db.Exec(ctx, duplicateOrganizationUserEmailFixture, arg.DuplicateUserID, arg.UserID, arg.OrganizationID)
+	return err
+}
+
 const getConnectedUserByEmail = `-- name: GetConnectedUserByEmail :one
 SELECT u.id, u.email, u.display_name, u.photo_url, u.admin, u.last_login, u.workos_id, u.workos_created_at, u.workos_updated_at, u.workos_deleted_at, u.deleted_at, u.created_at, u.updated_at FROM users u
 JOIN organization_user_relationships our ON our.user_id = u.id
@@ -478,6 +497,25 @@ func (q *Queries) OverwriteUserWorkosID(ctx context.Context, arg OverwriteUserWo
 	return err
 }
 
+const setOrganizationUserEmailFixture = `-- name: SetOrganizationUserEmailFixture :exec
+UPDATE users SET email = $1
+WHERE users.id = $2 AND EXISTS (
+    SELECT 1 FROM organization_user_relationships m
+    WHERE m.user_id = users.id AND m.organization_id = $3
+)
+`
+
+type SetOrganizationUserEmailFixtureParams struct {
+	Email          string
+	UserID         string
+	OrganizationID string
+}
+
+func (q *Queries) SetOrganizationUserEmailFixture(ctx context.Context, arg SetOrganizationUserEmailFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOrganizationUserEmailFixture, arg.Email, arg.UserID, arg.OrganizationID)
+	return err
+}
+
 const setUserWorkosID = `-- name: SetUserWorkosID :exec
 UPDATE users
 SET workos_id = $1,
@@ -493,6 +531,48 @@ type SetUserWorkosIDParams struct {
 
 func (q *Queries) SetUserWorkosID(ctx context.Context, arg SetUserWorkosIDParams) error {
 	_, err := q.db.Exec(ctx, setUserWorkosID, arg.WorkosID, arg.ID)
+	return err
+}
+
+const snapshotOrganizationUsersFixture = `-- name: SnapshotOrganizationUsersFixture :one
+SELECT coalesce(string_agg(u.id || ':' || u.xmin::text, ',' ORDER BY u.id), '')::text AS snapshot
+FROM users u
+WHERE u.id = $1 OR EXISTS (
+    SELECT 1 FROM organization_user_relationships m
+    WHERE m.user_id = u.id AND m.organization_id = ANY($2::text[])
+)
+`
+
+type SnapshotOrganizationUsersFixtureParams struct {
+	UserID          string
+	OrganizationIds []string
+}
+
+// Include the fixture's original user even after its membership is removed.
+// xmin detects writes that leave the visible user values unchanged.
+func (q *Queries) SnapshotOrganizationUsersFixture(ctx context.Context, arg SnapshotOrganizationUsersFixtureParams) (string, error) {
+	row := q.db.QueryRow(ctx, snapshotOrganizationUsersFixture, arg.UserID, arg.OrganizationIds)
+	var snapshot string
+	err := row.Scan(&snapshot)
+	return snapshot, err
+}
+
+const softDeleteOrganizationUserFixture = `-- name: SoftDeleteOrganizationUserFixture :exec
+UPDATE users SET deleted_at = clock_timestamp()
+WHERE users.id = $1 AND EXISTS (
+    SELECT 1 FROM organization_user_relationships m
+    WHERE m.user_id = users.id AND m.organization_id = $2
+)
+`
+
+type SoftDeleteOrganizationUserFixtureParams struct {
+	UserID         string
+	OrganizationID string
+}
+
+// Test fixture: hide a known tenant member from provisioned-human resolution.
+func (q *Queries) SoftDeleteOrganizationUserFixture(ctx context.Context, arg SoftDeleteOrganizationUserFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteOrganizationUserFixture, arg.UserID, arg.OrganizationID)
 	return err
 }
 

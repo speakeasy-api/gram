@@ -17,7 +17,11 @@ import (
 )
 
 const (
-	indexToolsetSweepInterval     = 5 * time.Minute
+	indexToolsetSweepInterval = 5 * time.Minute
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	indexToolsetSweepCatchupWindow = indexToolsetSweepInterval - time.Second
+
 	indexToolsetSweepProjectLimit = 100
 	indexToolsetSweepScanLimit    = 100
 	indexToolsetSweepStartLimit   = 10
@@ -139,8 +143,9 @@ func indexToolsetSweepScheduleID(queue string) string {
 func indexToolsetSweepScheduleOptions(queue string) client.ScheduleOptions {
 	scheduleID := indexToolsetSweepScheduleID(queue)
 	return client.ScheduleOptions{
-		ID:      scheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		CatchupWindow: indexToolsetSweepCatchupWindow,
+		ID:            scheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{{Every: indexToolsetSweepInterval}},
 		},
@@ -167,6 +172,7 @@ func AddIndexToolsetSweepSchedule(ctx context.Context, temporalEnv *tenv.Environ
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &options.Spec
 				input.Description.Schedule.Action = options.Action
+				setScheduleCatchup(&input.Description.Schedule, indexToolsetSweepCatchupWindow)
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,

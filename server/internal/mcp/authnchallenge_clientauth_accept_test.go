@@ -15,10 +15,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -362,14 +363,22 @@ func loadAuthorizationServerGrantMetadata(t *testing.T, ctx context.Context, ti 
 	return meta
 }
 
+// A self-registering client may claim jwt-bearer, yet an endpoint without
+// ID-JAG must not advertise it: the advertised list is built per endpoint, not
+// from the registration list.
 func TestHandleGetAuthorizationServer_OmitsIDJAGWithoutTrustedIssuer(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	require.Contains(t, usersessions.RegistrableGrantTypes, oauthwire.GrantTypeJWTBearer)
 
 	meta := loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String)
-	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken}, meta.GrantTypes)
+	// jwt-bearer is advertised because this deployment serves the clientless
+	// workload grant, which is a different use of the same grant type. The
+	// ID-JAG profile is what says the endpoint accepts an authenticated
+	// identity assertion, and it stays absent.
+	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
 	require.Empty(t, meta.GrantProfiles)
 }
 

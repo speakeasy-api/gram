@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Text } from "@/components/ui/Text";
 import { type RowSelection } from "@/hooks/useRowSelection";
+import { pluralize } from "@/lib/format";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
 import { Sparkline } from "@/pages/costs/Sparkline";
@@ -53,11 +54,6 @@ export function SignalTrend({
       {Math.round(trend)}%
     </span>
   );
-}
-
-/** "1 user", "4 teams" — the reference row uses proper singulars. */
-function pluralize(count: number, unit: string): string {
-  return `${count} ${unit}${count === 1 ? "" : "s"}`;
 }
 
 function groupLabel(group: SignalGroup, mode: SignalGroupMode): string {

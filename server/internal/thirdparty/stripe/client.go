@@ -59,6 +59,12 @@ type Catalog struct {
 	// PriceIDTUM identifies the Stripe price included in PAYG subscriptions.
 	PriceIDTUM string
 
+	// PriceIDMCPEgress identifies the metered MCP egress price in PAYG subscriptions.
+	PriceIDMCPEgress string
+
+	// PriceIDRiskScans identifies the metered risk scans price in PAYG subscriptions.
+	PriceIDRiskScans string
+
 	// PortalConfigurationID identifies the controlled Stripe customer portal configuration.
 	PortalConfigurationID string
 }
@@ -67,6 +73,12 @@ type Catalog struct {
 func (c Catalog) Validate() error {
 	if !IsConfigured(c.PriceIDTUM) {
 		return errors.New("missing TUM price id in catalog")
+	}
+	if !IsConfigured(c.PriceIDMCPEgress) {
+		return errors.New("missing MCP egress price id in catalog")
+	}
+	if !IsConfigured(c.PriceIDRiskScans) {
+		return errors.New("missing risk scans price id in catalog")
 	}
 	if !IsConfigured(c.PortalConfigurationID) {
 		return errors.New("missing portal configuration id in catalog")
@@ -645,6 +657,14 @@ func (c *client) CreateCheckoutSession(ctx context.Context, input CreateCheckout
 			Price:    stripesdk.String(c.catalog.PriceIDTUM),
 			Quantity: nil,
 		},
+		{
+			Price:    stripesdk.String(c.catalog.PriceIDMCPEgress),
+			Quantity: nil,
+		},
+		{
+			Price:    stripesdk.String(c.catalog.PriceIDRiskScans),
+			Quantity: nil,
+		},
 	}
 	identity := organizationIdentity{
 		id:   input.OrganizationID,
@@ -1159,6 +1179,8 @@ func (s *stubClient) VerifyWebhook(_ []byte, _ string) (*WebhookEvent, error) {
 func (s *stubClient) Catalog() Catalog {
 	return Catalog{
 		PriceIDTUM:            "",
+		PriceIDMCPEgress:      "",
+		PriceIDRiskScans:      "",
 		PortalConfigurationID: "",
 	}
 }

@@ -12,6 +12,10 @@ import {
 } from "./agentmarketplace.js";
 import { AgentPlugin, AgentPlugin$inboundSchema } from "./agentplugin.js";
 import {
+  AgentPollingPrincipal,
+  AgentPollingPrincipal$inboundSchema,
+} from "./agentpollingprincipal.js";
+import {
   DeviceAgentConfiguration,
   DeviceAgentConfiguration$inboundSchema,
 } from "./deviceagentconfiguration.js";
@@ -33,6 +37,7 @@ export type GetPluginsResult = {
    * Plugins the agent should enable. Each entry references one of the marketplaces above by name.
    */
   plugins: Array<AgentPlugin>;
+  principal?: AgentPollingPrincipal | undefined;
 };
 
 /** @internal */
@@ -44,6 +49,7 @@ export const GetPluginsResult$inboundSchema: z.ZodMiniType<
   etag: z.string(),
   marketplaces: z.array(AgentMarketplace$inboundSchema),
   plugins: z.array(AgentPlugin$inboundSchema),
+  principal: z.optional(AgentPollingPrincipal$inboundSchema),
 });
 
 export function getPluginsResultFromJSON(

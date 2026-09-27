@@ -21,7 +21,7 @@ type UserSession struct {
 	DelegatedGrants        []byte
 	DelegatedGrantsVersion pgtype.Int4
 	Jti                    string
-	RefreshTokenHash       string
+	RefreshTokenHash       pgtype.Text
 	RefreshExpiresAt       pgtype.Timestamptz
 	ExpiresAt              pgtype.Timestamptz
 	ToolSelection          []byte
@@ -82,6 +82,7 @@ type UserSessionIssuer struct {
 	ClientIDMetadataAdmissionMode pgtype.Text
 	TrustedRemoteSessionIssuerID  uuid.NullUUID
 	TrustedRemoteSessionClientID  uuid.NullUUID
+	UseAuthenticationHost         bool
 	CreatedAt                     pgtype.Timestamptz
 	UpdatedAt                     pgtype.Timestamptz
 	DeletedAt                     pgtype.Timestamptz

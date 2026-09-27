@@ -57,7 +57,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
 	piopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptinjection/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
+	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	"github.com/speakeasy-api/gram/server/internal/spendrules"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -176,6 +178,8 @@ func newWorkerCommand() *cli.Command {
 			Required: true,
 			EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
 		},
+		&cli.StringFlag{Name: "slack-client-id", EnvVars: []string{"SLACK_CLIENT_ID"}, Usage: "OAuth client ID for the Slack directory app, used to refresh workspace tokens"},
+		&cli.StringFlag{Name: "slack-client-secret", EnvVars: []string{"SLACK_CLIENT_SECRET"}, Usage: "OAuth client secret for the Slack directory app, used to refresh workspace tokens"},
 		&cli.StringFlag{
 			Name:    "openrouter-dev-key",
 			Usage:   "Dev API key for OpenRouter (primarily for local development) - https://openrouter.ai/settings/keys",
@@ -337,9 +341,11 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, customDomainFlags()...)
 	flags = append(flags, redisFlags()...)
 	flags = append(flags, clickHouseFlags()...)
+	flags = append(flags, clickHouseReadFlags()...)
 	flags = append(flags, functionsFlags()...)
 	flags = append(flags, pulseMCPFlags()...)
 	flags = append(flags, assistantRuntimeFlags()...)
+	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, pluginsFlags()...)
 	flags = append(flags, posthogFlags()...)
 	flags = append(flags, riskReconcileFlags()...)
@@ -471,7 +477,8 @@ func newWorkerCommand() *cli.Command {
 			var pluginPublisher *plugins.Service
 			if pluginsGitHub != nil {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: enabled")
-				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags)
+				pluginPublisher = plugins.NewPublisher(logger, db, auditLogger, pluginsGitHub, c.String("environment"), c.String("server-url"), featureFlags).
+					WithDistributionAdmission(admission.NewGuard(featureFlags, admission.NewReportMetrics(meterProvider, logger)))
 			} else {
 				logger.InfoContext(ctx, "GitHub publishing for plugins: disabled")
 			}
@@ -537,7 +544,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create Stripe client: %w", err)
 			}
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, c)
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, guardianPolicy, redisClient, posthogClient, stripeClient, db, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -578,6 +585,12 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
+
+			meterReadConn, meterReadShutdown, err := newClickhouseReadClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to connect to clickhouse read replica: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, meterReadShutdown)
 
 			riskFingerprinter, err := parseOptionalPepperKeyRing(ctx, logger, c.String("risk-fingerprint-pepper-keyring"))
 			if err != nil {
@@ -805,6 +818,12 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("build kms signing client factory: %w", err)
 			}
 			clientAssertionSigner := remotesessions.NewKMSClientAssertionSigner(logger, db, gcpIdentity, kmsSigningClients)
+			clientAssertionSigner.PinManagedSigner(c.String(identityProviderSigningServiceAccount))
+
+			var slackDirectoryRefresher slackdirectoryconnections.TokenRefresher
+			if id, secret := c.String("slack-client-id"), c.String("slack-client-secret"); id != "" && id != "unset" && secret != "" && secret != "unset" {
+				slackDirectoryRefresher = slackdirectoryconnections.NewOAuthProvider(slackapi.NewClient("", guardianPolicy.PooledClient()), id, secret, "")
+			}
 
 			temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				GuardianPolicy:               guardianPolicy,
@@ -814,6 +833,7 @@ func newWorkerCommand() *cli.Command {
 				FeatureProvider:              featureFlags,
 				AssetStorage:                 assetStorage,
 				SlackClient:                  slackClient,
+				SlackDirectoryTokenRefresher: slackDirectoryRefresher,
 				ChatMessageWriter:            chatWriter,
 				ChatClient:                   chatClient,
 				OpenRouter:                   openRouter,
@@ -835,6 +855,7 @@ func newWorkerCommand() *cli.Command {
 				MCPRegistryClient:            mcpRegistryClient,
 				TelemetryLogger:              telemetryLogger,
 				ClickhouseConn:               chDB,
+				MeterReadConn:                meterReadConn,
 				TelemetryRepo:                telemetryrepo.New(chDB),
 				TriggersApp:                  triggerApp,
 				CacheAdapter:                 remoteSessionsCache,
@@ -853,6 +874,7 @@ func newWorkerCommand() *cli.Command {
 				PluginPublisher:              pluginPublisher,
 				Publishers:                   publishers,
 				TrialEmailsService:           trialEmailsService,
+				TrialFixtureHandler:          newTrialFixtureHandler(c.String("environment"), db, productFeatures),
 				RiskFingerprinter:            riskFingerprinter,
 				DisableRiskRetroReconcile:    c.Bool("disable-clickhouse-risk-retro-reconcile"),
 				LLMAnalyzerEnabled:           llmAnalyzerConfigFromCLI(c).Enabled(),

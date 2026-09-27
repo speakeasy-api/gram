@@ -27,6 +27,9 @@ const (
 	identityMapSyncScheduleID = "v1:identity-map-sync-schedule"
 	identityMapSyncWorkflowID = identityMapSyncScheduleID + "/scheduled"
 	identityMapSyncInterval   = 15 * time.Minute
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	identityMapSyncCatchupWindow = identityMapSyncInterval - time.Second
 )
 
 func SyncIdentityMapWorkflow(ctx workflow.Context) error {
@@ -68,10 +71,11 @@ func AddIdentityMapSyncSchedule(ctx context.Context, temporalEnv *tenv.Environme
 	}
 
 	_, err := sc.Create(ctx, client.ScheduleOptions{
-		ID:      identityMapSyncScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec:    spec,
-		Action:  action,
+		CatchupWindow: identityMapSyncCatchupWindow,
+		ID:            identityMapSyncScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Spec:          spec,
+		Action:        action,
 	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
@@ -81,6 +85,7 @@ func AddIdentityMapSyncSchedule(ctx context.Context, temporalEnv *tenv.Environme
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, identityMapSyncCatchupWindow)
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,

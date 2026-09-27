@@ -59,8 +59,10 @@ export function CimdAdmissionModeField({
   userSessionIssuer,
   onDraftModeChange,
   children,
+  readOnly = false,
 }: {
   userSessionIssuer: UserSessionIssuer;
+  readOnly?: boolean;
   /**
    * Publishes each unsaved selection so a sibling field can render against
    * it. The custom-URL list belongs to the modes that consult it, and an
@@ -174,6 +176,7 @@ export function CimdAdmissionModeField({
           onDraftModeChange?.(next as WritableMode);
         }}
         className="flex flex-wrap items-center gap-x-6 gap-y-2"
+        disabled={readOnly}
       >
         {MODE_OPTIONS.map((option) => (
           <div key={option.value} className="flex items-center gap-2">
@@ -200,7 +203,7 @@ export function CimdAdmissionModeField({
       {/* A link on the explanation line, not a button stacked above Save:
           two buttons in one row read as a choice between them, when only
           one of them writes the setting. */}
-      {admitsCustomUrls && (
+      {admitsCustomUrls && !readOnly && (
         <AllowedClientsDialog
           trigger={
             <button
@@ -217,7 +220,7 @@ export function CimdAdmissionModeField({
 
       {update.isError && <FieldError>{update.error.message}</FieldError>}
 
-      <RowSave visible={dirty}>
+      <RowSave visible={dirty && !readOnly}>
         {/* Render-function form: RequireScope's loading branch applies only
             pointer-events-none, so a keyboard user could still fire the
             mutation while grants are in flight. */}

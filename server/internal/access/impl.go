@@ -304,6 +304,8 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeSkillBlockedRead, description: "Store exceptions for skill read access.", resourceType: "skill"},
 		{scope: authz.ScopeSkillWrite, description: "Create and modify skills within the project.", resourceType: "skill"},
 		{scope: authz.ScopeSkillBlockedWrite, description: "Store exceptions for skill write access.", resourceType: "skill"},
+		{scope: authz.ScopePluginWrite, description: "Manage plugin contents and publish plugins within the project, without editing referenced skills or MCP servers.", resourceType: "project"},
+		{scope: authz.ScopePluginBlockedWrite, description: "Store exceptions for plugin write access.", resourceType: "project"},
 		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
@@ -313,6 +315,10 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
 		{scope: authz.ScopeAgentTransfer, description: "Transfer agent ownership.", resourceType: "agent"},
+		{scope: authz.ScopeWorkloadRead, description: "View workload identity trust policy: issuers, admitted subjects, and assigned agents.", resourceType: "workload"},
+		{scope: authz.ScopeWorkloadWrite, description: "Register workload issuers, admit and withdraw subjects, and assign agents to workloads.", resourceType: "workload"},
+		{scope: authz.ScopeOrgDeviceAgentSync, description: "Let an agent's device agent sync the plugins assigned to it.", resourceType: "org"},
+		{scope: authz.ScopeOrgHooksIngest, description: "Let an agent send AI-tool hook events and telemetry.", resourceType: "org"},
 	}
 	result := make([]*gen.ScopeDefinition, 0, len(scopes))
 	for _, scope := range scopes {
@@ -680,6 +686,7 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeEnvironmentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeSkillRead), Selectors: nil},
 		{Scope: string(authz.ScopeSkillWrite), Selectors: nil},
+		{Scope: string(authz.ScopePluginWrite), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
@@ -689,6 +696,10 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeAgentWrite), Selectors: nil},
 		{Scope: string(authz.ScopeAgentAuthorize), Selectors: nil},
 		{Scope: string(authz.ScopeAgentTransfer), Selectors: nil},
+		{Scope: string(authz.ScopeWorkloadRead), Selectors: nil},
+		{Scope: string(authz.ScopeWorkloadWrite), Selectors: nil},
+		{Scope: string(authz.ScopeOrgDeviceAgentSync), Selectors: nil},
+		{Scope: string(authz.ScopeOrgHooksIngest), Selectors: nil},
 	}
 }
 

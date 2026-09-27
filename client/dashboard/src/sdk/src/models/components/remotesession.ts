@@ -26,6 +26,10 @@ export type RemoteSession = {
    */
   id: string;
   /**
+   * The upstream identity interface that supplied the stored account identity, such as an ID token or userinfo response. Absent when upstream identity is unknown.
+   */
+  identitySource?: string | undefined;
+  /**
    * Upstream refresh-token expiry. Null when the session has no refresh token.
    */
   refreshExpiresAt?: Date | undefined;
@@ -51,6 +55,14 @@ export type RemoteSession = {
   subjectUrn: string;
   updatedAt: Date;
   /**
+   * Stored display name of the account at the upstream provider. Absent when no upstream identity interface supplied it.
+   */
+  upstreamDisplayName?: string | undefined;
+  /**
+   * Stored email of the account at the upstream provider. Absent when no upstream identity interface supplied it; never inferred from the Gram subject.
+   */
+  upstreamEmail?: string | undefined;
+  /**
    * The user_session_issuer this session is bound to.
    */
   userSessionIssuerId: string;
@@ -72,6 +84,7 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
     ),
     has_refresh_token: z.boolean(),
     id: z.string(),
+    identity_source: z.optional(z.string()),
     refresh_expires_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
@@ -84,6 +97,8 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
+    upstream_display_name: z.optional(z.string()),
+    upstream_email: z.optional(z.string()),
     user_session_issuer_id: z.string(),
   }),
   z.transform((v) => {
@@ -91,12 +106,15 @@ export const RemoteSession$inboundSchema: z.ZodMiniType<
       "access_expires_at": "accessExpiresAt",
       "created_at": "createdAt",
       "has_refresh_token": "hasRefreshToken",
+      "identity_source": "identitySource",
       "refresh_expires_at": "refreshExpiresAt",
       "remote_session_client_id": "remoteSessionClientId",
       "subject_display_name": "subjectDisplayName",
       "subject_email": "subjectEmail",
       "subject_urn": "subjectUrn",
       "updated_at": "updatedAt",
+      "upstream_display_name": "upstreamDisplayName",
+      "upstream_email": "upstreamEmail",
       "user_session_issuer_id": "userSessionIssuerId",
     });
   }),

@@ -14,13 +14,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	srv "github.com/speakeasy-api/gram/server/gen/http/agent/server"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
@@ -29,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deviceidentity"
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -113,7 +117,26 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
+	ctx, err := s.auth.Authorize(ctx, key, schema)
+	if err != nil {
+		return ctx, err
+	}
+	if mode, ok := contextvalues.APIKeyAuthorization(ctx); !ok || mode != contextvalues.APIKeyAuthorizationModePrincipal {
+		return ctx, nil
+	}
+
+	// Agent-principal keys may only poll plugins, and only with an explicit grant.
+	if method, _ := ctx.Value(goa.MethodKey).(string); method != "getPlugins" {
+		return ctx, oops.C(oops.CodeForbidden)
+	}
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgDeviceAgentSync, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		return ctx, fmt.Errorf("authorize agent device sync: %w", err)
+	}
+	return ctx, nil
 }
 
 // GetPlugins returns every plugin assigned to the device user's resolved
@@ -142,98 +165,16 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // bound to the authenticated principal): any holder of the shared org key can
 // claim another member's email. That is the accepted shared-org-key limitation,
 // and it closes for each device as it migrates to a per-user key.
-// placeholderSerials are SMBIOS/DMI defaults that white-box hardware reports
-// verbatim instead of a real serial. Every MDM passes them straight through,
-// so an organization can hold many DIFFERENT machines carrying the identical
-// "serial" in inventory. Storing a heartbeat under one would let a single
-// agent install attest every one of those machines as device-verified — the
-// strongest claim this product makes, asserted for machines that never ran
-// the agent. Rejecting them costs those devices nothing: they fall back to
-// the assigned-user email match, exactly like an agent that reports no serial
-// at all.
-var placeholderSerials = map[string]bool{
-	"to be filled by o.e.m.": true,
-	"to be filled by oem":    true,
-	"default string":         true,
-	"system serial number":   true,
-	"not specified":          true,
-	"not applicable":         true,
-	"unknown":                true,
-	"none":                   true,
-	"n/a":                    true,
-	"invalid":                true,
-	"0":                      true,
-	"123456789":              true,
-	"0123456789":             true,
-	"serial number":          true,
-	"oem":                    true,
-	"o.e.m.":                 true,
-}
-
-// normalizeSerial canonicalizes an agent-reported hardware serial for storage,
-// returning "" when the value cannot serve as a device identity.
-//
-// Lowercasing mirrors conv.NormalizeEmail on the sibling user path: this
-// table's dedup key and every coverage reader compare LOWER(serial_number),
-// so the stored value must already be in that form or a machine could hold
-// two rows and fan out its coverage.
-func normalizeSerial(reported *string) string {
-	serial := strings.ToLower(strings.TrimSpace(conv.PtrValOr(reported, "")))
-	if placeholderSerials[serial] {
-		return ""
-	}
-	return serial
-}
-
-// Environment kinds an agent may declare.
-//
-// "endpoint" — an end-user device of any form factor, named so it does not
-// expire the way "laptop" would on a desktop or a phone — is the default, and
-// is the one kind never written to device_agent_environment_syncs: those
-// heartbeats go to device_agent_syncs, whose email match device coverage reads.
-// It is still a real value rather than an absence, so normalizeEnvironment
-// returns it and the call sites compare against it by name.
-const (
-	environmentEndpoint  = "endpoint"
-	environmentEphemeral = "ephemeral"
-	environmentServer    = "server"
-)
-
-// normalizeEnvironment maps the declared kind onto the closed set. Total: every
-// input resolves to one of the three constants, never to "".
-//
-// Three things collapse onto environmentEndpoint, and they are the same thing
-// as far as this server is concerned — "an ordinary device, recorded the way it
-// always was":
-//
-//   - an explicit "endpoint"
-//   - an absent header, which every agent predating this field sends
-//   - an unrecognized value
-//
-// The last of those degrades rather than erroring, deliberately. Rejecting the
-// poll would stop that device syncing plugins at all — an outage caused by an
-// attribution hint. A newer agent inventing a kind this server has not heard of
-// keeps working, and lands where it would have landed anyway.
-func normalizeEnvironment(reported *string) string {
-	switch strings.ToLower(strings.TrimSpace(conv.PtrValOr(reported, ""))) {
-	case environmentEphemeral:
-		return environmentEphemeral
-	case environmentServer:
-		return environmentServer
-	case environmentEndpoint:
-		// Listed rather than folded into the default so the closed set is
-		// visibly exhaustive here, and so the constant is not a declaration
-		// nothing reads.
-		return environmentEndpoint
-	default:
-		return environmentEndpoint
-	}
-}
-
 func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload) (*gen.GetPluginsResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// An agent-principal key is itself the identity; APIKeyAuth already
+	// required its device-sync grant.
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
+		return s.getAgentPlugins(ctx, authCtx, actor)
 	}
 
 	// Resolve the polling identity by credential type. An org install key carries
@@ -276,8 +217,8 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// Cloud environments enroll with one shared identity, so using a real
 	// person's address is an easy accident, and a false coverage claim is worse
 	// than an absent one because nothing prompts anyone to look.
-	environment := normalizeEnvironment(payload.Environment)
-	if environment != environmentEndpoint {
+	environment := deviceidentity.NormalizeEnvironment(payload.Environment)
+	if environment != deviceidentity.EnvironmentEndpoint {
 		if err := s.repo.UpsertDeviceAgentEnvironmentSync(ctx, repo.UpsertDeviceAgentEnvironmentSyncParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			Email:          email,
@@ -318,7 +259,7 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	// hole the environment split closes — just through the serial match instead
 	// of the email one. Those boxes are counted as environments; nothing about
 	// them belongs in a per-device count.
-	if serial := normalizeSerial(payload.SerialNumber); serial != "" && environment == environmentEndpoint {
+	if serial := deviceidentity.NormalizeSerial(payload.SerialNumber); serial != "" && environment == deviceidentity.EnvironmentEndpoint {
 		if err := s.repo.UpsertDeviceAgentDeviceSync(ctx, repo.UpsertDeviceAgentDeviceSyncParams{
 			OrganizationID: authCtx.ActiveOrganizationID,
 			SerialNumber:   serial,
@@ -340,6 +281,41 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
 	}
 
+	return s.pluginSetFor(ctx, authCtx, principals)
+}
+
+// getAgentPlugins resolves plugins for an agent-principal key: the agent, the
+// roles it holds, and the org wildcard. There is no email to vouch for and no
+// sync row to write; the key's last-use timestamp records the poll.
+func (s *Service) getAgentPlugins(ctx context.Context, authCtx *contextvalues.AuthContext, actor urn.Principal) (*gen.GetPluginsResult, error) {
+	agent, err := agents.ResolvePrincipal(ctx, s.db, authCtx.ActiveOrganizationID, actor)
+	switch {
+	case errors.Is(err, agents.ErrPrincipalInvalid), errors.Is(err, agents.ErrPrincipalNotFound):
+		return nil, oops.C(oops.CodeUnauthorized)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent principal").LogError(ctx, s.logger)
+	}
+
+	canonical := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+	rolePrincipals, err := accessrepo.New(s.db).ListAgentRolePrincipals(ctx, accessrepo.ListAgentRolePrincipalsParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		AgentID:        agent.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error resolving agent roles").LogError(ctx, s.logger)
+	}
+	principals := append([]string{canonical.String(), urn.PrincipalWildcard}, rolePrincipals...)
+
+	result, err := s.pluginSetFor(ctx, authCtx, principals)
+	if err != nil {
+		return nil, err
+	}
+	mv.AttachAgentPrincipal(result, &gen.AgentPollingPrincipal{Urn: canonical.String(), DisplayName: agent.Name})
+	return result, nil
+}
+
+// pluginSetFor builds the poll response for an already-resolved principal set.
+func (s *Service) pluginSetFor(ctx context.Context, authCtx *contextvalues.AuthContext, principals []string) (*gen.GetPluginsResult, error) {
 	var (
 		rows             []repo.GetAgentPluginSetRow
 		configurationRow repo.DeviceAgentConfiguration

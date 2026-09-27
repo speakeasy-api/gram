@@ -45,6 +45,11 @@ message LLMAnalysis {
   repeated string sources = 26;
   // True when body or tool_calls were cut to the analyzer's input caps.
   bool content_truncated = 27;
+  // True when the organization is in the `shadow` engine mode: the legacy
+  // engines enforce this message and the analyzer's verdict is recorded for
+  // engine comparison only. Shadow findings are never enforced and are hidden
+  // from the default findings views.
+  bool shadow = 28;
 
   message ToolCall {
     // Harness-assigned tool call id, or a synthetic one when the harness

@@ -35,6 +35,7 @@ type Endpoints struct {
 	GetOrganization                       goa.Endpoint
 	ListOrganizationMembers               goa.Endpoint
 	ListOrganizationProjects              goa.Endpoint
+	ListProjectMcpServers                 goa.Endpoint
 	ListOrganizationActivity              goa.Endpoint
 	ListOrganizations                     goa.Endpoint
 	ExtendTrial                           goa.Endpoint
@@ -51,6 +52,8 @@ type Endpoints struct {
 	CancelStripeSubscription              goa.Endpoint
 	ResumeStripeSubscription              goa.Endpoint
 	MarkEnterpriseTrialConverted          goa.Endpoint
+	GetOrganizationOnboarding             goa.Endpoint
+	SetOrganizationOnboarding             goa.Endpoint
 	CreateGlobalIssuer                    goa.Endpoint
 	GetGlobalIssuerDuplicatePreflight     goa.Endpoint
 	ListGlobalIssuers                     goa.Endpoint
@@ -67,8 +70,10 @@ type Endpoints struct {
 	StartTrial                            goa.Endpoint
 	ChangeTrialEndDate                    goa.Endpoint
 	GetMeterUsage                         goa.Endpoint
+	GetSpendBreakdown                     goa.Endpoint
 	GetSupportMatrix                      goa.Endpoint
 	UpdateSupportMatrix                   goa.Endpoint
+	GetSupportCoverage                    goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -112,6 +117,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetOrganization:                       NewGetOrganizationEndpoint(s, a.APIKeyAuth),
 		ListOrganizationMembers:               NewListOrganizationMembersEndpoint(s, a.APIKeyAuth),
 		ListOrganizationProjects:              NewListOrganizationProjectsEndpoint(s, a.APIKeyAuth),
+		ListProjectMcpServers:                 NewListProjectMcpServersEndpoint(s, a.APIKeyAuth),
 		ListOrganizationActivity:              NewListOrganizationActivityEndpoint(s, a.APIKeyAuth),
 		ListOrganizations:                     NewListOrganizationsEndpoint(s, a.APIKeyAuth),
 		ExtendTrial:                           NewExtendTrialEndpoint(s, a.APIKeyAuth),
@@ -128,6 +134,8 @@ func NewEndpoints(s Service) *Endpoints {
 		CancelStripeSubscription:              NewCancelStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		ResumeStripeSubscription:              NewResumeStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		MarkEnterpriseTrialConverted:          NewMarkEnterpriseTrialConvertedEndpoint(s, a.APIKeyAuth),
+		GetOrganizationOnboarding:             NewGetOrganizationOnboardingEndpoint(s, a.APIKeyAuth),
+		SetOrganizationOnboarding:             NewSetOrganizationOnboardingEndpoint(s, a.APIKeyAuth),
 		CreateGlobalIssuer:                    NewCreateGlobalIssuerEndpoint(s, a.APIKeyAuth),
 		GetGlobalIssuerDuplicatePreflight:     NewGetGlobalIssuerDuplicatePreflightEndpoint(s, a.APIKeyAuth),
 		ListGlobalIssuers:                     NewListGlobalIssuersEndpoint(s, a.APIKeyAuth),
@@ -144,8 +152,10 @@ func NewEndpoints(s Service) *Endpoints {
 		StartTrial:                            NewStartTrialEndpoint(s, a.APIKeyAuth),
 		ChangeTrialEndDate:                    NewChangeTrialEndDateEndpoint(s, a.APIKeyAuth),
 		GetMeterUsage:                         NewGetMeterUsageEndpoint(s, a.APIKeyAuth),
+		GetSpendBreakdown:                     NewGetSpendBreakdownEndpoint(s, a.APIKeyAuth),
 		GetSupportMatrix:                      NewGetSupportMatrixEndpoint(s, a.APIKeyAuth),
 		UpdateSupportMatrix:                   NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
+		GetSupportCoverage:                    NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -169,6 +179,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetOrganization = m(e.GetOrganization)
 	e.ListOrganizationMembers = m(e.ListOrganizationMembers)
 	e.ListOrganizationProjects = m(e.ListOrganizationProjects)
+	e.ListProjectMcpServers = m(e.ListProjectMcpServers)
 	e.ListOrganizationActivity = m(e.ListOrganizationActivity)
 	e.ListOrganizations = m(e.ListOrganizations)
 	e.ExtendTrial = m(e.ExtendTrial)
@@ -185,6 +196,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CancelStripeSubscription = m(e.CancelStripeSubscription)
 	e.ResumeStripeSubscription = m(e.ResumeStripeSubscription)
 	e.MarkEnterpriseTrialConverted = m(e.MarkEnterpriseTrialConverted)
+	e.GetOrganizationOnboarding = m(e.GetOrganizationOnboarding)
+	e.SetOrganizationOnboarding = m(e.SetOrganizationOnboarding)
 	e.CreateGlobalIssuer = m(e.CreateGlobalIssuer)
 	e.GetGlobalIssuerDuplicatePreflight = m(e.GetGlobalIssuerDuplicatePreflight)
 	e.ListGlobalIssuers = m(e.ListGlobalIssuers)
@@ -201,8 +214,10 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.StartTrial = m(e.StartTrial)
 	e.ChangeTrialEndDate = m(e.ChangeTrialEndDate)
 	e.GetMeterUsage = m(e.GetMeterUsage)
+	e.GetSpendBreakdown = m(e.GetSpendBreakdown)
 	e.GetSupportMatrix = m(e.GetSupportMatrix)
 	e.UpdateSupportMatrix = m(e.UpdateSupportMatrix)
+	e.GetSupportCoverage = m(e.GetSupportCoverage)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -589,6 +604,29 @@ func NewListOrganizationProjectsEndpoint(s Service, authAPIKeyFn security.AuthAP
 	}
 }
 
+// NewListProjectMcpServersEndpoint returns an endpoint function that calls the
+// method "listProjectMcpServers" of service "admin".
+func NewListProjectMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListProjectMcpServersPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListProjectMcpServers(ctx, p)
+	}
+}
+
 // NewListOrganizationActivityEndpoint returns an endpoint function that calls
 // the method "listOrganizationActivity" of service "admin".
 func NewListOrganizationActivityEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -957,6 +995,52 @@ func NewMarkEnterpriseTrialConvertedEndpoint(s Service, authAPIKeyFn security.Au
 	}
 }
 
+// NewGetOrganizationOnboardingEndpoint returns an endpoint function that calls
+// the method "getOrganizationOnboarding" of service "admin".
+func NewGetOrganizationOnboardingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationOnboardingPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationOnboarding(ctx, p)
+	}
+}
+
+// NewSetOrganizationOnboardingEndpoint returns an endpoint function that calls
+// the method "setOrganizationOnboarding" of service "admin".
+func NewSetOrganizationOnboardingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetOrganizationOnboardingPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetOrganizationOnboarding(ctx, p)
+	}
+}
+
 // NewCreateGlobalIssuerEndpoint returns an endpoint function that calls the
 // method "createGlobalIssuer" of service "admin".
 func NewCreateGlobalIssuerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -1316,6 +1400,29 @@ func NewGetMeterUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) g
 	}
 }
 
+// NewGetSpendBreakdownEndpoint returns an endpoint function that calls the
+// method "getSpendBreakdown" of service "admin".
+func NewGetSpendBreakdownEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSpendBreakdownPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSpendBreakdown(ctx, p)
+	}
+}
+
 // NewGetSupportMatrixEndpoint returns an endpoint function that calls the
 // method "getSupportMatrix" of service "admin".
 func NewGetSupportMatrixEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -1359,5 +1466,28 @@ func NewUpdateSupportMatrixEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyF
 			return nil, err
 		}
 		return s.UpdateSupportMatrix(ctx, p)
+	}
+}
+
+// NewGetSupportCoverageEndpoint returns an endpoint function that calls the
+// method "getSupportCoverage" of service "admin".
+func NewGetSupportCoverageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetSupportCoveragePayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetSupportCoverage(ctx, p)
 	}
 }

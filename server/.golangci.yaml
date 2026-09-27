@@ -31,6 +31,7 @@ linters:
     - gocritic
     - gosec
     - glint
+    - glintnolint
     - govet
     - iface
     - importas
@@ -250,6 +251,11 @@ linters:
               codes: []
             rpc-endpoint-format:
               disabled: false
+      glintnolint:
+        type: module
+        description: Requires //nolint:glint directives to sit on the offending line and name the suppressed glint analyzer.
+        original-url: github.com/speakeasy-api/gram/glint
+        settings: {}
     gosec:
       excludes:
         # Temporarily ignore this lint rule because it needs to be a separate
@@ -504,11 +510,13 @@ linters:
         - "github.com/speakeasy-api/gram/server/internal/auth.RequirePlatformAdmin("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Require("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).RequireAny("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).RequireAnyUnblocked("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).Filter("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Engine).ShouldEnforce("
         - "github.com/speakeasy-api/gram/server/internal/authz.GrantsForRole("
         - "github.com/speakeasy-api/gram/server/internal/organizations/orgprovision.ValidateName("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
+        - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).AuthorizeWithHandlerProjectAccess("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/chatsessions.Manager).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).CheckProjectAccess("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/sessions.Manager).Authenticate("

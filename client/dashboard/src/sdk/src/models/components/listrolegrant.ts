@@ -36,6 +36,8 @@ export const ListRoleGrantScope = {
   SkillBlockedRead: "skill:blocked_read",
   SkillWrite: "skill:write",
   SkillBlockedWrite: "skill:blocked_write",
+  PluginWrite: "plugin:write",
+  PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   RiskPolicyBlock: "risk_policy:block",
@@ -45,6 +47,12 @@ export const ListRoleGrantScope = {
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",
   AgentTransfer: "agent:transfer",
+  WorkloadRead: "workload:read",
+  WorkloadBlockedRead: "workload:blocked_read",
+  WorkloadWrite: "workload:write",
+  WorkloadBlockedWrite: "workload:blocked_write",
+  OrgDeviceAgentSync: "org:device_agent_sync",
+  OrgHooksIngest: "org:hooks_ingest",
 } as const;
 /**
  * The scope slug this grant applies to.
@@ -74,6 +82,8 @@ export const SubScopes = {
   SkillBlockedRead: "skill:blocked_read",
   SkillWrite: "skill:write",
   SkillBlockedWrite: "skill:blocked_write",
+  PluginWrite: "plugin:write",
+  PluginBlockedWrite: "plugin:blocked_write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   RiskPolicyBlock: "risk_policy:block",
@@ -83,6 +93,12 @@ export const SubScopes = {
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",
   AgentTransfer: "agent:transfer",
+  WorkloadRead: "workload:read",
+  WorkloadBlockedRead: "workload:blocked_read",
+  WorkloadWrite: "workload:write",
+  WorkloadBlockedWrite: "workload:blocked_write",
+  OrgDeviceAgentSync: "org:device_agent_sync",
+  OrgHooksIngest: "org:hooks_ingest",
 } as const;
 export type SubScopes = ClosedEnum<typeof SubScopes>;
 

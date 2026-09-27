@@ -70,6 +70,15 @@ describe("AUDIT_ACTIONS", () => {
     );
   });
 
+  it("describes binding changes against the audited principal", () => {
+    expect(staticActionPhrase("remote-session:attach")).toBe(
+      "attached a binding to",
+    );
+    expect(staticActionPhrase("remote-session:detach")).toBe(
+      "detached a binding from",
+    );
+  });
+
   it("describes data export actions", () => {
     expect(
       (

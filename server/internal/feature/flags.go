@@ -21,18 +21,19 @@ const (
 	FlagBudgets Flag = "gram-budgets"
 	// FlagRiskEnforcementPubsub routes realtime gitleaks and Presidio scans over Pub/Sub.
 	FlagRiskEnforcementPubsub Flag = "risk-enforcement-pubsub"
+	// FlagRiskEnforcementMaxContentBytes overrides the realtime enforcement
+	// truncation limit globally. Evaluated server-side with no targeting. The
+	// payload is {"max_content_bytes": <int>}; a missing or invalid payload
+	// keeps the default limit.
+	FlagRiskEnforcementMaxContentBytes Flag = "risk-enforcement-max-content-bytes"
 
 	// FlagAgentManagement gates the first-class agent management API. It is
 	// evaluated per organization and fails closed unless explicitly on.
 	FlagAgentManagement Flag = "agent-management"
-	// FlagAgentIdentityCredentials gates agent credential issuance and management.
+	// FlagAgentIdentityCredentials gates agent credential issuance, management,
+	// and agent identity selection in MCP OAuth authorization.
 	// It is evaluated per organization and fails closed unless explicitly on.
 	FlagAgentIdentityCredentials Flag = "agent-identity-credentials"
-
-	// FlagAgentMCPAuthorizationM2 gates selecting an existing agent in the MCP
-	// authorization challenge. It remains independently default-off until the M2
-	// credential and authorization safety gate is promoted.
-	FlagAgentMCPAuthorizationM2 Flag = "gram-agent-mcp-authorization-m2"
 
 	// FlagDeviceLevelCoverage switches device-agent coverage from matching a
 	// device's assigned-user email against user-keyed heartbeats to matching
@@ -55,6 +56,8 @@ const (
 	// replacing a plugin's complete audience assignment set through Platform MCP.
 	// It is evaluated at invocation time and fails closed.
 	FlagPlatformMCPPluginAssignmentMutations Flag = "platform-mcp-plugin-assignment-mutations"
+	// FlagGatewayPluginMembership gates new gateway attachments to plugins.
+	FlagGatewayPluginMembership Flag = "gateway-plugin-membership"
 	// FlagPlatformMCPAccessRoleMutations is the exact-project kill switch for
 	// creating and updating custom MCP-only access roles through Platform MCP.
 	// It is evaluated at invocation time and fails closed.
@@ -94,16 +97,24 @@ const (
 	// Key matches the dashboard's page-level flag so a single PostHog flag
 	// controls both the UI and the API surface.
 	FlagRiskWatchdog Flag = "gram-risk-watchdog"
-	// FlagRiskLLMAnalyzer routes an organization's secret, PII, prompt
-	// injection and destructive tool call detection through the fine-tuned
-	// risk model instead of the gitleaks, Presidio, prompt-injection and
-	// destructive-tool analyzers, on both the realtime enforcement lane and
-	// the batch flag lane. Policies keep their configured sources; the flag
-	// swaps the engine behind them. Targeted by PostHog organization group
-	// (org slug), like FlagBudgets. Fails closed to the legacy analyzers when
-	// the flag is off, absent or the provider errors. Removed at GA, or
-	// promoted to a productfeatures entitlement if the analyzer becomes a
-	// sold capability.
+	// FlagRiskLLMAnalyzer selects the engine behind an organization's secret,
+	// PII, prompt injection and destructive tool call detection on both the
+	// realtime enforcement lane and the batch flag lane. It is multivariate:
+	// VariantRiskLLMOff keeps the gitleaks, Presidio, prompt-injection and
+	// destructive-tool analyzers; VariantRiskLLMShadow keeps them enforcing
+	// and additionally runs the fine-tuned risk model on the same traffic,
+	// recording its findings for comparison without ever enforcing them;
+	// VariantRiskLLMLLM replaces the legacy analyzers with the model.
+	// Policies keep their configured sources; the variant swaps the engine
+	// behind them. Evaluated server-side with distinct id = organization id
+	// and the organization / slug groups (OrgProjectGroups), so a release
+	// condition selects organizations by the organization group key (org
+	// slug) or by distinct id (org id). Transition rule while the PostHog key
+	// is still boolean: an empty variant with the boolean read true resolves
+	// to VariantRiskLLMLLM (RiskLLMAnalyzerVariant). Fails safe to
+	// VariantRiskLLMOff when the flag is off, absent, unrecognized or the
+	// provider errors. Removed at GA, or promoted to a productfeatures
+	// entitlement if the analyzer becomes a sold capability.
 	FlagRiskLLMAnalyzer Flag = "gram-risk-llm-analyzer"
 
 	// FlagCanonicalIdentityFold serves cost analytics (telemetry.query /
@@ -202,4 +213,44 @@ func AssistantToolsVariant(variant Variant) Variant {
 		return VariantAssistantToolsPlatformMCP
 	}
 	return VariantAssistantToolsLegacy
+}
+
+// Variants of FlagRiskLLMAnalyzer, the risk engine mode of an organization.
+// Anything else — no variant, an unrecognized key, an unavailable provider,
+// or an evaluation error — resolves to VariantRiskLLMOff, which is the
+// pre-rollout behaviour, so a PostHog outage never changes which engine
+// enforces a policy.
+const (
+	// VariantRiskLLMOff runs the legacy engines only (gitleaks, Presidio,
+	// prompt-injection, destructive-tool, CLI-destructive).
+	VariantRiskLLMOff Variant = "off"
+	// VariantRiskLLMShadow runs the legacy engines exactly as under
+	// VariantRiskLLMOff, and additionally runs the fine-tuned risk model on
+	// the same traffic. The model's findings are recorded for engine
+	// comparison and never enforced; a model failure never denies.
+	VariantRiskLLMShadow Variant = "shadow"
+	// VariantRiskLLMLLM replaces the legacy engines with the fine-tuned risk
+	// model for every covered policy source. The realtime lane fails closed
+	// on a model failure.
+	VariantRiskLLMLLM Variant = "llm"
+)
+
+// RiskLLMAnalyzerVariant normalizes a resolved FlagRiskLLMAnalyzer variant to
+// one of the three known modes. A known variant is returned as is. An empty
+// variant with legacyEnabled true — the boolean read of the same key —
+// resolves to VariantRiskLLMLLM, which keeps organizations on the boolean
+// flag on the model until the PostHog key is switched to multivariate.
+// Everything else resolves to VariantRiskLLMOff.
+func RiskLLMAnalyzerVariant(variant Variant, legacyEnabled bool) Variant {
+	switch variant {
+	case VariantRiskLLMOff, VariantRiskLLMShadow, VariantRiskLLMLLM:
+		return variant
+	case "":
+		if legacyEnabled {
+			return VariantRiskLLMLLM
+		}
+		return VariantRiskLLMOff
+	default:
+		return VariantRiskLLMOff
+	}
 }

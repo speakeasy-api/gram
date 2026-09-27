@@ -78,3 +78,28 @@ func TestNewInlineSource_HasNoCacheKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, source.CacheKey())
 }
+
+// A plain-http key set location is named as such, so it can be reported as
+// the configuration error it is.
+func TestValidateURI_PlainHTTPIsNamed(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{
+		"http://token.actions.githubusercontent.com/.well-known/jwks",
+		"HTTP://oidc.example.com/keys",
+		"http://127.0.0.1:35291/keys",
+	} {
+		require.ErrorIs(t, ValidateURI(raw), ErrURINotHTTPS, raw)
+	}
+	for _, raw := range []string{
+		"",
+		"https://oidc.example.com/keys#frag",
+		"https://user@oidc.example.com/keys",
+		"https:///keys",
+	} {
+		err := ValidateURI(raw)
+		require.Error(t, err, raw)
+		require.NotErrorIs(t, err, ErrURINotHTTPS, raw)
+	}
+	require.NoError(t, ValidateURI("HTTPS://oidc.example.com:8443/keys"))
+}

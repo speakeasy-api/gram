@@ -20,6 +20,10 @@ export type CreateAgentForm = {
    * Optional initial allow-only agent policy ceilings, created atomically with the agent. Effective credential permissions remain limited by the live owner and authorizer.
    */
   policyGrants?: Array<AgentPolicyGrantForm> | undefined;
+  /**
+   * Optional project binding. Omit or send an empty string for an organization-wide agent; independent of policy grants and the Gram-Project header.
+   */
+  projectId?: string | undefined;
 };
 
 /** @internal */
@@ -27,6 +31,7 @@ export type CreateAgentForm$Outbound = {
   name: string;
   owner_user_id?: string | undefined;
   policy_grants?: Array<AgentPolicyGrantForm$Outbound> | undefined;
+  project_id?: string | undefined;
 };
 
 /** @internal */
@@ -38,11 +43,13 @@ export const CreateAgentForm$outboundSchema: z.ZodMiniType<
     name: z.string(),
     ownerUserId: z.optional(z.string()),
     policyGrants: z.optional(z.array(AgentPolicyGrantForm$outboundSchema)),
+    projectId: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
       ownerUserId: "owner_user_id",
       policyGrants: "policy_grants",
+      projectId: "project_id",
     });
   }),
 );

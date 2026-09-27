@@ -213,7 +213,7 @@ func newTestServiceWithPoolLimit(t *testing.T, features feature.Provider, maxCon
 	}
 
 	credentialID := provisiontest.CreatePlatformSigningCredential(t, ctx, ti.conn)
-	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID)
+	provisioner := provisiontest.NewProvisioner(t, ti.conn, provisiontest.NewKMSClients(t).Factory, testServerURL, credentialID, "")
 	discovery := newFakeDiscovery()
 	fakes := okta.NewFakeFactory(oktaFixtures())
 	syncTrigger := &fakeSyncTrigger{}
@@ -329,4 +329,12 @@ func checklistKeys(items []*gen.IdentityProviderConnectionChecklistItem) []strin
 		keys = append(keys, item.Key)
 	}
 	return keys
+}
+
+func checklistCompletion(items []*gen.IdentityProviderConnectionChecklistItem) map[string]*bool {
+	done := make(map[string]*bool, len(items))
+	for _, item := range items {
+		done[item.Key] = item.Completed
+	}
+	return done
 }

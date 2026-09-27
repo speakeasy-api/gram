@@ -15,10 +15,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/clientcred"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/jwks"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -138,7 +138,7 @@ func (s *Service) verifyClientAssertion(ctx context.Context, logger *slog.Logger
 		return "assertion_key_source_missing"
 	}
 
-	urls, err := endpoint.AuthorizationServerURLs(baseURL)
+	urls, err := s.requestAuthorizationServerURLs(ctx, endpoint, baseURL)
 	if err != nil {
 		// Cannot compute what aud may name, so nothing can be accepted.
 		logger.ErrorContext(ctx, "cannot derive assertion audiences for endpoint, failing closed", attr.SlogError(err))

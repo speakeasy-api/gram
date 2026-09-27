@@ -64,7 +64,7 @@ func (s *Service) ServeMCPEndpoint(w http.ResponseWriter, r *http.Request, slug,
 		if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
 			return err
 		}
-		return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer)
+		return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, uuid.Nil)
 	}
 
 	if err := s.enforceCustomDomainLockdown(ctx, logger, mcpEndpoint.ProjectID); err != nil {
@@ -144,7 +144,16 @@ func (s *Service) customDomainLockdownApplies(ctx context.Context, logger *slog.
 	}
 	metering.AttributeMCPBandwidth(ctx, project.OrganizationID, projectID)
 
-	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, project.OrganizationID)
+	return s.organizationCustomDomainLockdown(ctx, logger, project.OrganizationID)
+}
+
+// organizationCustomDomainLockdown is the lockdown rule itself: whether the
+// organization's custom domain carries an IP allowlist. The policy is owned by
+// the organization, not the project — enforceCustomDomainLockdown takes a
+// project only to read the organization off it — so surfaces that know their
+// organization directly can ask at that scope.
+func (s *Service) organizationCustomDomainLockdown(ctx context.Context, logger *slog.Logger, organizationID string) (bool, error) {
+	domain, err := customdomainsrepo.New(s.db).GetCustomDomainByOrganization(ctx, organizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return false, nil

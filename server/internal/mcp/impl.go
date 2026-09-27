@@ -103,13 +103,14 @@ type IdentityResolver interface {
 }
 
 type Service struct {
+	federatedLoginConsumer    FederatedLoginConsumer
 	logger                    *slog.Logger
 	tracer                    trace.Tracer
 	metrics                   *mcpmetrics.Metrics
 	networkIngressTelemetry   *networkingress.Telemetry
 	identityCoverage          *mcptoolexecution.IdentityCoverageCheckpoint
 	hostedToolsCallCheckpoint *mcptoolexecution.HostedCheckpoint
-	scanEvaluator             mcpriskscan.Evaluator
+	scanEvaluator             *mcpriskscan.Evaluator
 	guardianPolicy            *guardian.Policy
 	db                        *pgxpool.Pool
 	authRepo                  *auth_repo.Queries
@@ -119,6 +120,9 @@ type Service struct {
 	auth                      *auth.Auth
 	env                       toolconfig.EnvironmentLoader
 	serverURL                 *url.URL
+	// authenticationHostBaseURL is the authentication host's base URL, empty
+	// when none is configured. Set by AttachAuthenticationHost.
+	authenticationHostBaseURL string
 	siteURL                   *url.URL
 	posthog                   *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	// features resolves flag-controlled behavior (the managed assistant's
@@ -138,6 +142,9 @@ type Service struct {
 	// the token and revocation endpoints. Nil without Redis, in which case
 	// assertion clients are refused rather than admitted unverified.
 	clientAssertionVerifier *privatekeyjwt.Verifier
+	// workloadGrant runs the workload assertion grant's stages. Nil on a
+	// surface without Redis, which refuses the grant.
+	workloadGrant *workloadGrant
 	// idJAGValidator authenticates enterprise identity grants, enforces replay
 	// protection, and resolves their subjects to provisioned Gram users.
 	idJAGValidator *idjag.Validator
@@ -153,6 +160,7 @@ type Service struct {
 	vectorToolStore        *rag.ToolsetVectorStore
 	assistantTokens        *assistanttokens.Manager
 	sessions               *sessions.Manager
+	consentBindings        ConsentBindingService
 	identityResolver       IdentityResolver
 	identityValidator      *mcpidentity.ValidatorBoundary
 	chatSessionsManager    *chatsessions.Manager
@@ -166,6 +174,7 @@ type Service struct {
 	platformFeatureChecker platformtools.FeatureChecker
 	platformToolsets       map[string]platformtools.Toolset
 	authnChallengeCache    cache.TypedCacheObject[AuthnChallengeState]
+	remoteLoginCache       cache.TypedCacheObject[remotesessions.RemoteLoginState]
 	userSessionGrantCache  cache.TypedCacheObject[UserSessionGrant]
 	// userSessionRefreshReplayCache retains the encrypted rotation outcome.
 	userSessionRefreshReplayCache cache.TypedCacheObject[userSessionRefreshReplay]
@@ -388,6 +397,7 @@ func NewService(
 	identityResolver IdentityResolver,
 	userSessionSigner *sessiontokens.Signer,
 	remoteChallengeMgr *remotesessions.ChallengeManager,
+	scanEvaluator *mcpriskscan.Evaluator,
 	remoteProxyManager *remotemcp.ProxyManager,
 	tunnelRoutes route.Store,
 	tunnelForwardToken string,
@@ -400,7 +410,6 @@ func NewService(
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
 	logger = logger.With(attr.SlogComponent("mcp"))
 	metrics := mcpmetrics.NewMetrics(meter, logger)
-	scanEvaluator := mcpriskscan.NewNoop(tracerProvider, meterProvider, logger)
 	hostedToolsCallCheckpoint, err := mcptoolexecution.NewHostedCheckpoint(db, meterProvider, logger, metrics)
 	if err != nil {
 		return nil, fmt.Errorf("initialize hosted MCP kill-switch checkpoint: %w", err)
@@ -422,6 +431,8 @@ func NewService(
 	)
 
 	service := &Service{
+		federatedLoginConsumer:    nil,
+		consentBindings:           nil,
 		logger:                    logger,
 		tracer:                    tracer,
 		metrics:                   metrics,
@@ -440,12 +451,14 @@ func NewService(
 		auth:                      auth.New(logger, db, sessions, authzEngine),
 		env:                       env,
 		serverURL:                 serverURL,
+		authenticationHostBaseURL: "",
 		siteURL:                   siteURL,
 		posthog:                   posthog,
 		features:                  features,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
 		clientAssertionVerifier:   newClientAssertionVerifier(redisClient, guardianPolicy, meterProvider, logger),
+		workloadGrant:             newWorkloadGrant(db, redisClient, guardianPolicy, meterProvider, logger),
 		idJAGValidator:            idJAGValidator,
 		aiToolBlockReads:          defaultAIToolBlockReads(),
 		toolProxy: gateway.NewToolProxy(
@@ -480,6 +493,7 @@ func NewService(
 			cacheImpl,
 			cache.SuffixNone,
 		),
+		remoteLoginCache: cache.NewTypedObjectCache[remotesessions.RemoteLoginState](logger.With(attr.SlogCacheNamespace("remote_login")), cacheImpl, cache.SuffixNone),
 		userSessionGrantCache: cache.NewTypedObjectCache[UserSessionGrant](
 			logger.With(attr.SlogCacheNamespace("user_session_grant")),
 			cacheImpl,
@@ -594,6 +608,13 @@ func AttachPrivate(mux goahttp.Muxer, service *Service, metadataService *mcpmeta
 		}
 		o11y.AttachHandler(mux, route.Method, route.Path, handler.ServeHTTP)
 	}
+
+	for _, route := range netingress.PrivateRoutes(netingress.RouteSurfaceAgentMCP) {
+		if route.ID != netingress.RouteRuntime {
+			panic(fmt.Sprintf("private agent MCP route %s %s has no handler", route.Method, route.Path))
+		}
+		o11y.AttachHandler(mux, route.Method, route.Path, oops.MCPErrHandle(service.logger, service.ServeAgentGateway).ServeHTTP)
+	}
 }
 
 func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
@@ -612,6 +633,10 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	// client assertions.
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-client/{id}/jwks.json", oops.ErrHandle(service.logger, service.HandleClientJSONWebKeySet).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/.well-known/openai-apps-challenge", oops.ErrHandle(service.logger, service.HandleOpenAIAppsChallenge).ServeHTTP)
+	// Agents live outside Gram and reach it on the public host, so the gateway
+	// mounts here as well as on the private listener. Its own key is the
+	// credential, so being publicly routable is not being publicly readable.
+	o11y.AttachHandler(mux, "POST", AgentGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeAgentGateway).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", PublicServerRoute, oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", PublicServerRoute, oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
 		return service.HandleGetServer(w, r, metadataService)
@@ -647,6 +672,9 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 // same handler via the public method instead of reaching into the
 // unexported manager field.
 func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
+	if err := s.validateRemoteLoginBrowser(r); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "invalid remote login browser binding")
+	}
 	result, err := s.remoteChallengeMgr.CompleteRemoteLogin(r)
 	if err != nil {
 		return err //nolint:wrapcheck // the manager's errors already carry the response
@@ -915,7 +943,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if metaServer != nil {
-			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer)
+			return s.serveResolvedMetaMCPEndpoint(w, r, logger, mcpEndpoint, metaServer, uuid.Nil)
 		}
 		return s.serveResolvedMCPEndpoint(w, r, logger, mcpEndpoint, mcpServer, mcpSlug, "mcp")
 	case mcpendpoints.IsAddressMiss(err):
@@ -1781,7 +1809,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
-		return s.identityValidator.StampAPIKey(ctx), nil
+		return s.stampAuthenticatedAPIKey(ctx)
 	}
 
 	// Strategy 3: Try API key authentication (chat scope fallback)
@@ -1792,7 +1820,7 @@ func (s *Service) authenticateToken(ctx context.Context, token string, oauthReso
 	}
 	ctx, err = s.auth.Authorize(ctx, token, &sc)
 	if err == nil {
-		return s.identityValidator.StampAPIKey(ctx), nil
+		return s.stampAuthenticatedAPIKey(ctx)
 	}
 
 	// Strategy 4: Try Chat Sessions Token authentication

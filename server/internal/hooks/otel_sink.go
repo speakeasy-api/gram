@@ -38,6 +38,10 @@ func (s *Service) IngestOTLPLogs(ctx context.Context, payload *gen.LogsPayload) 
 		attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
 		attr.SlogProjectID(authCtx.ProjectID.String()),
 	)
+	// The hooks endpoint sanitizes before teeing; this edge publishes to the
+	// event feed upstream, so apply the same rules here or an agent's export
+	// would keep a human-reported session id and the spoofed actor keys.
+	sanitizeTeedLogsPayload(ctx, payload)
 	s.ingestOTLPLogs(ctx, logger, payload, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 }
 

@@ -124,14 +124,14 @@ beforeEach(() => {
   submitted = [];
   connectedAtSubmit = [];
   router = undefined;
-  vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(
-    function (this: HTMLFormElement) {
-      // The helper detaches the form immediately after this returns, so the
-      // element is held rather than its attributes read later off the document.
-      submitted.push(this);
-      connectedAtSubmit.push(this.isConnected);
-    },
-  );
+  vi.spyOn(HTMLFormElement.prototype, "submit").mockImplementation(function (
+    this: HTMLFormElement,
+  ) {
+    // The helper detaches the form immediately after this returns, so the
+    // element is held rather than its attributes read later off the document.
+    submitted.push(this);
+    connectedAtSubmit.push(this.isConnected);
+  });
   mocks.getSession.mockReset();
   mocks.getSession.mockResolvedValue({
     email: "ops@example.test",

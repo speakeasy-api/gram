@@ -50,7 +50,7 @@ func newAgentConsentFixture(t *testing.T, ctx context.Context, ti *testInstance)
 	require.NotNil(t, authCtx.ProjectID)
 
 	ti.features.SetFlag(feature.FlagAgentManagement, authCtx.ActiveOrganizationID, true)
-	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, authCtx.ActiveOrganizationID, true)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, authCtx.ActiveOrganizationID, true)
 
 	stateID := uuid.NewString()
 	csrf := "csrf-" + uuid.NewString()
@@ -257,6 +257,9 @@ func TestConsentAgentApprovalCarriesFixedResultWithoutReusableConsent(t *testing
 	agent := createConsentAgent(t, ctx, ti, fx, "Approved agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
 
+	before, err := accessrepo.New(ti.conn).GetPrincipalGrants(ctx, accessrepo.GetPrincipalGrantsParams{OrganizationID: fx.orgID, PrincipalUrns: []string{urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()}})
+	require.NoError(t, err)
+
 	w, err := serveAgentConsentPost(t, ctx, ti, fx, agent.ID)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, w.Code)
@@ -285,6 +288,9 @@ func TestConsentAgentApprovalCarriesFixedResultWithoutReusableConsent(t *testing
 	})
 	require.NoError(t, err)
 	require.Empty(t, consents)
+	after, err := accessrepo.New(ti.conn).GetPrincipalGrants(ctx, accessrepo.GetPrincipalGrantsParams{OrganizationID: fx.orgID, PrincipalUrns: []string{urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()}})
+	require.NoError(t, err)
+	require.ElementsMatch(t, before, after, "consent must not grant or rewrite agent policy")
 }
 
 func TestConsentAgentApprovalRechecksLiveAgentPolicy(t *testing.T) {
@@ -378,7 +384,7 @@ func TestConsentAgentSelectionFailsClosedWhenRolloutDisabled(t *testing.T) {
 	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.orgID, fx.userID, fx.target.MCPResourceID.String())
 	agent := createConsentAgent(t, ctx, ti, fx, "Hidden agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
-	ti.features.SetFlag(feature.FlagAgentMCPAuthorizationM2, fx.orgID, false)
+	ti.features.SetFlag(feature.FlagAgentIdentityCredentials, fx.orgID, false)
 
 	w := serveAgentConsentGet(t, ctx, ti, fx)
 	require.Equal(t, http.StatusOK, w.Code)

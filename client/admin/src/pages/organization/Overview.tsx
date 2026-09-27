@@ -29,6 +29,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useOnUnmount } from "@/hooks/useOnUnmount";
 import { ACCOUNT_TYPE_OPTIONS, isAccountType } from "@/lib/accountTypes";
+import { creationSourceFact } from "@/lib/creationSource";
 import {
   cancelOrganizationFetches,
   invalidateOrganizationActivity,
@@ -325,6 +326,8 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
     });
   };
 
+  const createdVia = creationSourceFact(org.creation_source);
+
   const showTrialPanel =
     org.trial_state === "running" ||
     org.trial_state === "ending_soon" ||
@@ -362,6 +365,23 @@ export function Overview({ org }: { org: AdminOrganization }): JSX.Element {
               value={org.id}
               className="text-sm"
             />
+          </Row>
+          <Row label="Created via">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={cn(
+                  "text-sm",
+                  createdVia.recorded ? undefined : "text-muted-foreground",
+                )}
+              >
+                {createdVia.label}
+              </span>
+              {createdVia.platformAdmin && (
+                <span className="text-muted-foreground rounded-full border px-2 py-0.5 text-[0.6875rem] font-medium tracking-wide">
+                  PROSPECT FLOW
+                </span>
+              )}
+            </div>
           </Row>
           <Row label="WorkOS org ID">
             {org.workos_id ? (

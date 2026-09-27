@@ -1,19 +1,14 @@
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import {
   DETECTION_RULES,
-  RULE_CATEGORY_META,
+  ruleCategoryMeta,
+  type DetectorMode,
   type RuleCategory,
 } from "./policy-data";
+import { PRESIDIO_CATEGORIES } from "./policy-form";
 import { ruleIdToPresidioEntity } from "./rule-ids";
 
 const DELETE_RULE_LIST_LIMIT = 4;
-
-const PRESIDIO_CATEGORIES: RuleCategory[] = [
-  "financial",
-  "pii",
-  "government_ids",
-  "healthcare",
-];
 
 const CATEGORY_LEVEL_SOURCE_BY_CATEGORY: Partial<Record<RuleCategory, string>> =
   {
@@ -32,9 +27,17 @@ function hasEnabledVisibleRule(
   );
 }
 
-function presidioCategories(policy: RiskPolicy): RuleCategory[] {
+function presidioCategories(
+  policy: RiskPolicy,
+  mode: DetectorMode,
+): RuleCategory[] {
   if (!policy.sources.includes("presidio")) {
     return [];
+  }
+  // The LLM analyzer ignores the entity list and decides the personal-data
+  // category per finding, so the policy enforces one PII group.
+  if (mode === "llm") {
+    return ["pii"];
   }
 
   const disabledRules = new Set(policy.disabledRules ?? []);
@@ -57,6 +60,7 @@ function presidioCategories(policy: RiskPolicy): RuleCategory[] {
 
 export function getPolicyRuleGroupNamesForDeleteDialog(
   policy: RiskPolicy,
+  mode: DetectorMode = "presidio",
 ): string[] {
   if (policy.policyType === "prompt_based") {
     return [];
@@ -72,7 +76,7 @@ export function getPolicyRuleGroupNamesForDeleteDialog(
     categories.push("secrets");
   }
 
-  categories.push(...presidioCategories(policy));
+  categories.push(...presidioCategories(policy, mode));
 
   for (const [category, source] of Object.entries(
     CATEGORY_LEVEL_SOURCE_BY_CATEGORY,
@@ -86,7 +90,7 @@ export function getPolicyRuleGroupNamesForDeleteDialog(
     categories.push("custom");
   }
 
-  return categories.map((category) => RULE_CATEGORY_META[category].label);
+  return categories.map((category) => ruleCategoryMeta(category, mode).label);
 }
 
 export function getPolicyDeleteRuleActionLabel(policy: RiskPolicy): string {

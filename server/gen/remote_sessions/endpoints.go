@@ -16,8 +16,12 @@ import (
 
 // Endpoints wraps the "remoteSessions" service endpoints.
 type Endpoints struct {
-	ListRemoteSessions  goa.Endpoint
-	RevokeRemoteSession goa.Endpoint
+	ListBindings                      goa.Endpoint
+	AttachBinding                     goa.Endpoint
+	DetachBinding                     goa.Endpoint
+	CommitServerIdentityConfiguration goa.Endpoint
+	ListRemoteSessions                goa.Endpoint
+	RevokeRemoteSession               goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "remoteSessions" service with
@@ -26,16 +30,189 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ListRemoteSessions:  NewListRemoteSessionsEndpoint(s, a.APIKeyAuth),
-		RevokeRemoteSession: NewRevokeRemoteSessionEndpoint(s, a.APIKeyAuth),
+		ListBindings:                      NewListBindingsEndpoint(s, a.APIKeyAuth),
+		AttachBinding:                     NewAttachBindingEndpoint(s, a.APIKeyAuth),
+		DetachBinding:                     NewDetachBindingEndpoint(s, a.APIKeyAuth),
+		CommitServerIdentityConfiguration: NewCommitServerIdentityConfigurationEndpoint(s, a.APIKeyAuth),
+		ListRemoteSessions:                NewListRemoteSessionsEndpoint(s, a.APIKeyAuth),
+		RevokeRemoteSession:               NewRevokeRemoteSessionEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "remoteSessions" service
 // endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.ListBindings = m(e.ListBindings)
+	e.AttachBinding = m(e.AttachBinding)
+	e.DetachBinding = m(e.DetachBinding)
+	e.CommitServerIdentityConfiguration = m(e.CommitServerIdentityConfiguration)
 	e.ListRemoteSessions = m(e.ListRemoteSessions)
 	e.RevokeRemoteSession = m(e.RevokeRemoteSession)
+}
+
+// NewListBindingsEndpoint returns an endpoint function that calls the method
+// "listBindings" of service "remoteSessions".
+func NewListBindingsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListBindingsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListBindings(ctx, p)
+	}
+}
+
+// NewAttachBindingEndpoint returns an endpoint function that calls the method
+// "attachBinding" of service "remoteSessions".
+func NewAttachBindingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*AttachBindingPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.AttachBinding(ctx, p)
+	}
+}
+
+// NewDetachBindingEndpoint returns an endpoint function that calls the method
+// "detachBinding" of service "remoteSessions".
+func NewDetachBindingEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DetachBindingPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.DetachBinding(ctx, p)
+	}
+}
+
+// NewCommitServerIdentityConfigurationEndpoint returns an endpoint function
+// that calls the method "commitServerIdentityConfiguration" of service
+// "remoteSessions".
+func NewCommitServerIdentityConfigurationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CommitServerIdentityConfigurationPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CommitServerIdentityConfiguration(ctx, p)
+	}
 }
 
 // NewListRemoteSessionsEndpoint returns an endpoint function that calls the

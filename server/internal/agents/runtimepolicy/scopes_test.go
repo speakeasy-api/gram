@@ -53,9 +53,14 @@ func TestRuntimeScopeAllowlist(t *testing.T) {
 		authz.ScopeEnvironmentRead, authz.ScopeEnvironmentWrite,
 		authz.ScopeSkillRead, authz.ScopeSkillWrite,
 		authz.ScopeRiskPolicyEvaluate,
+		authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest,
 	}
 	for _, scope := range safe {
 		require.True(t, IsRuntimeScopeSafe(CurrentRuntimeScopeRegistryVersion, scope), scope)
+	}
+	// Registry versions are immutable: scopes added in v2 stay unsafe at v1.
+	for _, scope := range []authz.Scope{authz.ScopeOrgDeviceAgentSync, authz.ScopeOrgHooksIngest} {
+		require.False(t, IsRuntimeScopeSafe(RuntimeScopeRegistryVersion1, scope), scope)
 	}
 
 	unsafe := []authz.Scope{
@@ -66,6 +71,7 @@ func TestRuntimeScopeAllowlist(t *testing.T) {
 		authz.ScopeMCPBlockedRead, authz.ScopeMCPBlockedWrite, authz.ScopeMCPBlockedConnect,
 		authz.ScopeEnvironmentBlockedRead, authz.ScopeEnvironmentBlockedWrite,
 		authz.ScopeSkillBlockedRead, authz.ScopeSkillBlockedWrite,
+		authz.ScopePluginWrite, authz.ScopePluginBlockedWrite,
 		authz.ScopeRiskPolicyBypass, authz.ScopeRiskPolicyBlock,
 		authz.ScopeChatRead, authz.ScopeChatWrite,
 		authz.ScopeAgentRead, authz.ScopeAgentWrite, authz.ScopeAgentAuthorize, authz.ScopeAgentTransfer,

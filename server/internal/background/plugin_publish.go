@@ -152,10 +152,9 @@ func PluginPublishWorkflow(ctx workflow.Context, params PluginPublishParams) (*p
 	}).Get(ctx, &result); err != nil {
 		var appErr *temporal.ApplicationError
 		if errors.As(err, &appErr) && appErr.Type() == activities.ErrTypePluginActorNotMember {
-			// The actor is fixed for this run and cannot publish for the
-			// organization. The rollout sweep publishes the project under a
-			// current member on its next tick.
-			workflow.GetLogger(ctx).Warn("plugin project publish skipped: actor is not an organization member", "error", err.Error())
+			// The organization has no member to attribute the publish to, so
+			// no retry or later sweep can publish it either.
+			workflow.GetLogger(ctx).Warn("plugin project publish skipped: no organization member to publish as", "error", err.Error())
 			return &plugins.PublishProjectResult{RepoURL: "", Skipped: true}, nil
 		}
 		return nil, fmt.Errorf("publish plugin project: %w", err)

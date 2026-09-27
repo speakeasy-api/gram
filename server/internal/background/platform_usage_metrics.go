@@ -18,6 +18,11 @@ import (
 const (
 	platformUsageMetricsBatchSize    = 25
 	platformUsageMetricsWaitInterval = 30 * time.Second
+
+	platformUsageMetricsScheduleInterval = 24 * time.Hour
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	platformUsageMetricsCatchupWindow = platformUsageMetricsScheduleInterval - time.Second
 )
 
 type PlatformUsageMetricsClient struct {
@@ -83,12 +88,13 @@ func AddPlatformUsageMetricsSchedule(ctx context.Context, temporalEnv *tenv.Envi
 	scheduleID := "v1:collect-platform-usage-metrics-schedule"
 	workflowID := "v1:collect-platform-usage-metrics/scheduled"
 
-	_, err := temporalEnv.Client().ScheduleClient().Create(ctx, client.ScheduleOptions{
-		ID: scheduleID,
+	_, err := createScheduleWithCatchup(ctx, temporalEnv.Client().ScheduleClient(), client.ScheduleOptions{
+		CatchupWindow: platformUsageMetricsCatchupWindow,
+		ID:            scheduleID,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{
 				{
-					Every: 24 * time.Hour,
+					Every: platformUsageMetricsScheduleInterval,
 				},
 			},
 		},

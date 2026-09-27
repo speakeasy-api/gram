@@ -1,4 +1,5 @@
-// Non-consuming per-card consent actions; only approve/deny consumes the challenge, so at most one client grant is minted.
+// Per-card consent actions do not consume challenges. Delegation retry consumes
+// and rotates the challenge; approve/deny remain the only grant-minting actions.
 
 package mcp
 
@@ -61,6 +62,9 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	if err != nil {
 		return oops.E(oops.CodeUnauthorized, err, "authn challenge state not found or expired").LogError(ctx, logger)
 	}
+	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
+		return oops.E(oops.CodeUnauthorized, err, "invalid consent browser binding")
+	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
 		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
@@ -74,7 +78,22 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		return oops.E(oops.CodeUnauthorized, nil, "authn challenge subject is not resolved").LogError(ctx, logger)
 	}
+	// Revalidate private authority before retry consumes state or card actions
+	// read or mutate credentials; the resolved endpoint can already be stale.
+	if err := endpoint.ValidateLiveChallenge(ctx, s.db, challengeState.Endpoint); err != nil {
+		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
+			s.metrics.RecordOAuthAuthorityUnavailable(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageConsent)
+		}
+		return oauthAuthorityError(err).LogError(ctx, logger)
+	}
 	subject := *challengeState.Subject
+
+	switch r.PostForm.Get("action") {
+	case "agent_connections", "agent_attach", "agent_detach":
+		return s.serveConsentAgentConnections(w, r, endpoint, challengeState)
+	case "retry_delegation":
+		return s.retryFederatedDelegation(w, r, endpoint, challengeState)
+	}
 
 	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
@@ -122,7 +141,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
-		challengeURL, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, autoRefresh)
+		challengeURL, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, clients, autoRefresh)
 		if berr != nil {
 			return berr
 		}
@@ -225,7 +244,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return nil
 
 	default:
-		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", or "set_auto_refresh"`).LogError(ctx, logger)
+		return oops.E(oops.CodeBadRequest, nil, `action must be "connect", "refresh", "validate", "disconnect", "set_auto_refresh", or "retry_delegation"`).LogError(ctx, logger)
 	}
 }
 
@@ -240,10 +259,13 @@ func (s *Service) buildRemoteConnectURL(
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
+	bound []remotesessions.Client,
 	autoRefresh *bool,
 ) (string, error) {
-	// Not endpoint.UpstreamResource: under multi-binding that may belong
-	// to a different client's upstream.
+	// endpoint.UpstreamResource only when no other bound client can claim
+	// it: under multi-binding it may belong to a different client's
+	// upstream, while a client shared by servers with different upstreams
+	// derives none on its own and would record a grant nothing routes to.
 	var clientResource string
 	var rerr error
 	claimedByMember := false
@@ -259,7 +281,11 @@ func (s *Service) buildRemoteConnectURL(
 	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
 	// decided, and falling back would qualify the credential anyway.
 	if rerr == nil && !claimedByMember {
-		clientResource, rerr = s.remoteChallengeMgr.FallbackResourceForClient(ctx, client.ID)
+		boundIDs := make([]uuid.UUID, 0, len(bound))
+		for i := range bound {
+			boundIDs = append(boundIDs, bound[i].ID)
+		}
+		clientResource, rerr = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, client.ID, boundIDs, endpoint.UpstreamResource)
 	}
 	if rerr != nil {
 		return "", oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)

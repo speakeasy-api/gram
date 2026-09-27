@@ -170,7 +170,10 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		publisher:      publisher,
 	}
 	enableSkills(t, ctx, ti)
-	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String()))
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String()),
+		authz.NewGrant(authz.ScopePluginWrite, ti.projectID.String()),
+	)
 
 	return ctx, ti
 }

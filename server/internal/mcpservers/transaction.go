@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionbindings "github.com/speakeasy-api/gram/server/internal/usersessions/bindings"
 )
 
 // MCPServerTransactionInput contains the server-owned values needed to create
@@ -26,6 +27,7 @@ type MCPServerTransactionInput struct {
 	Visibility            string
 	NetworkAccessMode     networkaccess.Mode
 	EnvironmentID         uuid.NullUUID
+	UserSessionIssuerID   uuid.NullUUID
 	RemoteMCPServerID     uuid.NullUUID
 	TunneledMCPServerID   uuid.NullUUID
 	ToolsetID             uuid.NullUUID
@@ -51,8 +53,12 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 		return repo.McpServer{}, fmt.Errorf("compute MCP server slug: %w", err)
 	}
 
-	issuerID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-	if input.RemoteMCPServerID.Valid || input.TunneledMCPServerID.Valid {
+	issuerID := input.UserSessionIssuerID
+	if issuerID.Valid {
+		if _, err := usersessionbindings.ValidateAndLock(ctx, tx, issuerID.UUID, input.ProjectID, input.OrganizationID); err != nil {
+			return repo.McpServer{}, fmt.Errorf("validate selected user session issuer: %w", err)
+		}
+	} else if input.RemoteMCPServerID.Valid || input.TunneledMCPServerID.Valid {
 		issuerID, err = MintServerUserSessionIssuer(ctx, tx, input.OrganizationID, input.ProjectID, slug)
 		if err != nil {
 			return repo.McpServer{}, fmt.Errorf("mint MCP server issuer: %w", err)
@@ -85,7 +91,6 @@ func CreateMCPServerInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *a
 	if err != nil {
 		return repo.McpServer{}, fmt.Errorf("create MCP server: %w", err)
 	}
-
 	if err := auditLogger.LogMcpServerCreate(ctx, tx, audit.LogMcpServerCreateEvent{
 		OrganizationID:   input.OrganizationID,
 		ProjectID:        input.ProjectID,

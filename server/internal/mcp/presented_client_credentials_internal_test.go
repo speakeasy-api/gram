@@ -47,6 +47,9 @@ func TestExtractClientCredentials_Labels(t *testing.T) {
 		{name: "assertion plus secret", form: map[string]string{"client_id": "c", "client_secret": "s", "client_assertion": assertion}, method: "multiple", id: "c"},
 		{name: "basic plus assertion", basic: [2]string{"c", "s"}, form: map[string]string{"client_assertion": assertion}, method: "multiple", id: "c"},
 		{name: "basic plus form", basic: [2]string{"c", "s"}, form: map[string]string{"client_id": "other"}, method: "multiple", id: "c"},
+		{name: "basic plus empty form secret", basic: [2]string{"c", "s"}, form: map[string]string{"client_secret": ""}, method: "client_secret_basic", id: "c"},
+		{name: "empty form secret alone", form: map[string]string{"client_id": "c", "client_secret": ""}, method: "none", id: "c"},
+		{name: "assertion plus empty form secret", form: map[string]string{"client_id": "c", "client_secret": "", "client_assertion": assertion, "client_assertion_type": privatekeyjwt.AssertionType}, method: "private_key_jwt", id: "c"},
 		{name: "nothing", method: "none", id: ""},
 	} {
 		r := newFormRequest(t, tc.form)

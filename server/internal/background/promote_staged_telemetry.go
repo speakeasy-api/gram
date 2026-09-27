@@ -49,6 +49,9 @@ const (
 	stagedTelemetrySweepScheduleID = "v1:staged-telemetry-sweep-schedule"
 	stagedTelemetrySweepWorkflowID = stagedTelemetrySweepScheduleID + "/scheduled"
 	stagedTelemetrySweepInterval   = 2 * time.Minute
+
+	// Allow lateness up to one interval minus 1s; skip older missed ticks.
+	stagedTelemetrySweepCatchupWindow = stagedTelemetrySweepInterval - time.Second
 )
 
 type PromoteStagedTelemetryParams struct {
@@ -152,10 +155,11 @@ func AddStagedTelemetrySweepSchedule(ctx context.Context, temporalEnv *tenv.Envi
 	}
 
 	_, err := sc.Create(ctx, client.ScheduleOptions{
-		ID:      stagedTelemetrySweepScheduleID,
-		Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP,
-		Spec:    spec,
-		Action:  action,
+		CatchupWindow: stagedTelemetrySweepCatchupWindow,
+		ID:            stagedTelemetrySweepScheduleID,
+		Overlap:       enums.SCHEDULE_OVERLAP_POLICY_SKIP,
+		Spec:          spec,
+		Action:        action,
 	})
 	switch {
 	case errors.Is(err, temporal.ErrScheduleAlreadyRunning):
@@ -165,6 +169,7 @@ func AddStagedTelemetrySweepSchedule(ctx context.Context, temporalEnv *tenv.Envi
 			DoUpdate: func(input client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 				input.Description.Schedule.Spec = &spec
 				input.Description.Schedule.Action = action
+				setScheduleCatchup(&input.Description.Schedule, stagedTelemetrySweepCatchupWindow)
 				return &client.ScheduleUpdate{
 					Schedule:              &input.Description.Schedule,
 					TypedSearchAttributes: nil,

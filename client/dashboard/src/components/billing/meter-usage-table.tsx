@@ -2,11 +2,14 @@ import {
   useOtherSeriesColor,
   useSeriesColors,
 } from "@/components/chart/useSeriesColors";
+import { Page } from "@/components/page-layout";
 import { type Column, Table } from "@/components/ui/Table";
+import { useState } from "react";
 import { meterBreakdownLabel } from "./meter-breakdown-options";
+import { MeterQuantityCell } from "./meter-quantity-cell";
+import { RawValuesToggle } from "./raw-values-toggle";
 import {
   type MeterUsageData,
-  formatMeterQuantity,
   meterSeriesIdentity,
   meterSeriesLabel,
 } from "./meter-usage-adapter";
@@ -29,6 +32,7 @@ export function MeterUsageTable({
   data: MeterUsageData;
   projectSlugs: ReadonlyMap<string, string>;
 }): JSX.Element {
+  const [showRaw, setShowRaw] = useState(false);
   const colors = useSeriesColors();
   const remainderColor = useOtherSeriesColor();
   const rows: MeterTableRow[] = data.breakdown.series.map((series, index) => {
@@ -79,28 +83,33 @@ export function MeterUsageTable({
     },
     {
       key: "total",
-      header: "Usage",
+      header: <span className="block w-full text-right">Usage</span>,
       width: "220px",
       render: (row) => (
-        <span
-          className="block w-full text-right tabular-nums"
-          title={formatMeterQuantity(row.total, data.unit, "standard")}
-        >
-          {formatMeterQuantity(row.total, data.unit)}
-        </span>
+        <MeterQuantityCell
+          quantity={row.total}
+          unit={data.unit}
+          showRaw={showRaw}
+        />
       ),
     },
   ];
 
   return (
     <div className="border-border border">
-      <div className="border-border flex items-baseline justify-between border-b px-4 py-3">
-        <span className="font-medium">Cumulative breakdown</span>
-        <span className="text-muted-foreground text-sm">
-          By {meterBreakdownLabel(data.family, data.breakdown.dimension)}
-        </span>
-      </div>
+      <Page.Toolbar className="border-0">
+        <Page.Toolbar.Leading>
+          <span className="font-medium">Cumulative breakdown</span>
+          <span className="text-muted-foreground text-sm">
+            By {meterBreakdownLabel(data.family, data.breakdown.dimension)}
+          </span>
+        </Page.Toolbar.Leading>
+        <Page.Toolbar.Actions>
+          <RawValuesToggle checked={showRaw} onCheckedChange={setShowRaw} />
+        </Page.Toolbar.Actions>
+      </Page.Toolbar>
       <Table
+        className="border-x-0 border-b-0"
         columns={columns}
         data={rows}
         rowKey={(row) => row.identity}

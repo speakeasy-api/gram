@@ -55,6 +55,9 @@ type RiskPolicy struct {
 	// Principal URNs the policy applies to. Contains user:all when audience_type
 	// is everyone.
 	AudiencePrincipalUrns []string
+	// Optional MCP server and tool restriction. Null applies the policy to every
+	// MCP server.
+	McpScope *RiskMCPScope
 	// Default disposition for shadow MCP blocking policies: block_all blocks every
 	// non-Gram-hosted server unless allowed, allow_all permits every server unless
 	// blocked. Blocked URLs are stored as risk_policy:block grants, not on the

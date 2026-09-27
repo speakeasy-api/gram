@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"strings"
 	"time"
 
 	jose "github.com/go-jose/go-jose/v4"
@@ -86,6 +87,10 @@ type Config struct {
 
 	// SigningCredentialID is the platform-tier gcp_iam credential that signs.
 	SigningCredentialID uuid.UUID
+
+	// SigningServiceAccount, when set, is the only service account the signing
+	// credential may impersonate; a credential repointed elsewhere is refused.
+	SigningServiceAccount string
 
 	// ServerURL is the origin managed JWKS documents are served from.
 	ServerURL *url.URL
@@ -1059,6 +1064,11 @@ func (p *Provisioner) resolveSigningCredential(ctx context.Context, logger *slog
 		return nil, fmt.Errorf("load platform signing credential: %w", err)
 	}
 
+	if want := p.cfg.SigningServiceAccount; want != "" {
+		if got := strings.TrimSpace(row.GcpIamCredential.ImpersonateServiceAccount.String); got != "" && !strings.EqualFold(got, want) {
+			return nil, fmt.Errorf("%w: credential impersonates %s, configured signer is %s", ErrSigningCredentialUnusable, got, want)
+		}
+	}
 	credential, problem, detail, err := p.gcpIdentity.ScreenStoredCredential(ctx, logger, gcpauth.StoredCredential{
 		Present:                   true,
 		ImpersonateServiceAccount: row.GcpIamCredential.ImpersonateServiceAccount.String,

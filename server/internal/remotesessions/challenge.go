@@ -54,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth/registration"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/interceptors"
@@ -205,6 +206,9 @@ type ChallengeManager struct {
 	// metrics carries the unsampled upstream-authorize census that the PKCE
 	// enforcement decision (AIS-566) reads.
 	metrics *remotesessionmetrics.Authorize
+
+	registrationTelemetry registration.Recorder
+
 	// privateAuthorityValidator is injected at construction. The callback package
 	// owns state mechanics; the caller owns endpoint resolution.
 	privateAuthorityValidator PrivateAuthorityValidator
@@ -323,6 +327,7 @@ func NewChallengeManager(
 			interceptors.NewGoogle(logger),
 		},
 		metrics:                   remotesessionmetrics.NewAuthorize(logger, meterProvider),
+		registrationTelemetry:     registration.NewMetrics(logger, meterProvider),
 		privateAuthorityValidator: nil,
 		idTokens:                  NoIDTokenVerifier(),
 		enricher:                  nil,
@@ -339,7 +344,7 @@ func NewChallengeManager(
 	}
 	// The manager's own refreshes restate identity with the same verifier.
 	manager.refresher = NewRefreshService(logger, meterProvider, db, enc, policy, tunnels, cacheImpl, WithRefreshIDTokenVerifier(manager.idTokens), WithRefreshIssuerMetadataRefresher(manager.issuerMetadata), WithRefreshSessionEnricher(manager.enricher), WithRefreshTokenEndpointAssertionSigner(manager.assertions))
-	manager.rotator = NewClientRotator(logger, db, enc, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger)
+	manager.rotator = NewClientRotator(logger, db, enc, policy, tunnels, cacheImpl, serverURL, manager.revoker, manager.auditLogger, manager.registrationTelemetry)
 	return manager
 }
 
@@ -385,7 +390,7 @@ type Client struct {
 
 	IssuerURL string
 
-	// IssuerIdentifier is the discovery document's issuer, else IssuerURL; what iss must equal.
+	// IssuerIdentifier is the stored issuer verbatim; what iss must equal.
 	IssuerIdentifier string
 	// ClientAssertionIssuer preserves the exact RFC 8414 issuer identifier for
 	// private_key_jwt aud claims, including a significant trailing slash.
@@ -489,23 +494,16 @@ func (c Client) RequestedScopes() (scopes []string, widened []string) {
 	return scopes, widened
 }
 
-// issuerIdentifier is the document's issuer verbatim, else the stored URL without a trailing slash.
-func issuerIdentifier(metadata []byte, issuerURL string) string {
-	if doc := rawDocumentIssuer(metadata); doc != "" {
-		return doc
-	}
-	return strings.TrimRight(issuerURL, "/")
+// issuerIdentifier preserves the configured identity verbatim. Retained legacy
+// metadata must never override the stored issuer, even for a slash-only difference.
+func issuerIdentifier(_ []byte, issuerURL string) string {
+	return issuerURL
 }
 
-// clientAssertionIssuer is the RFC 8414 issuer identifier used as the default
-// private_key_jwt audience. Preserve the configured URL verbatim when no
-// discovery document is stored: a trailing slash is significant to audience
-// comparison (notably for Auth0 issuers).
-func clientAssertionIssuer(metadata []byte, issuerURL string) string {
-	if doc := rawDocumentIssuer(metadata); doc != "" && issuerURLsCanonicallyEqual(doc, issuerURL) {
-		return doc
-	}
-	return strings.TrimSpace(issuerURL)
+// clientAssertionIssuer is the configured issuer identifier used as the default
+// private_key_jwt audience. It is not normalized or replaced by legacy metadata.
+func clientAssertionIssuer(_ []byte, issuerURL string) string {
+	return issuerURL
 }
 
 // ListClients returns the joined client + issuer rows linked to a user
@@ -759,6 +757,12 @@ func (m *ChallengeManager) RefreshRemoteSession(
 // attached MCP servers; ambiguous or absent upstreams derive "".
 func (m *ChallengeManager) FallbackResourceForClient(ctx context.Context, clientID uuid.UUID) (string, error) {
 	return m.refresher.FallbackResourceForClient(ctx, clientID)
+}
+
+// ResourceForClientAtUpstream derives one client's RFC 8707 resource for a
+// connect made through upstream; see RefreshService.ResourceForClientAtUpstream.
+func (m *ChallengeManager) ResourceForClientAtUpstream(ctx context.Context, clientID uuid.UUID, siblingIDs []uuid.UUID, upstream string) (string, error) {
+	return m.refresher.ResourceForClientAtUpstream(ctx, clientID, siblingIDs, upstream)
 }
 
 // DisconnectRemoteSession soft-deletes the subject's remote_session for one
@@ -1058,6 +1062,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			}
 			return m.retryWithoutResource(ctx, logger, state, cause)
 		}
+		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
 		return none, denied(ctx, logger, q)
 	}
 
@@ -1251,6 +1256,19 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 	txQueries := remotesessions_repo.New(dbtx)
 
+	// Issuer first, before the client row, so this transaction and an issuer
+	// migration acquire locks in the same order. A login whose issuer was
+	// retired in the meantime is rejected here rather than stored against the
+	// tombstone.
+	if _, err := txQueries.LockLiveUserSessionIssuerForRemoteSessionWrite(ctx, remotesessions_repo.LockLiveUserSessionIssuerForRemoteSessionWriteParams{
+		ID: state.UserSessionIssuerID, ProjectID: state.ProjectID, OrganizationID: state.OrganizationID,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return none, oops.E(oops.CodeUnauthorized, nil, "the identity provider this login was started from no longer exists").LogWarn(ctx, logger)
+		}
+		return none, oops.E(oops.CodeUnexpected, err, "lock user session issuer for remote session write").LogError(ctx, logger)
+	}
+
 	// No row means the client itself is gone, which the binding recheck below
 	// rejects on its own — there is nothing left to serialize against.
 	if _, err := txQueries.LockRemoteSessionClientForSessionWrite(ctx, state.RemoteSessionClientID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -1311,6 +1329,12 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	redirectBaseURL := m.serverURL.String()
 	if state.Authority.IsPrivate() {
 		redirectBaseURL = state.Authority.BaseURL
+	} else if state.Authority.Surface == requestorigin.SurfacePlatform && state.Authority.BaseURL != "" {
+		// A platform authority's origin is the server URL or an extra platform
+		// host (GRAM_PLATFORM_HOSTS), stamped by request middleware at mint.
+		// Consent revalidates it on arrival, so return to the host the flow
+		// started on rather than the configured server URL.
+		redirectBaseURL = state.Authority.BaseURL
 	} else if state.Authority.Surface == requestorigin.SurfaceCustomDomain && state.Authority.CustomDomainID.Valid {
 		domain, derr := customdomainsrepo.New(m.db).GetCustomDomainByIDAndOrganization(ctx, customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
 			ID: state.Authority.CustomDomainID.UUID, OrganizationID: state.Authority.OrganizationID,
@@ -1334,6 +1358,31 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			RemoteSessionUpdatedAt: storedSession.UpdatedAt.Time,
 		},
 	}, nil
+}
+
+func (m *ChallengeManager) recordCIMDAuthorizationFailure(ctx context.Context, state RemoteLoginState, code, description string) {
+	if m.registrationTelemetry == nil {
+		return
+	}
+
+	// Classify first: access_denied is the ordinary user cancellation and is
+	// not recorded, so the lookup that only decides whether this was a CIMD
+	// client is wasted on the most common denial there is.
+	failure, record := registration.ClassifyCIMDAuthorizationError(code, description)
+	if !record {
+		return
+	}
+
+	clientRow, err := remotesessions_repo.New(m.db).GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
+		ID:             state.RemoteSessionClientID,
+		ProjectID:      state.ProjectID,
+		OrganizationID: state.OrganizationID,
+	})
+	if err != nil || !clientRow.RemoteSessionClient.ClientIDMetadataUri.Valid {
+		return
+	}
+
+	m.registrationTelemetry.RecordFailure(ctx, registration.MethodCIMD, failure)
 }
 
 // denied rejects the callback; the public message echoes only IETF-registered error codes.
@@ -1455,13 +1504,13 @@ func (m *ChallengeManager) exchangeCode(
 
 	resp, err := doer.Do(req)
 	if err != nil {
-		return tokenResponse{}, fmt.Errorf("post token: %w", err)
+		return tokenResponse{}, &tokenExchangeUnavailableError{err: fmt.Errorf("post token: %w", err)}
 	}
 	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
-		return tokenResponse{}, fmt.Errorf("read token response body: %w", err)
+		return tokenResponse{}, &tokenExchangeUnavailableError{err: fmt.Errorf("read token response body: %w", err)}
 	}
 	if resp.StatusCode/100 != 2 {
 		return tokenResponse{}, newTokenEndpointError(resp.StatusCode, resp.Status, body)
@@ -1615,3 +1664,9 @@ func s256Challenge(verifier string) string {
 	sum := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
+
+// tokenExchangeUnavailableError preserves the shared exchange error contract.
+type tokenExchangeUnavailableError struct{ err error }
+
+func (e *tokenExchangeUnavailableError) Error() string { return e.err.Error() }
+func (e *tokenExchangeUnavailableError) Unwrap() error { return e.err }

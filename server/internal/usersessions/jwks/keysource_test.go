@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
 
 func TestValidateKeySource_NullInlineNormalizedToAbsent(t *testing.T) {

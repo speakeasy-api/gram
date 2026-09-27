@@ -67,6 +67,8 @@ func TestToolUsageFilteredSelect_BindsMetaMatcherArgsInPlaceholderOrder(t *testi
 	require.Greater(t, hostedAt, anchoredAt)
 	require.Greater(t, bareAt, hostedAt)
 	require.Contains(t, sql, "meta_mcp_server_id IN (?)")
+	require.Contains(t, sql, "max(agent_id) AS g_agent_id")
+	require.Contains(t, sql, "g_agent_id != '', 'agent_id'")
 }
 
 func TestListToolUsageTracesCTE_BindsMetaMatcherArgsOnBothPaths(t *testing.T) {
@@ -107,5 +109,15 @@ func TestListToolUsageTracesCTE_BindsMetaMatcherArgsOnBothPaths(t *testing.T) {
 		require.Len(t, args, strings.Count(sql, "?"), "%s sql: %s\nargs: %#v", name, sql, args)
 		require.Contains(t, sql, "meta_mcp_match_anchored", name)
 		require.Contains(t, sql, "meta_mcp_server_id", name)
+		require.Contains(t, sql, "agent_id", name)
+		require.Contains(t, sql, "!= '', 'agent_id'", name)
 	}
+}
+
+func TestRawToolUsageAttributionUsesTrustedEventExpression(t *testing.T) {
+	t.Parallel()
+	sql, _, err := toolUsageTraceRowsCTE(ListToolUsageTracesParams{Query: "raw-path"})
+	require.NoError(t, err)
+	require.Contains(t, sql, toolUsageAgentIDExpr+" AS agent_id")
+	require.Contains(t, sql, "telemetry_logs.event_source IN ('tool_call', 'resource_read', 'meta_discovery')")
 }

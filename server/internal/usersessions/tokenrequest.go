@@ -10,7 +10,7 @@ package usersessions
 import (
 	"net/url"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
 
 // AuthCodeTokenRequest is the RFC 6749 §4.1.3 token request issued by a

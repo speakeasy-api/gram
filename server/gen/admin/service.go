@@ -65,6 +65,8 @@ type Service interface {
 	ListOrganizationMembers(context.Context, *ListOrganizationMembersPayload) (res *AdminListOrganizationMembersResult, err error)
 	// Lists projects belonging to an organization (admin view, no auth scoping).
 	ListOrganizationProjects(context.Context, *ListOrganizationProjectsPayload) (res *AdminListOrganizationProjectsResult, err error)
+	// Lists the MCP servers in a project (admin view, no auth scoping).
+	ListProjectMcpServers(context.Context, *ListProjectMcpServersPayload) (res *AdminListProjectMcpServersResult, err error)
 	// Lists activity belonging to an organization for admin operators.
 	ListOrganizationActivity(context.Context, *ListOrganizationActivityPayload) (res *AdminListOrganizationActivityResult, err error)
 	// Lists organizations for platform admin operations with optional search and
@@ -116,6 +118,10 @@ type Service interface {
 	// Records that an organization's enterprise trial converted to a signed
 	// contract.
 	MarkEnterpriseTrialConverted(context.Context, *MarkEnterpriseTrialConvertedPayload) (res *MarkEnterpriseTrialConvertedResult, err error)
+	// GetOrganizationOnboarding implements getOrganizationOnboarding.
+	GetOrganizationOnboarding(context.Context, *GetOrganizationOnboardingPayload) (res *AdminOnboardingConfiguration, err error)
+	// SetOrganizationOnboarding implements setOrganizationOnboarding.
+	SetOrganizationOnboarding(context.Context, *SetOrganizationOnboardingPayload) (res *AdminOnboardingConfiguration, err error)
 	// Create a global remote_session_issuer (project_id NULL, organization_id
 	// NULL). Requires platform admin.
 	CreateGlobalIssuer(context.Context, *CreateGlobalIssuerPayload) (res *types.RemoteSessionIssuer, err error)
@@ -197,10 +203,18 @@ type Service interface {
 	// Returns totals-only ordinary meter usage for an organization over a bounded
 	// UTC-day window.
 	GetMeterUsage(context.Context, *GetMeterUsagePayload) (res *AdminMeterUsageResponse, err error)
+	// Returns exact current PAYG list-price estimates for an organization's three
+	// metered products over a maximum of three calendar months. Available for
+	// every organization regardless of account type or subscription state.
+	GetSpendBreakdown(context.Context, *GetSpendBreakdownPayload) (res *AdminSpendBreakdownResponse, err error)
 	// Read the shared support catalog and product coverage.
 	GetSupportMatrix(context.Context, *GetSupportMatrixPayload) (res *SupportMatrix, err error)
 	// Save coverage against the last read revision; rejects concurrent changes.
 	UpdateSupportMatrix(context.Context, *UpdateSupportMatrixPayload) (res *SupportMatrix, err error)
+	// Observed support coverage for one organization: per-surface evidence for
+	// session activity, policy enforcement, identity attribution, token usage and
+	// shadow MCP exposure.
+	GetSupportCoverage(context.Context, *GetSupportCoveragePayload) (res *SupportCoverageResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -223,7 +237,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [52]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSupportMatrix", "updateSupportMatrix"}
+var MethodNames = [57]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "getOrganizationOnboarding", "setOrganizationOnboarding", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage"}
 
 // AdminBulkUpdateAccountTypeResult is the result type of the admin service
 // bulkUpdateAccountType method.
@@ -323,6 +337,29 @@ type AdminListOrganizationsResult struct {
 	Total int64
 }
 
+// AdminListProjectMcpServersResult is the result type of the admin service
+// listProjectMcpServers method.
+type AdminListProjectMcpServersResult struct {
+	// The project's MCP servers, oldest first.
+	McpServers []*AdminMcpServer
+}
+
+// MCP server surfaced to admin operators. Covers both server models:
+// mcp_servers rows and mcp_enabled toolsets that no mcp_servers row points at.
+type AdminMcpServer struct {
+	// The mcp_servers row ID, or the toolset ID for a toolset-only server.
+	ID string
+	// Display name of the server.
+	Name string
+	// The URL clients connect to. Omitted when the server has no routable address.
+	URL *string
+	// The visibility of the server.
+	Visibility string
+	// What backs the server. toolset_only is a toolset with no mcp_servers row.
+	Source    string
+	CreatedAt string
+}
+
 type AdminMeterUsageBucket struct {
 	// Inclusive UTC day boundary
 	From string
@@ -347,6 +384,29 @@ type AdminMeterUsageResponse struct {
 	// Retrieval timestamp, not an ingestion watermark
 	QueriedAt         string
 	MeasurementMethod string
+}
+
+// AdminOnboardingConfiguration is the result type of the admin service
+// getOrganizationOnboarding method.
+type AdminOnboardingConfiguration struct {
+	OrganizationID string
+	// Absent for legacy organizations.
+	Preset  *string
+	Tasks   []*AdminOnboardingTask
+	Presets []*AdminOnboardingPreset
+}
+
+type AdminOnboardingPreset struct {
+	Key             string
+	Title           string
+	VisibleTaskKeys []string
+}
+
+type AdminOnboardingTask struct {
+	Key         string
+	Title       string
+	Description string
+	Hidden      bool
 }
 
 // AdminOrganization is the result type of the admin service updateOrganization
@@ -383,6 +443,9 @@ type AdminOrganization struct {
 	TrialDemotedAt *string
 	// Number of active members in the organization.
 	MemberCount int
+	// The flow that created the organization (e.g. signup, assistants,
+	// platform_admin). Absent when nothing recorded one. Informational only.
+	CreationSource *string
 	// The creation date of the organization.
 	CreatedAt string
 	// The last update date of the organization.
@@ -487,6 +550,22 @@ type AdminProjectDetail struct {
 type AdminSession struct {
 	Email string
 	Name  *string
+}
+
+// AdminSpendBreakdownResponse is the result type of the admin service
+// getSpendBreakdown method.
+type AdminSpendBreakdownResponse struct {
+	Window *MeterUsageWindow
+	// Trailing twelve billing-cycle date windows
+	BillingCycles []*MeterUsageWindow
+	Currency      string
+	PricingBasis  string
+	// Retrieval timestamp used to distinguish current and future buckets
+	QueriedAt string
+	// Exact estimated total at current PAYG list prices
+	TotalCostUsd string
+	// The three metered products in stable display order
+	Products []*SpendProduct
 }
 
 // AdminStripeCustomer is the result type of the admin service
@@ -648,6 +727,9 @@ type CreateGlobalIssuerPayload struct {
 	ScopesSupported []string
 	// Grant types advertised by the issuer.
 	GrantTypesSupported []string
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string
 	// Response types advertised by the issuer.
 	ResponseTypesSupported []string
 	// Token endpoint auth methods advertised by the issuer.
@@ -707,8 +789,12 @@ type CreateGlobalIssuerPayload struct {
 // createOrganization method.
 type CreateOrganizationPayload struct {
 	AdminSessionToken *string
-	// Display name for the new organization.
-	Name string
+	// Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes
+	// the name and verified email domain.
+	URL string
+	// The operator confirms that domain ownership was established outside this
+	// form.
+	OwnershipConfirmed bool
 }
 
 // DeleteGlobalIssuerPayload is the payload type of the admin service
@@ -823,6 +909,13 @@ type GetOrganizationFeaturesPayload struct {
 	OrganizationID    string
 }
 
+// GetOrganizationOnboardingPayload is the payload type of the admin service
+// getOrganizationOnboarding method.
+type GetOrganizationOnboardingPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+}
+
 // GetOrganizationPayload is the payload type of the admin service
 // getOrganization method.
 type GetOrganizationPayload struct {
@@ -860,6 +953,20 @@ type GetSessionPayload struct {
 	AdminSessionToken *string
 }
 
+// GetSpendBreakdownPayload is the payload type of the admin service
+// getSpendBreakdown method.
+type GetSpendBreakdownPayload struct {
+	AdminSessionToken *string
+	// Organization ID or canonical slug.
+	OrganizationID string
+	// Inclusive UTC midnight reporting boundary. Must be paired with to.
+	From *string
+	// Exclusive UTC midnight reporting boundary. Must be paired with from and no
+	// later than three calendar months after from, clamped to the target month's
+	// last day.
+	To *string
+}
+
 // GetStripeCustomerPayload is the payload type of the admin service
 // getStripeCustomer method.
 type GetStripeCustomerPayload struct {
@@ -873,6 +980,16 @@ type GetStripeCustomerPayload struct {
 type GetStripeSubscriptionPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
+}
+
+// GetSupportCoveragePayload is the payload type of the admin service
+// getSupportCoverage method.
+type GetSupportCoveragePayload struct {
+	AdminSessionToken *string
+	// Organization to report coverage for.
+	OrganizationID string
+	// Observation window in days.
+	WindowDays int
 }
 
 // GetSupportMatrixPayload is the payload type of the admin service
@@ -897,6 +1014,10 @@ type GlobalRemoteSessionIssuer struct {
 	// Number of active tenant-owned user_session_issuers that trust this issuer.
 	// These block deletion and must be unlinked by their owning organizations.
 	TrustedUserSessionIssuerCount int
+	// Number of active identity-chaining bindings that block deletion and must be
+	// explicitly unlinked by their owning organizations. Included in the detail
+	// response; omitted from listings.
+	EmaBindingCount *int
 }
 
 // An organization- or project-level remote_session_issuer that names the same
@@ -947,8 +1068,13 @@ type IssuerMigratePreflight struct {
 	// Number of user_session_issuers that trust the source. Any non-zero value
 	// blocks migration.
 	TrustedUserSessionIssuerCount int
-	// TRUE when the migration would succeed: no endpoint mismatches, conflicting
-	// MCP-server bindings, or user-session issuers that trust the source.
+	// Number of active identity-chaining bindings on the source. Non-zero blocks
+	// migration; explicitly unlink these bindings before migration, then prepare
+	// new bindings for the target.
+	EmaBindingCount int
+	// TRUE when the migration would succeed: no active identity-chaining bindings,
+	// endpoint mismatches, conflicting MCP-server bindings, or user-session
+	// issuers that trust the source.
 	CanMigrate bool
 	// Number of tenant-owned remote_session_clients already registered with the
 	// target issuer, BEFORE this migration. Any non-zero value blocks deleting the
@@ -1081,6 +1207,17 @@ type ListOrganizationsPayload struct {
 	// 1-based page number for offset paging (default 1). Supplying it selects
 	// offset paging.
 	Page *int
+}
+
+// ListProjectMcpServersPayload is the payload type of the admin service
+// listProjectMcpServers method.
+type ListProjectMcpServersPayload struct {
+	AdminSessionToken *string
+	// Organization the project must belong to. A project outside it is reported as
+	// not found.
+	OrganizationID string
+	// Project ID.
+	ProjectID string
 }
 
 // LoginPayload is the payload type of the admin service login method.
@@ -1289,12 +1426,51 @@ type SetOrganizationFeaturePayload struct {
 	Enabled           bool
 }
 
+// SetOrganizationOnboardingPayload is the payload type of the admin service
+// setOrganizationOnboarding method.
+type SetOrganizationOnboardingPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	// Complete explicit selection; an empty array selects no tasks.
+	VisibleTaskKeys []string
+	// A key from presets. Omit to preserve the saved preset. Null/reset is not
+	// supported.
+	Preset *string
+}
+
 // SetStripeCustomerPayload is the payload type of the admin service
 // setStripeCustomer method.
 type SetStripeCustomerPayload struct {
 	AdminSessionToken *string
 	OrganizationID    string
 	StripeCustomerID  string
+}
+
+type SpendBucket struct {
+	// Inclusive bucket boundary
+	From string
+	// Exclusive bucket boundary
+	To string
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string
+	// Exact estimated cost at current PAYG list prices
+	CostUsd string
+}
+
+type SpendProduct struct {
+	ID    string
+	Label string
+	Unit  string
+	// Exact integer ordinary usage quantity as a decimal string
+	Quantity string
+	// Exact integer quantity to which rate_usd applies
+	RateQuantity string
+	// Exact current PAYG USD list price
+	RateUsd string
+	// Exact estimated product cost at current PAYG list prices
+	CostUsd string
+	// Dense UTC daily product buckets, including in-progress and future days
+	Buckets []*SpendBucket
 }
 
 // StartTrialPayload is the payload type of the admin service startTrial method.
@@ -1310,6 +1486,48 @@ type SupportCapability struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Group string `json:"group"`
+}
+
+// Observed evidence for one capability on one surface.
+type SupportCoverageCell struct {
+	// Capability the cell reports on.
+	Capability string
+	// Consuming surface the cell reports on.
+	Surface string
+	// Whether evidence was found, absent, or not answerable yet.
+	Status string
+	// Primary measure: sessions, tokens, blocks, attributed sessions or distinct
+	// shadow servers depending on the capability. Zero unless observed.
+	Value int64
+	// Short qualifier rendered under the value. Empty when there is nothing to
+	// qualify.
+	Detail string
+	// RFC3339 timestamp of the most recent supporting evidence. Absent unless
+	// observed.
+	LastSeen *string
+}
+
+// SupportCoverageResult is the result type of the admin service
+// getSupportCoverage method.
+type SupportCoverageResult struct {
+	// One cell per (capability, surface) pair. Always fully populated.
+	Cells []*SupportCoverageCell
+	// Activity whose hook_source folded to no surface.
+	Unmapped []*SupportCoverageUnmapped
+	// Length of the observation window in days.
+	WindowDays int
+	// RFC3339 start of the observation window.
+	From string
+	// RFC3339 end of the observation window.
+	To string
+}
+
+// A hook_source the surface fold did not recognize.
+type SupportCoverageUnmapped struct {
+	// The raw, unrecognized hook_source.
+	HookSource string
+	// Sessions observed under it inside the window.
+	Sessions int64
 }
 
 type SupportDraft struct {
@@ -1399,11 +1617,14 @@ type UpdateGlobalIssuerPayload struct {
 	OpPolicyURI *string
 	// Set or clear RFC 8414 op_tos_uri. An empty string clears it to NULL; any
 	// other value must be an absolute http(s) URL.
-	OpTosURI                          *string
-	ScopesSupported                   []string
-	GrantTypesSupported               []string
-	ResponseTypesSupported            []string
-	TokenEndpointAuthMethodsSupported []string
+	OpTosURI            *string
+	ScopesSupported     []string
+	GrantTypesSupported []string
+	// Advertised grant profiles; metadata evidence is not client authorization or
+	// user access.
+	AuthorizationGrantProfilesSupported []string
+	ResponseTypesSupported              []string
+	TokenEndpointAuthMethodsSupported   []string
 	// PKCE code challenge methods advertised by the issuer (RFC 8414
 	// code_challenge_methods_supported). Omitting the field leaves the stored
 	// value unchanged; an empty array records that the issuer advertises no

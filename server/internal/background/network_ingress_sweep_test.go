@@ -78,6 +78,7 @@ func TestAddNetworkIngressSweepUpdatesExistingSchedule(t *testing.T) {
 		update, err := options.DoUpdate(client.ScheduleUpdateInput{Description: client.ScheduleDescription{
 			Schedule: client.Schedule{
 				Spec:   &client.ScheduleSpec{CronExpressions: []string{"stale"}},
+				State:  &client.ScheduleState{Paused: true, Note: "manually paused"},
 				Action: &client.ScheduleWorkflowAction{ID: "stale", TaskQueue: "new-queue"},
 			},
 		}})
@@ -90,6 +91,9 @@ func TestAddNetworkIngressSweepUpdatesExistingSchedule(t *testing.T) {
 		require.Equal(t, desiredAction.WorkflowExecutionTimeout, updatedAction.WorkflowExecutionTimeout)
 		require.NotNil(t, update.Schedule.Policy)
 		require.Equal(t, enums.SCHEDULE_OVERLAP_POLICY_SKIP, update.Schedule.Policy.Overlap)
+		require.Equal(t, desired.CatchupWindow, update.Schedule.Policy.CatchupWindow)
+		require.True(t, update.Schedule.State.Paused)
+		require.Equal(t, "manually paused", update.Schedule.State.Note)
 		return true
 	})).Return(nil).Once()
 

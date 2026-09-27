@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
 )
 
 const oauthRequestMaxBytes int64 = 64 << 10

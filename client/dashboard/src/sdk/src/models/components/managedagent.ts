@@ -40,6 +40,10 @@ export type ManagedAgent = {
   ownerReassignmentRequiredAt?: Date | undefined;
   ownerUserId: string;
   permissions: AgentPermissions;
+  /**
+   * The optional project this agent is scoped to; absent for an organization-wide agent
+   */
+  projectId?: string | undefined;
   updatedAt: Date;
 };
 
@@ -66,6 +70,7 @@ export const ManagedAgent$inboundSchema: z.ZodMiniType<ManagedAgent, unknown> =
       ),
       owner_user_id: z.string(),
       permissions: AgentPermissions$inboundSchema,
+      project_id: z.optional(z.string()),
       updated_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -78,6 +83,7 @@ export const ManagedAgent$inboundSchema: z.ZodMiniType<ManagedAgent, unknown> =
         "owner_reassignment_reason": "ownerReassignmentReason",
         "owner_reassignment_required_at": "ownerReassignmentRequiredAt",
         "owner_user_id": "ownerUserId",
+        "project_id": "projectId",
         "updated_at": "updatedAt",
       });
     }),

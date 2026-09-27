@@ -21,6 +21,11 @@ import (
 //
 // jwks_uri is NOT NULL on workload_issuers but carries no non-empty CHECK, so
 // the empty check guards invalid persisted data rather than an unstorable row.
+//
+// A plain-http jwks_uri is refused here, before anything is fetched, with an
+// error wrapping jwks.ErrURINotHTTPS. The table does not constrain the scheme,
+// so the stored value is not trusted to be https.
+//
 // Errors name the issuer by name; a workload issuer has no slug, its URL being
 // its canonical name.
 func workloadIssuerKeySource(endpoint *ResolvedMcpEndpoint, issuer *workloadidentity_repo.WorkloadIssuer) (jwks.Source, error) {

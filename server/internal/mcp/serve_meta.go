@@ -43,8 +43,16 @@ import (
 // outcome, and the surface-resolved protocol version. Assembled once in
 // serveResolvedMetaMCPEndpoint and threaded through dispatch.
 type metaGateContext struct {
-	projectID       uuid.UUID
-	metaServerID    uuid.UUID
+	projectID uuid.UUID
+	// metaServerID is a stored meta_mcp_servers row for an operator-built
+	// gateway, and a synthetic per-agent id for an agent gateway — see
+	// agentGatewayID. Treat it as a telemetry grouping key, never as
+	// something to read a row back by.
+	metaServerID uuid.UUID
+	// agentID is set only when this request is an agent gateway, which
+	// derives its members from the caller's delegated policy instead of
+	// stored membership rows.
+	agentID         uuid.UUID
 	organizationID  string
 	tokens          map[uuid.UUID]remotesessions.UpstreamToken
 	toolSelection   *toolfilter.SessionSelection
@@ -62,12 +70,15 @@ type metaGateContext struct {
 // then dispatches the JSON-RPC request. Only POST reaches here — GET/DELETE
 // on /mcp/{slug} stay with their existing handlers, which treat meta-backed
 // endpoints as having no proxied stream and no upstream session.
+// agentID is the agent whose grants define membership, or uuid.Nil for a
+// stored gateway whose members come from meta_mcp_server_members.
 func (s *Service) serveResolvedMetaMCPEndpoint(
 	w http.ResponseWriter,
 	r *http.Request,
 	logger *slog.Logger,
 	mcpEndpoint *mcpendpointsrepo.McpEndpoint,
 	metaServer *metamcprepo.MetaMcpServer,
+	agentID uuid.UUID,
 ) error {
 	ctx := r.Context()
 
@@ -145,8 +156,11 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	w.Header().Set(mcpversions.HTTPHeader, resolution.InEffect)
 
 	gate := &metaGateContext{
-		projectID:      mcpEndpoint.ProjectID,
-		metaServerID:   metaServer.ID,
+		projectID:    mcpEndpoint.ProjectID,
+		metaServerID: metaServer.ID,
+		// Nil for a stored gateway, whose members come from
+		// meta_mcp_server_members rather than from a caller's grants.
+		agentID:        agentID,
 		organizationID: metaServer.OrganizationID,
 		tokens:         gateTokens,
 		toolSelection:  gateToolSelection,
@@ -170,7 +184,14 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		gate.apiKeyID = authCtx.APIKeyID
 		// authenticated = the caller's org owns the endpoint's project,
 		// unlocking gram environments for hosted-member execution.
-		if authCtx.ActiveOrganizationID != "" {
+		//
+		// An agent gateway has no endpoint project to own, and its key was
+		// already authenticated against this organization before dispatch. It
+		// is authenticated by construction; leaving it false would list a
+		// granted private member and then fail to drill into it.
+		if agentID != uuid.Nil {
+			gate.authenticated = authCtx.ActiveOrganizationID == metaServer.OrganizationID
+		} else if authCtx.ActiveOrganizationID != "" {
 			projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return oops.E(oops.CodeUnexpected, err, "error checking project access").LogError(ctx, logger)
@@ -466,8 +487,18 @@ func (s *Service) callMetaServerTool(
 
 	// One snapshot per request: every meta MCP tool answers from the same
 	// member set, so a membership mutation lands between requests, never
-	// inside one.
-	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
+	// inside one. An agent gateway has no stored membership — its members are
+	// whatever its delegated policy still reaches at this instant — so a
+	// revoked grant lands between requests the same way.
+	var (
+		members []metaMember
+		err     error
+	)
+	if gate.agentID != uuid.Nil {
+		ctx, members, err = s.resolveAgentMemberSnapshot(ctx, logger, gate.organizationID)
+	} else {
+		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServer.ID, mcpEndpoint.ProjectID)
+	}
 	if err != nil {
 		if params.Name != metamcp.ToolExecuteTool {
 			s.logMetaDiscovery(ctx, gate, params.Name, start, err)

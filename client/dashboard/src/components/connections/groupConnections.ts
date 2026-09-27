@@ -1,3 +1,4 @@
+import type { ResolvedSession } from "@/lib/session-agents";
 import {
   connectionIsInactive,
   connectionLastUsedAt,
@@ -58,13 +59,13 @@ export type ConnectionGroup = {
    */
   inactive: boolean;
   /**
-   * Set when the group heading names a person, so the header can show their
-   * face. Absent for provider and client groups, which are not identities and
-   * would read oddly with an initials badge.
+   * Set when the heading names a user or a readable managed agent. Users have
+   * an identity URN/photo; agents have an authorized management destination.
+   * Absent for provider and client groups.
    */
   // `urn` is the subject URN the sessions were filed under, which is also the
   // identity URN the person's page resolves from.
-  identity?: { photoUrl?: string; urn?: string };
+  identity?: { photoUrl?: string; urn?: string; agentId?: string };
   /**
    * Set when the group heading names a workload rather than a person. Every
    * session filed under one workload subject describes the same workload.
@@ -154,7 +155,7 @@ function groupKeysFor(
  * the order is stable between refreshes.
  */
 export function groupConnections(
-  sessions: UserSession[],
+  sessions: ResolvedSession[],
   grouping: ConnectionGrouping,
   options: { clients?: UserSessionClient[]; now?: number } = {},
 ): ConnectionGroup[] {
@@ -199,16 +200,17 @@ export function groupConnections(
           lastUsedAt: null,
           // Narrowed to false by the first active session filed under it.
           inactive: true,
-          // Only the person grouping names an identity. A user subject may
-          // still have no photo, in which case the header falls back to
-          // initials rather than omitting the avatar.
+          // Only subject grouping names an identity. Users fall back to initials;
+          // managed agents link only when the inventory authorized their read.
           identity:
             grouping === "subject" && session.subjectType === "user"
               ? {
                   photoUrl: session.subjectPhotoUrl ?? undefined,
                   urn: session.subjectUrn,
                 }
-              : undefined,
+              : grouping === "subject" && session.subjectAgentId
+                ? { agentId: session.subjectAgentId }
+                : undefined,
           workload:
             grouping === "subject"
               ? (session.workload ?? undefined)

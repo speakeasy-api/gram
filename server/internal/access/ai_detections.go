@@ -2,10 +2,13 @@ package access
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
@@ -64,6 +67,7 @@ func (s *Service) ListAIDetections(ctx context.Context, payload *gen.ListAIDetec
 
 	result, err := s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       ac.ActiveOrganizationID,
+		TargetID:             "",
 		Categories:           nil,
 		UserEmails:           userEmails,
 		ExactUserEmail:       "",
@@ -102,6 +106,7 @@ func (s *Service) ListEmployeeAIDetections(ctx context.Context, payload *gen.Lis
 
 	result, err := s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       ac.ActiveOrganizationID,
+		TargetID:             "",
 		Categories:           nil,
 		UserEmails:           nil,
 		ExactUserEmail:       userEmail,
@@ -115,6 +120,88 @@ func (s *Service) ListEmployeeAIDetections(ctx context.Context, payload *gen.Lis
 	// matter, and not part of what this endpoint answers.
 	redactAIDecisionRationale(result.Detections)
 	return result, nil
+}
+
+// ListAIDetectionUsers expands one detection target into the enrolled users
+// it was detected for: the inverse of ListEmployeeAIDetections, which lists
+// one person's tools. Organization admin only, like the inventory it is
+// opened from, because the answer names people across the organization.
+func (s *Service) ListAIDetectionUsers(ctx context.Context, payload *gen.ListAIDetectionUsersPayload) (*gen.ListAIDetectionUsersResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	if err := s.requireLiveOrgAdmin(ctx, ac); err != nil {
+		return nil, err
+	}
+
+	// The read key is derived as the scan-report ingest derives the stored
+	// one, lowercased and trimmed, so an id reaches the row it was stored
+	// under whatever case the caller typed it in.
+	targetID := strings.ToLower(strings.TrimSpace(payload.TargetID))
+	if targetID == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "target id is required").LogError(ctx, s.logger)
+	}
+
+	canonicalOrg := s.canonicalFoldOrg(ctx, ac.ActiveOrganizationID)
+	// The target's own row comes off the same aggregation the inventory lists,
+	// so this page and the table it was opened from agree on the name, counts
+	// and access decision. Neither read depends on the other, so they run
+	// together; an unknown target is judged once both are back.
+	var (
+		summary *gen.ListAIDetectionsResult
+		rows    []telemetryrepo.AIDetectionUserRow
+	)
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		var egErr error
+		summary, egErr = s.listAIDetectionModels(egCtx, telemetryrepo.ListAIDetectionSummariesParams{
+			OrganizationID:       ac.ActiveOrganizationID,
+			TargetID:             targetID,
+			Categories:           nil,
+			UserEmails:           nil,
+			ExactUserEmail:       "",
+			CanonicalIdentityOrg: canonicalOrg,
+		})
+		return egErr
+	})
+	eg.Go(func() error {
+		var egErr error
+		rows, egErr = telemetryrepo.New(s.chConn).ListAIDetectionUsers(egCtx, telemetryrepo.ListAIDetectionUsersParams{
+			OrganizationID:       ac.ActiveOrganizationID,
+			TargetID:             targetID,
+			CanonicalIdentityOrg: canonicalOrg,
+		})
+		if egErr != nil {
+			return fmt.Errorf("list ai detection users: %w", egErr)
+		}
+		return nil
+	})
+	if err := eg.Wait(); err != nil {
+		// The inventory read reports its own failure; only the users read
+		// comes back raw.
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+			return nil, shareable
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "list ai detection users").LogError(ctx, s.logger)
+	}
+	if len(summary.Detections) == 0 {
+		return nil, oops.E(oops.CodeNotFound, nil, "no detections for target %q", targetID).LogError(ctx, s.logger)
+	}
+
+	users := make([]*gen.AIDetectionUser, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, &gen.AIDetectionUser{
+			UserEmail:   row.UserEmail,
+			DeviceCount: int64(row.DeviceCount), //nolint:gosec // distinct devices cannot approach int64 overflow
+			Signals:     row.Signals,
+			Versions:    row.Versions,
+			FirstSeen:   formatTimeValue(row.FirstSeen),
+			LastSeen:    formatTimeValue(row.LastSeen),
+		})
+	}
+
+	return &gen.ListAIDetectionUsersResult{Detection: summary.Detections[0], Users: users}, nil
 }
 
 func (s *Service) listAIDetectionModels(ctx context.Context, params telemetryrepo.ListAIDetectionSummariesParams) (*gen.ListAIDetectionsResult, error) {
@@ -224,6 +311,7 @@ func (s *Service) ReadAIDetections(ctx context.Context, input AIDetectionsReadIn
 
 	result, err := s.listAIDetectionModels(ctx, telemetryrepo.ListAIDetectionSummariesParams{
 		OrganizationID:       input.OrganizationID,
+		TargetID:             "",
 		Categories:           nil,
 		UserEmails:           nil,
 		ExactUserEmail:       "",

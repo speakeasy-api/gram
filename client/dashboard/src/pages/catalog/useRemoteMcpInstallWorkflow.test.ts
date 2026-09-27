@@ -4,15 +4,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockCreateServer = vi.fn();
 const mockDeleteServer = vi.fn();
 const mockCreateServerHeader = vi.fn();
+const mockProbeURL = vi.fn();
 const mockDiscoverProtectedResourceMetadata = vi.fn();
 const mockMcpServersCreate = vi.fn();
+const mockMcpServersUpdate = vi.fn();
+const mockFetchIssuerMetadata = vi.fn();
+const mockGetIssuer = vi.fn();
+const mockCommitIdentity = vi.fn();
 const mockMcpEndpointsCreate = vi.fn();
 const mockAuthedFetch = vi.fn();
 const mockUnproxiedCreateServer = vi.fn();
 const mockUnproxiedDeleteServer = vi.fn();
 const mockFetchImageFromURL = vi.fn();
 const mockMcpMetadataSet = vi.fn();
-const mockAutoConfigureRemoteMcpAuth = vi.fn();
+const mockUseEffectiveUserSessionIssuers = vi.fn();
 
 // Return a stable client reference to avoid re-render loops from useCallback deps
 const mockClient = {
@@ -20,10 +25,19 @@ const mockClient = {
     createServer: mockCreateServer,
     deleteServer: mockDeleteServer,
     createServerHeader: mockCreateServerHeader,
+    probeURL: mockProbeURL,
     discoverProtectedResourceMetadata: mockDiscoverProtectedResourceMetadata,
   },
   mcpServers: {
     create: mockMcpServersCreate,
+    update: mockMcpServersUpdate,
+  },
+  remoteSessionIssuers: {
+    fetchMetadata: mockFetchIssuerMetadata,
+    get: mockGetIssuer,
+  },
+  remoteSessions: {
+    commitServerIdentityConfiguration: mockCommitIdentity,
   },
   mcpEndpoints: {
     create: mockMcpEndpointsCreate,
@@ -54,11 +68,10 @@ vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: mockAuthedFetch }),
 }));
 
-vi.mock("@/pages/sources/remote-mcp/autoConfigureAuth", () => ({
-  autoConfigureRemoteMcpAuth: (...args: unknown[]) =>
-    mockAutoConfigureRemoteMcpAuth(...args),
+vi.mock("@/hooks/useEffectiveUserSessionIssuers", () => ({
+  useEffectiveUserSessionIssuers: (...args: unknown[]) =>
+    mockUseEffectiveUserSessionIssuers(...args),
 }));
-
 vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), success: vi.fn(), error: vi.fn() },
 }));
@@ -99,7 +112,10 @@ vi.mock("@tanstack/react-query", () => ({
 import type { ExternalMCPRemote } from "@gram/client/models/components/externalmcpremote.js";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
-import { useRemoteMcpInstallWorkflow } from "./useRemoteMcpInstallWorkflow";
+import {
+  ISSUER_LOOKUP_FAILED_MESSAGE,
+  useRemoteMcpInstallWorkflow,
+} from "./useRemoteMcpInstallWorkflow";
 
 const mockUseRemoteMcpServers = vi.mocked(useRemoteMcpServers);
 
@@ -137,6 +153,12 @@ const EMPTY_SERVERS: PulseMCPServer[] = [];
 describe("useRemoteMcpInstallWorkflow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseEffectiveUserSessionIssuers.mockReturnValue({
+      issuers: [],
+      organizationIssuers: [],
+      isLoading: false,
+      isError: false,
+    });
     mockUseRemoteMcpServers.mockReturnValue({
       data: undefined,
     } as ReturnType<typeof useRemoteMcpServers>);
@@ -153,8 +175,21 @@ describe("useRemoteMcpInstallWorkflow", () => {
       id: "mcp-server-1",
       slug: "mcp-server-slug",
       projectId: "proj-1",
-      userSessionIssuerId: undefined,
+      remoteMcpServerId: "rms-1",
+      userSessionIssuerId: "usi-1",
+      visibility: "disabled",
     });
+    mockMcpServersUpdate.mockImplementation((request) =>
+      Promise.resolve({
+        id: "mcp-server-1",
+        slug: "mcp-server-slug",
+        projectId: "proj-1",
+        remoteMcpServerId: "rms-1",
+        userSessionIssuerId: "usi-1",
+        visibility: request.updateMcpServerForm.visibility,
+      }),
+    );
+    mockProbeURL.mockResolvedValue({ outcome: "mcp_available" });
     mockCreateServerHeader.mockResolvedValue({ id: "header-1" });
     // No OAuth metadata → auto-config skips silently.
     mockDiscoverProtectedResourceMetadata.mockResolvedValue({
@@ -174,11 +209,6 @@ describe("useRemoteMcpInstallWorkflow", () => {
     mockUnproxiedDeleteServer.mockResolvedValue(undefined);
     mockFetchImageFromURL.mockResolvedValue({ asset: { id: "asset-1" } });
     mockMcpMetadataSet.mockResolvedValue({ mcpServerId: "mcp-server-1" });
-    mockAutoConfigureRemoteMcpAuth.mockResolvedValue({
-      status: "skipped",
-      message: "No OAuth metadata was discovered.",
-      warn: false,
-    });
   });
 
   // -------------------------------------------------------------------------
@@ -356,7 +386,7 @@ describe("useRemoteMcpInstallWorkflow", () => {
     });
   }
 
-  it("creates a remote MCP server, a private mcp server, and a default endpoint", async () => {
+  it("probes, creates disabled, then enables a remote MCP server", async () => {
     const servers = [makeServer({ title: "My Server" })];
     const { result } = renderHook(() =>
       useRemoteMcpInstallWorkflow({ servers }),
@@ -381,6 +411,21 @@ describe("useRemoteMcpInstallWorkflow", () => {
         createMcpServerForm: expect.objectContaining({
           name: "My Server",
           remoteMcpServerId: "rms-1",
+          visibility: "disabled",
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    expect(mockProbeURL).toHaveBeenCalledWith(
+      { probeURLForm: { url: "https://mcp.example.com/mcp" } },
+      undefined,
+      undefined,
+    );
+    expect(mockMcpServersUpdate).toHaveBeenCalledWith(
+      {
+        updateMcpServerForm: expect.objectContaining({
+          id: "mcp-server-1",
           visibility: "private",
         }),
       },
@@ -398,6 +443,273 @@ describe("useRemoteMcpInstallWorkflow", () => {
       mcpServerParam: "mcp-server-slug",
     });
     expect(state.statuses[0]!.mcpEndpointUrl).toContain("/mcp/test-org-abc123");
+  });
+
+  // User Identity is only reached when probing says the upstream wants auth
+  // and the discovery chain answers; without this the install settles on No
+  // Identity and never gets near the commit.
+  function stubUserIdentityDiscovery() {
+    mockProbeURL.mockResolvedValue({ outcome: "authentication_required" });
+    mockDiscoverProtectedResourceMetadata.mockResolvedValue({
+      available: true,
+      metadata: {
+        authorizationServers: ["https://id.example.com"],
+        scopesSupported: ["resource.read"],
+      },
+    });
+    mockFetchIssuerMetadata.mockResolvedValue({
+      issuer: "https://id.example.com",
+      authorizationEndpoint: "https://id.example.com/authorize",
+      tokenEndpoint: "https://id.example.com/token",
+      registrationEndpoint: "https://id.example.com/register",
+      tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+    });
+    mockGetIssuer.mockRejectedValue(
+      Object.assign(new Error("not found"), { statusCode: 404 }),
+    );
+    mockCommitIdentity.mockResolvedValue({
+      status: "registered",
+      registrationMethod: "dcr",
+      manualSetupRequired: false,
+    });
+  }
+
+  it("uses an organization issuer for noninteractive catalog installs", async () => {
+    stubUserIdentityDiscovery();
+    mockUseEffectiveUserSessionIssuers.mockReturnValue({
+      issuers: [{ id: "project-issuer" }, { id: "organization-issuer" }],
+      organizationIssuers: [{ id: "organization-issuer" }],
+      isLoading: false,
+      isError: false,
+    });
+    const servers = [makeServer({ title: "My Server", supportsDcr: true })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    expect(mockMcpServersCreate).toHaveBeenCalledWith(
+      {
+        createMcpServerForm: expect.objectContaining({
+          userSessionIssuerId: "organization-issuer",
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    // Setup must not bind this project's upstream client to the shared
+    // organization issuer, so the identity commit never runs.
+    expect(mockCommitIdentity).not.toHaveBeenCalled();
+  });
+
+  it("lets auto-config bind a client to the project-specific issuer", async () => {
+    stubUserIdentityDiscovery();
+    const servers = [makeServer({ title: "My Server", supportsDcr: true })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+    expect(mockMcpServersCreate).toHaveBeenCalledWith(
+      {
+        createMcpServerForm: expect.objectContaining({
+          userSessionIssuerId: undefined,
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    // A project-specific issuer is this project's to configure, so setup is
+    // allowed to reach the identity commit.
+    expect(mockCommitIdentity).toHaveBeenCalled();
+  });
+
+  it("blocks install while the issuer lookup is loading", () => {
+    mockUseEffectiveUserSessionIssuers.mockReturnValue({
+      issuers: [],
+      organizationIssuers: [],
+      isLoading: true,
+      isError: false,
+    });
+    const servers = [makeServer({ title: "My Server" })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+    const state = result.current;
+    if (state.phase !== "configure") throw new Error("unexpected phase");
+    expect(state.canInstall).toBe(false);
+    expect(state.installBlockedReason).toBeUndefined();
+  });
+
+  it("blocks install with a reason when the issuer lookup fails", async () => {
+    mockUseEffectiveUserSessionIssuers.mockReturnValue({
+      issuers: [],
+      organizationIssuers: [],
+      isLoading: false,
+      isError: true,
+    });
+    const servers = [makeServer({ title: "My Server" })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+    const state = result.current;
+    if (state.phase !== "configure") throw new Error("unexpected phase");
+    expect(state.canInstall).toBe(false);
+    expect(state.installBlockedReason).toBe(ISSUER_LOOKUP_FAILED_MESSAGE);
+
+    // A failed lookup must not fall through to a project-specific issuer.
+    await act(async () => {
+      await state.startInstall();
+    });
+    expect(result.current.phase).toBe("configure");
+    expect(mockCreateServer).not.toHaveBeenCalled();
+    expect(mockMcpServersCreate).not.toHaveBeenCalled();
+  });
+
+  it("commits User Identity atomically before enabling the server", async () => {
+    mockProbeURL.mockResolvedValue({ outcome: "authentication_required" });
+    mockDiscoverProtectedResourceMetadata.mockResolvedValue({
+      available: true,
+      metadata: {
+        authorizationServers: ["https://id.example.com"],
+        scopesSupported: ["resource.read"],
+      },
+    });
+    mockFetchIssuerMetadata.mockResolvedValue({
+      issuer: "https://id.example.com",
+      authorizationEndpoint: "https://id.example.com/authorize",
+      tokenEndpoint: "https://id.example.com/token",
+      registrationEndpoint: "https://id.example.com/register",
+      tokenEndpointAuthMethodsSupported: ["client_secret_basic"],
+    });
+    mockGetIssuer.mockRejectedValue(
+      Object.assign(new Error("not found"), { statusCode: 404 }),
+    );
+    mockCommitIdentity.mockResolvedValue({
+      status: "registered",
+      registrationMethod: "dcr",
+      manualSetupRequired: false,
+    });
+    const servers = [makeServer({ title: "Authenticated", supportsDcr: true })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    expect(mockCommitIdentity).toHaveBeenCalledWith(
+      {
+        commitServerIdentityConfigurationForm: expect.objectContaining({
+          mcpServerId: "mcp-server-1",
+          clientMode: "auto",
+          createProvider: expect.objectContaining({
+            issuer: "https://id.example.com",
+          }),
+          clientConfiguration: expect.objectContaining({
+            scope: ["resource.read"],
+          }),
+        }),
+      },
+      undefined,
+      undefined,
+    );
+    expect(mockMcpServersUpdate).toHaveBeenCalledOnce();
+    expect(mockCommitIdentity.mock.invocationCallOrder[0]).toBeLessThan(
+      mockMcpServersUpdate.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("keeps the visible No Identity choice when probing requires authentication", async () => {
+    mockProbeURL.mockResolvedValue({ outcome: "authentication_required" });
+    const servers = [makeServer({ supportsDcr: false })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    expect(mockCommitIdentity).not.toHaveBeenCalled();
+    expect(mockMcpServersUpdate).toHaveBeenCalledWith(
+      {
+        updateMcpServerForm: expect.objectContaining({
+          id: "mcp-server-1",
+          visibility: "private",
+        }),
+      },
+      undefined,
+      undefined,
+    );
+  });
+
+  it("retains a User Identity install disabled when registration fails", async () => {
+    mockDiscoverProtectedResourceMetadata.mockResolvedValue({
+      available: true,
+      metadata: { authorizationServers: ["https://id.example.com"] },
+    });
+    mockFetchIssuerMetadata.mockResolvedValue({
+      issuer: "https://id.example.com",
+      authorizationEndpoint: "https://id.example.com/authorize",
+      tokenEndpoint: "https://id.example.com/token",
+      registrationEndpoint: "https://id.example.com/register",
+    });
+    mockGetIssuer.mockRejectedValue(
+      Object.assign(new Error("not found"), { statusCode: 404 }),
+    );
+    mockCommitIdentity.mockResolvedValue({
+      manualSetupRequired: false,
+      registrationMethod: "dcr",
+      failure: {
+        outcome: "refused",
+        reason: "authorization_rejected",
+        retryable: false,
+      },
+    });
+    const servers = [makeServer({ supportsDcr: true })];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    const state = result.current;
+    if (state.phase !== "complete") throw new Error("unexpected phase");
+    expect(state.statuses[0]).toMatchObject({
+      status: "failed",
+      mcpServerId: "mcp-server-1",
+      mcpServerParam: "mcp-server-slug",
+      error: expect.stringContaining("Server retained disabled"),
+    });
+    expect(mockMcpServersUpdate).not.toHaveBeenCalled();
+    expect(mockCommitIdentity).toHaveBeenCalledOnce();
+  });
+
+  it("does not create a server when the preflight probe is unreachable", async () => {
+    mockProbeURL.mockResolvedValue({
+      outcome: "unreachable",
+      reason: "timeout",
+    });
+    const servers = [makeServer()];
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers }),
+    );
+
+    await startInstall(result);
+    await waitFor(() => expect(result.current.phase).toBe("complete"));
+
+    expect(mockCreateServer).not.toHaveBeenCalled();
+    const state = result.current;
+    if (state.phase !== "complete") throw new Error("unexpected phase");
+    expect(state.statuses[0]).toMatchObject({
+      status: "failed",
+      error: "The Remote MCP server is unreachable.",
+    });
   });
 
   it("creates an unproxied MCP server for Figma instead of a remote one", async () => {
@@ -573,12 +885,12 @@ describe("useRemoteMcpInstallWorkflow", () => {
       undefined,
       { headers: { "gram-project": "other-proj" } },
     );
-    expect(mockAutoConfigureRemoteMcpAuth).toHaveBeenCalledWith(
-      expect.objectContaining({
-        isPlatformAdmin: false,
-        projectSlug: "other-proj",
-        options: { headers: { "gram-project": "other-proj" } },
-      }),
+    expect(mockCreateServer).toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      {
+        headers: { "gram-project": "other-proj" },
+      },
     );
   });
 

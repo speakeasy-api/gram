@@ -105,7 +105,8 @@ GRAM_CLICKHOUSE_GOMIGRATE_URL = "clickhouse://{{env.CLICKHOUSE_HOST}}:{{env.CLIC
 ## Temporal configuration ##
 ############################
 TEMPORAL_HOST = "127.0.0.1"
-TEMPORAL_PORT = "7233"
+# Avoid the legacy shared server on 7233 during migration.
+TEMPORAL_PORT = "17233"
 TEMPORAL_NAMESPACE = "default"
 TEMPORAL_TASK_QUEUE = "main"
 ## When using Temporal Cloud, the following variable should like something like:
@@ -120,6 +121,7 @@ PRESIDIO_ANALYZER_URL = "http://127.0.0.1:{{env.PRESIDIO_PORT}}"
 
 ## Fine-tuned risk LLM analyzer (OpenAI-compatible chat endpoint, URL includes
 ## /v1). An empty URL disables it; real values belong in mise.local.toml.
+## Runbook: server/internal/scanners/llmanalyzer/README.md (Local development).
 GRAM_RISK_LLM_URL = ""
 GRAM_RISK_LLM_MODEL = "risk-judge-4b"
 GRAM_RISK_LLM_API_KEY = ""
@@ -257,7 +259,7 @@ VITE_DEV_HOSTNAMES = "localhost"
 ## renderBuiltUrl comment in client/dashboard/vite.config.ts). Unset locally
 ## and by default in production — assets are then served same-origin.
 # GRAM_CDN_URL = "https://cdn.dev.getgram.ai"
-TEMPORAL_WEB_PORT = "8233"
+TEMPORAL_WEB_PORT = "18233"
 ## If you want to enable/disable certain feature flags during local development,
 ## copy the following line to mise.local.toml and point to a CSV file containing
 ## flag settings. The server and worker run from the `server/` directory, and
@@ -322,11 +324,15 @@ GRAM_RISK_FINGERPRINT_PEPPER_KEYRING = '{"current": "v1", "keys": {"v1": "bmvSy6
 ## Stripe configuration ##
 ##########################
 ## PAYG self-serve billing. Run `mise run stripe:setup` to provision and
-## validate the sandbox TUM meter, product, and metered price. The task writes
-## the catalog values into mise.local.toml. Requires a Stripe sandbox API key.
+## validate the sandbox TUM meter, product, and metered price, and resolve
+## existing monthly metered prices by lookup keys payg-mcp-egress and
+## payg-risk-scans. The task writes catalog values into mise.local.toml.
+## Requires a Stripe sandbox API key.
 STRIPE_API_KEY = { default = "unset" }
 STRIPE_WEBHOOK_SECRET = { default = "unset" }
 STRIPE_PRICE_ID_TUM = { default = "" }
+STRIPE_PRICE_ID_MCP_EGRESS = { default = "" }
+STRIPE_PRICE_ID_RISK_SCANS = { default = "" }
 STRIPE_METER_ID_TUM = { default = "" }
 STRIPE_METER_EVENT_NAME = { default = "tum" }
 STRIPE_PORTAL_CONFIGURATION_ID = { default = "" }

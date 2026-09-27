@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolref"
@@ -52,6 +53,9 @@ func (s *Service) isHookDuplicate(ctx context.Context) bool {
 // window, since competing drain triggers can re-deliver the same entry hours
 // apart.
 func (s *Service) claimHookIdempotency(ctx context.Context, token string, replayed bool) bool {
+	ctx, span := s.tracer.Start(ctx, "hooks.claimHookIdempotency")
+	defer span.End()
+
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return true
@@ -112,7 +116,11 @@ func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen
 	// Use atomic RPUSH operation to append to the list
 	// This eliminates the race condition from read-modify-write
 	ttl := 5 * time.Minute // TTL for buffered hooks. This is very generous. Could be lower since this can trigger through an unauthenticated endpoint.
-	if err := s.cache.ListAppend(ctx, hookPendingCacheKey(sessionID), payload, ttl); err != nil {
+	projectID := ""
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ProjectID != nil {
+		projectID = authCtx.ProjectID.String()
+	}
+	if err := s.cache.ListAppend(ctx, hookPendingCacheKey(projectID, sessionID), payload, ttl); err != nil {
 		return fmt.Errorf("append hook to list: %w", err)
 	}
 
@@ -217,6 +225,7 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 	// device_id) onto every hook event row so per-tool-call telemetry can be
 	// split by personal vs team account, not just the OTEL log stream.
 	stampAccountAttribution(attrs, *metadata)
+	withAgentActor(ctx, attrs)
 	applyHookHostnameAttr(attrs, payload.HookHostname)
 
 	if payload.Error != nil {
@@ -347,7 +356,7 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 	emailToUserID := make(map[string]string)
 	for _, m := range metrics {
 		email := conv.NormalizeEmail(m.UserEmail)
-		if email == "" {
+		if email == "" || isAgentActor(ctx) {
 			continue
 		}
 		if _, seen := emailToUserID[email]; seen {
@@ -395,12 +404,16 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		// metadata that the same org+project seeded — a colliding or spoofed
 		// session id must not stamp another tenant's attribution or user identity
 		// onto this org's rows.
+		m.SessionID = agentSessionID(ctx, m.SessionID)
 		var sessionMeta SessionMetadata
 		if m.SessionID != "" {
 			if meta, err := s.getSessionMetadata(ctx, m.SessionID); err == nil &&
 				meta.GramOrgID == orgID && meta.ProjectID == projectID {
 				sessionMeta = meta
 			}
+		}
+		if isAgentActor(ctx) {
+			sessionMeta = agentSessionView(sessionMeta, orgID, projectID)
 		}
 		stampAccountAttribution(attrs, sessionMeta)
 		// Cost/token metric rows carry the session's resolved surface (OTEL
@@ -462,12 +475,15 @@ func (s *Service) writeMetricsToClickHouse(ctx context.Context, payload *gen.Met
 		if sessionMeta.UserID != "" {
 			userInfo = telemetry.UserInfoByIDAndEmail(sessionMeta.UserID, conv.Default(sessionMeta.UserEmail, m.UserEmail))
 		}
+		if isAgentActor(ctx) {
+			userInfo = telemetry.UserInfoByEmail("")
+		}
 
 		s.telemetryLogger.Log(ctx, telemetry.LogParams{
 			Timestamp:  time.Unix(0, m.TimestampNano),
 			ToolInfo:   toolInfo,
 			UserInfo:   userInfo,
-			Attributes: attrs,
+			Attributes: withAgentActor(ctx, attrs),
 		})
 	}
 
@@ -642,12 +658,20 @@ func isDeltaTemporality(v any) bool {
 	return ok && n == 1
 }
 
-// flushPendingHooks retrieves all buffered hooks for a session and writes them to ClickHouse.
+// flushPendingHooks retrieves the hooks buffered for a session and writes them to ClickHouse.
 // Conversation events (UserPromptSubmit, Stop) are written to PostgreSQL.
-func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metadata *SessionMetadata) {
+// Hooks buffered under metadata's project always flush; unauthenticated ones
+// flush only when includeUnscoped is set.
+func (s *Service) flushPendingHooks(ctx context.Context, sessionID string, metadata *SessionMetadata, includeUnscoped bool) {
+	s.flushPendingHookList(ctx, hookPendingCacheKey(metadata.ProjectID, sessionID), metadata)
+	if includeUnscoped {
+		s.flushPendingHookList(ctx, hookPendingCacheKey("", sessionID), metadata)
+	}
+}
+
+func (s *Service) flushPendingHookList(ctx context.Context, key string, metadata *SessionMetadata) {
 	// Use LRANGE to get all payloads from the list atomically
 	var payloads []gen.ClaudePayload
-	key := hookPendingCacheKey(sessionID)
 
 	if err := s.cache.ListRange(ctx, key, 0, -1, &payloads); err != nil {
 		s.logger.DebugContext(ctx, "No pending hooks to flush or error reading list", attr.SlogError(err))

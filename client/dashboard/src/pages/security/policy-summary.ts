@@ -1,5 +1,9 @@
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
-import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
+import {
+  ruleCategoryMeta,
+  type DetectorMode,
+  type RuleCategory,
+} from "./policy-data";
 import { policyToCategories } from "./policy-form";
 
 /** Words that pad out a category label without distinguishing it, so a name
@@ -69,10 +73,11 @@ function labelIsCoveredByName(label: string, nameTokens: Set<string>): boolean {
 function categoryIsCoveredByName(
   category: RuleCategory,
   nameTokens: Set<string>,
+  mode: DetectorMode,
 ): boolean {
   const alias = CATEGORY_LABEL_ALIASES[category];
   return (
-    labelIsCoveredByName(RULE_CATEGORY_META[category].label, nameTokens) ||
+    labelIsCoveredByName(ruleCategoryMeta(category, mode).label, nameTokens) ||
     (alias !== undefined && labelIsCoveredByName(alias, nameTokens))
   );
 }
@@ -106,6 +111,7 @@ function tokensStartWith(tokens: string[], prefix: string[]): boolean {
 export function categoriesSummaryForName(
   name: string,
   categories: RuleCategory[],
+  mode: DetectorMode = "presidio",
 ): string | null {
   if (categories.length === 0) {
     return null;
@@ -114,14 +120,14 @@ export function categoriesSummaryForName(
   const nameTokens = new Set(tokenize(name));
   if (
     categories.every((category) =>
-      categoryIsCoveredByName(category, nameTokens),
+      categoryIsCoveredByName(category, nameTokens, mode),
     )
   ) {
     return null;
   }
 
   return categories
-    .map((category) => RULE_CATEGORY_META[category].label)
+    .map((category) => ruleCategoryMeta(category, mode).label)
     .join(", ");
 }
 
@@ -148,15 +154,22 @@ export function promptSummaryForName(
     : trimmedPrompt;
 }
 
-/** The categories a standard policy detects, in display order. */
-function policyCategories(policy: PolicySummaryPolicy): RuleCategory[] {
-  const categories = [
-    ...policyToCategories(policy.sources, policy.presidioEntities),
-  ];
-  if (policy.customRuleIds?.length) {
-    categories.push("custom");
+/** The categories a standard policy detects, in display order. A presidio
+ *  policy with no entity list is a personal-data policy: the legacy engine
+ *  scans every entity for it, and the LLM analyzer writes it that way. */
+function policyCategories(
+  policy: PolicySummaryPolicy,
+  mode: DetectorMode,
+): RuleCategory[] {
+  const sources = policy.sources;
+  const categories = policyToCategories(sources, policy.presidioEntities, mode);
+  if (sources.includes("presidio") && !policy.presidioEntities?.length) {
+    categories.add("pii");
   }
-  return categories;
+  if (policy.customRuleIds?.length) {
+    categories.add("custom");
+  }
+  return [...categories];
 }
 
 /** What a policy detects, for the second line of its row in the policy table:
@@ -166,6 +179,7 @@ function policyCategories(policy: PolicySummaryPolicy): RuleCategory[] {
  *  thing twice. */
 export function policySummary(
   policy: PolicySummaryPolicy,
+  mode: DetectorMode = "presidio",
 ): PolicySummary | null {
   if (policy.policyType === "prompt_based") {
     const prompt = promptSummaryForName(policy.name, policy.prompt ?? "");
@@ -176,7 +190,8 @@ export function policySummary(
 
   const categories = categoriesSummaryForName(
     policy.name,
-    policyCategories(policy),
+    policyCategories(policy, mode),
+    mode,
   );
   return categories === null ? null : { kind: "categories", text: categories };
 }

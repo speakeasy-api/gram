@@ -22,6 +22,7 @@ type Server struct {
 	Mounts                    []*MountPoint
 	ListClients               http.Handler
 	GetClient                 http.Handler
+	GetClientDelegationStatus http.Handler
 	GetClientDeletePreflight  http.Handler
 	ListClientMcpServers      http.Handler
 	CreateClient              http.Handler
@@ -63,6 +64,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"ListClients", "GET", "/rpc/organizationRemoteSessionClients.list"},
 			{"GetClient", "GET", "/rpc/organizationRemoteSessionClients.get"},
+			{"GetClientDelegationStatus", "GET", "/rpc/organizationRemoteSessionClients.getDelegationStatus"},
 			{"GetClientDeletePreflight", "GET", "/rpc/organizationRemoteSessionClients.getDeletePreflight"},
 			{"ListClientMcpServers", "GET", "/rpc/organizationRemoteSessionClients.listMcpServers"},
 			{"CreateClient", "POST", "/rpc/organizationRemoteSessionClients.create"},
@@ -76,6 +78,7 @@ func New(
 		},
 		ListClients:               NewListClientsHandler(e.ListClients, mux, decoder, encoder, errhandler, formatter),
 		GetClient:                 NewGetClientHandler(e.GetClient, mux, decoder, encoder, errhandler, formatter),
+		GetClientDelegationStatus: NewGetClientDelegationStatusHandler(e.GetClientDelegationStatus, mux, decoder, encoder, errhandler, formatter),
 		GetClientDeletePreflight:  NewGetClientDeletePreflightHandler(e.GetClientDeletePreflight, mux, decoder, encoder, errhandler, formatter),
 		ListClientMcpServers:      NewListClientMcpServersHandler(e.ListClientMcpServers, mux, decoder, encoder, errhandler, formatter),
 		CreateClient:              NewCreateClientHandler(e.CreateClient, mux, decoder, encoder, errhandler, formatter),
@@ -96,6 +99,7 @@ func (s *Server) Service() string { return "organizationRemoteSessionClients" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListClients = m(s.ListClients)
 	s.GetClient = m(s.GetClient)
+	s.GetClientDelegationStatus = m(s.GetClientDelegationStatus)
 	s.GetClientDeletePreflight = m(s.GetClientDeletePreflight)
 	s.ListClientMcpServers = m(s.ListClientMcpServers)
 	s.CreateClient = m(s.CreateClient)
@@ -116,6 +120,7 @@ func (s *Server) MethodNames() []string { return organizationremotesessionclient
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountListClientsHandler(mux, h.ListClients)
 	MountGetClientHandler(mux, h.GetClient)
+	MountGetClientDelegationStatusHandler(mux, h.GetClientDelegationStatus)
 	MountGetClientDeletePreflightHandler(mux, h.GetClientDeletePreflight)
 	MountListClientMcpServersHandler(mux, h.ListClientMcpServers)
 	MountCreateClientHandler(mux, h.CreateClient)
@@ -218,6 +223,61 @@ func NewGetClientHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getClient")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetClientDelegationStatusHandler configures the mux to serve the
+// "organizationRemoteSessionClients" service "getClientDelegationStatus"
+// endpoint.
+func MountGetClientDelegationStatusHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/organizationRemoteSessionClients.getDelegationStatus", f)
+}
+
+// NewGetClientDelegationStatusHandler creates a HTTP handler which loads the
+// HTTP request and calls the "organizationRemoteSessionClients" service
+// "getClientDelegationStatus" endpoint.
+func NewGetClientDelegationStatusHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetClientDelegationStatusRequest(mux, decoder)
+		encodeResponse = EncodeGetClientDelegationStatusResponse(encoder)
+		encodeError    = EncodeGetClientDelegationStatusError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getClientDelegationStatus")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "organizationRemoteSessionClients")
 		payload, err := decodeRequest(r)
 		if err != nil {

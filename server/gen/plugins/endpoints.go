@@ -17,6 +17,8 @@ import (
 
 // Endpoints wraps the "plugins" service endpoints.
 type Endpoints struct {
+	ListDistributionPlugins     goa.Endpoint
+	GetDistributionPlugin       goa.Endpoint
 	ListPlugins                 goa.Endpoint
 	GetPlugin                   goa.Endpoint
 	CreatePlugin                goa.Endpoint
@@ -68,6 +70,8 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
+		ListDistributionPlugins:     NewListDistributionPluginsEndpoint(s, a.APIKeyAuth),
+		GetDistributionPlugin:       NewGetDistributionPluginEndpoint(s, a.APIKeyAuth),
 		ListPlugins:                 NewListPluginsEndpoint(s, a.APIKeyAuth),
 		GetPlugin:                   NewGetPluginEndpoint(s, a.APIKeyAuth),
 		CreatePlugin:                NewCreatePluginEndpoint(s, a.APIKeyAuth),
@@ -90,6 +94,8 @@ func NewEndpoints(s Service) *Endpoints {
 
 // Use applies the given middleware to all the "plugins" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
+	e.ListDistributionPlugins = m(e.ListDistributionPlugins)
+	e.GetDistributionPlugin = m(e.GetDistributionPlugin)
 	e.ListPlugins = m(e.ListPlugins)
 	e.GetPlugin = m(e.GetPlugin)
 	e.CreatePlugin = m(e.CreatePlugin)
@@ -107,6 +113,76 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.PublishPlugins = m(e.PublishPlugins)
 	e.GetMarketplaceSettings = m(e.GetMarketplaceSettings)
 	e.UpdateMarketplaceSettings = m(e.UpdateMarketplaceSettings)
+}
+
+// NewListDistributionPluginsEndpoint returns an endpoint function that calls
+// the method "listDistributionPlugins" of service "plugins".
+func NewListDistributionPluginsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListDistributionPluginsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListDistributionPlugins(ctx, p)
+	}
+}
+
+// NewGetDistributionPluginEndpoint returns an endpoint function that calls the
+// method "getDistributionPlugin" of service "plugins".
+func NewGetDistributionPluginEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetDistributionPluginPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetDistributionPlugin(ctx, p)
+	}
 }
 
 // NewListPluginsEndpoint returns an endpoint function that calls the method

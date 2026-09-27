@@ -148,6 +148,10 @@ type AgentSession struct {
 type CreatePayload struct {
 	SessionToken *string
 	Name         string
+	// Optional project binding. Omit or send an empty string for an
+	// organization-wide agent; independent of policy grants and the Gram-Project
+	// header.
+	ProjectID *string
 	// Eligible same-organization human owner; defaults to the caller
 	OwnerUserID *string
 	// Optional initial allow-only agent policy ceilings, created atomically with
@@ -196,6 +200,14 @@ type GetPayload struct {
 // listDelegableGrants method.
 type ListDelegableGrantsPayload struct {
 	SessionToken *string
+	// Optional MCP authorization resource identifier: the toolset ID when present,
+	// otherwise the MCP server ID. Narrows discovery to this server and its
+	// project before evaluating exclusions.
+	ToolsetID *string
+	// Optional MCP authorization resource identifiers, discovered in one request.
+	// Each narrows discovery like toolset_id; the result is the union of
+	// candidates across all of them.
+	ToolsetIds []string
 	// First-class agent identifier
 	AgentID string
 }
@@ -242,10 +254,13 @@ type ManagedAgent struct {
 	// Stable reason that explicit reassignment is required
 	OwnerReassignmentReason *string
 	Name                    string
-	Lifecycle               AgentLifecycle
-	Permissions             *AgentPermissions
-	CreatedAt               string
-	UpdatedAt               string
+	// The optional project this agent is scoped to; absent for an
+	// organization-wide agent
+	ProjectID   *string
+	Lifecycle   AgentLifecycle
+	Permissions *AgentPermissions
+	CreatedAt   string
+	UpdatedAt   string
 }
 
 // ReassignPayload is the payload type of the agents service reassign method.

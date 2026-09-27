@@ -162,6 +162,13 @@ type AgentPlugin struct {
 	MarketplaceName string
 }
 
+type AgentPollingPrincipal struct {
+	// Principal URN of the agent identity, for example `agent:<uuid>`.
+	Urn string
+	// Human-readable name of the agent identity.
+	DisplayName string
+}
+
 type AgentSessionMeta struct {
 	// The native harness session identifier this entry resolves, echoed from the
 	// request.
@@ -366,6 +373,9 @@ type GetPluginsResult struct {
 	// a configuration, allowing an agent with no cached remote layer to keep using
 	// its local configuration.
 	Configuration *DeviceAgentConfiguration
+	// The non-human principal the plugin set was resolved for. Present only when
+	// the caller authenticated with an agent API key.
+	Principal *AgentPollingPrincipal
 }
 
 // GetSessionMetaPayload is the payload type of the agent service
@@ -490,10 +500,11 @@ type UpdateConfigurationPayload struct {
 	SessionToken *string
 	// Shareable device-agent settings. Supported keys include platforms,
 	// update_channel, auto_update, pinned_target, blocked_versions,
-	// sync_interval_seconds, and ai_scan_interval_seconds. update_channel and
-	// blocked_versions can only be set by Speakeasy platform administrators;
-	// per-device identity and secret keys are forbidden, as is ai_scan, which Gram
-	// injects from the organization's scan target list when serving agents.
+	// sync_interval_seconds, ai_scan_interval_seconds, and disable_ai_scan.
+	// update_channel and blocked_versions can only be set by Speakeasy platform
+	// administrators; per-device identity and secret keys are forbidden, as is
+	// ai_scan, which Gram injects from the organization's scan target list when
+	// serving agents.
 	Config map[string]any
 }
 

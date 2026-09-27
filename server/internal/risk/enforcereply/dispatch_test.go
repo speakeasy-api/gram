@@ -3,6 +3,8 @@ package enforcereply
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"maps"
 	"strings"
 	"testing"
@@ -75,12 +77,30 @@ func int64CounterValue(metrics metricdata.ResourceMetrics, name string) int64 {
 				continue
 			}
 			sum, ok := candidate.Data.(metricdata.Sum[int64])
-			if ok && len(sum.DataPoints) == 1 {
-				return sum.DataPoints[0].Value
+			if !ok {
+				continue
 			}
+			var total int64
+			for _, point := range sum.DataPoints {
+				total += point.Value
+			}
+			return total
 		}
 	}
 	return 0
+}
+
+func contentLimitFlags(t *testing.T, limit int) *feature.InMemory {
+	t.Helper()
+	flags := &feature.InMemory{}
+	flags.SetFlagPayload(feature.FlagRiskEnforcementMaxContentBytes, contentLimitDistinctID, fmt.Appendf(nil, `{"max_content_bytes":%d}`, limit))
+	return flags
+}
+
+func testDispatcherWithFlags(te *inboxTestEnv, publisher *captureEnforcementPublisher, flags feature.Provider) *Dispatcher {
+	presidioPub := &capturePresidioPublisher{messages: nil, attributes: nil, onPublish: nil}
+	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
+	return testDispatcherWithLanes(te, publisher, presidioPub, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: flags})
 }
 
 func testDispatcher(te *inboxTestEnv, publisher *captureEnforcementPublisher, waitTimeout time.Duration) *Dispatcher {
@@ -89,7 +109,7 @@ func testDispatcher(te *inboxTestEnv, publisher *captureEnforcementPublisher, wa
 
 func testDispatcherWithPresidio(te *inboxTestEnv, gitleaksPub *captureEnforcementPublisher, presidioPub *capturePresidioPublisher, waitTimeout time.Duration) *Dispatcher {
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
-	return testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: waitTimeout, LaneWaitTimeout: nil})
+	return testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: waitTimeout, LaneWaitTimeout: nil, Flags: nil})
 }
 
 func testDispatcherWithLanes(te *inboxTestEnv, gitleaksPub *captureEnforcementPublisher, presidioPub *capturePresidioPublisher, llmPub *captureLLMPublisher, cfg DispatcherConfig) *Dispatcher {
@@ -105,6 +125,7 @@ func testDispatcherWithLanes(te *inboxTestEnv, gitleaksPub *captureEnforcementPu
 		},
 		waitTimeout:     cfg.WaitTimeout,
 		laneWaitTimeout: cfg.LaneWaitTimeout,
+		flags:           cfg.Flags,
 		logger:          newTestLogger(),
 		truncations:     newTruncationCounter(te.meterProvider),
 		stokenCodec:     stokens.NewCodec(),
@@ -439,37 +460,66 @@ func TestDispatchDeadlineIsNormalPartialOutcome(t *testing.T) {
 	require.Zero(t, te.inbox.Snapshot().Waiters)
 }
 
-func TestDispatchTruncatesOversizedContent(t *testing.T) {
+func TestDispatchUsesDefaultContentLimit(t *testing.T) {
 	t.Parallel()
 
-	te := setupInboxTest(t, "replica-dispatch-oversized")
+	te := setupInboxTest(t, "replica-dispatch-default-limit")
 	publisher := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
-	publisher.onPublish = func(ctx context.Context, _ *riskv1.GitleaksEnforcement, attributes map[string]string) error {
-		replyURN := attributes[requestreply.ReplyURNAttribute]
-		_, correlationID, err := ParseReplyURN(replyURN)
-		if err != nil {
-			return err
-		}
-		return te.writer.Reply(ctx, replyURN, testReply(correlationID, gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
-	}
+	publisher.onPublish = replyOK[*riskv1.GitleaksEnforcement](te, gitleaksLane)
 	dispatcher := testDispatcher(te, publisher, time.Second)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID: "org-oversized",
-		ProjectID:      "project-oversized",
-		Content:        strings.Repeat("x", MaxContentBytes+10),
-		Lanes:          []Lane{gitleaksLane},
-		Origins:        testOrigins(gitleaksLane),
+		OrganizationID:         "org-default-limit",
+		OrganizationSlug:       "",
+		ProjectID:              "project-default-limit",
+		Content:                strings.Repeat("x", DefaultMaxContentBytes+10),
+		Body:                   "",
+		ToolName:               "",
+		MessageType:            "",
+		ToolCalls:              nil,
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: nil,
+		Lanes:                  []Lane{gitleaksLane},
+		Origins:                testOrigins(gitleaksLane),
+	})
+	require.NoError(t, err)
+	require.True(t, outcome.Complete)
+	require.True(t, outcome.Truncated)
+	require.Len(t, publisher.messages, 1)
+	require.Equal(t, strings.Repeat("x", DefaultMaxContentBytes), publisher.messages[0].GetContent())
+	require.True(t, publisher.messages[0].GetContentTruncated())
+	var metrics metricdata.ResourceMetrics
+	require.NoError(t, te.reader.Collect(t.Context(), &metrics))
+	require.Equal(t, int64(1), int64CounterValue(metrics, "risk.enforcement.truncations"))
+}
+
+func TestDispatchClampsContentLimitAboveCeiling(t *testing.T) {
+	t.Parallel()
+
+	te := setupInboxTest(t, "replica-dispatch-limit-ceiling")
+	publisher := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
+	publisher.onPublish = replyOK[*riskv1.GitleaksEnforcement](te, gitleaksLane)
+	dispatcher := testDispatcherWithFlags(te, publisher, contentLimitFlags(t, MaxContentBytes*2))
+
+	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
+		OrganizationID:         "org-limit-ceiling",
+		OrganizationSlug:       "",
+		ProjectID:              "project-limit-ceiling",
+		Content:                strings.Repeat("x", MaxContentBytes+10),
+		Body:                   "",
+		ToolName:               "",
+		MessageType:            "",
+		ToolCalls:              nil,
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: nil,
+		Lanes:                  []Lane{gitleaksLane},
+		Origins:                testOrigins(gitleaksLane),
 	})
 	require.NoError(t, err)
 	require.True(t, outcome.Complete)
 	require.True(t, outcome.Truncated)
 	require.Len(t, publisher.messages, 1)
 	require.Equal(t, strings.Repeat("x", MaxContentBytes), publisher.messages[0].GetContent())
-	require.True(t, publisher.messages[0].GetContentTruncated())
-	var metrics metricdata.ResourceMetrics
-	require.NoError(t, te.reader.Collect(t.Context(), &metrics))
-	require.Equal(t, int64(1), int64CounterValue(metrics, "risk.enforcement.truncations"))
 }
 
 func TestDispatchTruncatesAtMultibyteRuneBoundary(t *testing.T) {
@@ -477,23 +527,23 @@ func TestDispatchTruncatesAtMultibyteRuneBoundary(t *testing.T) {
 
 	te := setupInboxTest(t, "replica-dispatch-multibyte")
 	gitleaksPub := &captureEnforcementPublisher{messages: nil, attributes: nil, onPublish: nil}
-	gitleaksPub.onPublish = func(ctx context.Context, _ *riskv1.GitleaksEnforcement, attributes map[string]string) error {
-		replyURN := attributes[requestreply.ReplyURNAttribute]
-		_, correlationID, err := ParseReplyURN(replyURN)
-		if err != nil {
-			return err
-		}
-		return te.writer.Reply(ctx, replyURN, testReply(correlationID, gitleaksLane, riskv1.EnforcementStatus_ENFORCEMENT_STATUS_OK))
-	}
+	gitleaksPub.onPublish = replyOK[*riskv1.GitleaksEnforcement](te, gitleaksLane)
 	dispatcher := testDispatcher(te, gitleaksPub, time.Second)
-	expected := strings.Repeat("x", MaxContentBytes-1)
+	expected := strings.Repeat("x", DefaultMaxContentBytes-1)
 
 	outcome, err := dispatcher.Dispatch(t.Context(), DispatchRequest{
-		OrganizationID: "org-multibyte",
-		ProjectID:      "project-multibyte",
-		Content:        expected + "€tail",
-		Lanes:          []Lane{gitleaksLane},
-		Origins:        testOrigins(gitleaksLane),
+		OrganizationID:         "org-multibyte",
+		OrganizationSlug:       "",
+		ProjectID:              "project-multibyte",
+		Content:                expected + "€tail",
+		Body:                   "",
+		ToolName:               "",
+		MessageType:            "",
+		ToolCalls:              nil,
+		PresidioEntities:       nil,
+		PresidioScoreThreshold: nil,
+		Lanes:                  []Lane{gitleaksLane},
+		Origins:                testOrigins(gitleaksLane),
 	})
 	require.NoError(t, err)
 	require.True(t, outcome.Complete)
@@ -510,7 +560,7 @@ func TestDispatchPublishesLLMLaneFields(t *testing.T) {
 	te := setupInboxTest(t, "replica-dispatch-llm")
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
-	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
 
 	origins := testOrigins(llmLane)
 	origin := origins[llmLane]
@@ -580,7 +630,7 @@ func TestDispatchLLMLaneFallsBackToOriginMessageFields(t *testing.T) {
 	te := setupInboxTest(t, "replica-dispatch-llm-fallback")
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
-	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
 
 	origins := testOrigins(llmLane)
 	origin := origins[llmLane]
@@ -611,7 +661,7 @@ func TestDispatchFansOutGitleaksAndLLMLanes(t *testing.T) {
 	presidioPub := &capturePresidioPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
-	dispatcher := testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+	dispatcher := testDispatcherWithLanes(te, gitleaksPub, presidioPub, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
 
 	origins := testOrigins(gitleaksLane, llmLane)
 	outcome, err := dispatcher.Dispatch(t.Context(), llmDispatchRequest([]Lane{gitleaksLane, llmLane}, origins))
@@ -649,6 +699,7 @@ func TestDispatchHonoursLaneWaitTimeoutOverride(t *testing.T) {
 		LaneWaitTimeout: map[riskv1.EnforcementScanner]time.Duration{ //nolint:exhaustive // only the LLM lane is overridden
 			riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER: 25 * time.Millisecond,
 		},
+		Flags: nil,
 	})
 
 	origins := testOrigins(gitleaksLane, llmLane)
@@ -671,7 +722,7 @@ func TestDispatchRejectsLLMLaneWithPolicyID(t *testing.T) {
 
 	te := setupInboxTest(t, "replica-dispatch-llm-policy")
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
-	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: nil})
 
 	policyLane := Lane{Scanner: riskv1.EnforcementScanner_ENFORCEMENT_SCANNER_LLM_ANALYZER, PolicyID: uuid.NewString()}
 	_, err := dispatcher.Dispatch(t.Context(), llmDispatchRequest([]Lane{policyLane}, testOrigins(policyLane)))
@@ -679,17 +730,22 @@ func TestDispatchRejectsLLMLaneWithPolicyID(t *testing.T) {
 	require.Empty(t, llmPub.messages)
 }
 
-func TestDispatchTruncatesOversizedLLMBody(t *testing.T) {
+func TestDispatchHonorsFlagLimitForContentBodyAndToolCalls(t *testing.T) {
 	t.Parallel()
 
-	te := setupInboxTest(t, "replica-dispatch-llm-body")
+	te := setupInboxTest(t, "replica-dispatch-request-limit")
 	llmPub := &captureLLMPublisher{messages: nil, attributes: nil, onPublish: nil}
 	llmPub.onPublish = replyOK[*riskv1.LLMEnforcement](te, llmLane)
-	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil})
+	const limit = 2048
+	dispatcher := testLLMDispatcher(te, llmPub, DispatcherConfig{WaitTimeout: time.Second, LaneWaitTimeout: nil, Flags: contentLimitFlags(t, limit)})
 
-	expected := strings.Repeat("x", MaxContentBytes-1)
+	expectedContent := strings.Repeat("c", limit)
+	expectedBody := strings.Repeat("b", limit-1)
 	request := llmDispatchRequest([]Lane{llmLane}, testOrigins(llmLane))
-	request.Body = expected + "€tail"
+	request.Content = expectedContent + "tail"
+	request.Body = expectedBody + "€tail"
+	expectedArguments := strings.Repeat("a", limit)
+	request.ToolCalls = []ToolCall{{ID: "toolu_1", Name: "bash", Arguments: expectedArguments + "tail"}}
 
 	outcome, err := dispatcher.Dispatch(t.Context(), request)
 	require.NoError(t, err)
@@ -697,9 +753,11 @@ func TestDispatchTruncatesOversizedLLMBody(t *testing.T) {
 	require.True(t, outcome.Truncated)
 	require.Len(t, llmPub.messages, 1)
 	message := llmPub.messages[0]
-	require.Equal(t, expected, message.GetBody())
+	require.Equal(t, expectedContent, message.GetContent())
+	require.Equal(t, expectedBody, message.GetBody())
 	require.True(t, utf8.ValidString(message.GetBody()))
-	require.Equal(t, "raw scanned content", message.GetContent(), "content below the cap is left intact")
+	require.Len(t, message.GetToolCalls(), 1)
+	require.Equal(t, expectedArguments, message.GetToolCalls()[0].GetArguments())
 	require.True(t, message.GetContentTruncated())
 	var metrics metricdata.ResourceMetrics
 	require.NoError(t, te.reader.Collect(t.Context(), &metrics))

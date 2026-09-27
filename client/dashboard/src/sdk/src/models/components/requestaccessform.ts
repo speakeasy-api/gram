@@ -21,6 +21,7 @@ export const RequestAccessFormScope = {
   EnvironmentWrite: "environment:write",
   SkillRead: "skill:read",
   SkillWrite: "skill:write",
+  PluginWrite: "plugin:write",
   RiskPolicyEvaluate: "risk_policy:evaluate",
   RiskPolicyBypass: "risk_policy:bypass",
   ChatRead: "chat:read",
@@ -29,6 +30,10 @@ export const RequestAccessFormScope = {
   AgentWrite: "agent:write",
   AgentAuthorize: "agent:authorize",
   AgentTransfer: "agent:transfer",
+  WorkloadRead: "workload:read",
+  WorkloadWrite: "workload:write",
+  OrgDeviceAgentSync: "org:device_agent_sync",
+  OrgHooksIngest: "org:hooks_ingest",
 } as const;
 /**
  * The scope being requested.

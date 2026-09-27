@@ -28,6 +28,10 @@
 //	POST   /authorization/organizations/{id}/roles
 //	PATCH  /authorization/organizations/{id}/roles/{slug}
 //	DELETE /authorization/organizations/{id}/roles/{slug}
+//	GET    /directory_groups                                                 (?directory, ?user, ?after, ?limit)
+//	GET    /directory_groups/{id}
+//	GET    /directory_users                                                  (?directory, ?group, ?after, ?limit)
+//	GET    /directory_users/{id}
 package mockworkos
 
 import (
@@ -113,6 +117,10 @@ func (h *Handler) registerWorkosRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /connections", h.handleWorkosListConnections)
 	mux.HandleFunc("GET /directories", h.handleWorkosListDirectories)
+	mux.HandleFunc("GET /directory_groups", h.handleWorkosListDirectoryGroups)
+	mux.HandleFunc("GET /directory_groups/{id}", h.handleWorkosGetDirectoryGroup)
+	mux.HandleFunc("GET /directory_users", h.handleWorkosListDirectoryUsers)
+	mux.HandleFunc("GET /directory_users/{id}", h.handleWorkosGetDirectoryUser)
 }
 
 // =============================================================================
@@ -593,7 +601,7 @@ func (h *Handler) handleWorkosGetOrganization(w http.ResponseWriter, r *http.Req
 		writeWorkosError(w, http.StatusInternalServerError, "failed to load organization")
 		return
 	}
-	writeJSON(w, http.StatusOK, workosOrganizationView(org))
+	h.writeWorkosOrganization(w, r, http.StatusOK, org)
 }
 
 // handleWorkosCreateOrganization creates an organization with no members. It is
@@ -606,6 +614,10 @@ func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.
 	var body struct {
 		Name       string `json:"name"`
 		ExternalID string `json:"external_id"`
+		DomainData []struct {
+			Domain string `json:"domain"`
+			State  string `json:"state"`
+		} `json:"domain_data"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeWorkosError(w, http.StatusBadRequest, "invalid request body")
@@ -617,6 +629,29 @@ func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.
 	}
 
 	id := uuid.New()
+	domains := make([]workosOrganizationDomain, 0, len(body.DomainData))
+	for _, domain := range body.DomainData {
+		state := domain.State
+		if state == "" {
+			state = "pending"
+		}
+		if domain.Domain == "" || (state != "pending" && state != "verified") {
+			writeWorkosError(w, http.StatusBadRequest, "invalid domain_data")
+			return
+		}
+		domains = append(domains, workosOrganizationDomain{
+			ID:             "org_domain_" + uuid.NewString(),
+			OrganizationID: workosOrgIDFor(id),
+			Domain:         domain.Domain,
+			State:          state,
+		})
+	}
+	encodedDomains, err := json.Marshal(domains)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "encode organization domains", slog.Any("error", err))
+		writeWorkosError(w, http.StatusInternalServerError, "failed to encode domains")
+		return
+	}
 	org, err := repo.New(h.db).CreateOrganization(ctx, repo.CreateOrganizationParams{
 		ID:   id,
 		Name: body.Name,
@@ -626,6 +661,7 @@ func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.
 		AccountType: sql.NullString{String: "", Valid: false},
 		WorkosID:    sql.NullString{String: workosOrgIDFor(id), Valid: true},
 		ExternalID:  nullableString(body.ExternalID),
+		Domains:     sql.NullString{String: string(encodedDomains), Valid: true},
 	})
 	if err != nil {
 		h.logger.ErrorContext(ctx, "workos create organization", slog.Any("error", err))
@@ -633,7 +669,7 @@ func (h *Handler) handleWorkosCreateOrganization(w http.ResponseWriter, r *http.
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, workosOrganizationView(org))
+	h.writeWorkosOrganization(w, r, http.StatusCreated, org)
 }
 
 // handleWorkosUpdateOrganization applies a partial update. The WorkOS SDK omits
@@ -682,7 +718,7 @@ func (h *Handler) handleWorkosUpdateOrganization(w http.ResponseWriter, r *http.
 		return
 	}
 
-	writeJSON(w, http.StatusOK, workosOrganizationView(org))
+	h.writeWorkosOrganization(w, r, http.StatusOK, org)
 }
 
 // =============================================================================
@@ -1471,17 +1507,23 @@ func workosOrgID(o repo.Organization) string {
 	return o.ID.String()
 }
 
-func workosOrganizationView(o repo.Organization) workosOrganization {
-	return workosOrganization{
+func (h *Handler) writeWorkosOrganization(w http.ResponseWriter, r *http.Request, status int, o repo.Organization) {
+	domains := []workosOrganizationDomain{}
+	if err := json.Unmarshal([]byte(o.Domains), &domains); err != nil {
+		h.logger.ErrorContext(r.Context(), "decode organization domains", slog.Any("error", err))
+		writeWorkosError(w, http.StatusInternalServerError, "failed to load organization domains")
+		return
+	}
+	writeJSON(w, status, workosOrganization{
 		ID:                               workosOrgID(o),
 		Name:                             o.Name,
 		AllowProfilesOutsideOrganization: false,
-		Domains:                          []workosOrganizationDomain{},
+		Domains:                          domains,
 		StripeCustomerID:                 "",
 		CreatedAt:                        o.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:                        o.UpdatedAt.UTC().Format(time.RFC3339),
 		ExternalID:                       o.ExternalID.String,
-	}
+	})
 }
 
 func workosMembershipView(m repo.ListMembershipsWithOrgNameRow) workosOrganizationMembership {

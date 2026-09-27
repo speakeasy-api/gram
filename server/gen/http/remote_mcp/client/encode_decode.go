@@ -1475,6 +1475,248 @@ func DecodeDiscoverProtectedResourceMetadataResponse(decoder func(*http.Response
 	}
 }
 
+// BuildProbeURLRequest instantiates a HTTP request object with method and path
+// set to call the "remoteMcp" service "probeURL" endpoint
+func (c *Client) BuildProbeURLRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ProbeURLRemoteMcpPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("remoteMcp", "probeURL", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeProbeURLRequest returns an encoder for requests sent to the remoteMcp
+// probeURL server.
+func EncodeProbeURLRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*remotemcp.ProbeURLPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("remoteMcp", "probeURL", "*remotemcp.ProbeURLPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewProbeURLRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("remoteMcp", "probeURL", err)
+		}
+		return nil
+	}
+}
+
+// DecodeProbeURLResponse returns a decoder for responses returned by the
+// remoteMcp probeURL endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeProbeURLResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeProbeURLResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ProbeURLResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "probeURL", err)
+			}
+			err = ValidateProbeURLResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "probeURL", err)
+			}
+			res := NewProbeURLResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ProbeURLUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "probeURL", err)
+			}
+			err = ValidateProbeURLUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "probeURL", err)
+			}
+			return nil, NewProbeURLUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ProbeURLForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "probeURL", err)
+			}
+			err = ValidateProbeURLForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "probeURL", err)
+			}
+			return nil, NewProbeURLForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ProbeURLBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "probeURL", err)
+			}
+			err = ValidateProbeURLBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "probeURL", err)
+			}
+			return nil, NewProbeURLBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ProbeURLNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "probeURL", err)
+			}
+			err = ValidateProbeURLNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "probeURL", err)
+			}
+			return nil, NewProbeURLNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ProbeURLConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "probeURL", err)
+			}
+			err = ValidateProbeURLConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "probeURL", err)
+			}
+			return nil, NewProbeURLConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ProbeURLUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "probeURL", err)
+			}
+			err = ValidateProbeURLUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "probeURL", err)
+			}
+			return nil, NewProbeURLUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ProbeURLInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "probeURL", err)
+			}
+			err = ValidateProbeURLInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "probeURL", err)
+			}
+			return nil, NewProbeURLInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ProbeURLInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "probeURL", err)
+				}
+				err = ValidateProbeURLInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "probeURL", err)
+				}
+				return nil, NewProbeURLInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ProbeURLUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("remoteMcp", "probeURL", err)
+				}
+				err = ValidateProbeURLUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("remoteMcp", "probeURL", err)
+				}
+				return nil, NewProbeURLUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("remoteMcp", "probeURL", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ProbeURLGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("remoteMcp", "probeURL", err)
+			}
+			err = ValidateProbeURLGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("remoteMcp", "probeURL", err)
+			}
+			return nil, NewProbeURLGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("remoteMcp", "probeURL", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildVerifyURLRequest instantiates a HTTP request object with method and
 // path set to call the "remoteMcp" service "verifyURL" endpoint
 func (c *Client) BuildVerifyURLRequest(ctx context.Context, v any) (*http.Request, error) {

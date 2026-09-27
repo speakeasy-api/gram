@@ -13,7 +13,7 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/speakeasy-api/gram/server/internal/usersessions/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 )
 
 // AuthorizationRequest is the RFC 6749 §4.1.1 authorization request, parsed

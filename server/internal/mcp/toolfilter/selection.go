@@ -332,19 +332,19 @@ func AnnotationsMatch(annotations *types.ToolAnnotations, values []string) bool 
 	hintTrue := func(hint *bool) bool { return hint != nil && *hint }
 	for _, value := range values {
 		switch value {
-		case AnnotationReadOnly:
+		case AnnotationReadOnly, "readOnlyHint":
 			if hintTrue(annotations.ReadOnlyHint) {
 				return true
 			}
-		case AnnotationDestructive:
+		case AnnotationDestructive, "destructiveHint":
 			if hintTrue(annotations.DestructiveHint) {
 				return true
 			}
-		case AnnotationIdempotent:
+		case AnnotationIdempotent, "idempotentHint":
 			if hintTrue(annotations.IdempotentHint) {
 				return true
 			}
-		case AnnotationOpenWorld:
+		case AnnotationOpenWorld, "openWorldHint":
 			if hintTrue(annotations.OpenWorldHint) {
 				return true
 			}

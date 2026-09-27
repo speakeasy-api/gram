@@ -29,7 +29,7 @@ import {
 } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { RULE_CATEGORY_META, type RuleCategory } from "./policy-data";
-import { getRuleTitleFallback, isJudgeSource } from "./risk-utils";
+import { getRuleTitleFallback, isRationaleSource } from "./risk-utils";
 import {
   CategoryLabel,
   EventMatchDialog,
@@ -438,7 +438,7 @@ function ResultsTable({
                 {result.userId ?? "-"}
               </td>
               <td className="px-4 py-3">
-                {isJudgeSource(result.source) ? (
+                {isRationaleSource(result.source) ? (
                   <EventMatchDialog
                     resultId={result.id}
                     matchRedacted={result.matchRedacted}

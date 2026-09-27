@@ -110,6 +110,22 @@ return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.l
 - Cascading soft-deletes must emit per-row audit entries for each affected child.
 - Treat audit-log failures as `oops.CodeUnexpected` — if it fails, fail the request.
 
+### Platform MCP Product Surface
+
+Treat `server/internal/platformmcp/` as a first-party product surface. For changes to backend APIs, dashboard workflows, permissions, or user-facing capabilities:
+
+- Require the implementation or review to record the outcome (update, add, or intentionally omit), target resource, actor, existing-tool comparison, rationale, and success evidence. A new endpoint does not automatically need a tool, but a useful repeatable administrator/member outcome must not be silently omitted.
+- Flag existing tools whose names, descriptions, schemas, results, next actions, authorization, discovery scopes, audiences, or behavior are stale relative to the changed product contract.
+- Flag new Platform MCP tools that merely mirror implementation endpoints instead of representing a bounded user outcome.
+- For mutations, verify explicit target selection, confirmation, idempotency/concurrency controls, audit logging, and post-change verification match the dashboard/API workflow.
+- Verify external-client and managed-assistant audiences were considered separately. Assistant tools must work under assistant identity and exact-project scoping without an external OAuth connection.
+- Verify unavailable dependencies produce the intended stable, readable contract rather than silently removing a tool.
+- If tool names or multi-tool workflows change, verify server instructions and shipped skills under `server/internal/plugins/platform_mcp_skills/` remain accurate.
+- For the external endpoint, verify connection-time live organization membership separately from per-tool RBAC and expect tests for both boundaries.
+- Expect focused tests for schemas, authorization/discovery, audience admission, unavailable behavior, mutation safety, and sensitive-data boundaries as applicable.
+
+Follow `.agents/skills/maintaining-platform-mcp/SKILL.md` for the implementation and review checklist. Use `.agents/skills/authoring-platform-mcp-skills/SKILL.md` when shipped Platform MCP workflows change.
+
 ---
 
 ## PostgreSQL / Database

@@ -114,6 +114,7 @@ func TestRiskFindingRelayEligibility(t *testing.T) {
 		{name: "new finding", mutate: func(f *riskv1.Finding) { f.SetEventKind("finding") }, ok: true},
 		{name: "legacy new finding", mutate: func(f *riskv1.Finding) { f.SetEventKind("") }, ok: true},
 		{name: "dead letter", mutate: func(f *riskv1.Finding) { f.SetDeadLetterReason("scanner failed") }, reason: relayReasonDeadLetter},
+		{name: "shadow finding", mutate: func(f *riskv1.Finding) { f.SetShadow(true) }, reason: relayReasonShadow},
 		{name: "suppression", mutate: func(f *riskv1.Finding) { f.SetEventKind("suppression") }, reason: relayReasonStateChange},
 		{name: "unsuppression", mutate: func(f *riskv1.Finding) { f.SetEventKind("unsuppression") }, reason: relayReasonStateChange},
 		{name: "legacy exclusion timestamp", mutate: func(f *riskv1.Finding) {
