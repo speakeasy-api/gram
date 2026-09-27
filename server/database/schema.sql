@@ -1653,6 +1653,41 @@ CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_dashboard_target_uniq
 ON trigger_instances (project_id, target_ref)
 WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
 
+-- trigger_thread_routes records how events on one external conversation (a
+-- trigger correlation id such as a Slack thread) reach a trigger target:
+-- whether the target is subscribed to it, and which of the target's
+-- conversations its events are delivered under.
+CREATE TABLE IF NOT EXISTS trigger_thread_routes (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  target_kind TEXT NOT NULL CHECK (target_kind <> '' AND CHAR_LENGTH(target_kind) <= 60),
+  target_ref TEXT NOT NULL CHECK (target_ref <> '' AND CHAR_LENGTH(target_ref) <= 255),
+  correlation_id TEXT NOT NULL CHECK (correlation_id <> '' AND CHAR_LENGTH(correlation_id) <= 300),
+  -- Correlation id that events on this conversation are delivered under. NULL
+  -- delivers them under correlation_id.
+  route_to_correlation_id TEXT CHECK (route_to_correlation_id <> '' AND CHAR_LENGTH(route_to_correlation_id) <= 300),
+  state TEXT NOT NULL,
+  -- Source-specific position of the newest event on this conversation that was
+  -- delivered to the target (a Slack message ts).
+  last_seen_cursor TEXT CHECK (last_seen_cursor <> '' AND CHAR_LENGTH(last_seen_cursor) <= 64),
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT trigger_thread_routes_pkey PRIMARY KEY (id),
+  CONSTRAINT trigger_thread_routes_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_thread_routes_target_correlation_id_key
+ON trigger_thread_routes (project_id, target_kind, target_ref, correlation_id)
+WHERE deleted IS FALSE;
+
+CREATE INDEX IF NOT EXISTS trigger_thread_routes_route_to_correlation_id_idx
+ON trigger_thread_routes (project_id, target_kind, target_ref, route_to_correlation_id)
+WHERE route_to_correlation_id IS NOT NULL AND deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS environment_entries (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   value TEXT NOT NULL CHECK (value <> '' AND CHAR_LENGTH(value) <= 4000),
