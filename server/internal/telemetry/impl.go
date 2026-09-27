@@ -489,6 +489,7 @@ func (s *Service) searchUsersByEmployee(ctx context.Context, payload *telem_gen.
 		ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
 		GroupBy:              groupBy,
 		UserIDs:              userKeys,
+		IdentityContains:     "",
 		SortOrder:            params.sortOrder,
 		Cursor:               params.cursor,
 		Limit:                params.limit + 1,
@@ -1165,6 +1166,7 @@ func (s *Service) searchUsersByRole(ctx context.Context, payload *telem_gen.Sear
 			ExternalOrgID:        conv.PtrValOr(filter.ExternalOrgID, ""),
 			GroupBy:              "user_id",
 			UserIDs:              userKeys,
+			IdentityContains:     "",
 			SortOrder:            "desc",
 			Cursor:               "",
 			Limit:                10001,                  // Upper bound; orgs rarely have >10k users

@@ -131,6 +131,9 @@ type platformMCPConfig struct {
 	// withholds the drill-down tools while leaving the overview-first entry
 	// points serving.
 	TelemetryDrilldown platformmcp.DrilldownTelemetryReader
+	// UserSearch is the per-person read model behind search_users and
+	// get_user_metrics_summary. Nil keeps both visible as unavailable.
+	UserSearch platformmcp.UserSearchReader
 
 	// WorkflowRun delivers shipped-workflow run reports to Speakeasy's own
 	// analytics. Nil registers record_workflow_run as a stub, so the tool
@@ -437,7 +440,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithToolUsageBreakdown(config.ToolUsage).
-		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
+		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
+		WithUserSearch(config.UserSearch)
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
 	if err != nil {
@@ -900,7 +904,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	diagnostics := platformmcp.NewDiagnosticsService(config.DB, config.Telemetry, config.SessionCapture, platformReader, readiness, budgets.Diagnostics).
 		WithCanonicalIdentityGate(config.CanonicalIdentity).
 		WithToolUsageBreakdown(config.ToolUsage).
-		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB))
+		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
+		WithUserSearch(config.UserSearch)
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, budgets.SensitiveSessionRecall)
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
 	if err != nil {

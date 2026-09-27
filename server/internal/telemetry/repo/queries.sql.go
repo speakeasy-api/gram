@@ -3387,9 +3387,14 @@ type SearchUsersParams struct {
 	ExternalOrgID       string // optional; scopes to a single account by provider org id
 	GroupBy             string // "user_id" or "external_user_id"
 	UserIDs             []string
-	SortOrder           string // "asc" or "desc"
-	Cursor              string // user identifier to paginate from
-	Limit               int
+	// IdentityContains keeps only summaries whose group key contains this
+	// text, compared case-insensitively. It is applied to the same expression
+	// the rows are grouped by, so a match is a match on the summary's identity
+	// and never on a folded-away variant. Empty applies no filter.
+	IdentityContains string
+	SortOrder        string // "asc" or "desc"
+	Cursor           string // user identifier to paginate from
+	Limit            int
 	// MetricsDetail selects how many aggregates to compute: one of the
 	// MetricsDetail* constants. MetricsDetailBasic projects only identity,
 	// first/last activity, input/output token sums, and raw_user_ids — skipping
@@ -3543,6 +3548,9 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Use
 	sb = withAccountTypeFilter(sb, arg.AccountType)
 	if arg.ExternalOrgID != "" {
 		sb = sb.Where("external_org_id = ?", arg.ExternalOrgID)
+	}
+	if arg.IdentityContains != "" {
+		sb = sb.Where("positionCaseInsensitive("+groupExpr+", ?) > 0", arg.IdentityContains)
 	}
 	if len(arg.UserIDs) > 0 {
 		switch {

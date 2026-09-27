@@ -438,6 +438,8 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"get_tool_usage_summary",
 		"list_organization_events",
 		"list_chats",
+		"search_users",
+		"get_user_metrics_summary",
 		"update_mcp_metadata",
 		"register_catalog_mcp",
 		"register_remote_mcp",
