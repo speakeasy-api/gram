@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -290,6 +291,89 @@ func TestListChats_RegularUser_SeesOnlyOwnChats(t *testing.T) {
 	require.Equal(t, 1, result.Total)
 	require.Len(t, result.Chats, 1)
 	require.Equal(t, authCtx.UserID, conv.PtrValOr(result.Chats[0].UserID, ""))
+}
+
+// A chat is one row however many assistant threads it carries, and the
+// assistant reported for it is always one recorded under the listed project.
+// A thread whose project_id points elsewhere while its chat_id points here is
+// an inconsistent relationship, and it must neither surface its assistant nor
+// add a row.
+func TestListChats_OneRowPerChat_ReportsOnlyThisProjectsAssistant(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	queries := repo.New(ti.conn)
+
+	foreignProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name:           "Foreign Project",
+		Slug:           "foreign-" + uuid.NewString()[:8],
+		OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	foreignAssistant, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      foreignProject.ID,
+		OrganizationID: ti.orgID,
+		Name:           "Foreign Assistant",
+	})
+	require.NoError(t, err)
+	localAssistant, err := queries.SeedAssistant(ctx, repo.SeedAssistantParams{
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		Name:           "Local Assistant",
+	})
+	require.NoError(t, err)
+
+	// One chat in the listed project with a thread from each project on it.
+	sharedChat := seedChat(t, ctx, ti, "", "ext-shared", "shared chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   foreignAssistant,
+		ProjectID:     foreignProject.ID,
+		CorrelationID: "foreign-on-shared",
+		ChatID:        sharedChat,
+	}))
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   localAssistant,
+		ProjectID:     ti.projectID,
+		CorrelationID: "local-on-shared",
+		ChatID:        sharedChat,
+	}))
+	// And one chat whose only thread is the foreign one.
+	foreignOnlyChat := seedChat(t, ctx, ti, "", "ext-foreign-only", "foreign only chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   foreignAssistant,
+		ProjectID:     foreignProject.ID,
+		CorrelationID: "foreign-on-foreign-only",
+		ChatID:        foreignOnlyChat,
+	}))
+
+	result, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Total, "total counts chats, not assistant threads")
+	require.Len(t, result.Chats, 2, "one row per chat however many threads it carries")
+	byID := map[string]*gen.ChatOverview{}
+	for _, chat := range result.Chats {
+		byID[chat.ID] = chat
+	}
+	shared, ok := byID[sharedChat.String()]
+	require.True(t, ok)
+	require.NotNil(t, shared.AssistantID)
+	require.Equal(t, localAssistant.String(), *shared.AssistantID, "the assistant recorded under this project is the one reported")
+	require.NotNil(t, shared.AssistantName)
+	require.Equal(t, "Local Assistant", *shared.AssistantName)
+	foreignOnly, ok := byID[foreignOnlyChat.String()]
+	require.True(t, ok)
+	require.Nil(t, foreignOnly.AssistantID, "a thread from another project never surfaces its assistant")
+	require.Nil(t, foreignOnly.AssistantName)
+
+	// Narrowing to the foreign assistant finds nothing in this project: the
+	// admission filter is project-scoped as well.
+	payload := defaultPayload()
+	foreignAssistantID := foreignAssistant.String()
+	payload.AssistantID = &foreignAssistantID
+	result, err = ti.service.ListChats(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, 0, result.Total)
+	require.Empty(t, result.Chats)
 }
 
 // TestListChats_ChatRead_SeesAllChats verifies that a caller holding an
