@@ -81,6 +81,7 @@ const MODEL_CONTEXT_LIMITS: Partial<Record<KnownModelId, number>> = {
   "qwen/qwen3.7-max": 1_000_000,
   "qwen/qwen3-coder": 256_000,
   "z-ai/glm-5.3": 1_310_720,
+  "z-ai/glm-5.3-flash": 1_310_720,
   "moonshotai/kimi-k3": 1_048_576,
   "moonshotai/kimi-k2.6": 256_000,
   "moonshotai/kimi-k2.5": 256_000,
