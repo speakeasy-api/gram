@@ -825,14 +825,27 @@ limited_chats AS (
     fc.last_message_timestamp,
     fc.account_type,
     fc.account_email,
-    at.assistant_id,
+    thread.assistant_id,
     a.name AS assistant_name,
     -- Window count runs before LIMIT/OFFSET, so every returned row carries the
     -- total number of filtered chats.
     COUNT(*) OVER ()::bigint AS total_count
   FROM filtered_chats fc
-  LEFT JOIN assistant_threads at ON at.chat_id = fc.id AND at.deleted IS FALSE
-  LEFT JOIN assistants a ON a.id = at.assistant_id AND a.deleted IS FALSE
+  -- One thread per chat, so a chat several assistants worked in is one row
+  -- and LIMIT/OFFSET, total_count and the page all count chats. The thread of
+  -- the assistant the listing was narrowed to wins; otherwise the most
+  -- recently active one. The lateral picks only the thread id: the columns
+  -- come from the base tables below so they stay nullable for a chat with no
+  -- assistant thread.
+  LEFT JOIN LATERAL (
+    SELECT at.id AS thread_id
+    FROM assistant_threads at
+    WHERE at.chat_id = fc.id AND at.deleted IS FALSE
+    ORDER BY (@assistant_id <> '' AND at.assistant_id::text = @assistant_id) DESC, at.last_event_at DESC, at.id DESC
+    LIMIT 1
+  ) picked ON TRUE
+  LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id
+  LEFT JOIN assistants a ON a.id = thread.assistant_id AND a.deleted IS FALSE
   ORDER BY
     -- Recency is pure message time. Hook rows persist at their occurred_at,
     -- so a chat whose only new traffic is spool-replayed backlog keeps its

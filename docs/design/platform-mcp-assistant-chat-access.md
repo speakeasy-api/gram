@@ -49,11 +49,14 @@ reuses keeps a chat whose last message is at or after the window start and
 that was created at or before the window end, ordered by last activity, and
 has no creation-time order. That is also the question an administrator asks
 ("which chats were active this week"), so the tool adopts it rather than
-adding a second time semantics to the same query. The same query left-joins
-every live assistant thread on a chat, so a chat several assistants worked in
-arrives as several rows; the projection reports each chat once, as the
-assistant the listing was narrowed to or otherwise its first thread, and
-`total_matches` counts thread rows for such chats.
+adding a second time semantics to the same query. The query picks one
+assistant thread per chat (the assistant the listing was narrowed to,
+otherwise the most recently active one) with a lateral join, so a chat several
+assistants worked in is one row: `LIMIT`/`OFFSET`, the window `total_count`,
+the 500-chat traversal cap, and the page all count chats. The listing refuses a
+page that carries the same chat twice rather than serving counts whose unit
+has silently changed. This also removes the duplicate rows the dashboard's
+chat list showed for such chats.
 
 - **Dashboard questions it answers.** "How many conversations did Claude Code
   have in this project this week?" "Which chats were flagged, when, and are
@@ -183,17 +186,17 @@ switched on" stub when the service is not composed.
 Input (closed object; the assistant policy injects `project_id` and hides
 both selectors):
 
-| Field            | Type    | Meaning                                                                 |
-| ---------------- | ------- | ----------------------------------------------------------------------- |
-| `project_id`     | uuid    | Optional exact project. At most one selector.                           |
-| `project_slug`   | string  | Optional exact project slug. Omit both for the literal default project. |
-| `window`         | enum    | `1h`, `24h`, `7d` (default), `30d`. Activity: a chat is listed when its last message is at or after the window start and it was created at or before the window end. |
-| `risk`           | enum    | `with_findings`, `without_findings`; omit for no filter.                |
-| `source`         | string  | Exact chat source label, at most 64 characters, no control characters.  |
-| `assistant_id`   | uuid    | Keep only that assistant's threads.                                     |
-| `user_reference` | string  | Person reference from a previous `list_chats` row in this project.      |
+| Field            | Type    | Meaning                                                                                                                                                                 |
+| ---------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project_id`     | uuid    | Optional exact project. At most one selector.                                                                                                                           |
+| `project_slug`   | string  | Optional exact project slug. Omit both for the literal default project.                                                                                                 |
+| `window`         | enum    | `1h`, `24h`, `7d` (default), `30d`. Activity: a chat is listed when its last message is at or after the window start and it was created at or before the window end.    |
+| `risk`           | enum    | `with_findings`, `without_findings`; omit for no filter.                                                                                                                |
+| `source`         | string  | Exact chat source label, at most 64 characters, no control characters.                                                                                                  |
+| `assistant_id`   | uuid    | Keep only that assistant's threads.                                                                                                                                     |
+| `user_reference` | string  | Person reference from a previous `list_chats` row in this project.                                                                                                      |
 | `limit`          | integer | Default 20. The tool schema admits 1–50; the service clamps a value above 50 to 50 rather than refusing it, treats 0 as the default, and refuses only a negative value. |
-| `cursor`         | string  | Opaque cursor from a previous result. It pins the absolute interval the first page read. |
+| `cursor`         | string  | Opaque cursor from a previous result. It pins the absolute interval the first page read.                                                                                |
 
 Output:
 
@@ -205,10 +208,10 @@ Output:
     "chat_id", "created_at", "last_message_at",
     "message_count", "risk_findings_count",
     "source", "client", "account_type",
-    "assistant_id", "assistant_name",     // one row per chat; the narrowed assistant when assistant_id was given
+    "assistant_id", "assistant_name",     // one row per chat: the narrowed assistant, else the most recently active
     "masked_identity", "user_reference"
   }],
-  "total_matches": int,
+  "total_matches": int,             // chats matching the filters and window, in chats like every other count
   "next_cursor": string,           // omitted on the last page or at the traversal cap
   "limitations": string
 }

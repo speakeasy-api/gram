@@ -1,7 +1,6 @@
 package platformmcp
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -110,59 +109,48 @@ func TestListChatsEmptyPageCountsIndependently(t *testing.T) {
 	require.Len(t, reader.countParams, 1)
 }
 
-// A chat two assistants worked in arrives from the query as two rows. It is
-// reported once: as the assistant the listing was narrowed to, or the first.
-func TestListChatsReportsOneRowPerChat(t *testing.T) {
+// The query yields one row per chat and picks the thread of the assistant the
+// listing was narrowed to, so the projection reports that row's assistant as
+// is, and the assistant filter reaches the query unchanged.
+func TestListChatsReportsTheRowsAssistant(t *testing.T) {
 	t.Parallel()
 
 	principal := registrationServicePrincipal()
 	chatID := uuid.New()
-	first := uuid.New()
-	second := uuid.New()
-	firstThread := chatListRow(chatID, chatListTestNow.Add(-time.Hour), "user_1", "", "", 3)
-	firstThread.AssistantID = uuid.NullUUID{UUID: first, Valid: true}
-	firstThread.AssistantName = pgtype.Text{String: "Triage", Valid: true}
-	secondThread := firstThread
-	secondThread.AssistantID = uuid.NullUUID{UUID: second, Valid: true}
-	secondThread.AssistantName = pgtype.Text{String: "Release", Valid: true}
-	other := chatListRow(uuid.New(), chatListTestNow.Add(-2*time.Hour), "user_2", "", "", 3)
-	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{firstThread, secondThread, other}, params: nil, err: nil, countParams: nil, count: 0}
+	assistantID := uuid.New()
+	row := chatListRow(chatID, chatListTestNow.Add(-time.Hour), "user_1", "", "", 1)
+	row.AssistantID = uuid.NullUUID{UUID: assistantID, Valid: true}
+	row.AssistantName = pgtype.Text{String: "Release", Valid: true}
+	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{row}, params: nil, err: nil, countParams: nil, count: 0}
 	service, _ := newChatMetadataService(t, reader, allowBudget())
 
-	narrowed, err := service.List(t.Context(), principal, ListChatsInput{
-		ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: second.String(), UserReference: "", Limit: 0, Cursor: "",
+	output, err := service.List(t.Context(), principal, ListChatsInput{
+		ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: assistantID.String(), UserReference: "", Limit: 0, Cursor: "",
 	})
 	require.NoError(t, err)
-	require.Len(t, narrowed.Chats, 2)
-	require.Equal(t, chatID.String(), narrowed.Chats[0].ChatID)
-	require.Equal(t, second.String(), narrowed.Chats[0].AssistantID, "the narrowed assistant is the one reported")
-	require.Equal(t, "Release", narrowed.Chats[0].AssistantName)
-	require.NotContains(t, chatListJSON(t, narrowed), first.String(), "the other assistant on the chat is not exposed")
-
-	unnarrowed, err := service.List(t.Context(), principal, ListChatsInput{
-		ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: 0, Cursor: "",
-	})
-	require.NoError(t, err)
-	require.Len(t, unnarrowed.Chats, 2)
-	require.Equal(t, first.String(), unnarrowed.Chats[0].AssistantID, "without a filter the first thread stands")
-	require.NotContains(t, chatListJSON(t, unnarrowed), second.String())
+	require.Len(t, output.Chats, 1)
+	require.Equal(t, chatID.String(), output.Chats[0].ChatID)
+	require.Equal(t, assistantID.String(), output.Chats[0].AssistantID)
+	require.Equal(t, "Release", output.Chats[0].AssistantName)
+	require.Equal(t, assistantID.String(), reader.params[0].AssistantID, "the filter reaches the query, which picks the matching thread")
+	require.Equal(t, 1, output.TotalMatches)
 }
 
-func chatListJSON(t *testing.T, value any) string {
-	t.Helper()
-	encoded, err := json.Marshal(value)
-	require.NoError(t, err)
-	return string(encoded)
-}
-
-func TestRowsCoveringChats(t *testing.T) {
+// One row per chat is the query's guarantee and the unit every count relies
+// on. A page that breaks it is refused rather than served with counts that no
+// longer mean chats.
+func TestListChatsRefusesADuplicateChatRow(t *testing.T) {
 	t.Parallel()
 
-	a, b, c := uuid.New(), uuid.New(), uuid.New()
-	rows := []chatrepo.ListChatsRow{{ID: a}, {ID: a}, {ID: b}, {ID: c}, {ID: c}}
-	require.Equal(t, 0, rowsCoveringChats(rows, 0))
-	require.Equal(t, 2, rowsCoveringChats(rows, 1))
-	require.Equal(t, 3, rowsCoveringChats(rows, 2))
-	require.Equal(t, 5, rowsCoveringChats(rows, 3))
-	require.Equal(t, 5, rowsCoveringChats(rows, 9))
+	chatID := uuid.New()
+	first := chatListRow(chatID, chatListTestNow.Add(-time.Hour), "user_1", "", "", 2)
+	second := first
+	second.AssistantID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{first, second}, params: nil, err: nil, countParams: nil, count: 0}
+	service, _ := newChatMetadataService(t, reader, allowBudget())
+
+	_, err := service.List(t.Context(), registrationServicePrincipal(), ListChatsInput{
+		ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: 0, Cursor: "",
+	})
+	require.ErrorIs(t, err, errChatListDuplicateRow)
 }

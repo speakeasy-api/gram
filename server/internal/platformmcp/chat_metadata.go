@@ -45,9 +45,15 @@ const (
 // malformed selector, or a source label that cannot be matched safely.
 var ErrChatListInvalid = errors.New("invalid platform mcp chat list")
 
+// errChatListDuplicateRow reports a page carrying the same chat twice. The chat
+// query yields one row per chat, so LIMIT, OFFSET, total_count and the page all
+// count chats; a duplicate means that guarantee broke, and the page is refused
+// rather than served with a count that no longer means what it says.
+var errChatListDuplicateRow = errors.New("platform mcp chat list returned a chat more than once")
+
 // chatListLimitations is stated on every page so a caller never mistakes the
 // listing for a transcript reader or an export.
-const chatListLimitations = "Metadata only: chat titles, messages, prompts, tool inputs and outputs are never returned; read a transcript in the dashboard. The window selects chats by activity: a chat is listed when its last message is at or after the window start and it was created at or before the window end, newest activity first. A cursor pins the window it was minted for, so later pages walk the same interval. Identities are masked and user references expire and are bound to this session and project. risk_findings_count counts live findings under enabled policies; excluded and dismissed findings are not counted. One row is returned per chat; a chat that several assistants worked in reports the assistant the listing was narrowed to, or the first, and total_matches counts assistant threads for such chats. Pages are bounded and at most 500 chats can be walked per listing. total_matches is the count at the time of this page and can change between pages."
+const chatListLimitations = "Metadata only: chat titles, messages, prompts, tool inputs and outputs are never returned; read a transcript in the dashboard. The window selects chats by activity: a chat is listed when its last message is at or after the window start and it was created at or before the window end, newest activity first. A cursor pins the window it was minted for, so later pages walk the same interval. Identities are masked and user references expire and are bound to this session and project. risk_findings_count counts live findings under enabled policies; excluded and dismissed findings are not counted. Every count is in chats: one row per chat, total_matches counts chats, and at most 500 chats can be walked per listing. A chat several assistants worked in reports the assistant the listing was narrowed to, otherwise its most recently active one. total_matches is the count at the time of this page and can change between pages."
 
 // chatMetadataReader is the pair of chat queries the listing reads through, so
 // unit tests can model the read without a database.
@@ -120,7 +126,8 @@ type ChatSummary struct {
 	// that produced the chat, when one is linked.
 	AccountType string `json:"account_type,omitempty"`
 	// AssistantID and AssistantName identify the administrator-configured
-	// assistant behind the chat, when it was an assistant thread.
+	// assistant behind the chat, when it was an assistant thread: the one the
+	// listing was narrowed to, otherwise the most recently active.
 	AssistantID    string `json:"assistant_id,omitempty"`
 	AssistantName  string `json:"assistant_name,omitempty"`
 	MaskedIdentity string `json:"masked_identity,omitempty"`
@@ -271,7 +278,12 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		more = false
 	}
 	chats := make([]ChatSummary, 0, len(rows))
-	for _, row := range oneRowPerChat(rows, list.assistantID) {
+	seen := make(map[uuid.UUID]struct{}, len(rows))
+	for _, row := range rows {
+		if _, duplicate := seen[row.ID]; duplicate {
+			return zero, errChatListDuplicateRow
+		}
+		seen[row.ID] = struct{}{}
 		summary, err := s.chatSummary(principal, list, row)
 		if err != nil {
 			return zero, err
@@ -288,13 +300,7 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		return zero, err
 	}
 	output.Chats = fitted
-	if dropped {
-		// The page was cut to fit. The rows handed over are the ones whose chat
-		// survived, counted in query rows so the cursor resumes at the right
-		// offset even when a surviving chat spanned several thread rows.
-		rows = rows[:rowsCoveringChats(rows, len(fitted))]
-		more = len(rows) > 0
-	}
+	rows, more = resumeAfterFit(rows, len(fitted), dropped, more)
 	traversed := offset + len(rows)
 	if more && len(rows) > 0 && traversed < maxChatListTraversal {
 		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatChatListCursor(traversed, list.window), list.now)
@@ -396,46 +402,6 @@ func (s *ChatMetadataService) chatListUserFilter(principal Principal, reference 
 	default:
 		return "", "", ErrSubjectReferenceNotFound
 	}
-}
-
-// oneRowPerChat collapses the query's assistant fan-out. The chat query admits
-// a chat by assistant and then left-joins every live assistant thread on it, so
-// a chat several assistants worked in arrives as several rows, one per thread,
-// adjacent because the order ends on the chat id. Each chat is reported once:
-// as the thread of the assistant the listing was narrowed to when there is one,
-// otherwise as its first thread row.
-func oneRowPerChat(rows []chatrepo.ListChatsRow, assistantID string) []chatrepo.ListChatsRow {
-	collapsed := make([]chatrepo.ListChatsRow, 0, len(rows))
-	index := make(map[uuid.UUID]int, len(rows))
-	for _, row := range rows {
-		position, seen := index[row.ID]
-		if !seen {
-			index[row.ID] = len(collapsed)
-			collapsed = append(collapsed, row)
-			continue
-		}
-		if assistantID != "" && uuidString(row.AssistantID) == assistantID {
-			collapsed[position] = row
-		}
-	}
-	return collapsed
-}
-
-// rowsCoveringChats counts the query rows that belong to the first n distinct
-// chats, so an offset advanced past them lands on the next chat's first row.
-func rowsCoveringChats(rows []chatrepo.ListChatsRow, n int) int {
-	seen := make(map[uuid.UUID]struct{}, n)
-	covered := 0
-	for _, row := range rows {
-		if _, ok := seen[row.ID]; !ok {
-			if len(seen) == n {
-				break
-			}
-			seen[row.ID] = struct{}{}
-		}
-		covered++
-	}
-	return covered
 }
 
 // chatSummary projects one row. The identity is masked and, when it is recorded
