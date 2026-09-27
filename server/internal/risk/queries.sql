@@ -2319,7 +2319,8 @@ RETURNING id;
 -- name: SetChatMessageExternalUserIDForTest :exec
 UPDATE chat_messages
 SET external_user_id = @external_user_id
-WHERE id = @id;
+WHERE id = @id
+  AND project_id = @project_id;
 
 -- name: SetRiskResultExcludedForTest :exec
 UPDATE risk_results

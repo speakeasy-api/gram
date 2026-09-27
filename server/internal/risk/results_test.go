@@ -384,6 +384,7 @@ func TestListRiskResults_UserIDPrefersMessageIdentity(t *testing.T) {
 	require.NoError(t, riskrepo.New(ti.conn).SetChatMessageExternalUserIDForTest(ctx, riskrepo.SetChatMessageExternalUserIDForTestParams{
 		ExternalUserID: pgtype.Text{String: "carol@example.com", Valid: true},
 		ID:             msgID,
+		ProjectID:      uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true},
 	}))
 	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
 	_, otherMsg := seedChatMessageWithUser(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "dave@example.com")

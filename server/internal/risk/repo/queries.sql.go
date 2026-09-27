@@ -5604,15 +5604,17 @@ const setChatMessageExternalUserIDForTest = `-- name: SetChatMessageExternalUser
 UPDATE chat_messages
 SET external_user_id = $1
 WHERE id = $2
+  AND project_id = $3
 `
 
 type SetChatMessageExternalUserIDForTestParams struct {
 	ExternalUserID pgtype.Text
 	ID             uuid.UUID
+	ProjectID      uuid.NullUUID
 }
 
 func (q *Queries) SetChatMessageExternalUserIDForTest(ctx context.Context, arg SetChatMessageExternalUserIDForTestParams) error {
-	_, err := q.db.Exec(ctx, setChatMessageExternalUserIDForTest, arg.ExternalUserID, arg.ID)
+	_, err := q.db.Exec(ctx, setChatMessageExternalUserIDForTest, arg.ExternalUserID, arg.ID, arg.ProjectID)
 	return err
 }
 
