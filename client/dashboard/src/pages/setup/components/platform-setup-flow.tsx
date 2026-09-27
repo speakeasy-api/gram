@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { AGENT_PLATFORMS, platformSteps } from "../setup-data";
+import { getAgentPlatforms, platformSteps } from "../setup-data";
 import type { PlatformSetupStatus } from "../types";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
 import {
@@ -40,7 +40,7 @@ export function PlatformSetupFlow({
   orgHeldBack,
   apiKeys: sharedApiKeys,
 }: PlatformSetupFlowProps): JSX.Element | null {
-  const platform = AGENT_PLATFORMS.find((p) => p.id === platformId);
+  const platform = getAgentPlatforms().find((p) => p.id === platformId);
   const localApiKeys = usePlatformApiKeys();
   const apiKeys = sharedApiKeys ?? localApiKeys;
   // A platform whose first step asks for the plan (the plan check)

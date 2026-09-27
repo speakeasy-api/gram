@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
-import { AGENT_PLATFORMS, platformSteps } from "../setup-data";
+import { getAgentPlatforms, platformSteps } from "../setup-data";
 import type { AgentPlatform } from "../types";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
 import { usePlatformApiKeys } from "./platform-setup-values";
@@ -35,9 +35,10 @@ export function PlatformInstrumentationSheet({
   const [eligibility, setEligibility] = useState<Record<string, boolean>>({});
   const apiKeys = usePlatformApiKeys();
 
+  const agentPlatforms = getAgentPlatforms();
   const activePlatform =
-    AGENT_PLATFORMS.find((p) => p.id === pickedPlatformId) ?? null;
-  const availablePlatforms = AGENT_PLATFORMS.filter(
+    agentPlatforms.find((p) => p.id === pickedPlatformId) ?? null;
+  const availablePlatforms = agentPlatforms.filter(
     (p) => p.available !== false,
   );
 

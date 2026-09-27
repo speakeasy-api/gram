@@ -3,6 +3,9 @@ package usage
 import (
 	"context"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -11,7 +14,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 )
 
 const extraPlatformHostURL = "https://ai.example.test"
@@ -66,10 +71,7 @@ func TestPolarCheckoutsReturnToRequestPlatformHost(t *testing.T) {
 	}
 }
 
-// Stripe Checkout keeps the site URL on every host: a live checkout intent
-// replays its idempotency key with byte-identical input for up to a day, so a
-// per-host return URL would fail the replay when a user switches hosts.
-func TestCreateStripeCheckoutKeepsSiteURLOnExtraPlatformHost(t *testing.T) {
+func TestCreateStripeCheckoutReturnsToExtraPlatformHost(t *testing.T) {
 	t.Parallel()
 
 	ti := newStripeCheckoutTestInstance(t)
@@ -80,8 +82,135 @@ func TestCreateStripeCheckoutKeepsSiteURLOnExtraPlatformHost(t *testing.T) {
 
 	_, _, checkouts := ti.stripe.snapshot()
 	require.Len(t, checkouts, 1)
-	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing", checkouts[0].SuccessURL)
+	require.Equal(t, extraPlatformHostURL+"/"+ti.orgSlug+"/billing", checkouts[0].SuccessURL)
 	require.Equal(t, checkouts[0].SuccessURL, checkouts[0].CancelURL)
+	require.Contains(t, checkouts[0].IdempotencyKey, ":"+stripeCheckoutReturnBasePrefix)
+	require.Equal(t, "none", checkoutIntentTrialFingerprint(checkouts[0].IdempotencyKey))
+}
+
+func TestCreateStripeCheckoutKeepsCanonicalIdempotencyKeyOnSiteHost(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	ctx := withPlatformOrigin(ti.adminContext(t), ti.service.siteURL.String())
+
+	_, err := ti.service.CreateStripeCheckout(ctx, &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Len(t, checkouts, 1)
+	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing", checkouts[0].SuccessURL)
+	require.NotContains(t, checkouts[0].IdempotencyKey, stripeCheckoutReturnBasePrefix)
+}
+
+func TestCreateStripeCheckoutReplaysLiveIntentOnSameExtraHost(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	ctx := withPlatformOrigin(ti.adminContext(t), extraPlatformHostURL)
+
+	first, err := ti.service.CreateStripeCheckout(ctx, &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+	second, err := ti.service.CreateStripeCheckout(ctx, &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+
+	require.Equal(t, first, second)
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Len(t, checkouts, 2)
+	require.Equal(t, checkouts[0], checkouts[1])
+}
+
+// A live intent keeps the return host it was created on: switching hosts must
+// replay the original input, which the fake Stripe client rejects otherwise.
+func TestCreateStripeCheckoutReplaysLiveIntentAfterHostSwitch(t *testing.T) {
+	t.Parallel()
+
+	siteBillingPath := "https://app.example.test/"
+	for _, tc := range []struct {
+		name       string
+		firstHost  string
+		secondHost string
+		wantBase   string
+	}{
+		{name: "extra host then site host", firstHost: extraPlatformHostURL, secondHost: "", wantBase: extraPlatformHostURL + "/"},
+		{name: "site host then extra host", firstHost: "", secondHost: extraPlatformHostURL, wantBase: siteBillingPath},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ti := newStripeCheckoutTestInstance(t)
+			contextFor := func(host string) context.Context {
+				ctx := ti.adminContext(t)
+				if host != "" {
+					ctx = withPlatformOrigin(ctx, host)
+				}
+				return ctx
+			}
+
+			first, err := ti.service.CreateStripeCheckout(contextFor(tc.firstHost), &gen.CreateStripeCheckoutPayload{})
+			require.NoError(t, err)
+			second, err := ti.service.CreateStripeCheckout(contextFor(tc.secondHost), &gen.CreateStripeCheckoutPayload{})
+			require.NoError(t, err)
+
+			require.Equal(t, first, second)
+			_, _, checkouts := ti.stripe.snapshot()
+			require.Len(t, checkouts, 2)
+			require.Equal(t, checkouts[0], checkouts[1])
+			require.Equal(t, tc.wantBase+ti.orgSlug+"/billing", checkouts[1].SuccessURL)
+			require.Empty(t, ti.stripe.expiredCheckoutIDs)
+		})
+	}
+}
+
+// Lifecycle recovery replays the stale intent's Create call with the URLs it
+// was created with, then starts the replacement on the current request's host.
+func TestCreateStripeCheckoutRecoversLifecycleStaleIntentWithOriginalHost(t *testing.T) {
+	t.Parallel()
+
+	ti := newStripeCheckoutTestInstance(t)
+	trialEnd := time.Now().UTC().Add(7 * 24 * time.Hour)
+	require.NoError(t, trialsrepo.New(ti.db).CreateTrial(t.Context(), trialsrepo.CreateTrialParams{
+		OrganizationID: ti.orgID, Tier: "enterprise",
+		EndsAt: pgtype.Timestamptz{Time: trialEnd, InfinityModifier: pgtype.Finite, Valid: true},
+	}))
+	ti.stripe.afterCheckoutCreate = func() {
+		ti.stripe.afterCheckoutCreate = nil
+		_, err := trialsrepo.New(ti.db).ExtendTrial(t.Context(), trialsrepo.ExtendTrialParams{OrganizationID: ti.orgID, ExtendByDays: 1})
+		require.NoError(t, err)
+	}
+
+	_, err := ti.service.CreateStripeCheckout(withPlatformOrigin(ti.adminContext(t), extraPlatformHostURL), &gen.CreateStripeCheckoutPayload{})
+	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	checkoutURL, err := ti.service.CreateStripeCheckout(ti.adminContext(t), &gen.CreateStripeCheckoutPayload{})
+	require.NoError(t, err)
+	require.Equal(t, "https://checkout.stripe.test/2", checkoutURL)
+	require.Equal(t, []string{"cs_1"}, ti.stripe.expiredCheckoutIDs)
+
+	_, _, checkouts := ti.stripe.snapshot()
+	require.Len(t, checkouts, 3)
+	require.Equal(t, checkouts[0], checkouts[1])
+	require.Equal(t, extraPlatformHostURL+"/"+ti.orgSlug+"/billing", checkouts[1].SuccessURL)
+	require.Equal(t, "https://app.example.test/"+ti.orgSlug+"/billing", checkouts[2].SuccessURL)
+}
+
+func TestStripeCheckoutReturnBaseRoundTripsThroughIdempotencyKey(t *testing.T) {
+	t.Parallel()
+
+	siteURL := mustParseURL(t, "https://app.example.test")
+	intent := newStripeCheckoutIntent("<ORG_ID>", time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC), nil)
+	fingerprint := checkoutIntentTrialFingerprint(intent.idempotencyKey)
+
+	canonical, err := stripeCheckoutBillingURL(intent.idempotencyKey, siteURL, "acme")
+	require.NoError(t, err)
+	require.Equal(t, "https://app.example.test/acme/billing", canonical)
+
+	withPort := withStripeCheckoutReturnBase(intent, "http://localhost:5173")
+	require.Equal(t, fingerprint, checkoutIntentTrialFingerprint(withPort.idempotencyKey))
+	returned, err := stripeCheckoutBillingURL(withPort.idempotencyKey, siteURL, "acme")
+	require.NoError(t, err)
+	require.Equal(t, "http://localhost:5173/acme/billing", returned)
 }
 
 func TestCreateStripePortalSessionReturnsToRequestPlatformHost(t *testing.T) {

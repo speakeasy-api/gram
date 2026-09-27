@@ -61,6 +61,34 @@ export function isProdHost(serverURL: string): boolean {
 // Hosts serving the dev dashboard, compared exactly like PROD_HOSTS.
 const DEV_HOSTS = new Set(["dev.getgram.ai", "dev.ai.speakeasy.com"]);
 
+// Each environment's configured server host. Published plugins and the device
+// daemon send to it whichever of that environment's hosts an admin configured
+// them from.
+const CANONICAL_PROD_HOST = "app.getgram.ai";
+const CANONICAL_DEV_HOST = "dev.getgram.ai";
+
+// Every first-party host that serves the same product as serverURL's host:
+// all of that environment's hosts on a prod or dev host, otherwise just it.
+export function firstPartyHosts(serverURL = getServerURL()): string[] {
+  const host = new URL(serverURL, window.location.origin).hostname;
+  if (PROD_HOSTS.has(host)) return [...PROD_HOSTS];
+  if (DEV_HOSTS.has(host)) return [...DEV_HOSTS];
+  return [host];
+}
+
+// Hosts an agent sandbox must allow to reach Speakeasy: the current host, plus
+// its environment's canonical host when different, because plugin hooks and
+// the daemon still send there.
+export function agentEgressHosts(serverURL = getServerURL()): string[] {
+  const host = new URL(serverURL, window.location.origin).hostname;
+  const canonical = PROD_HOSTS.has(host)
+    ? CANONICAL_PROD_HOST
+    : DEV_HOSTS.has(host)
+      ? CANONICAL_DEV_HOST
+      : host;
+  return canonical === host ? [host] : [host, canonical];
+}
+
 // tunnel.speakeasy.com on every prod host, tunnel.dev.getgram.ai on every dev
 // host, tunnel-pr-N.<env> in previews (single label keeps the wildcard cert
 // valid), tunnel.<host> otherwise.
