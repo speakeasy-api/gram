@@ -47,16 +47,17 @@ var ErrChatListInvalid = errors.New("invalid platform mcp chat list")
 
 // chatListLimitations is stated on every page so a caller never mistakes the
 // listing for a transcript reader or an export.
-const chatListLimitations = "Metadata only: chat titles, messages, prompts, tool inputs and outputs are never returned; read a transcript in the dashboard. Chats are selected by creation time within the window, newest first. Identities are masked and user references expire and are bound to this session and project. risk_findings_count counts live findings under enabled policies; excluded and dismissed findings are not counted. Pages are bounded and at most 500 chats can be walked per listing. total_matches is the count at the time of this page and can change between pages."
+const chatListLimitations = "Metadata only: chat titles, messages, prompts, tool inputs and outputs are never returned; read a transcript in the dashboard. The window selects chats by activity: a chat is listed when its last message is at or after the window start and it was created at or before the window end, newest activity first. A cursor pins the window it was minted for, so later pages walk the same interval. Identities are masked and user references expire and are bound to this session and project. risk_findings_count counts live findings under enabled policies; excluded and dismissed findings are not counted. One row is returned per chat; a chat that several assistants worked in reports the assistant the listing was narrowed to, or the first, and total_matches counts assistant threads for such chats. Pages are bounded and at most 500 chats can be walked per listing. total_matches is the count at the time of this page and can change between pages."
 
-// chatMetadataReader is the one chat query the listing reads through, so unit
-// tests can model the read without a database.
+// chatMetadataReader is the pair of chat queries the listing reads through, so
+// unit tests can model the read without a database.
 type chatMetadataReader interface {
 	ListChats(ctx context.Context, arg chatrepo.ListChatsParams) ([]chatrepo.ListChatsRow, error)
+	CountChats(ctx context.Context, arg chatrepo.CountChatsParams) (int64, error)
 }
 
 // ChatMetadataService serves list_chats: one project's conversations reduced
-// to when they happened, how long they ran, which app produced them, whether
+// to when they were active, how long they ran, which app produced them, whether
 // risk analysis found anything, and a masked participant. It never reads
 // chat_messages, so no path through it can return what was said.
 type ChatMetadataService struct {
@@ -89,7 +90,7 @@ func (s *ChatMetadataService) valid() bool {
 }
 
 // ListChatsInput narrows one project's chats. Every filter is optional; an
-// empty listing returns the newest chats of the last week.
+// empty listing returns the chats active in the last week.
 type ListChatsInput struct {
 	ProjectID     string `json:"project_id,omitempty"`
 	ProjectSlug   string `json:"project_slug,omitempty"`
@@ -186,9 +187,10 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 
 	// The cursor resolves only against the query that minted it, so a position
 	// cannot be replayed with different filters, another window, or a different
-	// person.
+	// person. It also pins the absolute interval the first page read, so later
+	// pages walk the same result set rather than one that slid with the clock.
 	scope := list.cursorScope()
-	offset, err := s.decodeChatListCursor(input.Cursor, principal, scope, list.now)
+	offset, err := s.decodeChatListCursor(input.Cursor, principal, scope, &list)
 	if err != nil {
 		return zero, err
 	}
@@ -210,10 +212,13 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		Sources:           nonEmpty(list.source),
 		FromTime:          pgtype.Timestamptz{Time: list.window.start, InfinityModifier: pgtype.Finite, Valid: true},
 		ToTime:            pgtype.Timestamptz{Time: list.window.end, InfinityModifier: pgtype.Finite, Valid: true},
-		SortBy:            "created_at",
-		SortOrder:         "desc",
-		PageOffset:        int32(offset),         // #nosec G115 -- the cursor codec caps offset at maxChatListTraversal.
-		PageLimit:         int32(list.limit + 1), // #nosec G115 -- limit is clamped to maxChatListLimit; one extra row detects another page.
+		// The query lists chats by activity — last message at or after the
+		// start, created at or before the end — so the order is activity too;
+		// it has no creation-time order.
+		SortBy:     "last_message_timestamp",
+		SortOrder:  "desc",
+		PageOffset: int32(offset),         // #nosec G115 -- the cursor codec caps offset at maxChatListTraversal.
+		PageLimit:  int32(list.limit + 1), // #nosec G115 -- limit is clamped to maxChatListLimit; one extra row detects another page.
 	})
 	if err != nil {
 		return zero, fmt.Errorf("list project chats: %w", err)
@@ -226,12 +231,37 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		Project:      riskProject(project),
 		Envelope:     newDataEnvelope(list.now, list.now, list.window, len(rows) > 0),
 		Chats:        []ChatSummary{},
-		TotalMatches: offset,
+		TotalMatches: 0,
 		NextCursor:   "",
 		Limitations:  chatListLimitations,
 	}
-	if len(rows) > 0 {
+	switch {
+	case len(rows) > 0:
 		output.TotalMatches = int(rows[0].TotalCount)
+	case offset > 0:
+		// Every page row carries the pre-LIMIT total; an empty page past the end
+		// of a set that shrank has none, so the count is read on its own rather
+		// than guessed from the cursor.
+		total, err := s.chats.CountChats(ctx, chatrepo.CountChatsParams{
+			FromTime:          pgtype.Timestamptz{Time: list.window.start, InfinityModifier: pgtype.Finite, Valid: true},
+			ToTime:            pgtype.Timestamptz{Time: list.window.end, InfinityModifier: pgtype.Finite, Valid: true},
+			HasRiskFilter:     chatListHasRiskFilter(list.risk),
+			MinRiskScore:      -1,
+			ProjectID:         list.projectID,
+			ExternalUserID:    externalUserID,
+			UserID:            userID,
+			Pinned:            "",
+			Search:            "",
+			AssistantID:       list.assistantID,
+			SourceKind:        "",
+			ExcludeSourceKind: "",
+			AccountType:       "",
+			Sources:           nonEmpty(list.source),
+		})
+		if err != nil {
+			return zero, fmt.Errorf("count project chats: %w", err)
+		}
+		output.TotalMatches = int(total)
 	}
 	rows, more := boundedRows(rows, list.limit)
 	// Trimmed to what the traversal budget still allows, so the cap bounds the
@@ -241,7 +271,7 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		more = false
 	}
 	chats := make([]ChatSummary, 0, len(rows))
-	for _, row := range rows {
+	for _, row := range oneRowPerChat(rows, list.assistantID) {
 		summary, err := s.chatSummary(principal, list, row)
 		if err != nil {
 			return zero, err
@@ -258,10 +288,16 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 		return zero, err
 	}
 	output.Chats = fitted
-	rows, more = resumeAfterFit(rows, len(fitted), dropped, more)
+	if dropped {
+		// The page was cut to fit. The rows handed over are the ones whose chat
+		// survived, counted in query rows so the cursor resumes at the right
+		// offset even when a surviving chat spanned several thread rows.
+		rows = rows[:rowsCoveringChats(rows, len(fitted))]
+		more = len(rows) > 0
+	}
 	traversed := offset + len(rows)
 	if more && len(rows) > 0 && traversed < maxChatListTraversal {
-		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatChatListCursor(traversed), list.now)
+		cursor, err := s.references.EncodeScoped(principal, subjectKindCursor, scope, formatChatListCursor(traversed, list.window), list.now)
 		if err != nil {
 			return zero, fmt.Errorf("mint chat list cursor: %w", err)
 		}
@@ -273,7 +309,9 @@ func (s *ChatMetadataService) List(ctx context.Context, principal Principal, inp
 // normalizeChatList validates the caller-supplied filters and turns them into
 // the normalized listing a cursor is bound to. Anything outside the closed
 // sets is refused rather than dropped: a filter silently ignored hands the
-// caller a page it believes was narrowed.
+// caller a page it believes was narrowed. The limit alone is clamped rather
+// than refused, because a too-large page is a preference, not a different
+// question.
 func normalizeChatList(input ListChatsInput) (chatList, error) {
 	list := chatList{
 		risk:   strings.TrimSpace(input.Risk),
@@ -321,6 +359,10 @@ func chatListHasRiskFilter(risk string) string {
 	}
 }
 
+// cursorScope binds a cursor to the question that minted it: project, named
+// window, and every filter. The absolute interval is not part of the scope —
+// it travels inside the sealed cursor and is restored from it — because the
+// scope has to be computable before the cursor is opened.
 func (l chatList) cursorScope() string {
 	return queryScope("list_chats", l.projectID.String(), string(l.window.Window), l.risk, l.source, l.assistantID, l.identity)
 }
@@ -354,6 +396,46 @@ func (s *ChatMetadataService) chatListUserFilter(principal Principal, reference 
 	default:
 		return "", "", ErrSubjectReferenceNotFound
 	}
+}
+
+// oneRowPerChat collapses the query's assistant fan-out. The chat query admits
+// a chat by assistant and then left-joins every live assistant thread on it, so
+// a chat several assistants worked in arrives as several rows, one per thread,
+// adjacent because the order ends on the chat id. Each chat is reported once:
+// as the thread of the assistant the listing was narrowed to when there is one,
+// otherwise as its first thread row.
+func oneRowPerChat(rows []chatrepo.ListChatsRow, assistantID string) []chatrepo.ListChatsRow {
+	collapsed := make([]chatrepo.ListChatsRow, 0, len(rows))
+	index := make(map[uuid.UUID]int, len(rows))
+	for _, row := range rows {
+		position, seen := index[row.ID]
+		if !seen {
+			index[row.ID] = len(collapsed)
+			collapsed = append(collapsed, row)
+			continue
+		}
+		if assistantID != "" && uuidString(row.AssistantID) == assistantID {
+			collapsed[position] = row
+		}
+	}
+	return collapsed
+}
+
+// rowsCoveringChats counts the query rows that belong to the first n distinct
+// chats, so an offset advanced past them lands on the next chat's first row.
+func rowsCoveringChats(rows []chatrepo.ListChatsRow, n int) int {
+	seen := make(map[uuid.UUID]struct{}, n)
+	covered := 0
+	for _, row := range rows {
+		if _, ok := seen[row.ID]; !ok {
+			if len(seen) == n {
+				break
+			}
+			seen[row.ID] = struct{}{}
+		}
+		covered++
+	}
+	return covered
 }
 
 // chatSummary projects one row. The identity is masked and, when it is recorded
@@ -407,33 +489,60 @@ func chatIdentity(row chatrepo.ListChatsRow) (string, string) {
 	return "", ""
 }
 
-// A listing cursor carries the offset the next page resumes from, minted
-// through the same bound, expiring reference codec as everything else a caller
-// holds between calls. The offset travels inside the sealed token so a caller
-// cannot reset its own traversal budget by editing what it was handed.
-func formatChatListCursor(offset int) string {
-	return "o:" + strconv.Itoa(offset)
+// A listing cursor carries the offset the next page resumes from and the
+// absolute interval the first page read, minted through the same bound,
+// expiring reference codec as everything else a caller holds between calls.
+// Both travel inside the sealed token, so a caller can neither reset its own
+// traversal budget nor slide the window by editing what it was handed.
+func formatChatListCursor(offset int, window ResolvedWindow) string {
+	return "o:" + strconv.Itoa(offset) + ":" + strconv.FormatInt(window.start.Unix(), 10) + ":" + strconv.FormatInt(window.end.Unix(), 10)
 }
 
-func parseChatListCursor(value string) (int, error) {
+func parseChatListCursor(value string) (int, time.Time, time.Time, error) {
 	rest, ok := strings.CutPrefix(value, "o:")
 	if !ok {
-		return 0, ErrSubjectReferenceNotFound
+		return 0, time.Time{}, time.Time{}, ErrSubjectReferenceNotFound
 	}
-	offset, err := strconv.Atoi(rest)
+	parts := strings.Split(rest, ":")
+	if len(parts) != 3 {
+		return 0, time.Time{}, time.Time{}, ErrSubjectReferenceNotFound
+	}
+	offset, err := strconv.Atoi(parts[0])
 	if err != nil || offset <= 0 || offset > maxChatListTraversal {
-		return 0, ErrSubjectReferenceNotFound
+		return 0, time.Time{}, time.Time{}, ErrSubjectReferenceNotFound
 	}
-	return offset, nil
+	start, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || start <= 0 {
+		return 0, time.Time{}, time.Time{}, ErrSubjectReferenceNotFound
+	}
+	end, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil || end <= start {
+		return 0, time.Time{}, time.Time{}, ErrSubjectReferenceNotFound
+	}
+	return offset, time.Unix(start, 0).UTC(), time.Unix(end, 0).UTC(), nil
 }
 
-func (s *ChatMetadataService) decodeChatListCursor(cursor string, principal Principal, scope string, now time.Time) (int, error) {
+// decodeChatListCursor resolves a cursor against the listing's scope and pins
+// the listing's window to the interval the cursor carries. Without a cursor
+// the window resolved from the clock stands.
+func (s *ChatMetadataService) decodeChatListCursor(cursor string, principal Principal, scope string, list *chatList) (int, error) {
 	if cursor == "" {
 		return 0, nil
 	}
-	value, err := s.references.DecodeScoped(cursor, principal, subjectKindCursor, scope, now)
+	value, err := s.references.DecodeScoped(cursor, principal, subjectKindCursor, scope, list.now)
 	if err != nil {
 		return 0, ErrSubjectReferenceNotFound
 	}
-	return parseChatListCursor(value)
+	offset, start, end, err := parseChatListCursor(value)
+	if err != nil {
+		return 0, err
+	}
+	list.window = ResolvedWindow{
+		Window: list.window.Window,
+		From:   start.Format(time.RFC3339),
+		To:     end.Format(time.RFC3339),
+		start:  start,
+		end:    end,
+	}
+	return offset, nil
 }

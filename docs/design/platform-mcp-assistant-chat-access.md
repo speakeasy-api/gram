@@ -44,6 +44,17 @@ most 30 days), risk presence, exact source label, assistant id, person
 reference. Opaque session-bound cursor, bounded pages, 500-chat traversal cap.
 No title, no content, no search parameter.
 
+The window selects by activity, not creation: the dashboard query the tool
+reuses keeps a chat whose last message is at or after the window start and
+that was created at or before the window end, ordered by last activity, and
+has no creation-time order. That is also the question an administrator asks
+("which chats were active this week"), so the tool adopts it rather than
+adding a second time semantics to the same query. The same query left-joins
+every live assistant thread on a chat, so a chat several assistants worked in
+arrives as several rows; the projection reports each chat once, as the
+assistant the listing was narrowed to or otherwise its first thread, and
+`total_matches` counts thread rows for such chats.
+
 - **Dashboard questions it answers.** "How many conversations did Claude Code
   have in this project this week?" "Which chats were flagged, when, and are
   they still active?" "Is one person producing most of the flagged chats?" "Did
@@ -152,7 +163,9 @@ Against today's managed tools, under (a) the assistant loses:
   email are masked without a reference, because the query cannot narrow to
   an email without matching titles too.
 - **Arbitrary time bounds.** `from`/`to` timestamps become a closed window of
-  1h, 24h, 7d or 30d, capped at 30 days, like every other project read.
+  1h, 24h, 7d or 30d, capped at 30 days, like every other project read. The
+  window selects chats by activity (last message at or after the start,
+  created at or before the end), which is the dashboard query's semantics.
 - **Unbounded paging.** Offset paging over the whole project becomes bounded
   pages behind an opaque cursor with a 500-chat traversal cap per listing.
 - **Pinned, account-type, minimum-risk-score and sort controls.** Not carried
@@ -174,13 +187,13 @@ both selectors):
 | ---------------- | ------- | ----------------------------------------------------------------------- |
 | `project_id`     | uuid    | Optional exact project. At most one selector.                           |
 | `project_slug`   | string  | Optional exact project slug. Omit both for the literal default project. |
-| `window`         | enum    | `1h`, `24h`, `7d` (default), `30d`. Creation time in `[from, to)`.      |
+| `window`         | enum    | `1h`, `24h`, `7d` (default), `30d`. Activity: a chat is listed when its last message is at or after the window start and it was created at or before the window end. |
 | `risk`           | enum    | `with_findings`, `without_findings`; omit for no filter.                |
 | `source`         | string  | Exact chat source label, at most 64 characters, no control characters.  |
 | `assistant_id`   | uuid    | Keep only that assistant's threads.                                     |
 | `user_reference` | string  | Person reference from a previous `list_chats` row in this project.      |
-| `limit`          | integer | 1–50, default 20.                                                       |
-| `cursor`         | string  | Opaque cursor from a previous result.                                   |
+| `limit`          | integer | Default 20. The tool schema admits 1–50; the service clamps a value above 50 to 50 rather than refusing it, treats 0 as the default, and refuses only a negative value. |
+| `cursor`         | string  | Opaque cursor from a previous result. It pins the absolute interval the first page read. |
 
 Output:
 
@@ -192,7 +205,7 @@ Output:
     "chat_id", "created_at", "last_message_at",
     "message_count", "risk_findings_count",
     "source", "client", "account_type",
-    "assistant_id", "assistant_name",
+    "assistant_id", "assistant_name",     // one row per chat; the narrowed assistant when assistant_id was given
     "masked_identity", "user_reference"
   }],
   "total_matches": int,
@@ -202,7 +215,7 @@ Output:
 ```
 
 Refusals: `invalid_request` (selectors, window, risk, source, assistant id,
-limit), `not_found` (project; cursor or reference, one message for both so an
+negative limit), `not_found` (project; cursor or reference, one message for both so an
 expired reference is indistinguishable from an unknown one), `rate_limited`,
 `feature_unavailable` (stub).
 
@@ -210,9 +223,12 @@ Budget: the sensitive-diagnostics allowance, shared with the drill-down reads
 and `search_tool_calls`, because a page carries masked identities and person
 references. Cursor and reference: `subjectReferenceCodec`, kinds `cursor` and
 `user`, ten-minute TTL, bound to organization, session binding and a query
-scope. The cursor scope hashes project, window, risk, source, assistant and
-decoded identity, so a position cannot be replayed against a different
-question. The user scope is the project alone, so a reference survives a
+scope. The cursor scope hashes project, named window, risk, source,
+assistant and decoded identity, so a position cannot be replayed against a
+different question; the absolute `from`/`to` the first page read travel
+inside the sealed cursor and are restored from it, so later pages walk the
+same interval rather than one that slid with the clock. The user scope is the
+project alone, so a reference survives a
 change of window or filter within one investigation and never resolves in
 another project.
 

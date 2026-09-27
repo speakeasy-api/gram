@@ -21,14 +21,21 @@ var chatListTestNow = time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 // recordingChatReader captures the repository parameters a listing built and
 // serves canned rows.
 type recordingChatReader struct {
-	params []chatrepo.ListChatsParams
-	rows   []chatrepo.ListChatsRow
-	err    error
+	params      []chatrepo.ListChatsParams
+	rows        []chatrepo.ListChatsRow
+	err         error
+	countParams []chatrepo.CountChatsParams
+	count       int64
 }
 
 func (r *recordingChatReader) ListChats(_ context.Context, arg chatrepo.ListChatsParams) ([]chatrepo.ListChatsRow, error) {
 	r.params = append(r.params, arg)
 	return r.rows, r.err
+}
+
+func (r *recordingChatReader) CountChats(_ context.Context, arg chatrepo.CountChatsParams) (int64, error) {
+	r.countParams = append(r.countParams, arg)
+	return r.count, r.err
 }
 
 // newChatMetadataService composes the listing without Postgres: the project
@@ -86,7 +93,7 @@ func chatListRows(count int, total int64) []chatrepo.ListChatsRow {
 func TestListChatsOutputProjectsOnlyAllowlistedFields(t *testing.T) {
 	t.Parallel()
 
-	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{chatListRow(uuid.New(), chatListTestNow.Add(-time.Hour), "", "", "dev@example.invalid", 1)}, params: nil, err: nil}
+	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{chatListRow(uuid.New(), chatListTestNow.Add(-time.Hour), "", "", "dev@example.invalid", 1)}, params: nil, err: nil, countParams: nil, count: 0}
 	service, _ := newChatMetadataService(t, reader, allowBudget())
 
 	output, err := service.List(t.Context(), registrationServicePrincipal(), ListChatsInput{
@@ -129,7 +136,7 @@ func keysOf(object map[string]any) []string {
 func TestListChatsQueriesTheWindowWithoutSearch(t *testing.T) {
 	t.Parallel()
 
-	reader := &recordingChatReader{rows: nil, params: nil, err: nil}
+	reader := &recordingChatReader{rows: nil, params: nil, err: nil, countParams: nil, count: 0}
 	service, project := newChatMetadataService(t, reader, allowBudget())
 	assistantID := uuid.New()
 
@@ -149,7 +156,7 @@ func TestListChatsQueriesTheWindowWithoutSearch(t *testing.T) {
 	require.Equal(t, []string{"claude-code"}, params.Sources)
 	require.Equal(t, chatListTestNow.Add(-24*time.Hour), params.FromTime.Time)
 	require.Equal(t, chatListTestNow, params.ToTime.Time)
-	require.Equal(t, "created_at", params.SortBy)
+	require.Equal(t, "last_message_timestamp", params.SortBy, "the chat query lists by activity and has no creation-time order")
 	require.Equal(t, "desc", params.SortOrder)
 	require.EqualValues(t, 0, params.PageOffset)
 	require.EqualValues(t, maxChatListLimit+1, params.PageLimit, "the limit is clamped and one extra row detects another page")
@@ -169,7 +176,7 @@ func TestListChatsUserReferenceNarrowsTheSamePerson(t *testing.T) {
 	principal := registrationServicePrincipal()
 	byUser := chatListRow(uuid.New(), chatListTestNow.Add(-time.Hour), "user_01HZX", "", "", 2)
 	byExternal := chatListRow(uuid.New(), chatListTestNow.Add(-2*time.Hour), "", "ext-4242", "", 2)
-	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{byUser, byExternal}, params: nil, err: nil}
+	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{byUser, byExternal}, params: nil, err: nil, countParams: nil, count: 0}
 	service, project := newChatMetadataService(t, reader, allowBudget())
 
 	first, err := service.List(t.Context(), principal, ListChatsInput{
@@ -225,7 +232,7 @@ func TestListChatsUserReferenceNarrowsTheSamePerson(t *testing.T) {
 func TestListChatsEmailIdentityIsMaskedWithoutReference(t *testing.T) {
 	t.Parallel()
 
-	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{chatListRow(uuid.New(), chatListTestNow.Add(-time.Hour), "", "", "someone@example.invalid", 1)}, params: nil, err: nil}
+	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{chatListRow(uuid.New(), chatListTestNow.Add(-time.Hour), "", "", "someone@example.invalid", 1)}, params: nil, err: nil, countParams: nil, count: 0}
 	service, _ := newChatMetadataService(t, reader, allowBudget())
 
 	output, err := service.List(t.Context(), registrationServicePrincipal(), ListChatsInput{
@@ -241,7 +248,7 @@ func TestListChatsCursorResumesOnlyTheSameQuery(t *testing.T) {
 	t.Parallel()
 
 	principal := registrationServicePrincipal()
-	reader := &recordingChatReader{rows: chatListRows(3, 7), params: nil, err: nil}
+	reader := &recordingChatReader{rows: chatListRows(3, 7), params: nil, err: nil, countParams: nil, count: 0}
 	service, _ := newChatMetadataService(t, reader, allowBudget())
 
 	first, err := service.List(t.Context(), principal, ListChatsInput{
@@ -293,7 +300,7 @@ func TestListChatsTraversalIsCapped(t *testing.T) {
 	t.Parallel()
 
 	principal := registrationServicePrincipal()
-	reader := &recordingChatReader{rows: chatListRows(maxChatListLimit+1, 10_000), params: nil, err: nil}
+	reader := &recordingChatReader{rows: chatListRows(maxChatListLimit+1, 10_000), params: nil, err: nil, countParams: nil, count: 0}
 	service, _ := newChatMetadataService(t, reader, allowBudget())
 	input := ListChatsInput{ProjectID: "", ProjectSlug: "", Window: "30d", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: maxChatListLimit, Cursor: ""}
 
@@ -313,8 +320,33 @@ func TestListChatsTraversalIsCapped(t *testing.T) {
 	require.Equal(t, maxChatListTraversal, handed)
 	require.Equal(t, maxChatListTraversal/maxChatListLimit, pages)
 
+	// A page size that does not divide the cap: the page straddling it is
+	// trimmed to exactly the remainder and carries no cursor, so the total
+	// handed over is still the cap.
+	reader.rows = chatListRows(31, 10_000)
+	input = ListChatsInput{ProjectID: "", ProjectSlug: "", Window: "30d", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: 30, Cursor: ""}
+	handed, pages = 0, 0
+	var last ListChatsOutput
+	for {
+		output, err := service.List(t.Context(), principal, input)
+		require.NoError(t, err)
+		handed += len(output.Chats)
+		pages++
+		last = output
+		if output.NextCursor == "" {
+			break
+		}
+		require.Less(t, pages, 30, "the walk must terminate")
+		input.Cursor = output.NextCursor
+	}
+	require.Equal(t, maxChatListTraversal, handed)
+	require.Equal(t, 17, pages)
+	require.Len(t, last.Chats, maxChatListTraversal%30, "the last page is trimmed to the remainder")
+
 	// A forged offset past the cap is refused even when sealed correctly.
-	forged, err := service.references.EncodeScoped(principal, subjectKindCursor, mustChatListScope(t, service, input), formatChatListCursor(maxChatListTraversal+1), chatListTestNow)
+	window, err := resolveWindow(input.Window, chatListTestNow, chatListWindowSpec)
+	require.NoError(t, err)
+	forged, err := service.references.EncodeScoped(principal, subjectKindCursor, mustChatListScope(t, service, input), formatChatListCursor(maxChatListTraversal+1, window), chatListTestNow)
 	require.NoError(t, err)
 	input.Cursor = forged
 	_, err = service.List(t.Context(), principal, input)
@@ -344,14 +376,14 @@ func TestListChatsRefusesInvalidInput(t *testing.T) {
 		"long source":       {ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: strings.Repeat("x", maxChatSourceLength+1), AssistantID: "", UserReference: "", Limit: 0, Cursor: ""},
 		"control in source": {ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "claude\x00code", AssistantID: "", UserReference: "", Limit: 0, Cursor: ""},
 	} {
-		reader := &recordingChatReader{rows: nil, params: nil, err: nil}
+		reader := &recordingChatReader{rows: nil, params: nil, err: nil, countParams: nil, count: 0}
 		service, _ := newChatMetadataService(t, reader, allowBudget())
 		_, err := service.List(t.Context(), registrationServicePrincipal(), input)
 		require.ErrorIs(t, err, ErrChatListInvalid, name)
 		require.Empty(t, reader.params, name)
 	}
 
-	reader := &recordingChatReader{rows: nil, params: nil, err: nil}
+	reader := &recordingChatReader{rows: nil, params: nil, err: nil, countParams: nil, count: 0}
 	service, _ := newChatMetadataService(t, reader, allowBudget())
 	_, err := service.List(t.Context(), registrationServicePrincipal(), ListChatsInput{
 		ProjectID: "", ProjectSlug: "", Window: "90d", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: 0, Cursor: "",
@@ -363,7 +395,7 @@ func TestListChatsRefusesInvalidInput(t *testing.T) {
 func TestListChatsRefusesWithoutBudgetOrProject(t *testing.T) {
 	t.Parallel()
 
-	reader := &recordingChatReader{rows: nil, params: nil, err: nil}
+	reader := &recordingChatReader{rows: nil, params: nil, err: nil, countParams: nil, count: 0}
 	service, _ := newChatMetadataService(t, reader, OperationBudget{Connection: denyOperationLimiter{}, Organization: allowOperationLimiter{}})
 	_, err := service.List(t.Context(), registrationServicePrincipal(), ListChatsInput{
 		ProjectID: "", ProjectSlug: "", Window: "", Risk: "", Source: "", AssistantID: "", UserReference: "", Limit: 0, Cursor: "",

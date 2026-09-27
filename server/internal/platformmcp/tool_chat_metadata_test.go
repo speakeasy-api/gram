@@ -22,7 +22,7 @@ func chatMetadataRegistrar(t *testing.T, reader chatMetadataReader) (*Registrar,
 func TestListChatsToolDeclaresBothAudiencesAndAdminAuthorization(t *testing.T) {
 	t.Parallel()
 
-	registrar, _ := chatMetadataRegistrar(t, &recordingChatReader{rows: nil, params: nil, err: nil})
+	registrar, _ := chatMetadataRegistrar(t, &recordingChatReader{rows: nil, params: nil, err: nil, countParams: nil, count: 0})
 	descriptor := descriptorByName(t, registrar, listChatsToolName)
 	require.Equal(t, bothAudiences, descriptor.Meta.Audiences)
 	require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
@@ -42,7 +42,7 @@ func TestListChatsToolDeclaresBothAudiencesAndAdminAuthorization(t *testing.T) {
 func TestListChatsToolServesAPage(t *testing.T) {
 	t.Parallel()
 
-	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{chatListRow(uuid.New(), chatListTestNow, "user_1", "", "", 1)}, params: nil, err: nil}
+	reader := &recordingChatReader{rows: []chatrepo.ListChatsRow{chatListRow(uuid.New(), chatListTestNow, "user_1", "", "", 1)}, params: nil, err: nil, countParams: nil, count: 0}
 	registrar, _ := chatMetadataRegistrar(t, reader)
 
 	result, err := descriptorByName(t, registrar, listChatsToolName).Invoke(
@@ -61,7 +61,7 @@ func TestListChatsToolServesAPage(t *testing.T) {
 func TestListChatsToolRefusesOutsideTheSchema(t *testing.T) {
 	t.Parallel()
 
-	reader := &recordingChatReader{rows: nil, params: nil, err: nil}
+	reader := &recordingChatReader{rows: nil, params: nil, err: nil, countParams: nil, count: 0}
 	registrar, _ := chatMetadataRegistrar(t, reader)
 	ctx := ContextWithPrincipal(t.Context(), registrationServicePrincipal())
 
@@ -82,7 +82,7 @@ func TestListChatsToolRefusesOutsideTheSchema(t *testing.T) {
 func TestListChatsToolMapsRefusals(t *testing.T) {
 	t.Parallel()
 
-	reader := &recordingChatReader{rows: nil, params: nil, err: nil}
+	reader := &recordingChatReader{rows: nil, params: nil, err: nil, countParams: nil, count: 0}
 	registrar, service := chatMetadataRegistrar(t, reader)
 	ctx := ContextWithPrincipal(t.Context(), registrationServicePrincipal())
 	descriptor := descriptorByName(t, registrar, listChatsToolName)
@@ -114,7 +114,7 @@ func TestListChatsToolMapsRefusals(t *testing.T) {
 func TestListChatsToolRequiresPrincipal(t *testing.T) {
 	t.Parallel()
 
-	registrar, _ := chatMetadataRegistrar(t, &recordingChatReader{rows: nil, params: nil, err: nil})
+	registrar, _ := chatMetadataRegistrar(t, &recordingChatReader{rows: nil, params: nil, err: nil, countParams: nil, count: 0})
 	_, err := descriptorByName(t, registrar, listChatsToolName).Invoke(t.Context(), json.RawMessage(`{}`))
 	require.ErrorIs(t, err, ErrUnauthorized)
 }
