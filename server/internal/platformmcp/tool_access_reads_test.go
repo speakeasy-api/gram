@@ -72,7 +72,15 @@ func TestListAccessMembersDescriptionExplainsMaskingAndReferences(t *testing.T) 
 	registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil))
 	registerAccessReadTools(registrar, nil)
 	descriptor := descriptorByName(t, registrar, "list_access_members")
-	for _, fragment := range []string{"three characters", "masked", "at least five people", "assign_mcp_access_role"} {
+	for _, fragment := range []string{
+		"three characters",
+		"External clients may instead filter by a role reference",
+		"not available to the project assistant",
+		"must use the identity query",
+		"masked",
+		"at least five people",
+		"assign_mcp_access_role",
+	} {
 		require.Contains(t, descriptor.Description, fragment)
 	}
 
