@@ -24,6 +24,8 @@ import (
 // fixed dates age out and the rows disappear before the tests can read them.
 var inventoryTestDay = time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -20)
 
+// inventoryTestTime returns a fixture timestamp: inventoryTestDay plus
+// dayOffset days, then the given hour, minute, second, and nanoseconds (UTC).
 func inventoryTestTime(dayOffset, hour, minute, sec, nsec int) time.Time {
 	return inventoryTestDay.AddDate(0, 0, dayOffset).Add(
 		time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute +
