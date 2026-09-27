@@ -600,6 +600,10 @@ func TestUserSearchService_UnavailableWithoutComposition(t *testing.T) {
 	_, err = withoutReader.GetUserMetricsSummary(t.Context(), testPrincipal(), GetUserMetricsSummaryInput{ProjectID: userSearchTestProject, UserReference: "opaque", Window: "", MCPID: ""})
 	require.ErrorIs(t, err, ErrUnavailable)
 	require.False(t, withoutReader.userSearchValid())
+	// A deployment without ClickHouse composes with a nil reader, which must
+	// leave the tools on the unavailable stub path rather than registering a
+	// live handler that fails on every call.
+	require.False(t, withoutReader.WithUserSearch(nil).userSearchValid())
 	require.True(t, withoutReader.WithUserSearch(&recordingUserSearchReader{}).userSearchValid())
 }
 
