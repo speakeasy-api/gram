@@ -827,7 +827,11 @@ limited_chats AS (
     fc.last_message_timestamp,
     fc.account_type,
     fc.account_email,
-    thread.assistant_id,
+    -- Both assistant columns come from the project-scoped assistants row, so a
+    -- thread here that points at another project's assistant reports neither
+    -- its id nor its name; assistant_threads has no composite (project_id,
+    -- assistant_id) key to rule that row out.
+    a.id AS assistant_id,
     a.name AS assistant_name,
     -- Window count runs before LIMIT/OFFSET, so every returned row carries the
     -- total number of filtered chats.

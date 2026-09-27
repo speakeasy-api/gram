@@ -345,11 +345,21 @@ func TestListChats_OneRowPerChat_ReportsOnlyThisProjectsAssistant(t *testing.T) 
 		CorrelationID: "foreign-on-foreign-only",
 		ChatID:        foreignOnlyChat,
 	}))
+	// And one chat whose thread is recorded under this project but points at
+	// the foreign project's assistant: assistant_threads has no composite
+	// (project_id, assistant_id) key, so the row is insertable.
+	crossAssistantChat := seedChat(t, ctx, ti, "", "ext-cross-assistant", "cross assistant chat")
+	require.NoError(t, queries.SeedAssistantThread(ctx, repo.SeedAssistantThreadParams{
+		AssistantID:   foreignAssistant,
+		ProjectID:     ti.projectID,
+		CorrelationID: "local-thread-foreign-assistant",
+		ChatID:        crossAssistantChat,
+	}))
 
 	result, err := ti.service.ListChats(ctx, defaultPayload())
 	require.NoError(t, err)
-	require.Equal(t, 2, result.Total, "total counts chats, not assistant threads")
-	require.Len(t, result.Chats, 2, "one row per chat however many threads it carries")
+	require.Equal(t, 3, result.Total, "total counts chats, not assistant threads")
+	require.Len(t, result.Chats, 3, "one row per chat however many threads it carries")
 	byID := map[string]*gen.ChatOverview{}
 	for _, chat := range result.Chats {
 		byID[chat.ID] = chat
@@ -364,16 +374,24 @@ func TestListChats_OneRowPerChat_ReportsOnlyThisProjectsAssistant(t *testing.T) 
 	require.True(t, ok)
 	require.Nil(t, foreignOnly.AssistantID, "a thread from another project never surfaces its assistant")
 	require.Nil(t, foreignOnly.AssistantName)
+	crossAssistant, ok := byID[crossAssistantChat.String()]
+	require.True(t, ok)
+	require.Nil(t, crossAssistant.AssistantID, "a thread here pointing at another project's assistant surfaces neither its id nor its name")
+	require.Nil(t, crossAssistant.AssistantName)
 
-	// Narrowing to the foreign assistant finds nothing in this project: the
-	// admission filter is project-scoped as well.
+	// Narrowing to the foreign assistant admits only the chat whose thread is
+	// recorded here (the admission filter is project-scoped), and even that row
+	// reports no assistant because the assistant itself is not this project's.
 	payload := defaultPayload()
 	foreignAssistantID := foreignAssistant.String()
 	payload.AssistantID = &foreignAssistantID
 	result, err = ti.service.ListChats(ctx, payload)
 	require.NoError(t, err)
-	require.Equal(t, 0, result.Total)
-	require.Empty(t, result.Chats)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, crossAssistantChat.String(), result.Chats[0].ID)
+	require.Nil(t, result.Chats[0].AssistantID)
+	require.Nil(t, result.Chats[0].AssistantName)
 }
 
 // TestListChats_ChatRead_SeesAllChats verifies that a caller holding an
