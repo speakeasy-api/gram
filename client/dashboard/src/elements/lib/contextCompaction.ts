@@ -60,17 +60,17 @@ const MODEL_CONTEXT_LIMITS: Partial<Record<KnownModelId, number>> = {
   "openai/gpt-5.3-codex": 400_000,
   "openai/gpt-5.1": 400_000,
   "openai/gpt-5": 400_000,
-  "google/gemini-3.8-flash": 1_048_576,
 
   // Google
+  "google/gemini-3.8-flash": 1_048_576,
   "google/gemini-3.5-flash": 1_000_000,
   "google/gemini-3.1-pro-preview": 1_000_000,
   "google/gemini-3.1-flash-lite": 1_000_000,
-  "deepseek/deepseek-v4.1-flash": 1_048_576,
 
   // Others
   "deepseek/deepseek-v4-pro": 1_000_000,
   "deepseek/deepseek-v4-flash": 1_000_000,
+  "deepseek/deepseek-v4.1-flash": 1_048_576,
   "deepseek/deepseek-v3.2": 128_000,
   "meta-llama/llama-4-maverick": 1_000_000,
   "x-ai/grok-4.7": 500_000,
