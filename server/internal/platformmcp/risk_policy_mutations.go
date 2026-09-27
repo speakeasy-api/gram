@@ -22,6 +22,7 @@ import (
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	"github.com/speakeasy-api/gram/server/internal/risk/exclusioncore"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycatalog"
@@ -107,15 +108,17 @@ type preparedRiskPolicyCreate struct {
 // NewRiskPolicyMutationHandlers retains the policy-only composition used by the
 // preceding rollout slice.
 func NewRiskPolicyMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, policies *policycore.Core) (*RiskMutationHandlers, error) {
-	return newRiskMutationHandlers(db, controls, policies, nil)
+	return newRiskMutationHandlers(db, controls, policies, nil, nil)
 }
 
-// NewRiskMutationHandlers activates policy and exclusion mutation callbacks.
-func NewRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, policies *policycore.Core, exclusions *exclusioncore.Core) (*RiskMutationHandlers, error) {
-	return newRiskMutationHandlers(db, controls, policies, exclusions)
+// NewRiskMutationHandlers activates policy, exclusion, and per-finding
+// false-positive mutation callbacks. A nil exclusions or falsePositives core
+// leaves the matching tools registered as stable "not enabled" stubs.
+func NewRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, policies *policycore.Core, exclusions *exclusioncore.Core, falsePositives *risk.FalsePositiveCore) (*RiskMutationHandlers, error) {
+	return newRiskMutationHandlers(db, controls, policies, exclusions, falsePositives)
 }
 
-func newRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, policies *policycore.Core, exclusions *exclusioncore.Core) (*RiskMutationHandlers, error) {
+func newRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, policies *policycore.Core, exclusions *exclusioncore.Core, falsePositives *risk.FalsePositiveCore) (*RiskMutationHandlers, error) {
 	if db == nil || controls == nil || policies == nil {
 		return nil, ErrRiskMutationUnavailable
 	}
@@ -125,18 +128,25 @@ func newRiskMutationHandlers(db *pgxpool.Pool, controls *RiskMutationControls, p
 	}
 	policyService := &riskPolicyMutationService{db: db, controls: controls, policies: policies, catalog: catalog}
 	handlers := &RiskMutationHandlers{
-		Controls:        controls,
-		CreatePolicy:    policyService.createPolicyTool,
-		UpdatePolicy:    policyService.updatePolicyTool,
-		RemoveSelf:      policyService.removeSelfFromPolicyTool,
-		ChangeAudience:  policyService.changePolicyAudienceTool,
-		CreateExclusion: nil,
-		UpdateExclusion: nil,
+		Controls:                    controls,
+		CreatePolicy:                policyService.createPolicyTool,
+		UpdatePolicy:                policyService.updatePolicyTool,
+		RemoveSelf:                  policyService.removeSelfFromPolicyTool,
+		ChangeAudience:              policyService.changePolicyAudienceTool,
+		CreateExclusion:             nil,
+		UpdateExclusion:             nil,
+		MarkFindingsFalsePositive:   nil,
+		UnmarkFindingsFalsePositive: nil,
 	}
 	if exclusions != nil {
 		exclusionService := newRiskExclusionMutationService(controls, exclusions, catalog)
 		handlers.CreateExclusion = exclusionService.createExclusionTool
 		handlers.UpdateExclusion = exclusionService.updateExclusionTool
+	}
+	if falsePositives != nil {
+		findingService := newRiskFindingFalsePositiveService(controls, falsePositives)
+		handlers.MarkFindingsFalsePositive = findingService.markTool
+		handlers.UnmarkFindingsFalsePositive = findingService.unmarkTool
 	}
 	return handlers, nil
 }

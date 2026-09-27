@@ -145,17 +145,20 @@ type UpdateRiskExclusionToolOutput struct {
 	Receipt RiskMutationToolReceipt `json:"receipt"`
 }
 
-// RiskMutationHandlers names the independently selectable callbacks.
+// RiskMutationHandlers names the independently selectable write callbacks.
 // Every callback has an exported success type that composition code can
-// construct, while the schemas remain owned by this package.
+// construct, while the schemas remain owned by this package. A nil callback
+// keeps its tool in the catalogue as a stable "not enabled" stub.
 type RiskMutationHandlers struct {
-	ChangeAudience  mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
-	RemoveSelf      mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
-	Controls        *RiskMutationControls
-	CreatePolicy    mcp.ToolHandlerFor[map[string]any, CreateRiskPolicyToolOutput]
-	UpdatePolicy    mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
-	CreateExclusion mcp.ToolHandlerFor[map[string]any, CreateRiskExclusionToolOutput]
-	UpdateExclusion mcp.ToolHandlerFor[map[string]any, UpdateRiskExclusionToolOutput]
+	ChangeAudience              mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
+	RemoveSelf                  mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
+	Controls                    *RiskMutationControls
+	CreatePolicy                mcp.ToolHandlerFor[map[string]any, CreateRiskPolicyToolOutput]
+	UpdatePolicy                mcp.ToolHandlerFor[map[string]any, UpdateRiskPolicyToolOutput]
+	CreateExclusion             mcp.ToolHandlerFor[map[string]any, CreateRiskExclusionToolOutput]
+	UpdateExclusion             mcp.ToolHandlerFor[map[string]any, UpdateRiskExclusionToolOutput]
+	MarkFindingsFalsePositive   mcp.ToolHandlerFor[map[string]any, MarkRiskFindingsFalsePositiveToolOutput]
+	UnmarkFindingsFalsePositive mcp.ToolHandlerFor[map[string]any, UnmarkRiskFindingsFalsePositiveToolOutput]
 }
 
 func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog, catalogAvailable bool, handlers *RiskMutationHandlers) {
@@ -177,6 +180,20 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 	updatePolicyDescription := "Patch a risk policy in an explicit project. Risk policy mutations are not enabled in this rollout."
 	createExclusionDescription := "Create a non-regex risk exclusion in an explicit project. Exclusion mutations are not enabled in this rollout."
 	updateExclusionDescription := "Enable or disable one risk exclusion without changing its definition. Exclusion mutations are not enabled in this rollout."
+	markFindings := unavailableRiskMutationTool[MarkRiskFindingsFalsePositiveToolOutput]()
+	unmarkFindings := unavailableRiskMutationTool[UnmarkRiskFindingsFalsePositiveToolOutput]()
+	markFindingsDescription := "Dismiss specific Watchdog findings as reviewed false positives in an explicit project. Finding dismissal is not enabled in this rollout."
+	unmarkFindingsDescription := "Restore previously dismissed Watchdog findings in an explicit project. Finding restore is not enabled in this rollout."
+	if handlers != nil && handlers.Controls != nil {
+		if handlers.MarkFindingsFalsePositive != nil {
+			markFindings = handlers.MarkFindingsFalsePositive
+			markFindingsDescription = riskFindingsMarkDescription
+		}
+		if handlers.UnmarkFindingsFalsePositive != nil {
+			unmarkFindings = handlers.UnmarkFindingsFalsePositive
+			unmarkFindingsDescription = riskFindingsUnmarkDescription
+		}
+	}
 	if catalogAvailable && handlers != nil && handlers.Controls != nil {
 		if handlers.CreatePolicy != nil {
 			createPolicy = handlers.CreatePolicy
@@ -200,6 +217,29 @@ func registerRiskMutationHandlers(reg *Registrar, catalog policycatalog.Catalog,
 	addTool(reg, &mcp.Tool{Name: "update_risk_policy", Title: "Update Risk Policy", Description: updatePolicyDescription, InputSchema: updatePolicySchema}, meta, instrumentRiskMutation(reg, "update_risk_policy", updatePolicy))
 	addTool(reg, &mcp.Tool{Name: "create_risk_exclusion", Title: "Create Risk Exclusion", Description: createExclusionDescription, InputSchema: createExclusionSchema}, meta, instrumentRiskMutation(reg, "create_risk_exclusion", createExclusion))
 	addTool(reg, &mcp.Tool{Name: "update_risk_exclusion", Title: "Update Risk Exclusion", Description: updateExclusionDescription, InputSchema: updateRiskExclusionSchema()}, meta, instrumentRiskMutation(reg, "update_risk_exclusion", updateExclusion))
+	findingAnnotations := &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(false)}
+	addTool(reg, &mcp.Tool{Name: operationMarkRiskFindingsFalsePositive, Title: "Mark Risk Findings False Positive", Description: markFindingsDescription, Annotations: findingAnnotations, InputSchema: riskFindingsFalsePositiveSchema(true)}, meta, instrumentRiskMutation(reg, operationMarkRiskFindingsFalsePositive, markFindings))
+	addTool(reg, &mcp.Tool{Name: operationUnmarkRiskFindingsFalsePositive, Title: "Unmark Risk Findings False Positive", Description: unmarkFindingsDescription, Annotations: findingAnnotations, InputSchema: riskFindingsFalsePositiveSchema(false)}, meta, instrumentRiskMutation(reg, operationUnmarkRiskFindingsFalsePositive, unmarkFindings))
+}
+
+const (
+	riskFindingsMarkDescription   = "Dismiss specific Watchdog findings as reviewed false positives in an explicit project, moving them to the Dismissed tab. Finding ids are the ids the dashboard and finding listings return. This suppresses only the findings named, not future findings that match the same rule; use create_risk_exclusion for a whole class. Requires confirmed: true after the user approves the exact findings. The receipt lists which ids changed, which were already dismissed, and which are not in the project; unknown ids never fail the call. Reversible with unmark_risk_findings_false_positive."
+	riskFindingsUnmarkDescription = "Restore previously dismissed Watchdog findings in an explicit project so they return to the active findings list. Finding ids are the ids the dashboard and finding listings return. Requires confirmed: true after the user approves the exact findings. The receipt lists which ids changed, which were already active, and which are not in the project; unknown ids never fail the call."
+)
+
+// riskFindingsFalsePositiveSchema is shared by mark and unmark; only mark
+// accepts a free-text reason.
+func riskFindingsFalsePositiveSchema(withReason bool) *jsonschema.Schema {
+	properties := map[string]*jsonschema.Schema{
+		"project_slug":    stringSchema("Exact project slug; writes never default a project.", 1, 128),
+		"finding_ids":     boundedArraySchema(uuidSchema("Exact finding id as returned by the dashboard or finding listings."), 1, maxRiskFindingFalsePositiveBatch, true),
+		"confirmed":       {Type: "boolean", Description: "Set true only after the user confirms the exact project and the exact findings to dismiss or restore."},
+		"idempotency_key": stringSchema("Caller key retained for 24-hour replay safety.", 1, 128),
+	}
+	if withReason {
+		properties["reason"] = stringSchema("Optional reason recorded on the dismissal.", 0, maxRiskFindingFalsePositiveReasonRunes)
+	}
+	return closedObject(properties, []string{"project_slug", "finding_ids", "confirmed", "idempotency_key"})
 }
 
 func unavailableRiskMutationTool[Out any]() mcp.ToolHandlerFor[map[string]any, Out] {
@@ -259,6 +299,10 @@ func riskMutationSuccessEvent[Out any](tool string, output Out) RiskToolEvent {
 	case UpdateRiskExclusionToolOutput:
 		event.Replay = riskMutationReplayState(typed.Receipt.Replayed, false)
 		event.Reconciliation = typed.Reconciliation
+	case MarkRiskFindingsFalsePositiveToolOutput:
+		event.Replay = riskMutationReplayState(typed.Receipt.Replayed, false)
+	case UnmarkRiskFindingsFalsePositiveToolOutput:
+		event.Replay = riskMutationReplayState(typed.Receipt.Replayed, false)
 	}
 	return event
 }

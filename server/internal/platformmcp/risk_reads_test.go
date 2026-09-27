@@ -376,6 +376,8 @@ func TestRiskToolRegistrationAndStableStubs(t *testing.T) {
 	wanted := map[string]ProjectScope{
 		"list_risk_policies": ProjectScopeDefaultable, "get_risk_policy": ProjectScopeDefaultable, "list_risk_exclusions": ProjectScopeDefaultable, "get_risk_analysis_status": ProjectScopeDefaultable,
 		"change_risk_policy_audience": ProjectScopeExplicit, "remove_self_from_risk_policy": ProjectScopeExplicit, "create_risk_policy": ProjectScopeExplicit, "update_risk_policy": ProjectScopeExplicit, "create_risk_exclusion": ProjectScopeExplicit, "update_risk_exclusion": ProjectScopeExplicit,
+		"create_risk_policy": ProjectScopeExplicit, "update_risk_policy": ProjectScopeExplicit, "create_risk_exclusion": ProjectScopeExplicit, "update_risk_exclusion": ProjectScopeExplicit,
+		"mark_risk_findings_false_positive": ProjectScopeExplicit, "unmark_risk_findings_false_positive": ProjectScopeExplicit,
 	}
 	require.Len(t, reg.Descriptors(), len(wanted))
 	for _, descriptor := range reg.Descriptors() {

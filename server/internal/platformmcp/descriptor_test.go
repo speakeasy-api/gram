@@ -458,6 +458,8 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		"create_risk_exclusion",
 		"update_risk_exclusion",
 		"list_access_members",
+		"mark_risk_findings_false_positive",
+		"unmark_risk_findings_false_positive",
 	} {
 		require.True(t, admitted[name], "tool %q works without a connection and should serve the assistant", name)
 	}

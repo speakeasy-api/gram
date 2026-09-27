@@ -435,6 +435,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		riskMutationControls,
 		risk.NewPolicyMutationCore(config.DB, config.AuditLogger, config.RiskPolicyApprovals, config.RiskPolicySignaler, config.RiskPolicyCache),
 		risk.NewExclusionMutationCore(config.Logger, config.DB, config.AuditLogger, config.RiskExclusionReconciler, config.JWTSigningKey),
+		risk.NewFalsePositiveCore(config.AuditLogger),
 	)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP risk policy mutations: %w", err)
@@ -892,6 +893,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		riskMutationControls,
 		risk.NewPolicyMutationCore(config.DB, config.AuditLogger, config.RiskPolicyApprovals, config.RiskPolicySignaler, config.RiskPolicyCache),
 		risk.NewExclusionMutationCore(config.Logger, config.DB, config.AuditLogger, config.RiskExclusionReconciler, config.JWTSigningKey),
+		risk.NewFalsePositiveCore(config.AuditLogger),
 	)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP risk policy mutations: %w", err)

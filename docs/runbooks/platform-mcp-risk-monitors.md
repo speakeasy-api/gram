@@ -39,10 +39,12 @@ malformed transport traffic.
 Allowed values:
 
 - `tool`: `list_risk_policies`, `get_risk_policy`, `create_risk_policy`,
-  `update_risk_policy`, `list_risk_exclusions`, `create_risk_exclusion`, or
-  `update_risk_exclusion`;
+  `update_risk_policy`, `list_risk_exclusions`, `create_risk_exclusion`,
+  `update_risk_exclusion`, `mark_risk_findings_false_positive`, or
+  `unmark_risk_findings_false_positive`;
 - `outcome`: `succeeded`, `feature_unavailable`, `invalid_request`,
-  `not_found`, `conflict`, `rate_limited`, `repair_required`, or `unavailable`;
+  `not_found`, `conflict`, `rate_limited`, `repair_required`,
+  `confirmation_required`, or `unavailable`;
 - `replay`: `not_applicable`, `fresh`, `receipt_replay`, or
   `matched_existing`;
 - `catalog_version`: `risk-policy-catalog-v1`;
