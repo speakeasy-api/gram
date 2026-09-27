@@ -60416,6 +60416,112 @@ paths:
       x-speakeasy-react-hook:
         name: GetHooksSummary
         type: query
+  /rpc/telemetry.getMcpNetworkTraffic:
+    post:
+      description: Observed inbound public and private MCP request counts for a server or gateway over a recent window
+      operationId: getMcpNetworkTraffic
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetMcpNetworkTrafficPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMcpNetworkTrafficResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: getMcpNetworkTraffic telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getMcpNetworkTraffic
+      x-speakeasy-react-hook:
+        name: GetMcpNetworkTraffic
+        type: query
   /rpc/telemetry.getMcpServerActivity:
     post:
       description: Get per-MCP-server tool-call activity for the Distribute MCP listing. Returns, for every MCP server with usage in the lookback window, its total and recent tool-call counts plus the last tool-call time, so the listing can flag servers that have never received a tool call or that have gone quiet.
@@ -82051,6 +82157,55 @@ components:
       properties:
         metadata:
           $ref: '#/components/schemas/McpMetadata'
+    GetMcpNetworkTrafficPayload:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: MCP server ID (mutually exclusive with meta_mcp_server_id)
+          format: uuid
+        meta_mcp_server_id:
+          type: string
+          description: Gateway ID (mutually exclusive with mcp_server_id)
+          format: uuid
+        window:
+          type: string
+          description: Recent traffic window
+          enum:
+            - 24h
+            - 7d
+      description: Provide exactly one of mcp_server_id or meta_mcp_server_id, and a recent window.
+      required:
+        - window
+    GetMcpNetworkTrafficResult:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Start of the window
+          format: date-time
+        last_private_at:
+          type: string
+          description: Most recent observed private request in the window
+          format: date-time
+        last_public_at:
+          type: string
+          description: Most recent observed public request in the window
+          format: date-time
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpNetworkTrafficPoint'
+          description: Hourly request counts
+        to:
+          type: string
+          description: End of the window
+          format: date-time
+      description: Observed resolved inbound MCP requests, not a guarantee of every client. No observations does not prove a route is unused.
+      required:
+        - from
+        - to
+        - points
     GetMcpServerActivityPayload:
       type: object
       properties:
@@ -87511,6 +87666,25 @@ components:
         - id
         - created_at
         - updated_at
+    McpNetworkTrafficPoint:
+      type: object
+      properties:
+        bucket_start:
+          type: string
+          description: Start of the UTC hour
+          format: date-time
+        private_requests:
+          type: integer
+          description: Observed private requests
+          format: int64
+        public_requests:
+          type: integer
+          description: Observed public requests
+          format: int64
+      required:
+        - bucket_start
+        - public_requests
+        - private_requests
     McpServer:
       type: object
       properties:

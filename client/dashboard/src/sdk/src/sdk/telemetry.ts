@@ -5,6 +5,7 @@
 import { telemetryCaptureEvent } from "../funcs/telemetryCaptureEvent.js";
 import { telemetryGetEmployeeDataFlowGraph } from "../funcs/telemetryGetEmployeeDataFlowGraph.js";
 import { telemetryGetHooksSummary } from "../funcs/telemetryGetHooksSummary.js";
+import { telemetryGetMcpNetworkTraffic } from "../funcs/telemetryGetMcpNetworkTraffic.js";
 import { telemetryGetMcpServerActivity } from "../funcs/telemetryGetMcpServerActivity.js";
 import { telemetryGetMetaMcpServerUsage } from "../funcs/telemetryGetMetaMcpServerUsage.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
@@ -41,6 +42,7 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { GetEmployeeDataFlowGraphResult } from "../models/components/getemployeedataflowgraphresult.js";
 import { GetHooksSummaryResult } from "../models/components/gethookssummaryresult.js";
+import { GetMcpNetworkTrafficResult } from "../models/components/getmcpnetworktrafficresult.js";
 import { GetMcpServerActivityResult } from "../models/components/getmcpserveractivityresult.js";
 import { GetMetaMcpServerUsageResult } from "../models/components/getmetamcpserverusageresult.js";
 import { GetMetricsSummaryResult } from "../models/components/getmetricssummaryresult.js";
@@ -85,6 +87,10 @@ import {
   GetHooksSummaryRequest,
   GetHooksSummarySecurity,
 } from "../models/operations/gethookssummary.js";
+import {
+  GetMcpNetworkTrafficRequest,
+  GetMcpNetworkTrafficSecurity,
+} from "../models/operations/getmcpnetworktraffic.js";
 import {
   GetMcpServerActivityRequest,
   GetMcpServerActivitySecurity,
@@ -263,6 +269,25 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetHooksSummaryResult> {
     return unwrapAsync(telemetryGetHooksSummary(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getMcpNetworkTraffic telemetry
+   *
+   * @remarks
+   * Observed inbound public and private MCP request counts for a server or gateway over a recent window
+   */
+  async getMcpNetworkTraffic(
+    request: GetMcpNetworkTrafficRequest,
+    security?: GetMcpNetworkTrafficSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetMcpNetworkTrafficResult> {
+    return unwrapAsync(telemetryGetMcpNetworkTraffic(
       this,
       request,
       security,

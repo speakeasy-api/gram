@@ -248,6 +248,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		} else {
 			registerRecentToolCallTools(reg, postgresReader)
 		}
+		if postgresReader.networkTraffic == nil || postgresReader.networkTrafficLogsEnabled == nil {
+			registerUnavailableMCPNetworkTrafficTool(reg)
+		} else {
+			registerMCPNetworkTrafficTool(reg, postgresReader)
+		}
 		if postgresReader.eventFeed == nil {
 			registerUnavailableOrganizationEventTools(reg)
 		} else {
@@ -266,6 +271,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableDataExportTools(reg)
 		registerUnavailableDataExportMutationTool(reg)
 		registerUnavailableRecentToolCallTools(reg)
+		registerUnavailableMCPNetworkTrafficTool(reg)
 		registerUnavailableOrganizationEventTools(reg)
 		registerUnavailableShadowInventoryTools(reg)
 		registerShadowDecisionTool(reg, nil)

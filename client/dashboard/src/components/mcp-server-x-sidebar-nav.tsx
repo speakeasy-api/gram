@@ -680,22 +680,21 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
         />
       ) : null}
 
-      {/* Content-sized halves with one gutter either side of the rule: at
-          flex-1 the rule sat at the container's midpoint, which the longer
-          label crowded while the shorter one left slack. */}
-      <div className="border-border flex items-stretch justify-center gap-3 border-t pt-3">
+      <div
+        className={`border-border flex gap-3 border-t pt-3 ${effectiveInstallPageLinks.length > 1 ? "flex-col items-start" : "items-stretch justify-center"}`}
+      >
         {effectiveInstallPageLinks.length > 0 ? (
-          <div className="flex flex-col items-center gap-1">
+          <div className="flex min-w-0 max-w-full flex-col items-start gap-1">
             {effectiveInstallPageLinks.map(({ url, label }) => (
               <a
                 key={url}
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-semibold transition-colors hover:no-underline"
+                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 break-words text-xs font-semibold transition-colors hover:no-underline"
               >
                 {label}
-                <ExternalLink className="h-3 w-3" />
+                <ExternalLink className="size-3 shrink-0" />
               </a>
             ))}
           </div>
@@ -705,7 +704,9 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
             <ExternalLink className="h-3 w-3" />
           </span>
         )}
-        <div className="bg-border w-px self-stretch" />
+        <div
+          className={`bg-border ${effectiveInstallPageLinks.length > 1 ? "h-px w-full" : "w-px self-stretch"}`}
+        />
         {isUnproxied ? (
           <span className="text-muted-foreground/50 flex cursor-not-allowed items-center gap-1 text-xs font-semibold">
             Playground

@@ -182,6 +182,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 ) error {
 	ctx := r.Context()
 
+	s.recordMCPNetworkRequest(ctx, mcpEndpoint.ProjectID, mcpServer.ID, uuid.Nil, "")
 	logger = logger.With(attr.SlogMcpServerID(mcpServer.ID.String()))
 
 	var prepared *preparedMCPRequest
