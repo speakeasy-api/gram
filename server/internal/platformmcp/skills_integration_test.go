@@ -486,11 +486,15 @@ type skillsVerticalFixture struct {
 	session           *mcp.ClientSession
 	marketingPluginID uuid.UUID
 
-	// insights stands in for ClickHouse behind get_skill_insights, and
-	// insightsLane is the diagnostics budget it is metered on, so a test can
-	// prove what a refused call did and did not reach.
-	insights     *stubSkillInsightsReader
-	insightsLane *countingLimiter
+	// insights stands in for ClickHouse behind get_skill_insights. The two
+	// counters are the connection and organization buckets of the diagnostics
+	// budget it is metered on: an OperationBudget charges both buckets on every
+	// permitted call from a connection-bearing principal, so they are counted
+	// apart rather than through one shared limiter that would read as two
+	// charges per call.
+	insights                 *stubSkillInsightsReader
+	insightsConnectionLane   *countingLimiter
+	insightsOrganizationLane *countingLimiter
 }
 
 // countingLimiter always allows and counts what it was charged. It is safe to
@@ -641,7 +645,8 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 	require.NoError(t, err)
 	allow := func() Limiter { return &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}} }
 	insights := &stubSkillInsightsReader{}
-	insightsLane := &countingLimiter{}
+	insightsConnectionLane := &countingLimiter{}
+	insightsOrganizationLane := &countingLimiter{}
 	skillsSurface := NewSkillsService(
 		skills,
 		NewPostgresSkillTargets(conn),
@@ -649,7 +654,7 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 		authzEngine,
 		NewCatalogRegistrationGate(testGate{enabled: options.capabilityEnabled}),
 		OperationBudget{Connection: allow(), Organization: allow()},
-	).WithInsights(insights, OperationBudget{Connection: insightsLane, Organization: insightsLane})
+	).WithInsights(insights, OperationBudget{Connection: insightsConnectionLane, Organization: insightsOrganizationLane})
 
 	runtimeAuthorizer := Authorizer(&testAuthorizer{})
 	if options.grantAdmin || options.grantSkillRead || options.grantSkillWrite {
@@ -677,14 +682,21 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 	t.Cleanup(func() { _ = session.Close() })
 
 	return &skillsVerticalFixture{
-		conn:              conn,
-		principal:         principal,
-		project:           project,
-		session:           session,
-		marketingPluginID: marketing.ID,
-		insights:          insights,
-		insightsLane:      insightsLane,
+		conn:                     conn,
+		principal:                principal,
+		project:                  project,
+		session:                  session,
+		marketingPluginID:        marketing.ID,
+		insights:                 insights,
+		insightsConnectionLane:   insightsConnectionLane,
+		insightsOrganizationLane: insightsOrganizationLane,
 	}
+}
+
+// insightsLaneCharges reports how often each bucket of the diagnostics budget
+// was charged, connection then organization.
+func (f *skillsVerticalFixture) insightsLaneCharges() (int, int) {
+	return f.insightsConnectionLane.count(), f.insightsOrganizationLane.count()
 }
 
 // createInsightsSkillVersion records one immutable version so the registry has
@@ -765,7 +777,9 @@ func TestPlatformMCPSkillInsightsRankAndCompareUnderRealGrants(t *testing.T) {
 	require.EqualValues(t, 3, byID[newer.ID.String()].Metrics.Activations)
 	require.Zero(t, byID[older.ID.String()].Metrics.Activations)
 	require.NotEmpty(t, byID[older.ID.String()].CreatedAt)
-	require.Equal(t, 2, fixture.insightsLane.count(), "each read is metered once on the diagnostics lane")
+	connectionCharges, organizationCharges := fixture.insightsLaneCharges()
+	require.Equal(t, 2, connectionCharges, "each read charges the diagnostics lane's connection bucket once")
+	require.Equal(t, 2, organizationCharges, "each read charges the diagnostics lane's organization bucket once")
 }
 
 // A caller's grants decide what get_skill_insights may read. A member holding
@@ -785,7 +799,9 @@ func TestPlatformMCPSkillInsightsRefuseCallersWithoutTheRightGrants(t *testing.T
 	// The lane is charged before the registry refuses, as every skills call
 	// charges its allowance before RBAC: an unauthorized caller cannot probe
 	// for free, and the refusal reveals nothing about what it would have read.
-	require.Equal(t, 1, ungranted.insightsLane.count())
+	connectionCharges, organizationCharges := ungranted.insightsLaneCharges()
+	require.Equal(t, 1, connectionCharges, "the refused call charged the connection bucket once")
+	require.Equal(t, 1, organizationCharges, "the refused call charged the organization bucket once")
 
 	readerOnly := newSkillsVerticalFixture(t, ctx, "platform_mcp_skill_insights_reader", skillsVerticalOptions{capabilityEnabled: true, grantSkillRead: true})
 	refusal = callSkillsRefusal(t, ctx, readerOnly.session, "get_skill_insights", map[string]any{
@@ -793,7 +809,9 @@ func TestPlatformMCPSkillInsightsRefuseCallersWithoutTheRightGrants(t *testing.T
 	})
 	require.Equal(t, "permission_denied", refusal.Code)
 	require.Nil(t, readerOnly.insights.LastParams())
-	require.Zero(t, readerOnly.insightsLane.count(), "the admin gate refuses before the handler charges anything")
+	connectionCharges, organizationCharges = readerOnly.insightsLaneCharges()
+	require.Zero(t, connectionCharges, "the admin gate refuses before the handler charges the connection bucket")
+	require.Zero(t, organizationCharges, "the admin gate refuses before the handler charges the organization bucket")
 }
 
 // callSkillsTool calls one tool and decodes its structured result, failing the
