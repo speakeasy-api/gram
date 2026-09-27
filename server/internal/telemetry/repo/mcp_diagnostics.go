@@ -429,7 +429,6 @@ FROM (%s)`, MCPClientUnattributed, outcome, groupedSQL), groupedArgs, nil
 // conservative behavior of counting repeated same-tool calls as one rather
 // than manufacturing calls from lifecycle rows.
 func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
-	mcpServerURL := "toString(attributes.gram.mcp.server_url)"
 	hasResult := "toUInt8(toString(attributes.gen_ai.tool.call.result) != '')"
 	hasError := "toUInt8(toString(attributes.gram.hook.error) != '')"
 	hasBlock := "toUInt8(toString(attributes.gram.hook.block_reason) != '')"
@@ -465,13 +464,10 @@ func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string
 		// the agent used. Either identifies this server.
 		predicate := squirrel.Or{}
 		if len(arg.MCPServerURLSuffixes) > 0 {
-			predicate = append(predicate, squirrel.Expr(
-				"("+mcpServerURL+" != '' AND arrayExists(suffix -> endsWith("+mcpServerURL+", suffix), ?))",
-				arg.MCPServerURLSuffixes,
-			))
+			predicate = append(predicate, hookServerURLMatch(arg.MCPServerURLSuffixes))
 		}
 		if len(arg.ToolSources) > 0 {
-			predicate = append(predicate, squirrel.Eq{"lowerUTF8(tool_source)": lowerAll(arg.ToolSources)})
+			predicate = append(predicate, hookToolSourceMatch(arg.ToolSources))
 		}
 		grouped = grouped.Where(predicate)
 	case arg.selectsDirectLane():
@@ -482,7 +478,7 @@ func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string
 	default:
 		// Unfiltered is the organization-wide comparison: every hook-observed
 		// call whose server the hook resolved.
-		grouped = grouped.Where(mcpServerURL + " != ''")
+		grouped = grouped.Where(hookServerURLExpr + " != ''")
 	}
 	grouped = grouped.GroupBy("trace_id", toolCallID)
 
@@ -510,6 +506,26 @@ SELECT
 	g_user_id AS user_id,
 	%s AS outcome
 FROM (%s)`, chFirstNonEmpty("g_hook_source", "'"+MCPClientUnattributed+"'"), outcome, groupedSQL), groupedArgs, nil
+}
+
+// hookServerURLExpr is the URL a hook-observed client called, as the hook
+// recorded it; empty when the hook never resolved the server to a URL.
+var hookServerURLExpr = chAttr("gram.mcp.server_url")
+
+// hookServerURLMatch matches hook-observed rows whose recorded server URL
+// (gram.mcp.server_url) ends in one of suffixes, the /mcp/<slug> form a hook
+// that resolved the server records.
+func hookServerURLMatch(suffixes []string) squirrel.Sqlizer {
+	return squirrel.Expr(
+		"("+hookServerURLExpr+" != '' AND arrayExists(suffix -> endsWith("+hookServerURLExpr+", suffix), ?))",
+		suffixes,
+	)
+}
+
+// hookToolSourceMatch matches hook-observed rows by the server name the agent
+// reported (gram.tool_call.source), compared case-insensitively.
+func hookToolSourceMatch(sources []string) squirrel.Sqlizer {
+	return squirrel.Eq{"lowerUTF8(tool_source)": lowerAll(sources)}
 }
 
 // lowerAll lower-cases every value so a reported server name matches

@@ -515,21 +515,10 @@ func (s *DiagnosticsService) QueryMCPMetrics(ctx context.Context, principal Prin
 		FailureRate:     failureRate(metrics.toolCalls, metrics.failedToolCalls),
 		AvgLatencyMs:    metrics.avgLatencyMs,
 	}
-	// The active-count read narrows by exactly one identity, for the same
-	// reason the summary read does: a hosted server is recorded under its
-	// toolset slug, every other model under its configured id, and requiring
-	// both would silently match nothing.
-	countsParams := telemetryrepo.GetActiveCountsParams{
-		GramProjectID: target.projectID,
-		TimeStart:     start,
-		TimeEnd:       end,
-	}
-	if slug := target.identity.hostedToolsetSlug(); slug != "" {
-		countsParams.ToolsetSlug = slug
-	} else {
-		countsParams.MCPServerID = target.identity.mcpServerID
-	}
-	counts, err := s.telemetry.GetActiveCounts(ctx, countsParams)
+	// The active-count read carries the same identities the outcome tally
+	// matched on, so a user whose calls the tally counted through a hook is
+	// counted here too rather than reported as zero beside them.
+	counts, err := s.telemetry.GetActiveCounts(ctx, target.identity.activeCountsParams(target.projectID, start, end))
 	if err != nil {
 		return QueryMCPMetricsOutput{}, fmt.Errorf("read mcp metrics active counts: %w", err)
 	}

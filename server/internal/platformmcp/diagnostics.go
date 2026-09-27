@@ -293,13 +293,33 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	}
 
 	topServers := attributeTopServers(servers, resolver, maxOverviewServers)
+	var activeUsers int64
+	if counts != nil {
+		activeUsers = boundedCount(counts.ActiveUsersCount)
+	}
+	if sessionMode {
+		// Under session capture the active-user count is a count of chat
+		// participants held in PostgreSQL. Reporting ClickHouse's tool-call
+		// actors here would answer a different question than metrics_mode says
+		// this number answers. It is read before the envelope is built so a
+		// window with chat participants and no tool calls is observed.
+		activeUsers, err = s.sessions.GetActiveUserCountByMessages(ctx, chatrepo.GetActiveUserCountByMessagesParams{
+			ProjectID: projectUUID,
+			TimeStart: conv.ToPGTimestamptz(window.start),
+			TimeEnd:   conv.ToPGTimestamptz(window.end),
+		})
+		if err != nil {
+			return GetProjectOverviewOutput{}, fmt.Errorf("read project overview active users: %w", err)
+		}
+	}
 	output := GetProjectOverviewOutput{
 		ProjectID: input.ProjectID,
 		// A project overview is project-scoped, so the watermark and the result
 		// answer for the same scope; observation is still taken from the
 		// result rather than inferred from the watermark.
-		Envelope:    newDataEnvelope(now, watermarkTime(watermark), window, overviewObserved(summary, counts, topServers)),
+		Envelope:    newDataEnvelope(now, watermarkTime(watermark), window, overviewObserved(summary, counts, topServers, activeUsers)),
 		MetricsMode: metricsMode(sessionMode),
+		ActiveUsers: NewSubjectCount(activeUsers),
 		TopServers:  topServers,
 	}
 	if summary != nil {
@@ -308,22 +328,6 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 	}
 	if counts != nil {
 		output.ActiveServers = boundedCount(counts.ActiveServersCount)
-		output.ActiveUsers = NewSubjectCount(boundedCount(counts.ActiveUsersCount))
-	}
-	if sessionMode {
-		// Under session capture the active-user count is a count of chat
-		// participants held in PostgreSQL. Reporting ClickHouse's tool-call
-		// actors here would answer a different question than metrics_mode says
-		// this number answers.
-		activeUsers, err := s.sessions.GetActiveUserCountByMessages(ctx, chatrepo.GetActiveUserCountByMessagesParams{
-			ProjectID: projectUUID,
-			TimeStart: conv.ToPGTimestamptz(window.start),
-			TimeEnd:   conv.ToPGTimestamptz(window.end),
-		})
-		if err != nil {
-			return GetProjectOverviewOutput{}, fmt.Errorf("read project overview active users: %w", err)
-		}
-		output.ActiveUsers = NewSubjectCount(activeUsers)
 	}
 	return output, nil
 }
@@ -331,16 +335,19 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 // overviewObserved reports whether the window holds any observation the
 // overview goes on to report. The gateway summary counts proxied and hosted
 // calls; hook-observed servers reach the overview only through the active
-// server count and the top-server list. Any of them being nonzero is an
-// observation, so no_observations is never asserted beside a nonzero metric.
-func overviewObserved(summary *telemetryrepo.OverviewSummary, counts *telemetryrepo.ActiveCounts, topServers []ProjectOverviewServer) bool {
+// server count and the top-server list; under session capture the active-user
+// count is chat participants, whom no tool-call read sees. activeUsers is the
+// count the overview reports, whichever source it came from. Any of them being
+// nonzero is an observation, so no_observations is never asserted beside a
+// nonzero metric.
+func overviewObserved(summary *telemetryrepo.OverviewSummary, counts *telemetryrepo.ActiveCounts, topServers []ProjectOverviewServer, activeUsers int64) bool {
 	if summary != nil && (summary.TotalToolCalls > 0 || summary.FailedToolCalls > 0) {
 		return true
 	}
 	if counts != nil && (counts.ActiveServersCount > 0 || counts.ActiveUsersCount > 0) {
 		return true
 	}
-	return len(topServers) > 0
+	return activeUsers > 0 || len(topServers) > 0
 }
 
 // GetMCPDiagnosticsInput names one configured MCP, using the same identity

@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const attachPlatformMCPOperationReceiptRegistration = `-- name: AttachPlatformMCPOperationReceiptRegistration :one
@@ -4644,7 +4645,7 @@ type ListOwnedChatTranscriptMessagesForRecallRow struct {
 	ContentAssetUrl pgtype.Text
 	ToolCalls       []byte
 	ToolCallID      pgtype.Text
-	ToolUrn         pgtype.Text
+	ToolUrn         urn.Tool
 	Source          pgtype.Text
 	RiskAnalyzedAt  pgtype.Timestamptz
 }

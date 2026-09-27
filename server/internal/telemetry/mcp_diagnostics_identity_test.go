@@ -239,3 +239,62 @@ func TestGetActiveCounts_ScopesByConfiguredServerID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(2), counts.ActiveUsersCount)
 }
+
+// TestGetActiveCounts_CountsHookObservedUsers pins that a server's active users
+// include the people whose calls only an agent hook observed. Hook rows carry
+// no mcp_server_id and a hooks: URN, so a read scoped by the configured id
+// alone cannot see them; the hook identities the outcome tally matches on must
+// select them here too, or active_users is zero beside a nonzero tally.
+func TestGetActiveCounts_CountsHookObservedUsers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	deploymentID := uuid.New().String()
+	now := time.Now().UTC()
+	selected := uuid.New().String()
+
+	// One user through the gateway.
+	insertProxiedToolEvent(t, ctx, ti, proxiedToolEventParams{projectID: projectID, timestamp: now.Add(-6 * time.Minute), mcpServerID: selected, toolName: "post_message", userID: "user-1", statusCode: 200})
+	// Two more only a hook saw: one by the plugin-routed name, one by the URL.
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID: projectID, deploymentID: deploymentID, timestamp: now.Add(-5 * time.Minute), traceID: uuid.New().String(),
+		hookSource: "claude-code", toolSource: "plugin_acme-tools_External_Acme_Chat", toolName: "post_message", result: `"ok"`,
+		userEmail: "alice@example.com",
+	})
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID: projectID, deploymentID: deploymentID, timestamp: now.Add(-4 * time.Minute), traceID: uuid.New().String(),
+		hookSource: "cursor", toolSource: "acme-chat", toolName: "post_message", result: `"ok"`,
+		mcpServerURL: "https://api.example.test/mcp/acme-chat", userEmail: "bob@example.com",
+	})
+	// Another server's hook user must not be folded in.
+	insertHookEvent(t, ctx, hookEventParams{
+		projectID: projectID, deploymentID: deploymentID, timestamp: now.Add(-3 * time.Minute), traceID: uuid.New().String(),
+		hookSource: "claude-code", toolSource: "plugin_acme-tools_Shipping", toolName: "quote", result: `"ok"`,
+		userEmail: "carol@example.com",
+	})
+
+	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
+
+	counts, err := ti.chClient.GetActiveCounts(ctx, telemetryRepo.GetActiveCountsParams{
+		GramProjectID:        projectID,
+		TimeStart:            now.Add(-time.Hour).UnixNano(),
+		TimeEnd:              now.UnixNano(),
+		MCPServerID:          selected,
+		MCPServerURLSuffixes: []string{"/mcp/acme-chat"},
+		ToolSources:          []string{"plugin_acme-tools_external_acme_chat"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, uint64(3), counts.ActiveUsersCount)
+
+	// Without a hook identity the read keeps its gateway-only meaning.
+	counts, err = ti.chClient.GetActiveCounts(ctx, telemetryRepo.GetActiveCountsParams{
+		GramProjectID: projectID,
+		TimeStart:     now.Add(-time.Hour).UnixNano(),
+		TimeEnd:       now.UnixNano(),
+		MCPServerID:   selected,
+	})
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), counts.ActiveUsersCount)
+}

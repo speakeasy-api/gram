@@ -116,13 +116,16 @@ func TestConfiguredServers_FoldsMembershipRowsPerServer(t *testing.T) {
 func TestOverviewObserved_NeverReportsNoObservationsBesideANonzeroMetric(t *testing.T) {
 	t.Parallel()
 
-	require.False(t, overviewObserved(nil, nil, nil))
-	require.False(t, overviewObserved(&telemetryrepo.OverviewSummary{}, &telemetryrepo.ActiveCounts{}, []ProjectOverviewServer{}))
+	require.False(t, overviewObserved(nil, nil, nil, 0))
+	require.False(t, overviewObserved(&telemetryrepo.OverviewSummary{}, &telemetryrepo.ActiveCounts{}, []ProjectOverviewServer{}, 0))
 
-	require.True(t, overviewObserved(&telemetryrepo.OverviewSummary{TotalToolCalls: 1}, nil, nil))
-	require.True(t, overviewObserved(nil, &telemetryrepo.ActiveCounts{ActiveServersCount: 2}, nil))
-	require.True(t, overviewObserved(nil, &telemetryrepo.ActiveCounts{ActiveUsersCount: 1}, nil))
-	require.True(t, overviewObserved(nil, nil, []ProjectOverviewServer{{Name: "linear", MCPID: "", ToolCalls: 3}}))
+	require.True(t, overviewObserved(&telemetryrepo.OverviewSummary{TotalToolCalls: 1}, nil, nil, 0))
+	require.True(t, overviewObserved(nil, &telemetryrepo.ActiveCounts{ActiveServersCount: 2}, nil, 0))
+	require.True(t, overviewObserved(nil, &telemetryrepo.ActiveCounts{ActiveUsersCount: 1}, nil, 0))
+	require.True(t, overviewObserved(nil, nil, []ProjectOverviewServer{{Name: "linear", MCPID: "", ToolCalls: 3}}, 0))
+	// Session mode: chat participants with no tool calls anywhere are still an
+	// observation, because active_users reports them.
+	require.True(t, overviewObserved(&telemetryrepo.OverviewSummary{}, &telemetryrepo.ActiveCounts{}, nil, 4))
 }
 
 // TestReconcileMetrics_NeverReportsNoObservationsBesideANonzeroMetric pins the

@@ -68,6 +68,27 @@ func (id serverIdentity) outcomeParams(projectID string, start, end int64) telem
 	}
 }
 
+// activeCountsParams narrows the active-user count to this server within one
+// project and window, under every identity it is recorded by: a hosted call
+// carries the toolset slug, a proxied call the configured id, and a
+// hook-observed call the URL or name the agent used. The count read matches
+// any of them, so a server whose calls arrive only through hooks still counts
+// its users.
+func (id serverIdentity) activeCountsParams(projectID string, start, end int64) telemetryrepo.GetActiveCountsParams {
+	return telemetryrepo.GetActiveCountsParams{
+		GramProjectID:        projectID,
+		TimeStart:            start,
+		TimeEnd:              end,
+		ExternalUserID:       "",
+		APIKeyID:             "",
+		ToolsetSlug:          id.hostedToolsetSlug(),
+		MCPServerID:          id.mcpServerID,
+		MCPServerURLSuffixes: id.urlSuffixes,
+		ToolSources:          id.toolSources,
+		SessionMode:          false,
+	}
+}
+
 // serverIdentity resolves one configured MCP to every identity its telemetry
 // is recorded under. Both lookups are scoped to the organization's own project,
 // so a caller cannot resolve an MCP it cannot already see.
@@ -131,7 +152,11 @@ func configuredServers(rows []platformrepo.ListPlatformMCPServerIdentitiesRow) [
 				Plugins:     nil,
 			})
 		}
-		if row.PluginDisplayName == "" {
+		// A membership whose plugin the query could not join (soft-deleted, or
+		// owned by another project) still carries its display name, but the
+		// plugin slug is empty: the name is not one a live plugin ships the
+		// server under, so it is not an identity of this server.
+		if row.PluginSlug == "" {
 			continue
 		}
 		servers[position].Plugins = append(servers[position].Plugins, servernames.PluginMembership{
