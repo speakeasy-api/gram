@@ -334,7 +334,13 @@ func TestUnavailableRiskToolRegistrationSurvivesCatalogFailure(t *testing.T) {
 		})
 	})
 	require.Equal(t, 1, buildCalls)
-	require.Len(t, reg.Descriptors(), 9)
+	require.Len(t, reg.Descriptors(), 11, "three reads, six policy/exclusion writes, two finding writes")
+	for _, name := range []string{operationMarkRiskFindingsFalsePositive, operationUnmarkRiskFindingsFalsePositive} {
+		_, err := descriptorByName(t, reg, name).Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","finding_ids":["`+uuid.NewString()+`"],"confirmed":true,"idempotency_key":"key"}`))
+		var refusal *ToolRefusalError
+		require.ErrorAs(t, err, &refusal, name)
+		require.Contains(t, refusal.Payload, `"code":"feature_unavailable"`, name)
+	}
 
 	create := descriptorByName(t, reg, "create_risk_policy")
 	_, err := create.Invoke(ContextWithPrincipal(t.Context(), testRiskPrincipal("user")), json.RawMessage(`{"project_slug":"project","policy_type":"standard","name":"policy","enabled":true,"sources":["gitleaks"],"idempotency_key":"key"}`))
@@ -376,7 +382,6 @@ func TestRiskToolRegistrationAndStableStubs(t *testing.T) {
 	wanted := map[string]ProjectScope{
 		"list_risk_policies": ProjectScopeDefaultable, "get_risk_policy": ProjectScopeDefaultable, "list_risk_exclusions": ProjectScopeDefaultable, "get_risk_analysis_status": ProjectScopeDefaultable,
 		"change_risk_policy_audience": ProjectScopeExplicit, "remove_self_from_risk_policy": ProjectScopeExplicit, "create_risk_policy": ProjectScopeExplicit, "update_risk_policy": ProjectScopeExplicit, "create_risk_exclusion": ProjectScopeExplicit, "update_risk_exclusion": ProjectScopeExplicit,
-		"create_risk_policy": ProjectScopeExplicit, "update_risk_policy": ProjectScopeExplicit, "create_risk_exclusion": ProjectScopeExplicit, "update_risk_exclusion": ProjectScopeExplicit,
 		"mark_risk_findings_false_positive": ProjectScopeExplicit, "unmark_risk_findings_false_positive": ProjectScopeExplicit,
 	}
 	require.Len(t, reg.Descriptors(), len(wanted))

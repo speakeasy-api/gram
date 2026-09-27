@@ -306,12 +306,13 @@ func hasID(set map[uuid.UUID]struct{}, id uuid.UUID) bool {
 }
 
 // validRiskFindingFalsePositiveReceipt keeps the stored receipt closed: only
-// well-formed ids in a bounded count and a fixed-vocabulary category.
+// well-formed ids, each in exactly one bucket, in a bounded count, with a
+// fixed-vocabulary category.
 func validRiskFindingFalsePositiveReceipt(result RiskFindingFalsePositiveReceipt, changedCategory string) bool {
 	if !validRiskReceiptProject(result.Project) {
 		return false
 	}
-	total := 0
+	seen := make(map[string]struct{}, len(result.ChangedFindingIDs)+len(result.AlreadyInRequestedStateFindingIDs)+len(result.NotFoundFindingIDs))
 	for _, ids := range [][]string{result.ChangedFindingIDs, result.AlreadyInRequestedStateFindingIDs, result.NotFoundFindingIDs} {
 		if ids == nil {
 			return false
@@ -320,10 +321,13 @@ func validRiskFindingFalsePositiveReceipt(result RiskFindingFalsePositiveReceipt
 			if uuid.Validate(id) != nil {
 				return false
 			}
+			if _, duplicate := seen[id]; duplicate {
+				return false
+			}
+			seen[id] = struct{}{}
 		}
-		total += len(ids)
 	}
-	if total == 0 || total > maxRiskFindingFalsePositiveBatch {
+	if len(seen) == 0 || len(seen) > maxRiskFindingFalsePositiveBatch {
 		return false
 	}
 	if len(result.ChangedFindingIDs) > 0 {

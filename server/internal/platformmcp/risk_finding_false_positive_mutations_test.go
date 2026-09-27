@@ -89,7 +89,11 @@ func TestRiskFindingFalsePositiveReceiptResultsStayClosed(t *testing.T) {
 	require.Error(t, err, "changed ids on a mark must be categorised as dismissed")
 
 	for name, mutate := range map[string]func(*RiskFindingFalsePositiveReceipt){
-		"nil bucket":   func(r *RiskFindingFalsePositiveReceipt) { r.AlreadyInRequestedStateFindingIDs = nil },
+		"nil bucket":        func(r *RiskFindingFalsePositiveReceipt) { r.AlreadyInRequestedStateFindingIDs = nil },
+		"id in two buckets": func(r *RiskFindingFalsePositiveReceipt) { r.NotFoundFindingIDs = []string{r.ChangedFindingIDs[0]} },
+		"id twice in bucket": func(r *RiskFindingFalsePositiveReceipt) {
+			r.ChangedFindingIDs = append(r.ChangedFindingIDs, r.ChangedFindingIDs[0])
+		},
 		"malformed id": func(r *RiskFindingFalsePositiveReceipt) { r.NotFoundFindingIDs = []string{"not-a-uuid"} },
 		"no ids": func(r *RiskFindingFalsePositiveReceipt) {
 			r.ChangedFindingIDs, r.NotFoundFindingIDs = []string{}, []string{}
@@ -155,6 +159,8 @@ func TestRiskFindingFalsePositiveToolSchemasBoundInput(t *testing.T) {
 		require.NotNil(t, descriptor.Annotations)
 		require.False(t, descriptor.Annotations.ReadOnlyHint)
 		require.True(t, descriptor.Annotations.IdempotentHint)
+		require.NotNil(t, descriptor.Annotations.DestructiveHint)
+		require.Equal(t, name == operationMarkRiskFindingsFalsePositive, *descriptor.Annotations.DestructiveHint, "dismissing hides findings; restoring does not")
 		require.Contains(t, descriptor.Description, "not enabled")
 
 		ctx := ContextWithPrincipal(t.Context(), testRiskPrincipal("user"))

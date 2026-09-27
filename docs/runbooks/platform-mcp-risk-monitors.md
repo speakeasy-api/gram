@@ -1,7 +1,8 @@
 # Platform MCP risk tool monitors
 
 This runbook covers the seven D3 risk-policy and exclusion tools delivered for
-AGE-3168. The application emits low-cardinality OpenTelemetry metrics from
+AGE-3168 and the two per-finding false-positive tools (GRW-182) that share
+their metric contract. The application emits low-cardinality OpenTelemetry metrics from
 `gram-server`; Datadog dashboards and monitors are managed in the Datadog UI,
 not as repository IaC.
 
@@ -27,10 +28,10 @@ CEL, principal, URL, error message, or request/result payload.
 
 ## Metric contracts
 
-| Metric                            | Type                | Meaning                                                   |
-| --------------------------------- | ------------------- | --------------------------------------------------------- |
-| `platform_mcp.risk.tool_calls`    | counter             | One bounded handler result for any of the seven D3 tools. |
-| `platform_mcp.risk.tool_duration` | histogram (seconds) | Handler duration for the same result and tags.            |
+| Metric                            | Type                | Meaning                                                    |
+| --------------------------------- | ------------------- | ---------------------------------------------------------- |
+| `platform_mcp.risk.tool_calls`    | counter             | One bounded handler result for any of the nine risk tools. |
+| `platform_mcp.risk.tool_duration` | histogram (seconds) | Handler duration for the same result and tags.             |
 
 Transport/schema rejections happen before a typed handler runs and are not
 included in these metrics. Protocol and HTTP telemetry remain the source for
@@ -77,13 +78,13 @@ Initial thresholds require dogfood baseline tuning. Scope every query to
 
 ### Mutation failure spike
 
-Monitor the four mutation tools over 15 minutes. Alert when non-success,
+Monitor the six mutation tools over 15 minutes. Alert when non-success,
 non-client-refusal outcomes rise above the dogfood baseline:
 
 ```text
 sum(last_15m):sum:platform_mcp.risk.tool_calls{
   service:gram-server AND
-  platform_mcp.risk.tool IN (create_risk_policy, update_risk_policy, create_risk_exclusion, update_risk_exclusion) AND
+  platform_mcp.risk.tool IN (create_risk_policy, update_risk_policy, create_risk_exclusion, update_risk_exclusion, mark_risk_findings_false_positive, unmark_risk_findings_false_positive) AND
   platform_mcp.risk.outcome NOT IN (succeeded, invalid_request, not_found, conflict, rate_limited, feature_unavailable)
 }.as_count()
 ```
@@ -99,7 +100,7 @@ Conflicts are actionable concurrency/idempotency signals, not server failures:
 ```text
 sum(last_15m):sum:platform_mcp.risk.tool_calls{
   service:gram-server AND
-  platform_mcp.risk.tool IN (create_risk_policy, update_risk_policy, create_risk_exclusion, update_risk_exclusion) AND
+  platform_mcp.risk.tool IN (create_risk_policy, update_risk_policy, create_risk_exclusion, update_risk_exclusion, mark_risk_findings_false_positive, unmark_risk_findings_false_positive) AND
   platform_mcp.risk.outcome:conflict
 }.as_count()
 ```
