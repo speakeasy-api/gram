@@ -60,8 +60,8 @@ type Resolver struct {
 	// names maps a server id to the name results report it under.
 	names map[string]string
 
-	// reported maps a server id to every spelling, as an agent reports it, that
-	// uniquely identifies it, for matching raw telemetry by exact value.
+	// reported maps a server id to every spelling an agent may report it under
+	// that uniquely identifies it, for matching raw telemetry by exact value.
 	reported map[string][]string
 }
 
@@ -101,15 +101,18 @@ func NewResolver(servers []ConfiguredServer) *Resolver {
 		}
 	}
 	for id, names := range candidates {
-		// Each unique name is kept as configured and as Claude Code rewrites it
-		// for a tool prefix, since a hook reports one or the other verbatim.
-		spellings := make([]string, 0, 2*len(names))
+		// Each unique name is kept as configured, as Claude Code rewrites it for
+		// a tool prefix, and lower-cased in both forms. The telemetry read
+		// compares the indexed column by exact value, so every spelling Resolve
+		// would accept has to be listed for a hook that reports it to match.
+		spellings := make([]string, 0, 4*len(names))
 		for _, name := range names {
 			if r.byKey[normalize(name)] != id {
 				continue
 			}
 			trimmed := strings.TrimSpace(name)
-			spellings = append(spellings, trimmed, toolref.SanitizeClaudeMCPName(trimmed))
+			sanitized := toolref.SanitizeClaudeMCPName(trimmed)
+			spellings = append(spellings, trimmed, sanitized, strings.ToLower(trimmed), strings.ToLower(sanitized))
 		}
 		reported := conv.DedupeNonEmpty(spellings)
 		sort.Strings(reported)
@@ -141,10 +144,12 @@ func (r *Resolver) Name(id string) string {
 	return id
 }
 
-// ReportedNames returns every spelling, as an agent reports it, that uniquely
-// identifies the server, for matching raw telemetry by exact value so the read
-// can use the index on the reported name. A spelling another server shares is
-// omitted so one call is never attributed to both.
+// ReportedNames returns every spelling an agent may report the server under
+// that uniquely identifies it: as configured, as Claude Code rewrites it for a
+// tool prefix, and lower-cased. The telemetry read matches raw rows by exact
+// value, so the index on the reported name applies and recall comes from
+// listing every variant. A spelling another server shares is omitted so one
+// call is never attributed to both.
 func (r *Resolver) ReportedNames(id string) []string {
 	if r == nil {
 		return nil

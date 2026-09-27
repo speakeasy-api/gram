@@ -129,10 +129,11 @@ func TestGetMCPOutcomeBreakdown_MatchesHookCallsByReportedServerName(t *testing.
 		projectID: projectID, deploymentID: deploymentID, timestamp: now.Add(-6 * time.Minute), traceID: uuid.New().String(),
 		hookSource: "claude-code", toolSource: "plugin_acme-tools_External_Acme_Chat", toolName: "post_message", result: `"ok"`,
 	})
-	// Inventory-resolved display name, no URL.
+	// Inventory-resolved display name as a client that normalizes names
+	// reports it: sanitized and lower-cased, no URL.
 	insertHookEvent(t, ctx, hookEventParams{
 		projectID: projectID, deploymentID: deploymentID, timestamp: now.Add(-5 * time.Minute), traceID: uuid.New().String(),
-		hookSource: "claude-code", toolSource: "External Acme Chat", toolName: "post_message", errorMsg: "boom",
+		hookSource: "claude-code", toolSource: "external_acme_chat", toolName: "post_message", errorMsg: "boom",
 	})
 	// URL-resolved slug.
 	insertHookEvent(t, ctx, hookEventParams{
@@ -148,10 +149,13 @@ func TestGetMCPOutcomeBreakdown_MatchesHookCallsByReportedServerName(t *testing.
 
 	testenv.FlushClickHouseAsyncInserts(t, ti.chConn)
 
+	// ToolSources is the resolver's spelling set for the server: the configured
+	// casing "External Acme Chat" differs from the inserted row, which matches
+	// through its normalized variant "external_acme_chat" instead.
 	rows, err := ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs:       []string{projectID},
 		MCPServerURLSuffixes: []string{"/mcp/acme-chat"},
-		ToolSources:          []string{"plugin_acme-tools_External_Acme_Chat", "External Acme Chat"},
+		ToolSources:          []string{"plugin_acme-tools_External_Acme_Chat", "External Acme Chat", "external_acme_chat"},
 		TimeStart:            now.Add(-time.Hour).UnixNano(),
 		TimeEnd:              now.UnixNano(),
 	})
@@ -171,6 +175,17 @@ func TestGetMCPOutcomeBreakdown_MatchesHookCallsByReportedServerName(t *testing.
 	})
 	require.NoError(t, err)
 	require.Equal(t, map[string]uint64{telemetryRepo.MCPOutcomeSuccess: 1}, outcomeCounts(rows))
+
+	// The column is compared by exact value, so a spelling outside the set
+	// matches nothing: recall comes from the resolver listing every variant.
+	rows, err = ti.chClient.GetMCPOutcomeBreakdown(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
+		GramProjectIDs: []string{projectID},
+		ToolSources:    []string{"external acme chat"},
+		TimeStart:      now.Add(-time.Hour).UnixNano(),
+		TimeEnd:        now.UnixNano(),
+	})
+	require.NoError(t, err)
+	require.Empty(t, outcomeCounts(rows))
 }
 
 // TestListMCPUsageUsers_ScopesByReportedServerName pins that the per-user
@@ -187,7 +202,7 @@ func TestListMCPUsageUsers_ScopesByReportedServerName(t *testing.T) {
 
 	insertHookEvent(t, ctx, hookEventParams{
 		projectID: projectID, deploymentID: deploymentID, timestamp: now.Add(-5 * time.Minute), traceID: uuid.New().String(),
-		hookSource: "claude-code", toolSource: "plugin_acme-tools_External_Acme_Chat", toolName: "post_message", result: `"ok"`,
+		hookSource: "claude-code", toolSource: "plugin_acme-tools_external_acme_chat", toolName: "post_message", result: `"ok"`,
 		userEmail: "alice@example.com",
 	})
 	insertHookEvent(t, ctx, hookEventParams{
@@ -200,10 +215,12 @@ func TestListMCPUsageUsers_ScopesByReportedServerName(t *testing.T) {
 
 	users, err := ti.chClient.ListMCPUsageUsers(ctx, telemetryRepo.GetMCPOutcomeBreakdownParams{
 		GramProjectIDs: []string{projectID},
-		ToolSources:    []string{"plugin_acme-tools_External_Acme_Chat"},
-		TimeStart:      now.Add(-time.Hour).UnixNano(),
-		TimeEnd:        now.UnixNano(),
-		Limit:          10,
+		// The configured casing differs from alice's row; the lower-cased
+		// variant beside it is what matches.
+		ToolSources: []string{"plugin_acme-tools_External_Acme_Chat", "plugin_acme-tools_external_acme_chat"},
+		TimeStart:   now.Add(-time.Hour).UnixNano(),
+		TimeEnd:     now.UnixNano(),
+		Limit:       10,
 	})
 	require.NoError(t, err)
 	require.Len(t, users, 1)
@@ -260,7 +277,7 @@ func TestGetActiveCounts_CountsHookObservedUsers(t *testing.T) {
 	// Two more only a hook saw: one by the plugin-routed name, one by the URL.
 	insertHookEvent(t, ctx, hookEventParams{
 		projectID: projectID, deploymentID: deploymentID, timestamp: now.Add(-5 * time.Minute), traceID: uuid.New().String(),
-		hookSource: "claude-code", toolSource: "plugin_acme-tools_External_Acme_Chat", toolName: "post_message", result: `"ok"`,
+		hookSource: "claude-code", toolSource: "external_acme_chat", toolName: "post_message", result: `"ok"`,
 		userEmail: "alice@example.com",
 	})
 	insertHookEvent(t, ctx, hookEventParams{
@@ -283,7 +300,9 @@ func TestGetActiveCounts_CountsHookObservedUsers(t *testing.T) {
 		TimeEnd:              now.UnixNano(),
 		MCPServerID:          selected,
 		MCPServerURLSuffixes: []string{"/mcp/acme-chat"},
-		ToolSources:          []string{"plugin_acme-tools_External_Acme_Chat"},
+		// The configured casing differs from alice's row; the normalized
+		// variant beside it is what matches.
+		ToolSources: []string{"External Acme Chat", "external_acme_chat"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), counts.ActiveUsersCount)

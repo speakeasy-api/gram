@@ -167,6 +167,7 @@ func TestResolver_RefusesNamesTwoServersShare(t *testing.T) {
 	require.NotContains(t, resolver.ReportedNames(chatServerID), "Slack")
 	require.NotContains(t, resolver.ReportedNames(billingServerID), "Slack")
 	require.Contains(t, resolver.ReportedNames(chatServerID), "plugin_support_Slack")
+	require.Contains(t, resolver.ReportedNames(chatServerID), "plugin_support_slack")
 	require.Contains(t, resolver.ReportedNames(billingServerID), "plugin_finance_Slack")
 }
 
@@ -175,14 +176,17 @@ func TestResolver_ReportedNamesCoverEverySpelling(t *testing.T) {
 
 	resolver := fixtureResolver()
 
-	// Spellings are kept as an agent reports them, so the telemetry read can
-	// compare the indexed column by exact value.
+	// Every spelling Resolve accepts is listed, as configured and lower-cased,
+	// so the telemetry read can compare the indexed column by exact value.
 	require.Equal(t, []string{
 		chatServerID,
 		"External Acme Chat",
 		"External_Acme_Chat",
 		"acme-chat",
+		"external acme chat",
+		"external_acme_chat",
 		"plugin_acme-tools_External_Acme_Chat",
+		"plugin_acme-tools_external_acme_chat",
 	}, resolver.ReportedNames(chatServerID))
 
 	require.Nil(t, resolver.ReportedNames("0192a3b4-0000-7000-8000-00000000ffff"))
