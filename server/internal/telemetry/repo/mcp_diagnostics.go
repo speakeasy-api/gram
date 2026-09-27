@@ -50,6 +50,18 @@ type GetMCPOutcomeBreakdownParams struct {
 	// MCPServerURLSuffixes matches the same servers in hook-observed traffic,
 	// where the server is identified by the URL the client called (/mcp/<slug>).
 	MCPServerURLSuffixes []string
+	// MCPServerIDs matches calls the gateway proxied to a configured MCP server
+	// and stamped with gram.mcp_server.id. Remote, tunneled, and gateway-member
+	// servers carry no toolset slug, so this is the only direct-lane identity
+	// they have.
+	MCPServerIDs []string
+	// ToolSources matches hook-observed calls by the server name the calling
+	// agent reported (gram.tool_call.source), by exact value; the caller
+	// supplies every spelling a hook reports. A plugin-routed server reaches
+	// the hook under a derived prefix such as
+	// "plugin_<plugin>_<Display_Name>" and no URL, so this is how those calls
+	// are attributed to the configured server.
+	ToolSources []string
 	// CanonicalIdentityOrg folds linked email aliases when user attribution is
 	// selected. Empty preserves literal identities.
 	CanonicalIdentityOrg string
@@ -58,6 +70,25 @@ type GetMCPOutcomeBreakdownParams struct {
 	// Limit bounds user and per-user tool attribution rows. Zero preserves the
 	// aggregate outcome readers' existing unbounded grouping.
 	Limit int
+}
+
+// selectsServer reports whether the parameters narrow the read to one server
+// through at least one identity. The per-user readers refuse an unscoped read
+// rather than broadening to every server in the project.
+func (arg GetMCPOutcomeBreakdownParams) selectsServer() bool {
+	return arg.selectsDirectLane() || arg.selectsHookLane()
+}
+
+// selectsDirectLane reports whether any identity can match a call that arrived
+// at Gram directly: a hosted toolset slug or a configured server id.
+func (arg GetMCPOutcomeBreakdownParams) selectsDirectLane() bool {
+	return len(arg.ToolsetSlugs) > 0 || len(arg.MCPServerIDs) > 0
+}
+
+// selectsHookLane reports whether any identity can match a hook-observed call:
+// the URL suffix the client called or the server name it reported.
+func (arg GetMCPOutcomeBreakdownParams) selectsHookLane() bool {
+	return len(arg.MCPServerURLSuffixes) > 0 || len(arg.ToolSources) > 0
 }
 
 type MCPOutcomeBreakdownRow struct {
@@ -93,8 +124,8 @@ type MCPUsageUserToolRow struct {
 
 // GetMCPOutcomeBreakdown counts calls by outcome class and by the client that
 // made them, over two lanes of the same traffic: calls that arrived directly at
-// a hosted MCP server (classified by HTTP status, no client attribution
-// available yet) and calls observed by an agent hook (classified by
+// a hosted or proxied MCP server (classified by HTTP status, no client
+// attribution available yet) and calls observed by an agent hook (classified by
 // result/error, attributed to the reporting client).
 //
 // It returns counts only. No status codes, URLs, arguments, results, or
@@ -158,7 +189,7 @@ func (q *Queries) GetMCPOutcomeBreakdown(ctx context.Context, arg GetMCPOutcomeB
 // The source is already server-scoped at row level, so a shared session cannot
 // pull another server's users or outcomes into the result.
 func (q *Queries) ListMCPUsageUsers(ctx context.Context, arg GetMCPOutcomeBreakdownParams) ([]MCPUsageUserRow, error) {
-	if len(arg.GramProjectIDs) == 0 || (len(arg.ToolsetSlugs) == 0 && len(arg.MCPServerURLSuffixes) == 0) {
+	if len(arg.GramProjectIDs) == 0 || !arg.selectsServer() {
 		return []MCPUsageUserRow{}, nil
 	}
 
@@ -223,7 +254,7 @@ func (q *Queries) ListMCPUsageUsers(ctx context.Context, arg GetMCPOutcomeBreakd
 // resolved identity. Empty identity input returns no rows rather than dropping
 // the filter and broadening to every caller.
 func (q *Queries) ListMCPUsageUserTools(ctx context.Context, arg GetMCPOutcomeBreakdownParams, identityKind, identifier string) ([]MCPUsageUserToolRow, error) {
-	if len(arg.GramProjectIDs) == 0 || (len(arg.ToolsetSlugs) == 0 && len(arg.MCPServerURLSuffixes) == 0) || identifier == "" {
+	if len(arg.GramProjectIDs) == 0 || !arg.selectsServer() || identifier == "" {
 		return []MCPUsageUserToolRow{}, nil
 	}
 
@@ -314,8 +345,8 @@ func unionSource(directSQL string, directArgs []any, hookSQL string, hookArgs []
 	return "(" + directSQL + " UNION ALL " + hookSQL + ")", args
 }
 
-// mcpOutcomeDirectSource classifies calls that reached a hosted MCP server
-// directly. Diagnostics need call-level attribution: trace_summaries has already
+// mcpOutcomeDirectSource classifies calls that reached a hosted or proxied MCP
+// server directly. Diagnostics need call-level attribution: trace_summaries has already
 // collapsed a trace's server, tool, and user dimensions with any(), so a trace
 // that contains more than one call cannot be filtered truthfully there. The raw
 // read is bounded to the diagnostic window and narrows by server before it
@@ -339,15 +370,29 @@ func (q *Queries) mcpOutcomeDirectSource(arg GetMCPOutcomeBreakdownParams) (stri
 		Where("time_unix_nano <= ?", arg.TimeEnd).
 		Where("trace_id IS NOT NULL").
 		Where("trace_id != ''").
-		Where("event_source != 'hook'").
-		Where("toolset_slug != ''")
-	if len(arg.ToolsetSlugs) > 0 {
-		grouped = grouped.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlugs})
-	} else if len(arg.MCPServerURLSuffixes) > 0 {
-		// This selected MCP has only a hook-observed URL identity. The direct
-		// lane cannot prove a match, so exclude it rather than broadening to every
-		// hosted call in the project.
+		Where("event_source != 'hook'")
+	switch {
+	case arg.selectsDirectLane():
+		// A hosted server is recorded under its toolset slug; a proxied remote,
+		// tunneled, or gateway-member server under its configured id. A row
+		// carries whichever applies, so matching either never counts one twice.
+		predicate := squirrel.Or{}
+		if len(arg.ToolsetSlugs) > 0 {
+			predicate = append(predicate, squirrel.Eq{"toolset_slug": arg.ToolsetSlugs})
+		}
+		if len(arg.MCPServerIDs) > 0 {
+			predicate = append(predicate, squirrel.Eq{"mcp_server_id": arg.MCPServerIDs})
+		}
+		grouped = grouped.Where(predicate)
+	case arg.selectsHookLane():
+		// This selected MCP has only hook-observed identities. The direct lane
+		// cannot prove a match, so exclude it rather than broadening to every
+		// call in the project.
 		grouped = grouped.Where("0")
+	default:
+		// Unfiltered is the organization-wide comparison: every call that names
+		// a server, whichever identity it carries.
+		grouped = grouped.Where("(toolset_slug != '' OR mcp_server_id != '')")
 	}
 	grouped = grouped.GroupBy("trace_id", eventID)
 
@@ -384,7 +429,6 @@ FROM (%s)`, MCPClientUnattributed, outcome, groupedSQL), groupedArgs, nil
 // conservative behavior of counting repeated same-tool calls as one rather
 // than manufacturing calls from lifecycle rows.
 func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string, []any, error) {
-	mcpServerURL := "toString(attributes.gram.mcp.server_url)"
 	hasResult := "toUInt8(toString(attributes.gen_ai.tool.call.result) != '')"
 	hasError := "toUInt8(toString(attributes.gram.hook.error) != '')"
 	hasBlock := "toUInt8(toString(attributes.gram.hook.block_reason) != '')"
@@ -412,15 +456,29 @@ func (q *Queries) mcpOutcomeHookSource(arg GetMCPOutcomeBreakdownParams) (string
 		Where("time_unix_nano <= ?", arg.TimeEnd).
 		Where("trace_id IS NOT NULL").
 		Where("trace_id != ''").
-		Where("event_source = 'hook'").
-		Where(mcpServerURL + " != ''")
-	if len(arg.MCPServerURLSuffixes) > 0 {
-		grouped = grouped.Where("arrayExists(suffix -> endsWith("+mcpServerURL+", suffix), ?)", arg.MCPServerURLSuffixes)
-	} else if len(arg.ToolsetSlugs) > 0 {
-		// This selected MCP has only a direct hosted identity. The hook lane
-		// cannot prove a URL match, so exclude it rather than broadening to every
+		Where("event_source = 'hook'")
+	switch {
+	case arg.selectsHookLane():
+		// A hook that resolved the server records the URL it called; one that
+		// did not (a plugin-shipped server, for instance) records only the name
+		// the agent used. Either identifies this server.
+		predicate := squirrel.Or{}
+		if len(arg.MCPServerURLSuffixes) > 0 {
+			predicate = append(predicate, hookServerURLMatch(arg.MCPServerURLSuffixes))
+		}
+		if len(arg.ToolSources) > 0 {
+			predicate = append(predicate, hookToolSourceMatch(arg.ToolSources))
+		}
+		grouped = grouped.Where(predicate)
+	case arg.selectsDirectLane():
+		// This selected MCP has only direct identities. The hook lane cannot
+		// prove a match, so exclude it rather than broadening to every
 		// hook-observed server in the project.
 		grouped = grouped.Where("0")
+	default:
+		// Unfiltered is the organization-wide comparison: every hook-observed
+		// call whose server the hook resolved.
+		grouped = grouped.Where(hookServerURLExpr + " != ''")
 	}
 	grouped = grouped.GroupBy("trace_id", toolCallID)
 
@@ -448,6 +506,28 @@ SELECT
 	g_user_id AS user_id,
 	%s AS outcome
 FROM (%s)`, chFirstNonEmpty("g_hook_source", "'"+MCPClientUnattributed+"'"), outcome, groupedSQL), groupedArgs, nil
+}
+
+// hookServerURLExpr is the URL a hook-observed client called, as the hook
+// recorded it; empty when the hook never resolved the server to a URL.
+var hookServerURLExpr = chAttr("gram.mcp.server_url")
+
+// hookServerURLMatch matches hook-observed rows whose recorded server URL
+// (gram.mcp.server_url) ends in one of suffixes, the /mcp/<slug> form a hook
+// that resolved the server records.
+func hookServerURLMatch(suffixes []string) squirrel.Sqlizer {
+	return squirrel.Expr(
+		"("+hookServerURLExpr+" != '' AND arrayExists(suffix -> endsWith("+hookServerURLExpr+", suffix), ?))",
+		suffixes,
+	)
+}
+
+// hookToolSourceMatch matches hook-observed rows by the server name the agent
+// reported (gram.tool_call.source), by exact value: the resolver supplies every
+// spelling a hook reports, so the bare materialized column, and its bloom
+// filter index, does the comparison.
+func hookToolSourceMatch(sources []string) squirrel.Sqlizer {
+	return squirrel.Eq{"tool_source": sources}
 }
 
 type GetTelemetryWatermarkParams struct {
