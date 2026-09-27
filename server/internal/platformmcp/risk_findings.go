@@ -3,7 +3,6 @@ package platformmcp
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -173,15 +172,6 @@ func findingLabel(value string) string {
 	return string(runes) + "…#" + hex.EncodeToString(hash[:8])
 }
 
-func (s *RiskFindingsService) userReference(org, value string) string {
-	if value == "" {
-		return ""
-	}
-	mac := hmac.New(sha256.New, s.cursor.key)
-	_, _ = mac.Write([]byte("watchdog-user:" + org + "\x00" + value))
-	return "user:" + hex.EncodeToString(mac.Sum(nil)[:16])
-}
-
 func (s *RiskFindingsService) List(ctx context.Context, principal Principal, input ListRiskFindingsInput) (ListRiskFindingsOutput, error) {
 	var zero ListRiskFindingsOutput
 	if !s.valid() {
@@ -301,7 +291,7 @@ func (s *RiskFindingsService) List(ctx context.Context, principal Principal, inp
 			for _, bucket := range buckets {
 				value := findingLabel(bucket.Value)
 				if dimension == "user" {
-					value = s.userReference(principal.OrganizationID, bucket.Value)
+					value = riskUserReference(s.cursor.key, principal.OrganizationID, bucket.Value)
 				}
 				byRule[bucket.RuleID] = append(byRule[bucket.RuleID], RiskFindingGroup{Value: value, Count: bucket.Count})
 			}
