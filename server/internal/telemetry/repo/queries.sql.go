@@ -4156,6 +4156,11 @@ type ListToolUsageTracesParams struct {
 	MetaMCPMatchers    []MetaMCPMatcher
 	TargetTypes        []string
 	HostedToolsetSlugs []string
+	// MCPServerTargetIDs narrows to configured remote or tunneled MCP servers by
+	// the target id their matcher folds calls onto (the server slug, or its id
+	// when it has none). Matched on both the hosted and tunneled target types,
+	// because a remote server is classified hosted and a tunneled one tunneled.
+	MCPServerTargetIDs []string
 	ShadowServerNames  []string
 	MetaMCPServerIDs   []string
 	UserFilters        []ToolUsageUserFilter
@@ -4511,6 +4516,49 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 
 // ListToolUsageTraces retrieves target-aware trace rows for the unified Tool Logs page.
 //
+// toolUsageTraceTargetFilter narrows normalized traces to configured targets.
+// Each identity is matched together with the target type it is recorded under,
+// so a hosted toolset slug never matches a shadow server that happens to share
+// it. Selectors are OR-ed: a caller naming several targets sees all of them.
+// It returns nil when no selector is set.
+func toolUsageTraceTargetFilter(arg ListToolUsageTracesParams) squirrel.Sqlizer {
+	targetFilters := squirrel.Or{}
+	if len(arg.HostedToolsetSlugs) > 0 {
+		targetFilters = append(targetFilters, squirrel.And{
+			squirrel.Eq{"target_type": ToolUsageTargetTypeHostedMCP},
+			squirrel.Eq{"target_id": arg.HostedToolsetSlugs},
+		})
+	}
+	// A configured remote server is classified hosted and a tunneled one
+	// tunneled, and neither carries a toolset slug, so the configured server
+	// identities are matched across both types by the target id the matcher
+	// stamped (server slug, or server id when it has none).
+	if len(arg.MCPServerTargetIDs) > 0 {
+		targetFilters = append(targetFilters, squirrel.And{
+			squirrel.Eq{"target_type": []string{ToolUsageTargetTypeHostedMCP, ToolUsageTargetTypeTunneledMCP}},
+			squirrel.Eq{"target_id": arg.MCPServerTargetIDs},
+		})
+	}
+	if len(arg.ShadowServerNames) > 0 {
+		targetFilters = append(targetFilters, squirrel.And{
+			squirrel.Eq{"target_type": ToolUsageTargetTypeShadowMCP},
+			squirrel.Eq{"target_id": arg.ShadowServerNames},
+		})
+	}
+	// Dispatches to members (stamped meta_mcp_server_id) plus calls on the gateway itself.
+	if len(arg.MetaMCPServerIDs) > 0 {
+		targetFilters = append(targetFilters, squirrel.Eq{"meta_mcp_server_id": arg.MetaMCPServerIDs})
+		targetFilters = append(targetFilters, squirrel.And{
+			squirrel.Eq{"target_type": ToolUsageTargetTypeMetaMCP},
+			squirrel.Eq{"target_id": arg.MetaMCPServerIDs},
+		})
+	}
+	if len(targetFilters) == 0 {
+		return nil
+	}
+	return targetFilters
+}
+
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTracesParams) ([]ToolUsageTraceSummary, error) {
 	cteSQL, cteArgs, err := toolUsageTraceRowsCTE(arg)
@@ -4550,29 +4598,8 @@ func (q *Queries) ListToolUsageTraces(ctx context.Context, arg ListToolUsageTrac
 		sb = sb.Where(squirrel.Eq{"target_type": arg.TargetTypes})
 	}
 
-	if len(arg.HostedToolsetSlugs) > 0 || len(arg.ShadowServerNames) > 0 || len(arg.MetaMCPServerIDs) > 0 {
-		targetFilters := squirrel.Or{}
-		if len(arg.HostedToolsetSlugs) > 0 {
-			targetFilters = append(targetFilters, squirrel.And{
-				squirrel.Eq{"target_type": ToolUsageTargetTypeHostedMCP},
-				squirrel.Eq{"target_id": arg.HostedToolsetSlugs},
-			})
-		}
-		if len(arg.ShadowServerNames) > 0 {
-			targetFilters = append(targetFilters, squirrel.And{
-				squirrel.Eq{"target_type": ToolUsageTargetTypeShadowMCP},
-				squirrel.Eq{"target_id": arg.ShadowServerNames},
-			})
-		}
-		// Dispatches to members (stamped meta_mcp_server_id) plus calls on the gateway itself.
-		if len(arg.MetaMCPServerIDs) > 0 {
-			targetFilters = append(targetFilters, squirrel.Eq{"meta_mcp_server_id": arg.MetaMCPServerIDs})
-			targetFilters = append(targetFilters, squirrel.And{
-				squirrel.Eq{"target_type": ToolUsageTargetTypeMetaMCP},
-				squirrel.Eq{"target_id": arg.MetaMCPServerIDs},
-			})
-		}
-		sb = sb.Where(targetFilters)
+	if targetFilter := toolUsageTraceTargetFilter(arg); targetFilter != nil {
+		sb = sb.Where(targetFilter)
 	}
 
 	if len(arg.HookSources) > 0 {
@@ -6255,6 +6282,7 @@ func toolUsageRawNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []a
 		MetaMCPMatchers:    arg.MetaMCPMatchers,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
+		MCPServerTargetIDs: nil,
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,

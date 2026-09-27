@@ -3,12 +3,15 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -51,15 +54,31 @@ func (s stubDiagnosticsTelemetry) GetSkillBreakdown(context.Context, telemetryre
 type recordingToolCallSearchReader struct {
 	traceParams telemetryrepo.ListToolUsageTracesParams
 	rows        []telemetryrepo.ToolUsageTraceSummary
-	keyParams   telemetryrepo.ListAttributeKeysParams
-	keys        []string
-	calls       int
+	// paged, when set, serves rows the way the repository does: newest first,
+	// strictly after the cursor position, at most Limit of them.
+	paged     bool
+	keyParams telemetryrepo.ListAttributeKeysParams
+	keys      []string
+	calls     int
 }
 
 func (r *recordingToolCallSearchReader) ListToolUsageTraces(_ context.Context, arg telemetryrepo.ListToolUsageTracesParams) ([]telemetryrepo.ToolUsageTraceSummary, error) {
 	r.traceParams = arg
 	r.calls++
-	return r.rows, nil
+	if !r.paged {
+		return r.rows, nil
+	}
+	page := make([]telemetryrepo.ToolUsageTraceSummary, 0, arg.Limit)
+	for _, row := range r.rows {
+		if arg.CursorID != "" && (row.StartTimeUnixNano > arg.CursorTimeUnixNano || (row.StartTimeUnixNano == arg.CursorTimeUnixNano && row.ID >= arg.CursorID)) {
+			continue
+		}
+		if len(page) == arg.Limit {
+			break
+		}
+		page = append(page, row)
+	}
+	return page, nil
 }
 
 func (r *recordingToolCallSearchReader) ListAttributeKeys(_ context.Context, arg telemetryrepo.ListAttributeKeysParams) ([]string, error) {
@@ -463,6 +482,207 @@ func TestListAttributeKeys_SplitsCustomFromFilterableSystemKeys(t *testing.T) {
 
 	_, err = service.ListAttributeKeys(t.Context(), testPrincipal(), ListAttributeKeysInput{ProjectID: ""})
 	require.ErrorIs(t, err, ErrToolCallSearchInvalid)
+}
+
+// TestServerIdentitiesForToolCallSearch_RemoteServerWithoutToolsetSlug pins that
+// a configured remote server, which has no toolset slug, is still matched: by
+// the slug and id its matcher stamps as the target id under the hosted or
+// tunneled type, and by the names a calling app may have reported.
+func TestServerIdentitiesForToolCallSearch_RemoteServerWithoutToolsetSlug(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	identities := serverIdentitiesForToolCallSearch(platformrepo.GetPlatformMCPDiagnosticsTargetRow{
+		McpServerID:     serverID,
+		ProjectID:       uuid.MustParse(toolCallSearchTestProject),
+		McpSlug:         "billing",
+		ToolsetSlug:     "",
+		ToolsetMcpCount: 0,
+	}, MCP{ID: serverID.String(), Slug: "billing", Name: "Billing"})
+
+	require.False(t, identities.empty())
+	require.Equal(t, []string{"billing", serverID.String()}, identities.targetIDs)
+	require.Empty(t, identities.toolsetSlugs)
+	require.Equal(t, []string{"billing", "Billing"}, identities.reportedNames)
+
+	// A server with no slug is still matched by its id.
+	unnamed := serverIdentitiesForToolCallSearch(platformrepo.GetPlatformMCPDiagnosticsTargetRow{
+		McpServerID:     serverID,
+		ProjectID:       uuid.MustParse(toolCallSearchTestProject),
+		McpSlug:         "",
+		ToolsetSlug:     "",
+		ToolsetMcpCount: 0,
+	}, MCP{ID: serverID.String(), Slug: "", Name: ""})
+	require.Equal(t, []string{serverID.String()}, unnamed.targetIDs)
+	require.Empty(t, unnamed.reportedNames)
+}
+
+// TestServerIdentitiesForToolCallSearch_HostedToolsetSlugIsHostedOnly pins that
+// a hosted server's toolset slug is matched under the hosted type only, and is
+// dropped when several configured wrappers share the toolset.
+func TestServerIdentitiesForToolCallSearch_HostedToolsetSlugIsHostedOnly(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
+	row := platformrepo.GetPlatformMCPDiagnosticsTargetRow{
+		McpServerID:     serverID,
+		ProjectID:       uuid.MustParse(toolCallSearchTestProject),
+		McpSlug:         "payments",
+		ToolsetSlug:     "payments-toolset",
+		ToolsetMcpCount: 1,
+	}
+	identities := serverIdentitiesForToolCallSearch(row, MCP{ID: serverID.String(), Slug: "payments", Name: "Payments"})
+	require.Equal(t, []string{"payments-toolset"}, identities.toolsetSlugs)
+	require.Equal(t, []string{"payments", serverID.String()}, identities.targetIDs)
+
+	row.ToolsetMcpCount = 2
+	shared := serverIdentitiesForToolCallSearch(row, MCP{ID: serverID.String(), Slug: "payments", Name: "Payments"})
+	require.Empty(t, shared.toolsetSlugs, "a toolset shared by several wrappers cannot be attributed to one")
+	require.False(t, shared.empty())
+}
+
+// TestSearchToolCalls_TraversalBudgetEndsPaging pins the cap on how many calls
+// one search may walk: a cursor at the edge of the budget yields only what is
+// left and no further cursor, and one at the cap yields nothing.
+func TestSearchToolCalls_TraversalBudgetEndsPaging(t *testing.T) {
+	t.Parallel()
+
+	rows := make([]telemetryrepo.ToolUsageTraceSummary, 0, maxToolCallSearchLimit+1)
+	for i := range maxToolCallSearchLimit + 1 {
+		rows = append(rows, toolCallSearchRow(fmt.Sprintf("row-%03d", i), toolCallSearchTestNow.Add(-time.Duration(i+1)*time.Second), "email", "person@example.test", 200))
+	}
+	reader := &recordingToolCallSearchReader{rows: rows}
+	service := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{})
+	principal := testPrincipal()
+	input := SearchToolCallsInput{ProjectID: toolCallSearchTestProject, Limit: maxToolCallSearchLimit}
+	scope := func() string {
+		search, err := normalizeToolCallSearch(input)
+		require.NoError(t, err)
+		search.window, err = resolveWindow(input.Window, toolCallSearchTestNow, toolCallSearchWindowSpec)
+		require.NoError(t, err)
+		return search.cursorScope()
+	}()
+	mintCursor := func(traversed int) string {
+		cursor, err := service.references.EncodeScoped(principal, subjectKindCursor, scope, formatToolCallCursor(toolCallSearchTestNow.UnixNano(), "row-000", traversed), toolCallSearchTestNow)
+		require.NoError(t, err)
+		return cursor
+	}
+
+	// A full page under the budget hands back a cursor.
+	output, err := service.SearchToolCalls(t.Context(), principal, input)
+	require.NoError(t, err)
+	require.Len(t, output.Calls, maxToolCallSearchLimit)
+	require.Equal(t, maxToolCallSearchLimit+1, reader.traceParams.Limit)
+	require.NotEmpty(t, output.NextCursor)
+
+	// Three calls short of the cap: only three are served, and no cursor.
+	nearCap := input
+	nearCap.Cursor = mintCursor(maxToolCallSearchTraversal - 3)
+	output, err = service.SearchToolCalls(t.Context(), principal, nearCap)
+	require.NoError(t, err)
+	require.Len(t, output.Calls, 3)
+	require.Empty(t, output.NextCursor)
+
+	// At the cap: nothing is served, and no cursor.
+	atCap := input
+	atCap.Cursor = mintCursor(maxToolCallSearchTraversal)
+	output, err = service.SearchToolCalls(t.Context(), principal, atCap)
+	require.NoError(t, err)
+	require.Empty(t, output.Calls)
+	require.Empty(t, output.NextCursor)
+	require.False(t, output.Envelope.NoObservations, "rows were observed even though none could be handed over")
+}
+
+// TestSearchToolCalls_CursorResumesAcrossThePageBoundary pins that following the
+// cursor walks the fixture in order without skipping or repeating a row, and
+// that the walk ends without a cursor once the fixture is exhausted.
+func TestSearchToolCalls_CursorResumesAcrossThePageBoundary(t *testing.T) {
+	t.Parallel()
+
+	rows := make([]telemetryrepo.ToolUsageTraceSummary, 0, 5)
+	for i := range 5 {
+		rows = append(rows, toolCallSearchRow(fmt.Sprintf("row-%d", i), toolCallSearchTestNow.Add(-time.Duration(i+1)*time.Minute), "email", "person@example.test", 200))
+	}
+	reader := &recordingToolCallSearchReader{rows: rows, paged: true}
+	service := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{})
+	principal := testPrincipal()
+	input := SearchToolCallsInput{ProjectID: toolCallSearchTestProject, Limit: 2}
+
+	seen := []string{}
+	cursor := ""
+	for page := range 3 {
+		input.Cursor = cursor
+		output, err := service.SearchToolCalls(t.Context(), principal, input)
+		require.NoError(t, err)
+		for _, call := range output.Calls {
+			seen = append(seen, call.OccurredAt)
+		}
+		if page < 2 {
+			require.Len(t, output.Calls, 2)
+			require.NotEmpty(t, output.NextCursor)
+		} else {
+			require.Len(t, output.Calls, 1)
+			require.Empty(t, output.NextCursor, "the exhausted fixture yields no further cursor")
+		}
+		cursor = output.NextCursor
+	}
+	expected := make([]string, 0, len(rows))
+	for _, row := range rows {
+		expected = append(expected, time.Unix(0, row.StartTimeUnixNano).UTC().Format(time.RFC3339Nano))
+	}
+	require.Equal(t, expected, seen)
+	require.Equal(t, 3, reader.calls)
+	require.Equal(t, rows[3].StartTimeUnixNano, reader.traceParams.CursorTimeUnixNano)
+	require.Equal(t, "row-3", reader.traceParams.CursorID)
+}
+
+// TestSearchToolCalls_ResponseCapTrimsThePage pins the 256 KiB response cap: a
+// page whose rows do not fit is cut to the leading rows that do, the cursor
+// resumes from the last row actually handed over so the dropped suffix stays
+// reachable, and a page where nothing fits carries no cursor at all.
+func TestSearchToolCalls_ResponseCapTrimsThePage(t *testing.T) {
+	t.Parallel()
+
+	const rowCount = 10
+	wide := strings.Repeat("x", maxDrilldownResponseBytes/(rowCount/2))
+	rows := make([]telemetryrepo.ToolUsageTraceSummary, 0, rowCount+1)
+	for i := range rowCount + 1 {
+		row := toolCallSearchRow(fmt.Sprintf("row-%02d", i), toolCallSearchTestNow.Add(-time.Duration(i+1)*time.Minute), "email", "person@example.test", 200)
+		row.ToolName = wide
+		rows = append(rows, row)
+	}
+	reader := &recordingToolCallSearchReader{rows: rows, paged: true}
+	service := newToolCallSearchService(t, reader, &recordingDrilldownAuditor{})
+	principal := testPrincipal()
+	input := SearchToolCallsInput{ProjectID: toolCallSearchTestProject, Limit: rowCount}
+
+	output, err := service.SearchToolCalls(t.Context(), principal, input)
+	require.NoError(t, err)
+	require.NotEmpty(t, output.Calls)
+	require.Less(t, len(output.Calls), rowCount, "the page must be cut to fit the response cap")
+	encoded, err := json.Marshal(output)
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(encoded), maxDrilldownResponseBytes)
+	require.NotEmpty(t, output.NextCursor, "a page cut to fit still has a next page")
+
+	// The cursor resumes from the last row served, not from the last row read.
+	next := input
+	next.Cursor = output.NextCursor
+	_, err = service.SearchToolCalls(t.Context(), principal, next)
+	require.NoError(t, err)
+	last := rows[len(output.Calls)-1]
+	require.Equal(t, last.StartTimeUnixNano, reader.traceParams.CursorTimeUnixNano)
+	require.Equal(t, last.ID, reader.traceParams.CursorID)
+
+	// A single row larger than the cap leaves nothing to serve and no position
+	// to resume from.
+	huge := toolCallSearchRow("row-huge", toolCallSearchTestNow.Add(-time.Minute), "email", "person@example.test", 200)
+	huge.ToolName = strings.Repeat("x", maxDrilldownResponseBytes+1)
+	reader.rows = []telemetryrepo.ToolUsageTraceSummary{huge, rows[0]}
+	output, err = service.SearchToolCalls(t.Context(), principal, input)
+	require.NoError(t, err)
+	require.Empty(t, output.Calls)
+	require.Empty(t, output.NextCursor)
 }
 
 // TestToolCallSearchTools_RequireTheDrilldownComposition pins that the pair is

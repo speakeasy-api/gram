@@ -303,3 +303,28 @@ func TestArrayDimFilter_MixedCombinesWithOr(t *testing.T) {
 	require.Equal(t, "(hasAny(groups, ?) OR empty(groups))", sql)
 	require.Equal(t, []any{[]string{"eng"}}, args)
 }
+
+// TestToolUsageTraceTargetFilter_MatchesConfiguredServersByTargetType pins that a
+// configured remote or tunneled server, which carries no toolset slug, is
+// matched by the target id its matcher stamps under both target types it can be
+// classified as, while the hosted toolset selector stays hosted-only.
+func TestToolUsageTraceTargetFilter_MatchesConfiguredServersByTargetType(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, toolUsageTraceTargetFilter(ListToolUsageTracesParams{}))
+
+	filter := toolUsageTraceTargetFilter(ListToolUsageTracesParams{
+		HostedToolsetSlugs: []string{"payments"},
+		MCPServerTargetIDs: []string{"billing", "00000000-0000-0000-0000-000000000002"},
+		ShadowServerNames:  []string{"Billing"},
+	})
+	require.NotNil(t, filter)
+	sql, args, err := filter.ToSql()
+	require.NoError(t, err)
+	require.Equal(t, "((target_type = ? AND target_id IN (?)) OR (target_type IN (?,?) AND target_id IN (?,?)) OR (target_type = ? AND target_id IN (?)))", sql)
+	require.Equal(t, []any{
+		ToolUsageTargetTypeHostedMCP, "payments",
+		ToolUsageTargetTypeHostedMCP, ToolUsageTargetTypeTunneledMCP, "billing", "00000000-0000-0000-0000-000000000002",
+		ToolUsageTargetTypeShadowMCP, "Billing",
+	}, args)
+}

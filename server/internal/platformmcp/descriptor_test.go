@@ -249,6 +249,9 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	for _, name := range []string{"list_skill_insights", "compare_skill_versions"} {
 		require.Equal(t, ExternalAuthorizationOrgAdmin, byName[name], "session cost is organization spend: %s", name)
 	}
+	// search_tool_calls returns masked identities and person references, so it
+	// stays admin-gated like the drill-downs that do the same.
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["search_tool_calls"])
 	for _, resource := range registrar.resources {
 		if resource.Meta.servesAudience(AudienceExternal) {
 			require.Equal(t, ExternalAuthorizationMember, resource.Meta.Authorization, resource.URI)
