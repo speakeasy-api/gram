@@ -32,14 +32,16 @@ export function AnthropicAdminControlsStep({
   // published. A missing flag means the collaborator lookup failed, not that
   // there are none, so only a definite "no" holds these instructions back.
   const noCollaborators = publishStatus?.hasCollaborators === false;
-  let heldBack: string | undefined;
-  if (!published) {
-    heldBack =
-      "Publish the marketplace above first — these instructions reference it.";
-  } else if (noCollaborators) {
-    heldBack =
-      "Add a collaborator to the marketplace repo above first — Claude.ai cannot sync a repo it has no access to.";
-  }
+  // Every path references the published marketplace. Only the org rollouts
+  // that read the repo through GitHub (Cowork's GitHub App, Cursor's import)
+  // need a collaborator; Claude Code clones through Speakeasy's proxy, and the
+  // personal-plan paths use the proxy or a downloaded ZIP.
+  const heldBack = published
+    ? undefined
+    : "Publish the marketplace above first — these instructions reference it.";
+  const orgHeldBack = noCollaborators
+    ? "Add a collaborator to the marketplace repo above first — the organization rollout cannot sync a repo nobody has access to."
+    : undefined;
 
   const statusOf = (id: string): PlatformSetupStatus =>
     platformStatus[id] ?? "not_started";
@@ -71,7 +73,7 @@ export function AnthropicAdminControlsStep({
           index={3}
           slug="connect-cowork"
           title="Connect Claude Cowork"
-          description="Cowork syncs the marketplace repo through Claude's own GitHub App, so the plugin is marked required from Organization settings rather than pushed from a machine."
+          description="On a Teams or Enterprise plan, Cowork syncs the marketplace repo through Claude's own GitHub App and the plugin is marked required from Organization settings. On a personal plan, each person uploads the plugin themselves."
           complete={statusOf("claude-cowork") === "complete"}
           aside={platformStatusBadge(statusOf("claude-cowork"))}
         >
@@ -81,6 +83,7 @@ export function AnthropicAdminControlsStep({
             status={statusOf("claude-cowork")}
             onStatusChange={(next) => setStatus("claude-cowork", next)}
             heldBack={heldBack}
+            orgHeldBack={orgHeldBack}
           />
         </StepSection>
 
@@ -88,7 +91,7 @@ export function AnthropicAdminControlsStep({
           index={4}
           slug="connect-claude-code"
           title="Connect Claude Code"
-          description="Managed settings on Claude.ai apply the marketplace and the observability plugin to every developer in your org. The device agent, if you deploy it, also enforces the plugin on managed machines."
+          description="On a Teams or Enterprise plan, managed settings on Claude.ai apply the marketplace and the observability plugin to every developer in your org, and the device agent, if you deploy it, also enforces the plugin on managed machines. On a personal plan, each developer adds the same settings to their own Claude Code."
           complete={statusOf("claude") === "complete"}
           aside={platformStatusBadge(statusOf("claude"))}
         >
@@ -106,7 +109,7 @@ export function AnthropicAdminControlsStep({
           slug="connect-cursor"
           title="Connect Cursor"
           badge="Optional"
-          description="Cursor's team marketplace imports the observability plugin from the same repo. Skip this if your team doesn't use Cursor."
+          description="On a Teams or Enterprise plan, Cursor's team marketplace imports the observability plugin from the same repo. On an individual plan, each person installs it as a local plugin. Skip this if your team doesn't use Cursor."
           complete={statusOf("cursor") === "complete"}
           aside={platformStatusBadge(statusOf("cursor"))}
         >
@@ -115,6 +118,7 @@ export function AnthropicAdminControlsStep({
             status={statusOf("cursor")}
             onStatusChange={(next) => setStatus("cursor", next)}
             heldBack={heldBack}
+            orgHeldBack={orgHeldBack}
           />
         </StepSection>
 

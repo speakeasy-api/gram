@@ -19,6 +19,12 @@ interface PlatformSetupFlowProps {
    * its marketplace section is done rather than handing out empty URLs.
    */
   heldBack?: string;
+  /**
+   * Like `heldBack`, but only for the org rollout: shown in place of the
+   * steps after "yes" to the plan check. The per-user path for personal plans
+   * doesn't read the repo through GitHub, so it isn't held back.
+   */
+  orgHeldBack?: string;
   apiKeys?: PlatformApiKeys;
 }
 
@@ -31,6 +37,7 @@ export function PlatformSetupFlow({
   status,
   onStatusChange,
   heldBack,
+  orgHeldBack,
   apiKeys: sharedApiKeys,
 }: PlatformSetupFlowProps): JSX.Element | null {
   const platform = AGENT_PLATFORMS.find((p) => p.id === platformId);
@@ -42,6 +49,7 @@ export function PlatformSetupFlow({
   const [eligible, setEligible] = useState<boolean | null>(null);
   const gate = platform?.setupSteps[0]?.eligibility;
   const unanswered = !!gate && eligible === null;
+  const orgBlocked = !!orgHeldBack && eligible !== false && !unanswered;
 
   // Mint the key the snippets need as soon as the flow is readable, and only
   // once — a failed mint leaves neither a key nor a pending flag, so a bare
@@ -49,11 +57,11 @@ export function PlatformSetupFlow({
   const { ensure } = apiKeys;
   const requestedKey = useRef(false);
   useEffect(() => {
-    if (!platform || heldBack || unanswered) return;
+    if (!platform || heldBack || unanswered || orgBlocked) return;
     if (requestedKey.current) return;
     requestedKey.current = true;
     ensure(platform);
-  }, [platform, heldBack, unanswered, ensure]);
+  }, [platform, heldBack, unanswered, orgBlocked, ensure]);
 
   if (!platform) return null;
   if (heldBack) {
@@ -61,7 +69,9 @@ export function PlatformSetupFlow({
   }
 
   const steps = platformSteps(platform, eligible);
-  const visibleSteps = unanswered ? steps.slice(0, 1) : steps;
+  // Held back or unanswered, only the plan check (if any) shows.
+  const visibleSteps =
+    unanswered || orgBlocked ? steps.slice(0, gate ? 1 : 0) : steps;
 
   return (
     <div className="space-y-8">
@@ -81,7 +91,11 @@ export function PlatformSetupFlow({
         />
       ))}
 
-      {unanswered ? null : status === "complete" ? (
+      {orgBlocked ? (
+        <p className="text-muted-foreground text-sm">{orgHeldBack}</p>
+      ) : null}
+
+      {unanswered || orgBlocked ? null : status === "complete" ? (
         <div className="border-border bg-secondary/20 flex items-center justify-between border p-4">
           <p className="text-foreground flex items-center gap-2 text-sm">
             <Check className="text-default-success h-4 w-4" strokeWidth={3} />

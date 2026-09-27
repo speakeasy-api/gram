@@ -122,6 +122,40 @@ describe("PlatformSetupFlow", () => {
     ).toBeTruthy();
   });
 
+  it("holds back only the org rollout when the repo has no collaborator", () => {
+    const { unmount } = render(
+      <PlatformSetupFlow
+        platformId="cursor"
+        status="not_started"
+        onStatusChange={() => {}}
+        orgHeldBack="Add a collaborator first."
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+
+    expect(screen.getByText("Add a collaborator first.")).toBeTruthy();
+    expect(screen.queryByText(/Step 2:/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Mark Cursor as connected" }),
+    ).toBeNull();
+    unmount();
+
+    render(
+      <PlatformSetupFlow
+        platformId="cursor"
+        status="not_started"
+        onStatusChange={() => {}}
+        orgHeldBack="Add a collaborator first."
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "No" }));
+
+    expect(screen.queryByText("Add a collaborator first.")).toBeNull();
+    expect(
+      screen.getByText("Step 2: Download the observability plugin"),
+    ).toBeTruthy();
+  });
+
   it("marks the platform connected, and lets that be taken back", () => {
     const onStatusChange = vi.fn();
     const { rerender } = render(
