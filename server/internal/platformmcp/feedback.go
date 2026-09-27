@@ -393,6 +393,7 @@ var knownPlatformMCPToolNames = map[string]struct{}{
 	"create_data_export":                    {},
 	"list_recent_tool_calls":                {},
 	"list_organization_events":              {},
+	toolUsageSummaryToolName:                {},
 	"search_mcp_catalog":                    {},
 	"inspect_mcp_candidate":                 {},
 	"register_catalog_mcp":                  {},

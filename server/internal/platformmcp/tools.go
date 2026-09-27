@@ -353,6 +353,11 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	} else {
 		registerDrilldownTools(reg, diagnostics)
 	}
+	if !diagnostics.toolUsageValid() {
+		registerUnavailableToolUsageSummaryTool(reg)
+	} else {
+		registerToolUsageSummaryTool(reg, diagnostics)
+	}
 	if diagnostics == nil || !diagnostics.valid() || diagnostics.references == nil || !diagnostics.sensitiveBudget.valid() || !diagnostics.volume.valid() {
 		registerUnavailableSkillUsageTools(reg)
 	} else {
