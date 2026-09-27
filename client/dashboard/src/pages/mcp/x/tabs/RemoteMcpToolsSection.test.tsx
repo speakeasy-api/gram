@@ -43,8 +43,9 @@ vi.mock("@/lib/utils", async () => {
   return {
     ...actual,
     mcpConnectionUrl: (url: string | undefined) => url,
+    getServerURL: () => "https://gram.example",
     firstPartyConnectUrl: (url: string | undefined) =>
-      url ? "https://gram.example/x/mcp/server/connect/first-party" : undefined,
+      url ? `${url}/connect/first-party` : undefined,
   };
 });
 
@@ -93,7 +94,7 @@ describe("RemoteMcpToolsSection connect prompt", () => {
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(mocks.open).toHaveBeenCalledWith(
-      "https://gram.example/x/mcp/server/connect/first-party",
+      "https://gram.example/mcp/server/connect/first-party",
       "_blank",
       "noopener,noreferrer",
     );

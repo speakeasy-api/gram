@@ -4,7 +4,12 @@ import { AttachedUserSessions } from "@/components/sessions/AttachedUserSessions
 import { useRBAC } from "@/hooks/useRBAC";
 import { useTabScrollReset } from "@/hooks/useTabScrollReset";
 import { platformEndpointSlug } from "@/hooks/useToolsetUrl";
-import { cn, firstPartyConnectUrl, getServerURL } from "@/lib/utils";
+import {
+  cn,
+  firstPartyConnectUrl,
+  getServerURL,
+  supportsFirstPartyConnect,
+} from "@/lib/utils";
 import { getMcpServerArgs, mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import type {
@@ -79,9 +84,16 @@ export default function MCPServerDetails(): JSX.Element {
     });
   const endpoints = endpointsResult?.mcpEndpoints ?? [];
   const platformSlug = platformEndpointSlug(endpoints);
-  const platformConnectUrl = firstPartyConnectUrl(
-    platformSlug ? `${getServerURL()}/mcp/${platformSlug}` : undefined,
-  );
+  const platformConnectUrl = supportsFirstPartyConnect({
+    userSessionIssuerId: mcpServer?.userSessionIssuerId,
+    tunneledMcpServerId: mcpServer?.tunneledMcpServerId,
+    visibility: mcpServer?.visibility,
+    platformSlug,
+  })
+    ? firstPartyConnectUrl(
+        platformSlug ? `${getServerURL()}/mcp/${platformSlug}` : undefined,
+      )
+    : undefined;
 
   if (!idOrSlug) {
     return <Navigate to={routes.mcp.href()} replace />;

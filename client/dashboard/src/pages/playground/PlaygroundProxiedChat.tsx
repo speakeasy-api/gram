@@ -52,7 +52,11 @@ export function PlaygroundProxiedChat({
 
   if (needsAuth) {
     return (
-      <ProxiedStatusNotice message="This server has no identity provider configured, so there's no Connect flow to start. Set one up in the server's authentication settings." />
+      <ProxiedStatusNotice message="This server has no identity provider configured, so there's no Connect flow to start. Set one up in the server's authentication settings.">
+        <Button variant="secondary" onClick={refetch}>
+          Try again
+        </Button>
+      </ProxiedStatusNotice>
     );
   }
 

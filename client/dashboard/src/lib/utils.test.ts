@@ -31,6 +31,25 @@ describe("supportsFirstPartyConnect", () => {
     ).toBe(false);
   });
 
+  it("allows a private tunnel", () => {
+    expect(
+      supportsFirstPartyConnect({
+        ...eligible,
+        tunneledMcpServerId: "tunnel-1",
+        visibility: "private",
+      }),
+    ).toBe(true);
+  });
+
+  it("allows a public server that is not tunneled", () => {
+    expect(
+      supportsFirstPartyConnect({
+        ...eligible,
+        visibility: "public",
+      }),
+    ).toBe(true);
+  });
+
   it("rejects a custom-domain-only server with no platform slug", () => {
     expect(
       supportsFirstPartyConnect({ ...eligible, platformSlug: undefined }),
