@@ -2717,6 +2717,45 @@ WHERE m.id = @mcp_server_id
   AND m.deleted IS FALSE
 GROUP BY m.id, m.project_id, m.slug, toolset.slug;
 
+-- name: ListPlatformMCPServerIdentities :many
+-- Lists the names an agent hook can report one configured MCP server under,
+-- for every live MCP server in one of the organization's projects: its id,
+-- slug, name, hosted toolset slug, and each plugin membership's plugin slug and
+-- display name (the key the plugin's mcp.json ships it under). One row per
+-- (server, membership); a server with no membership yields one row with empty
+-- plugin columns. Hosted servers are also reached through memberships attached
+-- by toolset, so those memberships are included for the server fronting that
+-- toolset.
+SELECT
+    m.id AS mcp_server_id,
+    COALESCE(m.name, '') AS mcp_name,
+    COALESCE(m.slug, '') AS mcp_slug,
+    COALESCE(toolset.slug, '') AS toolset_slug,
+    COALESCE(plugin.slug, '') AS plugin_slug,
+    COALESCE(plugin_server.display_name, '') AS plugin_display_name
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+LEFT JOIN toolsets AS toolset
+  ON toolset.id = m.toolset_id
+ AND toolset.project_id = m.project_id
+ AND toolset.deleted IS FALSE
+LEFT JOIN plugin_servers AS plugin_server
+  ON plugin_server.deleted IS FALSE
+ AND (
+      plugin_server.mcp_server_id = m.id
+      OR (m.toolset_id IS NOT NULL AND plugin_server.toolset_id = m.toolset_id)
+ )
+LEFT JOIN plugins AS plugin
+  ON plugin.id = plugin_server.plugin_id
+ AND plugin.project_id = m.project_id
+ AND plugin.deleted IS FALSE
+WHERE m.project_id = @project_id
+  AND m.deleted IS FALSE
+ORDER BY m.id, plugin_server.id;
+
 -- Session recall (list_my_sessions / continue_session). Every read below
 -- fuses tenancy and ownership into the row filter — organization, owner
 -- user_id, not-deleted, and the personal-account exclusion — rather than

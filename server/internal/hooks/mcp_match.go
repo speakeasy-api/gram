@@ -40,50 +40,6 @@ func parseClaudeToolName(rawName string) parsedClaudeToolName {
 	return parsedClaudeToolName{Server: server, Tool: tool, IsMCP: true}
 }
 
-// mcpServerPrefix returns the tool-name prefix Claude Code derives for an
-// MCP server entry. The rules — inferred from observed tool names like
-// "mcp__claude_ai_Linear_Speakeasy__..." against the `claude mcp list`
-// entry "claude.ai Linear (Speakeasy)" — are:
-//
-//   - source "claude.ai" → "claude_ai_" + sanitize(name)
-//   - source "plugin"    → "plugin_" + sanitize(plugin) + "_" + sanitize(name)
-//   - source "local"     → sanitize(name)
-//
-// sanitize: spaces become "_", parens are dropped, consecutive "_" are
-// collapsed, leading/trailing "_" are trimmed, and hyphens/underscores/
-// alphanumerics are preserved. This convention is not documented by
-// Claude Code; if it drifts, this function is the only place to update.
-func mcpServerPrefix(source, plugin, name string) string {
-	switch source {
-	case "claude.ai":
-		return "claude_ai_" + sanitizeMCPName(name)
-	case "plugin":
-		return "plugin_" + sanitizeMCPName(plugin) + "_" + sanitizeMCPName(name)
-	default:
-		return sanitizeMCPName(name)
-	}
-}
-
-func sanitizeMCPName(name string) string {
-	var b strings.Builder
-	b.Grow(len(name))
-	for _, r := range name {
-		switch r {
-		case ' ':
-			b.WriteByte('_')
-		case '(', ')':
-			// drop
-		default:
-			b.WriteRune(r)
-		}
-	}
-	s := b.String()
-	for strings.Contains(s, "__") {
-		s = strings.ReplaceAll(s, "__", "_")
-	}
-	return strings.Trim(s, "_")
-}
-
 // matchCachedMCPEntry returns the cached entry whose derived server prefix
 // equals serverPrefix, or nil if none match. For Cowork-shipped entries the
 // prefix Claude derives is the connector UUID rather than a sanitized name,
@@ -111,7 +67,7 @@ func mcpEntryMatchesPrefix(entry MCPServerEntry, serverPrefix string) bool {
 	if entry.ConnectorUUID != "" && entry.ConnectorUUID == serverPrefix {
 		return true
 	}
-	return mcpServerPrefix(entry.Source, entry.PluginName, entry.Name) == serverPrefix
+	return toolref.ClaudeMCPServerPrefix(entry.Source, entry.PluginName, entry.Name) == serverPrefix
 }
 
 // matchCodexCachedMCPEntry resolves a raw Codex tool name

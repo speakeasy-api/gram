@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const attachPlatformMCPOperationReceiptRegistration = `-- name: AttachPlatformMCPOperationReceiptRegistration :one
@@ -4645,7 +4644,7 @@ type ListOwnedChatTranscriptMessagesForRecallRow struct {
 	ContentAssetUrl pgtype.Text
 	ToolCalls       []byte
 	ToolCallID      pgtype.Text
-	ToolUrn         urn.Tool
+	ToolUrn         pgtype.Text
 	Source          pgtype.Text
 	RiskAnalyzedAt  pgtype.Timestamptz
 }
@@ -6080,6 +6079,87 @@ func (q *Queries) ListPlatformMCPProjects(ctx context.Context, arg ListPlatformM
 	for rows.Next() {
 		var i ListPlatformMCPProjectsRow
 		if err := rows.Scan(&i.ID, &i.Name, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPServerIdentities = `-- name: ListPlatformMCPServerIdentities :many
+SELECT
+    m.id AS mcp_server_id,
+    COALESCE(m.name, '') AS mcp_name,
+    COALESCE(m.slug, '') AS mcp_slug,
+    COALESCE(toolset.slug, '') AS toolset_slug,
+    COALESCE(plugin.slug, '') AS plugin_slug,
+    COALESCE(plugin_server.display_name, '') AS plugin_display_name
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+LEFT JOIN toolsets AS toolset
+  ON toolset.id = m.toolset_id
+ AND toolset.project_id = m.project_id
+ AND toolset.deleted IS FALSE
+LEFT JOIN plugin_servers AS plugin_server
+  ON plugin_server.deleted IS FALSE
+ AND (
+      plugin_server.mcp_server_id = m.id
+      OR (m.toolset_id IS NOT NULL AND plugin_server.toolset_id = m.toolset_id)
+ )
+LEFT JOIN plugins AS plugin
+  ON plugin.id = plugin_server.plugin_id
+ AND plugin.project_id = m.project_id
+ AND plugin.deleted IS FALSE
+WHERE m.project_id = $2
+  AND m.deleted IS FALSE
+ORDER BY m.id, plugin_server.id
+`
+
+type ListPlatformMCPServerIdentitiesParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ListPlatformMCPServerIdentitiesRow struct {
+	McpServerID       uuid.UUID
+	McpName           string
+	McpSlug           string
+	ToolsetSlug       string
+	PluginSlug        string
+	PluginDisplayName string
+}
+
+// Lists the names an agent hook can report one configured MCP server under,
+// for every live MCP server in one of the organization's projects: its id,
+// slug, name, hosted toolset slug, and each plugin membership's plugin slug and
+// display name (the key the plugin's mcp.json ships it under). One row per
+// (server, membership); a server with no membership yields one row with empty
+// plugin columns. Hosted servers are also reached through memberships attached
+// by toolset, so those memberships are included for the server fronting that
+// toolset.
+func (q *Queries) ListPlatformMCPServerIdentities(ctx context.Context, arg ListPlatformMCPServerIdentitiesParams) ([]ListPlatformMCPServerIdentitiesRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPServerIdentities, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPServerIdentitiesRow
+	for rows.Next() {
+		var i ListPlatformMCPServerIdentitiesRow
+		if err := rows.Scan(
+			&i.McpServerID,
+			&i.McpName,
+			&i.McpSlug,
+			&i.ToolsetSlug,
+			&i.PluginSlug,
+			&i.PluginDisplayName,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

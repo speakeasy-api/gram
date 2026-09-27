@@ -126,6 +126,7 @@ func FetchClickHouse(
 			ExternalUserID: "",
 			APIKeyID:       "",
 			ToolsetSlug:    "",
+			MCPServerID:    "",
 			SessionMode:    params.SessionMode,
 		})
 		if queryErr != nil {

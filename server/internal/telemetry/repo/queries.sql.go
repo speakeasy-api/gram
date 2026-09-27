@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"sort"
 	"strconv"
@@ -3040,9 +3041,7 @@ func (q *Queries) GetChatMetricsByIDs(ctx context.Context, arg GetChatMetricsByI
 	if err != nil {
 		return nil, fmt.Errorf("get chat metrics from telemetry logs: %w", err)
 	}
-	for id, row := range raw {
-		metricsMap[id] = row
-	}
+	maps.Copy(metricsMap, raw)
 	return metricsMap, nil
 }
 
@@ -7683,6 +7682,7 @@ type GetActiveCountsParams struct {
 	ExternalUserID string // Optional filter
 	APIKeyID       string // Optional filter
 	ToolsetSlug    string // Optional filter
+	MCPServerID    string // Optional filter - scopes to calls the gateway proxied to one configured MCP server
 	SessionMode    bool   // If true, count by messages; if false, count by tool calls
 }
 
@@ -7722,6 +7722,9 @@ func (q *Queries) GetActiveCounts(ctx context.Context, arg GetActiveCountsParams
 	}
 	if arg.ToolsetSlug != "" {
 		sb = sb.Where(squirrel.Eq{"toolset_slug": arg.ToolsetSlug})
+	}
+	if arg.MCPServerID != "" {
+		sb = sb.Where(squirrel.Eq{"mcp_server_id": arg.MCPServerID})
 	}
 
 	query, args, err := sb.ToSql()

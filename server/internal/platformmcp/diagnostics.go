@@ -30,6 +30,12 @@ const maxDiagnosticClients = 10
 // maxOverviewServers bounds the top-server list on a project overview.
 const maxOverviewServers = 10
 
+// overviewServerFetchLimit bounds how many hook-reported server names the
+// overview reads before folding them onto configured servers. One configured
+// server can be reported under several names, so more rows are read than are
+// returned; the fold is what the cap applies to.
+const overviewServerFetchLimit = maxOverviewServers * 5
+
 // maxOverviewProjects bounds the organization-wide scope comparison. When an
 // organization has more projects than this, the comparison covers a subset and
 // the diagnosis says so rather than asserting a scope from partial coverage.
@@ -180,8 +186,16 @@ type GetProjectOverviewInput struct {
 
 // ProjectOverviewServer is one MCP server's share of the project's tool calls.
 type ProjectOverviewServer struct {
-	Name      string `json:"name"`
-	ToolCalls int64  `json:"tool_calls"`
+	// Name is the configured MCP server's name when the reported name resolved
+	// to one, and otherwise the name the calling agent used for the server.
+	Name string `json:"name"`
+
+	// MCPID is the configured MCP server the calls were attributed to, usable
+	// with get_mcp and the diagnostics tools. Empty when no configured server
+	// is known by the reported name.
+	MCPID string `json:"mcp_id,omitempty"`
+
+	ToolCalls int64 `json:"tool_calls"`
 }
 
 // GetProjectOverviewOutput is the Platform subset of the project overview: the
@@ -260,24 +274,33 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 		GramProjectID: input.ProjectID,
 		TimeStart:     start,
 		TimeEnd:       end,
-		Limit:         maxOverviewServers,
+		Limit:         overviewServerFetchLimit,
 	})
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("read project overview top servers: %w", err)
+	}
+	// Hook telemetry names a server the way the calling agent did, so one
+	// configured server arrives as a plugin-routed prefix, a bare slug, a
+	// display name, or an id. Folding onto the configured server is what lets
+	// the overview's names line up with the ids the other tools take.
+	resolver, err := s.serverNameResolver(ctx, principal.OrganizationID, input.ProjectID)
+	if err != nil {
+		return GetProjectOverviewOutput{}, fmt.Errorf("resolve project overview server names: %w", err)
 	}
 	watermark, err := s.telemetry.GetTelemetryWatermark(ctx, telemetryrepo.GetTelemetryWatermarkParams{GramProjectIDs: projectIDs})
 	if err != nil {
 		return GetProjectOverviewOutput{}, fmt.Errorf("read project overview watermark: %w", err)
 	}
 
+	topServers := attributeTopServers(servers, resolver, maxOverviewServers)
 	output := GetProjectOverviewOutput{
 		ProjectID: input.ProjectID,
 		// A project overview is project-scoped, so the watermark and the result
 		// answer for the same scope; observation is still taken from the
 		// result rather than inferred from the watermark.
-		Envelope:    newDataEnvelope(now, watermarkTime(watermark), window, summary != nil && summary.TotalToolCalls > 0),
+		Envelope:    newDataEnvelope(now, watermarkTime(watermark), window, overviewObserved(summary, counts, topServers)),
 		MetricsMode: metricsMode(sessionMode),
-		TopServers:  make([]ProjectOverviewServer, 0, len(servers)),
+		TopServers:  topServers,
 	}
 	if summary != nil {
 		output.ToolCalls = boundedCount(summary.TotalToolCalls)
@@ -302,13 +325,22 @@ func (s *DiagnosticsService) GetProjectOverview(ctx context.Context, principal P
 		}
 		output.ActiveUsers = NewSubjectCount(activeUsers)
 	}
-	for _, server := range servers {
-		output.TopServers = append(output.TopServers, ProjectOverviewServer{
-			Name:      server.ServerName,
-			ToolCalls: boundedCount(server.ToolCallCount),
-		})
-	}
 	return output, nil
+}
+
+// overviewObserved reports whether the window holds any observation the
+// overview goes on to report. The gateway summary counts proxied and hosted
+// calls; hook-observed servers reach the overview only through the active
+// server count and the top-server list. Any of them being nonzero is an
+// observation, so no_observations is never asserted beside a nonzero metric.
+func overviewObserved(summary *telemetryrepo.OverviewSummary, counts *telemetryrepo.ActiveCounts, topServers []ProjectOverviewServer) bool {
+	if summary != nil && (summary.TotalToolCalls > 0 || summary.FailedToolCalls > 0) {
+		return true
+	}
+	if counts != nil && (counts.ActiveServersCount > 0 || counts.ActiveUsersCount > 0) {
+		return true
+	}
+	return len(topServers) > 0
 }
 
 // GetMCPDiagnosticsInput names one configured MCP, using the same identity
@@ -395,7 +427,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return GetMCPDiagnosticsOutput{}, err
 	}
-	target, err := s.diagnosticsTarget(ctx, principal.OrganizationID, input.ProjectID, input.MCPID)
+	identity, err := s.serverIdentity(ctx, principal.OrganizationID, input.ProjectID, input.MCPID)
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, err
 	}
@@ -406,19 +438,7 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 	}
 	start, end := window.start.UnixNano(), window.end.UnixNano()
 
-	toolsetSlugs := nonEmpty(target.ToolsetSlug)
-	if target.ToolsetMcpCount > 1 {
-		toolsetSlugs = nil
-	}
-	serverRows, err := s.telemetry.GetMCPOutcomeBreakdown(ctx, telemetryrepo.GetMCPOutcomeBreakdownParams{
-		GramProjectIDs:       []string{input.ProjectID},
-		ToolsetSlugs:         toolsetSlugs,
-		MCPServerURLSuffixes: mcpURLSuffixes(target.McpSlug),
-		CanonicalIdentityOrg: "",
-		TimeStart:            start,
-		TimeEnd:              end,
-		Limit:                0,
-	})
+	serverRows, err := s.telemetry.GetMCPOutcomeBreakdown(ctx, identity.outcomeParams(input.ProjectID, start, end))
 	if err != nil {
 		return GetMCPDiagnosticsOutput{}, fmt.Errorf("read mcp outcome breakdown: %w", err)
 	}
@@ -426,6 +446,8 @@ func (s *DiagnosticsService) GetMCPDiagnostics(ctx context.Context, principal Pr
 		GramProjectIDs:       projectIDs,
 		ToolsetSlugs:         nil,
 		MCPServerURLSuffixes: nil,
+		MCPServerIDs:         nil,
+		ToolSources:          nil,
 		CanonicalIdentityOrg: "",
 		TimeStart:            start,
 		TimeEnd:              end,
